@@ -5,20 +5,25 @@
 #include <mutex>
 #include <cstdlib>
 #include <algorithm>
+#include <filesystem>
 #include <readline/readline.h>
 #include <readline/history.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <future>
 #include <unistd.h>
 #include <dirent.h>
 #include <sstream>
 #include <thread>
+#include <mutex>
+
 
 // Define the default cache directory
 const std::string cacheDirectory = "/tmp/";
 
-// Avoid interleaved messages
-//std::mutex ioMutex;
+namespace fs = std::filesystem;
+
+std::mutex mtx;
 
 // Function prototypes
 void listAndMountISOs();
@@ -31,25 +36,19 @@ void manualMode_isos();
 void select_and_mount_files_by_number();
 void select_and_convert_files_to_iso();
 void manualMode_imgs();
+void print_ascii();
+void screen_clear();
 
 int main() {
     using_history();
-
+	print_ascii();
 
     bool returnToMainMenu = false;
 
     main_menu:
     while (true) {
     // Display ASCII art
-
-        std::cout << " _____          ___ _____ _____   ___ __   __  ___  _____ _____   __   __  ___ __   __ _   _ _____ _____ ____          _   ___   ___  " << std::endl;
-        std::cout << "|  ___)   /\\   (   |_   _)  ___) (   )  \\ /  |/ _ \\|  ___)  ___) |  \\ /  |/ _ (_ \\ / _) \\ | (_   _)  ___)  _ \\        / | /   \\ / _ \\ " << std::endl;
-        std::cout << "| |_     /  \\   | |  | | | |_     | ||   v   | |_| | |   | |_    |   v   | | | |\\ v / |  \\| | | | | |_  | |_) )  _  __- | \\ O /| | | |" << std::endl;
-        std::cout << "|  _)   / /\\ \\  | |  | | |  _)    | || |\\_/| |  _  | |   |  _)   | |\\_/| | | | | | |  |     | | | |  _) |  __/  | |/ /| | / _ \\| | | |" << std::endl;
-        std::cout << "| |___ / /  \\ \\ | |  | | | |___   | || |   | | | | | |   | |___  | |   | | |_| | | |  | |\\  | | | | |___| |     | / / | |( (_) ) |_| |" << std::endl;
-        std::cout << "|_____)_/    \\_(___) |_| |_____) (___)_|   |_|_| |_|_|   |_____) |_|   |_|\\___/  |_|  |_| \\_| |_| |_____)_|     |__/  |_(_)___/ \\___/" << std::endl;
-        std::cout << std::endl;
-    
+    	
         char* choice;
         char* prompt = (char*)"Select an option:\n1) List and Mount ISOs\n2) Unmount ISOs\n3) Clean and Unmount All ISOs\n4) Convert BIN(s)/IMG(s) to ISO(s)\n5) List Mounted ISO(s)\n6) Exit\nEnter the number of your choice: ";
         while ((choice = readline(prompt)) != nullptr) {
@@ -92,11 +91,19 @@ int main() {
                 case 2:
                     // Call your unmountISOs function
                     unmountISOs();
+		std::cout << "Press Enter to continue...";
+    	     	std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+		std::system("clear");
+			print_ascii();
                     break;
                 case 3:
                     // Call your cleanAndUnmountAllISOs function
                     cleanAndUnmountAllISOs();
+		    // Prompt the user to press Enter to continue
+    		    std::cout << "Press Enter to continue...";
+    	     	    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 		    std::system("clear");
+			print_ascii();
                     break;
                 case 4:
     while (true) {
@@ -117,8 +124,7 @@ int main() {
                     // Call your manual_mode_imgs function here
                     manualMode_imgs();
                     break;
-                case 3:
-                    std::cout << "Returning to the main menu..." << std::endl;
+                case 3:                  
                     goto main_menu;  // Use a goto statement to return to the main menu
                 default:
                     std::cout << "Error: Invalid choice: " << small_option << std::endl;
@@ -134,6 +140,10 @@ int main() {
                 case 5:
                     // Call your listMountedISOs function
                     listMountedISOs();
+		    std::cout << "Press Enter to continue...";
+    	     	    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+		    std::system("clear");
+			print_ascii();
                     break;
                 case 6:
                     std::cout << "Exiting the program..." << std::endl;
@@ -149,6 +159,18 @@ int main() {
 
 // ... Function definitions ...
 
+
+void print_ascii() {
+    /// Display ASCII art
+
+        std::cout << " _____          ___ _____ _____   ___ __   __  ___  _____ _____   __   __  ___ __   __ _   _ _____ _____ ____          _   ___   ___  " << std::endl;
+        std::cout << "|  ___)   /\\   (   |_   _)  ___) (   )  \\ /  |/ _ \\|  ___)  ___) |  \\ /  |/ _ (_ \\ / _) \\ | (_   _)  ___)  _ \\        / | /   \\ / _ \\ " << std::endl;
+        std::cout << "| |_     /  \\   | |  | | | |_     | ||   v   | |_| | |   | |_    |   v   | | | |\\ v / |  \\| | | | | |_  | |_) )  _  __- | \\ O /| | | |" << std::endl;
+        std::cout << "|  _)   / /\\ \\  | |  | | |  _)    | || |\\_/| |  _  | |   |  _)   | |\\_/| | | | | | |  |     | | | |  _) |  __/  | |/ /| | / _ \\| | | |" << std::endl;
+        std::cout << "| |___ / /  \\ \\ | |  | | | |___   | || |   | | | | | |   | |___  | |   | | |_| | | |  | |\\  | | | | |___| |     | / / | |( (_) ) |_| |" << std::endl;
+        std::cout << "|_____)_/    \\_(___) |_| |_____) (___)_|   |_|_| |_|_|   |_____) |_|   |_|\\___/  |_|  |_| \\_| |_| |_____)_|     |__/  |_(_)___/ \\___/" << std::endl;
+        std::cout << std::endl;
+}
 
 void unmountISOs() {
     while (true) {
@@ -170,7 +192,7 @@ void unmountISOs() {
 
         // Check if any ISOs were found
         if (isoDirs.empty()) {
-            std::cout << "No ISO folders found in " << isoPath << std::endl;
+            std::cout << "No ISO(s) Mounted\n";
             break; // No need to proceed further if no ISOs are found
         }
 
@@ -192,14 +214,20 @@ void unmountISOs() {
 
         // Parse the user's input to get the selected range or single choice
         std::istringstream iss(input);
-        int startRange, endRange;
-        char hyphen; // To handle the hyphen between start and end ranges
+	int startRange, endRange;
+	char hyphen;
 
-        if ((iss >> startRange) && !(iss >> hyphen) && !(iss >> endRange)) {
-            // If no hyphen is present, treat it as a single choice
-            endRange = startRange;
-        }
-
+	if ((iss >> startRange) && (iss >> hyphen) && (iss >> endRange)) {
+    	if (hyphen == '-' && startRange >= 1 && endRange >= startRange && static_cast<size_t>(endRange) <= isoDirs.size()) {
+        // Valid range input
+    	} else {
+        std::cerr << "Invalid range. Please try again." << std::endl;
+        continue;
+    	}
+	} else {
+    	// If no hyphen is present or parsing fails, treat it as a single choice
+    	endRange = startRange;
+	}
         if (startRange < 1 || endRange > static_cast<int>(isoDirs.size()) || startRange > endRange) {
             std::cerr << "Invalid range or choice. Please try again." << std::endl;
         } else {
@@ -234,8 +262,8 @@ void unmountISOs() {
         }
     }
 
-    std::cout << "All selected ISOs have been unmounted." << std::endl;
 }
+
 
 
 void unmountAndCleanISO(const std::string& isoDir) {
@@ -255,7 +283,13 @@ void unmountAndCleanISO(const std::string& isoDir) {
     }
 }
 
+void cleanAndUnmountISO(const std::string& isoDir) {
+    std::lock_guard<std::mutex> lock(mtx);
+    unmountAndCleanISO(isoDir);
+}
+
 void cleanAndUnmountAllISOs() {
+    std::cout << "Clean and Unmount All ISOs function." << std::endl;
     const std::string isoPath = "/mnt";
     std::vector<std::string> isoDirs;
 
@@ -278,16 +312,24 @@ void cleanAndUnmountAllISOs() {
     }
 
     std::vector<std::thread> threads;
+
     for (const std::string& isoDir : isoDirs) {
-        threads.push_back(std::thread(unmountAndCleanISO, isoDir));
+        threads.emplace_back(cleanAndUnmountISO, isoDir);
+        if (threads.size() >= 4) {
+            for (std::thread& thread : threads) {
+                thread.join();
+            }
+            threads.clear();
+        }
     }
 
-    for (auto& thread : threads) {
+    for (std::thread& thread : threads) {
         thread.join();
     }
 
     std::cout << "ALL ISOS CLEANED" << std::endl;
 }
+
 
 
 
@@ -297,8 +339,19 @@ void convertBINsToISOs() {
 }
 
 void listMountedISOs() {
-    std::cout << "List Mounted ISOs function." << std::endl;
-    // Implement the logic for this function.
+    std::string path = "/mnt";
+    int isoCount = 0;
+
+    for (const auto& entry : std::filesystem::directory_iterator(path)) {
+        if (entry.is_directory() && entry.path().filename().string().find("iso") == 0) {
+            // Print the directory number, name, and color.
+            std::cout << "\033[1;35m" << ++isoCount << ". " << entry.path().filename().string() << "\033[0m" << std::endl;
+        }
+    }
+
+    if (isoCount == 0) {
+        std::cout << "No ISO(s) mounted." << std::endl;
+    }
 }
 
 void listMode() {
