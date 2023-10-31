@@ -2,6 +2,7 @@
 #include <fstream>
 #include <string>
 #include <vector>
+#include <mutex>
 #include <cstdlib>
 #include <algorithm>
 #include <readline/readline.h>
@@ -11,9 +12,13 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <sstream>
+#include <thread>
 
 // Define the default cache directory
 const std::string cacheDirectory = "/tmp/";
+
+// Avoid interleaved messages
+//std::mutex ioMutex;
 
 // Function prototypes
 void listAndMountISOs();
@@ -30,8 +35,14 @@ void manualMode_imgs();
 int main() {
     using_history();
 
+
+    bool returnToMainMenu = false;
+
+    main_menu:
+    while (true) {
     // Display ASCII art
-std::cout << " _____          ___ _____ _____   ___ __   __  ___  _____ _____   __   __  ___ __   __ _   _ _____ _____ ____          _   ___   ___  " << std::endl;
+
+        std::cout << " _____          ___ _____ _____   ___ __   __  ___  _____ _____   __   __  ___ __   __ _   _ _____ _____ ____          _   ___   ___  " << std::endl;
         std::cout << "|  ___)   /\\   (   |_   _)  ___) (   )  \\ /  |/ _ \\|  ___)  ___) |  \\ /  |/ _ (_ \\ / _) \\ | (_   _)  ___)  _ \\        / | /   \\ / _ \\ " << std::endl;
         std::cout << "| |_     /  \\   | |  | | | |_     | ||   v   | |_| | |   | |_    |   v   | | | |\\ v / |  \\| | | | | |_  | |_) )  _  __- | \\ O /| | | |" << std::endl;
         std::cout << "|  _)   / /\\ \\  | |  | | |  _)    | || |\\_/| |  _  | |   |  _)   | |\\_/| | | | | | |  |     | | | |  _) |  __/  | |/ /| | / _ \\| | | |" << std::endl;
@@ -39,10 +50,6 @@ std::cout << " _____          ___ _____ _____   ___ __   __  ___  _____ _____   
         std::cout << "|_____)_/    \\_(___) |_| |_____) (___)_|   |_|_| |_|_|   |_____) |_|   |_|\\___/  |_|  |_| \\_| |_| |_____)_|     |__/  |_(_)___/ \\___/" << std::endl;
         std::cout << std::endl;
     
-    bool returnToMainMenu = false;
-
-    main_menu:
-    while (true) {
         char* choice;
         char* prompt = (char*)"Select an option:\n1) List and Mount ISOs\n2) Unmount ISOs\n3) Clean and Unmount All ISOs\n4) Convert BIN(s)/IMG(s) to ISO(s)\n5) List Mounted ISO(s)\n6) Exit\nEnter the number of your choice: ";
         while ((choice = readline(prompt)) != nullptr) {
@@ -89,6 +96,7 @@ std::cout << " _____          ___ _____ _____   ___ __   __  ___  _____ _____   
                 case 3:
                     // Call your cleanAndUnmountAllISOs function
                     cleanAndUnmountAllISOs();
+		    std::system("clear");
                     break;
                 case 4:
     while (true) {
@@ -230,10 +238,58 @@ void unmountISOs() {
 }
 
 
-void cleanAndUnmountAllISOs() {
-    std::cout << "Clean and Unmount All ISOs function." << std::endl;
-    // Implement the logic for this function.
+void unmountAndCleanISO(const std::string& isoDir) {
+    std::string unmountCommand = "sudo umount -l \"" + isoDir + "\"";
+    int result = std::system(unmountCommand.c_str());
+
+    if (result != 0) {
+        std::cerr << "Failed to unmount " << isoDir << " with sudo." << std::endl;
+    }
+
+    // Remove the directory after unmounting
+    std::string removeDirCommand = "sudo rmdir \"" + isoDir + "\"";
+    int removeDirResult = std::system(removeDirCommand.c_str());
+
+    if (removeDirResult != 0) {
+        std::cerr << "Failed to remove directory " << isoDir << std::endl;
+    }
 }
+
+void cleanAndUnmountAllISOs() {
+    const std::string isoPath = "/mnt";
+    std::vector<std::string> isoDirs;
+
+    DIR* dir;
+    struct dirent* entry;
+
+    if ((dir = opendir(isoPath.c_str())) != NULL) {
+        while ((entry = readdir(dir)) != NULL) {
+            if (entry->d_type == DT_DIR && std::string(entry->d_name).find("iso_") == 0) {
+                isoDirs.push_back(isoPath + "/" + entry->d_name);
+            }
+        }
+        closedir(dir);
+    }
+
+    if (isoDirs.empty()) {
+        std::cout << "No ISO folders found in " << isoPath << std::endl;
+        std::cout << "NO ISOS TO BE CLEANED" << std::endl;
+        return;
+    }
+
+    std::vector<std::thread> threads;
+    for (const std::string& isoDir : isoDirs) {
+        threads.push_back(std::thread(unmountAndCleanISO, isoDir));
+    }
+
+    for (auto& thread : threads) {
+        thread.join();
+    }
+
+    std::cout << "ALL ISOS CLEANED" << std::endl;
+}
+
+
 
 void convertBINsToISOs() {
     std::cout << "Convert BINs/IMGs to ISOs function." << std::endl;
