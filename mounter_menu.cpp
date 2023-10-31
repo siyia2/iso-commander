@@ -23,7 +23,10 @@ const std::string cacheDirectory = "/tmp/";
 
 namespace fs = std::filesystem;
 
+// Define a mutex for synchronization
 std::mutex mtx;
+
+
 
 // Function prototypes
 void listAndMountISOs();
@@ -163,13 +166,14 @@ int main() {
 void print_ascii() {
     /// Display ASCII art
 
-        std::cout << " _____          ___ _____ _____   ___ __   __  ___  _____ _____   __   __  ___ __   __ _   _ _____ _____ ____          _   ___   ___  " << std::endl;
-        std::cout << "|  ___)   /\\   (   |_   _)  ___) (   )  \\ /  |/ _ \\|  ___)  ___) |  \\ /  |/ _ (_ \\ / _) \\ | (_   _)  ___)  _ \\        / | /   \\ / _ \\ " << std::endl;
-        std::cout << "| |_     /  \\   | |  | | | |_     | ||   v   | |_| | |   | |_    |   v   | | | |\\ v / |  \\| | | | | |_  | |_) )  _  __- | \\ O /| | | |" << std::endl;
-        std::cout << "|  _)   / /\\ \\  | |  | | |  _)    | || |\\_/| |  _  | |   |  _)   | |\\_/| | | | | | |  |     | | | |  _) |  __/  | |/ /| | / _ \\| | | |" << std::endl;
-        std::cout << "| |___ / /  \\ \\ | |  | | | |___   | || |   | | | | | |   | |___  | |   | | |_| | | |  | |\\  | | | | |___| |     | / / | |( (_) ) |_| |" << std::endl;
-        std::cout << "|_____)_/    \\_(___) |_| |_____) (___)_|   |_|_| |_|_|   |_____) |_|   |_|\\___/  |_|  |_| \\_| |_| |_____)_|     |__/  |_(_)___/ \\___/" << std::endl;
-        std::cout << std::endl;
+std::cout << "\033[32m  _____          ___ _____ _____   ___ __   __  ___  _____ _____   __   __  ___ __   __ _   _ _____ _____ ____          _   ___   ___             \033[0m" << std::endl;
+std::cout << "\033[32m |  ___)   /\\   (   |_   _)  ___) (   )  \\ /  |/ _ \\|  ___)  ___) |  \\ /  |/ _ (_ \\ / _) \\ | (_   _)  ___)  _ \\        / | /   \\ / _ \\  \033[0m" << std::endl;
+std::cout << "\033[32m | |_     /  \\   | |  | | | |_     | ||   v   | |_| | |   | |_    |   v   | | | |\\ v / |  \\| | | | | |_  | |_) )  _  __- | \\ O /| | | |      \033[0m" << std::endl;
+std::cout << "\033[32m |  _)   / /\\ \\  | |  | | |  _)    | || |\\_/| |  _  | |   |  _)   | |\\_/| | | | | | |  |     | | | |  _) |  __/  | |/ /| | / _ \\| | | |     \033[0m" << std::endl;
+std::cout << "\033[32m | |___ / /  \\ \\ | |  | | | |___   | || |   | | | | | |   | |___  | |   | | |_| | | |  | |\\  | | | | |___| |     | / / | |( (_) ) |_| |       \033[0m" << std::endl;
+std::cout << "\033[32m |_____)_/    \\_(___) |_| |_____) (___)_|   |_|_| |_|_|   |_____) |_|   |_|\\___/  |_|  |_| \\_| |_| |_____)_|     |__/  |_(_)___/ \\___/       \033[0m" << std::endl;
+		
+std::cout << " " << std::endl;
 }
 
 void unmountISOs() {
@@ -192,7 +196,7 @@ void unmountISOs() {
         }
 
         if (isoDirs.empty()) {
-            std::cout << "No ISO(s) Mounted\n";
+            std::cout << "\033[31mNO ISOS MOUNTED, NOTHING TO DO.\n\033[0m";
             return;
         }
 
@@ -203,7 +207,7 @@ void unmountISOs() {
         }
 
         // Prompt for unmounting input
-        std::cout << "Enter the range of ISOs to unmount (e.g., 1, 1-3, 1 to 3) or type 'exit' to cancel: ";
+        std::cout << "\033[33mEnter the range of ISOs to unmount (e.g., 1, 1-3, 1 to 3) or type 'exit' to cancel:\033[0m ";
         std::string input;
         std::getline(std::cin, input);
 
@@ -221,7 +225,7 @@ void unmountISOs() {
             if (hyphen == '-' && startRange >= 1 && endRange >= startRange && static_cast<size_t>(endRange) <= isoDirs.size()) {
                 // Valid range input
             } else {
-                std::cerr << "Invalid range. Please try again." << std::endl;
+                std::cerr << "\033[31mInvalid range. Please try again.\n\033[0m" << std::endl;
                 continue;  // Restart the loop
             }
         } else {
@@ -229,7 +233,7 @@ void unmountISOs() {
             endRange = startRange;
         }
         if (startRange < 1 || endRange > static_cast<int>(isoDirs.size()) || startRange > endRange) {
-            std::cerr << "Invalid range or choice. Please try again." << std::endl;
+            std::cerr << "\033[31mInvalid range or choice. Please try again.\n\033[0m" << std::endl;
             continue;  // Restart the loop
         }
 
@@ -259,13 +263,14 @@ void unmountISOs() {
 }
 
 
+
 void unmountAndCleanISO(const std::string& isoDir) {
-    std::string unmountCommand = "sudo umount -l \"" + isoDir + "\"";
+    std::string unmountCommand = "sudo umount -l \"" + isoDir + "\" 2>/dev/null";
     int result = std::system(unmountCommand.c_str());
 
-    if (result != 0) {
-        std::cerr << "Failed to unmount " << isoDir << " with sudo." << std::endl;
-    }
+    // if (result != 0) {
+       // std::cerr << "Failed to unmount " << isoDir << " with sudo." << std::endl;
+    // }
 
     // Remove the directory after unmounting
     std::string removeDirCommand = "sudo rmdir \"" + isoDir + "\"";
@@ -282,6 +287,7 @@ void cleanAndUnmountISO(const std::string& isoDir) {
 }
 
 void cleanAndUnmountAllISOs() {
+	std::cout << "\n";
     std::cout << "Clean and Unmount All ISOs function." << std::endl;
     const std::string isoPath = "/mnt";
     std::vector<std::string> isoDirs;
@@ -299,8 +305,7 @@ void cleanAndUnmountAllISOs() {
     }
 
     if (isoDirs.empty()) {
-        std::cout << "No ISO folders found in " << isoPath << std::endl;
-        std::cout << "NO ISOS TO BE CLEANED" << std::endl;
+        std::cout << "\033[31mNO ISOS TO BE CLEANED\n\033[0m" << std::endl;
         return;
     }
 
@@ -320,7 +325,7 @@ void cleanAndUnmountAllISOs() {
         thread.join();
     }
 
-    std::cout << "ALL ISOS CLEANED" << std::endl;
+    std::cout << "\033[32mALL ISOS CLEANED\n\033[0m" << std::endl;
 }
 
 
@@ -343,7 +348,7 @@ void listMountedISOs() {
     }
 
     if (isoCount == 0) {
-        std::cout << "No ISO(s) mounted." << std::endl;
+        std::cout << "\033[31mNo ISO(s) mounted.\n\033[0m" << std::endl;
     }
 }
 
