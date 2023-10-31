@@ -193,7 +193,7 @@ void unmountISOs() {
         // Check if any ISOs were found
         if (isoDirs.empty()) {
             std::cout << "No ISO(s) Mounted\n";
-            break; // No need to proceed further if no ISOs are found
+            return;
         }
 
         // Display a list of mounted ISOs with indices
@@ -209,59 +209,53 @@ void unmountISOs() {
 
         if (input.empty()) {
             std::cout << "Unmounting canceled." << std::endl;
-            break;
+            return;
         }
 
         // Parse the user's input to get the selected range or single choice
         std::istringstream iss(input);
-	int startRange, endRange;
-	char hyphen;
+        int startRange, endRange;
+        char hyphen;
 
-	if ((iss >> startRange) && (iss >> hyphen) && (iss >> endRange)) {
-    	if (hyphen == '-' && startRange >= 1 && endRange >= startRange && static_cast<size_t>(endRange) <= isoDirs.size()) {
-        // Valid range input
-    	} else {
-        std::cerr << "Invalid range. Please try again." << std::endl;
-        continue;
-    	}
-	} else {
-    	// If no hyphen is present or parsing fails, treat it as a single choice
-    	endRange = startRange;
-	}
-        if (startRange < 1 || endRange > static_cast<int>(isoDirs.size()) || startRange > endRange) {
-            std::cerr << "Invalid range or choice. Please try again." << std::endl;
+        if ((iss >> startRange) && (iss >> hyphen) && (iss >> endRange)) {
+            if (hyphen == '-' and startRange >= 1 and endRange >= startRange and static_cast<size_t>(endRange) <= isoDirs.size()) {
+                // Valid range input
+            } else {
+                std::cerr << "Invalid range. Please try again." << std::endl;
+                return;
+            }
         } else {
-            // Unmount the selected range of ISOs
-            for (int i = startRange - 1; i < endRange; ++i) {
-                const std::string& isoDir = isoDirs[i];
+            // If no hyphen is present or parsing fails, treat it as a single choice
+            endRange = startRange;
+        }
+        if (startRange < 1 or endRange > static_cast<int>(isoDirs.size()) or startRange > endRange) {
+            std::cerr << "Invalid range or choice. Please try again." << std::endl;
+            return;
+        }
 
-                // Check if the ISO is mounted before unmounting
-                std::string checkMountedCommand = "sudo mountpoint -q \"" + isoDir + "\"";
-                int checkResult = system(checkMountedCommand.c_str());
+        // Unmount and attempt to remove the selected range of ISOs, suppressing output
+        for (int i = startRange - 1; i < endRange; ++i) {
+            const std::string& isoDir = isoDirs[i];
 
-                if (checkResult == 0) {
-                    std::string unmountCommand = "sudo umount -l \"" + isoDir + "\"";
-                    int result = system(unmountCommand.c_str());
+            // Unmount the ISO and suppress logs
+            std::string unmountCommand = "sudo umount -l \"" + isoDir + "\" > /dev/null 2>&1";
+            int result = system(unmountCommand.c_str());
 
-                    if (result == 0) {
-                        std::cout << "Unmounted ISO: " << isoDir << std::endl;
+            if (result == 0) {
+                // Omitted log for unmounting
+            } else {
+                // Omitted log for unmounting
+            }
 
-                        // Remove empty directory after unmounting
-                        std::string removeDirCommand = "sudo rmdir \"" + isoDir + "\"";
-                        int removeDirResult = system(removeDirCommand.c_str());
-                        if (removeDirResult == 0) {
-                            std::cout << "Removed directory: " << isoDir << std::endl;
-                        }
-                    } else {
-                        std::cerr << "Failed to unmount " << isoDir << " with sudo." << std::endl;
-                    }
-                } else {
-                    std::cerr << isoDir << " is not mounted. Skipping." << std::endl;
-                }
+            // Remove the directory, regardless of unmount success, and suppress error message
+            std::string removeDirCommand = "sudo rmdir -p \"" + isoDir + "\" 2>/dev/null";
+            int removeDirResult = system(removeDirCommand.c_str());
+
+            if (removeDirResult == 0) {
+                // Omitted log for directory removal
             }
         }
     }
-
 }
 
 
