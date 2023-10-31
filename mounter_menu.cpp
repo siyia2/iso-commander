@@ -173,8 +173,9 @@ void print_ascii() {
 }
 
 void unmountISOs() {
+    const std::string isoPath = "/mnt";
+
     while (true) {
-        const std::string isoPath = "/mnt";
         std::vector<std::string> isoDirs;
 
         // Find and store directories with the name "iso_*" in /mnt
@@ -190,7 +191,6 @@ void unmountISOs() {
             closedir(dir);
         }
 
-        // Check if any ISOs were found
         if (isoDirs.empty()) {
             std::cout << "No ISO(s) Mounted\n";
             return;
@@ -203,34 +203,34 @@ void unmountISOs() {
         }
 
         // Prompt for unmounting input
-        std::cout << "Enter the range of ISOs to unmount (e.g., 1, 1-3, 1 to 3) or press Enter to cancel: ";
+        std::cout << "Enter the range of ISOs to unmount (e.g., 1, 1-3, 1 to 3) or type 'exit' to cancel: ";
         std::string input;
         std::getline(std::cin, input);
 
-        if (input.empty()) {
-            std::cout << "Unmounting canceled." << std::endl;
-            return;
+        if (input == "exit") {
+            std::cout << "Exiting the unmounting tool." << std::endl;
+            break;  // Exit the loop
         }
 
-        // Parse the user's input to get the selected range or single choice
+        // Continue with the rest of the logic to process user input
         std::istringstream iss(input);
         int startRange, endRange;
         char hyphen;
 
         if ((iss >> startRange) && (iss >> hyphen) && (iss >> endRange)) {
-            if (hyphen == '-' and startRange >= 1 and endRange >= startRange and static_cast<size_t>(endRange) <= isoDirs.size()) {
+            if (hyphen == '-' && startRange >= 1 && endRange >= startRange && static_cast<size_t>(endRange) <= isoDirs.size()) {
                 // Valid range input
             } else {
                 std::cerr << "Invalid range. Please try again." << std::endl;
-                return;
+                continue;  // Restart the loop
             }
         } else {
             // If no hyphen is present or parsing fails, treat it as a single choice
             endRange = startRange;
         }
-        if (startRange < 1 or endRange > static_cast<int>(isoDirs.size()) or startRange > endRange) {
+        if (startRange < 1 || endRange > static_cast<int>(isoDirs.size()) || startRange > endRange) {
             std::cerr << "Invalid range or choice. Please try again." << std::endl;
-            return;
+            continue;  // Restart the loop
         }
 
         // Unmount and attempt to remove the selected range of ISOs, suppressing output
@@ -257,7 +257,6 @@ void unmountISOs() {
         }
     }
 }
-
 
 
 void unmountAndCleanISO(const std::string& isoDir) {
