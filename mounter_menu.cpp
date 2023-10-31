@@ -1,7 +1,12 @@
 #include <iostream>
+#include <unordered_map>
+#include <string>
 #include <readline/readline.h>
 #include <readline/history.h>
-#include <string>
+#include <fstream>
+
+// Define the default cache directory
+const std::string cacheDirectory = "/tmp/";
 
 // Function prototypes
 void listAndMountISOs();
