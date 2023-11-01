@@ -30,6 +30,10 @@ namespace fs = std::filesystem;
 
 
 // Function prototypes
+bool directoryExists(const std::string& path);
+bool hasIsoExtension(const std::string& filePath);
+void traverseDirectory(const std::filesystem::path& path, std::vector<std::string>& isoFiles);
+void mountISO(const std::vector<std::string>& isoFiles);
 void listAndMountISOs();
 void unmountISOs();
 void cleanAndUnmountAllISOs();
@@ -137,6 +141,7 @@ std::cout << " " << std::endl;
 
 
 // Function to check if a directory exists
+// Function to check if a directory exists
 bool directoryExists(const std::string& path) {
     struct stat info;
     return (stat(path.c_str(), &info) == 0) && (info.st_mode & S_IFDIR);
@@ -153,7 +158,7 @@ void mountISO(const std::vector<std::string>& isoFiles) {
         } else {
             std::string isoFileName = isoFile.substr(isoFile.find_last_of('/') + 1); // Extract the ISO file name
 
-            std::string mountPoint = "/mnt/iso_" + isoFileName; // Use the ISO file name in the mount point
+            std::string mountPoint = "/mnt/" + isoFileName; // Use the ISO file name in the mount point
 
             // Check if the mount point directory doesn't exist, create it
             if (!directoryExists(mountPoint)) {
@@ -183,32 +188,6 @@ void mountISO(const std::vector<std::string>& isoFiles) {
     std::cout << "\e[1;32mAll ISO files have been mounted.\e[0m" << std::endl;
 }
 
-bool hasIsoExtension(const std::string& filePath) {
-    // Extract the file extension and check if it's ".iso"
-    size_t pos = filePath.find_last_of('.');
-    if (pos != std::string::npos) {
-        std::string extension = filePath.substr(pos);
-        return extension == ".iso";
-    }
-    return false;
-}
-
-void traverseDirectory(const std::filesystem::path& path, std::vector<std::string>& isoFiles) {
-    try {
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
-            if (entry.is_regular_file()) {
-                std::string filePath = entry.path().string();
-                if (hasIsoExtension(filePath)) {
-                    isoFiles.push_back(filePath);
-                }
-            }
-        }
-    } catch (const std::filesystem::filesystem_error& e) {
-        // Handle any errors due to permission issues or other filesystem errors
-        std::cerr << "Error: " << e.what() << std::endl;
-    }
-}
-
 void select_and_mount_files_by_number() {
     std::cout << "Enter the directory path to search for .iso files: ";
     std::string directoryPath;
@@ -227,7 +206,7 @@ void select_and_mount_files_by_number() {
         std::string input;
 
         while (true) {
-            std::cout << "Choose .iso files to mount (enter numbers separated by spaces or press Enter to exit): ";
+            std::cout << "Choose an .iso file to mount (enter the number or range e.g., 1-5 or press Enter to exit): ";
             std::getline(std::cin, input);
 
             if (input.empty()) {
@@ -236,24 +215,62 @@ void select_and_mount_files_by_number() {
             }
 
             std::istringstream iss(input);
-            int num;
+            int start, end;
+            char dash;
 
-            std::vector<std::string> selectedISOs; // Create a vector to store selected ISO files
-
-            while (iss >> num) {
-                if (num >= 1 && num <= isoFiles.size()) {
-                    selectedISOs.push_back(isoFiles[num - 1]); // Add the selected ISO file to the vector
+            if (iss >> start) {
+                if (iss >> dash && dash == '-' && iss >> end) {
+                    // Range input (e.g., 1-5)
+                    if (start >= 1 && start <= isoFiles.size() && end >= start && end <= isoFiles.size()) {
+                        // Mount the selected ISO files within the specified range
+                        std::vector<std::string> selectedISOs;
+                        for (int i = start - 1; i < end; i++) {
+                            selectedISOs.push_back(isoFiles[i]);
+                        }
+                        mountISO(selectedISOs);
+                    } else {
+                        std::cout << "Invalid range. Please try again." << std::endl;
+                    }
+                } else if (start >= 1 && start <= isoFiles.size()) {
+                    // Single number input
+                    mountISO({isoFiles[start - 1]}); // Pass the ISO file as a vector with a single element
                 } else {
-                    std::cout << "Invalid number: " << num << ". Please try again." << std::endl;
+                    std::cout << "Invalid number. Please try again." << std::endl;
                 }
-            }
-
-            if (!selectedISOs.empty()) {
-                // Call the mountISO function with the selected ISO files
-                mountISO(selectedISOs);
+            } else {
+                std::cout << "Invalid input format. Please try again." << std::endl;
             }
         }
     }
+}
+
+// Function to traverse a directory and collect .iso files
+void traverseDirectory(const std::filesystem::path& path, std::vector<std::string>& isoFiles) {
+    try {
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
+            if (entry.is_regular_file()) {
+                std::string filePath = entry.path().string();
+                // Debug output: Print the actual file name, including quotes
+                //std::cout << "Found file: \"" << filePath << "\"" << std::endl;
+
+                // Correctly handle file names with spaces or special characters
+                isoFiles.push_back(filePath);
+            }
+        }
+    } catch (const std::filesystem::filesystem_error& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+    }
+}
+
+// Function to check if a file has the .iso extension
+bool hasIsoExtension(const std::string& filePath) {
+    // Extract the file extension and check if it's ".iso"
+    size_t pos = filePath.find_last_of('.');
+    if (pos != std::string::npos) {
+        std::string extension = filePath.substr(pos);
+        return extension == ".iso";
+    }
+    return false;
 }
 
 
