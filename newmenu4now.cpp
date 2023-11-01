@@ -140,25 +140,26 @@ std::cout << " " << std::endl;
 }
 
 
-// Function to check if a directory exists
+
 // Function to check if a directory exists
 bool directoryExists(const std::string& path) {
-    struct stat info;
-    return (stat(path.c_str(), &info) == 0) && (info.st_mode & S_IFDIR);
+    return fs::is_directory(path);
 }
 
-// Function to mount an ISO file
 void mountISO(const std::vector<std::string>& isoFiles) {
     std::map<std::string, std::string> mountedIsos;
+    int count = 1;
 
     for (const std::string& isoFile : isoFiles) {
         // Check if the ISO file is already mounted
         if (mountedIsos.find(isoFile) != mountedIsos.end()) {
             std::cout << "ISO file '" << isoFile << "' is already mounted at '" << mountedIsos[isoFile] << "'." << std::endl;
         } else {
-            std::string isoFileName = isoFile.substr(isoFile.find_last_of('/') + 1); // Extract the ISO file name
+            // Use the filesystem library to extract the ISO file name
+            fs::path isoPath(isoFile);
+            std::string isoFileName = isoPath.stem().string(); // Remove the .iso extension
 
-            std::string mountPoint = "/mnt/" + isoFileName; // Use the ISO file name in the mount point
+            std::string mountPoint = "/mnt/iso_" + isoFileName; // Use the modified ISO file name in the mount point with "iso_" prefix
 
             // Check if the mount point directory doesn't exist, create it
             if (!directoryExists(mountPoint)) {
@@ -183,7 +184,8 @@ void mountISO(const std::vector<std::string>& isoFiles) {
             }
         }
     }
-	system("clear");
+
+    system("clear");
     // Print a message indicating that all ISO files have been mounted
     std::cout << "\e[1;32mPreviously Selected ISO files have been mounted.\e[0m" << std::endl;
 }
