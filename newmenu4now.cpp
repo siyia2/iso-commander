@@ -151,7 +151,9 @@ void mountISO(const std::vector<std::string>& isoFiles) {
         if (mountedIsos.find(isoFile) != mountedIsos.end()) {
             std::cout << "ISO file '" << isoFile << "' is already mounted at '" << mountedIsos[isoFile] << "'." << std::endl;
         } else {
-            std::string mountPoint = "/mnt/iso_" + std::to_string(std::hash<std::string>{}(isoFile)); // Create a unique mount point
+            std::string isoFileName = isoFile.substr(isoFile.find_last_of('/') + 1); // Extract the ISO file name
+
+            std::string mountPoint = "/mnt/iso_" + isoFileName; // Use the ISO file name in the mount point
 
             // Check if the mount point directory doesn't exist, create it
             if (!directoryExists(mountPoint)) {
