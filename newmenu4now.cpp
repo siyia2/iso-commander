@@ -44,24 +44,13 @@ std::vector<std::string> findBinImgFiles(const std::string& directory) {
 
     try {
         for (const auto& entry : fs::recursive_directory_iterator(directory)) {
-            // Check if the directory entry is a directory
-            if (entry.is_directory()) {
-                // Attempt to list the contents of the directory to check for permission
-                try {
-                    for (const auto& subentry : fs::directory_iterator(entry.path())) {
-                        // Empty loop just to check permissions
+            if (entry.is_regular_file()) {
+                std::string ext = entry.path().extension();
+                std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower); // Convert extension to lowercase
+                if (ext == ".bin" || ext == ".img") {
+                    if (fs::file_size(entry) >= 50'000'000) {
+                        fileNames.push_back(entry.path().string());
                     }
-                } catch (const std::filesystem::filesystem_error&) {
-                    std::cerr << "Skipping directory (requires root access): " << entry.path() << std::endl;
-                    continue;  // Skip this directory
-                }
-            }
-
-            // If it's not a directory or doesn't require root access, process the files
-            if (entry.is_regular_file() && (entry.path().extension() == ".bin" || entry.path().extension() == ".img")) {
-                // Check the file size and skip files under 50MB
-                if (fs::file_size(entry) >= 50'000'000) {
-                    fileNames.push_back(entry.path().string());
                 }
             }
         }
@@ -126,15 +115,15 @@ int main() {
             std::cout << "Press Enter to continue...";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             std::system("clear");
-        } else if (choice == "4") {
-            std::cout << "Enter the directory path to scan for parts: ";
+            } else if (choice == "4") {
+            std::cout << "Enter the directory path to scan for .bin and .img files: ";
             std::getline(std::cin, directoryPath);
             binImgFiles = findBinImgFiles(directoryPath);
 
             if (binImgFiles.empty()) {
-                std::cout << "No .bin or .img files found in the specified directory and its subdirectories or all files are under 50MB.\n";
+                std::cout << "No .bin or .img files found in the specified directory and its subdirectories or all files are under 50MB." << std::endl;
             } else {
-                std::cout << "Choose a file to process (enter the number or range e.g., 1-5):\n";
+                std::cout << "Choose a file to process (enter the number or range e.g., 1-5):" << std::endl;
                 for (int i = 0; i < binImgFiles.size(); i++) {
                     std::cout << i + 1 << ". " << binImgFiles[i] << std::endl;
                 }
@@ -142,10 +131,10 @@ int main() {
                 std::vector<std::string> selectedFiles;
                 while (true) {
                     std::string input;
-                    std::getline(std::cin, input); // Read the entire line
+                    std::getline(std::cin, input);
 
                     if (input.empty()) {
-                        // User pressed Enter with no other input, exit the loop
+                        std::cout << "No selection made. Press Enter to exit." << std::endl;
                         break;
                     }
 
