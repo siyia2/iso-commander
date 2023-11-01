@@ -2,7 +2,6 @@
 #include <fstream>
 #include <string>
 #include <vector>
-#include <mutex>
 #include <cstdlib>
 #include <condition_variable>
 #include <algorithm>
@@ -21,6 +20,10 @@
 #include <algorithm>
 #include <cctype>
 
+//167 opoydhpote trexw thn entolh system needs escaping with replace " with  ' and ' with ("'", "'\\''", string) 
+//santitization example system(("sudo mkdir -p '" + sanitizePath(mountPoint) + "'").c_str()) != 0)
+
+
 std::mutex mtx;
 int numThreads = 4;
 // Define the default cache directory
@@ -28,9 +31,6 @@ const std::string cacheDirectory = "/tmp/";
 
 namespace fs = std::filesystem;
 
-bool directoryExists(const std::string& path) {
-    return fs::is_directory(path);
-}
 
 // Function prototypes
 bool directoryExists(const std::string& path);
@@ -49,8 +49,9 @@ void select_and_convert_files_to_iso();
 void manualMode_imgs();
 void print_ascii();
 void screen_clear();
-std::vector<std::string> findBinImgFiles(const std::string& directory);
 
+std::vector<std::string> findBinImgFiles(const std::string& directory);
+std::mutex mountMutex; // Mutex for thread safety
 
 std::string directoryPath;
 std::vector<std::string> binImgFiles;  // Declare binImgFiles here
@@ -146,45 +147,69 @@ std::cout << " " << std::endl;
 
 
 
+bool directoryExists(const std::string& path) {
+    return fs::is_directory(path);
+}
+
+void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>& mountedIsos) {
+    // Check if the ISO file is already mounted
+    std::lock_guard<std::mutex> lock(mountMutex); // Lock to protect access to mountedIsos
+    if (mountedIsos.find(isoFile) != mountedIsos.end()) {
+        std::cout << "\e[1;31mALREADY MOUNTED\e[0m: ISO file '" << isoFile << "' is already mounted at '" << mountedIsos[isoFile] << "'." << std::endl;
+        return;
+    }
+
+    // Use the filesystem library to extract the ISO file name
+    fs::path isoPath(isoFile);
+    std::string isoFileName = isoPath.stem().string(); // Remove the .iso extension
+
+    std::string mountPoint = "/mnt/iso_" + isoFileName; // Use the modified ISO file name in the mount point with "iso_" prefix
+
+    // Check if the mount point directory doesn't exist, create it
+    if (!directoryExists(mountPoint)) {
+        // Create the mount point directory
+        if (system(("sudo mkdir -p \"" + mountPoint + "\"").c_str()) != 0) {
+            std::perror("Failed to create mount point directory");
+            return;
+        }
+
+        // Mount the ISO file to the mount point
+        if (system(("sudo mount -o loop \"" + isoFile + "\" \"" + mountPoint + "\"").c_str()) != 0) {
+            std::perror("Failed to mount ISO file");
+        } else {
+            std::cout << "ISO file '" << isoFile << "' mounted at '" << mountPoint << "'." << std::endl;
+            // Store the mount point in the map
+            mountedIsos[isoFile] = mountPoint;
+        }
+    } else {
+        // The mount point directory already exists, so the ISO is considered mounted
+        std::cout << "ISO file '" << isoFile << "' is already mounted at '" << mountPoint << "'." << std::endl;
+        mountedIsos[isoFile] = mountPoint;
+        std::cout << "Press Enter to continue...";
+        std::cin.get(); // Wait for the user to press Enter
+    }
+}
+
 void mountISO(const std::vector<std::string>& isoFiles) {
     std::map<std::string, std::string> mountedIsos;
     int count = 1;
+    std::vector<std::thread> threads;
 
     for (const std::string& isoFile : isoFiles) {
-        // Check if the ISO file is already mounted
-        if (mountedIsos.find(isoFile) != mountedIsos.end()) {
-            std::cout << "\e[1;31mALREADY MOUNTED\e[0m: ISO file '" << isoFile << "' is already mounted at '" << mountedIsos[isoFile] << "'." << std::endl;
-        } else {
-            // Use the filesystem library to extract the ISO file name
-            fs::path isoPath(isoFile);
-            std::string isoFileName = isoPath.stem().string(); // Remove the .iso extension
-
-            std::string mountPoint = "/mnt/iso_" + isoFileName; // Use the modified ISO file name in the mount point with "iso_" prefix
-
-            // Check if the mount point directory doesn't exist, create it
-            if (!directoryExists(mountPoint)) {
-                // Create the mount point directory
-                if (system(("sudo mkdir -p \"" + mountPoint + "\"").c_str()) != 0) {
-                    std::perror("Failed to create mount point directory");
-                    continue;
-                }
-
-                // Mount the ISO file to the mount point
-                if (system(("sudo mount -o loop \"" + isoFile + "\" \"" + mountPoint + "\"").c_str()) != 0) {
-                    std::perror("Failed to mount ISO file");
-                } else {
-                    std::cout << "ISO file '" << isoFile << "' mounted at '" << mountPoint << "'." << std::endl;
-                    // Store the mount point in the map
-                    mountedIsos[isoFile] = mountPoint;
-                }
-            } else {
-                // The mount point directory already exists, so the ISO is considered mounted
-                std::cout << "ISO file '" << isoFile << "' is already mounted at '" << mountPoint << "'." << std::endl;
-                mountedIsos[isoFile] = mountPoint;
-                std::cout << "Press Enter to continue...";
-				std::cin.get();  // Wait for the user to press Enter
+        // Limit the number of threads to a maximum of 4
+        if (threads.size() >= 4) {
+            for (auto& thread : threads) {
+                thread.join();
             }
+            threads.clear();
         }
+
+        threads.emplace_back(mountIsoFile, isoFile, std::ref(mountedIsos));
+    }
+
+    // Join any remaining threads
+    for (auto& thread : threads) {
+        thread.join();
     }
 
     system("clear");
