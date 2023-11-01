@@ -254,7 +254,7 @@ void select_and_mount_files_by_number() {
         std::getline(std::cin, input);
 
         if (input.empty()) {
-            std::cout << "Exiting..." << std::endl;
+            std::cout << "Press Enter to Return" << std::endl;
             break;
         }
 
