@@ -250,11 +250,11 @@ void traverseDirectory(const std::filesystem::path& path, std::vector<std::strin
         for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
             if (entry.is_regular_file()) {
                 std::string filePath = entry.path().string();
-                // Debug output: Print the actual file name, including quotes
-                //std::cout << "Found file: \"" << filePath << "\"" << std::endl;
-
-                // Correctly handle file names with spaces or special characters
-                isoFiles.push_back(filePath);
+                
+                // Check if the file has an ".iso" extension
+                if (std::filesystem::path(filePath).extension() == ".iso") {
+                    isoFiles.push_back(filePath);
+                }
             }
         }
     } catch (const std::filesystem::filesystem_error& e) {
