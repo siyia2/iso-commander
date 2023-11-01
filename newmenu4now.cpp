@@ -17,15 +17,12 @@
 #include <thread>
 #include <mutex>
 
+std::mutex mtx;
 
 // Define the default cache directory
 const std::string cacheDirectory = "/tmp/";
 
 namespace fs = std::filesystem;
-
-// Define a mutex for synchronization
-std::mutex mtx;
-
 
 
 // Function prototypes
@@ -42,7 +39,62 @@ void manualMode_imgs();
 void print_ascii();
 void screen_clear();
 
+std::vector<std::string> findBinImgFiles(const std::string& directory) {
+    std::vector<std::string> fileNames;
+
+    try {
+        for (const auto& entry : fs::recursive_directory_iterator(directory)) {
+            // Check if the directory entry is a directory
+            if (entry.is_directory()) {
+                // Attempt to list the contents of the directory to check for permission
+                try {
+                    for (const auto& subentry : fs::directory_iterator(entry.path())) {
+                        // Empty loop just to check permissions
+                    }
+                } catch (const std::filesystem::filesystem_error&) {
+                    std::cerr << "Skipping directory (requires root access): " << entry.path() << std::endl;
+                    continue;  // Skip this directory
+                }
+            }
+
+            // If it's not a directory or doesn't require root access, process the files
+            if (entry.is_regular_file() && (entry.path().extension() == ".bin" || entry.path().extension() == ".img")) {
+                // Check the file size and skip files under 50MB
+                if (fs::file_size(entry) >= 50'000'000) {
+                    fileNames.push_back(entry.path().string());
+                }
+            }
+        }
+    } catch (const std::filesystem::filesystem_error& e) {
+        std::cerr << "Filesystem error: " << e.what() << std::endl;
+    }
+
+    return fileNames;
+}
+
+
+// Function to list and prompt the user to choose a file for conversion
+std::string chooseFileToConvert(const std::vector<std::string>& files) {
+    std::cout << "Found the following .bin and .img files:\n";
+    for (size_t i = 0; i < files.size(); ++i) {
+        std::cout << i + 1 << ": " << files[i] << "\n";
+    }
+
+    int choice;
+    std::cout << "Enter the number of the file you want to convert: ";
+    std::cin >> choice;
+
+    if (choice >= 1 && choice <= static_cast<int>(files.size())) {
+        return files[choice - 1];
+    } else {
+        std::cout << "Invalid choice. Please choose a valid file.\n";
+        return "";
+    }
+}
+
 int main() {
+	std::string directoryPath = "/your/directory/path";  // Specify your directory path here
+        std::vector<std::string> binImgFiles;  // Declare binImgFiles here
     char choice;
     while (true) {
         print_ascii();
@@ -79,15 +131,19 @@ int main() {
 				std::system("clear");
                 break;
 
-            case '4':
-                std::cout << "Operating in List Mode" << std::endl;
-                // Call your select_and_convert_files_to_iso function here
-                select_and_convert_files_to_iso();
-                std::cout << "Press Enter to continue...";
-				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-				std::system("clear");
-                break;
+             case '4':
+                std::cout << "Enter the directory path to scan for parts: ";
+                std::cin >> directoryPath;
+                binImgFiles = findBinImgFiles(directoryPath); // Update the existing vector
 
+                if (binImgFiles.empty()) {
+                    std::cout << "No .bin or .img files found in the specified directory and its subdirectories or all files are under 50MB.\n";
+                } else {
+                    for (const std::string& fileName : binImgFiles) {
+                        std::cout << "Found accessible file: " << fileName << std::endl;
+                    }
+                }
+                break;
             case '5':
                 // Call your listMountedISOs function
                 listMountedISOs();
@@ -123,6 +179,8 @@ std::cout << "\033[32m |_____)_/    \\_(___) |_| |_____) (___)_|   |_|_| |_|_|  
 		
 std::cout << " " << std::endl;
 }
+
+
 
 void unmountISOs() {
     const std::string isoPath = "/mnt";
