@@ -220,9 +220,8 @@ void select_and_mount_files_by_number() {
         }
 
         std::string input;
-        std::cout << "Choose an .iso file to mount (enter the number or range e.g., 1-5 or press Enter to exit): ";
+        std::cout << "Choose .iso files to mount (enter numbers separated by spaces or press Enter to exit): ";
         std::getline(std::cin, input);
-        
 
         if (input.empty()) {
             std::cout << "Exiting..." << std::endl;
@@ -230,37 +229,19 @@ void select_and_mount_files_by_number() {
         }
 
         std::istringstream iss(input);
-        int start, end;
-        char dash;
+        int selectedNumber;
 
-        if (iss >> start) {
-            if (iss >> dash && dash == '-' && iss >> end) {
-                // Range input (e.g., 1-5)
-                if (start >= 1 && start <= isoFiles.size() && end >= start && end <= isoFiles.size()) {
-                    // Mount the selected ISO files within the specified range
-                    std::vector<std::string> selectedISOs;
-                    for (int i = start - 1; i < end; i++) {
-                        selectedISOs.push_back(isoFiles[i]);
-                    }
-                    mountISO(selectedISOs);
-
-                    // Add the mounted ISOs to the list
-                    mountedISOs.insert(mountedISOs.end(), selectedISOs.begin(), selectedISOs.end());
-                } else {
-                    std::cout << "Invalid range. Please try again." << std::endl;
-                }
-            } else if (start >= 1 && start <= isoFiles.size()) {
-                // Single number input
-                std::string selectedISO = isoFiles[start - 1];
+        while (iss >> selectedNumber) {
+            if (selectedNumber >= 1 && selectedNumber <= isoFiles.size()) {
+                // Mount the selected ISO file
+                std::string selectedISO = isoFiles[selectedNumber - 1];
                 mountISO({selectedISO});
 
                 // Add the mounted ISO to the list
                 mountedISOs.push_back(selectedISO);
             } else {
-                std::cout << "Invalid number. Please try again." << std::endl;
+                std::cout << "Invalid number: " << selectedNumber << ". Please try again." << std::endl;
             }
-        } else {
-            std::cout << "Invalid input format. Please try again." << std::endl;
         }
     }
 }
