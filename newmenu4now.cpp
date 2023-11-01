@@ -8,10 +8,12 @@
 #include <algorithm>
 #include <filesystem>
 #include <future>
+#include <map>
 #include <readline/readline.h>
 #include <readline/history.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <future>
 #include <unistd.h>
 #include <dirent.h>
@@ -19,6 +21,7 @@
 #include <thread>
 #include <queue>
 #include <mutex>
+#include <unordered_map>  // Include the header for unordered_map
 #include <algorithm>
 #include <cctype>
 
@@ -26,8 +29,9 @@ std::mutex mtx;
 int numThreads = 4;
 // Define the default cache directory
 const std::string cacheDirectory = "/tmp/";
-
+std::vector<std::string> isoFiles
 namespace fs = std::filesystem;
+
 
 
 // Function prototypes
@@ -36,11 +40,8 @@ void unmountISOs();
 void cleanAndUnmountAllISOs();
 void convertBINsToISOs();
 void listMountedISOs();
-void listMode();
-void manualMode_isos();
 void select_and_mount_files_by_number();
 void select_and_convert_files_to_iso();
-void manualMode_imgs();
 void print_ascii();
 void screen_clear();
 std::vector<std::string> findBinImgFiles(const std::string& directory);
@@ -88,7 +89,9 @@ int main() {
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');  // Consume the newline character
 
         if (choice == "1") {
-            // Call your listAndMountISOs function
+            select_and_mount_files_by_number();
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            std::system("clear");
         } else if (choice == "2") {
             // Call your unmountISOs function
             unmountISOs();
@@ -307,26 +310,125 @@ void listMountedISOs() {
     }
 }
 
-void listMode() {
-    std::cout << "List Mode selected. Implement your logic here." << std::endl;
-    // You can call select_and_mount_files_by_number or add your specific logic.
+bool mountISO(const std::string& isoFilePath) {
+    std::string mountPoint = "/mnt/";
+    
+    // Get the ISO file name from the path
+    size_t lastSlashPos = isoFilePath.find_last_of('/');
+    if (lastSlashPos != std::string::npos) {
+        std::string isoFileName = isoFilePath.substr(lastSlashPos + 1);
+        
+        // Escape spaces and parentheses in the ISO file name
+        std::string escapedFileName = isoFileName;
+        for (char& c : escapedFileName) {
+            if (c == ' ' || c == '(' || c == ')') {
+                c = '\\';
+                escapedFileName.insert(++c, 1, c);
+            }
+        }
+
+        std::string command = "mount -o loop -t iso9660 \"" + isoFilePath + "\" \"" + mountPoint + escapedFileName + "\"";
+
+        int result = system(command.c_str());
+
+        if (result == 0) {
+            std::cout << "ISO mounted successfully." << std::endl;
+            return true;
+        } else {
+            std::cerr << "Failed to mount ISO." << std::endl;
+            return false;
+        }
+    } else {
+        std::cerr << "Invalid ISO file path." << std::endl;
+        return false;
+    }
 }
 
-void manualMode_isos() {
-    std::cout << "Manual Mode selected. Implement your logic here." << std::endl;
-    // You can call manual_mode_isos or add your specific logic.
+
+
+
+
+
+
+bool hasIsoExtension(const std::string& filePath) {
+    // Extract the file extension and check if it's ".iso"
+    size_t pos = filePath.find_last_of('.');
+    if (pos != std::string::npos) {
+        std::string extension = filePath.substr(pos);
+        return extension == ".iso";
+    }
+    return false;
 }
 
-void manualMode_imgs() {
-    std::cout << "Manual Mode selected. Implement your logic here." << std::endl;
-    // You can call manual_mode_imgs or add your specific logic.
+void traverseDirectory(const std::filesystem::path& path, std::vector<std::string>& isoFiles) {
+    try {
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
+            if (entry.is_regular_file()) {
+                std::string filePath = entry.path().string();
+                if (hasIsoExtension(filePath)) {
+                    isoFiles.push_back(filePath);
+                }
+            }
+        }
+    } catch (const std::filesystem::filesystem_error& e) {
+        // Handle any errors due to permission issues or other filesystem errors
+        std::cerr << "Error: " << e.what() << std::endl;
+    }
 }
 
 void select_and_mount_files_by_number() {
-    std::cout << "List and mount files by number. Implement your logic here." << std::endl;
-    // Implement the logic for selecting and mountin files.
-}
+    std::cout << "Enter the directory path to search for .iso files: ";
+    std::string directoryPath;
+    std::getline(std::cin, directoryPath);
 
+    std::vector<std::string> isoFiles;
+    traverseDirectory(directoryPath, isoFiles);
+
+    if (isoFiles.empty()) {
+        std::cout << "No .iso files found in the specified directory and its subdirectories." << std::endl;
+    } else {
+        for (int i = 0; i < isoFiles.size(); i++) {
+            std::cout << i + 1 << ". " << isoFiles[i] << std::endl;
+        }
+
+        std::string input;
+
+        while (true) {
+            std::cout << "Choose an .iso file to mount (enter the number or range e.g., 1-5 or press Enter to exit): ";
+            std::getline(std::cin, input);
+
+            if (input.empty()) {
+                std::cout << "Exiting..." << std::endl;
+                break;
+            }
+
+            std::istringstream iss(input);
+            int start, end;
+            char dash;
+
+            if (iss >> start) {
+                if (iss >> dash && dash == '-' && iss >> end) {
+                    // Range input (e.g., 1-5)
+                    if (start >= 1 && start <= isoFiles.size() && end >= start && end <= isoFiles.size()) {
+                        // Mount the selected ISO files within the specified range
+                        for (int i = start - 1; i < end; i++) {
+                            mountISO(isoFiles[i]);
+                        }
+                    } else {
+                        std::cout << "Invalid range. Please try again." << std::endl;
+                    }
+                } else if (start >= 1 && start <= isoFiles.size()) {
+                    // Single number input
+                    mountISO(isoFiles[start - 1]);
+                } else {
+                    std::cout << "Invalid number. Please try again." << std::endl;
+                }
+            } else {
+                std::cout << "Invalid input format. Please try again." << std::endl;
+            }
+        }
+    }
+}
 
 
 std::vector<std::string> findBinImgFiles(const std::string& directory) {
@@ -461,12 +563,10 @@ void processFilesInRange(int start, int end) {
 }
 
 void select_and_convert_files_to_iso() {
-    
-    char* input = readline("Enter the directory path to scan for .bin and .img files: ");
-	if (input) {
-    directoryPath = input;  // Convert C string to std::string
-    free(input);
-}
+    std::cout << "Enter the directory path to scan for .bin and .img files: ";
+    std::getline(std::cin, directoryPath);
+    binImgFiles = findBinImgFiles(directoryPath); // You need to define findBinImgFiles function.
+
     if (binImgFiles.empty()) {
         std::cout << "No .bin or .img files found in the specified directory and its subdirectories or all files are under 50MB." << std::endl;
     } else {
@@ -522,62 +622,4 @@ void select_and_convert_files_to_iso() {
             }
         }
     }
-}
-
-// Function to read a line with escape character support
-std::string customReadline() {
-    std::string input;
-    char ch;
-    bool escape = false;
-
-    while (true) {
-        ch = std::cin.get();
-        if (ch == '\n' && !escape) {
-            break;
-        }
-
-        if (ch == '\\' && !escape) {
-            escape = true;
-        } else if (ch == ' ' && escape) {
-            input += ' ';
-            escape = false;
-        } else if (escape) {
-            // Handle other escape characters if needed
-            input += '\\';
-            input += ch;
-            escape = false;
-        } else {
-            input += ch;
-        }
-    }
-
-    return input;
-}
-
-// Function to perform autocompletion for filenames
-std::string autocompleteFilename(const std::string& partial) {
-    // Implement your autocompletion logic here
-    // For example, you can list matching filenames from a directory
-    // and return the best match.
-
-    // For demonstration purposes, let's assume we have a list of filenames.
-    std::vector<std::string> filenames = {"file with spaces.txt", "another file.txt"};
-
-    std::string bestMatch;
-    for (const std::string& filename : filenames) {
-        if (filename.find(partial) == 0) {
-            if (bestMatch.empty()) {
-                bestMatch = filename;
-            } else {
-                // Multiple matches found, return the common prefix
-                size_t i = 0;
-                while (i < bestMatch.length() && i < filename.length() && bestMatch[i] == filename[i]) {
-                    i++;
-                }
-                bestMatch = bestMatch.substr(0, i);
-            }
-        }
-    }
-
-    return bestMatch;
 }
