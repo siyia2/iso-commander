@@ -129,10 +129,10 @@ int main() {
 				
                 std::vector<std::string> selectedFiles;
                 while (true) {
-					
-                    std::string input;
-                    std::cout << "Choose a file to process (enter the number or range e.g., 1-5 or enter to exit):" << std::endl;
-                    std::getline(std::cin, input);
+					std::string input;
+					std::cout << "Choose a file to process (enter the number or range e.g., 1-5 or press Enter to exit): ";
+					std::getline(std::cin, input);
+                    
                     if (input.empty()) {
                         std::cout << "No selection made. Press Enter to exit." << std::endl;
                         break;
