@@ -139,11 +139,26 @@ int main() {
                 if (binImgFiles.empty()) {
                     std::cout << "No .bin or .img files found in the specified directory and its subdirectories or all files are under 50MB.\n";
                 } else {
-                    for (const std::string& fileName : binImgFiles) {
-                        std::cout << "Found accessible file: " << fileName << std::endl;
+                    std::cout << "Choose a file to process (enter the number):\n";
+                    for (int i = 0; i < binImgFiles.size(); i++) {
+                        std::cout << i + 1 << ". " << binImgFiles[i] << std::endl;
+                    }
+
+                    int selectedFileNumber;
+                    std::cout << "Enter the number of the file you want to process: ";
+                    std::cin >> selectedFileNumber;
+
+                    if (selectedFileNumber >= 1 && selectedFileNumber <= binImgFiles.size()) {
+                        std::string chosenFile = binImgFiles[selectedFileNumber - 1];
+                        std::cout << "You selected: " << chosenFile << std::endl;
+
+                        // Continue with processing the chosen file
+                    } else {
+                        std::cout << "Invalid file number. Please try again." << std::endl;
                     }
                 }
                 break;
+
             case '5':
                 // Call your listMountedISOs function
                 listMountedISOs();
