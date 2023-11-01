@@ -4,6 +4,7 @@
 #include <vector>
 #include <mutex>
 #include <cstdlib>
+#include <condition_variable>
 #include <algorithm>
 #include <filesystem>
 #include <future>
@@ -16,12 +17,13 @@
 #include <dirent.h>
 #include <sstream>
 #include <thread>
+#include <queue>
 #include <mutex>
 #include <algorithm>
 #include <cctype>
 
 std::mutex mtx;
-
+int numThreads = 4;
 // Define the default cache directory
 const std::string cacheDirectory = "/tmp/";
 
@@ -68,7 +70,7 @@ std::string chooseFileToConvert(const std::vector<std::string>& files) {
 
 int main() {
     std::string choice;
-    
+    int numThreads = 4;
 
     while (true) {
         // Display the menu options
@@ -391,44 +393,77 @@ bool isCcd2IsoInstalled() {
 }
 
 
-void convertBINsToISOs(const std::vector<std::string>& inputPaths) {
+void convertBINToISO(const std::string& inputPath) {
+    // Check if the input file exists
+    if (!std::ifstream(inputPath)) {
+        std::cout << "The specified input file '" << inputPath << "' does not exist." << std::endl;
+        return;
+    }
+
+    // Define the output path for the ISO file with only the .iso extension
+    std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
+
+    // Check if the output ISO file already exists
+    if (std::ifstream(outputPath)) {
+        std::cout << "The output ISO file '" << outputPath << "' already exists. Skipping conversion." << std::endl;
+    } else {
+        // Execute the conversion using ccd2iso
+        std::string conversionCommand = "ccd2iso \"" + inputPath + "\" \"" + outputPath + "\"";
+        int conversionStatus = std::system(conversionCommand.c_str());
+        if (conversionStatus == 0) {
+            std::cout << "Image file converted to ISO: " << outputPath << std::endl;
+        } else {
+            std::cout << "Conversion of " << inputPath << " failed." << std::endl;
+        }
+    }
+}
+
+void convertBINsToISOs(const std::vector<std::string>& inputPaths, int numThreads) {
     if (!isCcd2IsoInstalled()) {
         std::cout << "ccd2iso is not installed. Please install it before using this option." << std::endl;
         return;
     }
 
+    // Create a thread pool with a limited number of threads
+    std::vector<std::thread> threads;
+    int numCores = std::min(numThreads, static_cast<int>(std::thread::hardware_concurrency()));
+
     for (const std::string& inputPath : inputPaths) {
         if (inputPath == "}") {
             break; // Exit the loop if a closing brace is encountered
-        } else if (!std::ifstream(inputPath)) {
-            std::cout << "The specified input file '" << inputPath << "' does not exist." << std::endl;
         } else {
-            // Define the output path for the ISO file with only the .iso extension
-            std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
-
-            // Check if the output ISO file already exists
-            if (std::ifstream(outputPath)) {
-                std::cout << "The output ISO file '" << outputPath << "' already exists. Skipping conversion." << std::endl;
-            } else {
-                // Execute the conversion using ccd2iso
-                std::string conversionCommand = "ccd2iso \"" + inputPath + "\" \"" + outputPath + "\"";
-                int conversionStatus = std::system(conversionCommand.c_str());
-                if (conversionStatus == 0) {
-                    std::cout << "Image file converted to ISO: " << outputPath << std::endl;
-                } else {
-                    std::cout << "Conversion of " << inputPath << " failed." << std::endl;
+            // Create a new thread for each conversion
+            threads.emplace_back(convertBINToISO, inputPath);
+            if (threads.size() >= numCores) {
+                // Limit the number of concurrent threads to the number of available cores
+                for (auto& thread : threads) {
+                    thread.join();
                 }
+                threads.clear();
             }
         }
+    }
+
+    // Join any remaining threads
+    for (auto& thread : threads) {
+        thread.join();
     }
 }
 
 
 
+void processFilesInRange(int start, int end) {
+    std::vector<std::string> selectedFiles;
+    for (int i = start; i <= end; i++) {
+        selectedFiles.push_back(binImgFiles[i - 1]);
+    }
+    convertBINsToISOs(selectedFiles, numThreads);
+}
+
 void select_and_convert_files_to_iso() {
     std::cout << "Enter the directory path to scan for .bin and .img files: ";
     std::getline(std::cin, directoryPath);
-    binImgFiles = findBinImgFiles(directoryPath);
+    binImgFiles = findBinImgFiles(directoryPath); // You need to define findBinImgFiles function.
 
     if (binImgFiles.empty()) {
         std::cout << "No .bin or .img files found in the specified directory and its subdirectories or all files are under 50MB." << std::endl;
@@ -448,18 +483,26 @@ void select_and_convert_files_to_iso() {
                 break;
             }
 
-            // Parse and process the input for single numbers or ranges
             std::istringstream iss(input);
             int start, end;
             char dash;
+
             if (iss >> start) {
                 if (iss >> dash && dash == '-' && iss >> end) {
                     // Range input (e.g., 1-5)
                     if (start >= 1 && start <= binImgFiles.size() && end >= start && end <= binImgFiles.size()) {
-                        for (int i = start; i <= end; i++) {
-                            std::vector<std::string> selectedFiles;
-                            selectedFiles.push_back(binImgFiles[i - 1]);
-                            convertBINsToISOs(selectedFiles); // Convert the selected file immediately
+                        // Divide the work among threads (up to 4 cores)
+                        std::thread threads[4];
+                        int range = (end - start + 1) / 4;
+
+                        for (int i = 0; i < 4; i++) {
+                            int threadStart = start + i * range;
+                            int threadEnd = i == 3 ? end : threadStart + range - 1;
+                            threads[i] = std::thread(processFilesInRange, threadStart, threadEnd);
+                        }
+
+                        for (int i = 0; i < 4; i++) {
+                            threads[i].join();
                         }
                     } else {
                         std::cout << "Invalid range. Please try again." << std::endl;
@@ -468,7 +511,7 @@ void select_and_convert_files_to_iso() {
                     // Single number input
                     std::vector<std::string> selectedFiles;
                     selectedFiles.push_back(binImgFiles[start - 1]);
-                    convertBINsToISOs(selectedFiles); // Convert the selected file immediately
+                    convertBINsToISOs(selectedFiles, numThreads); // Convert the selected file immediately
                 } else {
                     std::cout << "Invalid number. Please try again." << std::endl;
                 }
