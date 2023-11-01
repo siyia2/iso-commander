@@ -347,26 +347,34 @@ std::vector<std::string> findBinImgFiles(const std::string& directory) {
 }
 
 
+bool isCcd2IsoInstalled() {
+    if (std::system("which ccd2iso > /dev/null 2>&1") == 0) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+
 void convertBINsToISOs(const std::vector<std::string>& inputPaths) {
     std::vector<std::string> results;
 
-    for (const std::string& inputPath : inputPaths) {
-        if (inputPath == "}") {
-            break; // Exit the loop if a closing brace is encountered
-        } else if (!std::ifstream(inputPath)) {
-            results.push_back("The specified input file '" + inputPath + "' does not exist.");
-        } else {
-            // Check if the file is already in ISO format
-            std::string lowerInputPath = inputPath;
-            for (char& c : lowerInputPath) {
-                c = std::tolower(c);
-            }
-            if (lowerInputPath.size() >= 4 && lowerInputPath.substr(lowerInputPath.size() - 4) == ".iso") {
-                results.push_back("The file '" + inputPath + "' is already in ISO format.");
+    if (!isCcd2IsoInstalled()) {
+        results.push_back("ccd2iso is not installed. Please install it before using this option.");
+    } else {
+        for (const std::string& inputPath : inputPaths) {
+            if (inputPath == "}") {
+                break; // Exit the loop if a closing brace is encountered
+            } else if (!std::ifstream(inputPath)) {
+                results.push_back("The specified input file '" + inputPath + "' does not exist.");
             } else {
-                // Check if ccd2iso is available
-                if (std::system("ccd2iso -V") != 0) {
-                    results.push_back("ccd2iso is not installed. Please install it before using this option.");
+                // Check if the file is already in ISO format
+                std::string lowerInputPath = inputPath;
+                for (char& c : lowerInputPath) {
+                    c = std::tolower(c);
+                }
+                if (lowerInputPath.size() >= 4 && lowerInputPath.substr(lowerInputPath.size() - 4) == ".iso") {
+                    results.push_back("The file '" + inputPath + "' is already in ISO format.");
                 } else {
                     // Define the output path for the ISO file with only the .iso extension
                     std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
@@ -393,6 +401,7 @@ void convertBINsToISOs(const std::vector<std::string>& inputPaths) {
         std::cout << result << std::endl;
     }
 }
+
 
 
 void select_and_convert_files_to_iso() {
