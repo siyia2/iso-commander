@@ -38,29 +38,11 @@ void select_and_convert_files_to_iso();
 void manualMode_imgs();
 void print_ascii();
 void screen_clear();
+std::vector<std::string> findBinImgFiles(const std::string& directory);
 
-std::vector<std::string> findBinImgFiles(const std::string& directory) {
-    std::vector<std::string> fileNames;
 
-    try {
-        for (const auto& entry : fs::recursive_directory_iterator(directory)) {
-            if (entry.is_regular_file()) {
-                std::string ext = entry.path().extension();
-                std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower); // Convert extension to lowercase
-                if (ext == ".bin" || ext == ".img") {
-                    if (fs::file_size(entry) >= 50'000'000) {
-                        fileNames.push_back(entry.path().string());
-                    }
-                }
-            }
-        }
-    } catch (const std::filesystem::filesystem_error& e) {
-        std::cerr << "Filesystem error: " << e.what() << std::endl;
-    }
-
-    return fileNames;
-}
-
+std::string directoryPath;
+std::vector<std::string> binImgFiles;  // Declare binImgFiles here
 
 // Function to list and prompt the user to choose a file for conversion
 std::string chooseFileToConvert(const std::vector<std::string>& files) {
@@ -83,8 +65,7 @@ std::string chooseFileToConvert(const std::vector<std::string>& files) {
 
 int main() {
     std::string choice;
-    std::string directoryPath;
-    std::vector<std::string> binImgFiles;  // Declare binImgFiles here
+    
 
     while (true) {
         // Display the menu options
@@ -116,57 +97,7 @@ int main() {
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             std::system("clear");
             } else if (choice == "4") {			
-            std::cout << "Enter the directory path to scan for .bin and .img files: ";
-            std::getline(std::cin, directoryPath);
-            binImgFiles = findBinImgFiles(directoryPath);
-
-            if (binImgFiles.empty()) {
-                std::cout << "No .bin or .img files found in the specified directory and its subdirectories or all files are under 50MB." << std::endl;
-            } else {
-                for (int i = 0; i < binImgFiles.size(); i++) {
-                    std::cout << i + 1 << ". " << binImgFiles[i] << std::endl;
-                }
-				
-                std::vector<std::string> selectedFiles;
-                while (true) {
-					std::string input;
-					std::cout << "Choose a file to process (enter the number or range e.g., 1-5 or press Enter to exit): ";
-					std::getline(std::cin, input);
-                    
-                    if (input.empty()) {
-                        std::cout << "No selection made. Press Enter to exit." << std::endl;
-                        break;
-                    }
-
-                    // Parse and process the input for single numbers or ranges
-                    std::istringstream iss(input);
-                    int start, end;
-                    char dash;
-                    if (iss >> start) {
-                        if (iss >> dash && dash == '-' && iss >> end) {
-                            // Range input (e.g., 1-5)
-                            if (start >= 1 && start <= binImgFiles.size() && end >= start && end <= binImgFiles.size()) {
-                                for (int i = start; i <= end; i++) {
-                                    selectedFiles.push_back(binImgFiles[i - 1]);
-                                }
-                            } else {
-                                std::cout << "Invalid range. Please try again." << std::endl;
-                            }
-                        } else if (start >= 1 && start <= binImgFiles.size()) {
-                            // Single number input
-                            selectedFiles.push_back(binImgFiles[start - 1]);
-                        } else {
-                            std::cout << "Invalid number. Please try again." << std::endl;
-                        }
-                    } else {
-                        std::cout << "Invalid input format. Please try again." << std::endl;
-                    }
-                }
-
-                //if (!selectedFiles.empty()) {
-                  //  processSelectedFiles(selectedFiles);
-                //}
-            }
+            select_and_convert_files_to_iso();
         } else if (choice == "5") {
             // Call your listMountedISOs function
             listMountedISOs();
@@ -398,7 +329,80 @@ void select_and_mount_files_by_number() {
     // Implement the logic for selecting and mountin files.
 }
 
+
+std::vector<std::string> findBinImgFiles(const std::string& directory) {
+    std::vector<std::string> fileNames;
+
+    try {
+        for (const auto& entry : fs::recursive_directory_iterator(directory)) {
+            if (entry.is_regular_file()) {
+                std::string ext = entry.path().extension();
+                std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower); // Convert extension to lowercase
+                if (ext == ".bin" || ext == ".img") {
+                    if (fs::file_size(entry) >= 50'000'000) {
+                        fileNames.push_back(entry.path().string());
+                    }
+                }
+            }
+        }
+    } catch (const std::filesystem::filesystem_error& e) {
+        std::cerr << "Filesystem error: " << e.what() << std::endl;
+    }
+
+    return fileNames;
+}
+
+
 void select_and_convert_files_to_iso() {
-    std::cout << "List and mount files by number. Implement your logic here." << std::endl;
-    // Implement the logic for selecting and converting files.
+    std::cout << "Enter the directory path to scan for .bin and .img files: ";
+            std::getline(std::cin, directoryPath);
+            binImgFiles = findBinImgFiles(directoryPath);
+
+            if (binImgFiles.empty()) {
+                std::cout << "No .bin or .img files found in the specified directory and its subdirectories or all files are under 50MB." << std::endl;
+            } else {
+                for (int i = 0; i < binImgFiles.size(); i++) {
+                    std::cout << i + 1 << ". " << binImgFiles[i] << std::endl;
+                }
+				
+                std::vector<std::string> selectedFiles;
+                while (true) {
+					std::string input;
+					std::cout << "Choose a file to process (enter the number or range e.g., 1-5 or press Enter to exit): ";
+					std::getline(std::cin, input);
+                    
+                    if (input.empty()) {
+                        std::cout << "No selection made. Press Enter to exit." << std::endl;
+                        break;
+                    }
+
+                    // Parse and process the input for single numbers or ranges
+                    std::istringstream iss(input);
+                    int start, end;
+                    char dash;
+                    if (iss >> start) {
+                        if (iss >> dash && dash == '-' && iss >> end) {
+                            // Range input (e.g., 1-5)
+                            if (start >= 1 && start <= binImgFiles.size() && end >= start && end <= binImgFiles.size()) {
+                                for (int i = start; i <= end; i++) {
+                                    selectedFiles.push_back(binImgFiles[i - 1]);
+                                }
+                            } else {
+                                std::cout << "Invalid range. Please try again." << std::endl;
+                            }
+                        } else if (start >= 1 && start <= binImgFiles.size()) {
+                            // Single number input
+                            selectedFiles.push_back(binImgFiles[start - 1]);
+                        } else {
+                            std::cout << "Invalid number. Please try again." << std::endl;
+                        }
+                    } else {
+                        std::cout << "Invalid input format. Please try again." << std::endl;
+                    }
+                }
+
+                //if (!selectedFiles.empty()) {
+                  //  processSelectedFiles(selectedFiles);
+                //}
+            }
 }
