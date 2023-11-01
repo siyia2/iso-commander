@@ -357,48 +357,34 @@ bool isCcd2IsoInstalled() {
 
 
 void convertBINsToISOs(const std::vector<std::string>& inputPaths) {
-    std::vector<std::string> results;
-
     if (!isCcd2IsoInstalled()) {
-        results.push_back("ccd2iso is not installed. Please install it before using this option.");
-    } else {
-        for (const std::string& inputPath : inputPaths) {
-            if (inputPath == "}") {
-                break; // Exit the loop if a closing brace is encountered
-            } else if (!std::ifstream(inputPath)) {
-                results.push_back("The specified input file '" + inputPath + "' does not exist.");
-            } else {
-                // Check if the file is already in ISO format
-                std::string lowerInputPath = inputPath;
-                for (char& c : lowerInputPath) {
-                    c = std::tolower(c);
-                }
-                if (lowerInputPath.size() >= 4 && lowerInputPath.substr(lowerInputPath.size() - 4) == ".iso") {
-                    results.push_back("The file '" + inputPath + "' is already in ISO format.");
-                } else {
-                    // Define the output path for the ISO file with only the .iso extension
-                    std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
+        std::cout << "ccd2iso is not installed. Please install it before using this option." << std::endl;
+        return;
+    }
 
-                    // Check if the output ISO file already exists
-                    if (std::ifstream(outputPath)) {
-                        results.push_back("The output ISO file '" + outputPath + "' already exists. Skipping conversion.");
-                    } else {
-                        // Execute the conversion using ccd2iso
-                        std::string conversionCommand = "ccd2iso \"" + inputPath + "\" \"" + outputPath + "\"";
-                        if (std::system(conversionCommand.c_str()) == 0) {
-                            results.push_back("Image file converted to ISO: " + outputPath);
-                        } else {
-                            results.push_back("Conversion of " + inputPath + " failed.");
-                        }
-                    }
+    for (const std::string& inputPath : inputPaths) {
+        if (inputPath == "}") {
+            break; // Exit the loop if a closing brace is encountered
+        } else if (!std::ifstream(inputPath)) {
+            std::cout << "The specified input file '" << inputPath << "' does not exist." << std::endl;
+        } else {
+            // Define the output path for the ISO file with only the .iso extension
+            std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
+
+            // Check if the output ISO file already exists
+            if (std::ifstream(outputPath)) {
+                std::cout << "The output ISO file '" << outputPath << "' already exists. Skipping conversion." << std::endl;
+            } else {
+                // Execute the conversion using ccd2iso
+                std::string conversionCommand = "ccd2iso \"" + inputPath + "\" \"" + outputPath + "\"";
+                int conversionStatus = std::system(conversionCommand.c_str());
+                if (conversionStatus == 0) {
+                    std::cout << "Image file converted to ISO: " << outputPath << std::endl;
+                } else {
+                    std::cout << "Conversion of " << inputPath << " failed." << std::endl;
                 }
             }
         }
-    }
-
-    // Display all results
-    for (const std::string& result : results) {
-        std::cout << result << std::endl;
     }
 }
 
@@ -406,54 +392,54 @@ void convertBINsToISOs(const std::vector<std::string>& inputPaths) {
 
 void select_and_convert_files_to_iso() {
     std::cout << "Enter the directory path to scan for .bin and .img files: ";
-            std::getline(std::cin, directoryPath);
-            binImgFiles = findBinImgFiles(directoryPath);
+    std::getline(std::cin, directoryPath);
+    binImgFiles = findBinImgFiles(directoryPath);
 
-            if (binImgFiles.empty()) {
-                std::cout << "No .bin or .img files found in the specified directory and its subdirectories or all files are under 50MB." << std::endl;
-            } else {
-                for (int i = 0; i < binImgFiles.size(); i++) {
-                    std::cout << i + 1 << ". " << binImgFiles[i] << std::endl;
-                }
-				
-                std::vector<std::string> selectedFiles;
-                while (true) {
-					std::string input;
-					std::cout << "Choose a file to process (enter the number or range e.g., 1-5 or press Enter to exit): ";
-					std::getline(std::cin, input);
-                    
-                    if (input.empty()) {
-                        std::cout << "No selection made. Press Enter to exit." << std::endl;
-                        break;
-                    }
+    if (binImgFiles.empty()) {
+        std::cout << "No .bin or .img files found in the specified directory and its subdirectories or all files are under 50MB." << std::endl;
+    } else {
+        for (int i = 0; i < binImgFiles.size(); i++) {
+            std::cout << i + 1 << ". " << binImgFiles[i] << std::endl;
+        }
 
-                    // Parse and process the input for single numbers or ranges
-                    std::istringstream iss(input);
-                    int start, end;
-                    char dash;
-                    if (iss >> start) {
-                        if (iss >> dash && dash == '-' && iss >> end) {
-                            // Range input (e.g., 1-5)
-                            if (start >= 1 && start <= binImgFiles.size() && end >= start && end <= binImgFiles.size()) {
-                                for (int i = start; i <= end; i++) {
-                                    selectedFiles.push_back(binImgFiles[i - 1]);
-                                }
-                            } else {
-                                std::cout << "Invalid range. Please try again." << std::endl;
-                            }
-                        } else if (start >= 1 && start <= binImgFiles.size()) {
-                            // Single number input
-                            selectedFiles.push_back(binImgFiles[start - 1]);
-                        } else {
-                            std::cout << "Invalid number. Please try again." << std::endl;
+        std::string input;
+
+        while (true) {
+            std::cout << "Choose a file to process (enter the number or range e.g., 1-5 or press Enter to exit): ";
+            std::getline(std::cin, input);
+
+            if (input.empty()) {
+                std::cout << "No selection made. Press Enter to exit." << std::endl;
+                break;
+            }
+
+            // Parse and process the input for single numbers or ranges
+            std::istringstream iss(input);
+            int start, end;
+            char dash;
+            if (iss >> start) {
+                if (iss >> dash && dash == '-' && iss >> end) {
+                    // Range input (e.g., 1-5)
+                    if (start >= 1 && start <= binImgFiles.size() && end >= start && end <= binImgFiles.size()) {
+                        for (int i = start; i <= end; i++) {
+                            std::vector<std::string> selectedFiles;
+                            selectedFiles.push_back(binImgFiles[i - 1]);
+                            convertBINsToISOs(selectedFiles); // Convert the selected file immediately
                         }
                     } else {
-                        std::cout << "Invalid input format. Please try again." << std::endl;
+                        std::cout << "Invalid range. Please try again." << std::endl;
                     }
+                } else if (start >= 1 && start <= binImgFiles.size()) {
+                    // Single number input
+                    std::vector<std::string> selectedFiles;
+                    selectedFiles.push_back(binImgFiles[start - 1]);
+                    convertBINsToISOs(selectedFiles); // Convert the selected file immediately
+                } else {
+                    std::cout << "Invalid number. Please try again." << std::endl;
                 }
-
-                if (!selectedFiles.empty()) {
-            convertBINsToISOs(selectedFiles); // Call the ISO conversion function with selected files
-		}
+            } else {
+                std::cout << "Invalid input format. Please try again." << std::endl;
             }
+        }
+    }
 }
