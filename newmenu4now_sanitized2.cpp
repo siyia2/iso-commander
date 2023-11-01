@@ -278,7 +278,7 @@ void select_and_mount_files_by_number() {
         }
 
         std::string input;
-        std::cout << "Choose .iso files to mount (enter numbers separated by spaces or press Enter to exit): ";
+        std::cout << "Choose .iso files to mount (enter numbers separated by spaces or ranges like '1-3', or press Enter to exit): ";
         std::getline(std::cin, input);
 
         if (input.empty()) {
@@ -287,21 +287,53 @@ void select_and_mount_files_by_number() {
         }
 
         std::istringstream iss(input);
-        int selectedNumber;
+        std::string token;
+        
+        while (std::getline(iss, token, ' ')) {
+            if (token.find('-') != std::string::npos) {
+                // Handle a range
+                size_t dashPos = token.find('-');
+                int startRange = std::stoi(token.substr(0, dashPos));
+                int endRange = std::stoi(token.substr(dashPos + 1));
 
-        while (iss >> selectedNumber) {
-            if (selectedNumber >= 1 && selectedNumber <= isoFiles.size()) {
-                // Sanitize the selected ISO file path
-                std::string selectedISO = isoFiles[selectedNumber - 1];
-                selectedISO = sanitizeForShell(selectedISO);
+                if (startRange >= 1 && startRange <= isoFiles.size() && endRange >= startRange && endRange <= isoFiles.size()) {
+                    for (int i = startRange; i <= endRange; i++) {
+                        // Sanitize the selected ISO file path
+                        std::string selectedISO = isoFiles[i - 1];
+                        selectedISO = sanitizeForShell(selectedISO);
 
-                // Mount the selected ISO file
-                mountISO({selectedISO});
-
-                // Add the sanitized mounted ISO to the list
-                mountedISOs.push_back(selectedISO);
+                        // Check if the selected ISO is not already mounted
+                        if (std::find(mountedISOs.begin(), mountedISOs.end(), selectedISO) == mountedISOs.end()) {
+                            // Mount the selected ISO file
+                            mountISO({selectedISO});
+                            // Add the sanitized mounted ISO to the list
+                            mountedISOs.push_back(selectedISO);
+                        } else {
+                            std::cout << "ISO file '" << selectedISO << "' is already mounted." << std::endl;
+                        }
+                    }
+                } else {
+                    std::cout << "Invalid range: " << token << ". Please try again." << std::endl;
+                }
             } else {
-                std::cout << "Invalid number: " << selectedNumber << ". Please try again." << std::endl;
+                int selectedNumber = std::stoi(token);
+                if (selectedNumber >= 1 && selectedNumber <= isoFiles.size()) {
+                    // Sanitize the selected ISO file path
+                    std::string selectedISO = isoFiles[selectedNumber - 1];
+                    selectedISO = sanitizeForShell(selectedISO);
+
+                    // Check if the selected ISO is not already mounted
+                    if (std::find(mountedISOs.begin(), mountedISOs.end(), selectedISO) == mountedISOs.end()) {
+                        // Mount the selected ISO file
+                        mountISO({selectedISO});
+                        // Add the sanitized mounted ISO to the list
+                        mountedISOs.push_back(selectedISO);
+                    } else {
+                        std::cout << "ISO file '" << selectedISO << "' is already mounted." << std::endl;
+                    }
+                } else {
+                    std::cout << "Invalid number: " << selectedNumber << ". Please try again." << std::endl;
+                }
             }
         }
     }
