@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <algorithm>
 #include <filesystem>
+#include <future>
 #include <readline/readline.h>
 #include <readline/history.h>
 #include <sys/types.h>
@@ -16,6 +17,8 @@
 #include <sstream>
 #include <thread>
 #include <mutex>
+#include <algorithm>
+#include <cctype>
 
 std::mutex mtx;
 
@@ -328,16 +331,46 @@ std::vector<std::string> findBinImgFiles(const std::string& directory) {
     std::vector<std::string> fileNames;
 
     try {
+        std::vector<std::future<void>> futures;
+        std::mutex mutex; // Mutex for protecting the shared data
+        const int maxThreads = 4; // Maximum number of worker threads
+
         for (const auto& entry : fs::recursive_directory_iterator(directory)) {
             if (entry.is_regular_file()) {
                 std::string ext = entry.path().extension();
-                std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower); // Convert extension to lowercase
+                std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); }); // Convert extension to lowercase
+
                 if (ext == ".bin" || ext == ".img") {
                     if (fs::file_size(entry) >= 50'000'000) {
-                        fileNames.push_back(entry.path().string());
+                        // Ensure the number of active threads doesn't exceed maxThreads
+                        while (futures.size() >= maxThreads) {
+                            // Wait for at least one thread to complete
+                            auto it = std::find_if(futures.begin(), futures.end(),
+                                [](const std::future<void>& f) { return f.wait_for(std::chrono::seconds(0)) == std::future_status::ready; });
+                            if (it != futures.end()) {
+                                it->get();
+                                futures.erase(it);
+                            }
+                        }
+
+                        // Create a task to process the file
+                        futures.push_back(std::async(std::launch::async, [entry, &fileNames, &mutex] {
+                            std::string fileName = entry.path().string();
+
+                            // Lock the mutex before modifying the shared data
+                            std::lock_guard<std::mutex> lock(mutex);
+
+                            // Add the file name to the shared vector
+                            fileNames.push_back(fileName);
+                        }));
                     }
                 }
             }
+        }
+
+        // Wait for the remaining tasks to complete
+        for (auto& future : futures) {
+            future.get();
         }
     } catch (const std::filesystem::filesystem_error& e) {
         std::cerr << "Filesystem error: " << e.what() << std::endl;
@@ -345,6 +378,8 @@ std::vector<std::string> findBinImgFiles(const std::string& directory) {
 
     return fileNames;
 }
+
+
 
 
 bool isCcd2IsoInstalled() {
@@ -409,7 +444,7 @@ void select_and_convert_files_to_iso() {
             std::getline(std::cin, input);
 
             if (input.empty()) {
-                std::cout << "No selection made. Press Enter to exit." << std::endl;
+                std::cout << "Exiting..." << std::endl;
                 break;
             }
 
