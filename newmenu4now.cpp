@@ -142,6 +142,7 @@ bool directoryExists(const std::string& path) {
     return (stat(path.c_str(), &info) == 0) && (info.st_mode & S_IFDIR);
 }
 
+// Function to mount an ISO file
 void mountISO(const std::vector<std::string>& isoFiles) {
     std::map<std::string, std::string> mountedIsos;
 
@@ -150,19 +151,19 @@ void mountISO(const std::vector<std::string>& isoFiles) {
         if (mountedIsos.find(isoFile) != mountedIsos.end()) {
             std::cout << "ISO file '" << isoFile << "' is already mounted at '" << mountedIsos[isoFile] << "'." << std::endl;
         } else {
-            std::string mountPoint = "/mnt/iso_" + isoFile.substr(isoFile.find_last_of('/') + 1);
+            std::string mountPoint = "/mnt/iso_" + std::to_string(std::hash<std::string>{}(isoFile)); // Create a unique mount point
 
             // Check if the mount point directory doesn't exist, create it
             if (!directoryExists(mountPoint)) {
                 // Create the mount point directory
-                if (system(("sudo mkdir -p " + mountPoint).c_str()) != 0) {
-                    std::cerr << "Failed to create mount point directory: " << mountPoint << std::endl;
+                if (system(("sudo mkdir -p \"" + mountPoint + "\"").c_str()) != 0) {
+                    std::perror("Failed to create mount point directory");
                     continue;
                 }
 
                 // Mount the ISO file to the mount point
                 if (system(("sudo mount -o loop \"" + isoFile + "\" \"" + mountPoint + "\"").c_str()) != 0) {
-                    std::cerr << "Failed to mount ISO file: " << isoFile << std::endl;
+                    std::perror("Failed to mount ISO file");
                 } else {
                     std::cout << "ISO file '" << isoFile << "' mounted at '" << mountPoint << "'." << std::endl;
                     // Store the mount point in the map
