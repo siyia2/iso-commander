@@ -93,86 +93,102 @@ std::string chooseFileToConvert(const std::vector<std::string>& files) {
 }
 
 int main() {
-	std::string directoryPath = "/your/directory/path";  // Specify your directory path here
-        std::vector<std::string> binImgFiles;  // Declare binImgFiles here
-    char choice;
+    std::string choice;
+    std::string directoryPath;
+    std::vector<std::string> binImgFiles;  // Declare binImgFiles here
+
     while (true) {
-        print_ascii();
-        std::cout << "Select an option:\n"
-                  << "1) List and Mount ISOs\n"
-                  << "2) Unmount ISOs\n"
-                  << "3) Clean and Unmount All ISOs\n"
-                  << "4) Scan and Convert Parts\n"
-                  << "5) List Mounted ISOs\n"
-                  << "6) Exit\n"
-                  << "Enter the number of your choice: ";
+        // Display the menu options
+        std::cout << "Menu Options:" << std::endl;
+        std::cout << "1. List and Mount ISOs" << std::endl;
+        std::cout << "2. Unmount ISOs" << std::endl;
+        std::cout << "3. Clean and Unmount All ISOs" << std::endl;
+        std::cout << "4. Scan for .bin and .img Files" << std::endl;
+        std::cout << "5. List Mounted ISOs" << std::endl;
+        std::cout << "6. Exit the Program" << std::endl;
 
+        // Prompt for choice
+        std::cout << "Enter your choice: ";
         std::cin >> choice;
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n'); // Clear input buffer
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');  // Consume the newline character
 
-        switch (choice) {
-            case '1':
-                // Call your listAndMountISOs function
-                break;
+        if (choice == "1") {
+            // Call your listAndMountISOs function
+        } else if (choice == "2") {
+            // Call your unmountISOs function
+            unmountISOs();
+            std::cout << "Press Enter to continue...";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            std::system("clear");
+        } else if (choice == "3") {
+            // Call your cleanAndUnmountAllISOs function
+            cleanAndUnmountAllISOs();
+            std::cout << "Press Enter to continue...";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            std::system("clear");
+        } else if (choice == "4") {
+            std::cout << "Enter the directory path to scan for parts: ";
+            std::getline(std::cin, directoryPath);
+            binImgFiles = findBinImgFiles(directoryPath);
 
-            case '2':
-                // Call your unmountISOs function
-                unmountISOs();
-                std::cout << "Press Enter to continue...";
-    	     	std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-				std::system("clear");
-                break;
+            if (binImgFiles.empty()) {
+                std::cout << "No .bin or .img files found in the specified directory and its subdirectories or all files are under 50MB.\n";
+            } else {
+                std::cout << "Choose a file to process (enter the number or range e.g., 1-5):\n";
+                for (int i = 0; i < binImgFiles.size(); i++) {
+                    std::cout << i + 1 << ". " << binImgFiles[i] << std::endl;
+                }
 
-            case '3':
-                // Call your cleanAndUnmountAllISOs function
-                cleanAndUnmountAllISOs();
-                std::cout << "Press Enter to continue...";
-    	     	std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-				std::system("clear");
-                break;
+                std::vector<std::string> selectedFiles;
+                while (true) {
+                    std::string input;
+                    std::getline(std::cin, input); // Read the entire line
 
-             case '4':
-                std::cout << "Enter the directory path to scan for parts: ";
-                std::cin >> directoryPath;
-                binImgFiles = findBinImgFiles(directoryPath); // Update the existing vector
-
-                if (binImgFiles.empty()) {
-                    std::cout << "No .bin or .img files found in the specified directory and its subdirectories or all files are under 50MB.\n";
-                } else {
-                    std::cout << "Choose a file to process (enter the number):\n";
-                    for (int i = 0; i < binImgFiles.size(); i++) {
-                        std::cout << i + 1 << ". " << binImgFiles[i] << std::endl;
+                    if (input.empty()) {
+                        // User pressed Enter with no other input, exit the loop
+                        break;
                     }
 
-                    int selectedFileNumber;
-                    std::cout << "Enter the number of the file you want to process: ";
-                    std::cin >> selectedFileNumber;
-
-                    if (selectedFileNumber >= 1 && selectedFileNumber <= binImgFiles.size()) {
-                        std::string chosenFile = binImgFiles[selectedFileNumber - 1];
-                        std::cout << "You selected: " << chosenFile << std::endl;
-
-                        // Continue with processing the chosen file
+                    // Parse and process the input for single numbers or ranges
+                    std::istringstream iss(input);
+                    int start, end;
+                    char dash;
+                    if (iss >> start) {
+                        if (iss >> dash && dash == '-' && iss >> end) {
+                            // Range input (e.g., 1-5)
+                            if (start >= 1 && start <= binImgFiles.size() && end >= start && end <= binImgFiles.size()) {
+                                for (int i = start; i <= end; i++) {
+                                    selectedFiles.push_back(binImgFiles[i - 1]);
+                                }
+                            } else {
+                                std::cout << "Invalid range. Please try again." << std::endl;
+                            }
+                        } else if (start >= 1 && start <= binImgFiles.size()) {
+                            // Single number input
+                            selectedFiles.push_back(binImgFiles[start - 1]);
+                        } else {
+                            std::cout << "Invalid number. Please try again." << std::endl;
+                        }
                     } else {
-                        std::cout << "Invalid file number. Please try again." << std::endl;
+                        std::cout << "Invalid input format. Please try again." << std::endl;
                     }
                 }
-                break;
 
-            case '5':
-                // Call your listMountedISOs function
-                listMountedISOs();
-                std::cout << "Press Enter to continue...";
-    	     	std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-				std::system("clear");
-                break;
-
-            case '6':
-                std::cout << "Exiting the program..." << std::endl;
-                return 0;
-
-            default:
-                std::cout << "Invalid choice. Please enter 1, 2, 3, 4, 5, or 6." << std::endl;
+                //if (!selectedFiles.empty()) {
+                  //  processSelectedFiles(selectedFiles);
+                //}
+            }
+        } else if (choice == "5") {
+            // Call your listMountedISOs function
+            listMountedISOs();
+            std::cout << "Press Enter to continue...";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            std::system("clear");
+        } else if (choice == "6") {
+            std::cout << "Exiting the program..." << std::endl;
+            return 0;
+        } else {
+            std::cout << "Invalid choice. Please enter 1, 2, 3, 4, 5, or 6." << std::endl;
         }
     }
 
