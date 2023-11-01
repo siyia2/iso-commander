@@ -135,6 +135,91 @@ std::cout << " " << std::endl;
 }
 
 
+void mountISO(const std::string& isoFile) {
+
+}
+
+bool hasIsoExtension(const std::string& filePath) {
+    // Extract the file extension and check if it's ".iso"
+    size_t pos = filePath.find_last_of('.');
+    if (pos != std::string::npos) {
+        std::string extension = filePath.substr(pos);
+        return extension == ".iso";
+    }
+    return false;
+}
+
+void traverseDirectory(const std::filesystem::path& path, std::vector<std::string>& isoFiles) {
+    try {
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
+            if (entry.is_regular_file()) {
+                std::string filePath = entry.path().string();
+                if (hasIsoExtension(filePath)) {
+                    isoFiles.push_back(filePath);
+                }
+            }
+        }
+    } catch (const std::filesystem::filesystem_error& e) {
+        // Handle any errors due to permission issues or other filesystem errors
+        std::cerr << "Error: " << e.what() << std::endl;
+    }
+}
+
+void select_and_mount_files_by_number() {
+    std::cout << "Enter the directory path to search for .iso files: ";
+    std::string directoryPath;
+    std::getline(std::cin, directoryPath);
+
+    std::vector<std::string> isoFiles;
+    traverseDirectory(directoryPath, isoFiles);
+
+    if (isoFiles.empty()) {
+        std::cout << "No .iso files found in the specified directory and its subdirectories." << std::endl;
+    } else {
+        for (int i = 0; i < isoFiles.size(); i++) {
+            std::cout << i + 1 << ". " << isoFiles[i] << std::endl;
+        }
+
+        std::string input;
+
+        while (true) {
+            std::cout << "Choose an .iso file to mount (enter the number or range e.g., 1-5 or press Enter to exit): ";
+            std::getline(std::cin, input);
+
+            if (input.empty()) {
+                std::cout << "Exiting..." << std::endl;
+                break;
+            }
+
+            std::istringstream iss(input);
+            int start, end;
+            char dash;
+
+            if (iss >> start) {
+                if (iss >> dash && dash == '-' && iss >> end) {
+                    // Range input (e.g., 1-5)
+                    if (start >= 1 && start <= isoFiles.size() && end >= start && end <= isoFiles.size()) {
+                        // Mount the selected ISO files within the specified range
+                        for (int i = start - 1; i < end; i++) {
+                            mountISO(isoFiles[start - 1]);
+                        }
+                    } else {
+                        std::cout << "Invalid range. Please try again." << std::endl;
+                    }
+                } else if (start >= 1 && start <= isoFiles.size()) {
+                    // Single number input
+                    mountISO(isoFiles[start - 1]);
+                } else {
+                    std::cout << "Invalid number. Please try again." << std::endl;
+                }
+            } else {
+                std::cout << "Invalid input format. Please try again." << std::endl;
+            }
+        }
+    }
+}
+
+
 
 void unmountISOs() {
     const std::string isoPath = "/mnt";
@@ -320,10 +405,7 @@ void manualMode_imgs() {
     // You can call manual_mode_imgs or add your specific logic.
 }
 
-void select_and_mount_files_by_number() {
-    std::cout << "List and mount files by number. Implement your logic here." << std::endl;
-    // Implement the logic for selecting and mountin files.
-}
+
 
 
 
