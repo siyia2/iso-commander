@@ -244,15 +244,21 @@ void select_and_mount_files_by_number() {
     }
 }
 
-// Function to traverse a directory and collect .iso files
+// Case-insensitive string comparison function
+bool iequals(const std::string& a, const std::string& b) {
+    return std::equal(a.begin(), a.end(), b.begin(), b.end(), [](char lhs, char rhs) {
+        return std::tolower(lhs) == std::tolower(rhs);
+    });
+}
+
 void traverseDirectory(const std::filesystem::path& path, std::vector<std::string>& isoFiles) {
     try {
         for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
             if (entry.is_regular_file()) {
                 std::string filePath = entry.path().string();
                 
-                // Check if the file has an ".iso" extension
-                if (std::filesystem::path(filePath).extension() == ".iso") {
+                // Check if the file has an ".iso" extension (case-insensitive)
+                if (iequals(std::filesystem::path(filePath).extension(), ".iso")) {
                     isoFiles.push_back(filePath);
                 }
             }
