@@ -28,6 +28,9 @@ const std::string cacheDirectory = "/tmp/";
 
 namespace fs = std::filesystem;
 
+bool directoryExists(const std::string& path) {
+    return fs::is_directory(path);
+}
 
 // Function prototypes
 bool directoryExists(const std::string& path);
@@ -92,6 +95,8 @@ int main() {
 
         if (choice == "1") {
             select_and_mount_files_by_number();
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            std::system("clear");
         } else if (choice == "2") {
             // Call your unmountISOs function
             unmountISOs();
@@ -141,11 +146,6 @@ std::cout << " " << std::endl;
 
 
 
-// Function to check if a directory exists
-bool directoryExists(const std::string& path) {
-    return fs::is_directory(path);
-}
-
 void mountISO(const std::vector<std::string>& isoFiles) {
     std::map<std::string, std::string> mountedIsos;
     int count = 1;
@@ -153,7 +153,7 @@ void mountISO(const std::vector<std::string>& isoFiles) {
     for (const std::string& isoFile : isoFiles) {
         // Check if the ISO file is already mounted
         if (mountedIsos.find(isoFile) != mountedIsos.end()) {
-            std::cout << "ISO file '" << isoFile << "' is already mounted at '" << mountedIsos[isoFile] << "'." << std::endl;
+            std::cout << "\e[1;31mALREADY MOUNTED\e[0m: ISO file '" << isoFile << "' is already mounted at '" << mountedIsos[isoFile] << "'." << std::endl;
         } else {
             // Use the filesystem library to extract the ISO file name
             fs::path isoPath(isoFile);
@@ -181,6 +181,8 @@ void mountISO(const std::vector<std::string>& isoFiles) {
                 // The mount point directory already exists, so the ISO is considered mounted
                 std::cout << "ISO file '" << isoFile << "' is already mounted at '" << mountPoint << "'." << std::endl;
                 mountedIsos[isoFile] = mountPoint;
+                std::cout << "Press Enter to continue...";
+				std::cin.get();  // Wait for the user to press Enter
             }
         }
     }
@@ -189,6 +191,7 @@ void mountISO(const std::vector<std::string>& isoFiles) {
     // Print a message indicating that all ISO files have been mounted
     std::cout << "\e[1;32mPreviously Selected ISO files have been mounted.\e[0m" << std::endl;
 }
+
 
 void select_and_mount_files_by_number() {
     std::cout << "Enter the directory path to search for .iso files: ";
