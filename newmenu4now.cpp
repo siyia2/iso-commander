@@ -115,7 +115,7 @@ int main() {
             std::cout << "Press Enter to continue...";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             std::system("clear");
-            } else if (choice == "4") {
+            } else if (choice == "4") {			
             std::cout << "Enter the directory path to scan for .bin and .img files: ";
             std::getline(std::cin, directoryPath);
             binImgFiles = findBinImgFiles(directoryPath);
@@ -123,16 +123,16 @@ int main() {
             if (binImgFiles.empty()) {
                 std::cout << "No .bin or .img files found in the specified directory and its subdirectories or all files are under 50MB." << std::endl;
             } else {
-                std::cout << "Choose a file to process (enter the number or range e.g., 1-5):" << std::endl;
                 for (int i = 0; i < binImgFiles.size(); i++) {
                     std::cout << i + 1 << ". " << binImgFiles[i] << std::endl;
                 }
-
+				
                 std::vector<std::string> selectedFiles;
                 while (true) {
+					
                     std::string input;
+                    std::cout << "Choose a file to process (enter the number or range e.g., 1-5 or enter to exit):" << std::endl;
                     std::getline(std::cin, input);
-
                     if (input.empty()) {
                         std::cout << "No selection made. Press Enter to exit." << std::endl;
                         break;
