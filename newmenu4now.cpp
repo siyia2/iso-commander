@@ -183,9 +183,9 @@ void mountISO(const std::vector<std::string>& isoFiles) {
             }
         }
     }
-
+	system("clear");
     // Print a message indicating that all ISO files have been mounted
-    std::cout << "\e[1;32mAll ISO files have been mounted.\e[0m" << std::endl;
+    std::cout << "\e[1;32mPreviously Selected ISO files have been mounted.\e[0m" << std::endl;
 }
 
 void select_and_mount_files_by_number() {
@@ -196,50 +196,71 @@ void select_and_mount_files_by_number() {
     std::vector<std::string> isoFiles;
     traverseDirectory(directoryPath, isoFiles);
 
-    if (isoFiles.empty()) {
-        std::cout << "No .iso files found in the specified directory and its subdirectories." << std::endl;
-    } else {
+    std::vector<std::string> mountedISOs;
+
+    while (true) {
+        if (isoFiles.empty()) {
+            std::cout << "No .iso files found in the specified directory and its subdirectories." << std::endl;
+            break;
+        }
+
+        // Remove already mounted files from the selection list
+        for (const auto& mountedISO : mountedISOs) {
+            auto it = std::remove(isoFiles.begin(), isoFiles.end(), mountedISO);
+            isoFiles.erase(it, isoFiles.end());
+        }
+
+        if (isoFiles.empty()) {
+            std::cout << "No more unmounted .iso files in the directory." << std::endl;
+            break;
+        }
+
         for (int i = 0; i < isoFiles.size(); i++) {
             std::cout << i + 1 << ". " << isoFiles[i] << std::endl;
         }
 
         std::string input;
+        std::cout << "Choose an .iso file to mount (enter the number or range e.g., 1-5 or press Enter to exit): ";
+        std::getline(std::cin, input);
+        
 
-        while (true) {
-            std::cout << "Choose an .iso file to mount (enter the number or range e.g., 1-5 or press Enter to exit): ";
-            std::getline(std::cin, input);
+        if (input.empty()) {
+            std::cout << "Exiting..." << std::endl;
+            break;
+        }
 
-            if (input.empty()) {
-                std::cout << "Exiting..." << std::endl;
-                break;
-            }
+        std::istringstream iss(input);
+        int start, end;
+        char dash;
 
-            std::istringstream iss(input);
-            int start, end;
-            char dash;
-
-            if (iss >> start) {
-                if (iss >> dash && dash == '-' && iss >> end) {
-                    // Range input (e.g., 1-5)
-                    if (start >= 1 && start <= isoFiles.size() && end >= start && end <= isoFiles.size()) {
-                        // Mount the selected ISO files within the specified range
-                        std::vector<std::string> selectedISOs;
-                        for (int i = start - 1; i < end; i++) {
-                            selectedISOs.push_back(isoFiles[i]);
-                        }
-                        mountISO(selectedISOs);
-                    } else {
-                        std::cout << "Invalid range. Please try again." << std::endl;
+        if (iss >> start) {
+            if (iss >> dash && dash == '-' && iss >> end) {
+                // Range input (e.g., 1-5)
+                if (start >= 1 && start <= isoFiles.size() && end >= start && end <= isoFiles.size()) {
+                    // Mount the selected ISO files within the specified range
+                    std::vector<std::string> selectedISOs;
+                    for (int i = start - 1; i < end; i++) {
+                        selectedISOs.push_back(isoFiles[i]);
                     }
-                } else if (start >= 1 && start <= isoFiles.size()) {
-                    // Single number input
-                    mountISO({isoFiles[start - 1]}); // Pass the ISO file as a vector with a single element
+                    mountISO(selectedISOs);
+
+                    // Add the mounted ISOs to the list
+                    mountedISOs.insert(mountedISOs.end(), selectedISOs.begin(), selectedISOs.end());
                 } else {
-                    std::cout << "Invalid number. Please try again." << std::endl;
+                    std::cout << "Invalid range. Please try again." << std::endl;
                 }
+            } else if (start >= 1 && start <= isoFiles.size()) {
+                // Single number input
+                std::string selectedISO = isoFiles[start - 1];
+                mountISO({selectedISO});
+
+                // Add the mounted ISO to the list
+                mountedISOs.push_back(selectedISO);
             } else {
-                std::cout << "Invalid input format. Please try again." << std::endl;
+                std::cout << "Invalid number. Please try again." << std::endl;
             }
+        } else {
+            std::cout << "Invalid input format. Please try again." << std::endl;
         }
     }
 }
