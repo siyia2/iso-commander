@@ -461,10 +461,13 @@ void processFilesInRange(int start, int end) {
 }
 
 void select_and_convert_files_to_iso() {
-    std::cout << "Enter the directory path to scan for .bin and .img files: ";
-    std::getline(std::cin, directoryPath);
-    binImgFiles = findBinImgFiles(directoryPath); // You need to define findBinImgFiles function.
-
+    rl_attempted_completion_function = nullptr;   
+    
+    char* input = readline("Enter the directory path to scan for .bin and .img files: ");
+	if (input) {
+    directoryPath = input;  // Convert C string to std::string
+    free(input);
+}
     if (binImgFiles.empty()) {
         std::cout << "No .bin or .img files found in the specified directory and its subdirectories or all files are under 50MB." << std::endl;
     } else {
