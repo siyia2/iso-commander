@@ -86,7 +86,7 @@ int main() {
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');  // Consume the newline character
 
         if (choice == "1") {
-            // Call your listAndMountISOs function
+            select_and_mount_files_by_number();
         } else if (choice == "2") {
             // Call your unmountISOs function
             unmountISOs();
