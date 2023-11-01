@@ -461,7 +461,6 @@ void processFilesInRange(int start, int end) {
 }
 
 void select_and_convert_files_to_iso() {
-    rl_attempted_completion_function = nullptr;   
     
     char* input = readline("Enter the directory path to scan for .bin and .img files: ");
 	if (input) {
@@ -523,4 +522,62 @@ void select_and_convert_files_to_iso() {
             }
         }
     }
+}
+
+// Function to read a line with escape character support
+std::string customReadline() {
+    std::string input;
+    char ch;
+    bool escape = false;
+
+    while (true) {
+        ch = std::cin.get();
+        if (ch == '\n' && !escape) {
+            break;
+        }
+
+        if (ch == '\\' && !escape) {
+            escape = true;
+        } else if (ch == ' ' && escape) {
+            input += ' ';
+            escape = false;
+        } else if (escape) {
+            // Handle other escape characters if needed
+            input += '\\';
+            input += ch;
+            escape = false;
+        } else {
+            input += ch;
+        }
+    }
+
+    return input;
+}
+
+// Function to perform autocompletion for filenames
+std::string autocompleteFilename(const std::string& partial) {
+    // Implement your autocompletion logic here
+    // For example, you can list matching filenames from a directory
+    // and return the best match.
+
+    // For demonstration purposes, let's assume we have a list of filenames.
+    std::vector<std::string> filenames = {"file with spaces.txt", "another file.txt"};
+
+    std::string bestMatch;
+    for (const std::string& filename : filenames) {
+        if (filename.find(partial) == 0) {
+            if (bestMatch.empty()) {
+                bestMatch = filename;
+            } else {
+                // Multiple matches found, return the common prefix
+                size_t i = 0;
+                while (i < bestMatch.length() && i < filename.length() && bestMatch[i] == filename[i]) {
+                    i++;
+                }
+                bestMatch = bestMatch.substr(0, i);
+            }
+        }
+    }
+
+    return bestMatch;
 }
