@@ -847,8 +847,8 @@ std::vector<std::string> findMdsMdfFiles(const std::string& directory) {
                 std::string ext = entry.path().extension();
                 std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); }); // Convert extension to lowercase
 
-                if ((ext == ".mds" || ext == ".mdf") && (entry.path().filename().string().find("data") == std::string::npos) && (entry.path().filename().string() != "terrain.mdf") && (entry.path().filename().string() != "blocklist.mdf")) {
-                    if (fs::file_size(entry) >= 10'000'000) {
+                if (ext == ".mds" || ext == ".mdf") {
+                    
                         // Ensure the number of active threads doesn't exceed maxThreads
                         while (futures.size() >= maxThreads) {
                             // Wait for at least one thread to complete
@@ -870,7 +870,7 @@ std::vector<std::string> findMdsMdfFiles(const std::string& directory) {
                             // Add the file name to the shared vector
                             fileNames.push_back(fileName);
                         }));
-                    }
+                    
                 }
             }
         }
@@ -973,7 +973,7 @@ void select_and_convert_files_to_iso_mdf() {
 
     std::vector<std::string> mdfMdsFiles = findMdsMdfFiles(directoryPath);  // You need to define findMdfMdsFiles function.
     if (mdfMdsFiles.empty()) {
-        std::cout << "No .mdf or .mds files found in the specified directory and its subdirectories or all files are under 10MB." << std::endl;
+        std::cout << "No .mdf or .mds files found in the specified directory and its subdirectories." << std::endl;
     } else {
         for (int i = 0; i < mdfMdsFiles.size(); i++) {
             std::cout << i + 1 << ". " << mdfMdsFiles[i] << std::endl;
