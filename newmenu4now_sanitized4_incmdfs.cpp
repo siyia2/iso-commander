@@ -22,15 +22,17 @@
 #include <cctype>
 #include <regex>
 
-//167 opoydhpote trexw thn entolh system needs escaping with replace " with  ' and ' with ("'", "'\\''", string) 
 //santitization example system(("sudo mkdir -p '" + sanitizePath(mountPoint) + "'").c_str()) != 0)
 std::string sanitizeForShell(const std::string& input) {
-    // If the input contains only spaces, don't escape it
-    if (input.find_first_not_of(" ()") == std::string::npos) {
-        return input;
+    // Escape double quotes and backslashes (common shell escape characters)
+    std::string sanitized = input;
+    size_t pos = sanitized.find_first_of("\"\\");
+    while (pos != std::string::npos) {
+        sanitized.insert(pos, "\\");
+        pos = sanitized.find_first_of("\"\\", pos + 2);
     }
 
-    return input;
+    return sanitized;
 }
 
 // Function to read a line of input using readline
