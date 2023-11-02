@@ -4,6 +4,7 @@
 #include <vector>
 #include <cstdlib>
 #include <condition_variable>
+#include <readline/readline.h>
 #include <algorithm>
 #include <filesystem>
 #include <future>
@@ -23,17 +24,26 @@
 
 //167 opoydhpote trexw thn entolh system needs escaping with replace " with  ' and ' with ("'", "'\\''", string) 
 //santitization example system(("sudo mkdir -p '" + sanitizePath(mountPoint) + "'").c_str()) != 0)
-
 std::string sanitizeForShell(const std::string& input) {
-    // Escape double quotes and backslashes (common shell escape characters)
-    std::string sanitized = input;
-    size_t pos = sanitized.find_first_of("\"\\");
-    while (pos != std::string::npos) {
-        sanitized.insert(pos, "\\");
-        pos = sanitized.find_first_of("\"\\", pos + 2);
+    // If the input contains only spaces, don't escape it
+    if (input.find_first_not_of(" ()") == std::string::npos) {
+        return input;
     }
 
-    return sanitized;
+    return input;
+}
+
+// Function to read a line of input using readline
+std::string readInputLine(const std::string& prompt) {
+    char* input = readline(prompt.c_str());
+
+    if (input) {
+        std::string inputStr(input);
+        free(input); // Free the allocated memory for the input
+        return inputStr;
+    }
+
+    return ""; // Return an empty string if readline fails
 }
 
 std::mutex mtx;
@@ -244,9 +254,12 @@ void mountISO(const std::vector<std::string>& isoFiles) {
 
 
 void select_and_mount_files_by_number() {
-    std::cout << "Enter the directory path to search for .iso files: ";
-    std::string directoryPath;
-    std::getline(std::cin, directoryPath);
+    std::string directoryPath = readInputLine("Enter the directory path to search for .iso files: ");
+    
+    if (directoryPath.empty()) {
+        std::cout << "Path input is empty. Exiting." << std::endl;
+        return;
+    }
 
     // Sanitize the directory path before using it
     directoryPath = sanitizeForShell(directoryPath);
@@ -582,8 +595,8 @@ std::vector<std::string> findBinImgFiles(const std::string& directory) {
                 std::string ext = entry.path().extension();
                 std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); }); // Convert extension to lowercase
 
-                if (ext == ".bin" || ext == ".img") {
-                    if (fs::file_size(entry) >= 50'000'000) {
+		if ((ext == ".bin" || ext == ".img") && (entry.path().filename().string().find("data") == std::string::npos) && (entry.path().filename().string() != "terrain.bin")) {
+                    if (fs::file_size(entry) >= 10'000'000) {
                         // Ensure the number of active threads doesn't exceed maxThreads
                         while (futures.size() >= maxThreads) {
                             // Wait for at least one thread to complete
