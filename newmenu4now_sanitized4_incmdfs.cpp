@@ -240,6 +240,10 @@ bool mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
 
         if (result != 0) {
             std::perror("Failed to mount ISO file");
+            // Remove the mount point directory in case of failure
+            if (system(("sudo rmdir " + sanitizedMountPoint).c_str()) != 0) {
+                std::perror("Failed to remove mount point directory");
+            }
             return false;
         } else {
             std::cout << "ISO file '" << isoFile << "' mounted at '" << sanitizedMountPoint << "'." << std::endl;
