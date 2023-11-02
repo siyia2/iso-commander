@@ -352,7 +352,6 @@ void select_and_mount_files_by_number() {
     }
 }
 
-// Case-insensitive string comparison function
 bool iequals(const std::string& a, const std::string& b) {
     return std::equal(a.begin(), a.end(), b.begin(), b.end(), [](char lhs, char rhs) {
         return std::tolower(lhs) == std::tolower(rhs);
@@ -364,7 +363,7 @@ void traverseDirectory(const std::filesystem::path& path, std::vector<std::strin
         for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
             if (entry.is_regular_file()) {
                 std::string filePath = entry.path().string();
-                
+
                 // Check if the file has an ".iso" extension (case-insensitive)
                 if (iequals(std::filesystem::path(filePath).extension(), ".iso")) {
                     isoFiles.push_back(filePath);
@@ -376,6 +375,7 @@ void traverseDirectory(const std::filesystem::path& path, std::vector<std::strin
     }
 }
 
+
 // Function to check if a file has the .iso extension
 bool hasIsoExtension(const std::string& filePath) {
     // Extract the file extension and check if it's ".iso"
@@ -384,6 +384,42 @@ bool hasIsoExtension(const std::string& filePath) {
         std::string extension = filePath.substr(pos);
         return extension == ".iso";
     }
+    return false;
+}
+
+bool hasIsoExtensionInParallel(const std::vector<std::string>& filePaths) {
+    std::vector<bool> results(filePaths.size(), false);
+
+    // Define a function to be executed by each thread
+    auto checkIsoExtension = [&](int start, int end) {
+        for (int i = start; i < end; i++) {
+            results[i] = hasIsoExtension(filePaths[i]);
+        }
+    };
+
+    // Create four threads to perform the checks in parallel (for a maximum of 4 cores)
+    int numThreads = std::min(4, static_cast<int>(filePaths.size()));
+    std::vector<std::thread> threads;
+
+    int batchSize = filePaths.size() / numThreads;
+    for (int i = 0; i < numThreads; i++) {
+        int start = i * batchSize;
+        int end = (i == numThreads - 1) ? filePaths.size() : (i + 1) * batchSize;
+        threads.emplace_back(checkIsoExtension, start, end);
+    }
+
+    // Wait for all threads to finish
+    for (auto& thread : threads) {
+        thread.join();
+    }
+
+    // Check if any of the threads found an ".iso" file
+    for (bool result : results) {
+        if (result) {
+            return true;
+        }
+    }
+
     return false;
 }
 
@@ -563,24 +599,6 @@ void listMountedISOs() {
     }
 }
 
-void listMode() {
-    std::cout << "List Mode selected. Implement your logic here." << std::endl;
-    // You can call select_and_mount_files_by_number or add your specific logic.
-}
-
-void manualMode_isos() {
-    std::cout << "Manual Mode selected. Implement your logic here." << std::endl;
-    // You can call manual_mode_isos or add your specific logic.
-}
-
-void manualMode_imgs() {
-    std::cout << "Manual Mode selected. Implement your logic here." << std::endl;
-    // You can call manual_mode_imgs or add your specific logic.
-}
-
-
-
-
 
 std::vector<std::string> findBinImgFiles(const std::string& directory) {
     std::vector<std::string> fileNames;
@@ -595,8 +613,8 @@ std::vector<std::string> findBinImgFiles(const std::string& directory) {
                 std::string ext = entry.path().extension();
                 std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); }); // Convert extension to lowercase
 
-                if (ext == ".bin" || ext == ".img") {
-                    if (fs::file_size(entry) >= 50'000'000) {
+		if ((ext == ".bin" || ext == ".img") && (entry.path().filename().string().find("data") == std::string::npos) && (entry.path().filename().string() != "terrain.bin")&& (entry.path().filename().string() != "blocklist.bin")) {
+                    if (fs::file_size(entry) >= 10'000'000) {
                         // Ensure the number of active threads doesn't exceed maxThreads
                         while (futures.size() >= maxThreads) {
                             // Wait for at least one thread to complete
@@ -714,16 +732,19 @@ void processFilesInRange(int start, int end) {
 }
 
 void select_and_convert_files_to_iso() {
-    std::cout << "Enter the directory path to scan for .bin and .img files: ";
-    std::string directoryPath;
-    std::getline(std::cin, directoryPath);
+    std::string directoryPath = readInputLine("Enter the directory path to search for .bin .img files: ");
+    
+    if (directoryPath.empty()) {
+        std::cout << "Path input is empty. Exiting." << std::endl;
+        return;
+    }
 
     // Sanitize the directory path before using it
     directoryPath = sanitizeForShell(directoryPath);
 
     binImgFiles = findBinImgFiles(directoryPath); // You need to define findBinImgFiles function.
     if (binImgFiles.empty()) {
-        std::cout << "No .bin or .img files found in the specified directory and its subdirectories or all files are under 50MB." << std::endl;
+        std::cout << "No .bin or .img files found in the specified directory and its subdirectories or all files are under 10MB." << std::endl;
     } else {
         for (int i = 0; i < binImgFiles.size(); i++) {
             std::cout << i + 1 << ". " << binImgFiles[i] << std::endl;
