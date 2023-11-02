@@ -23,25 +23,56 @@
 #include <regex>
 
 std::string sanitizeForShell(const std::string& input) {
-    // Remove double backslashes, and escape double quotes, spaces, parentheses, and square brackets
+    // Characters that need to be escaped in a shell command
+    const std::string specialChars = "\"\\?!;,`~@#$%^&*";
+    
     std::string sanitized = input;
-    sanitized.erase(std::remove(sanitized.begin(), sanitized.end(), '\\'), sanitized.end());
-
-    const std::string charactersToEscape = "\"\\ ()[]";
-
-    for (char character : charactersToEscape) {
-        size_t pos = sanitized.find(character);
-        while (pos != std::string::npos) {
-            sanitized.insert(pos, "\\");
-            pos = sanitized.find(character, pos + 2);
-        }
+    size_t pos = sanitized.find_first_of(specialChars);
+    
+    while (pos != std::string::npos) {
+        // Escape the special character at the current position
+        sanitized.insert(pos, "\\");
+        // Move to the next character
+        pos = sanitized.find_first_of(specialChars, pos + 2);
     }
 
     return sanitized;
 }
 
+In this code, we create a string specialChars that contains all the characters you want to escape. The find_first_of method is then used to find the position of the first occurrence of any of these characters in the input string. We then insert a backslash before each of these characters to escape them. The loop continues until all special characters have been escaped.
 
+This updated code should properly sanitize the input string for use in a shell command, escaping not only double quotes and backslashes but also the additional special characters you mentioned.
+User
+nice also dont escape parenthesis and replace them with p if the are in filename
+ChatGPT
 
+To modify the sanitizeForShell function to handle parentheses and replace them with "p" when they appear in a filename, you can add additional logic to check whether a character is part of a filename and not escape it. Here's an updated version of the function:
+
+cpp
+
+std::string sanitizeForShell(const std::string& input) {
+    const std::string specialChars = "\"\\?!;,`~@#$%^&*";
+    
+    std::string sanitized = input;
+    size_t pos = sanitized.find_first_of(specialChars);
+    
+    while (pos != std::string::npos) {
+        // Check if the character is part of a filename (between parentheses)
+        size_t filenameStart = sanitized.rfind('(', pos);
+        size_t filenameEnd = sanitized.find(')', pos);
+
+        if (filenameStart != std::string::npos && filenameEnd != std::string::npos && filenameStart < pos && pos < filenameEnd) {
+            // The character is part of a filename; do not escape it
+        } else {
+            // Escape the special character at the current position
+            sanitized.insert(pos, "\\");
+            // Move to the next character
+            pos = sanitized.find_first_of(specialChars, pos + 2);
+        }
+    }
+
+    return sanitized;
+}
 
 // Function to read a line of input using readline
 std::string readInputLine(const std::string& prompt) {
