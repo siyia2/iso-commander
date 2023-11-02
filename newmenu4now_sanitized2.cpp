@@ -714,9 +714,12 @@ void processFilesInRange(int start, int end) {
 }
 
 void select_and_convert_files_to_iso() {
-    std::cout << "Enter the directory path to scan for .bin and .img files: ";
-    std::string directoryPath;
-    std::getline(std::cin, directoryPath);
+    std::string directoryPath = readInputLine("Enter the directory path to search for .bin .img files: ");
+    
+    if (directoryPath.empty()) {
+        std::cout << "Path input is empty. Exiting." << std::endl;
+        return;
+    }
 
     // Sanitize the directory path before using it
     directoryPath = sanitizeForShell(directoryPath);
