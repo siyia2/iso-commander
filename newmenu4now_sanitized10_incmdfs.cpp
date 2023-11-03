@@ -136,7 +136,7 @@ int main() {
         //std::cin.clear();
 
 	std::cout << " " << std::endl;
-        char* input = readline("\033[32mEnter a choice:\033[0m ");
+        char* input = readline("\033[34mEnter a choice:\033[0m ");
 	
         if (!input) {
             break; // Exit the program if readline returns NULL (e.g., on EOF or Ctrl+D)
@@ -170,7 +170,7 @@ int main() {
                         std::cout << "2. Convert to ISO (MDF2ISO)" << std::endl;
                         std::cout << "3. Back to Main Menu" << std::endl;
 
-                        char* submenu_input = readline("\033[32mEnter a choice:\033[0m ");
+                        char* submenu_input = readline("\034[32mEnter a choice:\033[0m ");
 
                         if (!submenu_input) {
                             break; // Exit the submenu if readline returns NULL
@@ -320,7 +320,7 @@ void mountISO(const std::vector<std::string>& isoFiles) {
     std::cout << "\e[1;32mPreviously Selected ISO files have been mounted.\n\e[0m" << std::endl;
 }
 void select_and_mount_files_by_number() {
-    std::string directoryPath = readInputLine("\033[32mEnter the directory path to search for .iso files or simply press enter to return:\033[0m ");
+    std::string directoryPath = readInputLine("\033[34mEnter the directory path to search for .iso files or simply press enter to return:\033[0m ");
 
     if (directoryPath.empty()) {
         std::cout << "\033[33mPath input is empty. Exiting.\033[0m" << std::endl;
@@ -354,7 +354,7 @@ void select_and_mount_files_by_number() {
         }
 
         std::string input;
-        std::cout << "\033[32mChoose .iso files to mount (enter numbers separated by spaces or ranges like '1-3', or press Enter to exit):\033[0m ";
+        std::cout << "\033[34mChoose .iso files to mount (enter numbers separated by spaces or ranges like '1-3', or press Enter to exit):\033[0m ";
         std::getline(std::cin, input);
 
         if (input.empty()) {
@@ -600,7 +600,7 @@ void unmountISOs() {
         }
 
         // Prompt for unmounting input
-        std::cout << "\033[33mEnter the range of ISOs to unmount (e.g., 1, 1-3, 1 to 3, or individual numbers like 1 2 3) or type enter to exit:\033[0m ";
+        std::cout << "\034[33mEnter the range of ISOs to unmount (e.g., 1, 1-3, 1 to 3, or individual numbers like 1 2 3) or type enter to exit:\033[0m ";
         std::string input;
         std::getline(std::cin, input);
 
@@ -764,7 +764,7 @@ std::string chooseFileToConvert(const std::vector<std::string>& files) {
     }
 
     int choice;
-    std::cout << "\033[32mEnter the number of the file you want to convert:\033[0m ";
+    std::cout << "\034[32mEnter the number of the file you want to convert:\033[0m ";
     std::cin >> choice;
 
     if (choice >= 1 && choice <= static_cast<int>(files.size())) {
@@ -918,7 +918,7 @@ void processFilesInRange(int start, int end) {
 }
 
 void select_and_convert_files_to_iso() {
-    std::string directoryPath = readInputLine("\033[32mEnter the directory path to search for .bin .img files or simply press enter to exit:\033[0m ");
+    std::string directoryPath = readInputLine("\034[32mEnter the directory path to search for .bin .img files or simply press enter to exit:\033[0m ");
     
     if (directoryPath.empty()) {
         std::cout << "Path input is empty. Exiting." << std::endl;
@@ -937,7 +937,7 @@ void select_and_convert_files_to_iso() {
         std::string input;
 
       while (true) {
-    std::cout << "\033[32mChoose a file to process (enter the number or range e.g., 1-5 or 1 or simply press Enter to return):\033[0m ";
+    std::cout << "\034[32mChoose a file to process (enter the number or range e.g., 1-5 or 1 or simply press Enter to return):\033[0m ";
     std::getline(std::cin, input);
 
     if (input.empty()) {
@@ -1136,7 +1136,7 @@ void processMDFFilesInRange(int start, int end) {
 
 void select_and_convert_files_to_iso_mdf() {
         int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4; // Determine the number of threads based on CPU cores
-    std::string directoryPath = readInputLine("\033[32mEnter the directory path to search for .mdf .mds files or simply press enter to return:\033[0m ");
+    std::string directoryPath = readInputLine("\034[32mEnter the directory path to search for .mdf .mds files or simply press enter to return:\033[0m ");
 
     if (directoryPath.empty()) {
         std::cout << "\033[33mPath input is empty. Exiting.\033[33m"<< std::endl;
@@ -1155,7 +1155,7 @@ void select_and_convert_files_to_iso_mdf() {
         std::string input;
 
         while (true) {
-    std::cout << "\033[32mChoose a file to process (enter the number or range e.g., 1-5 or 1 or simply press Enter to return):\033[0m ";
+    std::cout << "\034[34mChoose a file to process (enter the number or range e.g., 1-5 or 1 or simply press Enter to return):\033[0m ";
     std::getline(std::cin, input);
 
     if (input.empty()) {
