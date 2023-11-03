@@ -2,9 +2,14 @@
 Port of mounter_elite to C++ 
 https://github.com/siyia2/mounter_elite
 
-Simple asf terminal tool written in C++, that allows you to mount ISOs and/or to convert BIN/IMG files to ISO. Supports Tab completion on path list generation, a curtesy of readline library. 
+
+![2023-11-03-231927_grim](https://github.com/siyia2/mounter-elite-Plus/assets/46220960/c7fb4ba6-ccab-4672-b12a-bc03ad5e2dc5)
+
+
+
+Simple secure and blazing fast terminal image mounter/converter written in C++, it allows mounting ISOs and/or converting BIN/IMG files to ISO. Supports Tab completion on path list generation, a curtesy of readline library. 
 You can add multiple mounts and/or conversion paths. All paths are mounted under /mnt/iso_* format and all conversions take place at their local source directories, script requires ROOT access to mount&unmount ISOs. 
-It is recommended that search directories have permissions of 755 and upwards for better list generations, but if not, you can always run it as ROOT from the beginning.
+It is recommended that search directories have permissions of 755 and upwards for better list generations, but if not, you can always run it as ROOT from the beginning if need be.
 
 Added Features:
 * Sanitisation support added to shell commands to improve security.
