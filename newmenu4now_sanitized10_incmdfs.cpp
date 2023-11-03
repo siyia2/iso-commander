@@ -28,25 +28,36 @@
 //	SANITISATION AND STRING STUFF	//
 
 std::string shell_escape(const std::string& param) {
-    std::string result = "";
-    result.reserve(param.size() + 2); // Reserve space for single quotes
-
-    result += '\''; // Start with an opening single quote
+    const char single_quote = '\'';
+    size_t count = 0;
 
     for (char c : param) {
-        if (c == '\'') {
-            // Escape single quotes by adding an additional one
+        if (c == single_quote) {
+            count += 2;  // Each single quote is replaced with two single quotes
+        } else {
+            count += 1;  // Other characters are kept as is
+        }
+    }
+
+    std::string result;
+    result.reserve(count + 2); // +2 for the enclosing single quotes
+
+    result += single_quote;
+
+    for (char c : param) {
+        if (c == single_quote) {
             result += "''";
         } else {
-            // Just append the character
             result += c;
         }
     }
 
-    result += '\''; // End with a closing single quote
+    result += single_quote;
 
     return result;
 }
+
+
 
 
 // Function to read a line of input using readline
