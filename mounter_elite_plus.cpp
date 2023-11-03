@@ -29,11 +29,14 @@
 
 std::string shell_escape(const std::string& param) {
     const char single_quote = '\'';
+    const char space = ' ';
     size_t count = 0;
 
     for (char c : param) {
         if (c == single_quote) {
             count += 2;  // Each single quote is replaced with two single quotes
+        } else if (c == space) {
+            count += 1;  // Spaces are replaced with a single backslash and a space
         } else {
             count += 1;  // Other characters are kept as is
         }
@@ -47,6 +50,8 @@ std::string shell_escape(const std::string& param) {
     for (char c : param) {
         if (c == single_quote) {
             result += "''";
+        } else if (c == space) {
+            result += "\\ ";
         } else {
             result += c;
         }
