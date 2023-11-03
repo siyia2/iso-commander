@@ -137,7 +137,7 @@ int main() {
 
 	std::cout << " " << std::endl;
         char* input = readline("\033[34mEnter a choice:\033[0m ");
-	
+	std::cout << " " << std::endl;
         if (!input) {
             break; // Exit the program if readline returns NULL (e.g., on EOF or Ctrl+D)
         }
@@ -165,12 +165,11 @@ int main() {
                     break;
                 case '4':
                     while (!returnToMainMenu) {
-                        std::cout << "Convert Files to ISO:" << std::endl;
                         std::cout << "1. Convert to ISO (BIN2ISO)" << std::endl;
                         std::cout << "2. Convert to ISO (MDF2ISO)" << std::endl;
                         std::cout << "3. Back to Main Menu" << std::endl;
-
-                        char* submenu_input = readline("\034[32mEnter a choice:\033[0m ");
+						std::cout << " " << std::endl;
+                        char* submenu_input = readline("\033[34mEnter a choice:\033[0m ");
 
                         if (!submenu_input) {
                             break; // Exit the submenu if readline returns NULL
@@ -1010,6 +1009,7 @@ std::vector<std::string> findMdsMdfFiles(const std::string& directory) {
                 std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); }); // Convert extension to lowercase
 
                 if (ext == ".mds" || ext == ".mdf") {
+					if (std::filesystem::file_size(entry) >= 10'000'000) {
                     // Ensure the number of active threads doesn't exceed maxThreads
                     while (futures.size() >= maxThreads) {
                         // Wait for at least one thread to complete
@@ -1031,7 +1031,7 @@ std::vector<std::string> findMdsMdfFiles(const std::string& directory) {
                         // Add the file name to the shared vector
                         fileNames.push_back(fileName);
                     }));
-				  
+				  }
 			   }  
              
         }
