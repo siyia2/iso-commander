@@ -378,7 +378,6 @@ void select_and_mount_files_by_number() {
 
                         // Check if the selected ISO is not already mounted
                         if (std::find(mountedISOs.begin(), mountedISOs.end(), selectedISO) == mountedISOs.end()) {
-                            // Shell-escape the selected ISO file path before mounting
                             mountISO({(selectedISO)});
                             mountedISOs.push_back(selectedISO);
                         } else {
@@ -395,7 +394,6 @@ void select_and_mount_files_by_number() {
 
                     // Check if the selected ISO is not already mounted
                     if (std::find(mountedISOs.begin(), mountedISOs.end(), selectedISO) == mountedISOs.end()) {
-                        // Shell-escape the selected ISO file path before mounting
                         mountISO({(selectedISO)});
                         mountedISOs.push_back(selectedISO);
                     } else {
@@ -460,7 +458,6 @@ bool hasIsoExtension(const std::string& filePath) {
     if (pos != std::string::npos) {
         std::string extension = filePath.substr(pos);
 
-        // Shell-escape the extension for robustness
         std::string escapedExtension = shell_escape(extension);
 
         return escapedExtension == ".iso";
