@@ -63,6 +63,8 @@ std::string shell_escape(const std::string& param) {
     return result + "'";
 }
 
+
+
 // Function to read a line of input using readline
 std::string readInputLine(const std::string& prompt) {
     char* input = readline(prompt.c_str());
@@ -162,6 +164,7 @@ int main() {
         if (choice == "1") {
 	    std::system("clear");
             select_and_mount_files_by_number();
+	    std::system("clear");
         } else {
             switch (choice[0]) {
                 case '2':
@@ -196,12 +199,10 @@ int main() {
                             case '1':
 				std::system("clear");
                                 select_and_convert_files_to_iso();
-				std::system("clear");
                                 break;
                             case '2':
 				std::system("clear");
                                 select_and_convert_files_to_iso_mdf();
-				std::system("clear");
                                 break;
                             case '3':
 				returnToMainMenu = true;  // Set the flag to return to the main menu
@@ -948,7 +949,7 @@ void select_and_convert_files_to_iso() {
     binImgFiles = findBinImgFiles(directoryPath); // You need to define findBinImgFiles function.
 
     if (binImgFiles.empty()) {
-        std::cout << "\033[33mNo .bin or .img files found in the specified directory and its subdirectories or all files are under 10MB.\033[0m" << std::endl;
+        std::cout << "\033[33mNo .bin or .img files found in the specified directory and its subdirectories or all files are under 10MB.\n\033[0m";
     } else {
         for (int i = 0; i < binImgFiles.size(); i++) {
             std::cout << i + 1 << ". " << binImgFiles[i] << std::endl;
@@ -1167,7 +1168,7 @@ void select_and_convert_files_to_iso_mdf() {
     std::vector<std::string> mdfMdsFiles = findMdsMdfFiles(directoryPath);
 
     if (mdfMdsFiles.empty()) {
-        std::cout << "\033[31mNo .mdf or .mds files found in the specified directory and its subdirectories or all files are under 10MB.\033[0m";
+        std::cout << "\033[31mNo .mdf or .mds files found in the specified directory and its subdirectories or all files are under 10MB.\n\033[0m";
     } else {
         for (int i = 0; i < mdfMdsFiles.size(); i++) {
             std::cout << i + 1 << ". " << mdfMdsFiles[i] << std::endl;
