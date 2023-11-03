@@ -12,7 +12,7 @@ You can add multiple mounts and/or conversion paths. All paths are mounted under
 It is recommended that search directories have permissions of 755 and upwards for better list generations, but if not, you can always run it as ROOT from the beginning if need be.
 
 Added Features:
-* Sanitisation support added to shell commands to improve security.
+* Sanitized shell commands for improved security.
 * Supports all filenames, including special charactes and gaps.
 * Extra checks and error controls so that you don't erase your / or /mnt accidentally (joking).
 * More robust menu experience.
