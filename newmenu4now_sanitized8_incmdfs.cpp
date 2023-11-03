@@ -22,7 +22,6 @@
 #include <algorithm>
 #include <cctype>
 #include <regex>
-#include <termios.h>
 
 
 //	SANITISATION AND STRING STUFF	//
@@ -65,7 +64,6 @@ std::string readInputLine(const std::string& prompt) {
 // MULTITHREADING STUFF
 std::mutex mountMutex; // Mutex for thread safety
 std::mutex mtx;
-int numThreads = 4;
 
 // Define the default cache directory
 const std::string cacheDirectory = "/tmp/";
@@ -694,7 +692,7 @@ std::vector<std::string> findBinImgFiles(const std::string& directory) {
     try {
         std::vector<std::future<void>> futures;
         std::mutex mutex; // Mutex for protecting the shared data
-        const int maxThreads = 4; // Maximum number of worker threads
+        const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4; // Maximum number of worker threads
 
         for (const auto& entry : std::filesystem::recursive_directory_iterator(directory)) {
             if (entry.is_regular_file()) {
@@ -813,6 +811,7 @@ void convertBINsToISOs(const std::vector<std::string>& inputPaths, int numThread
 
 
 void processFilesInRange(int start, int end) {
+        int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4; // Determine the number of threads based on CPU cores
     std::vector<std::string> selectedFiles;
     for (int i = start; i <= end; i++) {
         selectedFiles.push_back(binImgFiles[i - 1]);
@@ -1030,6 +1029,7 @@ void convertMDFsToISOs(const std::vector<std::string>& inputPaths, int numThread
 }
 
 void processMDFFilesInRange(int start, int end) {
+	int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4; // Determine the number of threads based on CPU cores
     std::vector<std::string> selectedFiles;
     for (int i = start; i <= end; i++) {
         // Escape the file path before using it in shell commands
@@ -1041,6 +1041,7 @@ void processMDFFilesInRange(int start, int end) {
 
 
 void select_and_convert_files_to_iso_mdf() {
+        int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4; // Determine the number of threads based on CPU cores
     std::string directoryPath = readInputLine("Enter the directory path to search for .mdf .mds files: ");
 
     if (directoryPath.empty()) {
@@ -1108,6 +1109,7 @@ void select_and_convert_files_to_iso_mdf() {
 }
 
 void processMdfMdsFilesInRange(const std::vector<std::string>& mdfMdsFiles, int start, int end) {
+    int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4; // Determine the number of threads based on CPU cores
     for (int i = start - 1; i < end; i++) {
         // Escape the file path before using it in shell commands
         std::string escapedFilePath = shell_escape(mdfMdsFiles[i]);
