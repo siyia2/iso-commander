@@ -16,6 +16,7 @@
 #include <sstream>
 #include <thread>
 #include <queue>
+#include <string_view>
 #include <map>
 #include <mutex>
 #include <algorithm>
@@ -102,9 +103,12 @@ void manualMode_imgs();
 void print_ascii();
 void screen_clear();
 void print_ascii();
-void processDirectory(const std::filesystem::path& path, std::vector<std::string>& isoFiles);
+
 bool iequals(const std::string& a, const std::string& b);
-void traverseDirectory(const std::filesystem::path& path, std::vector<std::string>& isoFiles, int numThreads);
+
+void traverseDirectory(const std::filesystem::path& path, std::vector<std::string>& isoFiles);
+
+void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles);
 
 
 
@@ -116,11 +120,10 @@ std::vector<std::string> mdfImgFiles;	// Declare mdfImgFiles here
 
 int main() {
     std::string choice;
-			std::system("clear");
 
     while (true) {
 			
-			
+			std::system("clear");
 			print_ascii();
         // Display the main menu options
         std::cout << "Menu Options:" << std::endl;
@@ -134,17 +137,19 @@ int main() {
         std::cout << "Enter your choice: ";
         std::cin >> choice;
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');  // Consume the newline character
-        
+
         if (choice == "1") {
             select_and_mount_files_by_number();
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             std::system("clear");
         } else if (choice == "2") {
+            // Call your unmountISOs function
             unmountISOs();
             std::cout << "Press Enter to continue...";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             std::system("clear");
         } else if (choice == "3") {
+            // Call your cleanAndUnmountAllISOs function
             cleanAndUnmountAllISOs();
             std::cout << "Press Enter to continue...";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -173,6 +178,7 @@ int main() {
                 }
             }
         } else if (choice == "5") {
+            // Call your listMountedISOs function
             listMountedISOs();
             std::cout << "Press Enter to continue...";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -194,16 +200,14 @@ int main() {
 void print_ascii() {
     /// Display ASCII art
 
-std::cout << "\033[32m  _____          ___ _____ _____   ___ __   __  ___  _____ _____   __   __  ___ __   __ _   _ _____ _____ ____                         \033[0m" << std::endl;
-std::cout << "\033[32m |  ___)   /\\   (   |_   _)  ___) (   )  \\ /  |/ _ \\|  ___)  ___) |  \\ /  |/ _ (_ \\ / _) \\ | (_   _)  ___)  _ \\ \033[0m" << std::endl;
-std::cout << "\033[32m | |_     /  \\   | |  | | | |_     | ||   v   | |_| | |   | |_    |   v   | | | |\\ v / |  \\| | | | | |_  | |_) )         \033[0m" << std::endl;
-std::cout << "\033[32m |  _)   / /\\ \\  | |  | | |  _)    | || |\\_/| |  _  | |   |  _)   | |\\_/| | | | | | |  |     | | | |  _) |  __/       \033[0m" << std::endl;
-std::cout << "\033[32m | |___ / /  \\ \\ | |  | | | |___   | || |   | | | | | |   | |___  | |   | | |_| | | |  | |\\  | | | | |___| |            \033[0m" << std::endl;
-std::cout << "\033[32m |_____)_/    \\_(___) |_| |_____) (___)_|   |_|_| |_|_|   |_____) |_|   |_|\\___/  |_|  |_| \\_| |_| |_____)_|              \033[0m" << std::endl;
-																																		
-																																			
+std::cout << "\033[32m  _____          ___ _____ _____   ___ __   __  ___  _____ _____   __   __  ___ __   __ _   _ _____ _____ ____          _   ___   ___             \033[0m" << std::endl;
+std::cout << "\033[32m |  ___)   /\\   (   |_   _)  ___) (   )  \\ /  |/ _ \\|  ___)  ___) |  \\ /  |/ _ (_ \\ / _) \\ | (_   _)  ___)  _ \\        / | /   \\ / _ \\  \033[0m" << std::endl;
+std::cout << "\033[32m | |_     /  \\   | |  | | | |_     | ||   v   | |_| | |   | |_    |   v   | | | |\\ v / |  \\| | | | | |_  | |_) )  _  __- | \\ O /| | | |      \033[0m" << std::endl;
+std::cout << "\033[32m |  _)   / /\\ \\  | |  | | |  _)    | || |\\_/| |  _  | |   |  _)   | |\\_/| | | | | | |  |     | | | |  _) |  __/  | |/ /| | / _ \\| | | |     \033[0m" << std::endl;
+std::cout << "\033[32m | |___ / /  \\ \\ | |  | | | |___   | || |   | | | | | |   | |___  | |   | | |_| | | |  | |\\  | | | | |___| |     | / / | |( (_) ) |_| |       \033[0m" << std::endl;
+std::cout << "\033[32m |_____)_/    \\_(___) |_| |_____) (___)_|   |_|_| |_|_|   |_____) |_|   |_|\\___/  |_|  |_| \\_| |_| |_____)_|     |__/  |_(_)___/ \\___/       \033[0m" << std::endl;
 		
-std::cout << " " << std::endl;																												
+std::cout << " " << std::endl;
 }
 
 
@@ -284,7 +288,7 @@ void mountISO(const std::vector<std::string>& isoFiles) {
     std::cout << "\e[1;32mPreviously Selected ISO files have been mounted.\n\e[0m" << std::endl;
 }
 void select_and_mount_files_by_number() {
-    std::string directoryPath = readInputLine("Enter the directory path to search for .iso files or simply enter to return: ");
+    std::string directoryPath = readInputLine("Enter the directory path to search for .iso files: ");
 
     if (directoryPath.empty()) {
         std::cout << "Path input is empty. Exiting." << std::endl;
@@ -292,7 +296,7 @@ void select_and_mount_files_by_number() {
     }
 
     std::vector<std::string> isoFiles;
-    traverseDirectory(directoryPath, isoFiles, numThreads);
+    traverseDirectory(directoryPath, isoFiles);
 
     std::vector<std::string> mountedISOs;
 
@@ -380,28 +384,42 @@ bool iequals(const std::string& a, const std::string& b) {
     });
 }
 
-void traverseDirectory(const std::filesystem::path& path, std::vector<std::string>& isoFiles, int numThreads) {
-    std::vector<std::thread> threads;
-    for (int i = 0; i < numThreads; ++i) {
-        threads.push_back(std::thread([i, &path, &isoFiles, numThreads]() {
-            for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
-                if (entry.is_regular_file()) {
-                    std::string filePath = entry.path().string();
+void traverseDirectory(const std::filesystem::path& path, std::vector<std::string>& isoFiles) {
+    try {
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
+            if (entry.is_regular_file()) {
+                const std::filesystem::path& filePath = entry.path();
 
-                    // Check if the file has an ".iso" extension (case-insensitive)
-                    if (iequals(std::filesystem::path(filePath).extension(), ".iso")) {
-                        // Shell-escape the ISO file path before adding it to the vector
-                        isoFiles.push_back(filePath);
-                    }
+                std::string extensionStr = filePath.extension().string();
+                std::string_view extension = extensionStr;
+
+                if (iequals(std::string(extension), ".iso")) {
+                    isoFiles.push_back(filePath.string());
                 }
             }
-        }));
+        }
+    } catch (const std::filesystem::filesystem_error& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+    }
+}
+
+void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles) {
+    int numThreads = std::thread::hardware_concurrency();
+
+    std::vector<std::thread> threads;
+
+    for (int i = 0; i < numThreads; ++i) {
+        threads.emplace_back([&path, &isoFiles]() {
+            traverseDirectory(path, isoFiles);
+        });
     }
 
     for (std::thread& thread : threads) {
         thread.join();
     }
 }
+
+
 
 
 // Function to check if a file has the .iso extension
@@ -811,7 +829,7 @@ void processFilesInRange(int start, int end) {
 }
 
 void select_and_convert_files_to_iso() {
-    std::string directoryPath = readInputLine("Enter the directory path to search for .bin .img files, or simply enter to return: ");
+    std::string directoryPath = readInputLine("Enter the directory path to search for .bin .img files: ");
     
     if (directoryPath.empty()) {
         std::cout << "Path input is empty. Exiting." << std::endl;
@@ -1023,7 +1041,7 @@ void processMDFFilesInRange(int start, int end) {
 
 
 void select_and_convert_files_to_iso_mdf() {
-    std::string directoryPath = readInputLine("Enter the directory path to search for .mdf .mds files, or simply enter to return: ");
+    std::string directoryPath = readInputLine("Enter the directory path to search for .mdf .mds files: ");
 
     if (directoryPath.empty()) {
         std::cout << "Path input is empty. Exiting." << std::endl;
