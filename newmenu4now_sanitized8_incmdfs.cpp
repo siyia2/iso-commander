@@ -129,7 +129,7 @@ int main() {
         std::cout << "5. List Mounted ISOs" << std::endl;
         std::cout << "6. Exit the Program" << std::endl;
          // Prompt for the main menu choice
-        std::cout << "Enter your choice: ";
+        std::cout << "\033[32mEnter your choice:\033[0m ";
         std::cin >> choice;
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');  // Consume the newline character
 
@@ -158,7 +158,7 @@ int main() {
                 std::cout << "3. Back to Main Menu" << std::endl;
 
                 // Prompt for the submenu choice
-                std::cout << "Enter your choice: ";
+                std::cout << "\033[32Enter your choice:\033[0m ";
                 std::cin >> choice;
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');  // Consume the newline character
 
@@ -169,7 +169,7 @@ int main() {
                 } else if (choice == "3") {
                     break;  // Go back to the main menu
                 } else {
-                    std::cout << "Invalid choice. Please enter 1, 2, or 3." << std::endl;
+                    std::cout << "\033[31mInvalid choice. Please enter 1, 2, or 3.\033[0m" << std::endl;
                 }
             }
         } else if (choice == "5") {
@@ -182,7 +182,7 @@ int main() {
             std::cout << "Exiting the program..." << std::endl;
             return 0;
         } else {
-            std::cout << "Invalid choice. Please enter 1, 2, 3, 4, 5, or 6." << std::endl;
+            std::cout << "\033[31mInvalid choice. Please enter 1, 2, 3, 4, 5, or 6.\033[0m" << std::endl;
         }
     }
 
@@ -232,14 +232,14 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
         // Create the mount point directory
         std::string mkdirCommand = "sudo mkdir -p " + shell_escape(mountPoint);
         if (system(mkdirCommand.c_str()) != 0) {
-            std::perror("Failed to create mount point directory");
+            std::perror("\033[33mFailed to create mount point directory\033[0m");
             return;
         }
 
         // Mount the ISO file to the mount point
         std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint);
         if (system(mountCommand.c_str()) != 0) {
-            std::perror("Failed to mount ISO file");
+            std::perror("\033[31mFailed to mount ISO file\033[0m");
         } else {
             std::cout << "ISO file '" << isoFile << "' mounted at '" << mountPoint << "'." << std::endl;
             // Store the mount point in the map
@@ -283,10 +283,10 @@ void mountISO(const std::vector<std::string>& isoFiles) {
     std::cout << "\e[1;32mPreviously Selected ISO files have been mounted.\n\e[0m" << std::endl;
 }
 void select_and_mount_files_by_number() {
-    std::string directoryPath = readInputLine("Enter the directory path to search for .iso files: ");
+    std::string directoryPath = readInputLine("\033[32mEnter the directory path to search for .iso files:\033[0m ");
 
     if (directoryPath.empty()) {
-        std::cout << "Path input is empty. Exiting." << std::endl;
+        std::cout << "\033[33mPath input is empty. Exiting.\033[0m" << std::endl;
         return;
     }
 
@@ -297,7 +297,7 @@ void select_and_mount_files_by_number() {
 
     while (true) {
         if (isoFiles.empty()) {
-            std::cout << "No .iso files found in the specified directory and its subdirectories." << std::endl;
+            std::cout << "\033[33mNo .iso files found in the specified directory and its subdirectories.\033[0m" << std::endl;
             break;
         }
 
@@ -308,7 +308,7 @@ void select_and_mount_files_by_number() {
         }
 
         if (isoFiles.empty()) {
-            std::cout << "No more unmounted .iso files in the directory." << std::endl;
+            std::cout << "\033[33mNo more unmounted .iso files in the directory.\033[33m" << std::endl;
             break;
         }
 
@@ -317,7 +317,7 @@ void select_and_mount_files_by_number() {
         }
 
         std::string input;
-        std::cout << "Choose .iso files to mount (enter numbers separated by spaces or ranges like '1-3', or press Enter to exit): ";
+        std::cout << "\033[32mChoose .iso files to mount (enter numbers separated by spaces or ranges like '1-3', or press Enter to exit):\033[0m ";
         std::getline(std::cin, input);
 
         if (input.empty()) {
@@ -346,11 +346,11 @@ void select_and_mount_files_by_number() {
                             mountISO({(selectedISO)});
                             mountedISOs.push_back(selectedISO);
                         } else {
-                            std::cout << "ISO file '" << selectedISO << "' is already mounted." << std::endl;
+                            std::cout << "\033[33mISO file '" << selectedISO << "' is already mounted.\033[0m" << std::endl;
                         }
                     }
                 } else {
-                    std::cout << "Invalid range: " << token << ". Please try again." << std::endl;
+                    std::cout << "\033[31mInvalid range: " << token << ". Please try again.\033[0m" << std::endl;
                 }
             } else {
                 int selectedNumber = std::stoi(token);
@@ -363,10 +363,10 @@ void select_and_mount_files_by_number() {
                         mountISO({(selectedISO)});
                         mountedISOs.push_back(selectedISO);
                     } else {
-                        std::cout << "ISO file '" << selectedISO << "' is already mounted." << std::endl;
+                        std::cout << "\033[33mISO file '" << selectedISO << "' is already mounted.\033[0m" << std::endl;
                     }
                 } else {
-                    std::cout << "Invalid number: " << selectedNumber << ". Please try again." << std::endl;
+                    std::cout << "\033[31mInvalid number: " << selectedNumber << ". Please try again.\033[30m" << std::endl;
                 }
             }
         }
@@ -508,7 +508,7 @@ void unmountISOs() {
         }
 
         // Display a list of mounted ISOs with indices
-        std::cout << "List of mounted ISOs:" << std::endl;
+        std::cout << "\033[32mList of mounted ISOs:\033[0m" << std::endl;
         for (size_t i = 0; i < isoDirs.size(); ++i) {
             std::cout << i + 1 << ". " << isoDirs[i] << std::endl;
         }
@@ -597,7 +597,7 @@ void unmountAndCleanISO(const std::string& isoDir) {
     int removeDirResult = std::system(removeDirCommand.c_str());
 
     if (removeDirResult != 0) {
-        std::cerr << "Failed to remove directory " << isoDir << std::endl;
+        std::cerr << "\033[31mFailed to remove directory\033[0m" << isoDir << std::endl;
     }
 }
 
@@ -629,7 +629,7 @@ void cleanAndUnmountAllISOs() {
     }
 
     if (isoDirs.empty()) {
-        std::cout << "\033[31mNO ISOS TO BE CLEANED\n\033[0m" << std::endl;
+        std::cout << "\033[33mNO ISOS LEFT TO BE CLEANED\n\033[0m" << std::endl;
         return;
     }
 
@@ -678,19 +678,19 @@ void listMountedISOs() {
 
 // Function to list and prompt the user to choose a file for conversion
 std::string chooseFileToConvert(const std::vector<std::string>& files) {
-    std::cout << "Found the following .bin and .img files:\n";
+    std::cout << "\033[32mFound the following .bin and .img files:\033[0m\n";
     for (size_t i = 0; i < files.size(); ++i) {
         std::cout << i + 1 << ": " << files[i] << "\n";
     }
 
     int choice;
-    std::cout << "Enter the number of the file you want to convert: ";
+    std::cout << "\033[32mEnter the number of the file you want to convert:\033[0m ";
     std::cin >> choice;
 
     if (choice >= 1 && choice <= static_cast<int>(files.size())) {
         return files[choice - 1];
     } else {
-        std::cout << "Invalid choice. Please choose a valid file.\n";
+        std::cout << "\033[31mInvalid choice. Please choose a valid file.\033[31m\n";
         return "";
     }
 }
@@ -761,7 +761,7 @@ bool isCcd2IsoInstalled() {
 void convertBINToISO(const std::string& inputPath) {
     // Check if the input file exists
     if (!std::ifstream(inputPath)) {
-        std::cout << "The specified input file '" << inputPath << "' does not exist." << std::endl;
+        std::cout << "\033[31mThe specified input file '" << inputPath << "' does not exist.\033[0m" << std::endl;
         return;
     }
 
@@ -770,22 +770,22 @@ void convertBINToISO(const std::string& inputPath) {
 
     // Check if the output ISO file already exists
     if (std::ifstream(outputPath)) {
-        std::cout << "The output ISO file '" << outputPath << "' already exists. Skipping conversion." << std::endl;
+        std::cout << "\033[33mThe output ISO file '" << outputPath << "' already exists. Skipping conversion.\033[0m" << std::endl;
     } else {
         // Execute the conversion using ccd2iso, with shell-escaped paths
         std::string conversionCommand = "ccd2iso " + shell_escape(inputPath) + " " + shell_escape(outputPath);
         int conversionStatus = std::system(conversionCommand.c_str());
         if (conversionStatus == 0) {
-            std::cout << "Image file converted to ISO: " << outputPath << std::endl;
+            std::cout << "\033[32mImage file converted to ISO: " << outputPath << std::endl;
         } else {
-            std::cout << "Conversion of " << inputPath << " failed." << std::endl;
+            std::cout << "\033[31mConversion of " << inputPath << " failed.\033[0m" << std::endl;
         }
     }
 }
 
 void convertBINsToISOs(const std::vector<std::string>& inputPaths, int numThreads) {
     if (!isCcd2IsoInstalled()) {
-        std::cout << "ccd2iso is not installed. Please install it before using this option." << std::endl;
+        std::cout << "\033[31mccd2iso is not installed. Please install it before using this option.\033[0m" << std::endl;
         return;
     }
 
@@ -838,7 +838,7 @@ void processFilesInRange(int start, int end) {
 }
 
 void select_and_convert_files_to_iso() {
-    std::string directoryPath = readInputLine("Enter the directory path to search for .bin .img files: ");
+    std::string directoryPath = readInputLine("\033[32mEnter the directory path to search for .bin .img files:\033[0m ");
     
     if (directoryPath.empty()) {
         std::cout << "Path input is empty. Exiting." << std::endl;
@@ -848,7 +848,7 @@ void select_and_convert_files_to_iso() {
     binImgFiles = findBinImgFiles(directoryPath); // You need to define findBinImgFiles function.
 
     if (binImgFiles.empty()) {
-        std::cout << "No .bin or .img files found in the specified directory and its subdirectories or all files are under 10MB." << std::endl;
+        std::cout << "\033[33mNo .bin or .img files found in the specified directory and its subdirectories or all files are under 10MB.\033[0m" << std::endl;
     } else {
         for (int i = 0; i < binImgFiles.size(); i++) {
             std::cout << i + 1 << ". " << binImgFiles[i] << std::endl;
@@ -857,7 +857,7 @@ void select_and_convert_files_to_iso() {
         std::string input;
 
         while (true) {
-            std::cout << "Choose a file to process (enter the number or range e.g., 1-5 or press Enter to exit): ";
+            std::cout << "\033[31mChoose a file to process (enter the number or range e.g., 1-5 or 1 or simply press Enter to exit):\033[0m ";
             std::getline(std::cin, input);
 
             if (input.empty()) {
@@ -888,7 +888,7 @@ void select_and_convert_files_to_iso() {
                             thread.join();
                         }
                     } else {
-                        std::cout << "Invalid range. Please try again." << std::endl;
+                        std::cout << "\033[31mInvalid range. Please try again.\033[0m" << std::endl;
                     }
                 } else if (start >= 1 && start <= binImgFiles.size()) {
                     // Single number input
@@ -897,10 +897,10 @@ void select_and_convert_files_to_iso() {
 
                     convertBINToISO(selectedFile); // Removed numThreads argument
                 } else {
-                    std::cout << "Invalid number. Please try again." << std::endl;
+                    std::cout << "\033[31mInvalid number. Please try again.\033[0m" << std::endl;
                 }
             } else {
-                std::cout << "Invalid input format. Please try again." << std::endl;
+                std::cout << "\033[31mInvalid input format. Please try again.\033[0m" << std::endl;
             }
         }
     }
@@ -975,7 +975,7 @@ bool isMdf2IsoInstalled() {
 void convertMDFToISO(const std::string& inputPath) {
     // Check if the input file exists
     if (!std::ifstream(inputPath)) {
-        std::cout << "The specified input file '" << inputPath << "' does not exist." << std::endl;
+        std::cout << "\033[31mThe specified input file '" << inputPath << "' does not exist.\033[0m" << std::endl;
         return;
     }
 
@@ -990,22 +990,22 @@ void convertMDFToISO(const std::string& inputPath) {
 
     // Check if the output ISO file already exists
     if (std::ifstream(outputPath)) {
-        std::cout << "The output ISO file '" << outputPath << "' already exists. Skipping conversion." << std::endl;
+        std::cout << "\033[33mThe output ISO file '" << outputPath << "' already exists. Skipping conversion.\033[0m" << std::endl;
     } else {
         // Execute the conversion using mdf2iso
         std::string conversionCommand = "mdf2iso " + escapedInputPath + " " + escapedOutputPath;
         int conversionStatus = std::system(conversionCommand.c_str());
         if (conversionStatus == 0) {
-            std::cout << "Image file converted to ISO: " << outputPath << std::endl;
+            std::cout << "\033[32mImage file converted to ISO: " << outputPath << std::endl;
         } else {
-            std::cout << "Conversion of " << inputPath << " failed." << std::endl;
+            std::cout << "\033[31mConversion of " << inputPath << " failed.\033[0m" << std::endl;
         }
     }
 }
 
 void convertMDFsToISOs(const std::vector<std::string>& inputPaths, int numThreads) {
     if (!isMdf2IsoInstalled()) {
-        std::cout << "mdf2iso is not installed. Please install it before using this option." << std::endl;
+        std::cout << "\033[31mmdf2iso is not installed. Please install it before using this option.\033[0m" << std::endl;
         return;
     }
 
@@ -1052,7 +1052,7 @@ void processMDFFilesInRange(int start, int end) {
 
 void select_and_convert_files_to_iso_mdf() {
         int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4; // Determine the number of threads based on CPU cores
-    std::string directoryPath = readInputLine("Enter the directory path to search for .mdf .mds files: ");
+    std::string directoryPath = readInputLine("\033[32mEnter the directory path to search for .mdf .mds files:\033[0m ");
 
     if (directoryPath.empty()) {
         std::cout << "Path input is empty. Exiting." << std::endl;
@@ -1071,7 +1071,7 @@ void select_and_convert_files_to_iso_mdf() {
         std::string input;
 
         while (true) {
-            std::cout << "Choose a file to process (enter the number or range e.g., 1-5 or press Enter to exit): ";
+            std::cout << "Choose a file to process (enter the number or range e.g., 1-5 or 1 or simply press Enter to exit): ";
             std::getline(std::cin, input);
 
             if (input.empty()) {
@@ -1101,7 +1101,7 @@ void select_and_convert_files_to_iso_mdf() {
                             threads[i].join();
                         }
                     } else {
-                        std::cout << "Invalid range. Please try again." << std::endl;
+                        std::cout << "\033[31mInvalid range. Please try again.\033[0m" << std::endl;
                     }
                 } else if (start >= 1 && start <= mdfMdsFiles.size()) {
                     // Single number input
@@ -1109,7 +1109,7 @@ void select_and_convert_files_to_iso_mdf() {
                     selectedFiles.push_back(mdfMdsFiles[start - 1]);
                     convertMDFsToISOs(selectedFiles, numThreads); // Convert the selected file immediately
                 } else {
-                    std::cout << "Invalid number. Please try again." << std::endl;
+                    std::cout << "\033[31mInvalid number. Please try again.\033[0m" << std::endl;
                 }
             } else {
                 std::cout << "Invalid input format. Please try again." << std::endl;
