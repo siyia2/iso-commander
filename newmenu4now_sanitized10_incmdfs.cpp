@@ -305,7 +305,7 @@ void mountISO(const std::vector<std::string>& isoFiles) {
         }
 
         // Shell-escape the ISO file path before mounting
-        std::string escapedIsoFile = shell_escape(isoFile);
+        std::string escapedIsoFile = (isoFile);
         threads.emplace_back(mountIsoFile, escapedIsoFile, std::ref(mountedIsos));
     }
 
@@ -558,12 +558,17 @@ void unmountISO(const std::string& isoDir) {
         // Omitted log for unmounting failure
     }
 
-    // Remove the directory, regardless of unmount success, and suppress error message
-    std::string removeDirCommand = "sudo rmdir -p " + shell_escape(isoDir) + " 2>/dev/null";
-    int removeDirResult = system(removeDirCommand.c_str());
+    // Check if the directory is empty before removing it
+    if (std::filesystem::is_empty(isoDir)) {
+        std::string removeDirCommand = "sudo rmdir -p " + shell_escape(isoDir) + " 2>/dev/null";
+        int removeDirResult = system(removeDirCommand.c_str());
 
-    if (removeDirResult == 0) {
-        // Omitted log for directory removal
+        if (removeDirResult == 0) {
+            // Omitted log for directory removal
+        }
+    } else {
+        std::cout << "\033[31mDIRECTORY NOT EMPTY, SKIPPING PROBABLY NOT AN ISO.\033[0m" << std::endl;
+        // Handle the case where the directory is not empty, e.g., log an error or take appropriate action.
     }
 }
 
@@ -696,25 +701,10 @@ void unmountAndCleanISO(const std::string& isoDir) {
 void cleanAndUnmountISO(const std::string& isoDir) {
     std::lock_guard<std::mutex> lock(mtx);
 
-    try {
-        // Unmount the directory before attempting removal
-        unmountAndCleanISO(isoDir);
+    // Construct a shell-escaped ISO directory path
+    std::string escapedIsoDir = shell_escape(isoDir);
 
-        // Check if the directory exists
-        if (std::filesystem::exists(isoDir)) {
-            // Check if the directory is empty
-            if (std::filesystem::is_empty(isoDir)) {
-                // Remove the directory
-                std::filesystem::remove(isoDir);
-            } else {
-                std::cerr << "\033[33mDirectory is not empty, skipping removal:\033[0m " << isoDir << std::endl;
-            }
-        } else {
-            std::cerr << "\033[32mDIRECTORY UNMOUNTED&REMOVED:\033[0m " << isoDir << std::endl;
-        }
-    } catch (const std::filesystem::filesystem_error& ex) {
-        std::cerr << "\033[31mFilesystem error:\033[0m " << ex.what() << std::endl;
-    }
+    unmountAndCleanISO(escapedIsoDir);
 }
 
 void cleanAndUnmountAllISOs() {
@@ -743,8 +733,9 @@ void cleanAndUnmountAllISOs() {
     std::vector<std::thread> threads;
 
     for (const std::string& isoDir : isoDirs) {
-        std::string IsoDir = (isoDir);
-        threads.emplace_back(cleanAndUnmountISO, IsoDir);
+        // Construct a shell-escaped path
+        std::string escapedIsoDir = shell_escape(isoDir);
+        threads.emplace_back(cleanAndUnmountISO, escapedIsoDir);
         if (threads.size() >= 4) {
             for (std::thread& thread : threads) {
                 thread.join();
@@ -1113,10 +1104,10 @@ void convertMDFsToISOs(const std::vector<std::string>& inputPaths, int numThread
             break; // Exit the loop
         } else {
             // No need to escape the file path, as we'll handle it in the convertMDFToISO function
-            std::string InputPath = inputPath;
+            std::string escapedInputPath = inputPath;
 
             // Create a new thread for each conversion
-            threads.emplace_back(convertMDFToISO, InputPath);
+            threads.emplace_back(convertMDFToISO, escapedInputPath);
             if (threads.size() >= numCores) {
                 // Limit the number of concurrent threads to the number of available cores
                 for (auto& thread : threads) {
