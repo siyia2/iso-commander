@@ -80,7 +80,9 @@ std::string chooseFileToConvert(const std::vector<std::string>& files);
 //	bools
 bool directoryExists(const std::string& path);
 bool hasIsoExtension(const std::string& filePath);
+bool iequals(const std::string& a, const std::string& b);
 bool isMdf2IsoInstalled();
+
 //	voids
 void convertMDFToISO(const std::string& inputPath);
 void convertMDFsToISOs(const std::vector<std::string>& inputPaths, int numThreads);
@@ -101,13 +103,8 @@ void manualMode_imgs();
 void print_ascii();
 void screen_clear();
 void print_ascii();
-
-bool iequals(const std::string& a, const std::string& b);
-
 void traverseDirectory(const std::filesystem::path& path, std::vector<std::string>& isoFiles);
-
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles);
-
 
 
 std::string directoryPath;				// Declare directoryPath here
@@ -506,7 +503,7 @@ void unmountISOs() {
         }
 
         if (isoDirs.empty()) {
-            std::cout << "\033[31mNO ISOS MOUNTED, NOTHING TO DO.\n\033[0m";
+            std::cout << "\033[33mNO ISOS MOUNTED, NOTHING TO DO.\n\033[0m";
             return;
         }
 
@@ -517,9 +514,10 @@ void unmountISOs() {
         }
 
         // Prompt for unmounting input
-        std::cout << "\033[33mEnter the range of ISOs to unmount (e.g., 1, 1-3, 1 to 3) or type enter to exit:\033[0m ";
+        std::cout << "\033[33mEnter the indices of ISOs to unmount (e.g., 1, 2, 1-2) or type enter to exit:\033[0m ";
         std::string input;
         std::getline(std::cin, input);
+        std::system("clear");
 
         if (input == "") {
             std::cout << "Exiting the unmounting tool." << std::endl;
@@ -528,28 +526,40 @@ void unmountISOs() {
 
         // Continue with the rest of the logic to process user input
         std::istringstream iss(input);
-        int startRange, endRange;
-        char hyphen;
+        std::vector<int> unmountIndices;
+        std::string token;
 
-        if ((iss >> startRange) && (iss >> hyphen) && (iss >> endRange)) {
-            if (hyphen == '-' && startRange >= 1 && endRange >= startRange && static_cast<size_t>(endRange) <= isoDirs.size()) {
-                // Valid range input
+        while (iss >> token) {
+            std::smatch match;
+            std::regex range_regex("(\\d+)-(\\d+)");
+            if (std::regex_match(token, match, range_regex)) {
+                int startRange = std::stoi(match[1]);
+                int endRange = std::stoi(match[2]);
+                if (startRange >= 1 && endRange >= startRange && static_cast<size_t>(endRange) <= isoDirs.size()) {
+                    for (int i = startRange; i <= endRange; ++i) {
+                        unmountIndices.push_back(i);
+                    }
+                } else {
+                    std::cerr << "\033[31mInvalid range. Please try again.\n\033[0m" << std::endl;
+                }
             } else {
-                std::cerr << "\033[31mInvalid range. Please try again.\n\033[0m" << std::endl;
-                continue;  // Restart the loop
+                int index = std::stoi(token);
+                if (index >= 1 && static_cast<size_t>(index) <= isoDirs.size()) {
+                    unmountIndices.push_back(index);
+                } else {
+                    std::cerr << "\033[31mInvalid index. Please try again.\n\033[0m" << std::endl;
+                }
             }
-        } else {
-            // If no hyphen is present or parsing fails, treat it as a single choice
-            endRange = startRange;
         }
-        if (startRange < 1 || endRange > static_cast<int>(isoDirs.size()) || startRange > endRange) {
-            std::cerr << "\033[31mInvalid range or choice. Please try again.\n\033[0m" << std::endl;
+
+        if (unmountIndices.empty()) {
+            std::cerr << "\033[31mNo valid indices provided. Please try again.\n\033[0m" << std::endl;
             continue;  // Restart the loop
         }
 
-        // Unmount and attempt to remove the selected range of ISOs, suppressing output
-        for (int i = startRange - 1; i < endRange; ++i) {
-            const std::string& isoDir = isoDirs[i];
+        // Unmount and attempt to remove the selected ISOs, suppressing output
+        for (int index : unmountIndices) {
+            const std::string& isoDir = isoDirs[index - 1];
 
             // Unmount the ISO and suppress logs
             std::string unmountCommand = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1";
