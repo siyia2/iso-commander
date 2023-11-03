@@ -136,7 +136,7 @@ int main() {
         //std::cin.clear();
 
 	std::cout << " " << std::endl;
-        char* input = readline("\033[34mEnter a choice:\033[0m ");
+        char* input = readline("\033[94mEnter a choice:\033[0m ");
 	std::cout << " " << std::endl;
         if (!input) {
             break; // Exit the program if readline returns NULL (e.g., on EOF or Ctrl+D)
@@ -169,7 +169,7 @@ int main() {
                         std::cout << "2. Convert to ISO (MDF2ISO)" << std::endl;
                         std::cout << "3. Back to Main Menu" << std::endl;
 						std::cout << " " << std::endl;
-                        char* submenu_input = readline("\033[34mEnter a choice:\033[0m ");
+                        char* submenu_input = readline("\033[94mEnter a choice:\033[0m ");
 
                         if (!submenu_input) {
                             break; // Exit the submenu if readline returns NULL
@@ -319,7 +319,7 @@ void mountISO(const std::vector<std::string>& isoFiles) {
     std::cout << "\e[1;32mPreviously Selected ISO files have been mounted.\n\e[0m" << std::endl;
 }
 void select_and_mount_files_by_number() {
-    std::string directoryPath = readInputLine("\033[34mEnter the directory path to search for .iso files or simply press enter to return:\033[0m ");
+    std::string directoryPath = readInputLine("\033[94mEnter the directory path to search for .iso files or simply press enter to return:\033[0m ");
 
     if (directoryPath.empty()) {
         std::cout << "\033[33mPath input is empty. Exiting.\033[0m" << std::endl;
@@ -353,7 +353,7 @@ void select_and_mount_files_by_number() {
         }
 
         std::string input;
-        std::cout << "\033[34mChoose .iso files to mount (enter numbers separated by spaces or ranges like '1-3', or press Enter to exit):\033[0m ";
+        std::cout << "\033[94mChoose .iso files to mount (enter numbers separated by spaces or ranges like '1-3', or press Enter to exit):\033[0m ";
         std::getline(std::cin, input);
 
         if (input.empty()) {
@@ -601,7 +601,7 @@ void unmountISOs() {
         }
 
         // Prompt for unmounting input
-        std::cout << "\033[34mEnter the range of ISOs to unmount (e.g., 1, 1-3, 1 to 3, or individual numbers like 1 2 3) or type enter to exit:\033[0m ";
+        std::cout << "\033[94mEnter the range of ISOs to unmount (e.g., 1, 1-3, 1 to 3, or individual numbers like 1 2 3) or type enter to exit:\033[0m ";
         std::string input;
         std::getline(std::cin, input);
 
