@@ -28,41 +28,37 @@
 //	SANITISATION AND STRING STUFF	//
 
 std::string shell_escape(const std::string& param) {
-    const char single_quote = '\'';
-    const char space = ' ';
-    size_t count = 0;
+    // Characters to escape: single quote, &, ;, |, !, ?, ~, `, $, %, ^, *, +, -
+    const char* specialChars = "'&;|!?~`$%^*+-";
+    const char backslash = '\\';
 
+    // Calculate the maximum possible size for the result
+    size_t inputLength = param.length();
+    size_t numSpecialChars = 0;
     for (char c : param) {
-        if (c == single_quote) {
-            count += 2;  // Each single quote is replaced with two single quotes
-        } else if (c == space) {
-            count += 1;  // Spaces are replaced with a single backslash and a space
-        } else {
-            count += 1;  // Other characters are kept as is
+        if (strchr(specialChars, c) != nullptr) {
+            numSpecialChars++;
         }
     }
+    
+    size_t maxResultSize = inputLength + numSpecialChars + 2; // +2 for enclosing single quotes
 
     std::string result;
-    result.reserve(count + 2); // +2 for the enclosing single quotes
+    result.reserve(maxResultSize);
 
-    result += single_quote;
+    result += '\'';
 
     for (char c : param) {
-        if (c == single_quote) {
-            result += "''";
-        } else if (c == space) {
-            result += "\\ ";
-        } else {
-            result += c;
+        if (strchr(specialChars, c) != nullptr) {
+            result += backslash;
         }
+        result += c;
     }
 
-    result += single_quote;
+    result += '\'';
 
     return result;
 }
-
-
 
 
 // Function to read a line of input using readline
@@ -247,12 +243,13 @@ const char* resetColor = "\x1B[0m"; // Reset color to default
 
 
 
-std::cout << greenColor << R"( _____            ___  _____  _____   ___  __   __   ___   _____  _____   __   __   ___  __   __  _   _  _____  _____  ____         ____                 
-|  ___)    /\    (   )(_   _)|  ___) (   )|  \ /  | / _ \ |  ___)|  ___) |  \ /  | / _ \(_ \ / _)| \ | |(_   _)|  ___)|  _ \       (___ \     _      _   
-| |_      /  \    | |   | |  | |_     | | |   v   || |_| || |    | |_    |   v   || | | | \ v /  |  \| |  | |  | |_   | |_) )  _  __ __) )  _| |_  _| |_ 
-|  _)    / /\ \   | |   | |  |  _)    | | | |\_/| ||  _  || |    |  _)   | |\_/| || | | |  | |   |     |  | |  |  _)  |  __/  | |/ // __/  (_   _)(_   _)
-| |___  / /  \ \  | |   | |  | |___   | | | |   | || | | || |    | |___  | |   | || |_| |  | |   | |\  |  | |  | |___ | |     | / /| |___    |_|    |_|  
-|_____)/_/    \_\(___)  |_|  |_____) (___)|_|   |_||_| |_||_|    |_____) |_|   |_| \___/   |_|   |_| \_|  |_|  |_____)|_|     |__/ |_____)               
+std::cout << greenColor << R"( _____            ___  _____  _____     ___  __   __   ___   _____  _____     __   __   ___  __   __  _   _  _____  _____  ____         ____                 
+|  ___)    /\    (   )(_   _)|  ___)   (   )|  \ /  | / _ \ |  ___)|  ___)   |  \ /  | / _ \(_ \ / _)| \ | |(_   _)|  ___)|  _ \       (___ \     _      _   
+| |_      /  \    | |   | |  | |_       | | |   v   || |_| || |    | |_      |   v   || | | | \ v /  |  \| |  | |  | |_   | |_) )  _  __ __) )  _| |_  _| |_ 
+|  _)    / /\ \   | |   | |  |  _)      | | | |\_/| ||  _  || |    |  _)     | |\_/| || | | |  | |   |     |  | |  |  _)  |  __/  | |/ // __/  (_   _)(_   _)
+| |___  / /  \ \  | |   | |  | |___     | | | |   | || | | || |    | |___    | |   | || |_| |  | |   | |\  |  | |  | |___ | |     | / /| |___    |_|    |_|  
+|_____)/_/    \_\(___)  |_|  |_____)   (___)|_|   |_||_| |_||_|    |_____)   |_|   |_| \___/   |_|   |_| \_|  |_|  |_____)|_|     |__/ |_____)               
+                                                                                                                                                             
                                                                                                                                                                        
                                                                                                                                          )" << resetColor << '\n';
 
@@ -722,9 +719,9 @@ void cleanAndUnmountISO(const std::string& isoDir) {
     std::lock_guard<std::mutex> lock(mtx);
 
     // Construct a shell-escaped ISO directory path
-    std::string escapedIsoDir = shell_escape(isoDir);
+    std::string IsoDir = (isoDir);
 
-    unmountAndCleanISO(escapedIsoDir);
+    unmountAndCleanISO(IsoDir);
 }
 
 void cleanAndUnmountAllISOs() {
@@ -754,8 +751,8 @@ void cleanAndUnmountAllISOs() {
 
     for (const std::string& isoDir : isoDirs) {
         // Construct a shell-escaped path
-        std::string escapedIsoDir = shell_escape(isoDir);
-        threads.emplace_back(cleanAndUnmountISO, escapedIsoDir);
+        std::string IsoDir = (isoDir);
+        threads.emplace_back(cleanAndUnmountISO, IsoDir);
         if (threads.size() >= 4) {
             for (std::thread& thread : threads) {
                 thread.join();
