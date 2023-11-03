@@ -24,6 +24,6 @@ Added Features:
 * Added support for MDS/MDF to ISO by utilizing mdf2iso.
 * Clean codebase, just in case someone decides to contribute in the future.
 
-To compile it, you need to have installed the readline library from your distro, and then run`g++ -o "whatever_name_you_want" -O2 mounter_elite_plus.cpp -lreadline`.
+To compile it, you need the readline library from your distro, after just run`g++ -o "whatever_name_you_want" -O2 mounter_elite_plus.cpp -lreadline`.
 
 Make it executable and it can run from anywhere.
