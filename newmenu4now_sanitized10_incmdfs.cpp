@@ -305,7 +305,7 @@ void mountISO(const std::vector<std::string>& isoFiles) {
         }
 
         // Shell-escape the ISO file path before mounting
-        std::string escapedIsoFile = (isoFile);
+        std::string escapedIsoFile = shell_escape(isoFile);
         threads.emplace_back(mountIsoFile, escapedIsoFile, std::ref(mountedIsos));
     }
 
@@ -696,10 +696,25 @@ void unmountAndCleanISO(const std::string& isoDir) {
 void cleanAndUnmountISO(const std::string& isoDir) {
     std::lock_guard<std::mutex> lock(mtx);
 
-    // Construct a shell-escaped ISO directory path
-    std::string escapedIsoDir = shell_escape(isoDir);
+    try {
+        // Unmount the directory before attempting removal
+        unmountAndCleanISO(isoDir);
 
-    unmountAndCleanISO(escapedIsoDir);
+        // Check if the directory exists
+        if (std::filesystem::exists(isoDir)) {
+            // Check if the directory is empty
+            if (std::filesystem::is_empty(isoDir)) {
+                // Remove the directory
+                std::filesystem::remove(isoDir);
+            } else {
+                std::cerr << "\033[33mDirectory is not empty, skipping removal:\033[0m " << isoDir << std::endl;
+            }
+        } else {
+            std::cerr << "\033[32mDIRECTORY UNMOUNTED&REMOVED:\033[0m " << isoDir << std::endl;
+        }
+    } catch (const std::filesystem::filesystem_error& ex) {
+        std::cerr << "\033[31mFilesystem error:\033[0m " << ex.what() << std::endl;
+    }
 }
 
 void cleanAndUnmountAllISOs() {
@@ -728,9 +743,8 @@ void cleanAndUnmountAllISOs() {
     std::vector<std::thread> threads;
 
     for (const std::string& isoDir : isoDirs) {
-        // Construct a shell-escaped path
-        std::string escapedIsoDir = shell_escape(isoDir);
-        threads.emplace_back(cleanAndUnmountISO, escapedIsoDir);
+        std::string IsoDir = (isoDir);
+        threads.emplace_back(cleanAndUnmountISO, IsoDir);
         if (threads.size() >= 4) {
             for (std::thread& thread : threads) {
                 thread.join();
@@ -1099,10 +1113,10 @@ void convertMDFsToISOs(const std::vector<std::string>& inputPaths, int numThread
             break; // Exit the loop
         } else {
             // No need to escape the file path, as we'll handle it in the convertMDFToISO function
-            std::string escapedInputPath = inputPath;
+            std::string InputPath = inputPath;
 
             // Create a new thread for each conversion
-            threads.emplace_back(convertMDFToISO, escapedInputPath);
+            threads.emplace_back(convertMDFToISO, InputPath);
             if (threads.size() >= numCores) {
                 // Limit the number of concurrent threads to the number of available cores
                 for (auto& thread : threads) {
