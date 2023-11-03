@@ -528,7 +528,9 @@ void listMountedISOs() {
     if ((dir = opendir(isoPath.c_str())) != NULL) {
         while ((entry = readdir(dir)) != NULL) {
             if (entry->d_type == DT_DIR && std::string(entry->d_name).find("iso_") == 0) {
-                isoDirs.push_back(isoPath + "/" + entry->d_name);
+                std::string fullDirPath = isoPath + "/" + entry->d_name;
+                std::string isoName = entry->d_name + 4; // Remove "/mnt/iso_" part
+                isoDirs.push_back(isoName);
             }
         }
         closedir(dir);
@@ -536,16 +538,17 @@ void listMountedISOs() {
         std::cerr << "Error opening the /mnt directory." << std::endl;
     }
 
-    // Display a list of mounted ISOs if there are any
+    // Display a list of mounted ISOs with ISO names in bold and white "List of mounted ISOs" text
     if (!isoDirs.empty()) {
-        std::cout << "List of mounted ISOs:" << std::endl;
+        std::cout << "\033[37;1mList of mounted ISOs:\033[0m" << std::endl; // White and bold
         for (size_t i = 0; i < isoDirs.size(); ++i) {
-            std::cout << i + 1 << ". " << isoDirs[i] << std::endl;
+            std::cout << i + 1 << ". \033[1m\033[35m" << isoDirs[i] << "\033[0m" << std::endl; // Bold and magenta
         }
     } else {
         std::cout << "\033[31mNO ISOS MOUNTED.\n\033[0m";
     }
 }
+
 
 void unmountISO(const std::string& isoDir) {
     // Unmount the ISO and suppress logs
@@ -765,7 +768,7 @@ std::string chooseFileToConvert(const std::vector<std::string>& files) {
     }
 
     int choice;
-    std::cout << "\034[32mEnter the number of the file you want to convert:\033[0m ";
+    std::cout << "\033[94mEnter the number of the file you want to convert:\033[0m ";
     std::cin >> choice;
 
     if (choice >= 1 && choice <= static_cast<int>(files.size())) {
@@ -919,7 +922,7 @@ void processFilesInRange(int start, int end) {
 }
 
 void select_and_convert_files_to_iso() {
-    std::string directoryPath = readInputLine("\034[32mEnter the directory path to search for .bin .img files or simply press enter to exit:\033[0m ");
+    std::string directoryPath = readInputLine("\033[94mEnter the directory path to search for .bin .img files or simply press enter to exit:\033[0m ");
     
     if (directoryPath.empty()) {
         std::cout << "Path input is empty. Exiting." << std::endl;
@@ -938,7 +941,7 @@ void select_and_convert_files_to_iso() {
         std::string input;
 
       while (true) {
-    std::cout << "\034[32mChoose a file to process (enter the number or range e.g., 1-5 or 1 or simply press Enter to return):\033[0m ";
+    std::cout << "\033[94mChoose a file to process (enter the number or range e.g., 1-5 or 1 or simply press Enter to return):\033[0m ";
     std::getline(std::cin, input);
 
     if (input.empty()) {
@@ -1138,7 +1141,7 @@ void processMDFFilesInRange(int start, int end) {
 
 void select_and_convert_files_to_iso_mdf() {
         int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4; // Determine the number of threads based on CPU cores
-    std::string directoryPath = readInputLine("\034[32mEnter the directory path to search for .mdf .mds files or simply press enter to return:\033[0m ");
+    std::string directoryPath = readInputLine("\033[94mEnter the directory path to search for .mdf .mds files or simply press enter to return:\033[0m ");
 
     if (directoryPath.empty()) {
         std::cout << "\033[33mPath input is empty. Exiting.\033[33m"<< std::endl;
@@ -1157,7 +1160,7 @@ void select_and_convert_files_to_iso_mdf() {
         std::string input;
 
         while (true) {
-    std::cout << "\034[34mChoose a file to process (enter the number or range e.g., 1-5 or 1 or simply press Enter to return):\033[0m ";
+    std::cout << "\033[94mChoose a file to process (enter the number or range e.g., 1-5 or 1 or simply press Enter to return):\033[0m ";
     std::getline(std::cin, input);
 
     if (input.empty()) {
