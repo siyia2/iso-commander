@@ -28,38 +28,40 @@
 //	SANITISATION AND STRING STUFF	//
 
 std::string shell_escape(const std::string& param) {
-    // Characters to escape: single quote, &, ;, |, !, ?, ~, `, $, %, ^, *, +, -
-    const char* specialChars = "'&;|!?~`$%^*+-";
-    const char backslash = '\\';
+    const char* specialChars = "'&;|!?~`$%^*+";
+    const char* escapeChars = "<>";
 
-    // Calculate the maximum possible size for the result
-    size_t inputLength = param.length();
-    size_t numSpecialChars = 0;
+    std::string result = "'";
+    bool inDoubleArrow = false;
+    bool inDoubleLess = false;
+
     for (char c : param) {
-        if (strchr(specialChars, c) != nullptr) {
-            numSpecialChars++;
+        if (inDoubleArrow) {
+            inDoubleArrow = false;
+            if (c == '>') {
+                result += "\\>";
+                continue;
+            }
+        } else if (inDoubleLess) {
+            inDoubleLess = false;
+            if (c == '<') {
+                result += "\\<";
+                continue;
+            }
         }
-    }
-    
-    size_t maxResultSize = inputLength + numSpecialChars + 2; // +2 for enclosing single quotes
 
-    std::string result;
-    result.reserve(maxResultSize);
-
-    result += '\'';
-
-    for (char c : param) {
-        if (strchr(specialChars, c) != nullptr) {
-            result += backslash;
+        if (strchr(specialChars, c) != nullptr || strchr(escapeChars, c) != nullptr) {
+            if ((c == '>' || c == '<') && result.back() == c) {
+                inDoubleArrow = true;
+                inDoubleLess = true;
+            }
+            result += '\\';
         }
         result += c;
     }
 
-    result += '\'';
-
-    return result;
+    return result + "'";
 }
-
 
 // Function to read a line of input using readline
 std::string readInputLine(const std::string& prompt) {
