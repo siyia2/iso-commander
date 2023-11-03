@@ -1,5 +1,5 @@
 # mounter-elite-Plus
-Port of bash mounter_elite to C++ 
+Port of bash shell program mounter_elite to C++ 
 https://github.com/siyia2/mounter_elite
 
 
