@@ -8,7 +8,7 @@ It is recommended that search directories have permissions of 755 and upwards fo
 
 Added Features:
 * Sanitisation support added to shell commands to improve security.
-* Supports all filepaths including special charactes and gaps.
+* Supports all filenames, including special charactes and gaps.
 * Extra checks and error controls so that you don't erase your / or /mnt accidentally (joking).
 * More robust menu experience.
 * Improved selection procedures.
