@@ -1164,10 +1164,10 @@ void select_and_convert_files_to_iso_mdf() {
         std::cout << "\033[94mEnter the numbers of the files to convert (e.g., '1-2' or '1 2', or simply press enter to return):\033[0m ";
         std::getline(std::cin, input);
 
-        if (input == " ") {
-            std::cout << "Exiting..." << std::endl;
-            break;
-        }
+        if (input.empty()) {
+                std::cout << "Exiting..." << std::endl;
+                break;
+            }
 
         // Parse the user input to extract file numbers
         std::vector<int> selectedFileIndices;
