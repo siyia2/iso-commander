@@ -19,6 +19,7 @@
 #include <sys/stat.h>
 #include <thread>
 #include <unistd.h>
+#include <unordered_set>
 #include <vector>
 #include <queue>
 
@@ -327,20 +328,21 @@ void select_and_mount_files_by_number() {
 
     std::vector<std::string> mountedISOs;
 
+    if (isoFiles.empty()) {
+        std::cout << "\033[33mNo .iso files found in the specified directory and its subdirectories.\033[0m" << std::endl;
+        return;
+    }
+
+    std::unordered_set<std::string> mountedSet(mountedISOs.begin(), mountedISOs.end());
+
     while (true) {
-        if (isoFiles.empty()) {
-            std::cout << "\033[33mNo .iso files found in the specified directory and its subdirectories.\033[0m" << std::endl;
-            break;
-        }
-
         // Remove already mounted files from the selection list
-        for (const auto& mountedISO : mountedISOs) {
-            auto it = std::remove(isoFiles.begin(), isoFiles.end(), mountedISO);
-            isoFiles.erase(it, isoFiles.end());
-        }
+        isoFiles.erase(std::remove_if(isoFiles.begin(), isoFiles.end(), [&mountedSet](const std::string& iso) {
+            return mountedSet.find(iso) != mountedSet.end();
+        }), isoFiles.end());
 
         if (isoFiles.empty()) {
-            std::cout << "\033[33mNo more unmounted .iso files in the directory.\033[33m" << std::endl;
+            std::cout << "\033[33mNo more unmounted .iso files in the directory.\033[0m" << std::endl;
             break;
         }
 
@@ -369,13 +371,12 @@ void select_and_mount_files_by_number() {
 
                 if (startRange >= 1 && startRange <= isoFiles.size() && endRange >= startRange && endRange <= isoFiles.size()) {
                     for (int i = startRange; i <= endRange; i++) {
-                        int selectedNumber = i;
-                        std::string selectedISO = isoFiles[selectedNumber - 1];
+                        int selectedNumber = i - 1;
+                        std::string selectedISO = isoFiles[selectedNumber];
 
-                        // Check if the selected ISO is not already mounted
-                        if (std::find(mountedISOs.begin(), mountedISOs.end(), selectedISO) == mountedISOs.end()) {
-                            mountISO({(selectedISO)});
-                            mountedISOs.push_back(selectedISO);
+                        if (mountedSet.find(selectedISO) == mountedSet.end()) {
+                            mountISO({selectedISO});
+                            mountedSet.insert(selectedISO);
                         } else {
                             std::cout << "\033[33mISO file '" << selectedISO << "' is already mounted.\033[0m" << std::endl;
                         }
@@ -388,15 +389,14 @@ void select_and_mount_files_by_number() {
                 if (selectedNumber >= 1 && selectedNumber <= isoFiles.size()) {
                     std::string selectedISO = isoFiles[selectedNumber - 1];
 
-                    // Check if the selected ISO is not already mounted
-                    if (std::find(mountedISOs.begin(), mountedISOs.end(), selectedISO) == mountedISOs.end()) {
-                        mountISO({(selectedISO)});
-                        mountedISOs.push_back(selectedISO);
+                    if (mountedSet.find(selectedISO) == mountedSet.end()) {
+                        mountISO({selectedISO});
+                        mountedSet.insert(selectedISO);
                     } else {
                         std::cout << "\033[33mISO file '" << selectedISO << "' is already mounted.\033[0m" << std::endl;
                     }
                 } else {
-                    std::cout << "\033[31mInvalid number: " << selectedNumber << ". Please try again.\033[30m" << std::endl;
+                    std::cout << "\033[31mInvalid number: " << selectedNumber << ". Please try again.\033[0m" << std::endl;
                 }
             }
         }
@@ -673,13 +673,6 @@ void unmountISOs() {
 }
 
 
-
-
-
-
-
-
-
 void unmountAndCleanISO(const std::string& isoDir) {
     std::string unmountCommand = "sudo umount -l " + shell_escape(isoDir) + " 2>/dev/null";
     int result = std::system(unmountCommand.c_str());
@@ -856,7 +849,7 @@ void convertBINToISO(const std::string& inputPath) {
         std::string conversionCommand = "ccd2iso " + shell_escape(inputPath) + " " + shell_escape(outputPath);
         int conversionStatus = std::system(conversionCommand.c_str());
         if (conversionStatus == 0) {
-            std::cout << "\033[32mImage file converted to ISO: " << outputPath << std::endl;
+            std::cout << "\033[32mImage file converted to ISO:\033[0m " << outputPath << std::endl;
         } else {
             std::cout << "\033[31mConversion of " << inputPath << " failed.\033[0m" << std::endl;
         }
@@ -919,7 +912,7 @@ void processFilesInRange(int start, int end) {
 
 void select_and_convert_files_to_iso() {
     std::string directoryPath = readInputLine("\033[94mEnter the directory path to search for .bin .img files or simply press enter to exit:\033[0m ");
-    
+
     if (directoryPath.empty()) {
         std::cout << "Path input is empty. Exiting." << std::endl;
         return;
@@ -936,61 +929,55 @@ void select_and_convert_files_to_iso() {
 
         std::string input;
 
-      while (true) {
-    std::cout << "\033[94mChoose a file to process (enter the number or range e.g., 1-5 or 1 or simply press Enter to return):\033[0m ";
-    std::getline(std::cin, input);
+        while (true) {
+            std::cout << "\033[94mChoose a file to process (enter the number or range e.g., 1-5 or 1 or simply press Enter to return):\033[0m ";
+            std::getline(std::cin, input);
 
-    if (input.empty()) {
-        std::cout << "Exiting..." << std::endl;
-        break;
-    }
+            if (input.empty()) {
+                std::cout << "Exiting..." << std::endl;
+                break;
+            }
 
-    std::istringstream iss(input);
-    std::string token;
-    while (iss >> token) {
-        std::istringstream tokenStream(token);
-        int start, end;
-        char dash;
+            std::istringstream iss(input);
+            std::string token;
+            std::vector<std::thread> threads;
 
-        if (tokenStream >> start) {
-            if (tokenStream >> dash && dash == '-' && tokenStream >> end) {
-                // Range input (e.g., 1-5)
-                if (start >= 1 && start <= binImgFiles.size() && end >= start && end <= binImgFiles.size()) {
-                    // Divide the work among threads (up to 4 cores)
-                    std::vector<std::thread> threads;
+            while (iss >> token) {
+                std::istringstream tokenStream(token);
+                int start, end;
+                char dash;
 
-                    for (int i = start; i <= end; i++) {
-                        std::string selectedFile = binImgFiles[i - 1]; // No need to shell-escape
-
-                        threads.emplace_back([selectedFile] {
-                            convertBINToISO(selectedFile); // Removed numThreads argument
-                        });
-                    }
-
-                    for (auto& thread : threads) {
-                        thread.join();
+                if (tokenStream >> start) {
+                    if (tokenStream >> dash && dash == '-' && tokenStream >> end) {
+                        // Range input (e.g., 1-5)
+                        if (start >= 1 && start <= binImgFiles.size() && end >= start && end <= binImgFiles.size()) {
+                            for (int i = start; i <= end; i++) {
+                                std::string selectedFile = binImgFiles[i - 1]; // No need to shell-escape
+                                threads.emplace_back(convertBINToISO, selectedFile);
+                            }
+                        } else {
+                            std::cout << "\033[31mInvalid range. Please try again.\033[0m" << std::endl;
+                        }
+                    } else if (start >= 1 && start <= binImgFiles.size()) {
+                        // Single number input
+                        int selectedIndex = start - 1;
+                        std::string selectedFile = binImgFiles[selectedIndex]; // No need to shell-escape
+                        threads.emplace_back(convertBINToISO, selectedFile);
+                    } else {
+                        std::cout << "\033[31mInvalid number: " << start << ". Please try again.\033[0m" << std::endl;
                     }
                 } else {
-                    std::cout << "\033[31mInvalid range. Please try again.\033[0m" << std::endl;
+                    std::cout << "\033[31mInvalid input format: " << token << ". Please try again.\033[0m" << std::endl;
                 }
-            } else if (start >= 1 && start <= binImgFiles.size()) {
-                // Single number input
-                int selectedIndex = start - 1;
-                std::string selectedFile = binImgFiles[selectedIndex]; // No need to shell-escape
-
-                convertBINToISO(selectedFile); // Removed numThreads argument
-            } else {
-                std::cout << "\033[31mInvalid number: " << start << ". Please try again.\033[0m" << std::endl;
             }
-        } else {
-            std::cout << "\033[31mInvalid input format: " << token << ". Please try again.\033[0m" << std::endl;
+
+            // Wait for all threads to complete
+            for (auto& thread : threads) {
+                thread.join();
+            }
         }
     }
 }
-
-}
- }
-
 
 
 
@@ -1073,18 +1060,33 @@ void convertMDFToISO(const std::string& inputPath) {
     // Escape the outputPath before using it in shell commands
     std::string escapedOutputPath = shell_escape(outputPath);
 
-    // Check if the output ISO file already exists
-    if (std::ifstream(outputPath)) {
-        std::cout << "\033[33mThe output ISO file '" << outputPath << "' already exists. Skipping conversion.\033[0m" << std::endl;
-    } else {
-        // Execute the conversion using mdf2iso
-        std::string conversionCommand = "mdf2iso " + escapedInputPath + " " + escapedOutputPath;
-        int conversionStatus = std::system(conversionCommand.c_str());
-        if (conversionStatus == 0) {
-            std::cout << "\033[32mImage file converted to ISO: " << outputPath << std::endl;
+    // Execute the conversion using mdf2iso
+    std::string conversionCommand = "mdf2iso " + escapedInputPath + " " + escapedOutputPath;
+
+    // Capture the output of the mdf2iso command
+    FILE* pipe = popen(conversionCommand.c_str(), "r");
+    if (!pipe) {
+        std::cout << "\033[31mFailed to execute conversion command\033[0m" << std::endl;
+        return;
+    }
+
+    char buffer[128];
+    std::string conversionOutput;
+    while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
+        conversionOutput += buffer;
+    }
+
+    int conversionStatus = pclose(pipe);
+
+    if (conversionStatus == 0) {
+        // Check if the conversion output contains the "already ISO9660" message
+        if (conversionOutput.find("already ISO9660") != std::string::npos) {
+            std::cout << "\033[31mThe selected file '" << inputPath << "' is already in ISO9660 format. Skipping conversion.\033[0m" << std::endl;
         } else {
-            std::cout << "\033[31mConversion of " << inputPath << " failed.\033[0m" << std::endl;
+            std::cout << "\033[33mImage file converted to ISO:\033[0m " << outputPath << std::endl;
         }
+    } else {
+        std::cout << "\033[31mConversion of " << inputPath << " failed.\033[0m" << std::endl;
     }
 }
 
@@ -1127,7 +1129,6 @@ void processMDFFilesInRange(int start, int end) {
 	int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4; // Determine the number of threads based on CPU cores
     std::vector<std::string> selectedFiles;
     for (int i = start; i <= end; i++) {
-        // Escape the file path before using it in shell commands
         std::string FilePath = (mdfImgFiles[i - 1]);
         selectedFiles.push_back(FilePath);
     }
@@ -1136,11 +1137,11 @@ void processMDFFilesInRange(int start, int end) {
 
 
 void select_and_convert_files_to_iso_mdf() {
-        int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4; // Determine the number of threads based on CPU cores
+    int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4;
     std::string directoryPath = readInputLine("\033[94mEnter the directory path to search for .mdf .mds files or simply press enter to return:\033[0m ");
 
     if (directoryPath.empty()) {
-        std::cout << "\033[33mPath input is empty. Exiting.\033[33m"<< std::endl;
+        std::cout << "\033[33mPath input is empty. Exiting.\033[0m" << std::endl;
         return;
     }
 
@@ -1148,64 +1149,62 @@ void select_and_convert_files_to_iso_mdf() {
 
     if (mdfMdsFiles.empty()) {
         std::cout << "\033[31mNo .mdf or .mds files found in the specified directory and its subdirectories or all files are under 10MB.\n\033[0m";
-    } else {
+        return;
+    }
+
+    while (true) {
+        // Display the list of available files with numbers
+        std::cout << "Select files to convert to ISO:\n";
         for (int i = 0; i < mdfMdsFiles.size(); i++) {
             std::cout << i + 1 << ". " << mdfMdsFiles[i] << std::endl;
         }
 
+        // Ask the user to choose files
         std::string input;
+        std::cout << "\033[94mEnter the numbers of the files to convert (e.g., '1-2' or '1 2', or 'exit' to exit):\033[0m ";
+        std::getline(std::cin, input);
 
-        while (true) {
-    std::cout << "\033[94mChoose a file to process (enter the number or range e.g., 1-5 or 1 or simply press Enter to return):\033[0m ";
-    std::getline(std::cin, input);
+        if (input == "exit") {
+            std::cout << "Exiting..." << std::endl;
+            break;
+        }
 
-    if (input.empty()) {
-        std::cout << "Exiting..." << std::endl;
-        break;
-    }
-
-    std::istringstream iss(input);
-    std::string token;
-    while (iss >> token) {
-        std::istringstream tokenStream(token);
-        int start, end;
-        char dash;
-
-        if (tokenStream >> start) {
-            if (tokenStream >> dash && dash == '-' && tokenStream >> end) {
-                // Range input (e.g., 1-5)
-                if (start >= 1 && start <= mdfMdsFiles.size() && end >= start && end <= mdfMdsFiles.size()) {
-                    // Divide the work among threads (up to 4 cores)
-                    std::thread threads[4];
-                    int range = (end - start + 1) / 4;
-
-                    for (int i = 0; i < 4; i++) {
-                        int threadStart = start + i * range;
-                        int threadEnd = i == 3 ? end : threadStart + range - 1;
-                        threads[i] = std::thread(processMdfMdsFilesInRange, mdfMdsFiles, threadStart, threadEnd);
+        // Parse the user input to extract file numbers
+        std::vector<int> selectedFileIndices;
+        std::istringstream iss(input);
+        std::string token;
+        while (iss >> token) {
+            if (token.find('-') != std::string::npos) {
+                // Handle a range (e.g., "1-2")
+                size_t dashPos = token.find('-');
+                int startRange = std::stoi(token.substr(0, dashPos));
+                int endRange = std::stoi(token.substr(dashPos + 1));
+                for (int i = startRange; i <= endRange; i++) {
+                    if (i >= 1 && i <= mdfMdsFiles.size()) {
+                        selectedFileIndices.push_back(i - 1);
                     }
-
-                    for (int i = 0; i < 4; i++) {
-                        threads[i].join();
-                    }
-                } else {
-                    std::cout << "\033[31mInvalid range. Please try again.\033[0m" << std::endl;
                 }
-            } else if (start >= 1 && start <= mdfMdsFiles.size()) {
-                // Single number input
-                std::vector<std::string> selectedFiles;
-                selectedFiles.push_back(mdfMdsFiles[start - 1]);
-                convertMDFsToISOs(selectedFiles, numThreads); // Convert the selected file immediately
             } else {
-                std::cout << "\033[31mInvalid number: " << start << ". Please try again.\033[0m" << std::endl;
+                // Handle individual numbers (e.g., "1")
+                int selectedFileIndex = std::stoi(token);
+                if (selectedFileIndex >= 1 && selectedFileIndex <= mdfMdsFiles.size()) {
+                    selectedFileIndices.push_back(selectedFileIndex - 1);
+                }
             }
+        }
+
+        if (!selectedFileIndices.empty()) {
+            // Convert the selected files
+            std::vector<std::string> selectedFiles;
+            for (int index : selectedFileIndices) {
+                selectedFiles.push_back(mdfMdsFiles[index]);
+            }
+            convertMDFsToISOs(selectedFiles, numThreads);
         } else {
-            std::cout << "\033[31mInvalid input format: " << token << ". Please try again.\033[0m" << std::endl;
+            std::cout << "Invalid choice. Please enter valid file numbers or 'exit'." << std::endl;
         }
     }
 }
-        }
-    }
 
 
 void processMdfMdsFilesInRange(const std::vector<std::string>& mdfMdsFiles, int start, int end) {
