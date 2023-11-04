@@ -843,7 +843,7 @@ void convertBINToISO(const std::string& inputPath) {
 
     // Check if the output ISO file already exists
     if (std::ifstream(outputPath)) {
-        std::cout << "\033[33mThe output ISO file '" << outputPath << "' already exists. Skipping conversion.\033[0m" << std::endl;
+        std::cout << "\033[33mThe output ISO file '" << outputPath << " already exists. Skipping conversion.\033[0m" << std::endl;
     } else {
         // Execute the conversion using ccd2iso, with shell-escaped paths
         std::string conversionCommand = "ccd2iso " + shell_escape(inputPath) + " " + shell_escape(outputPath);
