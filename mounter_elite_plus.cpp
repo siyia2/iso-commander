@@ -313,7 +313,7 @@ void mountISO(const std::vector<std::string>& isoFiles) {
 
     system("clear");
     // Print a message indicating that all ISO files have been mounted
-    std::cout << "\e[1;32mProcessing ISO(s):\n\e[0m" << std::endl;
+    std::cout << "\e[1;32mPreviously Selected ISO files have been processed.\n\e[0m" << std::endl;
 }
 void select_and_mount_files_by_number() {
     std::string directoryPath = readInputLine("\033[94mEnter the directory path to search for .iso files or simply press enter to return:\033[0m ");
