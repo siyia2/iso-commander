@@ -1,4 +1,4 @@
-# mounter-elite-Plus
+# mounter-elite-plus
 Port of bash shell program mounter_elite to C++ 
 https://github.com/siyia2/mounter_elite
 
