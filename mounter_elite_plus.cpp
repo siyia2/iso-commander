@@ -27,40 +27,21 @@
 
 //	SANITISATION AND STRING STUFF	//
 
-std::string shell_escape(const std::string& param) {
-    const char* specialChars = "'&;|!?~`$%^*+";
-    const char* escapeChars = "<>";
+std::string shell_escape(const std::string& s) {
+    // Estimate the maximum size of the escaped string
+    size_t max_size = s.size() * 4;  // Assuming every character might need escaping
+    std::string escaped_string;
+    escaped_string.reserve(max_size);
 
-    std::string result = "'";
-    bool inDoubleArrow = false;
-    bool inDoubleLess = false;
-
-    for (char c : param) {
-        if (inDoubleArrow) {
-            inDoubleArrow = false;
-            if (c == '>') {
-                result += "\\>";
-                continue;
-            }
-        } else if (inDoubleLess) {
-            inDoubleLess = false;
-            if (c == '<') {
-                result += "\\<";
-                continue;
-            }
+    for (char c : s) {
+        if (c == '\'') {
+            escaped_string += "'\\''";
+        } else {
+            escaped_string += c;
         }
-
-        if (strchr(specialChars, c) != nullptr || strchr(escapeChars, c) != nullptr) {
-            if ((c == '>' || c == '<') && result.back() == c) {
-                inDoubleArrow = true;
-                inDoubleLess = true;
-            }
-            result += '\\';
-        }
-        result += c;
     }
 
-    return result + "'";
+    return "'" + escaped_string + "'";
 }
 
 
