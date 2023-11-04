@@ -21,7 +21,7 @@ Added Features:
 * Faster search times and list generetions.
 * Faster mounting&unmounting times, from my tests i found it can mount, up to 30 ISO files in under 5s.
 * Dropped manual mode of mounting/converting, since lists are way faster and easier to manage.
-* Added support for MDS/MDF to ISO by utilizing mdf2iso.
+* Added support for MDS/MDF conversion to ISO by utilizing mdf2iso.
 * Clean codebase, just in case someone decides to contribute in the future.
 
 Compilation requires the readline library insatlled from your distro. 
