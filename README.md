@@ -17,7 +17,7 @@ Added Features:
 * Extra checks and error controls so that you don't erase your / or /mnt accidentally (joking).
 * More robust menu experience.
 * Improved selection procedures.
-* Proper multithreading support added that can utilize up to 4 cores maximum.
+* Proper multithreading support added now it can utilize up to 4 cores for maximum performance.
 * Faster search times and list generetions.
 * Faster mounting&unmounting times, from my tests i found it can mount, up to 30 ISO files in under 5s.
 * Dropped manual mode of mounting/converting, since lists are way faster and easier to manage.
