@@ -272,8 +272,9 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
         std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint);
         if (system(mountCommand.c_str()) != 0) {
             std::perror("\033[31mFailed to mount ISO file\033[0m");
-
-            // Cleanup the mount point directory
+	
+		
+	// Cleanup the mount point directory
             std::string cleanupCommand = "sudo rmdir " + shell_escape(mountPoint);
             if (system(cleanupCommand.c_str()) != 0) {
                 std::perror("\033[33mFailed to clean up mount point directory\033[0m");
@@ -283,7 +284,7 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
             std::cin.get(); // Wait for the user to press Enter
             return;
         } else {
-            std::cout << "ISO file '" << isoFile << "' mounted at '" << mountPoint << "'." << std::endl;
+            std::cout << "\033[32mISO file '" << isoFile << "' mounted at '" << mountPoint << "'.\033[0m" << std::endl;
             // Store the mount point in the map
             mountedIsos[isoFile] = mountPoint;
         }
@@ -320,9 +321,6 @@ void mountISO(const std::vector<std::string>& isoFiles) {
         thread.join();
     }
 
-    system("clear");
-    // Print a message indicating that all ISO files have been mounted
-    std::cout << "\e[1;32mPreviously Selected ISO files have been mounted.\n\e[0m" << std::endl;
 }
 void select_and_mount_files_by_number() {
     std::string directoryPath = readInputLine("\033[94mEnter the directory path to search for .iso files or simply press enter to return:\033[0m ");
@@ -362,7 +360,7 @@ void select_and_mount_files_by_number() {
         std::string input;
         std::cout << "\033[94mChoose .iso files to mount (enter numbers separated by spaces or ranges like '1-3', or press Enter to return):\033[0m ";
         std::getline(std::cin, input);
-
+	std::system("clear");
         if (input.empty()) {
             std::cout << "Press Enter to Return" << std::endl;
             break;
@@ -587,7 +585,7 @@ void unmountISOs() {
 
     while (true) {
         std::vector<std::string> isoDirs;
-
+	
         // Find and store directories with the name "iso_*" in /mnt
         DIR* dir;
         struct dirent* entry;
@@ -602,9 +600,9 @@ void unmountISOs() {
         } else {
             std::cerr << "Error opening the /mnt directory." << std::endl;
         }
-
+	
         if (isoDirs.empty()) {
-            std::cout << "\033[33mLIST EMPTY, NOTHING TO DO.\n\033[0m";
+            std::cout << "\033[33mLIST IS EMPTY, NOTHING TO DO.\n\033[0m";
             return;
         }
 
@@ -612,7 +610,7 @@ void unmountISOs() {
         std::cout << "\033[94mEnter the range of ISOs to unmount (e.g., 1, 1-3, 1 to 3, or individual numbers like 1 2 3) or type enter to return:\033[0m ";
         std::string input;
         std::getline(std::cin, input);
-
+	std::system("clear");
         if (input == "") {
             std::cout << "Exiting the unmounting tool." << std::endl;
             break;  // Exit the loop
