@@ -62,9 +62,6 @@ std::string readInputLine(const std::string& prompt) {
 std::mutex mountMutex; // Mutex for thread safety
 std::mutex mtx;
 
-// Define the default cache directory
-const std::string cacheDirectory = "/tmp/";
-
 namespace fs = std::filesystem;
 
 
