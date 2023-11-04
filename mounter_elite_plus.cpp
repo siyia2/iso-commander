@@ -351,7 +351,7 @@ void select_and_mount_files_by_number() {
         }
 
         std::string input;
-        std::cout << "\033[94mChoose .iso files to mount (enter numbers separated by spaces or ranges like '1-3', or press Enter to exit):\033[0m ";
+        std::cout << "\033[94mChoose .iso files to mount (enter numbers separated by spaces or ranges like '1-3', or press Enter to return):\033[0m ";
         std::getline(std::cin, input);
 
         if (input.empty()) {
@@ -600,7 +600,7 @@ void unmountISOs() {
         }
 
         // Prompt for unmounting input
-        std::cout << "\033[94mEnter the range of ISOs to unmount (e.g., 1, 1-3, 1 to 3, or individual numbers like 1 2 3) or type enter to exit:\033[0m ";
+        std::cout << "\033[94mEnter the range of ISOs to unmount (e.g., 1, 1-3, 1 to 3, or individual numbers like 1 2 3) or type enter to return:\033[0m ";
         std::string input;
         std::getline(std::cin, input);
 
@@ -843,7 +843,7 @@ void convertBINToISO(const std::string& inputPath) {
 
     // Check if the output ISO file already exists
     if (std::ifstream(outputPath)) {
-        std::cout << "\033[33mThe output ISO file '" << outputPath << " already exists. Skipping conversion.\033[0m" << std::endl;
+        std::cout << "\033[33mThe output ISO file " << outputPath << " already exists. Skipping conversion.\033[0m" << std::endl;
     } else {
         // Execute the conversion using ccd2iso, with shell-escaped paths
         std::string conversionCommand = "ccd2iso " + shell_escape(inputPath) + " " + shell_escape(outputPath);
@@ -911,7 +911,7 @@ void processFilesInRange(int start, int end) {
 }
 
 void select_and_convert_files_to_iso() {
-    std::string directoryPath = readInputLine("\033[94mEnter the directory path to search for .bin .img files or simply press enter to exit:\033[0m ");
+    std::string directoryPath = readInputLine("\033[94mEnter the directory path to search for .bin .img files or simply press enter to return:\033[0m ");
 
     if (directoryPath.empty()) {
         std::cout << "Path input is empty. Exiting." << std::endl;
@@ -1080,8 +1080,8 @@ void convertMDFToISO(const std::string& inputPath) {
 
     if (conversionStatus == 0) {
         // Check if the conversion output contains the "already ISO9660" message
-        if (conversionOutput.find("already ISO9660") != std::string::npos) {
-            std::cout << "\033[31mThe selected file '" << inputPath << "' is already in ISO9660 format. Skipping conversion.\033[0m" << std::endl;
+        if (conversionOutput.find("already ISO") != std::string::npos) {
+            std::cout << "\033[31mThe selected file " << inputPath << " is already in ISO format. Skipping conversion.\033[0m" << std::endl;
         } else {
             std::cout << "\033[33mImage file converted to ISO:\033[0m " << outputPath << std::endl;
         }
@@ -1161,10 +1161,10 @@ void select_and_convert_files_to_iso_mdf() {
 
         // Ask the user to choose files
         std::string input;
-        std::cout << "\033[94mEnter the numbers of the files to convert (e.g., '1-2' or '1 2', or 'exit' to exit):\033[0m ";
+        std::cout << "\033[94mEnter the numbers of the files to convert (e.g., '1-2' or '1 2', or simply press enter to return):\033[0m ";
         std::getline(std::cin, input);
 
-        if (input == "exit") {
+        if (input == " ") {
             std::cout << "Exiting..." << std::endl;
             break;
         }
