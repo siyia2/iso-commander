@@ -75,6 +75,16 @@ std::vector<std::string> loadCache() {
     return isoFiles;
 }
 
+// Check if all selected files are still present on disk
+bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles) {
+    for (const std::string& file : selectedFiles) {
+        if (!std::filesystem::exists(file)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 //	SANITISATION AND STRING STUFF	//
 
 std::string shell_escape(const std::string& s) {
@@ -109,9 +119,11 @@ std::string readInputLine(const std::string& prompt) {
     return ""; // Return an empty string if readline fails
 }
 
+
 // MULTITHREADING STUFF
 std::mutex mountMutex; // Mutex for thread safety
 std::mutex mtx;
+
 
 namespace fs = std::filesystem;
 
@@ -125,6 +137,7 @@ std::string chooseFileToConvert(const std::vector<std::string>& files);
 //	bools
 bool directoryExists(const std::string& path);
 bool iequals(const std::string& a, const std::string& b);
+bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles);
 bool isMdf2IsoInstalled();
 
 //	voids
@@ -147,6 +160,7 @@ void print_ascii();
 void screen_clear();
 void print_ascii();
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mtx);
+void refreshCache();
 
 std::string directoryPath;				// Declare directoryPath here
 std::vector<std::string> binImgFiles;	// Declare binImgFiles here
@@ -383,9 +397,9 @@ void select_and_mount_files_by_number() {
     isoFiles = loadCache();
 
     // If the cache is empty or a selected file doesn't exist, perform a fresh traversal and update the cache
-    if (isoFiles.empty() || !cacheContainsAllSelectedFiles(isoFiles)) {
-        parallelTraverse(directoryPath, isoFiles, mtx);
-        saveCache(isoFiles);
+    if (isoFiles.empty() || !allSelectedFilesExistOnDisk(isoFiles)) {
+    parallelTraverse(directoryPath, isoFiles, mtx);
+    saveCache(isoFiles);
     }
 	std::vector<std::string> mountedISOs;
     std::unordered_set<std::string> mountedSet(mountedISOs.begin(), mountedISOs.end());
@@ -505,6 +519,36 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
     }
 }
 
+void refreshCache() {
+    std::vector<std::string> newIsoFiles;
+    std::string directoryPath = readInputLine("\033[94mEnter the directory path to refresh the cache or simply press enter to return:\033[0m ");
+
+    if (directoryPath.empty()) {
+        std::cout << "Cache refresh canceled." << std::endl;
+        return;
+    }
+
+    // Perform a fresh traversal of the specified directory
+    parallelTraverse(directoryPath, newIsoFiles, mtx);
+
+    // Load the existing cache
+    std::vector<std::string> cachedIsoFiles = loadCache();
+
+    // Remove files from the cache that are not present in the new list
+    cachedIsoFiles.erase(
+        std::remove_if(cachedIsoFiles.begin(), cachedIsoFiles.end(),
+            [&newIsoFiles](const std::string& cachedFile) {
+                return std::find(newIsoFiles.begin(), newIsoFiles.end(), cachedFile) == newIsoFiles.end();
+            }
+        ),
+        cachedIsoFiles.end()
+    );
+
+    // Save the updated cache
+    saveCache(cachedIsoFiles);
+
+    std::cout << "Cache refreshed successfully." << std::endl;
+}
 
 // UMOUNT FUNCTIONS
 
