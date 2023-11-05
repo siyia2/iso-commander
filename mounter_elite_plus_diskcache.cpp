@@ -28,12 +28,23 @@
 
 const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.cache"; // Construct the full path to the cache directory
 const std::string cacheFileName = "iso_cache.txt";;
+const uintmax_t maxCacheSize = 50 * 1024 * 1024; // 50MB
 
 void saveCache(const std::vector<std::string>& isoFiles) {
     std::filesystem::path cachePath = cacheDirectory;
     cachePath /= cacheFileName;
 
-    std::ofstream cacheFile(cachePath);
+    if (std::filesystem::exists(cachePath) && std::filesystem::file_size(cachePath) >= maxCacheSize) {
+        // The cache file is too large; you can either truncate it or remove older entries.
+        // For this example, we will truncate it.
+        std::ofstream cacheFile(cachePath, std::ios::out | std::ios::trunc);
+        if (!cacheFile.is_open()) {
+            std::cerr << "Error: Could not open cache file for writing." << std::endl;
+            return;
+        }
+    }
+
+    std::ofstream cacheFile(cachePath, std::ios::app);
     if (cacheFile.is_open()) {
         for (const std::string& iso : isoFiles) {
             cacheFile << iso << "\n";
@@ -63,7 +74,6 @@ std::vector<std::string> loadCache() {
     }
     return isoFiles;
 }
-
 
 //	SANITISATION AND STRING STUFF	//
 
