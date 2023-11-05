@@ -434,7 +434,7 @@ void select_and_mount_files_by_number() {
         }
 
         std::string input;
-        std::cout << "\033[94mChoose .iso files to mount (enter numbers separated by spaces or ranges like '1-3', or press Enter to return):\033[0m ";
+        std::cout << "\033[94mChoose .iso files to mount (enter numbers 1 2 or ranges like '1-3', or press Enter to return):\033[0m ";
         std::getline(std::cin, input);
 	std::system("clear");
         if (input.empty()) {
@@ -537,7 +537,7 @@ void manualRefreshCache() {
     std::string refreshPath = readInputLine("\033[94mEnter the directory path to manually refresh the cache or simply press enter to cancel:\033[0m ");
 
     if (refreshPath.empty()) {
-        std::cout << "Manual cache refresh canceled." << std::endl;
+        std::cout << "Cache refresh canceled." << std::endl;
         return;
     }
 
@@ -549,7 +549,7 @@ void manualRefreshCache() {
     // Clear the existing cache
     saveCache(newIsoFiles);
 
-    std::cout << "Manual cache refreshed successfully." << std::endl;
+    std::cout << "Cache refreshed successfully." << std::endl;
 }
 
 void refreshCache() {
