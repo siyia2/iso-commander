@@ -30,31 +30,6 @@ const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.cache";
 const std::string cacheFileName = "iso_cache.txt";;
 const uintmax_t maxCacheSize = 50 * 1024 * 1024; // 50MB
 
-void saveCache(const std::vector<std::string>& isoFiles) {
-    std::filesystem::path cachePath = cacheDirectory;
-    cachePath /= cacheFileName;
-
-    if (std::filesystem::exists(cachePath) && std::filesystem::file_size(cachePath) >= maxCacheSize) {
-        // The cache file is too large; you can either truncate it or remove older entries.
-        // For this example, we will truncate it.
-        std::ofstream cacheFile(cachePath, std::ios::out | std::ios::trunc);
-        if (!cacheFile.is_open()) {
-            std::cerr << "Error: Could not open cache file for writing." << std::endl;
-            return;
-        }
-    }
-
-    std::ofstream cacheFile(cachePath, std::ios::app);
-    if (cacheFile.is_open()) {
-        for (const std::string& iso : isoFiles) {
-            cacheFile << iso << "\n";
-        }
-        cacheFile.close();
-    } else {
-        std::cerr << "Error: Could not open cache file for writing." << std::endl;
-    }
-}
-
 std::vector<std::string> loadCache() {
     std::vector<std::string> isoFiles;
     std::filesystem::path cachePath = cacheDirectory;
@@ -72,7 +47,27 @@ std::vector<std::string> loadCache() {
             std::cerr << "Error: Could not open cache file for reading." << std::endl;
         }
     }
+
+    // Remove duplicates from the loaded cache
+    std::sort(isoFiles.begin(), isoFiles.end());
+    isoFiles.erase(std::unique(isoFiles.begin(), isoFiles.end()), isoFiles.end());
+
     return isoFiles;
+}
+
+void saveCache(const std::vector<std::string>& isoFiles) {
+    std::filesystem::path cachePath = cacheDirectory;
+    cachePath /= cacheFileName;
+
+    std::ofstream cacheFile(cachePath);
+    if (cacheFile.is_open()) {
+        for (const std::string& iso : isoFiles) {
+            cacheFile << iso << "\n";
+        }
+        cacheFile.close();
+    } else {
+        std::cerr << "Error: Could not open cache file for writing." << std::endl;
+    }
 }
 
 // Check if all selected files are still present on disk
@@ -396,10 +391,11 @@ void select_and_mount_files_by_number() {
     // Try to load the cache
     isoFiles = loadCache();
 
-    // If the cache is empty or a selected file doesn't exist, perform a fresh traversal and update the cache
+    // Perform a fresh traversal if the cache is empty or if selected files do not exist on disk
     if (isoFiles.empty() || !allSelectedFilesExistOnDisk(isoFiles)) {
-    parallelTraverse(directoryPath, isoFiles, mtx);
-    saveCache(isoFiles);
+        isoFiles.clear(); // Clear the existing cache
+        parallelTraverse(directoryPath, isoFiles, mtx);
+        saveCache(isoFiles);
     }
 	std::vector<std::string> mountedISOs;
     std::unordered_set<std::string> mountedSet(mountedISOs.begin(), mountedISOs.end());
@@ -534,18 +530,18 @@ void refreshCache() {
     // Load the existing cache
     std::vector<std::string> cachedIsoFiles = loadCache();
 
-    // Remove files from the cache that are not present in the new list
-    cachedIsoFiles.erase(
-        std::remove_if(cachedIsoFiles.begin(), cachedIsoFiles.end(),
-            [&newIsoFiles](const std::string& cachedFile) {
-                return std::find(newIsoFiles.begin(), newIsoFiles.end(), cachedFile) == newIsoFiles.end();
-            }
-        ),
-        cachedIsoFiles.end()
-    );
+    // Remove duplicates from the new list by creating a set
+    std::set<std::string> newIsoFilesSet(newIsoFiles.begin(), newIsoFiles.end());
+
+    // Add the unique entries from the cached list that still exist on disk
+    for (const std::string& cachedFile : cachedIsoFiles) {
+        if (std::filesystem::exists(cachedFile)) {
+            newIsoFilesSet.insert(cachedFile);
+        }
+    }
 
     // Save the updated cache
-    saveCache(cachedIsoFiles);
+    saveCache(std::vector<std::string>(newIsoFilesSet.begin(), newIsoFilesSet.end()));
 
     std::cout << "Cache refreshed successfully." << std::endl;
 }
