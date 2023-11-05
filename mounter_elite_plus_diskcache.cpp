@@ -382,8 +382,8 @@ void select_and_mount_files_by_number() {
     // Try to load the cache
     isoFiles = loadCache();
 
-    // If the cache is empty, perform the traversal
-    if (isoFiles.empty()) {
+    // If the cache is empty or a selected file doesn't exist, perform a fresh traversal and update the cache
+    if (isoFiles.empty() || !cacheContainsAllSelectedFiles(isoFiles)) {
         parallelTraverse(directoryPath, isoFiles, mtx);
         saveCache(isoFiles);
     }
