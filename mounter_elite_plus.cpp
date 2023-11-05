@@ -426,6 +426,7 @@ void traverseDirectory(const std::filesystem::path& path, std::vector<std::strin
                 std::string_view extension = extensionStr;
 
                 if (iequals(std::string(extension), ".iso")) {
+                    std::lock_guard<std::mutex> lock(mtx); // Lock the mutex before modifying isoFiles
                     isoFiles.push_back(filePath.string());
                 }
             }
@@ -450,7 +451,6 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
         thread.join();
     }
 }
-
 
 
 
