@@ -115,6 +115,8 @@ std::string readInputLine(const std::string& prompt) {
 }
 
 
+
+
 // MULTITHREADING STUFF
 std::mutex mountMutex; // Mutex for thread safety
 std::mutex mtx;
@@ -156,6 +158,7 @@ void screen_clear();
 void print_ascii();
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mtx);
 void refreshCache();
+void manualRefreshCache();
 
 std::string directoryPath;				// Declare directoryPath here
 std::vector<std::string> binImgFiles;	// Declare binImgFiles here
@@ -178,7 +181,8 @@ int main() {
         std::cout << "3. Clean and Unmount All ISOs" << std::endl;
         std::cout << "4. Conversion Tools" << std::endl;
         std::cout << "5. List Mounted ISOs" << std::endl;
-        std::cout << "6. Exit the Program" << std::endl;
+	std::cout << "6. Refresh ISO cache" << std::endl;
+        std::cout << "7. Exit the Program" << std::endl;
 
          // Prompt for the main menu choice
         //std::cin.clear();
@@ -251,8 +255,13 @@ int main() {
                     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                     std::system("clear");
                     break;
-                case '6':
-		    exitProgram = true; // Exit the program
+		case '6':
+		    manualRefreshCache();
+                    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                    std::system("clear");
+                    break;
+                case '7':
+		    manualRefreshCache();
                     std::cout << "Exiting the program..." << std::endl;
                     break;
                 default:
@@ -513,6 +522,25 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
     } catch (const std::filesystem::filesystem_error& e) {
         std::cerr << "Error: " << e.what() << std::endl;
     }
+}
+
+void manualRefreshCache() {
+    std::string refreshPath = readInputLine("\033[94mEnter the directory path to manually refresh the cache or simply press enter to cancel:\033[0m ");
+
+    if (refreshPath.empty()) {
+        std::cout << "Manual cache refresh canceled." << std::endl;
+        return;
+    }
+
+    std::vector<std::string> newIsoFiles;
+
+    // Perform a fresh traversal of the specified directory
+    parallelTraverse(refreshPath, newIsoFiles, mtx);
+
+    // Clear the existing cache
+    saveCache(newIsoFiles);
+
+    std::cout << "Manual cache refreshed successfully." << std::endl;
 }
 
 void refreshCache() {
