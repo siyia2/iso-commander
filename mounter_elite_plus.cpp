@@ -12,6 +12,7 @@
 #include <mutex>
 #include <readline/readline.h>
 #include <regex>
+#include <set>
 #include <string>
 #include <string_view>
 #include <sstream>
@@ -73,7 +74,6 @@ std::vector<std::string> findMdsMdfFiles(const std::string& directory);
 std::string chooseFileToConvert(const std::vector<std::string>& files);
 //	bools
 bool directoryExists(const std::string& path);
-bool hasIsoExtension(const std::string& filePath);
 bool iequals(const std::string& a, const std::string& b);
 bool isMdf2IsoInstalled();
 
@@ -318,6 +318,7 @@ void mountISO(const std::vector<std::string>& isoFiles) {
     }
 
 }
+
 void select_and_mount_files_by_number() {
     std::string directoryPath = readInputLine("\033[94mEnter the directory path to search for .iso files or simply press enter to return:\033[0m ");
 
@@ -434,69 +435,6 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
     }
 }
 
-
-// Function to check if a file has the .iso extension
-bool hasIsoExtension(const std::string& filePath) {
-    // Extract the file extension and check if it's ".iso"
-    size_t pos = filePath.find_last_of('.');
-    if (pos != std::string::npos) {
-        std::string extension = filePath.substr(pos);
-
-        std::string escapedExtension = shell_escape(extension);
-
-        return escapedExtension == ".iso";
-    }
-    return false;
-}
-
-
-
-bool hasIsoExtensionInParallel(const std::vector<std::string>& filePaths) {
-    std::vector<bool> results(filePaths.size(), false);
-
-    // Define a function to be executed by each thread
-    auto checkIsoExtension = [&](int start, int end) {
-        for (int i = start; i < end; i++) {
-            results[i] = hasIsoExtension(filePaths[i]);
-        }
-    };
-
-    // Create four threads to perform the checks in parallel (for a maximum of 4 cores)
-    int numThreads = std::min(4, static_cast<int>(filePaths.size()));
-    std::vector<std::thread> threads;
-
-    int batchSize = filePaths.size() / numThreads;
-    for (int i = 0; i < numThreads; i++) {
-        int start = i * batchSize;
-        int end = (i == numThreads - 1) ? filePaths.size() : (i + 1) * batchSize;
-        
-        // Create a copy of the file path with shell escape
-        std::vector<std::string> escapedFilePaths;
-        for (int j = start; j < end; j++) {
-            escapedFilePaths.push_back(shell_escape(filePaths[j]));
-        }
-
-        threads.emplace_back([escapedFilePaths, &results, start, end] {
-            for (int j = start; j < end; j++) {
-                results[j] = hasIsoExtension(escapedFilePaths[j - start]);
-            }
-        });
-    }
-
-    // Wait for all threads to finish
-    for (auto& thread : threads) {
-        thread.join();
-    }
-
-    // Check if any of the threads found an ".iso" file
-    for (bool result : results) {
-        if (result) {
-            return true;
-        }
-    }
-
-    return false;
-}
 
 // UMOUNT FUNCTIONS
 
