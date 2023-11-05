@@ -13,6 +13,7 @@
 #include <mutex>
 #include <readline/readline.h>
 #include <regex>
+#include <set>
 #include <string>
 #include <string_view>
 #include <sstream>
@@ -74,15 +75,38 @@ std::vector<std::string> isoFiles; // Declare isoFiles at the beginning
 std::string directoryPath; // Declare directoryPath at the beginning
 std::map<std::string, std::vector<std::string>> binImgMdfCache;
 
-
+std::set<std::string> visitedDirectories;
 // Function to populate the cache for .iso, .bin, .img, and .mdf files in a directory
 void populateCaches(const std::string& directoryPath) {
+    // Check if the directory path is already in the cache, or it's a subdirectory of an existing path
+    for (const auto& entry : binImgMdfCache) {
+        if (directoryPath.find(entry.first) == 0) {
+            // Skip if it's a subdirectory or already cached
+            return;
+        }
+    }
+
     // List of extensions to search for
     std::vector<std::string> extensions = {".iso", ".bin", ".img", ".mdf"};
 
-    // Populate cache for .iso, .bin, .img, and .mdf files
+    // Find the files in the given directory
     std::vector<std::string> binImgIsoMdfFiles = findBinImgIsoMdfFiles(directoryPath, extensions);
-    binImgMdfCache[directoryPath] = binImgIsoMdfFiles;
+
+    // Retrieve the files already cached for the parent directory (if it exists)
+    std::vector<std::string> parentCachedFiles;
+    for (const auto& entry : binImgMdfCache) {
+        if (directoryPath.find(entry.first) == 0) {
+            parentCachedFiles = entry.second;
+            break;
+        }
+    }
+
+    // Store the file names in the cache under the directory path, excluding duplicates
+    for (const auto& file : binImgIsoMdfFiles) {
+        if (std::find(parentCachedFiles.begin(), parentCachedFiles.end(), file) == parentCachedFiles.end()) {
+            binImgMdfCache[directoryPath].push_back(file);
+        }
+    }
 }
 
 std::string getBinImgIsoMdfCacheFilePath() {
@@ -173,21 +197,25 @@ void generateCacheForDirectory(std::vector<std::string>& isoBinImgMdfFiles, std:
     // Call functions to find ISO, BIN, IMG, and MDF files
     std::vector<std::string> extensions = {".iso", ".bin", ".img", ".mdf"};
     isoBinImgMdfFiles = findBinImgIsoMdfFiles(directoryPath, extensions);
+	populateCaches(directoryPath);
+        saveBinImgIsoMdfCacheToFile();
 }
 
-void getFilesByExtension(const std::string& directoryPath, std::vector<std::string>& files, const std::string& extension) {
-    if (cache.find(directoryPath) != cache.end()) {
-        files = cache[directoryPath];
-    } else {
-        std::string pathCopy = directoryPath; // Make a non-const copy of the path
-        std::vector<std::string> extensions;  // Declare the extensions vector once
-
-        if (extension == ".iso" || extension == ".bin" || extension == ".img" || extension == ".mdf") {
-            extensions = {extension};
-            files = findBinImgIsoMdfFiles(pathCopy, extensions);
+void getFilesByExtensions(const std::string& directoryPath, std::vector<std::string>& files) {
+    files.clear(); // Clear the existing files vector
+    for (const auto& entry : binImgMdfCache) {
+        // Check if the directory path is a prefix of the requested path
+        if (directoryPath.find(entry.first) == 0) {
+            for (const std::string& file : entry.second) {
+                for (const std::string& extension : {".iso", ".img", ".bin", ".mdf"}) {
+                    // Check if the file has one of the specified extensions
+                    if (file.size() > extension.size() &&
+                        file.compare(file.size() - extension.size(), extension.size(), extension) == 0) {
+                        files.push_back(file);
+                    }
+                }
+            }
         }
-
-        cache[directoryPath] = files;
     }
 }
 
@@ -332,8 +360,7 @@ int main() {
 		case '6':
 		std::system("clear");
        	 	generateCacheForDirectory(binImgIsoMdfFiles, directoryPath);
-		populateCaches(directoryPath);
-		saveBinImgIsoMdfCacheToFile();
+		
         	std::system("clear");
                     break;
                 case '7':
