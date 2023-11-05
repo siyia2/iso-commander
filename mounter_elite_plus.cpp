@@ -91,16 +91,12 @@ void unmountISOs();
 void cleanAndUnmountAllISOs();
 void convertBINsToISOs();
 void listMode();
-void manualMode_isos();
 void select_and_mount_files_by_number();
 void select_and_convert_files_to_iso();
-void manualMode_imgs();
 void print_ascii();
 void screen_clear();
 void print_ascii();
-void traverseDirectory(const std::filesystem::path& path, std::vector<std::string>& isoFiles);
-void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles);
-
+void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mtx);
 
 std::string directoryPath;				// Declare directoryPath here
 std::vector<std::string> binImgFiles;	// Declare binImgFiles here
@@ -331,7 +327,7 @@ void select_and_mount_files_by_number() {
     }
 
     std::vector<std::string> isoFiles;
-    traverseDirectory(directoryPath, isoFiles);
+    parallelTraverse(directoryPath, isoFiles, mtx);
 
     std::vector<std::string> mountedISOs;
 
@@ -410,13 +406,15 @@ void select_and_mount_files_by_number() {
     }
 }
 
+
 bool iequals(const std::string& a, const std::string& b) {
     return std::equal(a.begin(), a.end(), b.begin(), b.end(), [](char lhs, char rhs) {
         return std::tolower(lhs) == std::tolower(rhs);
     });
 }
 
-void traverseDirectory(const std::filesystem::path& path, std::vector<std::string>& isoFiles) {
+
+void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mtx) {
     try {
         for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
             if (entry.is_regular_file()) {
@@ -426,7 +424,7 @@ void traverseDirectory(const std::filesystem::path& path, std::vector<std::strin
                 std::string_view extension = extensionStr;
 
                 if (iequals(std::string(extension), ".iso")) {
-                    std::lock_guard<std::mutex> lock(mtx); // Lock the mutex before modifying isoFiles
+                    std::lock_guard<std::mutex> lock(mtx);
                     isoFiles.push_back(filePath.string());
                 }
             }
@@ -435,23 +433,6 @@ void traverseDirectory(const std::filesystem::path& path, std::vector<std::strin
         std::cerr << "Error: " << e.what() << std::endl;
     }
 }
-
-void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles) {
-    int numThreads = std::thread::hardware_concurrency();
-
-    std::vector<std::thread> threads;
-
-    for (int i = 0; i < numThreads; ++i) {
-        threads.emplace_back([&path, &isoFiles]() {
-            traverseDirectory(path, isoFiles);
-        });
-    }
-
-    for (std::thread& thread : threads) {
-        thread.join();
-    }
-}
-
 
 
 // Function to check if a file has the .iso extension
