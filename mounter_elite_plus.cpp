@@ -10,6 +10,7 @@
 #include <iostream>
 #include <map>
 #include <mutex>
+#include <omp.h>
 #include <readline/readline.h>
 #include <regex>
 #include <set>
@@ -409,9 +410,28 @@ void select_and_mount_files_by_number() {
 
 
 bool iequals(const std::string& a, const std::string& b) {
-    return std::equal(a.begin(), a.end(), b.begin(), b.end(), [](char lhs, char rhs) {
-        return std::tolower(lhs) == std::tolower(rhs);
-    });
+    if (a.size() != b.size()) {
+        return false;
+    }
+
+    bool equal = true;
+
+    #pragma omp parallel for
+    for (int i = 0; i < a.size(); i++) {
+        if (!equal) continue; // Skip further work if a mismatch has been found
+
+        char lhs = std::tolower(a[i]);
+        char rhs = std::tolower(b[i]);
+
+        #pragma omp critical
+        {
+            if (lhs != rhs) {
+                equal = false;
+            }
+        }
+    }
+
+    return equal;
 }
 
 
