@@ -30,55 +30,6 @@ const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.cache";
 const std::string cacheFileName = "iso_cache.txt";;
 const uintmax_t maxCacheSize = 50 * 1024 * 1024; // 50MB
 
-std::vector<std::string> loadCache() {
-    std::vector<std::string> isoFiles;
-    std::filesystem::path cachePath = cacheDirectory;
-    cachePath /= cacheFileName;
-
-    if (std::filesystem::exists(cachePath)) {
-        std::ifstream cacheFile(cachePath);
-        if (cacheFile.is_open()) {
-            std::string iso;
-            while (std::getline(cacheFile, iso)) {
-                isoFiles.push_back(iso);
-            }
-            cacheFile.close();
-        } else {
-            std::cerr << "Error: Could not open cache file for reading." << std::endl;
-        }
-    }
-
-    // Remove duplicates from the loaded cache
-    std::sort(isoFiles.begin(), isoFiles.end());
-    isoFiles.erase(std::unique(isoFiles.begin(), isoFiles.end()), isoFiles.end());
-
-    return isoFiles;
-}
-
-void saveCache(const std::vector<std::string>& isoFiles) {
-    std::filesystem::path cachePath = cacheDirectory;
-    cachePath /= cacheFileName;
-
-    std::ofstream cacheFile(cachePath);
-    if (cacheFile.is_open()) {
-        for (const std::string& iso : isoFiles) {
-            cacheFile << iso << "\n";
-        }
-        cacheFile.close();
-    } else {
-        std::cerr << "Error: Could not open cache file for writing." << std::endl;
-    }
-}
-
-// Check if all selected files are still present on disk
-bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles) {
-    for (const std::string& file : selectedFiles) {
-        if (!std::filesystem::exists(file)) {
-            return false;
-        }
-    }
-    return true;
-}
 
 //	SANITISATION AND STRING STUFF	//
 
@@ -180,8 +131,8 @@ int main() {
         std::cout << "2. Unmount ISOs" << std::endl;
         std::cout << "3. Clean and Unmount All ISOs" << std::endl;
         std::cout << "4. Conversion Tools" << std::endl;
-        std::cout << "5. List Mounted ISOs" << std::endl;
-		std::cout << "6. Refresh ISO cache" << std::endl;
+        std::cout << "5. Refresh ISO cache" << std::endl;
+		std::cout << "6. List Mounted ISOs" << std::endl;
         std::cout << "7. Exit the Program" << std::endl;
 
          // Prompt for the main menu choice
@@ -250,13 +201,13 @@ int main() {
                     }
                     break;
                 case '5':
-                    listMountedISOs();
-                    std::cout << "Press Enter to continue...";
+                    manualRefreshCache();
                     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                     std::system("clear");
                     break;
 			    case '6':
-					manualRefreshCache();
+                    listMountedISOs();
+                    std::cout << "Press Enter to continue...";
                     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                     std::system("clear");
                     break;
@@ -280,7 +231,8 @@ int main() {
 
 
 void print_ascii() {
-    /// Display ASCII art
+    // Display ASCII art \\
+    
 const char* greenColor = "\x1B[32m";
 const char* resetColor = "\x1B[0m"; // Reset color to default
 
@@ -299,8 +251,61 @@ std::cout << greenColor << R"( _____            ___  _____  _____     ___  __   
 
 }
 
+//	CACHE STUFF \\
 
-// MOUNT FUNCTIONS
+std::vector<std::string> loadCache() {
+    std::vector<std::string> isoFiles;
+    std::filesystem::path cachePath = cacheDirectory;
+    cachePath /= cacheFileName;
+
+    if (std::filesystem::exists(cachePath)) {
+        std::ifstream cacheFile(cachePath);
+        if (cacheFile.is_open()) {
+            std::string iso;
+            while (std::getline(cacheFile, iso)) {
+                isoFiles.push_back(iso);
+            }
+            cacheFile.close();
+        } else {
+            std::cerr << "Error: Could not open cache file for reading." << std::endl;
+        }
+    }
+
+    // Remove duplicates from the loaded cache
+    std::sort(isoFiles.begin(), isoFiles.end());
+    isoFiles.erase(std::unique(isoFiles.begin(), isoFiles.end()), isoFiles.end());
+
+    return isoFiles;
+}
+
+void saveCache(const std::vector<std::string>& isoFiles) {
+    std::filesystem::path cachePath = cacheDirectory;
+    cachePath /= cacheFileName;
+
+    std::ofstream cacheFile(cachePath);
+    if (cacheFile.is_open()) {
+        for (const std::string& iso : isoFiles) {
+            cacheFile << iso << "\n";
+        }
+        cacheFile.close();
+    } else {
+        std::cerr << "Error: Could not open cache file for writing." << std::endl;
+    }
+}
+
+// Check if all selected files are still present on disk
+bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles) {
+    for (const std::string& file : selectedFiles) {
+        if (!std::filesystem::exists(file)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+
+
+//	MOUNT STUFF	\\
 
 
 bool directoryExists(const std::string& path) {
@@ -508,6 +513,9 @@ bool iequals(const std::string& a, const std::string& b) {
 
     bool equal = true;
 
+    // Set the number of threads to a maximum of 4
+    omp_set_num_threads(4);
+
     #pragma omp parallel for
     for (int i = 0; i < a.size(); i++) {
         if (!equal) continue; // Skip further work if a mismatch has been found
@@ -525,6 +533,7 @@ bool iequals(const std::string& a, const std::string& b) {
 
     return equal;
 }
+
 
 
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mtx) {
@@ -602,7 +611,7 @@ void refreshCache() {
     std::cout << "Cache refreshed successfully." << std::endl;
 }
 
-// UMOUNT FUNCTIONS
+// UMOUNT FUNCTIONS	\\
 
 
 void listMountedISOs() {
@@ -838,7 +847,7 @@ void cleanAndUnmountAllISOs() {
 
 
 
-// BIN/IMG CONVERSION FUNCTIONS
+// BIN/IMG CONVERSION FUNCTIONS	\\
 
 
 // Function to list and prompt the user to choose a file for conversion
@@ -1073,7 +1082,7 @@ void select_and_convert_files_to_iso() {
 
 
 
-// MDF/MDS CONVERSION FUNCTIONS
+// MDF/MDS CONVERSION FUNCTIONS	\\
 
 std::vector<std::string> findMdsMdfFiles(const std::string& directory) {
     std::vector<std::string> fileNames;
