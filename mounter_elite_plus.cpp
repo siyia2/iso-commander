@@ -36,8 +36,8 @@ bool fileExists(const std::string& path) {
     return (stat(path.c_str(), &buffer) == 0);
 }
 
-// Function to remove non-existent paths from the cache
-void removeNonExistentPathsFromCache() {
+// Function to remove non-existent paths from the cache with OpenMP (up to 4 cores)
+void removeNonExistentPathsFromCacheWithOpenMP() {
     std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/iso_cache.txt";
     std::vector<std::string> cache;
     std::ifstream cacheFile(cacheFilePath);
@@ -49,12 +49,23 @@ void removeNonExistentPathsFromCache() {
     }
 
     while (std::getline(cacheFile, line)) {
-        if (fileExists(line)) {
-            cache.push_back(line);
-        }
+        cache.push_back(line);
     }
 
     cacheFile.close();
+
+    // Set the number of threads to a maximum of 4
+    omp_set_num_threads(4);
+
+    std::vector<std::string> retainedPaths;
+
+    #pragma omp parallel for
+    for (int i = 0; i < cache.size(); i++) {
+        if (fileExists(cache[i])) {
+            #pragma omp critical
+            retainedPaths.push_back(cache[i]);
+        }
+    }
 
     std::ofstream updatedCacheFile(cacheFilePath);
 
@@ -63,7 +74,7 @@ void removeNonExistentPathsFromCache() {
         return;
     }
 
-    for (const std::string& path : cache) {
+    for (const std::string& path : retainedPaths) {
         updatedCacheFile << path << std::endl;
     }
 
@@ -234,7 +245,7 @@ int main() {
                 }
                 break;
             case '5':
-				removeNonExistentPathsFromCache();
+				removeNonExistentPathsFromCacheWithOpenMP();
                 manualRefreshCache();
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 std::system("clear");
