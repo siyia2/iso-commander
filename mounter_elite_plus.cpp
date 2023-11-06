@@ -104,7 +104,9 @@ void manualRefreshCache();
 
 std::string directoryPath;				// Declare directoryPath here
 std::vector<std::string> binImgFiles;	// Declare binImgFiles here
+std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles here
 std::vector<std::string> mdfImgFiles;	// Declare mdfImgFiles here
+std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
 
 int main() {
     bool exitProgram = false;
@@ -868,6 +870,11 @@ std::string chooseFileToConvert(const std::vector<std::string>& files) {
 }
 
 std::vector<std::string> findBinImgFiles(const std::string& directory) {
+    // Check if the cache is already populated
+    if (!binImgFilesCache.empty()) {
+        return binImgFilesCache;
+    }
+
     std::vector<std::string> fileNames;
 
     try {
@@ -920,6 +927,8 @@ std::vector<std::string> findBinImgFiles(const std::string& directory) {
         std::cerr << "Filesystem error: " << e.what() << std::endl;
     }
 
+    // After collecting the results, update the cache
+    binImgFilesCache = fileNames;
     return fileNames;
 }
 
@@ -1016,7 +1025,8 @@ void select_and_convert_files_to_iso() {
         return;
     }
 
-    binImgFiles = findBinImgFiles(directoryPath); // You need to define findBinImgFiles function.
+    // Call the findBinImgFiles function to populate the cache
+    binImgFiles = findBinImgFiles(directoryPath);
 
     if (binImgFiles.empty()) {
         std::cout << "\033[33mNo .bin or .img files found in the specified directory and its subdirectories or all files are under 10MB.\n\033[0m";
@@ -1080,6 +1090,11 @@ void select_and_convert_files_to_iso() {
 // MDF/MDS CONVERSION FUNCTIONS	\\
 
 std::vector<std::string> findMdsMdfFiles(const std::string& directory) {
+    // Check if the cache is already populated
+    if (!mdfMdsFilesCache.empty()) {
+        return mdfMdsFilesCache;
+    }
+
     std::vector<std::string> fileNames;
 
     try {
@@ -1087,7 +1102,7 @@ std::vector<std::string> findMdsMdfFiles(const std::string& directory) {
         std::mutex mutex; // Mutex for protecting the shared data
         const int maxThreads = 4; // Maximum number of worker threads
 
-        for (const auto& entry : fs::recursive_directory_iterator(directory)) {
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(directory)) {
             if (entry.is_regular_file()) {
                 std::string ext = entry.path().extension();
                 std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) {
@@ -1121,9 +1136,9 @@ std::vector<std::string> findMdsMdfFiles(const std::string& directory) {
                         }));
                     }
                 }
-
             }
         }
+
         // Wait for the remaining tasks to complete
         for (auto& future : futures) {
             future.get();
@@ -1132,6 +1147,8 @@ std::vector<std::string> findMdsMdfFiles(const std::string& directory) {
         std::cerr << "Filesystem error: " << e.what() << std::endl;
     }
 
+    // After collecting the results, update the cache
+    mdfMdsFilesCache = fileNames;
     return fileNames;
 }
 
@@ -1244,6 +1261,7 @@ void select_and_convert_files_to_iso_mdf() {
         return;
     }
 
+    // Call the findMdsMdfFiles function to populate the cache
     std::vector<std::string> mdfMdsFiles = findMdsMdfFiles(directoryPath);
 
     if (mdfMdsFiles.empty()) {
