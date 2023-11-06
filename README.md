@@ -13,7 +13,7 @@ You can add multiple mounts and/or conversion paths. All paths are mounted under
 It is recommended that directories that are to be searched should have permissions of `755` and upwards for better list generation, but if not, you can always run it as ROOT from the beginning if need be.
 
 Added Features:
-* Cached based ISO management to reduce disk thrashing.
+* Cached ISO management to reduce disk thrashing.
 * Sanitized shell commands for improved security.
 * Supports all filenames, including special charactes and gaps and ''.
 * Extra checks and error controls so that you don't erase your / or /mnt accidentally (joking).
