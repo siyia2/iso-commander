@@ -401,21 +401,22 @@ void select_and_mount_files_by_number() {
     isoFiles = loadCache();
 
     while (true) {
-    if (isoFiles.empty() || !allSelectedFilesExistOnDisk(isoFiles)) {
-        std::cout << "Cache is being updated. Please wait and retry mounting in a few moments." << std::endl;
+        if (isoFiles.empty() || !allSelectedFilesExistOnDisk(isoFiles)) {
+            std::cout << "Cache is being updated. Please wait and retry mounting in a few moments." << std::endl;
 
-        // Clear the existing cache
-        isoFiles.clear();
-        parallelTraverse(directoryPath, isoFiles, mtx);
-        saveCache(isoFiles);
+            // Clear the existing cache
+            isoFiles.clear();
+            parallelTraverse(directoryPath, isoFiles, mtx);
+            saveCache(isoFiles);
 
-        // Wait for a specified time (e.g., 5 seconds)
-        std::this_thread::sleep_for(std::chrono::seconds(5));
-    } else {
-        break; // Exit the loop when the cache is updated
+            // Wait for a specified time (e.g., 5 seconds)
+            std::this_thread::sleep_for(std::chrono::seconds(5));
+        } else {
+            break; // Exit the loop when the cache is updated
+        }
     }
-}
-	std::vector<std::string> mountedISOs;
+
+    std::vector<std::string> mountedISOs;
     std::unordered_set<std::string> mountedSet(mountedISOs.begin(), mountedISOs.end());
 
     while (true) {
@@ -434,28 +435,55 @@ void select_and_mount_files_by_number() {
         }
 
         std::string input;
-        std::cout << "\033[94mChoose .iso files to mount (enter numbers 1 2 or ranges like '1-3', or press Enter to return):\033[0m ";
+        std::cout << "\033[94mChoose .iso files to mount (enter numbers 1 2 or ranges like '1-3', '00' to mount all, or press Enter to return):\033[0m ";
         std::getline(std::cin, input);
-	std::system("clear");
+        std::system("clear");
+
         if (input.empty()) {
             std::cout << "Press Enter to Return" << std::endl;
             break;
         }
 
-        std::istringstream iss(input);
-        std::string token;
+        if (input == "00") {
+            // Mount all listed files
+            for (const std::string& iso : isoFiles) {
+                if (mountedSet.find(iso) == mountedSet.end()) {
+                    mountISO({iso});
+                    mountedSet.insert(iso);
+                } else {
+                    std::cout << "\033[33mISO file '" << iso << "' is already mounted.\033[0m" << std::endl;
+                }
+            }
+        } else {
+            std::istringstream iss(input);
+            std::string token;
 
-        while (std::getline(iss, token, ' ')) {
-            if (token.find('-') != std::string::npos) {
-                // Handle a range
-                size_t dashPos = token.find('-');
-                int startRange = std::stoi(token.substr(0, dashPos));
-                int endRange = std::stoi(token.substr(dashPos + 1));
+            while (std::getline(iss, token, ' ')) {
+                if (token.find('-') != std::string::npos) {
+                    // Handle a range
+                    size_t dashPos = token.find('-');
+                    int startRange = std::stoi(token.substr(0, dashPos));
+                    int endRange = std::stoi(token.substr(dashPos + 1));
 
-                if (startRange >= 1 && startRange <= isoFiles.size() && endRange >= startRange && endRange <= isoFiles.size()) {
-                    for (int i = startRange; i <= endRange; i++) {
-                        int selectedNumber = i - 1;
-                        std::string selectedISO = isoFiles[selectedNumber];
+                    if (startRange >= 1 && startRange <= isoFiles.size() && endRange >= startRange && endRange <= isoFiles.size()) {
+                        for (int i = startRange; i <= endRange; i++) {
+                            int selectedNumber = i - 1;
+                            std::string selectedISO = isoFiles[selectedNumber];
+
+                            if (mountedSet.find(selectedISO) == mountedSet.end()) {
+                                mountISO({selectedISO});
+                                mountedSet.insert(selectedISO);
+                            } else {
+                                std::cout << "\033[33mISO file '" << selectedISO << "' is already mounted.\033[0m" << std::endl;
+                            }
+                        }
+                    } else {
+                        std::cout << "\033[31mInvalid range: " << token << ". Please try again.\033[0m" << std::endl;
+                    }
+                } else {
+                    int selectedNumber = std::stoi(token);
+                    if (selectedNumber >= 1 && selectedNumber <= isoFiles.size()) {
+                        std::string selectedISO = isoFiles[selectedNumber - 1];
 
                         if (mountedSet.find(selectedISO) == mountedSet.end()) {
                             mountISO({selectedISO});
@@ -463,23 +491,9 @@ void select_and_mount_files_by_number() {
                         } else {
                             std::cout << "\033[33mISO file '" << selectedISO << "' is already mounted.\033[0m" << std::endl;
                         }
-                    }
-                } else {
-                    std::cout << "\033[31mInvalid range: " << token << ". Please try again.\033[0m" << std::endl;
-                }
-            } else {
-                int selectedNumber = std::stoi(token);
-                if (selectedNumber >= 1 && selectedNumber <= isoFiles.size()) {
-                    std::string selectedISO = isoFiles[selectedNumber - 1];
-
-                    if (mountedSet.find(selectedISO) == mountedSet.end()) {
-                        mountISO({selectedISO});
-                        mountedSet.insert(selectedISO);
                     } else {
-                        std::cout << "\033[33mISO file '" << selectedISO << "' is already mounted.\033[0m" << std::endl;
+                        std::cout << "\033[31mInvalid number: " << selectedNumber << ". Please try again.\033[0m" << std::endl;
                     }
-                } else {
-                    std::cout << "\033[31mInvalid number: " << selectedNumber << ". Please try again.\033[0m" << std::endl;
                 }
             }
         }
