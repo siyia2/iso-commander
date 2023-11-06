@@ -675,13 +675,23 @@ void unmountISOs() {
         }
 
         // Prompt for unmounting input
-        std::cout << "\033[94mEnter the range of ISOs to unmount (e.g., 1, 1-3, 1 to 3, or individual numbers like 1 2 3) or type enter to return:\033[0m ";
+        std::cout << "\033[94mEnter the range of ISOs to unmount (e.g., 1, 1-3, 1 to 3, or individual numbers like 1 2 3), '00' to unmount all, or press Enter to return:\033[0m ";
         std::string input;
         std::getline(std::cin, input);
         std::system("clear");
         if (input == "") {
             std::cout << "Exiting the unmounting tool." << std::endl;
             break;  // Exit the loop
+        }
+
+        if (input == "00") {
+            // Unmount all ISOs
+            for (const std::string& isoDir : isoDirs) {
+                std::lock_guard<std::mutex> lock(mtx); // Lock the critical section
+                unmountISO(isoDir);
+            }
+            listMountedISOs(); // Display the updated list of mounted ISOs after unmounting all
+            continue;  // Restart the loop
         }
 
         // Split the input into tokens
