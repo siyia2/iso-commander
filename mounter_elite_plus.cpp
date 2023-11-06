@@ -196,6 +196,7 @@ int main() {
                 }
                 break;
             case '5':
+				removeNonExistentPathsFromCacheWithOpenMP();
                 manualRefreshCache();
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 std::system("clear");
@@ -243,6 +244,58 @@ void print_ascii() {
 //	CACHE STUFF \\
 
 
+// Function to check if a file or directory exists
+bool fileExists(const std::string& path) {
+    struct stat buffer;
+    return (stat(path.c_str(), &buffer) == 0);
+}
+
+// Function to remove non-existent paths from the cache with OpenMP (up to 4 cores)
+void removeNonExistentPathsFromCacheWithOpenMP() {
+    std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/iso_cache.txt";
+    std::vector<std::string> cache;
+    std::ifstream cacheFile(cacheFilePath);
+    std::string line;
+
+    if (!cacheFile) {
+        std::cerr << "Error: Unable to open cache file." << std::endl;
+        return;
+    }
+
+    while (std::getline(cacheFile, line)) {
+        cache.push_back(line);
+    }
+
+    cacheFile.close();
+
+    // Set the number of threads to a maximum of 4
+    omp_set_num_threads(4);
+
+    std::vector<std::string> retainedPaths;
+
+    #pragma omp parallel for
+    for (int i = 0; i < cache.size(); i++) {
+        if (fileExists(cache[i])) {
+            #pragma omp critical
+            retainedPaths.push_back(cache[i]);
+        }
+    }
+
+    std::ofstream updatedCacheFile(cacheFilePath);
+
+    if (!updatedCacheFile) {
+        std::cerr << "Error: Unable to open cache file for writing." << std::endl;
+        return;
+    }
+
+    for (const std::string& path : retainedPaths) {
+        updatedCacheFile << path << std::endl;
+    }
+
+    updatedCacheFile.close();
+}
+
+
 // Set default cache dir
 std::string getHomeDirectory() {
     const char* homeDir = getenv("HOME");
@@ -252,25 +305,33 @@ std::string getHomeDirectory() {
     return "";
 }
 
-// Load the existing cache
+// Load cache
 std::vector<std::string> loadCache() {
-    std::vector<std::string> existingCache;
-    std::filesystem::path cachePath = std::filesystem::path(getenv("HOME")) / ".cache/iso_cache.txt";
-    
-    if (std::filesystem::exists(cachePath)) {
-        std::ifstream cacheFile(cachePath);
+    std::vector<std::string> isoFiles;
+    std::string cacheFilePath = getHomeDirectory() + "/.cache/iso_cache.txt";
+    std::ifstream cacheFile(cacheFilePath);
+
+    if (cacheFile.is_open()) {
         std::string line;
         while (std::getline(cacheFile, line)) {
-            existingCache.push_back(line);
+            // Check if the line is not empty
+            if (!line.empty()) {
+                isoFiles.push_back(line);
+            }
         }
         cacheFile.close();
-    }
-    return existingCache;
-}
 
-// Save the cache
+        // Remove duplicates from the loaded cache
+        std::sort(isoFiles.begin(), isoFiles.end());
+        isoFiles.erase(std::unique(isoFiles.begin(), isoFiles.end()), isoFiles.end());
+    }
+
+    return isoFiles;
+}
+// Save cache
 void saveCache(const std::vector<std::string>& isoFiles) {
-    std::filesystem::path cachePath = std::filesystem::path(getenv("HOME")) / ".cache/iso_cache.txt";
+    std::filesystem::path cachePath = cacheDirectory;
+    cachePath /= cacheFileName;
 
     // Load the existing cache
     std::vector<std::string> existingCache = loadCache();
@@ -294,12 +355,6 @@ void saveCache(const std::vector<std::string>& isoFiles) {
     }
 }
 
-// Function to check if a file or directory exists
-bool fileExists(const std::string& path) {
-    struct stat buffer;
-    return (stat(path.c_str(), &buffer) == 0);
-}
-
 // Check if all selected files are still present on disk
 bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles) {
     for (const std::string& file : selectedFiles) {
@@ -314,18 +369,18 @@ bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles) 
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles) {
     std::cout << "Processing directory path: " << path << std::endl;
     std::vector<std::string> newIsoFiles;
-
-    parallelTraverse(std::filesystem::path(path), newIsoFiles, mtx);
-
+    
+    // Perform the cache refresh for the directory (e.g., using parallelTraverse)
+    parallelTraverse(path, newIsoFiles, mtx);
+    
     // Lock the mutex to protect the shared 'allIsoFiles' vector
     std::lock_guard<std::mutex> lock(mtx);
-
+    
     // Append the new entries to the shared vector
     allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
-
+    
     std::cout << "Cache refreshed for directory: " << path << std::endl;
 }
-
 
 // Cache refresh function
 void manualRefreshCache() {
