@@ -533,6 +533,11 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
             if (entry.is_regular_file()) {
                 const std::filesystem::path& filePath = entry.path();
 
+                // Check if the file size is zero or the ISO name ends in ".bin.iso"
+                if (std::filesystem::file_size(filePath) == 0 || iequals(std::string(filePath.stem()), ".bin")) {
+                    continue; // Skip zero-byte files and files ending in ".bin.iso"
+                }
+
                 std::string extensionStr = filePath.extension().string();
                 std::string_view extension = extensionStr;
 
