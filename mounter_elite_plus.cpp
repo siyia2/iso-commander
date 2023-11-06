@@ -99,6 +99,7 @@ void print_ascii();
 void screen_clear();
 void print_ascii();
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mtx);
+void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles);
 void manualRefreshCache();
 
 std::string directoryPath;				// Declare directoryPath here
@@ -294,6 +295,51 @@ bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles) 
         }
     }
     return true;
+}
+
+// Function to refresh the cache for a single directory
+void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles) {
+    std::cout << "Processing directory path: " << path << std::endl;
+    std::vector<std::string> newIsoFiles;
+    
+    // Perform the cache refresh for the directory (e.g., using parallelTraverse)
+    parallelTraverse(path, newIsoFiles, mtx);
+    
+    // Lock the mutex to protect the shared 'allIsoFiles' vector
+    std::lock_guard<std::mutex> lock(mtx);
+    
+    // Append the new entries to the shared vector
+    allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
+    
+    std::cout << "Cache refreshed for directory: " << path << std::endl;
+}
+
+void manualRefreshCache() {
+    std::string inputLine = readInputLine("\033[94mEnter directory paths to manually refresh the cache (separated by spaces), or simply press enter to cancel:\033[0m ");
+    
+    if (inputLine.empty()) {
+        std::cout << "Cache refresh canceled." << std::endl;
+        return;
+    }
+
+    std::istringstream iss(inputLine);
+    std::string path;
+    std::vector<std::string> allIsoFiles; // Create a vector to combine results
+
+    std::vector<std::thread> threads;
+    
+    while (iss >> path) {
+        threads.emplace_back(std::thread(refreshCacheForDirectory, path, std::ref(allIsoFiles)));
+    }
+    
+    // Wait for all threads to finish
+    for (std::thread& t : threads) {
+        t.join();
+    }
+
+    // Now, save the combined cache
+    saveCache(allIsoFiles);
+    std::cout << "Cache refreshed successfully." << std::endl;
 }
 
 //	MOUNT STUFF	\\
@@ -557,55 +603,6 @@ void processPath(const std::string& path, std::vector<std::string>& allIsoFiles)
 
     std::cout << "Cache refreshed for directory: " << path << std::endl;
 }
-
-
-// Function to refresh the cache for a single directory
-void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles) {
-    std::cout << "Processing directory path: " << path << std::endl;
-    std::vector<std::string> newIsoFiles;
-    
-    // Perform the cache refresh for the directory (e.g., using parallelTraverse)
-    parallelTraverse(path, newIsoFiles, mtx);
-    
-    // Lock the mutex to protect the shared 'allIsoFiles' vector
-    std::lock_guard<std::mutex> lock(mtx);
-    
-    // Append the new entries to the shared vector
-    allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
-    
-    std::cout << "Cache refreshed for directory: " << path << std::endl;
-}
-
-void manualRefreshCache() {
-    std::string inputLine = readInputLine("\033[94mEnter directory paths to manually refresh the cache (separated by spaces), or simply press enter to cancel:\033[0m ");
-    
-    if (inputLine.empty()) {
-        std::cout << "Cache refresh canceled." << std::endl;
-        return;
-    }
-
-    std::istringstream iss(inputLine);
-    std::string path;
-    std::vector<std::string> allIsoFiles; // Create a vector to combine results
-
-    std::vector<std::thread> threads;
-    
-    while (iss >> path) {
-        threads.emplace_back(std::thread(refreshCacheForDirectory, path, std::ref(allIsoFiles)));
-    }
-    
-    // Wait for all threads to finish
-    for (std::thread& t : threads) {
-        t.join();
-    }
-
-    // Now, save the combined cache
-    saveCache(allIsoFiles);
-    std::cout << "Cache refreshed successfully." << std::endl;
-}
-
-
-
 
 
 
