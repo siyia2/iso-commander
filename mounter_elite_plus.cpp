@@ -434,33 +434,20 @@ void mountISO(const std::vector<std::string>& isoFiles) {
 
 }
 
+bool fileExistsOnDisk(const std::string& filename) {
+    std::ifstream file(filename);
+    return file.good();
+}
+
 void select_and_mount_files_by_number() {
-    std::string directoryPath = readInputLine("\033[94mEnter the directory path to search for .iso files or simply press enter to return:\033[0m ");
+    std::vector<std::string> isoFiles = loadCache();
 
-    if (directoryPath.empty()) {
-        std::cout << "\033[33mPath input is empty. Exiting.\033[0m" << std::endl;
+    if (isoFiles.empty()) {
+		std::system("clear");
+        std::cout << "\033[33mCache is empty. Please refresh the cache from the main menu.\033[0m" << std::endl;
+        std::cout << "Press Enter to continue...";
+        std::cin.get(); // Wait for the user to press Enter
         return;
-    }
-
-    std::vector<std::string> isoFiles;
-
-    // Try to load the cache
-    isoFiles = loadCache();
-
-    while (true) {
-        if (isoFiles.empty() || !allSelectedFilesExistOnDisk(isoFiles)) {
-            std::cout << "Cache is being updated. Please wait and retry mounting in a few moments." << std::endl;
-
-            // Clear the existing cache
-            isoFiles.clear();
-            parallelTraverse(directoryPath, isoFiles, mtx);
-            saveCache(isoFiles);
-
-            // Wait for a specified time (e.g., 5 seconds)
-            std::this_thread::sleep_for(std::chrono::seconds(5));
-        } else {
-            break; // Exit the loop when the cache is updated
-        }
     }
 
     std::vector<std::string> mountedISOs;
@@ -473,7 +460,7 @@ void select_and_mount_files_by_number() {
         }), isoFiles.end());
 
         if (isoFiles.empty()) {
-            std::cout << "\033[33mNo more unmounted .iso files in the directory.\033[0m" << std::endl;
+            std::cout << "\033[33mNo more unmounted .iso files in the cache. Please refresh the cache from the main menu.\033[0m" << std::endl;
             break;
         }
 
@@ -495,8 +482,13 @@ void select_and_mount_files_by_number() {
             // Mount all listed files
             for (const std::string& iso : isoFiles) {
                 if (mountedSet.find(iso) == mountedSet.end()) {
-                    mountISO({iso});
-                    mountedSet.insert(iso);
+                    // Check if the file exists on disk before mounting
+                    if (fileExistsOnDisk(iso)) {
+                        mountISO({iso});
+                        mountedSet.insert(iso);
+                    } else {
+                        std::cout << "\033[33mISO file '" << iso << "' does not exist on disk. Please refresh the cache from the main menu.\033[0m" << std::endl;
+                    }
                 } else {
                     std::cout << "\033[33mISO file '" << iso << "' is already mounted.\033[0m" << std::endl;
                 }
@@ -512,20 +504,26 @@ void select_and_mount_files_by_number() {
                     int startRange = std::stoi(token.substr(0, dashPos));
                     int endRange = std::stoi(token.substr(dashPos + 1));
 
-                    if (startRange >= 1 && startRange <= isoFiles.size() && endRange >= startRange && endRange <= isoFiles.size()) {
-                        for (int i = startRange; i <= endRange; i++) {
-                            int selectedNumber = i - 1;
+                    for (int i = startRange; i <= endRange; i++) {
+                        int selectedNumber = i - 1;
+
+                        if (selectedNumber >= 0 && selectedNumber < isoFiles.size()) {
                             std::string selectedISO = isoFiles[selectedNumber];
 
                             if (mountedSet.find(selectedISO) == mountedSet.end()) {
-                                mountISO({selectedISO});
-                                mountedSet.insert(selectedISO);
+                                // Check if the file exists on disk before mounting
+                                if (fileExistsOnDisk(selectedISO)) {
+                                    mountISO({selectedISO});
+                                    mountedSet.insert(selectedISO);
+                                } else {
+                                    std::cout << "\033[33mISO file '" << selectedISO << "' does not exist on disk. Please refresh the cache from the main menu.\033[0m" << std::endl;
+                                }
                             } else {
                                 std::cout << "\033[33mISO file '" << selectedISO << "' is already mounted.\033[0m" << std::endl;
                             }
+                        } else {
+                            std::cout << "\033[31mInvalid range: " << token << ". Please try again.\033[0m" << std::endl;
                         }
-                    } else {
-                        std::cout << "\033[31mInvalid range: " << token << ". Please try again.\033[0m" << std::endl;
                     }
                 } else {
                     int selectedNumber = std::stoi(token);
@@ -533,8 +531,13 @@ void select_and_mount_files_by_number() {
                         std::string selectedISO = isoFiles[selectedNumber - 1];
 
                         if (mountedSet.find(selectedISO) == mountedSet.end()) {
-                            mountISO({selectedISO});
-                            mountedSet.insert(selectedISO);
+                            // Check if the file exists on disk before mounting
+                            if (fileExistsOnDisk(selectedISO)) {
+                                mountISO({selectedISO});
+                                mountedSet.insert(selectedISO);
+                            } else {
+                                std::cout << "\033[33mISO file '" << selectedISO << "' does not exist on disk. Please refresh the cache from the main menu.\033[0m" << std::endl;
+                            }
                         } else {
                             std::cout << "\033[33mISO file '" << selectedISO << "' is already mounted.\033[0m" << std::endl;
                         }
@@ -643,8 +646,6 @@ void listMountedISOs() {
         for (size_t i = 0; i < isoDirs.size(); ++i) {
             std::cout << i + 1 << ". \033[1m\033[35m" << isoDirs[i] << "\033[0m" << std::endl; // Bold and magenta
         }
-    } else {
-        std::cout << "\033[31mNO ISOS MOUNTED.\n\033[0m";
     }
 }
 
