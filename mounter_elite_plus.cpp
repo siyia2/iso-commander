@@ -265,9 +265,20 @@ void saveCache(const std::vector<std::string>& isoFiles) {
     std::filesystem::path cachePath = cacheDirectory;
     cachePath /= cacheFileName;
 
+    // Load the existing cache
+    std::vector<std::string> existingCache = loadCache();
+
+    // Append new and unique entries to the existing cache
+    for (const std::string& iso : isoFiles) {
+        if (std::find(existingCache.begin(), existingCache.end(), iso) == existingCache.end()) {
+            existingCache.push_back(iso);
+        }
+    }
+
+    // Open the cache file in write mode (truncating it)
     std::ofstream cacheFile(cachePath);
     if (cacheFile.is_open()) {
-        for (const std::string& iso : isoFiles) {
+        for (const std::string& iso : existingCache) {
             cacheFile << iso << "\n";
         }
         cacheFile.close();
@@ -548,6 +559,7 @@ void processPath(const std::string& path, std::vector<std::string>& allIsoFiles)
     std::cout << "Cache refreshed for directory: " << path << std::endl;
 }
 
+
 // Function to refresh the cache for a single directory
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles) {
     std::cout << "Processing directory path: " << path << std::endl;
@@ -559,7 +571,7 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
     // Lock the mutex to protect the shared 'allIsoFiles' vector
     std::lock_guard<std::mutex> lock(mtx);
     
-    // Combine the results with the shared vector
+    // Append the new entries to the shared vector
     allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
     
     std::cout << "Cache refreshed for directory: " << path << std::endl;
@@ -592,6 +604,7 @@ void manualRefreshCache() {
     saveCache(allIsoFiles);
     std::cout << "Cache refreshed successfully." << std::endl;
 }
+
 
 
 
