@@ -99,7 +99,6 @@ void print_ascii();
 void screen_clear();
 void print_ascii();
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mtx);
-void refreshCache();
 void manualRefreshCache();
 
 std::string directoryPath;				// Declare directoryPath here
