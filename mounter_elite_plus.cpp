@@ -30,6 +30,8 @@
 const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.cache"; // Construct the full path to the cache directory
 const std::string cacheFileName = "iso_cache.txt";;
 const uintmax_t maxCacheSize = 50 * 1024 * 1024; // 50MB
+std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles here
+std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
 
 
 
@@ -109,8 +111,6 @@ void manualRefreshCache();
 void removeNonExistentPathsFromCacheWithOpenMP();
 
 std::string directoryPath;					// Declare directoryPath here
-std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles here
-std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
 
 int main() {
     bool exitProgram = false;
@@ -1187,7 +1187,7 @@ std::vector<std::string> findMdsMdfFiles(const std::string& directory) {
                     return std::tolower(c);
                 }); // Convert extension to lowercase
 
-                if (ext == ".mds" || ext == ".mdf") {
+                if (ext == ".mdf") {
                     if (std::filesystem::file_size(entry) >= 10'000'000) {
                         // Ensure the number of active threads doesn't exceed maxThreads
                         while (futures.size() >= maxThreads) {
@@ -1333,7 +1333,7 @@ void processMDFFilesInRange(int start, int end) {
 
 void select_and_convert_files_to_iso_mdf() {
     int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4;
-    std::string directoryPath = readInputLine("\033[94mEnter the directory path to search for .mdf .mds files or simply press enter to return:\033[0m ");
+    std::string directoryPath = readInputLine("\033[94mEnter the directory path to search for .mdf files or simply press enter to return:\033[0m ");
 
     if (directoryPath.empty()) {
         std::cout << "\033[33mPath input is empty. Exiting.\033[0m" << std::endl;
@@ -1344,7 +1344,7 @@ void select_and_convert_files_to_iso_mdf() {
     std::vector<std::string> mdfMdsFiles = findMdsMdfFiles(directoryPath);
 
     if (mdfMdsFiles.empty()) {
-        std::cout << "\033[31mNo .mdf or .mds files found in the specified directory and its subdirectories or all files are under 10MB.\n\033[0m";
+        std::cout << "\033[31mNo .mdf files found in the specified directory and its subdirectories or all files are under 10MB.\n\033[0m";
         return;
     }
 
@@ -1399,16 +1399,5 @@ void select_and_convert_files_to_iso_mdf() {
         } else {
             std::cout << "Invalid choice. Please enter valid file numbers or 'exit'." << std::endl;
         }
-    }
-}
-
-void processMdfMdsFilesInRange(const std::vector<std::string>& mdfMdsFiles, int start, int end) {
-    int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4; // Determine the number of threads based on CPU cores
-    for (int i = start - 1; i < end; i++) {
-        std::string FilePath = (mdfMdsFiles[i]);
-
-        std::vector<std::string> selectedFiles;
-        selectedFiles.push_back(FilePath);
-        convertMDFsToISOs(selectedFiles, numThreads);
     }
 }
