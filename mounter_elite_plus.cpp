@@ -537,6 +537,18 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
     }
 }
 
+void processPath(const std::string& path, std::vector<std::string>& allIsoFiles) {
+    std::cout << "Processing directory path: " << path << std::endl;
+    std::vector<std::string> newIsoFiles;
+    parallelTraverse(path, newIsoFiles, mtx);
+
+    // Lock the mutex to safely update the shared vector
+    std::lock_guard<std::mutex> lock(mtx);
+    allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
+
+    std::cout << "Cache refreshed for directory: " << path << std::endl;
+}
+
 void manualRefreshCache() {
     std::string inputLine = readInputLine("\033[94mEnter directory paths to manually refresh the cache (separated by spaces), or simply press enter to cancel:\033[0m ");
     
@@ -544,20 +556,36 @@ void manualRefreshCache() {
         std::cout << "Cache refresh canceled." << std::endl;
         return;
     }
-std::istringstream iss(inputLine);
-std::string path;
-std::vector<std::string> allIsoFiles; // Create a vector to combine results
 
-while (iss >> path) {
-    std::cout << "Processing directory path: " << path << std::endl;
-    std::vector<std::string> newIsoFiles;
-    parallelTraverse(path, newIsoFiles, mtx);
-    allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end()); // Combine vectors
-    std::cout << "Cache refreshed for directory: " << path << std::endl;
-}
+    std::istringstream iss(inputLine);
+    std::string path;
+    std::vector<std::string> allIsoFiles; // Create a vector to combine results
 
-	// Now, save the combined cache
-	saveCache(allIsoFiles);
+    const int maxThreads = 4; // Limit to 4 threads
+
+    std::vector<std::thread> threads;
+    threads.reserve(maxThreads);
+
+    while (iss >> path) {
+        // If we have reached the maximum number of threads, wait for one to finish
+        if (threads.size() >= maxThreads) {
+            std::for_each(threads.begin(), threads.end(), [](std::thread& t) {
+                t.join();
+            });
+            threads.clear();
+        }
+
+        // Create a new thread for each directory path
+        threads.emplace_back(processPath, path, std::ref(allIsoFiles));
+    }
+
+    // Join any remaining threads
+    std::for_each(threads.begin(), threads.end(), [](std::thread& t) {
+        t.join();
+    });
+
+    // Now, save the combined cache
+    saveCache(allIsoFiles);
     std::cout << "Cache refreshed successfully." << std::endl;
 }
 
