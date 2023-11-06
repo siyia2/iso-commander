@@ -238,27 +238,33 @@ void print_ascii() {
 
 //	CACHE STUFF \\
 
+std::string getHomeDirectory() {
+    const char* homeDir = getenv("HOME");
+    if (homeDir) {
+        return std::string(homeDir);
+    }
+    return "";
+}
+
 std::vector<std::string> loadCache() {
     std::vector<std::string> isoFiles;
-    std::filesystem::path cachePath = cacheDirectory;
-    cachePath /= cacheFileName;
+    std::string cacheFilePath = getHomeDirectory() + "/.cache/iso_cache.txt";
+    std::ifstream cacheFile(cacheFilePath);
 
-    if (std::filesystem::exists(cachePath)) {
-        std::ifstream cacheFile(cachePath);
-        if (cacheFile.is_open()) {
-            std::string iso;
-            while (std::getline(cacheFile, iso)) {
-                isoFiles.push_back(iso);
+    if (cacheFile.is_open()) {
+        std::string line;
+        while (std::getline(cacheFile, line)) {
+            // Check if the line is not empty
+            if (!line.empty()) {
+                isoFiles.push_back(line);
             }
-            cacheFile.close();
-        } else {
-            std::cerr << "Error: Could not open cache file for reading." << std::endl;
         }
-    }
+        cacheFile.close();
 
-    // Remove duplicates from the loaded cache
-    std::sort(isoFiles.begin(), isoFiles.end());
-    isoFiles.erase(std::unique(isoFiles.begin(), isoFiles.end()), isoFiles.end());
+        // Remove duplicates from the loaded cache
+        std::sort(isoFiles.begin(), isoFiles.end());
+        isoFiles.erase(std::unique(isoFiles.begin(), isoFiles.end()), isoFiles.end());
+    }
 
     return isoFiles;
 }
