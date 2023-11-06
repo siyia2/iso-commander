@@ -3,7 +3,7 @@ Port of bash shell program mounter_elite to C++
 https://github.com/siyia2/mounter_elite
 
 
-![2023-11-03-231927_grim](https://github.com/siyia2/mounter-elite-Plus/assets/46220960/c7fb4ba6-ccab-4672-b12a-bc03ad5e2dc5)
+![2023-11-06-181204_grim](https://github.com/siyia2/mounter-elite-plus/assets/46220960/07578b60-254f-4704-962a-56a16d2442a8)
 
 
 
@@ -12,8 +12,9 @@ You can add multiple mounts and/or conversion paths. All paths are mounted under
 It is recommended that directories that are to be searched should have permissions of `755` and upwards for better list generation, but if not, you can always run it as ROOT from the beginning if need be.
 
 Added Features:
+* Cached based ISO management to reduce disk thrashing.
 * Sanitized shell commands for improved security.
-* Supports all filenames, including special charactes and gaps.
+* Supports all filenames, including special charactes and gaps and ''.
 * Extra checks and error controls so that you don't erase your / or /mnt accidentally (joking).
 * More robust menu experience.
 * Improved selection procedures.
@@ -21,11 +22,11 @@ Added Features:
 * Faster search times and list generetions.
 * Faster mounting&unmounting times, from my tests i found it can mount, up to 30 ISO files in under 5s.
 * Dropped manual mode of mounting/converting, since lists are way faster and easier to manage.
-* Added support for MDS/MDF conversion to ISO by utilizing mdf2iso.
+* Added support for MDF conversion to ISO by utilizing mdf2iso.
 * Clean codebase, just in case someone decides to contribute in the future.
 
 Compilation requires the readline library insatlled from your distro. 
-Once requirements are met just run`g++ -o "whatever_name_you_want" -O2 mounter_elite_plus.cpp -lreadline`.
+Once requirements are met just run`g++ -o "whatever_name_you_want" -O2 mounter_elite_plus.cpp -lreadline -fopenmp`.
 Make it executable and it can run from anywhere.
 
 You can also download the binaries from my releases, or if you are on arch or on an archbased distro you can install with `yay -S mounter-elite-plus`.
