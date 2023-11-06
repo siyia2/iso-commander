@@ -25,64 +25,15 @@
 #include <vector>
 #include <queue>
 
+// Cache Varables \\
+
 const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.cache"; // Construct the full path to the cache directory
 const std::string cacheFileName = "iso_cache.txt";;
 const uintmax_t maxCacheSize = 50 * 1024 * 1024; // 50MB
 
 
-// Function to check if a file or directory exists
-bool fileExists(const std::string& path) {
-    struct stat buffer;
-    return (stat(path.c_str(), &buffer) == 0);
-}
 
-// Function to remove non-existent paths from the cache with OpenMP (up to 4 cores)
-void removeNonExistentPathsFromCacheWithOpenMP() {
-    std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/iso_cache.txt";
-    std::vector<std::string> cache;
-    std::ifstream cacheFile(cacheFilePath);
-    std::string line;
-
-    if (!cacheFile) {
-        std::cerr << "Error: Unable to open cache file." << std::endl;
-        return;
-    }
-
-    while (std::getline(cacheFile, line)) {
-        cache.push_back(line);
-    }
-
-    cacheFile.close();
-
-    // Set the number of threads to a maximum of 4
-    omp_set_num_threads(4);
-
-    std::vector<std::string> retainedPaths;
-
-    #pragma omp parallel for
-    for (int i = 0; i < cache.size(); i++) {
-        if (fileExists(cache[i])) {
-            #pragma omp critical
-            retainedPaths.push_back(cache[i]);
-        }
-    }
-
-    std::ofstream updatedCacheFile(cacheFilePath);
-
-    if (!updatedCacheFile) {
-        std::cerr << "Error: Unable to open cache file for writing." << std::endl;
-        return;
-    }
-
-    for (const std::string& path : retainedPaths) {
-        updatedCacheFile << path << std::endl;
-    }
-
-    updatedCacheFile.close();
-}
-
-
-//	SANITISATION AND STRING STUFF	//
+//	SANITISATION AND STRING STUFF	\\
 
 std::string shell_escape(const std::string& s) {
     // Estimate the maximum size of the escaped string
@@ -120,7 +71,7 @@ std::mutex mtx;
 
 namespace fs = std::filesystem;
 
-//	Function prototypes	//
+//	Function prototypes	\\
 
 //	stds
 std::vector<std::string> findBinImgFiles(const std::string& directory);
@@ -131,6 +82,7 @@ bool directoryExists(const std::string& path);
 bool iequals(const std::string& a, const std::string& b);
 bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles);
 bool isMdf2IsoInstalled();
+bool fileExists(const std::string& path);
 
 //	voids
 void convertMDFToISO(const std::string& inputPath);
@@ -154,11 +106,10 @@ void print_ascii();
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mtx);
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles);
 void manualRefreshCache();
+void removeNonExistentPathsFromCacheWithOpenMP();
 
-std::string directoryPath;				// Declare directoryPath here
-std::vector<std::string> binImgFiles;	// Declare binImgFiles here
+std::string directoryPath;					// Declare directoryPath here
 std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles here
-std::vector<std::string> mdfImgFiles;	// Declare mdfImgFiles here
 std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
 
 int main() {
@@ -171,12 +122,12 @@ int main() {
         print_ascii();
         // Display the main menu options
         std::cout << "Menu Options:" << std::endl;
-        std::cout << "1. List and Mount ISOs" << std::endl;
-        std::cout << "2. Unmount ISOs" << std::endl;
-        std::cout << "3. Clean and Unmount All ISOs" << std::endl;
+        std::cout << "1. Mount" << std::endl;
+        std::cout << "2. Unmount" << std::endl;
+        std::cout << "3. Clean&Unmount" << std::endl;
         std::cout << "4. Conversion Tools" << std::endl;
-        std::cout << "5. Refresh ISO cache" << std::endl;
-        std::cout << "6. List Mounted ISOs" << std::endl;
+        std::cout << "5. Refresh ISO Cache" << std::endl;
+        std::cout << "6. List Mountpoints" << std::endl;
         std::cout << "7. Exit the Program" << std::endl;
 
         // Prompt for the main menu choice
@@ -292,6 +243,60 @@ void print_ascii() {
 
 //	CACHE STUFF \\
 
+
+// Function to check if a file or directory exists
+bool fileExists(const std::string& path) {
+    struct stat buffer;
+    return (stat(path.c_str(), &buffer) == 0);
+}
+
+// Function to remove non-existent paths from the cache with OpenMP (up to 4 cores)
+void removeNonExistentPathsFromCacheWithOpenMP() {
+    std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/iso_cache.txt";
+    std::vector<std::string> cache;
+    std::ifstream cacheFile(cacheFilePath);
+    std::string line;
+
+    if (!cacheFile) {
+        std::cerr << "Error: Unable to open cache file." << std::endl;
+        return;
+    }
+
+    while (std::getline(cacheFile, line)) {
+        cache.push_back(line);
+    }
+
+    cacheFile.close();
+
+    // Set the number of threads to a maximum of 4
+    omp_set_num_threads(4);
+
+    std::vector<std::string> retainedPaths;
+
+    #pragma omp parallel for
+    for (int i = 0; i < cache.size(); i++) {
+        if (fileExists(cache[i])) {
+            #pragma omp critical
+            retainedPaths.push_back(cache[i]);
+        }
+    }
+
+    std::ofstream updatedCacheFile(cacheFilePath);
+
+    if (!updatedCacheFile) {
+        std::cerr << "Error: Unable to open cache file for writing." << std::endl;
+        return;
+    }
+
+    for (const std::string& path : retainedPaths) {
+        updatedCacheFile << path << std::endl;
+    }
+
+    updatedCacheFile.close();
+}
+
+
+// Set default cache dir
 std::string getHomeDirectory() {
     const char* homeDir = getenv("HOME");
     if (homeDir) {
@@ -300,6 +305,7 @@ std::string getHomeDirectory() {
     return "";
 }
 
+// Load cache
 std::vector<std::string> loadCache() {
     std::vector<std::string> isoFiles;
     std::string cacheFilePath = getHomeDirectory() + "/.cache/iso_cache.txt";
@@ -322,7 +328,7 @@ std::vector<std::string> loadCache() {
 
     return isoFiles;
 }
-
+// Save cache
 void saveCache(const std::vector<std::string>& isoFiles) {
     std::filesystem::path cachePath = cacheDirectory;
     cachePath /= cacheFileName;
@@ -376,6 +382,7 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
     std::cout << "Cache refreshed for directory: " << path << std::endl;
 }
 
+// Cache refresh function
 void manualRefreshCache() {
     std::string inputLine = readInputLine("\033[94mEnter directory paths to manually refresh the cache (separated by spaces), or simply press enter to cancel:\033[0m ");
     
@@ -1070,6 +1077,7 @@ void convertBINsToISOs(const std::vector<std::string>& inputPaths, int numThread
 }
 
 void processFilesInRange(int start, int end) {
+	std::vector<std::string> binImgFiles;
     int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4; // Determine the number of threads based on CPU cores
     std::vector<std::string> selectedFiles;
     for (int i = start; i <= end; i++) {
@@ -1087,6 +1095,7 @@ void processFilesInRange(int start, int end) {
 }
 
 void select_and_convert_files_to_iso() {
+	std::vector<std::string> binImgFiles;
     std::string directoryPath = readInputLine("\033[94mEnter the directory path to search for .bin .img files or simply press enter to return:\033[0m ");
 
     if (directoryPath.empty()) {
@@ -1312,6 +1321,7 @@ void convertMDFsToISOs(const std::vector<std::string>& inputPaths, int numThread
 }
 
 void processMDFFilesInRange(int start, int end) {
+	std::vector<std::string> mdfImgFiles;	// Declare mdfImgFiles here
     int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4; // Determine the number of threads based on CPU cores
     std::vector<std::string> selectedFiles;
     for (int i = start; i <= end; i++) {
