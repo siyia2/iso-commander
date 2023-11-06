@@ -538,21 +538,26 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
 }
 
 void manualRefreshCache() {
-    std::string refreshPath = readInputLine("\033[94mEnter the directory path to manually refresh the cache or simply press enter to cancel:\033[0m ");
-
-    if (refreshPath.empty()) {
+    std::string inputLine = readInputLine("\033[94mEnter directory paths to manually refresh the cache (separated by spaces), or simply press enter to cancel:\033[0m ");
+    
+    if (inputLine.empty()) {
         std::cout << "Cache refresh canceled." << std::endl;
         return;
     }
+std::istringstream iss(inputLine);
+std::string path;
+std::vector<std::string> allIsoFiles; // Create a vector to combine results
 
+while (iss >> path) {
+    std::cout << "Processing directory path: " << path << std::endl;
     std::vector<std::string> newIsoFiles;
+    parallelTraverse(path, newIsoFiles, mtx);
+    allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end()); // Combine vectors
+    std::cout << "Cache refreshed for directory: " << path << std::endl;
+}
 
-    // Perform a fresh traversal of the specified directory
-    parallelTraverse(refreshPath, newIsoFiles, mtx);
-
-    // Clear the existing cache
-    saveCache(newIsoFiles);
-
+	// Now, save the combined cache
+	saveCache(allIsoFiles);
     std::cout << "Cache refreshed successfully." << std::endl;
 }
 
