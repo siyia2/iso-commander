@@ -25,11 +25,9 @@
 #include <vector>
 #include <queue>
 
-
 const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.cache"; // Construct the full path to the cache directory
 const std::string cacheFileName = "iso_cache.txt";;
 const uintmax_t maxCacheSize = 50 * 1024 * 1024; // 50MB
-
 
 //	SANITISATION AND STRING STUFF	//
 
@@ -50,8 +48,6 @@ std::string shell_escape(const std::string& s) {
     return "'" + escaped_string + "'";
 }
 
-
-
 // Function to read a line of input using readline
 std::string readInputLine(const std::string& prompt) {
     char* input = readline(prompt.c_str());
@@ -65,16 +61,11 @@ std::string readInputLine(const std::string& prompt) {
     return ""; // Return an empty string if readline fails
 }
 
-
-
-
 // MULTITHREADING STUFF
 std::mutex mountMutex; // Mutex for thread safety
 std::mutex mtx;
 
-
 namespace fs = std::filesystem;
-
 
 //	Function prototypes	//
 
@@ -115,16 +106,14 @@ std::string directoryPath;				// Declare directoryPath here
 std::vector<std::string> binImgFiles;	// Declare binImgFiles here
 std::vector<std::string> mdfImgFiles;	// Declare mdfImgFiles here
 
-
-
 int main() {
     bool exitProgram = false;
     std::string choice;
 
     while (!exitProgram) {
-			bool returnToMainMenu = false;
-			std::system("clear");
-			print_ascii();
+        bool returnToMainMenu = false;
+        std::system("clear");
+        print_ascii();
         // Display the main menu options
         std::cout << "Menu Options:" << std::endl;
         std::cout << "1. List and Mount ISOs" << std::endl;
@@ -132,15 +121,15 @@ int main() {
         std::cout << "3. Clean and Unmount All ISOs" << std::endl;
         std::cout << "4. Conversion Tools" << std::endl;
         std::cout << "5. Refresh ISO cache" << std::endl;
-		std::cout << "6. List Mounted ISOs" << std::endl;
+        std::cout << "6. List Mounted ISOs" << std::endl;
         std::cout << "7. Exit the Program" << std::endl;
 
-         // Prompt for the main menu choice
+        // Prompt for the main menu choice
         //std::cin.clear();
 
-	std::cout << " " << std::endl;
+        std::cout << " " << std::endl;
         char* input = readline("\033[94mEnter a choice:\033[0m ");
-	std::cout << " " << std::endl;
+        std::cout << " " << std::endl;
         if (!input) {
             break; // Exit the program if readline returns NULL (e.g., on EOF or Ctrl+D)
         }
@@ -149,97 +138,91 @@ int main() {
         free(input);
 
         if (choice == "1") {
-	    std::system("clear");
+            std::system("clear");
             select_and_mount_files_by_number();
-	    std::system("clear");
+            std::system("clear");
         } else {
             switch (choice[0]) {
-                case '2':
-		    std::system("clear");
-                    unmountISOs();
-                    std::cout << "Press Enter to continue...";
-                    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                    std::system("clear");
-                    break;
-                case '3':
-                    cleanAndUnmountAllISOs();
-                    std::cout << "Press Enter to continue...";
-                    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                    std::system("clear");
-                    break;
-                case '4':
-                    while (!returnToMainMenu) {
-                        std::cout << "1. Convert to ISO (BIN2ISO)" << std::endl;
-                        std::cout << "2. Convert to ISO (MDF2ISO)" << std::endl;
-                        std::cout << "3. Back to Main Menu" << std::endl;
-						std::cout << " " << std::endl;
-                        char* submenu_input = readline("\033[94mEnter a choice:\033[0m ");
+            case '2':
+                std::system("clear");
+                unmountISOs();
+                std::cout << "Press Enter to continue...";
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                std::system("clear");
+                break;
+            case '3':
+                cleanAndUnmountAllISOs();
+                std::cout << "Press Enter to continue...";
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                std::system("clear");
+                break;
+            case '4':
+                while (!returnToMainMenu) {
+                    std::cout << "1. Convert to ISO (BIN2ISO)" << std::endl;
+                    std::cout << "2. Convert to ISO (MDF2ISO)" << std::endl;
+                    std::cout << "3. Back to Main Menu" << std::endl;
+                    std::cout << " " << std::endl;
+                    char* submenu_input = readline("\033[94mEnter a choice:\033[0m ");
 
-                        if (!submenu_input) {
-                            break; // Exit the submenu if readline returns NULL
-                        }
-
-                        std::string submenu_choice(submenu_input);
-                        free(submenu_input);
-
-                        switch (submenu_choice[0]) {
-                            case '1':
-				std::system("clear");
-                                select_and_convert_files_to_iso();
-                                break;
-                            case '2':
-				std::system("clear");
-                                select_and_convert_files_to_iso_mdf();
-                                break;
-                            case '3':
-				returnToMainMenu = true;  // Set the flag to return to the main menu
-                                break; // Go back to the main menu
-                            default:
-                                std::cout << "\033[31mInvalid choice. Please enter 1, 2, or 3.\033[0m" << std::endl;
-                                break;
-                        }
+                    if (!submenu_input) {
+                        break; // Exit the submenu if readline returns NULL
                     }
-                    break;
-                case '5':
-                    manualRefreshCache();
-                    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                    std::system("clear");
-                    break;
-			    case '6':
-                    listMountedISOs();
-                    std::cout << "Press Enter to continue...";
-                    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                    std::system("clear");
-                    break;
-                case '7':
-					exitProgram = true; // Exit the program
-                    std::cout << "Exiting the program..." << std::endl;
-                    break;
-                default:
-                    std::cout << "\033[31mInvalid choice. Please enter 1, 2, 3, 4, 5, or 6.\033[0m" << std::endl;
-                    break;
+
+                    std::string submenu_choice(submenu_input);
+                    free(submenu_input);
+
+                    switch (submenu_choice[0]) {
+                    case '1':
+                        std::system("clear");
+                        select_and_convert_files_to_iso();
+                        break;
+                    case '2':
+                        std::system("clear");
+                        select_and_convert_files_to_iso_mdf();
+                        break;
+                    case '3':
+                        returnToMainMenu = true;  // Set the flag to return to the main menu
+                        break; // Go back to the main menu
+                    default:
+                        std::cout << "\033[31mInvalid choice. Please enter 1, 2, or 3.\033[0m" << std::endl;
+                        break;
+                    }
+                }
+                break;
+            case '5':
+                manualRefreshCache();
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                std::system("clear");
+                break;
+            case '6':
+                listMountedISOs();
+                std::cout << "Press Enter to continue...";
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                std::system("clear");
+                break;
+            case '7':
+                exitProgram = true; // Exit the program
+                std::cout << "Exiting the program..." << std::endl;
+                break;
+            default:
+                std::cout << "\033[31mInvalid choice. Please enter 1, 2, 3, 4, 5, or 6.\033[0m" << std::endl;
+                break;
             }
         }
     }
-
-
 
     return 0;
 }
 
 // ... Function definitions ...
 
-
 void print_ascii() {
     // Display ASCII art \\
-    
-const char* greenColor = "\x1B[32m";
-const char* resetColor = "\x1B[0m"; // Reset color to default
 
+    const char* greenColor = "\x1B[32m";
+    const char* resetColor = "\x1B[0m"; // Reset color to default
 
-
-
-std::cout << greenColor << R"( _____            ___  _____  _____     ___  __   __   ___   _____  _____     __   __   ___  __   __  _   _  _____  _____  ____         ____                 
+    std::cout << greenColor << R"( _____            ___  _____  _____     ___  __   __   ___   _____  _____     __   __   ___  __   __  _   _  _____  _____  ____         ____
 |  ___)    /\    (   )(_   _)|  ___)   (   )|  \ /  | / _ \ |  ___)|  ___)   |  \ /  | / _ \(_ \ / _)| \ | |(_   _)|  ___)|  _ \       (___ \     _      _   
 | |_      /  \    | |   | |  | |_       | | |   v   || |_| || |    | |_      |   v   || | | | \ v /  |  \| |  | |  | |_   | |_) )  _  __ __) )  _| |_  _| |_ 
 |  _)    / /\ \   | |   | |  |  _)      | | | |\_/| ||  _  || |    |  _)     | |\_/| || | | |  | |   |     |  | |  |  _)  |  __/  | |/ // __/  (_   _)(_   _)
@@ -303,10 +286,7 @@ bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles) 
     return true;
 }
 
-
-
 //	MOUNT STUFF	\\
-
 
 bool directoryExists(const std::string& path) {
     return fs::is_directory(path);
@@ -341,9 +321,8 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
         std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint);
         if (system(mountCommand.c_str()) != 0) {
             std::perror("\033[31mFailed to mount ISO file\033[0m");
-	
-		
-	// Cleanup the mount point directory
+
+            // Cleanup the mount point directory
             std::string cleanupCommand = "sudo rmdir " + shell_escape(mountPoint);
             if (system(cleanupCommand.c_str()) != 0) {
                 std::perror("\033[33mFailed to clean up mount point directory\033[0m");
@@ -505,7 +484,6 @@ void select_and_mount_files_by_number() {
     }
 }
 
-
 bool iequals(const std::string& a, const std::string& b) {
     if (a.size() != b.size()) {
         return false;
@@ -533,8 +511,6 @@ bool iequals(const std::string& a, const std::string& b) {
 
     return equal;
 }
-
-
 
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mtx) {
     try {
@@ -613,7 +589,6 @@ void refreshCache() {
 
 // UMOUNT FUNCTIONS	\\
 
-
 void listMountedISOs() {
     const std::string isoPath = "/mnt";
     std::vector<std::string> isoDirs;
@@ -645,7 +620,6 @@ void listMountedISOs() {
         std::cout << "\033[31mNO ISOS MOUNTED.\n\033[0m";
     }
 }
-
 
 void unmountISO(const std::string& isoDir) {
     // Unmount the ISO and suppress logs
@@ -679,7 +653,7 @@ void unmountISOs() {
 
     while (true) {
         std::vector<std::string> isoDirs;
-	
+
         // Find and store directories with the name "iso_*" in /mnt
         DIR* dir;
         struct dirent* entry;
@@ -694,7 +668,7 @@ void unmountISOs() {
         } else {
             std::cerr << "Error opening the /mnt directory." << std::endl;
         }
-	
+
         if (isoDirs.empty()) {
             std::cout << "\033[33mLIST IS EMPTY, NOTHING TO DO.\n\033[0m";
             return;
@@ -704,7 +678,7 @@ void unmountISOs() {
         std::cout << "\033[94mEnter the range of ISOs to unmount (e.g., 1, 1-3, 1 to 3, or individual numbers like 1 2 3) or type enter to return:\033[0m ";
         std::string input;
         std::getline(std::cin, input);
-	std::system("clear");
+        std::system("clear");
         if (input == "") {
             std::cout << "Exiting the unmounting tool." << std::endl;
             break;  // Exit the loop
@@ -772,7 +746,6 @@ void unmountISOs() {
         listMountedISOs(); // Display the updated list of mounted ISOs after unmounting
     }
 }
-
 
 void unmountAndCleanISO(const std::string& isoDir) {
     std::string unmountCommand = "sudo umount -l " + shell_escape(isoDir) + " 2>/dev/null";
@@ -844,11 +817,7 @@ void cleanAndUnmountAllISOs() {
     std::cout << "\033[32mALL ISOS CLEANED\n\033[0m" << std::endl;
 }
 
-
-
-
 // BIN/IMG CONVERSION FUNCTIONS	\\
-
 
 // Function to list and prompt the user to choose a file for conversion
 std::string chooseFileToConvert(const std::vector<std::string>& files) {
@@ -869,7 +838,6 @@ std::string chooseFileToConvert(const std::vector<std::string>& files) {
     }
 }
 
-
 std::vector<std::string> findBinImgFiles(const std::string& directory) {
     std::vector<std::string> fileNames;
 
@@ -881,7 +849,9 @@ std::vector<std::string> findBinImgFiles(const std::string& directory) {
         for (const auto& entry : std::filesystem::recursive_directory_iterator(directory)) {
             if (entry.is_regular_file()) {
                 std::string ext = entry.path().extension();
-                std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); }); // Convert extension to lowercase
+                std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) {
+                    return std::tolower(c);
+                }); // Convert extension to lowercase
 
                 if ((ext == ".bin" || ext == ".img") && (entry.path().filename().string().find("data") == std::string::npos) && (entry.path().filename().string() != "terrain.bin") && (entry.path().filename().string() != "blocklist.bin")) {
                     if (std::filesystem::file_size(entry) >= 10'000'000) {
@@ -889,7 +859,9 @@ std::vector<std::string> findBinImgFiles(const std::string& directory) {
                         while (futures.size() >= maxThreads) {
                             // Wait for at least one thread to complete
                             auto it = std::find_if(futures.begin(), futures.end(),
-                                [](const std::future<void>& f) { return f.wait_for(std::chrono::seconds(0)) == std::future_status::ready; });
+                            [](const std::future<void>& f) {
+                                return f.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+                            });
                             if (it != futures.end()) {
                                 it->get();
                                 futures.erase(it);
@@ -922,7 +894,6 @@ std::vector<std::string> findBinImgFiles(const std::string& directory) {
     return fileNames;
 }
 
-
 bool isCcd2IsoInstalled() {
     if (std::system("which ccd2iso > /dev/null 2>&1") == 0) {
         return true;
@@ -930,7 +901,6 @@ bool isCcd2IsoInstalled() {
         return false;
     }
 }
-
 
 void convertBINToISO(const std::string& inputPath) {
     // Check if the input file exists
@@ -969,7 +939,7 @@ void convertBINsToISOs(const std::vector<std::string>& inputPaths, int numThread
 
     for (const std::string& inputPath : inputPaths) {
         if (inputPath == "") {
-            break; // 
+            break; //
         } else {
             // Construct the shell-escaped input path
             std::string escapedInputPath = shell_escape(inputPath);
@@ -992,10 +962,8 @@ void convertBINsToISOs(const std::vector<std::string>& inputPaths, int numThread
     }
 }
 
-
-
 void processFilesInRange(int start, int end) {
-        int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4; // Determine the number of threads based on CPU cores
+    int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4; // Determine the number of threads based on CPU cores
     std::vector<std::string> selectedFiles;
     for (int i = start; i <= end; i++) {
         selectedFiles.push_back(binImgFiles[i - 1]);
@@ -1080,8 +1048,6 @@ void select_and_convert_files_to_iso() {
     }
 }
 
-
-
 // MDF/MDS CONVERSION FUNCTIONS	\\
 
 std::vector<std::string> findMdsMdfFiles(const std::string& directory) {
@@ -1095,36 +1061,40 @@ std::vector<std::string> findMdsMdfFiles(const std::string& directory) {
         for (const auto& entry : fs::recursive_directory_iterator(directory)) {
             if (entry.is_regular_file()) {
                 std::string ext = entry.path().extension();
-                std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); }); // Convert extension to lowercase
+                std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) {
+                    return std::tolower(c);
+                }); // Convert extension to lowercase
 
                 if (ext == ".mds" || ext == ".mdf") {
-					if (std::filesystem::file_size(entry) >= 10'000'000) {
-                    // Ensure the number of active threads doesn't exceed maxThreads
-                    while (futures.size() >= maxThreads) {
-                        // Wait for at least one thread to complete
-                        auto it = std::find_if(futures.begin(), futures.end(),
-                            [](const std::future<void>& f) { return f.wait_for(std::chrono::seconds(0)) == std::future_status::ready; });
-                        if (it != futures.end()) {
-                            it->get();
-                            futures.erase(it);
+                    if (std::filesystem::file_size(entry) >= 10'000'000) {
+                        // Ensure the number of active threads doesn't exceed maxThreads
+                        while (futures.size() >= maxThreads) {
+                            // Wait for at least one thread to complete
+                            auto it = std::find_if(futures.begin(), futures.end(),
+                            [](const std::future<void>& f) {
+                                return f.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+                            });
+                            if (it != futures.end()) {
+                                it->get();
+                                futures.erase(it);
+                            }
                         }
+
+                        // Create a task to process the file
+                        futures.push_back(std::async(std::launch::async, [entry, &fileNames, &mutex] {
+                            std::string fileName = entry.path().string();
+
+                            // Lock the mutex before modifying the shared data
+                            std::lock_guard<std::mutex> lock(mutex);
+
+                            // Add the file name to the shared vector
+                            fileNames.push_back(fileName);
+                        }));
                     }
+                }
 
-                    // Create a task to process the file
-                    futures.push_back(std::async(std::launch::async, [entry, &fileNames, &mutex] {
-                        std::string fileName = entry.path().string();
-
-                        // Lock the mutex before modifying the shared data
-                        std::lock_guard<std::mutex> lock(mutex);
-
-                        // Add the file name to the shared vector
-                        fileNames.push_back(fileName);
-                    }));
-				  }
-			   }  
-             
+            }
         }
-	}
         // Wait for the remaining tasks to complete
         for (auto& future : futures) {
             future.get();
@@ -1227,7 +1197,7 @@ void convertMDFsToISOs(const std::vector<std::string>& inputPaths, int numThread
 }
 
 void processMDFFilesInRange(int start, int end) {
-	int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4; // Determine the number of threads based on CPU cores
+    int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4; // Determine the number of threads based on CPU cores
     std::vector<std::string> selectedFiles;
     for (int i = start; i <= end; i++) {
         std::string FilePath = (mdfImgFiles[i - 1]);
@@ -1235,7 +1205,6 @@ void processMDFFilesInRange(int start, int end) {
     }
     convertMDFsToISOs(selectedFiles, numThreads);
 }
-
 
 void select_and_convert_files_to_iso_mdf() {
     int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4;
@@ -1266,9 +1235,9 @@ void select_and_convert_files_to_iso_mdf() {
         std::getline(std::cin, input);
 
         if (input.empty()) {
-                std::cout << "Exiting..." << std::endl;
-                break;
-            }
+            std::cout << "Exiting..." << std::endl;
+            break;
+        }
 
         // Parse the user input to extract file numbers
         std::vector<int> selectedFileIndices;
@@ -1306,7 +1275,6 @@ void select_and_convert_files_to_iso_mdf() {
         }
     }
 }
-
 
 void processMdfMdsFilesInRange(const std::vector<std::string>& mdfMdsFiles, int start, int end) {
     int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4; // Determine the number of threads based on CPU cores
