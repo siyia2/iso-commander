@@ -29,6 +29,48 @@ const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.cache";
 const std::string cacheFileName = "iso_cache.txt";;
 const uintmax_t maxCacheSize = 50 * 1024 * 1024; // 50MB
 
+
+// Function to check if a file or directory exists
+bool fileExists(const std::string& path) {
+    struct stat buffer;
+    return (stat(path.c_str(), &buffer) == 0);
+}
+
+// Function to remove non-existent paths from the cache
+void removeNonExistentPathsFromCache() {
+    std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/iso_cache.txt";
+    std::vector<std::string> cache;
+    std::ifstream cacheFile(cacheFilePath);
+    std::string line;
+
+    if (!cacheFile) {
+        std::cerr << "Error: Unable to open cache file." << std::endl;
+        return;
+    }
+
+    while (std::getline(cacheFile, line)) {
+        if (fileExists(line)) {
+            cache.push_back(line);
+        }
+    }
+
+    cacheFile.close();
+
+    std::ofstream updatedCacheFile(cacheFilePath);
+
+    if (!updatedCacheFile) {
+        std::cerr << "Error: Unable to open cache file for writing." << std::endl;
+        return;
+    }
+
+    for (const std::string& path : cache) {
+        updatedCacheFile << path << std::endl;
+    }
+
+    updatedCacheFile.close();
+}
+
+
 //	SANITISATION AND STRING STUFF	//
 
 std::string shell_escape(const std::string& s) {
@@ -192,6 +234,7 @@ int main() {
                 }
                 break;
             case '5':
+				removeNonExistentPathsFromCache();
                 manualRefreshCache();
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 std::system("clear");
@@ -441,7 +484,7 @@ bool fileExistsOnDisk(const std::string& filename) {
 
 void select_and_mount_files_by_number() {
     std::vector<std::string> isoFiles = loadCache();
-
+	
     if (isoFiles.empty()) {
 		std::system("clear");
         std::cout << "\033[33mCache is empty. Please refresh the cache from the main menu.\033[0m" << std::endl;
@@ -487,7 +530,12 @@ void select_and_mount_files_by_number() {
                         mountISO({iso});
                         mountedSet.insert(iso);
                     } else {
+						// Clear the existing cache
+						isoFiles.clear();
+						parallelTraverse(directoryPath, isoFiles, mtx);
+						saveCache(isoFiles);
                         std::cout << "\033[33mISO file '" << iso << "' does not exist on disk. Please refresh the cache from the main menu.\033[0m" << std::endl;
+                        
                     }
                 } else {
                     std::cout << "\033[33mISO file '" << iso << "' is already mounted.\033[0m" << std::endl;
