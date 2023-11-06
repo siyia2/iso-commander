@@ -546,7 +546,7 @@ void select_and_mount_files_by_number() {
             std::cout << "\033[33mNo more unmounted .iso files in the cache. Please refresh the cache from the main menu.\033[0m" << std::endl;
             break;
         }
-
+		std::system("clear");
         std::cout << "\033[33m! IF EXPECTED ISO FILE IS NOT ON THE LIST, UPDATE CACHE FROM MAIN MENU !\n\033[0m" << std::endl;
         for (int i = 0; i < isoFiles.size(); i++) {
             std::cout << i + 1 << ". " << isoFiles[i] << std::endl;
