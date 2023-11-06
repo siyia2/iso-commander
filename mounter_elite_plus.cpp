@@ -359,9 +359,8 @@ void mountISO(const std::vector<std::string>& isoFiles) {
             threads.clear();
         }
 
-        // Shell-escape the ISO file path before mounting
-        std::string escapedIsoFile = (isoFile);
-        threads.emplace_back(mountIsoFile, escapedIsoFile, std::ref(mountedIsos));
+        std::string IsoFile = (isoFile);
+        threads.emplace_back(mountIsoFile, IsoFile, std::ref(mountedIsos));
     }
 
     // Join any remaining threads
@@ -556,38 +555,23 @@ void manualRefreshCache() {
         std::cout << "Cache refresh canceled." << std::endl;
         return;
     }
+std::istringstream iss(inputLine);
+std::string path;
+std::vector<std::string> allIsoFiles; // Create a vector to combine results
 
-    std::istringstream iss(inputLine);
-    std::string path;
-    std::vector<std::string> allIsoFiles; // Create a vector to combine results
+while (iss >> path) {
+    std::cout << "Processing directory path: " << path << std::endl;
+    std::vector<std::string> newIsoFiles;
+    parallelTraverse(path, newIsoFiles, mtx);
+    allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end()); // Combine vectors
+    std::cout << "Cache refreshed for directory: " << path << std::endl;
+}
 
-    const int maxThreads = 4; // Limit to 4 threads
-
-    std::vector<std::thread> threads;
-    threads.reserve(maxThreads);
-
-    while (iss >> path) {
-        // If we have reached the maximum number of threads, wait for one to finish
-        if (threads.size() >= maxThreads) {
-            std::for_each(threads.begin(), threads.end(), [](std::thread& t) {
-                t.join();
-            });
-            threads.clear();
-        }
-
-        // Create a new thread for each directory path
-        threads.emplace_back(processPath, path, std::ref(allIsoFiles));
-    }
-
-    // Join any remaining threads
-    std::for_each(threads.begin(), threads.end(), [](std::thread& t) {
-        t.join();
-    });
-
-    // Now, save the combined cache
-    saveCache(allIsoFiles);
+	// Now, save the combined cache
+	saveCache(allIsoFiles);
     std::cout << "Cache refreshed successfully." << std::endl;
 }
+
 
 void refreshCache() {
     std::vector<std::string> newIsoFiles;
