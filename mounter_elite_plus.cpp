@@ -443,10 +443,12 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
         }
 
         // Mount the ISO file to the mount point
-        std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
+        std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " 1> /dev/null ";
         if (system(mountCommand.c_str()) != 0) {
             std::perror("\033[31mFailed to mount ISO file\033[0m");
-            std::system("clear");
+            std::cout << "Press Enter to continue...";
+			std::cin.get(); // Wait for the user to press Enter
+			std::system("clear");
 
             // Cleanup the mount point directory
             std::string cleanupCommand = "sudo rmdir " + shell_escape(mountPoint);
@@ -454,8 +456,8 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
                 std::perror("\033[33mFailed to clean up mount point directory\033[0m");
             }
 
-            std::cout << "Press Enter to continue...";
-            std::cin.get(); // Wait for the user to press Enter
+            //std::cout << "Press Enter to continue...";
+            //std::cin.get(); // Wait for the user to press Enter
             return;
         } else {
             //std::cout << "\033[32mISO file '" << isoFile << "' mounted at '" << mountPoint << "'.\033[0m" << std::endl;
@@ -503,14 +505,31 @@ bool fileExistsOnDisk(const std::string& filename) {
     return file.good();
 }
 
+bool ends_with_iso(const std::string& str) {
+    // Convert the string to lowercase for a case-insensitive comparison
+    std::string lowercase = str;
+    std::transform(lowercase.begin(), lowercase.end(), lowercase.begin(), ::tolower);
+    return lowercase.size() >= 4 && lowercase.compare(lowercase.size() - 4, 4, ".iso") == 0;
+}
+
 void select_and_mount_files_by_number() {
     std::vector<std::string> isoFiles = loadCache();
-	
+
     if (isoFiles.empty()) {
-		std::system("clear");
+        std::system("clear");
         std::cout << "\033[33mCache is empty. Please refresh the cache from the main menu.\033[0m" << std::endl;
         std::cout << "Press Enter to continue...";
         std::cin.get(); // Wait for the user to press Enter
+        return;
+    }
+
+    // Filter isoFiles to include entries with ".iso" or ".ISO" extensions
+    isoFiles.erase(std::remove_if(isoFiles.begin(), isoFiles.end(), [](const std::string& iso) {
+        return !ends_with_iso(iso);
+    }), isoFiles.end());
+
+    if (isoFiles.empty()) {
+        std::cout << "\033[33mNo more unmounted .iso files in the cache. Please refresh the cache from the main menu.\033[0m" << std::endl;
         return;
     }
 
@@ -527,7 +546,8 @@ void select_and_mount_files_by_number() {
             std::cout << "\033[33mNo more unmounted .iso files in the cache. Please refresh the cache from the main menu.\033[0m" << std::endl;
             break;
         }
-		std::cout << "\033[33m! IF EXPECTED ISO FILE IS NOT ON THE LIST, UPDATE CACHE FROM MAIN MENU !\n\033[0m"<< std::endl;
+
+        std::cout << "\033[33m! IF EXPECTED ISO FILE IS NOT ON THE LIST, UPDATE CACHE FROM MAIN MENU !\n\033[0m" << std::endl;
         for (int i = 0; i < isoFiles.size(); i++) {
             std::cout << i + 1 << ". " << isoFiles[i] << std::endl;
         }
@@ -715,7 +735,9 @@ void listMountedISOs() {
         for (size_t i = 0; i < isoDirs.size(); ++i) {
             std::cout << i + 1 << ". \033[1m\033[35m" << isoDirs[i] << "\033[0m" << std::endl; // Bold and magenta
         }
-    }
+    } else {
+        std::cerr << "\033[31mNO ISOS MOUNTED\n\033[0m" << std::endl;
+ }
 }
 
 void unmountISO(const std::string& isoDir) {
