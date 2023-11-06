@@ -27,7 +27,7 @@ Added Features:
 * Clean codebase, just in case someone decides to contribute in the future.
 
 Compilation requires the readline library insatlled from your distro. 
-Once requirements are met just run`g++ -o "whatever_name_you_want" -O2 mounter_elite_plus.cpp -lreadline -fopenmp`.
+Once requirements are met just run`g++ -o -O2 mounter_elite_plus.cpp -lreadline -fopenmp "whatever_name_you_want"`.
 Make it executable and it can run from anywhere.
 
 You can also download the binaries from my releases, or if you are on arch or on an archbased distro you can install with `yay -S mounter-elite-plus`.
