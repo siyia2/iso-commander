@@ -8,7 +8,7 @@ https://github.com/siyia2/mounter_elite
 
 
 
-Simple secure and blazing fast terminal image mounter/converter written in C++, it allows mounting ISOs and/or converting BIN&IMG&MDS&MDF files to ISO. Supports Tab completion on disk cache generation, a curtesy of readline the library. 
+Simple secure and blazing fast terminal image mounter/converter written in C++, it allows mounting ISOs and/or converting BIN&IMG&MDF files to ISO. Supports Tab completion on disk cache generation, a curtesy of readline the library. 
 You can add multiple mounts and/or conversion paths. All paths are mounted under /mnt/iso_* format and all conversions take place at their local source directories, script requires ROOT access to mount&unmount ISOs. 
 It is recommended that directories that are to be searched should have permissions of `755` and upwards for better list generation, but if not, you can always run it as ROOT from the beginning if need be.
 
