@@ -720,7 +720,7 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
             }
 
             // Check the batch size and acquire the lock to merge
-            if (batchIsoFiles.size() >= 5) {  // Tweak the batch size as needed
+            if (batchIsoFiles.size() >= 2) {  // Tweak the batch size as needed
                 std::lock_guard<std::mutex> lock(mtx);
                 isoFiles.insert(isoFiles.end(), batchIsoFiles.begin(), batchIsoFiles.end());
                 batchIsoFiles.clear();
@@ -1019,7 +1019,7 @@ std::vector<std::string> findBinImgFiles(const std::string& directory) {
         std::vector<std::future<void>> futures;
         std::mutex mutex;
         const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 8;
-        const int batchSize = 5; // Tweak the batch size as needed
+        const int batchSize = 2; // Tweak the batch size as needed
 
         for (const auto& entry : std::filesystem::recursive_directory_iterator(directory)) {
             if (entry.is_regular_file()) {
@@ -1238,7 +1238,7 @@ std::vector<std::string> findMdsMdfFiles(const std::string& directory) {
         std::vector<std::future<void>> futures;
         std::mutex mutex;
         const int maxThreads = 8;
-        const int batchSize = 5; // Tweak the batch size as needed
+        const int batchSize = 2; // Tweak the batch size as needed
 
         for (const auto& entry : std::filesystem::recursive_directory_iterator(directory)) {
             if (entry.is_regular_file()) {
