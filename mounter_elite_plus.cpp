@@ -144,11 +144,12 @@ int main() {
         std::string choice(input);
         free(input);
 
-        if (choice == "1") {
+        if (choice == "1") { 
             std::system("clear");
             select_and_mount_files_by_number();
             std::system("clear");
         } else {
+			if (choice.length() == 1){
             switch (choice[0]) {
             case '2':
                 std::system("clear");
@@ -165,6 +166,7 @@ int main() {
                 break;
             case '4':
                 while (!returnToMainMenu) {
+					
                     std::cout << "1. Convert to ISO (BIN2ISO)" << std::endl;
                     std::cout << "2. Convert to ISO (MDF2ISO)" << std::endl;
                     std::cout << "3. Back to Main Menu" << std::endl;
@@ -174,11 +176,12 @@ int main() {
                     if (!submenu_input) {
                         break; // Exit the submenu if readline returns NULL
                     }
-
+					
                     std::string submenu_choice(submenu_input);
                     free(submenu_input);
-
-                    switch (submenu_choice[0]) {
+					if (submenu_choice.length() == 1){
+                    switch (submenu_choice[0]) {		
+				 // Check if the input length is exactly 1
                     case '1':
                         std::system("clear");
                         select_and_convert_files_to_iso();
@@ -191,8 +194,7 @@ int main() {
                         returnToMainMenu = true;  // Set the flag to return to the main menu
                         break; // Go back to the main menu
                     default:
-                        std::cout << "\033[31mInvalid choice. Please enter 1, 2, or 3.\033[0m" << std::endl;
-                        break;
+                        break;}
                     }
                 }
                 break;
@@ -214,12 +216,11 @@ int main() {
                 std::cout << "Exiting the program..." << std::endl;
                 break;
             default:
-                std::cout << "\033[31mInvalid choice. Please enter 1, 2, 3, 4, 5, or 6.\033[0m" << std::endl;
                 break;
             }
         }
     }
-
+}
     return 0;
 }
 
