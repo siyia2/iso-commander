@@ -29,7 +29,7 @@
 
 const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.cache"; // Construct the full path to the cache directory
 const std::string cacheFileName = "iso_cache.txt";;
-const uintmax_t maxCacheSize = 50 * 1024 * 1024; // 50MB
+const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles here
 std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
 
@@ -359,12 +359,19 @@ void saveCache(const std::vector<std::string>& isoFiles) {
 
 // Check if all selected files are still present on disk
 bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles) {
-    for (const std::string& file : selectedFiles) {
-        if (!std::filesystem::exists(file)) {
-            return false;
+    bool allExist = true;
+
+    #pragma omp parallel for shared(allExist) num_threads(4)
+    for (int i = 0; i < selectedFiles.size(); ++i) {
+        if (!std::filesystem::exists(selectedFiles[i])) {
+            #pragma omp critical
+            {
+                allExist = false;
+            }
         }
     }
-    return true;
+
+    return allExist;
 }
 
 // Function to refresh the cache for a single directory
@@ -416,7 +423,23 @@ void manualRefreshCache() {
 //	MOUNT STUFF	\\
 
 bool directoryExists(const std::string& path) {
-    return fs::is_directory(path);
+    return std::filesystem::is_directory(path);
+}
+
+bool allDirectoriesExistOnDisk(const std::vector<std::string>& directories) {
+    bool allExist = true;
+
+    #pragma omp parallel for shared(allExist) num_threads(4)
+    for (int i = 0; i < directories.size(); ++i) {
+        if (!directoryExists(directories[i])) {
+            #pragma omp critical
+            {
+                allExist = false;
+            }
+        }
+    }
+
+    return allExist;
 }
 
 void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>& mountedIsos) {
@@ -512,6 +535,22 @@ bool ends_with_iso(const std::string& str) {
     std::string lowercase = str;
     std::transform(lowercase.begin(), lowercase.end(), lowercase.begin(), ::tolower);
     return lowercase.size() >= 4 && lowercase.compare(lowercase.size() - 4, 4, ".iso") == 0;
+}
+
+bool allFilesExistAndAreIso(const std::vector<std::string>& files) {
+    bool allExistAndIso = true;
+
+    #pragma omp parallel for shared(allExistAndIso) num_threads(4)
+    for (int i = 0; i < files.size(); ++i) {
+        if (!fileExistsOnDisk(files[i]) || !ends_with_iso(files[i])) {
+            #pragma omp critical
+            {
+                allExistAndIso = false;
+            }
+        }
+    }
+
+    return allExistAndIso;
 }
 
 void select_and_mount_files_by_number() {
@@ -922,7 +961,7 @@ void cleanAndUnmountAllISOs() {
     }
 
     if (isoDirs.empty()) {
-        std::cout << "\033[33mNO ISOS LEFT TO BE CLEANED\n\033[0m" << std::endl;
+        std::cout << "\033[33mNO ISOS TO UNMOUNT\n\033[0m" << std::endl;
         return;
     }
 
