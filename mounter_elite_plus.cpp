@@ -471,9 +471,10 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
         }
 
         // Mount the ISO file to the mount point
-        std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " 1> /dev/null";
-        if (system(mountCommand.c_str()) != 0) {
-            std::perror("\033[31mFailed to mount ISO file\033[0m");
+        std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
+        int mountResult = system(mountCommand.c_str());
+			if (mountResult != 0) {
+				std::cerr << "\033[31mFailed to mount:\033[0m " << isoFile << std::endl;
            
 
             // Cleanup the mount point directory
