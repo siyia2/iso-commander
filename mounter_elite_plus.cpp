@@ -331,7 +331,7 @@ std::vector<std::string> loadCache() {
     return isoFiles;
 }
 // Save cache
-void saveCache(const std::vector<std::string>& isoFiles) {
+void saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize) {
     std::filesystem::path cachePath = cacheDirectory;
     cachePath /= cacheFileName;
 
@@ -343,6 +343,11 @@ void saveCache(const std::vector<std::string>& isoFiles) {
         if (std::find(existingCache.begin(), existingCache.end(), iso) == existingCache.end()) {
             existingCache.push_back(iso);
         }
+    }
+
+    // Limit the cache size to the maximum allowed size
+    while (existingCache.size() > maxCacheSize) {
+        existingCache.erase(existingCache.begin());
     }
 
     // Open the cache file in write mode (truncating it)
@@ -416,7 +421,7 @@ void manualRefreshCache() {
     }
 
     // Now, save the combined cache
-    saveCache(allIsoFiles);
+    saveCache(allIsoFiles, maxCacheSize);
     std::cout << "Cache refreshed successfully." << std::endl;
 }
 
