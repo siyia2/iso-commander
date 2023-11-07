@@ -28,7 +28,7 @@ Added Features:
 * Added support for MDF conversion to ISO by utilizing mdf2iso.
 * Clean codebase, just in case someone decides to contribute in the future.
 
-Tested the program on my rig with `mounting` at the same time `125 ISOS` and then `unmounting` them, did this a couple of times and it didn't even break a sweat Rock Solid. :)
+Tested the program on my rig: `mounting` at the same time `125 ISOS` and then `unmounting` them, did this a couple of times and it didn't even break a sweat, Rock Solid!!! :)
 
 Compilation requires the readline library installed from your distro. 
 Once requirements are met just run`g++ -O2 mounter_elite_plus.cpp -lreadline -fopenmp -o "whatever_name"`.
