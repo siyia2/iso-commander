@@ -199,6 +199,7 @@ int main() {
             case '5':
 				removeNonExistentPathsFromCacheWithOpenMP();
                 manualRefreshCache();
+                std::cout << "Press Enter to continue...";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 std::system("clear");
                 break;
@@ -904,7 +905,7 @@ void cleanAndUnmountISO(const std::string& isoDir) {
 
 void cleanAndUnmountAllISOs() {
     std::cout << "\n";
-    std::cout << "Clean and Unmount All ISOs function." << std::endl;
+    std::cout << "Unmount All ISOs function." << std::endl;
     const std::string isoPath = "/mnt";
     std::vector<std::string> isoDirs;
 
