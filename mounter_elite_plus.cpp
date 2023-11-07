@@ -110,6 +110,7 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 void manualRefreshCache();
 void removeNonExistentPathsFromCacheWithOpenMP();
 void displayErrorMessage(const std::string& iso);
+void printAlreadyMountedMessage(const std::string& iso);
 
 std::string directoryPath;					// Declare directoryPath here
 
@@ -154,8 +155,6 @@ int main() {
             case '2':
                 std::system("clear");
                 unmountISOs();
-                std::cout << "Press Enter to continue...";
-                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 std::system("clear");
                 break;
             case '3':
@@ -261,7 +260,7 @@ void removeNonExistentPathsFromCacheWithOpenMP() {
     std::string line;
 
     if (!cacheFile) {
-        std::cerr << "Error: Unable to open cache file." << std::endl;
+        std::cerr << "\033[31mError: Unable to open cache file, will attempt to recreate it.\033[0m" << std::endl;
         return;
     }
 
@@ -271,8 +270,8 @@ void removeNonExistentPathsFromCacheWithOpenMP() {
 
     cacheFile.close();
 
-    // Set the number of threads to a maximum of 4
-    omp_set_num_threads(4);
+    // Set the number of threads to a maximum of 8
+    omp_set_num_threads(8);
 
     std::vector<std::string> retainedPaths;
 
@@ -287,7 +286,7 @@ void removeNonExistentPathsFromCacheWithOpenMP() {
     std::ofstream updatedCacheFile(cacheFilePath);
 
     if (!updatedCacheFile) {
-        std::cerr << "Error: Unable to open cache file for writing." << std::endl;
+        std::cerr << "\033[31mError: Unable to open cache file for writing, check permissions\033[0m." << std::endl;
         return;
     }
 
@@ -367,7 +366,7 @@ void saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
 bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles) {
     bool allExist = true;
 
-    #pragma omp parallel for shared(allExist) num_threads(4)
+    #pragma omp parallel for shared(allExist) num_threads(8)
     for (int i = 0; i < selectedFiles.size(); ++i) {
         if (!std::filesystem::exists(selectedFiles[i])) {
             #pragma omp critical
@@ -435,7 +434,7 @@ bool directoryExists(const std::string& path) {
 bool allDirectoriesExistOnDisk(const std::vector<std::string>& directories) {
     bool allExist = true;
 
-    #pragma omp parallel for shared(allExist) num_threads(4)
+    #pragma omp parallel for shared(allExist) num_threads(8)
     for (int i = 0; i < directories.size(); ++i) {
         if (!directoryExists(directories[i])) {
             #pragma omp critical
@@ -453,8 +452,6 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
     std::lock_guard<std::mutex> lock(mountMutex); // Lock to protect access to mountedIsos
     if (mountedIsos.find(isoFile) != mountedIsos.end()) {
         std::cout << "\e[1;31mALREADY MOUNTED\e[0m: ISO file '" << isoFile << "' is already mounted at '" << mountedIsos[isoFile] << "'.\033[0m" << std::endl;
-        std::cout << "Press Enter to continue...";
-        std::cin.get(); // Wait for the user to press Enter
         return;
     }
 
@@ -469,30 +466,30 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
         // Create the mount point directory
         std::string mkdirCommand = "sudo mkdir " + shell_escape(mountPoint);
         if (system(mkdirCommand.c_str()) != 0) {
-            std::perror("\033[33mFailed to create mount point directory\033[0m");
+            std::perror("\033[31mFailed to create mount point directory\033[0m");
             return;
         }
 
         // Mount the ISO file to the mount point
-        std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " 1> /dev/null";
-        if (system(mountCommand.c_str()) != 0) {
-            std::perror("\033[31mFailed to mount ISO file\033[0m");
-            std::cout << "Press Enter to continue...";
-			std::cin.get(); // Wait for the user to press Enter
-			std::system("clear");
+        std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
+        int mountResult = system(mountCommand.c_str());
+			if (mountResult == 0) {
+				std::cout << "\033[32mMounted at: " << mountPoint << "\033[0m" << std::endl;}
+			if (mountResult != 0) {
+				std::cerr << "\033[31mFailed to mount: " << isoFile << std::endl;
+           
 
             // Cleanup the mount point directory
             std::string cleanupCommand = "sudo rmdir " + shell_escape(mountPoint);
             if (system(cleanupCommand.c_str()) != 0) {
-                std::perror("\033[33mFailed to clean up mount point directory\033[0m");
+                std::perror("\033[31mFailed to clean up mount point directory\033[0m");
             }
 
-            //std::cout << "Press Enter to continue...";
-            //std::cin.get(); // Wait for the user to press Enter
+            
             return;
         } else {
             //std::cout << "\033[32mISO file '" << isoFile << "' mounted at '" << mountPoint << "'.\033[0m" << std::endl;
-            // Store the mount point in the map
+             //Store the mount point in the map
             mountedIsos[isoFile] = mountPoint;
             
         }
@@ -500,10 +497,9 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
         // The mount point directory already exists, so the ISO is considered mounted
         std::cout << "\033[33mISO file '" << isoFile << "' is already mounted at '" << mountPoint << "'.\033[m" << std::endl;
         mountedIsos[isoFile] = mountPoint;
-        std::cout << "Press Enter to continue...";
-        std::cin.get(); // Wait for the user to press Enter
-        std::system("clear");
+        
     }
+    
 }
 
 void mountISO(const std::vector<std::string>& isoFiles) {
@@ -513,7 +509,7 @@ void mountISO(const std::vector<std::string>& isoFiles) {
 
     for (const std::string& isoFile : isoFiles) {
         // Limit the number of threads to a maximum of 4
-        if (threads.size() >= 4) {
+        if (threads.size() >= 8) {
             for (auto& thread : threads) {
                 thread.join();
             }
@@ -546,7 +542,7 @@ bool ends_with_iso(const std::string& str) {
 bool allFilesExistAndAreIso(const std::vector<std::string>& files) {
     bool allExistAndIso = true;
 
-    #pragma omp parallel for shared(allExistAndIso) num_threads(4)
+    #pragma omp parallel for shared(allExistAndIso) num_threads(8)
     for (int i = 0; i < files.size(); ++i) {
         if (!fileExistsOnDisk(files[i]) || !ends_with_iso(files[i])) {
             #pragma omp critical
@@ -566,7 +562,7 @@ void select_and_mount_files_by_number() {
         std::system("clear");
         std::cout << "\033[33mCache is empty. Please refresh the cache from the main menu.\033[0m" << std::endl;
         std::cout << "Press Enter to continue...";
-        std::cin.get(); // Wait for the user to press Enter
+        std::cin.get();
         return;
     }
 
@@ -580,28 +576,18 @@ void select_and_mount_files_by_number() {
         return;
     }
 
-    std::vector<std::string> mountedISOs;
-    std::unordered_set<std::string> mountedSet(mountedISOs.begin(), mountedISOs.end());
+    std::unordered_set<std::string> mountedSet;
 
     while (true) {
-        // Remove already mounted files from the selection list
-        isoFiles.erase(std::remove_if(isoFiles.begin(), isoFiles.end(), [&mountedSet](const std::string& iso) {
-            return mountedSet.find(iso) != mountedSet.end();
-        }), isoFiles.end());
-
-        if (isoFiles.empty()) {
-            std::cout << "\033[33mNo more unmounted .iso files in the cache. Please refresh the cache from the main menu.\033[0m" << std::endl;
-            break;
-        }
-
         std::system("clear");
         std::cout << "\033[33m! IF EXPECTED ISO FILE IS NOT ON THE LIST, REFRESH CACHE FROM MAIN MENU !\n\033[0m" << std::endl;
+
         for (int i = 0; i < isoFiles.size(); i++) {
             std::cout << i + 1 << ". " << isoFiles[i] << std::endl;
         }
 
         std::string input;
-        std::cout << "\033[94mChoose .iso files to mount (enter numbers 1 2 or ranges like '1-3', '00' to mount all, or press Enter to return):\033[0m ";
+        std::cout << "\033[94mChoose .iso files to mount (enter numbers, ranges like '1-3', '00' to mount all, or press Enter to return):\033[0m ";
         std::getline(std::cin, input);
         std::system("clear");
 
@@ -612,15 +598,14 @@ void select_and_mount_files_by_number() {
 
         if (input == "00") {
             for (const std::string& iso : isoFiles) {
-                if (mountedSet.find(iso) == mountedSet.end()) {
-                    if (fileExistsOnDisk(iso)) {
+                if (fileExistsOnDisk(iso)) {
+                    if (mountedSet.insert(iso).second) {
                         mountISO({iso});
-                        mountedSet.insert(iso);
                     } else {
-                        displayErrorMessage(iso);
+                        printAlreadyMountedMessage(iso);
                     }
                 } else {
-                    std::cout << "\033[33mISO file '" << iso << "' is already mounted.\033[0m" << std::endl;
+                    displayErrorMessage(iso);
                 }
             }
         } else {
@@ -629,7 +614,6 @@ void select_and_mount_files_by_number() {
 
             while (std::getline(iss, token, ' ')) {
                 if (token.find('-') != std::string::npos) {
-                    // Handle a range
                     size_t dashPos = token.find('-');
                     int startRange = std::stoi(token.substr(0, dashPos));
                     int endRange = std::stoi(token.substr(dashPos + 1));
@@ -638,17 +622,16 @@ void select_and_mount_files_by_number() {
                         int selectedNumber = i - 1;
 
                         if (selectedNumber >= 0 && selectedNumber < isoFiles.size()) {
-                            std::string selectedISO = isoFiles[selectedNumber];
+                            const std::string& selectedISO = isoFiles[selectedNumber];
 
-                            if (mountedSet.find(selectedISO) == mountedSet.end()) {
-                                if (fileExistsOnDisk(selectedISO)) {
+                            if (fileExistsOnDisk(selectedISO)) {
+                                if (mountedSet.insert(selectedISO).second) {
                                     mountISO({selectedISO});
-                                    mountedSet.insert(selectedISO);
                                 } else {
-                                    displayErrorMessage(selectedISO);
+                                    printAlreadyMountedMessage(selectedISO);
                                 }
                             } else {
-                                std::cout << "\033[33mISO file '" << selectedISO << "' is already mounted.\033[0m" << std::endl;
+                                displayErrorMessage(selectedISO);
                             }
                         } else {
                             std::cout << "\033[31mInvalid range: " << token << ". Please try again.\033[0m" << std::endl;
@@ -657,32 +640,35 @@ void select_and_mount_files_by_number() {
                 } else {
                     int selectedNumber = std::stoi(token);
                     if (selectedNumber >= 1 && selectedNumber <= isoFiles.size()) {
-                        std::string selectedISO = isoFiles[selectedNumber - 1];
+                        const std::string& selectedISO = isoFiles[selectedNumber - 1];
 
-                        if (mountedSet.find(selectedISO) == mountedSet.end()) {
-                            if (fileExistsOnDisk(selectedISO)) {
+                        if (fileExistsOnDisk(selectedISO)) {
+                            if (mountedSet.insert(selectedISO).second) {
                                 mountISO({selectedISO});
-                                mountedSet.insert(selectedISO);
                             } else {
-                                displayErrorMessage(selectedISO);
+                                printAlreadyMountedMessage(selectedISO);
                             }
                         } else {
-                            std::cout << "\033[33mISO file '" << selectedISO << "' is already mounted.\033[0m" << std::endl;
+                            displayErrorMessage(selectedISO);
                         }
                     } else {
                         std::cout << "\033[31mInvalid number: " << selectedNumber << ". Please try again.\033[0m" << std::endl;
                     }
                 }
-            }
+            std::cout << "Press Enter to continue...";
+    std::cin.get(); }
         }
     }
 }
 
+void printAlreadyMountedMessage(const std::string& iso) {
+    std::cout << "\033[33mISO file '" << iso << "' is already mounted.\033[0m" << std::endl;
+}
+
 void displayErrorMessage(const std::string& iso) {
-    std::system("clear");
-    std::cout << "\033[33mISO file '" << iso << "' does not exist on disk. Please refresh the cache from the main menu.\033[0m" << std::endl;
-    std::cout << "Press Enter to continue...";
-    std::cin.get(); // Wait for the user to press Enter
+    std::cout << "\033[35mISO file '" << iso << "' does not exist on disk. Please refresh the cache from the main menu.\033[0m" << std::endl;
+    //std::cout << "Press Enter to continue...";
+    //std::cin.get(); // Wait for the user to press Enter
 }
 
 bool iequals(const std::string& a, const std::string& b) {
@@ -692,8 +678,8 @@ bool iequals(const std::string& a, const std::string& b) {
 
     bool equal = true;
 
-    // Set the number of threads to a maximum of 4
-    omp_set_num_threads(4);
+    // Set the number of threads to a maximum of 8
+    omp_set_num_threads(8);
 
     #pragma omp parallel for
     for (int i = 0; i < a.size(); i++) {
@@ -836,6 +822,8 @@ void unmountISOs() {
 
         if (isoDirs.empty()) {
             std::cout << "\033[33mLIST IS EMPTY, NOTHING TO DO.\n\033[0m";
+            std::cout << "Press Enter to continue...";
+            std::cin.get(); // Wait for the user to press Enter
             return;
         }
 
@@ -845,7 +833,6 @@ void unmountISOs() {
         std::getline(std::cin, input);
         std::system("clear");
         if (input == "") {
-            std::cout << "Exiting the unmounting tool." << std::endl;
             break;  // Exit the loop
         }
 
@@ -926,10 +913,6 @@ void unmountAndCleanISO(const std::string& isoDir) {
     std::string unmountCommand = "sudo umount -l " + shell_escape(isoDir) + " 2>/dev/null";
     int result = std::system(unmountCommand.c_str());
 
-    // if (result != 0) {
-    //     std::cerr << "Failed to unmount " << isoDir << " with sudo." << std::endl;
-    // }
-
     // Remove the directory after unmounting
     std::string removeDirCommand = "sudo rmdir " + shell_escape(isoDir);
     int removeDirResult = std::system(removeDirCommand.c_str());
@@ -977,7 +960,7 @@ void cleanAndUnmountAllISOs() {
         // Construct a shell-escaped path
         std::string IsoDir = (isoDir);
         threads.emplace_back(cleanAndUnmountISO, IsoDir);
-        if (threads.size() >= 4) {
+        if (threads.size() >= 8) {
             for (std::thread& thread : threads) {
                 thread.join();
             }
@@ -1024,7 +1007,7 @@ std::vector<std::string> findBinImgFiles(const std::string& directory) {
     try {
         std::vector<std::future<void>> futures;
         std::mutex mutex; // Mutex for protecting the shared data
-        const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4; // Maximum number of worker threads
+        const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 8; // Maximum number of worker threads
 
         for (const auto& entry : std::filesystem::recursive_directory_iterator(directory)) {
             if (entry.is_regular_file()) {
@@ -1146,7 +1129,7 @@ void convertBINsToISOs(const std::vector<std::string>& inputPaths, int numThread
 
 void processFilesInRange(int start, int end) {
 	std::vector<std::string> binImgFiles;
-    int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4; // Determine the number of threads based on CPU cores
+    int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 8; // Determine the number of threads based on CPU cores
     std::vector<std::string> selectedFiles;
     for (int i = start; i <= end; i++) {
         selectedFiles.push_back(binImgFiles[i - 1]);
@@ -1246,7 +1229,7 @@ std::vector<std::string> findMdsMdfFiles(const std::string& directory) {
     try {
         std::vector<std::future<void>> futures;
         std::mutex mutex; // Mutex for protecting the shared data
-        const int maxThreads = 4; // Maximum number of worker threads
+        const int maxThreads = 8; // Maximum number of worker threads
 
         for (const auto& entry : std::filesystem::recursive_directory_iterator(directory)) {
             if (entry.is_regular_file()) {
@@ -1390,7 +1373,7 @@ void convertMDFsToISOs(const std::vector<std::string>& inputPaths, int numThread
 
 void processMDFFilesInRange(int start, int end) {
 	std::vector<std::string> mdfImgFiles;	// Declare mdfImgFiles here
-    int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4; // Determine the number of threads based on CPU cores
+    int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 8; // Determine the number of threads based on CPU cores
     std::vector<std::string> selectedFiles;
     for (int i = start; i <= end; i++) {
         std::string FilePath = (mdfImgFiles[i - 1]);
@@ -1400,7 +1383,7 @@ void processMDFFilesInRange(int start, int end) {
 }
 
 void select_and_convert_files_to_iso_mdf() {
-    int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4;
+    int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 8;
     std::string directoryPath = readInputLine("\033[94mEnter the directory path to search for .mdf files or simply press enter to return:\033[0m ");
 
     if (directoryPath.empty()) {
