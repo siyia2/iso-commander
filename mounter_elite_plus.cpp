@@ -564,7 +564,7 @@ void select_and_mount_files_by_number() {
         std::system("clear");
         std::cout << "\033[33mCache is empty. Please refresh the cache from the main menu.\033[0m" << std::endl;
         std::cout << "Press Enter to continue...";
-        std::cin.get(); // Wait for the user to press Enter
+        std::cin.get();
         return;
     }
 
@@ -578,28 +578,18 @@ void select_and_mount_files_by_number() {
         return;
     }
 
-    std::vector<std::string> mountedISOs;
-    std::unordered_set<std::string> mountedSet(mountedISOs.begin(), mountedISOs.end());
+    std::unordered_set<std::string> mountedSet;
 
     while (true) {
-        // Remove already mounted files from the selection list
-        isoFiles.erase(std::remove_if(isoFiles.begin(), isoFiles.end(), [&mountedSet](const std::string& iso) {
-            return mountedSet.find(iso) != mountedSet.end();
-        }), isoFiles.end());
-
-        if (isoFiles.empty()) {
-            std::cout << "\033[33mNo more unmounted .iso files in the cache. Please refresh the cache from the main menu.\033[0m" << std::endl;
-            break;
-        }
-
         std::system("clear");
         std::cout << "\033[33m! IF EXPECTED ISO FILE IS NOT ON THE LIST, REFRESH CACHE FROM MAIN MENU !\n\033[0m" << std::endl;
+
         for (int i = 0; i < isoFiles.size(); i++) {
             std::cout << i + 1 << ". " << isoFiles[i] << std::endl;
         }
 
         std::string input;
-        std::cout << "\033[94mChoose .iso files to mount (enter numbers 1 2 or ranges like '1-3', '00' to mount all, or press Enter to return):\033[0m ";
+        std::cout << "\033[94mChoose .iso files to mount (enter numbers, ranges like '1-3', '00' to mount all, or press Enter to return):\033[0m ";
         std::getline(std::cin, input);
         std::system("clear");
 
@@ -610,10 +600,9 @@ void select_and_mount_files_by_number() {
 
         if (input == "00") {
             for (const std::string& iso : isoFiles) {
-                if (mountedSet.find(iso) == mountedSet.end()) {
+                if (mountedSet.insert(iso).second) {
                     if (fileExistsOnDisk(iso)) {
                         mountISO({iso});
-                        mountedSet.insert(iso);
                     } else {
                         displayErrorMessage(iso);
                     }
@@ -627,7 +616,6 @@ void select_and_mount_files_by_number() {
 
             while (std::getline(iss, token, ' ')) {
                 if (token.find('-') != std::string::npos) {
-                    // Handle a range
                     size_t dashPos = token.find('-');
                     int startRange = std::stoi(token.substr(0, dashPos));
                     int endRange = std::stoi(token.substr(dashPos + 1));
@@ -636,12 +624,11 @@ void select_and_mount_files_by_number() {
                         int selectedNumber = i - 1;
 
                         if (selectedNumber >= 0 && selectedNumber < isoFiles.size()) {
-                            std::string selectedISO = isoFiles[selectedNumber];
+                            const std::string& selectedISO = isoFiles[selectedNumber];
 
-                            if (mountedSet.find(selectedISO) == mountedSet.end()) {
+                            if (mountedSet.insert(selectedISO).second) {
                                 if (fileExistsOnDisk(selectedISO)) {
                                     mountISO({selectedISO});
-                                    mountedSet.insert(selectedISO);
                                 } else {
                                     displayErrorMessage(selectedISO);
                                 }
@@ -655,12 +642,11 @@ void select_and_mount_files_by_number() {
                 } else {
                     int selectedNumber = std::stoi(token);
                     if (selectedNumber >= 1 && selectedNumber <= isoFiles.size()) {
-                        std::string selectedISO = isoFiles[selectedNumber - 1];
+                        const std::string& selectedISO = isoFiles[selectedNumber - 1];
 
-                        if (mountedSet.find(selectedISO) == mountedSet.end()) {
+                        if (mountedSet.insert(selectedISO).second) {
                             if (fileExistsOnDisk(selectedISO)) {
                                 mountISO({selectedISO});
-                                mountedSet.insert(selectedISO);
                             } else {
                                 displayErrorMessage(selectedISO);
                             }
