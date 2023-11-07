@@ -508,7 +508,7 @@ void mountISO(const std::vector<std::string>& isoFiles) {
     std::vector<std::thread> threads;
 
     for (const std::string& isoFile : isoFiles) {
-        // Limit the number of threads to a maximum of 4
+        // Limit the number of threads to a maximum of 8
         if (threads.size() >= 8) {
             for (auto& thread : threads) {
                 thread.join();
@@ -701,23 +701,36 @@ bool iequals(const std::string& a, const std::string& b) {
 
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mtx) {
     try {
+        std::vector<std::string> batchIsoFiles;  // Local batch
+
         for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
             if (entry.is_regular_file()) {
                 const std::filesystem::path& filePath = entry.path();
 
-                // Check if the file size is zero or the ISO name ends in ".bin.iso"
                 if (std::filesystem::file_size(filePath) == 0 || iequals(std::string(filePath.stem()), ".bin")) {
-                    continue; // Skip zero-byte files and files ending in ".bin.iso"
+                    continue;
                 }
 
                 std::string extensionStr = filePath.extension().string();
                 std::string_view extension = extensionStr;
 
                 if (iequals(std::string(extension), ".iso")) {
-                    std::lock_guard<std::mutex> lock(mtx);
-                    isoFiles.push_back(filePath.string());
+                    batchIsoFiles.push_back(filePath.string());
                 }
             }
+
+            // Check the batch size and acquire the lock to merge
+            if (batchIsoFiles.size() >= 5) {  // Tweak the batch size as needed
+                std::lock_guard<std::mutex> lock(mtx);
+                isoFiles.insert(isoFiles.end(), batchIsoFiles.begin(), batchIsoFiles.end());
+                batchIsoFiles.clear();
+            }
+        }
+
+        // Acquire the lock to merge any remaining items in the batch
+        if (!batchIsoFiles.empty()) {
+            std::lock_guard<std::mutex> lock(mtx);
+            isoFiles.insert(isoFiles.end(), batchIsoFiles.begin(), batchIsoFiles.end());
         }
     } catch (const std::filesystem::filesystem_error& e) {
         std::cerr << "Error: " << e.what() << std::endl;
@@ -997,56 +1010,55 @@ std::string chooseFileToConvert(const std::vector<std::string>& files) {
 }
 
 std::vector<std::string> findBinImgFiles(const std::string& directory) {
-    // Check if the cache is already populated
     if (!binImgFilesCache.empty()) {
         return binImgFilesCache;
     }
 
     std::vector<std::string> fileNames;
-
     try {
         std::vector<std::future<void>> futures;
-        std::mutex mutex; // Mutex for protecting the shared data
-        const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 8; // Maximum number of worker threads
+        std::mutex mutex;
+        const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 8;
+        const int batchSize = 5; // Tweak the batch size as needed
 
         for (const auto& entry : std::filesystem::recursive_directory_iterator(directory)) {
             if (entry.is_regular_file()) {
                 std::string ext = entry.path().extension();
                 std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) {
                     return std::tolower(c);
-                }); // Convert extension to lowercase
+                });
 
                 if ((ext == ".bin" || ext == ".img") && (entry.path().filename().string().find("data") == std::string::npos) && (entry.path().filename().string() != "terrain.bin") && (entry.path().filename().string() != "blocklist.bin")) {
                     if (std::filesystem::file_size(entry) >= 10'000'000) {
-                        // Ensure the number of active threads doesn't exceed maxThreads
                         while (futures.size() >= maxThreads) {
-                            // Wait for at least one thread to complete
                             auto it = std::find_if(futures.begin(), futures.end(),
-                            [](const std::future<void>& f) {
-                                return f.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
-                            });
+                                [](const std::future<void>& f) {
+                                    return f.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+                                });
                             if (it != futures.end()) {
                                 it->get();
                                 futures.erase(it);
                             }
                         }
 
-                        // Create a task to process the file
                         futures.push_back(std::async(std::launch::async, [entry, &fileNames, &mutex] {
                             std::string fileName = entry.path().string();
 
-                            // Lock the mutex before modifying the shared data
                             std::lock_guard<std::mutex> lock(mutex);
-
-                            // Add the file name to the shared vector without shell escaping
                             fileNames.push_back(fileName);
                         }));
+
+                        if (futures.size() >= batchSize) {
+                            for (auto& future : futures) {
+                                future.get();
+                            }
+                            futures.clear();
+                        }
                     }
                 }
             }
         }
 
-        // Wait for the remaining tasks to complete
         for (auto& future : futures) {
             future.get();
         }
@@ -1054,11 +1066,9 @@ std::vector<std::string> findBinImgFiles(const std::string& directory) {
         std::cerr << "Filesystem error: " << e.what() << std::endl;
     }
 
-    // After collecting the results, update the cache
     binImgFilesCache = fileNames;
     return fileNames;
 }
-
 bool isCcd2IsoInstalled() {
     if (std::system("which ccd2iso > /dev/null 2>&1") == 0) {
         return true;
@@ -1219,34 +1229,31 @@ void select_and_convert_files_to_iso() {
 // MDF/MDS CONVERSION FUNCTIONS	\\
 
 std::vector<std::string> findMdsMdfFiles(const std::string& directory) {
-    // Check if the cache is already populated
     if (!mdfMdsFilesCache.empty()) {
         return mdfMdsFilesCache;
     }
 
     std::vector<std::string> fileNames;
-
     try {
         std::vector<std::future<void>> futures;
-        std::mutex mutex; // Mutex for protecting the shared data
-        const int maxThreads = 8; // Maximum number of worker threads
+        std::mutex mutex;
+        const int maxThreads = 8;
+        const int batchSize = 5; // Tweak the batch size as needed
 
         for (const auto& entry : std::filesystem::recursive_directory_iterator(directory)) {
             if (entry.is_regular_file()) {
                 std::string ext = entry.path().extension();
                 std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) {
                     return std::tolower(c);
-                }); // Convert extension to lowercase
+                });
 
                 if (ext == ".mdf") {
                     if (std::filesystem::file_size(entry) >= 10'000'000) {
-                        // Ensure the number of active threads doesn't exceed maxThreads
                         while (futures.size() >= maxThreads) {
-                            // Wait for at least one thread to complete
                             auto it = std::find_if(futures.begin(), futures.end(),
-                            [](const std::future<void>& f) {
-                                return f.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
-                            });
+                                [](const std::future<void>& f) {
+                                    return f.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+                                });
                             if (it != futures.end()) {
                                 it->get();
                                 futures.erase(it);
@@ -1257,18 +1264,23 @@ std::vector<std::string> findMdsMdfFiles(const std::string& directory) {
                         futures.push_back(std::async(std::launch::async, [entry, &fileNames, &mutex] {
                             std::string fileName = entry.path().string();
 
-                            // Lock the mutex before modifying the shared data
                             std::lock_guard<std::mutex> lock(mutex);
-
-                            // Add the file name to the shared vector
                             fileNames.push_back(fileName);
                         }));
+
+                        // Check the batch size and acquire the lock to merge
+                        if (futures.size() >= batchSize) {
+                            for (auto& future : futures) {
+                                future.get();
+                            }
+                            futures.clear();
+                        }
                     }
                 }
             }
         }
 
-        // Wait for the remaining tasks to complete
+        // Wait for any remaining tasks
         for (auto& future : futures) {
             future.get();
         }
@@ -1276,7 +1288,6 @@ std::vector<std::string> findMdsMdfFiles(const std::string& directory) {
         std::cerr << "Filesystem error: " << e.what() << std::endl;
     }
 
-    // After collecting the results, update the cache
     mdfMdsFilesCache = fileNames;
     return fileNames;
 }
