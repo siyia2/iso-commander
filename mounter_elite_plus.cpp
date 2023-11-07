@@ -110,6 +110,7 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 void manualRefreshCache();
 void removeNonExistentPathsFromCacheWithOpenMP();
 void displayErrorMessage(const std::string& iso);
+void printAlreadyMountedMessage(const std::string& iso);
 
 std::string directoryPath;					// Declare directoryPath here
 
@@ -259,7 +260,7 @@ void removeNonExistentPathsFromCacheWithOpenMP() {
     std::string line;
 
     if (!cacheFile) {
-        std::cerr << "Error: Unable to open cache file." << std::endl;
+        std::cerr << "\033[31mError: Unable to open cache file, will attempt to recreate it.\033[0m" << std::endl;
         return;
     }
 
@@ -285,7 +286,7 @@ void removeNonExistentPathsFromCacheWithOpenMP() {
     std::ofstream updatedCacheFile(cacheFilePath);
 
     if (!updatedCacheFile) {
-        std::cerr << "Error: Unable to open cache file for writing." << std::endl;
+        std::cerr << "\033[31mError: Unable to open cache file for writing, check permissions\033[0m." << std::endl;
         return;
     }
 
@@ -451,8 +452,6 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
     std::lock_guard<std::mutex> lock(mountMutex); // Lock to protect access to mountedIsos
     if (mountedIsos.find(isoFile) != mountedIsos.end()) {
         std::cout << "\e[1;31mALREADY MOUNTED\e[0m: ISO file '" << isoFile << "' is already mounted at '" << mountedIsos[isoFile] << "'.\033[0m" << std::endl;
-        std::cout << "Press Enter to continue...";
-        std::cin.get(); // Wait for the user to press Enter
         return;
     }
 
@@ -467,7 +466,7 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
         // Create the mount point directory
         std::string mkdirCommand = "sudo mkdir " + shell_escape(mountPoint);
         if (system(mkdirCommand.c_str()) != 0) {
-            std::perror("\033[33mFailed to create mount point directory\033[0m");
+            std::perror("\033[31mFailed to create mount point directory\033[0m");
             return;
         }
 
@@ -475,22 +474,19 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
         std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " 1> /dev/null";
         if (system(mountCommand.c_str()) != 0) {
             std::perror("\033[31mFailed to mount ISO file\033[0m");
-            std::cout << "Press Enter to continue...";
-			std::cin.get(); // Wait for the user to press Enter
-			std::system("clear");
+           
 
             // Cleanup the mount point directory
             std::string cleanupCommand = "sudo rmdir " + shell_escape(mountPoint);
             if (system(cleanupCommand.c_str()) != 0) {
-                std::perror("\033[33mFailed to clean up mount point directory\033[0m");
+                std::perror("\033[31mFailed to clean up mount point directory\033[0m");
             }
 
-            //std::cout << "Press Enter to continue...";
-            //std::cin.get(); // Wait for the user to press Enter
+            
             return;
         } else {
             //std::cout << "\033[32mISO file '" << isoFile << "' mounted at '" << mountPoint << "'.\033[0m" << std::endl;
-            // Store the mount point in the map
+             //Store the mount point in the map
             mountedIsos[isoFile] = mountPoint;
             
         }
@@ -498,10 +494,9 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
         // The mount point directory already exists, so the ISO is considered mounted
         std::cout << "\033[33mISO file '" << isoFile << "' is already mounted at '" << mountPoint << "'.\033[m" << std::endl;
         mountedIsos[isoFile] = mountPoint;
-        std::cout << "Press Enter to continue...";
-        std::cin.get(); // Wait for the user to press Enter
-        std::system("clear");
+        
     }
+    
 }
 
 void mountISO(const std::vector<std::string>& isoFiles) {
@@ -600,14 +595,14 @@ void select_and_mount_files_by_number() {
 
         if (input == "00") {
             for (const std::string& iso : isoFiles) {
-                if (mountedSet.insert(iso).second) {
-                    if (fileExistsOnDisk(iso)) {
+                if (fileExistsOnDisk(iso)) {
+                    if (mountedSet.insert(iso).second) {
                         mountISO({iso});
                     } else {
-                        displayErrorMessage(iso);
+                        printAlreadyMountedMessage(iso);
                     }
                 } else {
-                    std::cout << "\033[33mISO file '" << iso << "' is already mounted.\033[0m" << std::endl;
+                    displayErrorMessage(iso);
                 }
             }
         } else {
@@ -626,14 +621,14 @@ void select_and_mount_files_by_number() {
                         if (selectedNumber >= 0 && selectedNumber < isoFiles.size()) {
                             const std::string& selectedISO = isoFiles[selectedNumber];
 
-                            if (mountedSet.insert(selectedISO).second) {
-                                if (fileExistsOnDisk(selectedISO)) {
+                            if (fileExistsOnDisk(selectedISO)) {
+                                if (mountedSet.insert(selectedISO).second) {
                                     mountISO({selectedISO});
                                 } else {
-                                    displayErrorMessage(selectedISO);
+                                    printAlreadyMountedMessage(selectedISO);
                                 }
                             } else {
-                                std::cout << "\033[33mISO file '" << selectedISO << "' is already mounted.\033[0m" << std::endl;
+                                displayErrorMessage(selectedISO);
                             }
                         } else {
                             std::cout << "\033[31mInvalid range: " << token << ". Please try again.\033[0m" << std::endl;
@@ -644,29 +639,33 @@ void select_and_mount_files_by_number() {
                     if (selectedNumber >= 1 && selectedNumber <= isoFiles.size()) {
                         const std::string& selectedISO = isoFiles[selectedNumber - 1];
 
-                        if (mountedSet.insert(selectedISO).second) {
-                            if (fileExistsOnDisk(selectedISO)) {
+                        if (fileExistsOnDisk(selectedISO)) {
+                            if (mountedSet.insert(selectedISO).second) {
                                 mountISO({selectedISO});
                             } else {
-                                displayErrorMessage(selectedISO);
+                                printAlreadyMountedMessage(selectedISO);
                             }
                         } else {
-                            std::cout << "\033[33mISO file '" << selectedISO << "' is already mounted.\033[0m" << std::endl;
+                            displayErrorMessage(selectedISO);
                         }
                     } else {
                         std::cout << "\033[31mInvalid number: " << selectedNumber << ". Please try again.\033[0m" << std::endl;
                     }
                 }
-            }
+            std::cout << "Press Enter to continue...";
+    std::cin.get(); }
         }
     }
 }
 
+void printAlreadyMountedMessage(const std::string& iso) {
+    std::cout << "\033[33mISO file '" << iso << "' is already mounted.\033[0m" << std::endl;
+}
+
 void displayErrorMessage(const std::string& iso) {
-    std::system("clear");
-    std::cout << "\033[33mISO file '" << iso << "' does not exist on disk. Please refresh the cache from the main menu.\033[0m" << std::endl;
-    std::cout << "Press Enter to continue...";
-    std::cin.get(); // Wait for the user to press Enter
+    std::cout << "\033[35mISO file '" << iso << "' does not exist on disk. Please refresh the cache from the main menu.\033[0m" << std::endl;
+    //std::cout << "Press Enter to continue...";
+    //std::cin.get(); // Wait for the user to press Enter
 }
 
 bool iequals(const std::string& a, const std::string& b) {
@@ -820,6 +819,8 @@ void unmountISOs() {
 
         if (isoDirs.empty()) {
             std::cout << "\033[33mLIST IS EMPTY, NOTHING TO DO.\n\033[0m";
+            std::cout << "Press Enter to continue...";
+            std::cin.get(); // Wait for the user to press Enter
             return;
         }
 
@@ -908,10 +909,6 @@ void unmountISOs() {
 void unmountAndCleanISO(const std::string& isoDir) {
     std::string unmountCommand = "sudo umount -l " + shell_escape(isoDir) + " 2>/dev/null";
     int result = std::system(unmountCommand.c_str());
-
-    // if (result != 0) {
-    //     std::cerr << "Failed to unmount " << isoDir << " with sudo." << std::endl;
-    // }
 
     // Remove the directory after unmounting
     std::string removeDirCommand = "sudo rmdir " + shell_escape(isoDir);
