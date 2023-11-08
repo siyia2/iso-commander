@@ -512,28 +512,19 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
 
 void mountISO(const std::vector<std::string>& isoFiles) {
     std::map<std::string, std::string> mountedIsos;
-    int count = 1;
     std::vector<std::thread> threads;
 
     for (const std::string& isoFile : isoFiles) {
-        // Limit the number of threads to a maximum of 8
-        if (threads.size() >= 8) {
-            for (auto& thread : threads) {
-                thread.join();
-            }
-            threads.clear();
-        }
-
         std::string IsoFile = (isoFile);
         threads.emplace_back(mountIsoFile, IsoFile, std::ref(mountedIsos));
     }
 
-    // Join any remaining threads
+    // Join all threads
     for (auto& thread : threads) {
         thread.join();
     }
-
 }
+
 
 bool fileExistsOnDisk(const std::string& filename) {
     std::ifstream file(filename);
@@ -932,8 +923,7 @@ void cleanAndUnmountISO(const std::string& isoDir) {
 }
 
 void cleanAndUnmountAllISOs() {
-    std::cout << "\n";
-    std::cout << "Unmount All ISOs function." << std::endl;
+    std::cout << "\nUnmount All ISOs function." << std::endl;
     const std::string isoPath = "/mnt";
     std::vector<std::string> isoDirs;
 
@@ -960,12 +950,6 @@ void cleanAndUnmountAllISOs() {
         // Construct a shell-escaped path
         std::string IsoDir = (isoDir);
         threads.emplace_back(cleanAndUnmountISO, IsoDir);
-        if (threads.size() >= 8) {
-            for (std::thread& thread : threads) {
-                thread.join();
-            }
-            threads.clear();
-        }
     }
 
     for (std::thread& thread : threads) {
@@ -974,6 +958,7 @@ void cleanAndUnmountAllISOs() {
 
     std::cout << "\033[32mALL ISOS CLEANED\n\033[0m" << std::endl;
 }
+
 
 // BIN/IMG CONVERSION FUNCTIONS	\\
 
