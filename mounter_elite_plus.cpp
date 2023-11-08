@@ -271,7 +271,7 @@ void removeNonExistentPathsFromCacheWithOpenMP() {
     cacheFile.close();
 
     // Set the number of threads to a maximum of 8
-    omp_set_num_threads(8);
+    omp_set_num_threads(omp_get_max_threads());
 
     std::vector<std::string> retainedPaths;
 
@@ -366,7 +366,7 @@ void saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
 bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles) {
     bool allExist = true;
 
-    #pragma omp parallel for shared(allExist) num_threads(8)
+    #pragma omp parallel for shared(allExist) num_threads(omp_get_max_threads())
     for (int i = 0; i < selectedFiles.size(); ++i) {
         if (!std::filesystem::exists(selectedFiles[i])) {
             #pragma omp critical
@@ -434,7 +434,7 @@ bool directoryExists(const std::string& path) {
 bool allDirectoriesExistOnDisk(const std::vector<std::string>& directories) {
     bool allExist = true;
 
-    #pragma omp parallel for shared(allExist) num_threads(8)
+    #pragma omp parallel for shared(allExist) num_threads(omp_get_max_threads())
     for (int i = 0; i < directories.size(); ++i) {
         if (!directoryExists(directories[i])) {
             #pragma omp critical
@@ -542,7 +542,7 @@ bool ends_with_iso(const std::string& str) {
 bool allFilesExistAndAreIso(const std::vector<std::string>& files) {
     bool allExistAndIso = true;
 
-    #pragma omp parallel for shared(allExistAndIso) num_threads(8)
+    #pragma omp parallel for shared(allExistAndIso) num_threads(omp_get_max_threads())
     for (int i = 0; i < files.size(); ++i) {
         if (!fileExistsOnDisk(files[i]) || !ends_with_iso(files[i])) {
             #pragma omp critical
@@ -1004,7 +1004,7 @@ std::vector<std::string> findBinImgFiles(const std::string& directory) {
     try {
         std::vector<std::future<void>> futures;
         std::mutex mutex;
-        const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 8;
+        const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4;
         const int batchSize = 2; // Tweak the batch size as needed
 
         for (const auto& entry : std::filesystem::recursive_directory_iterator(directory)) {
@@ -1125,7 +1125,7 @@ void convertBINsToISOs(const std::vector<std::string>& inputPaths, int numThread
 
 void processFilesInRange(int start, int end) {
 	std::vector<std::string> binImgFiles;
-    int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 8; // Determine the number of threads based on CPU cores
+    int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4; // Determine the number of threads based on CPU cores
     std::vector<std::string> selectedFiles;
     for (int i = start; i <= end; i++) {
         selectedFiles.push_back(binImgFiles[i - 1]);
