@@ -111,6 +111,10 @@ void manualRefreshCache();
 void removeNonExistentPathsFromCacheWithOpenMP();
 void displayErrorMessage(const std::string& iso);
 void printAlreadyMountedMessage(const std::string& iso);
+void printIsoFileList(const std::vector<std::string>& isoFiles);
+void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet);
+void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
+
 
 std::string directoryPath;					// Declare directoryPath here
 
@@ -581,10 +585,7 @@ void select_and_mount_files_by_number() {
     while (true) {
         std::system("clear");
         std::cout << "\033[33m! IF EXPECTED ISO FILE IS NOT ON THE LIST, REFRESH CACHE FROM MAIN MENU !\n\033[0m" << std::endl;
-
-        for (int i = 0; i < isoFiles.size(); i++) {
-            std::cout << i + 1 << ". " << isoFiles[i] << std::endl;
-        }
+        printIsoFileList(isoFiles);
 
         std::string input;
         std::cout << "\033[94mChoose .iso files to mount (enter numbers, ranges like '1-3', '00' to mount all, or press Enter to return):\033[0m ";
@@ -598,65 +599,61 @@ void select_and_mount_files_by_number() {
 
         if (input == "00") {
             for (const std::string& iso : isoFiles) {
-                if (fileExistsOnDisk(iso)) {
-                    if (mountedSet.insert(iso).second) {
-                        mountISO({iso});
-                    } else {
-                        printAlreadyMountedMessage(iso);
-                    }
+                handleIsoFile(iso, mountedSet);
+            }
+        } else {
+            processInput(input, isoFiles, mountedSet);
+        }
+
+        std::cout << "Press Enter to continue...";
+        std::cin.get();
+    }
+}
+
+void printIsoFileList(const std::vector<std::string>& isoFiles) {
+    for (int i = 0; i < isoFiles.size(); i++) {
+        std::cout << i + 1 << ". " << isoFiles[i] << std::endl;
+    }
+}
+
+void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet) {
+    if (fileExistsOnDisk(iso)) {
+        if (mountedSet.insert(iso).second) {
+            mountISO({iso});
+        } else {
+            printAlreadyMountedMessage(iso);
+        }
+    } else {
+        displayErrorMessage(iso);
+    }
+}
+
+void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
+    std::istringstream iss(input);
+    std::string token;
+
+    while (std::getline(iss, token, ' ')) {
+        if (token.find('-') != std::string::npos) {
+            size_t dashPos = token.find('-');
+            int startRange = std::stoi(token.substr(0, dashPos));
+            int endRange = std::stoi(token.substr(dashPos + 1));
+
+            for (int i = startRange; i <= endRange; i++) {
+                int selectedNumber = i - 1;
+
+                if (selectedNumber >= 0 && selectedNumber < isoFiles.size()) {
+                    handleIsoFile(isoFiles[selectedNumber], mountedSet);
                 } else {
-                    displayErrorMessage(iso);
+                    std::cout << "\033[31mInvalid range: " << token << ". Please try again.\033[0m" << std::endl;
                 }
             }
         } else {
-            std::istringstream iss(input);
-            std::string token;
-
-            while (std::getline(iss, token, ' ')) {
-                if (token.find('-') != std::string::npos) {
-                    size_t dashPos = token.find('-');
-                    int startRange = std::stoi(token.substr(0, dashPos));
-                    int endRange = std::stoi(token.substr(dashPos + 1));
-
-                    for (int i = startRange; i <= endRange; i++) {
-                        int selectedNumber = i - 1;
-
-                        if (selectedNumber >= 0 && selectedNumber < isoFiles.size()) {
-                            const std::string& selectedISO = isoFiles[selectedNumber];
-
-                            if (fileExistsOnDisk(selectedISO)) {
-                                if (mountedSet.insert(selectedISO).second) {
-                                    mountISO({selectedISO});
-                                } else {
-                                    printAlreadyMountedMessage(selectedISO);
-                                }
-                            } else {
-                                displayErrorMessage(selectedISO);
-                            }
-                        } else {
-                            std::cout << "\033[31mInvalid range: " << token << ". Please try again.\033[0m" << std::endl;
-                        }
-                    }
-                } else {
-                    int selectedNumber = std::stoi(token);
-                    if (selectedNumber >= 1 && selectedNumber <= isoFiles.size()) {
-                        const std::string& selectedISO = isoFiles[selectedNumber - 1];
-
-                        if (fileExistsOnDisk(selectedISO)) {
-                            if (mountedSet.insert(selectedISO).second) {
-                                mountISO({selectedISO});
-                            } else {
-                                printAlreadyMountedMessage(selectedISO);
-                            }
-                        } else {
-                            displayErrorMessage(selectedISO);
-                        }
-                    } else {
-                        std::cout << "\033[31mInvalid number: " << selectedNumber << ". Please try again.\033[0m" << std::endl;
-                    }
-                }
-            std::cout << "Press Enter to continue...";
-    std::cin.get(); }
+            int selectedNumber = std::stoi(token);
+            if (selectedNumber >= 1 && selectedNumber <= isoFiles.size()) {
+                handleIsoFile(isoFiles[selectedNumber - 1], mountedSet);
+            } else {
+                std::cout << "\033[31mInvalid number: " << selectedNumber << ". Please try again.\033[0m" << std::endl;
+            }
         }
     }
 }
