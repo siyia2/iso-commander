@@ -79,6 +79,8 @@ namespace fs = std::filesystem;
 std::vector<std::string> findBinImgFiles(const std::string& directory);
 std::vector<std::string> findMdsMdfFiles(const std::string& directory);
 std::string chooseFileToConvert(const std::vector<std::string>& files);
+std::vector<int> parseUserInput(const std::string& input, int maxIndex);
+std::vector<std::string> getSelectedFiles(const std::vector<int>& selectedIndices, const std::vector<std::string>& fileList);
 //	bools
 bool directoryExists(const std::string& path);
 bool iequals(std::string_view a, std::string_view b);
@@ -114,7 +116,9 @@ void printAlreadyMountedMessage(const std::string& iso);
 void printIsoFileList(const std::vector<std::string>& isoFiles);
 void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet);
 void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
-
+void printFileListBin(const std::vector<std::string>& fileList);
+void processInputBin(const std::string& input, const std::vector<std::string>& fileList);
+void printFileListMdf(const std::vector<std::string>& fileList);
 
 std::string directoryPath;					// Declare directoryPath here
 
@@ -1139,7 +1143,7 @@ void processFilesInRange(int start, int end) {
 }
 
 void select_and_convert_files_to_iso() {
-	std::vector<std::string> binImgFiles;
+    std::vector<std::string> binImgFiles;
     std::string directoryPath = readInputLine("\033[94mEnter the directory path to search for .bin .img files or simply press enter to return:\033[0m ");
 
     if (directoryPath.empty()) {
@@ -1153,9 +1157,7 @@ void select_and_convert_files_to_iso() {
     if (binImgFiles.empty()) {
         std::cout << "\033[33mNo .bin or .img files found in the specified directory and its subdirectories or all files are under 10MB.\n\033[0m";
     } else {
-        for (int i = 0; i < binImgFiles.size(); i++) {
-            std::cout << i + 1 << ". " << binImgFiles[i] << std::endl;
-        }
+        printFileListBin(binImgFiles);
 
         std::string input;
 
@@ -1168,44 +1170,55 @@ void select_and_convert_files_to_iso() {
                 break;
             }
 
-            std::istringstream iss(input);
-            std::string token;
-            std::vector<std::thread> threads;
+            processInputBin(input, binImgFiles);
+        }
+    }
+}
 
-            while (iss >> token) {
-                std::istringstream tokenStream(token);
-                int start, end;
-                char dash;
+void printFileListBin(const std::vector<std::string>& fileList) {
+    for (int i = 0; i < fileList.size(); i++) {
+        std::cout << i + 1 << ". " << fileList[i] << std::endl;
+    }
+}
 
-                if (tokenStream >> start) {
-                    if (tokenStream >> dash && dash == '-' && tokenStream >> end) {
-                        // Range input (e.g., 1-5)
-                        if (start >= 1 && start <= binImgFiles.size() && end >= start && end <= binImgFiles.size()) {
-                            for (int i = start; i <= end; i++) {
-                                std::string selectedFile = binImgFiles[i - 1]; // No need to shell-escape
-                                threads.emplace_back(convertBINToISO, selectedFile);
-                            }
-                        } else {
-                            std::cout << "\033[31mInvalid range. Please try again.\033[0m" << std::endl;
-                        }
-                    } else if (start >= 1 && start <= binImgFiles.size()) {
-                        // Single number input
-                        int selectedIndex = start - 1;
-                        std::string selectedFile = binImgFiles[selectedIndex]; // No need to shell-escape
+void processInputBin(const std::string& input, const std::vector<std::string>& fileList) {
+    std::istringstream iss(input);
+    std::string token;
+    std::vector<std::thread> threads;
+
+    while (iss >> token) {
+        std::istringstream tokenStream(token);
+        int start, end;
+        char dash;
+
+        if (tokenStream >> start) {
+            if (tokenStream >> dash && dash == '-' && tokenStream >> end) {
+                // Range input (e.g., 1-5)
+                if (start >= 1 && start <= fileList.size() && end >= start && end <= fileList.size()) {
+                    for (int i = start; i <= end; i++) {
+                        int selectedIndex = i - 1;
+                        std::string selectedFile = fileList[selectedIndex];
                         threads.emplace_back(convertBINToISO, selectedFile);
-                    } else {
-                        std::cout << "\033[31mInvalid number: " << start << ". Please try again.\033[0m" << std::endl;
                     }
                 } else {
-                    std::cout << "\033[31mInvalid input format: " << token << ". Please try again.\033[0m" << std::endl;
+                    std::cout << "\033[31mInvalid range. Please try again.\033[0m" << std::endl;
                 }
+            } else if (start >= 1 && start <= fileList.size()) {
+                // Single number input
+                int selectedIndex = start - 1;
+                std::string selectedFile = fileList[selectedIndex];
+                threads.emplace_back(convertBINToISO, selectedFile);
+            } else {
+                std::cout << "\033[31mInvalid number: " << start << ". Please try again.\033[0m" << std::endl;
             }
-
-            // Wait for all threads to complete
-            for (auto& thread : threads) {
-                thread.join();
-            }
+        } else {
+            std::cout << "\033[31mInvalid input format: " << token << ". Please try again.\033[0m" << std::endl;
         }
+    }
+
+    // Wait for all threads to complete
+    for (auto& thread : threads) {
+        thread.join();
     }
 }
 
@@ -1394,55 +1407,68 @@ void select_and_convert_files_to_iso_mdf() {
     }
 
     while (true) {
-        // Display the list of available files with numbers
-        std::cout << "Select files to convert to ISO:\n";
-        for (int i = 0; i < mdfMdsFiles.size(); i++) {
-            std::cout << i + 1 << ". " << mdfMdsFiles[i] << std::endl;
-        }
+        printFileListMdf(mdfMdsFiles);
 
-        // Ask the user to choose files
-        std::string input;
-        std::cout << "\033[94mEnter the numbers of the files to convert (e.g., '1-2' or '1 2', or simply press enter to return):\033[0m ";
-        std::getline(std::cin, input);
+        std::string input = readInputLine("\033[94mEnter the numbers of the files to convert (e.g., '1-2' or '1 2', or simply press enter to return):\033[0m ");
 
         if (input.empty()) {
             std::cout << "Exiting..." << std::endl;
             break;
         }
 
-        // Parse the user input to extract file numbers
-        std::vector<int> selectedFileIndices;
-        std::istringstream iss(input);
-        std::string token;
-        while (iss >> token) {
-            if (token.find('-') != std::string::npos) {
-                // Handle a range (e.g., "1-2")
-                size_t dashPos = token.find('-');
-                int startRange = std::stoi(token.substr(0, dashPos));
-                int endRange = std::stoi(token.substr(dashPos + 1));
-                for (int i = startRange; i <= endRange; i++) {
-                    if (i >= 1 && i <= mdfMdsFiles.size()) {
-                        selectedFileIndices.push_back(i - 1);
-                    }
-                }
-            } else {
-                // Handle individual numbers (e.g., "1")
-                int selectedFileIndex = std::stoi(token);
-                if (selectedFileIndex >= 1 && selectedFileIndex <= mdfMdsFiles.size()) {
-                    selectedFileIndices.push_back(selectedFileIndex - 1);
-                }
-            }
-        }
+        std::vector<int> selectedFileIndices = parseUserInput(input, mdfMdsFiles.size());
 
         if (!selectedFileIndices.empty()) {
-            // Convert the selected files
-            std::vector<std::string> selectedFiles;
-            for (int index : selectedFileIndices) {
-                selectedFiles.push_back(mdfMdsFiles[index]);
-            }
+            std::vector<std::string> selectedFiles = getSelectedFiles(selectedFileIndices, mdfMdsFiles);
             convertMDFsToISOs(selectedFiles, numThreads);
         } else {
             std::cout << "Invalid choice. Please enter valid file numbers or 'exit'." << std::endl;
         }
     }
+}
+
+void printFileListMdf(const std::vector<std::string>& fileList) {
+    std::cout << "Select files to convert to ISO:\n";
+    for (int i = 0; i < fileList.size(); i++) {
+        std::cout << i + 1 << ". " << fileList[i] << std::endl;
+    }
+}
+
+std::vector<int> parseUserInput(const std::string& input, int maxIndex) {
+    std::vector<int> selectedFileIndices;
+    std::istringstream iss(input);
+    std::string token;
+
+    while (iss >> token) {
+        if (token.find('-') != std::string::npos) {
+            // Handle a range (e.g., "1-2")
+            size_t dashPos = token.find('-');
+            int startRange = std::stoi(token.substr(0, dashPos));
+            int endRange = std::stoi(token.substr(dashPos + 1));
+
+            for (int i = startRange; i <= endRange; i++) {
+                if (i >= 1 && i <= maxIndex) {
+                    selectedFileIndices.push_back(i - 1);
+                }
+            }
+        } else {
+            // Handle individual numbers (e.g., "1")
+            int selectedFileIndex = std::stoi(token);
+            if (selectedFileIndex >= 1 && selectedFileIndex <= maxIndex) {
+                selectedFileIndices.push_back(selectedFileIndex - 1);
+            }
+        }
+    }
+
+    return selectedFileIndices;
+}
+
+std::vector<std::string> getSelectedFiles(const std::vector<int>& selectedIndices, const std::vector<std::string>& fileList) {
+    std::vector<std::string> selectedFiles;
+
+    for (int index : selectedIndices) {
+        selectedFiles.push_back(fileList[index]);
+    }
+
+    return selectedFiles;
 }
