@@ -81,7 +81,7 @@ std::vector<std::string> findMdsMdfFiles(const std::string& directory);
 std::string chooseFileToConvert(const std::vector<std::string>& files);
 //	bools
 bool directoryExists(const std::string& path);
-bool iequals(const std::string& a, const std::string& b);
+bool iequals(std::string_view a, std::string_view b);
 bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles);
 bool isMdf2IsoInstalled();
 bool fileExists(const std::string& path);
@@ -671,71 +671,57 @@ void displayErrorMessage(const std::string& iso) {
     //std::cin.get(); // Wait for the user to press Enter
 }
 
-bool iequals(const std::string& a, const std::string& b) {
+bool iequals(std::string_view a, std::string_view b) {
     if (a.size() != b.size()) {
         return false;
     }
 
-    bool equal = true;
-
-    // Set the number of threads to a maximum of 8
-    omp_set_num_threads(8);
-
-    #pragma omp parallel for
-    for (int i = 0; i < a.size(); i++) {
-        if (!equal) continue; // Skip further work if a mismatch has been found
-
-        char lhs = std::tolower(a[i]);
-        char rhs = std::tolower(b[i]);
-
-        #pragma omp critical
-        {
-            if (lhs != rhs) {
-                equal = false;
-            }
+    for (std::size_t i = 0; i < a.size(); ++i) {
+        if (std::tolower(a[i]) != std::tolower(b[i])) {
+            return false;
         }
     }
 
-    return equal;
+    return true;
 }
+
+
+
 
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mtx) {
     try {
-        std::vector<std::string> batchIsoFiles;  // Local batch
+        std::vector<std::future<void>> futures;
 
         for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
             if (entry.is_regular_file()) {
                 const std::filesystem::path& filePath = entry.path();
 
-                if (std::filesystem::file_size(filePath) == 0 || iequals(std::string(filePath.stem()), ".bin")) {
+                if (std::filesystem::file_size(filePath) == 0 || iequals(filePath.stem().string(), ".bin")) {
                     continue;
                 }
 
                 std::string extensionStr = filePath.extension().string();
                 std::string_view extension = extensionStr;
 
-                if (iequals(std::string(extension), ".iso")) {
-                    batchIsoFiles.push_back(filePath.string());
+                if (iequals(extension, ".iso")) {
+                    std::string isoPath = filePath.string();
+                    futures.push_back(std::async(std::launch::async, [&isoFiles, isoPath, &mtx]() {
+                        std::lock_guard<std::mutex> lock(mtx);
+                        isoFiles.push_back(isoPath);
+                    }));
                 }
-            }
-
-            // Check the batch size and acquire the lock to merge
-            if (batchIsoFiles.size() >= 2) {  // Tweak the batch size as needed
-                std::lock_guard<std::mutex> lock(mtx);
-                isoFiles.insert(isoFiles.end(), batchIsoFiles.begin(), batchIsoFiles.end());
-                batchIsoFiles.clear();
             }
         }
 
-        // Acquire the lock to merge any remaining items in the batch
-        if (!batchIsoFiles.empty()) {
-            std::lock_guard<std::mutex> lock(mtx);
-            isoFiles.insert(isoFiles.end(), batchIsoFiles.begin(), batchIsoFiles.end());
+        // Wait for all async tasks to complete
+        for (auto& future : futures) {
+            future.get();
         }
     } catch (const std::filesystem::filesystem_error& e) {
         std::cerr << "Error: " << e.what() << std::endl;
     }
 }
+
 
 void processPath(const std::string& path, std::vector<std::string>& allIsoFiles) {
     std::cout << "Processing directory path: " << path << std::endl;
