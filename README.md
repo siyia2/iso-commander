@@ -32,6 +32,6 @@ Tested the program on my rig: `mounting` at the same time `125 ISOS` and then `u
 
 Compilation requires the readline library installed from your distro. 
 Once dependancies are met, open a terminal inside the source folder and run `make`, this will make a file named `mounter_elite_plus`.
-Make it executable and it can then run from anywhere.
+Make it executable and it can then be run from anywhere.
 
 You can also download the binaries from my releases, or if you are on arch or on an archbased distro you can install with `yay -S mounter-elite-plus`.
