@@ -205,7 +205,6 @@ void removeNonExistentPathsFromCacheWithOpenMP() {
 
     cacheFile.close();
 
-    // Set the number of threads to a maximum of 8
     omp_set_num_threads(omp_get_max_threads());
 
     std::vector<std::string> retainedPaths;
