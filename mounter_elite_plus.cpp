@@ -16,11 +16,8 @@ namespace fs = std::filesystem;
 
 //	Function prototypes	\\
 
-//	stds
-
-std::vector<int> parseUserInput(const std::string& input, int maxIndex);
-std::vector<std::string> getSelectedFiles(const std::vector<int>& selectedIndices, const std::vector<std::string>& fileList);
 //	bools
+
 bool directoryExists(const std::string& path);
 bool iequals(std::string_view a, std::string_view b);
 bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles);
