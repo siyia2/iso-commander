@@ -29,3 +29,6 @@ run: $(EXECUTABLE)
 
 install: $(EXECUTABLE)
 	install -m 755 $(EXECUTABLE) $(INSTALL_DIR)
+
+uninstall:
+	rm -f $(INSTALL_DIR)/$(EXECUTABLE)
