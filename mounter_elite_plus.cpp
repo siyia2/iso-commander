@@ -998,7 +998,7 @@ std::vector<std::string> findBinImgFiles(const std::string& directory) {
     try {
         std::vector<std::future<void>> futures;
         std::mutex mutex;
-        const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4;
+        const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
         const int batchSize = 2; // Tweak the batch size as needed
 
         for (const auto& entry : std::filesystem::recursive_directory_iterator(directory)) {
