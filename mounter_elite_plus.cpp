@@ -294,7 +294,7 @@ void removeNonExistentPathsFromCacheWithOpenMP() {
     std::ofstream updatedCacheFile(cacheFilePath);
 
     if (!updatedCacheFile) {
-        std::cerr << "\033[31mError: Unable to open cache file for writing, check permissions\033[0m." << std::endl;
+        std::cerr << "\033[31mError: Unable to open cache file for writing, check permissions.\033[0m" << std::endl;
         return;
     }
 
@@ -668,13 +668,19 @@ bool iequals(std::string_view a, std::string_view b) {
         return false;
     }
 
+    bool equal = true;
+
+    #pragma omp parallel for shared(equal)
     for (std::size_t i = 0; i < a.size(); ++i) {
-        if (std::tolower(a[i]) != std::tolower(b[i])) {
-            return false;
+        #pragma omp critical
+        {
+            if (std::tolower(a[i]) != std::tolower(b[i])) {
+                equal = false;
+            }
         }
     }
 
-    return true;
+    return equal;
 }
 
 
@@ -682,7 +688,7 @@ bool iequals(std::string_view a, std::string_view b) {
 
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mtx) {
     try {
-        std::vector<std::future<void>> futures;
+        std::vector<std::future<std::vector<std::string>>> futures;
 
         for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
             if (entry.is_regular_file()) {
@@ -696,18 +702,20 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
                 std::string_view extension = extensionStr;
 
                 if (iequals(extension, ".iso")) {
-                    std::string isoPath = filePath.string();
-                    futures.push_back(std::async(std::launch::async, [&isoFiles, isoPath, &mtx]() {
-                        std::lock_guard<std::mutex> lock(mtx);
-                        isoFiles.push_back(isoPath);
+                    futures.push_back(std::async(std::launch::async, [filePath]() -> std::vector<std::string> {
+                        return std::vector<std::string>{filePath.string()};
                     }));
                 }
             }
         }
 
-        // Wait for all async tasks to complete
+        // Wait for all async tasks to complete and collect results
         for (auto& future : futures) {
-            future.get();
+            auto isoPaths = future.get();
+
+            // Lock the mutex only once to merge local vectors into isoFiles
+            std::lock_guard<std::mutex> lock(mtx);
+            isoFiles.insert(isoFiles.end(), isoPaths.begin(), isoPaths.end());
         }
     } catch (const std::filesystem::filesystem_error& e) {
         std::cerr << "Error: " << e.what() << std::endl;
@@ -1111,7 +1119,7 @@ void convertBINsToISOs(const std::vector<std::string>& inputPaths, int numThread
 
 void processFilesInRange(int start, int end) {
 	std::vector<std::string> binImgFiles;
-    int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4; // Determine the number of threads based on CPU cores
+    int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2; // Determine the number of threads based on CPU cores
     std::vector<std::string> selectedFiles;
     for (int i = start; i <= end; i++) {
         selectedFiles.push_back(binImgFiles[i - 1]);
@@ -1218,7 +1226,7 @@ std::vector<std::string> findMdsMdfFiles(const std::string& directory) {
     try {
         std::vector<std::future<void>> futures;
         std::mutex mutex;
-        const int maxThreads = 8;
+        const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
         const int batchSize = 2; // Tweak the batch size as needed
 
         for (const auto& entry : std::filesystem::recursive_directory_iterator(directory)) {
