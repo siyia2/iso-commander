@@ -31,7 +31,7 @@ Added Features:
 Tested the program on my rig: `mounting` at the same time `125 ISOS` and then `unmounting` them, did this a couple of times and it didn't even break a sweat, Rock Solid!!! :)
 
 Compilation requires the readline library installed from your distro. 
-Once dependancies are met, open a terminal inside the source folder and run `g++ -O2 mounter_elite_plus.cpp conversion_tools.cpp sanitization_readline.cpp -lreadline -fopenmp -o "whatever_name"`.
-Make it executable and it can run from anywhere.
+Once dependancies are met, open a terminal inside the source folder and run `make -j(number of your cores)`, this will make a file named `mounter_elite_plus`.
+Make it executable it can then run from anywhere.
 
 You can also download the binaries from my releases, or if you are on arch or on an archbased distro you can install with `yay -S mounter-elite-plus`.
