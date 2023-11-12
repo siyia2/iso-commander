@@ -484,7 +484,7 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
 			if (mountResult == 0) {
 				std::cout << "\033[32mMounted at: " << mountPoint << "\033[0m" << std::endl;}
 			if (mountResult != 0) {
-				std::cerr << "\033[31mFailed to mount: " << isoFile << std::endl;
+				std::cerr << "\033[31mFailed to mount: " << isoFile << "\033[0m" <<std::endl;
            
 
             // Cleanup the mount point directory
