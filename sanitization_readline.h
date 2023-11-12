@@ -2,7 +2,6 @@
 
 #ifndef SANITIZATION_READLINE_H
 #define SANITIZATION_READLINE_H
-
 #include <cstdio>
 #include <readline/readline.h>
 #include <string>
