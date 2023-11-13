@@ -99,6 +99,7 @@ bool isCcd2IsoInstalled() {
     }
 }
 
+// Function to convert a BIN file to ISO format
 void convertBINToISO(const std::string& inputPath) {
     // Check if the input file exists
     if (!std::ifstream(inputPath)) {
@@ -120,9 +121,17 @@ void convertBINToISO(const std::string& inputPath) {
             std::cout << "\033[32mImage file converted to ISO:\033[0m " << outputPath << std::endl;
         } else {
             std::cout << "\033[31mConversion of " << inputPath << " failed.\033[0m" << std::endl;
+            
+            // Delete the partially created ISO file
+            if (std::remove(outputPath.c_str()) == 0) {
+                std::cout << "\033[31mDeleted partially created ISO file:\033[0m " << outputPath << std::endl;
+            } else {
+                std::cerr << "\033[31mFailed to delete partially created ISO file:\033[0m " << outputPath << std::endl;
+            }
         }
     }
 }
+
 
 void convertBINsToISOs(const std::vector<std::string>& inputPaths, int numThreads) {
     if (!isCcd2IsoInstalled()) {
