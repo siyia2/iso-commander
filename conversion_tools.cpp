@@ -444,6 +444,7 @@ bool isMdf2IsoInstalled() {
 
 // Function to convert an MDF file to ISO format using mdf2iso
 void convertMDFToISO(const std::string& inputPath) {
+	std::system("clear");
     // Check if the input file exists
     if (!std::ifstream(inputPath)) {
         std::cout << "\033[31mThe specified input file '" << inputPath << "' does not exist.\033[0m" << std::endl;
@@ -480,13 +481,14 @@ void convertMDFToISO(const std::string& inputPath) {
     if (conversionStatus == 0) {
         // Check if the conversion output contains the "already ISO9660" message
         if (conversionOutput.find("already ISO") != std::string::npos) {
-            std::cout << "\033[31mThe selected file '" << inputPath << "' is already in ISO format. Skipping conversion.\033[0m" << std::endl;
+            std::cout << "\033[31mThe selected file '" << inputPath << "' is already in ISO format, maybe rename it to .iso?. Skipping conversion.\033[0m" << std::endl;
         } else {
             std::cout << "\033[33mImage file converted to ISO:\033[0m " << outputPath << std::endl;
         }
     } else {
         std::cout << "\033[31mConversion of " << inputPath << " failed.\033[0m" << std::endl;
-    }
+    }        
+
 }
 // Function to convert multiple MDF files to ISO format using mdf2iso
 void convertMDFsToISOs(const std::vector<std::string>& inputPaths, int numThreads) {
@@ -529,7 +531,7 @@ void convertMDFsToISOs(const std::vector<std::string>& inputPaths, int numThread
 // Function to process a range of MDF files by converting them to ISO
 void processMDFFilesInRange(int start, int end) {
     std::vector<std::string> mdfImgFiles;	// Declare mdfImgFiles here
-    int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 8; // Determine the number of threads based on CPU cores
+    int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2; // Determine the number of threads based on CPU cores
     std::vector<std::string> selectedFiles;
 
     // Construct a list of selected files based on the specified range
@@ -544,7 +546,7 @@ void processMDFFilesInRange(int start, int end) {
 
 // Function to interactively select and convert MDF files to ISO
 void select_and_convert_files_to_iso_mdf() {
-    int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 8;
+    int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
     std::string directoryPath = readInputLine("\033[94mEnter the directory paths (separated by spaces) to search for .mdf files or simply press enter to return:\033[0m ");
 
     if (directoryPath.empty()) {
