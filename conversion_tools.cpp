@@ -266,7 +266,18 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
 
 // MDF/MDS CONVERSION FUNCTIONS	\\
 
-std::vector<std::string> findMdsMdfFiles(const std::string& directory) {
+std::vector<std::string> findMdsMdfFiles(const std::string& paths) {
+    std::vector<std::string> directories;
+    std::istringstream iss(paths);
+    std::copy(std::istream_iterator<std::string>(iss),
+              std::istream_iterator<std::string>(),
+              std::back_inserter(directories));
+
+    if (directories.empty()) {
+        std::cerr << "No paths provided. Exiting." << std::endl;
+        return {};  // Return an empty vector or handle it as needed
+    }
+
     if (!mdfMdsFilesCache.empty()) {
         return mdfMdsFilesCache;
     }
@@ -278,40 +289,42 @@ std::vector<std::string> findMdsMdfFiles(const std::string& directory) {
         const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
         const int batchSize = 2; // Tweak the batch size as needed
 
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(directory)) {
-            if (entry.is_regular_file()) {
-                std::string ext = entry.path().extension();
-                std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) {
-                    return std::tolower(c);
-                });
+        for (const auto& directory : directories) {
+            for (const auto& entry : std::filesystem::recursive_directory_iterator(directory)) {
+                if (entry.is_regular_file()) {
+                    std::string ext = entry.path().extension();
+                    std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) {
+                        return std::tolower(c);
+                    });
 
-                if (ext == ".mdf") {
-                    if (std::filesystem::file_size(entry) >= 10'000'000) {
-                        while (futures.size() >= maxThreads) {
-                            auto it = std::find_if(futures.begin(), futures.end(),
-                                [](const std::future<void>& f) {
-                                    return f.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
-                                });
-                            if (it != futures.end()) {
-                                it->get();
-                                futures.erase(it);
+                    if (ext == ".mdf") {
+                        if (std::filesystem::file_size(entry) >= 10'000'000) {
+                            while (futures.size() >= maxThreads) {
+                                auto it = std::find_if(futures.begin(), futures.end(),
+                                    [](const std::future<void>& f) {
+                                        return f.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+                                    });
+                                if (it != futures.end()) {
+                                    it->get();
+                                    futures.erase(it);
+                                }
                             }
-                        }
 
-                        // Create a task to process the file
-                        futures.push_back(std::async(std::launch::async, [entry, &fileNames, &mutex] {
-                            std::string fileName = entry.path().string();
+                            // Create a task to process the file
+                            futures.push_back(std::async(std::launch::async, [entry, &fileNames, &mutex] {
+                                std::string fileName = entry.path().string();
 
-                            std::lock_guard<std::mutex> lock(mutex);
-                            fileNames.push_back(fileName);
-                        }));
+                                std::lock_guard<std::mutex> lock(mutex);
+                                fileNames.push_back(fileName);
+                            }));
 
-                        // Check the batch size and acquire the lock to merge
-                        if (futures.size() >= batchSize) {
-                            for (auto& future : futures) {
-                                future.get();
+                            // Check the batch size and acquire the lock to merge
+                            if (futures.size() >= batchSize) {
+                                for (auto& future : futures) {
+                                    future.get();
+                                }
+                                futures.clear();
                             }
-                            futures.clear();
                         }
                     }
                 }
@@ -329,6 +342,7 @@ std::vector<std::string> findMdsMdfFiles(const std::string& directory) {
     mdfMdsFilesCache = fileNames;
     return fileNames;
 }
+
 
 bool isMdf2IsoInstalled() {
     std::string command = "which " + shell_escape("mdf2iso");
@@ -433,10 +447,9 @@ void processMDFFilesInRange(int start, int end) {
 
 void select_and_convert_files_to_iso_mdf() {
     int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 8;
-    std::string directoryPath = readInputLine("\033[94mEnter the directory path to search for .mdf files or simply press enter to return:\033[0m ");
+    std::string directoryPath = readInputLine("\033[94mEnter the directory paths (separated by spaces) to search for .mdf files or simply press enter to return:\033[0m ");
 
     if (directoryPath.empty()) {
-        std::cout << "\033[33mPath input is empty. Exiting.\033[0m" << std::endl;
         return;
     }
 

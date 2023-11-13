@@ -4,9 +4,6 @@ LIBS = -lreadline
 
 # Use the number of available processors from nproc
 NUM_PROCESSORS := $(shell nproc 2>/dev/null)
-ifeq ($(NUM_PROCESSORS),)
-    NUM_PROCESSORS := 1
-endif
 
 # Set the default number of jobs to the number of available processors
 MAKEFLAGS = -j$(NUM_PROCESSORS)
