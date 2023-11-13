@@ -314,6 +314,7 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                     }
                 } else {
                     std::cout << "\033[31mInvalid range. Please try again.\033[0m" << std::endl;
+                    
                 }
             } else if (start >= 1 && start <= fileList.size()) {
                 // Process a valid single number input
@@ -326,7 +327,7 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
             }
         } else {
             // Handle invalid input format
-            std::cout << "\033[31mInvalid input format: " << token << ". Please try again.\033[0m" << std::endl;
+            std::cout << "\033[31mInvalid input format: Please try again.\033[0m" << std::endl;
         }
     }
 
