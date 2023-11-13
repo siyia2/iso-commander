@@ -345,7 +345,6 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
 
 // MDF/MDS CONVERSION FUNCTIONS	\\
 
-// Function to find MDF files in specified directories and subdirectories
 std::vector<std::string> findMdsMdfFiles(const std::string& paths) {
     // Parse input paths
     std::vector<std::string> directories;
@@ -360,8 +359,11 @@ std::vector<std::string> findMdsMdfFiles(const std::string& paths) {
         return {};  // Return an empty vector or handle it as needed
     }
 
-    // Check if the cache is already populated
-    if (!mdfMdsFilesCache.empty()) {
+    // Static variable to store cached paths
+    static std::vector<std::string> cachedPaths;
+
+    // Check if the cache is already populated and if the input paths are the same
+    if (!mdfMdsFilesCache.empty() && directories == cachedPaths) {
         return mdfMdsFilesCache;
     }
 
@@ -428,7 +430,12 @@ std::vector<std::string> findMdsMdfFiles(const std::string& paths) {
         std::cerr << "Filesystem error: " << e.what() << std::endl;
     }
 
-    mdfMdsFilesCache = fileNames;
+    // Update the cache only if the input paths are different
+    if (directories != cachedPaths) {
+        mdfMdsFilesCache = fileNames;
+        cachedPaths = directories;  // Update the cached paths
+    }
+
     return fileNames;
 }
 
