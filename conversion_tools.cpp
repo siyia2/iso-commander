@@ -35,10 +35,9 @@ std::string chooseFileToConvert(const std::vector<std::string>& files) {
 }
 
 
-// Function to find .bin and .img files in specified directories
-std::vector<std::string> findBinImgFiles(const std::vector<std::string>& directories) {
+std::vector<std::string> findBinImgFiles(const std::vector<std::string>& directories, const std::vector<std::string>& previousPaths) {
     // Check if the cache is already populated and return it if available
-    if (!binImgFilesCache.empty()) {
+    if (!previousPaths.empty() && directories == previousPaths && !binImgFilesCache.empty()) {
         return binImgFilesCache;
     }
 
@@ -66,7 +65,7 @@ std::vector<std::string> findBinImgFiles(const std::vector<std::string>& directo
                         (entry.path().filename().string().find("data") == std::string::npos) &&
                         (entry.path().filename().string() != "terrain.bin") &&
                         (entry.path().filename().string() != "blocklist.bin")) {
-                        
+
                         // Check file size before adding to the list
                         if (std::filesystem::file_size(entry) >= 10'000'000) {
                             // Ensure the number of active threads doesn't exceed the maximum
@@ -106,7 +105,8 @@ std::vector<std::string> findBinImgFiles(const std::vector<std::string>& directo
         for (auto& future : futures) {
             future.get();
         }
-    } catch (const std::filesystem::filesystem_error& e) {
+    }
+    catch (const std::filesystem::filesystem_error& e) {
         std::cerr << "Filesystem error: " << e.what() << std::endl;
     }
 
@@ -233,7 +233,10 @@ void select_and_convert_files_to_iso() {
     // Initialize vectors to store BIN/IMG files and directory paths
     std::vector<std::string> binImgFiles;
     std::vector<std::string> directoryPaths;
-
+    
+    // Declare previousPaths as a static variable
+    static std::vector<std::string> previousPaths;
+    
     // Read input for directory paths (allow multiple paths separated by spaces)
     std::string inputPaths = readInputLine("\033[94mEnter the directory paths (separated by spaces) to search for .bin .img files or simply press enter to return:\033[0m ");
     std::istringstream iss(inputPaths);
@@ -250,35 +253,33 @@ void select_and_convert_files_to_iso() {
     }
 
     // Call the findBinImgFiles function to populate the cache
-    binImgFiles = findBinImgFiles(directoryPaths);
+    binImgFiles = findBinImgFiles(directoryPaths, previousPaths);
 
     // Check if binImgFiles is empty
     if (binImgFiles.empty()) {
         std::cout << "\033[33mNo .bin or .img files found in the specified directories and their subdirectories or all files are under 10MB.\n\033[0m";
     } else {
-        
-
         // String for user input
         std::string input;
 
         while (true) {
-			std::system("clear");
-			// Print the list of BIN/IMG files
-			printFileListBin(binImgFiles);
+            std::system("clear");
+            // Print the list of BIN/IMG files
+            printFileListBin(binImgFiles);
             // Prompt user to choose a file or exit
             std::cout << "\033[94mChoose a file to process (enter the number or range e.g., 1-5 or 1 or simply press Enter to return):\033[0m ";
             std::getline(std::cin, input);
 
-            // Break the loop if user presses Enter
+            // Break the loop if the user presses Enter
             if (input.empty()) {
-				std::system("clear");
+                std::system("clear");
                 break;
             }
 
             // Process user input
             processInputBin(input, binImgFiles);
             std::cout << "Press enter to continue...";
-			std::cin.ignore();
+            std::cin.ignore();
         }
     }
 }
