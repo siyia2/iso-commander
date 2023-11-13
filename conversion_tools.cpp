@@ -129,6 +129,7 @@ bool isCcd2IsoInstalled() {
 
 // Function to convert a BIN file to ISO format
 void convertBINToISO(const std::string& inputPath) {
+	std::system("clear");
     // Check if the input file exists
     if (!std::ifstream(inputPath)) {
         std::cout << "\033[31mThe specified input file '" << inputPath << "' does not exist.\033[0m" << std::endl;
@@ -166,6 +167,7 @@ void convertBINToISO(const std::string& inputPath) {
 
 // Function to convert multiple BIN files to ISO format concurrently
 void convertBINsToISOs(const std::vector<std::string>& inputPaths, int numThreads) {
+	std::system("clear");
     // Check if ccd2iso is installed on the system
     if (!isCcd2IsoInstalled()) {
         std::cout << "\033[31mccd2iso is not installed. Please install it before using this option.\033[0m" << std::endl;
@@ -256,13 +258,14 @@ void select_and_convert_files_to_iso() {
     if (binImgFiles.empty()) {
         std::cout << "\033[33mNo .bin or .img files found in the specified directories and their subdirectories or all files are under 10MB.\n\033[0m";
     } else {
-        // Print the list of BIN/IMG files
-        printFileListBin(binImgFiles);
+        
 
         // String for user input
         std::string input;
 
         while (true) {
+			// Print the list of BIN/IMG files
+			printFileListBin(binImgFiles);
             // Prompt user to choose a file or exit
             std::cout << "\033[94mChoose a file to process (enter the number or range e.g., 1-5 or 1 or simply press Enter to return):\033[0m ";
             std::getline(std::cin, input);
