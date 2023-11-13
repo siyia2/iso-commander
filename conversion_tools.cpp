@@ -275,7 +275,7 @@ void select_and_convert_files_to_iso() {
                 std::system("clear");
                 break;
             }
-
+			std::system("clear");
             // Process user input
             processInputBin(input, binImgFiles);
             std::cout << "Press enter to continue...";
@@ -577,7 +577,7 @@ void select_and_convert_files_to_iso_mdf() {
     std::vector<std::string> mdfMdsFiles = findMdsMdfFiles(directoryPath);
 
     if (mdfMdsFiles.empty()) {
-        std::cout << "\033[31mNo .mdf files found in the specified directory and its subdirectories or all files are under 10MB.\n\033[0m";
+        std::cout << "\033[33mNo .mdf files found in the specified directory and its subdirectories or all files are under 10MB.\n\033[0m";
         return;
     }
 
@@ -600,7 +600,7 @@ void select_and_convert_files_to_iso_mdf() {
         if (!selectedFileIndices.empty()) {
             // Get the paths of the selected files based on user input
             std::vector<std::string> selectedFiles = getSelectedFiles(selectedFileIndices, mdfMdsFiles);
-
+			std::system("clear");
             // Convert the selected MDF files to ISO
             convertMDFsToISOs(selectedFiles, numThreads);
             std::cout << "Press enter to continue...";
