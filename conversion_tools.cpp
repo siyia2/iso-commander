@@ -27,7 +27,7 @@ std::string chooseFileToConvert(const std::vector<std::string>& files) {
     }
 }
 
-std::vector<std::string> findBinImgFiles(const std::string& directory) {
+std::vector<std::string> findBinImgFiles(const std::vector<std::string>& directories) {
     if (!binImgFilesCache.empty()) {
         return binImgFilesCache;
     }
@@ -39,38 +39,40 @@ std::vector<std::string> findBinImgFiles(const std::string& directory) {
         const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
         const int batchSize = 2; // Tweak the batch size as needed
 
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(directory)) {
-            if (entry.is_regular_file()) {
-                std::string ext = entry.path().extension();
-                std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) {
-                    return std::tolower(c);
-                });
+        for (const auto& directory : directories) {
+            for (const auto& entry : std::filesystem::recursive_directory_iterator(directory)) {
+                if (entry.is_regular_file()) {
+                    std::string ext = entry.path().extension();
+                    std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) {
+                        return std::tolower(c);
+                    });
 
-                if ((ext == ".bin" || ext == ".img") && (entry.path().filename().string().find("data") == std::string::npos) && (entry.path().filename().string() != "terrain.bin") && (entry.path().filename().string() != "blocklist.bin")) {
-                    if (std::filesystem::file_size(entry) >= 10'000'000) {
-                        while (futures.size() >= maxThreads) {
-                            auto it = std::find_if(futures.begin(), futures.end(),
-                                [](const std::future<void>& f) {
-                                    return f.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
-                                });
-                            if (it != futures.end()) {
-                                it->get();
-                                futures.erase(it);
+                    if ((ext == ".bin" || ext == ".img") && (entry.path().filename().string().find("data") == std::string::npos) && (entry.path().filename().string() != "terrain.bin") && (entry.path().filename().string() != "blocklist.bin")) {
+                        if (std::filesystem::file_size(entry) >= 10'000'000) {
+                            while (futures.size() >= maxThreads) {
+                                auto it = std::find_if(futures.begin(), futures.end(),
+                                    [](const std::future<void>& f) {
+                                        return f.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+                                    });
+                                if (it != futures.end()) {
+                                    it->get();
+                                    futures.erase(it);
+                                }
                             }
-                        }
 
-                        futures.push_back(std::async(std::launch::async, [entry, &fileNames, &mutex] {
-                            std::string fileName = entry.path().string();
+                            futures.push_back(std::async(std::launch::async, [entry, &fileNames, &mutex] {
+                                std::string fileName = entry.path().string();
 
-                            std::lock_guard<std::mutex> lock(mutex);
-                            fileNames.push_back(fileName);
-                        }));
+                                std::lock_guard<std::mutex> lock(mutex);
+                                fileNames.push_back(fileName);
+                            }));
 
-                        if (futures.size() >= batchSize) {
-                            for (auto& future : futures) {
-                                future.get();
+                            if (futures.size() >= batchSize) {
+                                for (auto& future : futures) {
+                                    future.get();
+                                }
+                                futures.clear();
                             }
-                            futures.clear();
                         }
                     }
                 }
@@ -87,6 +89,8 @@ std::vector<std::string> findBinImgFiles(const std::string& directory) {
     binImgFilesCache = fileNames;
     return fileNames;
 }
+
+
 bool isCcd2IsoInstalled() {
     if (std::system("which ccd2iso > /dev/null 2>&1") == 0) {
         return true;
@@ -175,18 +179,25 @@ void processFilesInRange(int start, int end) {
 
 void select_and_convert_files_to_iso() {
     std::vector<std::string> binImgFiles;
-    std::string directoryPath = readInputLine("\033[94mEnter the directory path to search for .bin .img files or simply press enter to return:\033[0m ");
+    std::vector<std::string> directoryPaths;
 
-    if (directoryPath.empty()) {
+    // Read input for directory paths (allow multiple paths separated by spaces)
+    std::string inputPaths = readInputLine("\033[94mEnter the directory paths (separated by spaces) to search for .bin .img files or simply press enter to return:\033[0m ");
+    std::istringstream iss(inputPaths);
+    std::copy(std::istream_iterator<std::string>(iss),
+              std::istream_iterator<std::string>(),
+              std::back_inserter(directoryPaths));
+
+    if (directoryPaths.empty()) {
         std::cout << "Path input is empty. Exiting." << std::endl;
         return;
     }
 
     // Call the findBinImgFiles function to populate the cache
-    binImgFiles = findBinImgFiles(directoryPath);
+    binImgFiles = findBinImgFiles(directoryPaths);
 
     if (binImgFiles.empty()) {
-        std::cout << "\033[33mNo .bin or .img files found in the specified directory and its subdirectories or all files are under 10MB.\n\033[0m";
+        std::cout << "\033[33mNo .bin or .img files found in the specified directories and their subdirectories or all files are under 10MB.\n\033[0m";
     } else {
         printFileListBin(binImgFiles);
 

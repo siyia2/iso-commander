@@ -17,13 +17,14 @@
 #include <thread>
 #include <unordered_set>
 #include <vector>
+#include <iterator>
 
 
 // Function prototypes
 
 // BIN/IMG CONVERSION
 std::string chooseFileToConvert(const std::vector<std::string>& files);
-std::vector<std::string> findBinImgFiles(const std::string& directory);
+std::vector<std::string> findBinImgFiles(const std::vector<std::string>& directories);
 void convertBINToISO(const std::string& inputPath);
 void convertBINsToISOs(const std::vector<std::string>& inputPaths, int numThreads);
 void processFilesInRange(int start, int end);
