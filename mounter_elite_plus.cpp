@@ -330,47 +330,64 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
     std::cout << "Cache refreshed for directory: " << path << std::endl;
 }
 
-// Cache refresh function
+// Function for manual cache refresh
 void manualRefreshCache() {
+    // Prompt the user to enter directory paths for manual cache refresh
     std::string inputLine = readInputLine("\033[94mEnter directory paths to manually refresh the cache (separated by spaces), or simply press enter to cancel:\033[0m ");
-    
+
+    // Check if the user canceled the cache refresh
     if (inputLine.empty()) {
         std::cout << "Cache refresh canceled." << std::endl;
         return;
     }
 
+    // Create an input string stream to parse directory paths
     std::istringstream iss(inputLine);
     std::string path;
-    std::vector<std::string> allIsoFiles; // Create a vector to combine results
 
+    // Vector to store all ISO files from multiple directories
+    std::vector<std::string> allIsoFiles;
+
+    // Vector to store threads for parallel cache refreshing
     std::vector<std::thread> threads;
-    
+
+    // Iterate through the entered directory paths
     while (iss >> path) {
+        // Create a thread for refreshing the cache for each directory and pass the vector by reference
         threads.emplace_back(std::thread(refreshCacheForDirectory, path, std::ref(allIsoFiles)));
     }
-    
+
     // Wait for all threads to finish
     for (std::thread& t : threads) {
         t.join();
     }
 
-    // Now, save the combined cache
+    // Save the combined cache to disk
     saveCache(allIsoFiles, maxCacheSize);
+
+    // Inform the user that the cache has been successfully refreshed
     std::cout << "Cache refreshed successfully." << std::endl;
 }
 
 //	MOUNT STUFF	\\
 
+// Function to check if a directory exists at the specified path
 bool directoryExists(const std::string& path) {
+    // Use the std::filesystem::is_directory function to check if the path is a directory
     return std::filesystem::is_directory(path);
 }
 
+// Function to check if all directories in a vector exist on disk
 bool allDirectoriesExistOnDisk(const std::vector<std::string>& directories) {
+    // Flag to track whether all directories exist
     bool allExist = true;
 
+    // Use OpenMP to parallelize the loop for checking directory existence
     #pragma omp parallel for shared(allExist) num_threads(omp_get_max_threads())
     for (int i = 0; i < directories.size(); ++i) {
+        // Check if the directory at the current index exists
         if (!directoryExists(directories[i])) {
+            // If not, enter a critical section to safely update the shared flag
             #pragma omp critical
             {
                 allExist = false;
@@ -378,6 +395,7 @@ bool allDirectoriesExistOnDisk(const std::vector<std::string>& directories) {
         }
     }
 
+    // Return the final result indicating whether all directories exist
     return allExist;
 }
 
@@ -436,40 +454,57 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
     
 }
 
+// Function to mount ISO files concurrently using threads
 void mountISO(const std::vector<std::string>& isoFiles) {
+    // Map to store mounted ISOs with their corresponding paths
     std::map<std::string, std::string> mountedIsos;
+
+    // Vector to store threads for parallel mounting
     std::vector<std::thread> threads;
 
+    // Iterate through the list of ISO files and spawn a thread for each
     for (const std::string& isoFile : isoFiles) {
+        // Create a copy of the ISO file path for the thread to avoid race conditions
         std::string IsoFile = (isoFile);
+
+        // Create a thread for mounting the ISO file and pass the map by reference
         threads.emplace_back(mountIsoFile, IsoFile, std::ref(mountedIsos));
     }
 
-    // Join all threads
+    // Join all threads to wait for them to finish
     for (auto& thread : threads) {
         thread.join();
     }
 }
 
-
+// Function to check if a file exists on disk
 bool fileExistsOnDisk(const std::string& filename) {
+    // Use an ifstream to check the existence of the file
     std::ifstream file(filename);
     return file.good();
 }
 
+// Function to check if a string ends with ".iso" (case-insensitive)
 bool ends_with_iso(const std::string& str) {
     // Convert the string to lowercase for a case-insensitive comparison
     std::string lowercase = str;
     std::transform(lowercase.begin(), lowercase.end(), lowercase.begin(), ::tolower);
+
+    // Check if the lowercase string ends with ".iso"
     return lowercase.size() >= 4 && lowercase.compare(lowercase.size() - 4, 4, ".iso") == 0;
 }
 
+// Function to check if all files in a vector exist on disk and have the ".iso" extension
 bool allFilesExistAndAreIso(const std::vector<std::string>& files) {
+    // Flag to track whether all files exist and have the ".iso" extension
     bool allExistAndIso = true;
 
+    // Use OpenMP to parallelize the loop for checking file existence and extension
     #pragma omp parallel for shared(allExistAndIso) num_threads(omp_get_max_threads())
     for (int i = 0; i < files.size(); ++i) {
+        // Check if the file exists on disk and has the ".iso" extension
         if (!fileExistsOnDisk(files[i]) || !ends_with_iso(files[i])) {
+            // If not, enter a critical section to safely update the shared flag
             #pragma omp critical
             {
                 allExistAndIso = false;
@@ -477,13 +512,16 @@ bool allFilesExistAndAreIso(const std::vector<std::string>& files) {
         }
     }
 
+    // Return the final result indicating whether all files meet the criteria
     return allExistAndIso;
 }
 
-// Main function to select and mount ISO files by number
+// Function to select and mount ISO files by number
 void select_and_mount_files_by_number() {
+    // Load ISO files from cache
     std::vector<std::string> isoFiles = loadCache();
 
+    // Check if the cache is empty
     if (isoFiles.empty()) {
         std::system("clear");
         std::cout << "\033[33mCache is empty. Please refresh the cache from the main menu.\033[0m" << std::endl;
@@ -492,38 +530,45 @@ void select_and_mount_files_by_number() {
         return;
     }
 
-    // Filter isoFiles to include entries with ".iso" or ".ISO" extensions
+    // Filter isoFiles to include only entries with ".iso" or ".ISO" extensions
     isoFiles.erase(std::remove_if(isoFiles.begin(), isoFiles.end(), [](const std::string& iso) {
         return !ends_with_iso(iso);
     }), isoFiles.end());
 
+    // Check if there are any ISO files to mount
     if (isoFiles.empty()) {
         std::cout << "\033[33mNo more unmounted .iso files in the cache. Please refresh the cache from the main menu.\033[0m" << std::endl;
         return;
     }
 
+    // Set to track mounted ISO files
     std::unordered_set<std::string> mountedSet;
 
+    // Main loop for selecting and mounting ISO files
     while (true) {
         std::system("clear");
         std::cout << "\033[33m! IF EXPECTED ISO FILE IS NOT ON THE LIST, REFRESH CACHE FROM MAIN MENU !\n\033[0m" << std::endl;
         printIsoFileList(isoFiles);
 
+        // Prompt user for input
         std::string input;
         std::cout << "\033[94mChoose .iso files to mount (enter numbers, ranges like '1-3', '1 2', '00' to mount all, or press Enter to return):\033[0m ";
         std::getline(std::cin, input);
         std::system("clear");
 
+        // Check if the user wants to return
         if (input.empty()) {
             std::cout << "Press Enter to Return" << std::endl;
             break;
         }
 
+        // Check if the user wants to mount all ISO files
         if (input == "00") {
             for (const std::string& iso : isoFiles) {
                 handleIsoFile(iso, mountedSet);
             }
         } else {
+            // Process user input to select and mount specific ISO files
             processInput(input, isoFiles, mountedSet);
         }
 
@@ -532,44 +577,56 @@ void select_and_mount_files_by_number() {
     }
 }
 
+// Function to print the list of ISO files with their corresponding numbers
 void printIsoFileList(const std::vector<std::string>& isoFiles) {
     for (int i = 0; i < isoFiles.size(); i++) {
         std::cout << i + 1 << ". " << isoFiles[i] << std::endl;
     }
 }
 
+// Function to handle mounting of a specific ISO file
 void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet) {
+    // Check if the ISO file exists on disk
     if (fileExistsOnDisk(iso)) {
+        // Attempt to insert the ISO file into the set; if it's a new entry, mount it
         if (mountedSet.insert(iso).second) {
             mountISO({iso});
         } else {
+            // Print a message if the ISO file is already mounted
             printAlreadyMountedMessage(iso);
         }
     } else {
+        // Display an error message if the ISO file doesn't exist on disk
         displayErrorMessage(iso);
     }
 }
 
 // Function to process user input and choose ISO files to mount
 void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
+    // Input string stream to parse user input
     std::istringstream iss(input);
     int start, end;
     char separator;
 
+    // Check if the input is a range in the form of "start-end"
     if ((iss >> start) && (iss >> separator) && (separator == '-') && (iss >> end)) {
         // Successfully parsed a range
         if (start >= 1 && static_cast<size_t>(end) <= isoFiles.size() && start <= end) {
+            // Iterate through the specified range and handle each ISO file
             for (int i = start; i <= end; ++i) {
                 const std::string& selectedIso = isoFiles[i - 1];
                 handleIsoFile(selectedIso, mountedSet);
             }
         } else {
+            // Print an error message for an invalid range
             std::cerr << "\033[31mInvalid range. Please enter a valid range.\033[0m" << std::endl;
         }
     } else if (!input.empty()) {
-        // Attempt to parse as a single number
+        // Attempt to parse as a single number or multiple numbers separated by spaces
         std::stringstream ss(input);
         std::string singleInput;
+
+        // Iterate through the space-separated numbers and handle each ISO file
         while (std::getline(ss, singleInput, ' ')) {
             int userInput;
             std::istringstream(singleInput) >> userInput;
@@ -578,36 +635,44 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
                 const std::string& selectedIso = isoFiles[userInput - 1];
                 handleIsoFile(selectedIso, mountedSet);
             } else {
+                // Print an error message for an invalid number
                 std::cerr << "\033[31mInvalid selection. Please enter a valid number.\033[0m" << std::endl;
                 return;
             }
         }
     } else {
+        // Print an error message for an empty input
         std::cerr << "\033[31mInvalid input. Please enter a valid number or range.\033[0m" << std::endl;
     }
 }
 
+// Function to print a message indicating that the ISO file is already mounted
 void printAlreadyMountedMessage(const std::string& iso) {
     std::cout << "\033[33mISO file '" << iso << "' is already mounted.\033[0m" << std::endl;
 }
 
+// Function to display an error message when the ISO file does not exist on disk
 void displayErrorMessage(const std::string& iso) {
     std::cout << "\033[35mISO file '" << iso << "' does not exist on disk. Please refresh the cache from the main menu.\033[0m" << std::endl;
-    //std::cout << "Press Enter to continue...";
-    //std::cin.get(); // Wait for the user to press Enter
 }
 
+// Function to perform case-insensitive string comparison
 bool iequals(std::string_view a, std::string_view b) {
+    // Check if the string lengths are equal
     if (a.size() != b.size()) {
         return false;
     }
 
+    // Flag to track equality
     bool equal = true;
 
+    // Use OpenMP to parallelize the loop for case-insensitive comparison
     #pragma omp parallel for shared(equal)
     for (std::size_t i = 0; i < a.size(); ++i) {
+        // Enter a critical section to safely update the shared flag
         #pragma omp critical
         {
+            // Check if characters are not equal (case-insensitive)
             if (std::tolower(a[i]) != std::tolower(b[i])) {
                 equal = false;
             }
@@ -618,25 +683,33 @@ bool iequals(std::string_view a, std::string_view b) {
 }
 
 
-
-
+// Function to parallel traverse a directory and find ISO files
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mtx) {
     try {
+        // Vector to store futures for asynchronous tasks
         std::vector<std::future<std::vector<std::string>>> futures;
 
+        // Iterate through the directory and its subdirectories
         for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
+            // Check if the entry is a regular file
             if (entry.is_regular_file()) {
+                // Get the path of the file
                 const std::filesystem::path& filePath = entry.path();
 
+                // Skip empty files or files with ".bin" extension
                 if (std::filesystem::file_size(filePath) == 0 || iequals(filePath.stem().string(), ".bin")) {
                     continue;
                 }
 
+                // Get the file extension as a string and string view
                 std::string extensionStr = filePath.extension().string();
                 std::string_view extension = extensionStr;
 
+                // Check if the file has a ".iso" extension
                 if (iequals(extension, ".iso")) {
+                    // Use async to run the task of collecting ISO paths in parallel
                     futures.push_back(std::async(std::launch::async, [filePath]() -> std::vector<std::string> {
+                        // Return a vector containing the path of the ISO file
                         return std::vector<std::string>{filePath.string()};
                     }));
                 }
@@ -645,6 +718,7 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
 
         // Wait for all async tasks to complete and collect results
         for (auto& future : futures) {
+            // Retrieve the vector of ISO paths from the completed future
             auto isoPaths = future.get();
 
             // Lock the mutex only once to merge local vectors into isoFiles
@@ -652,20 +726,30 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
             isoFiles.insert(isoFiles.end(), isoPaths.begin(), isoPaths.end());
         }
     } catch (const std::filesystem::filesystem_error& e) {
+        // Handle filesystem errors and print an error message
         std::cerr << "Error: " << e.what() << std::endl;
     }
 }
 
 
+// Function to process a directory path, find ISO files in parallel, and update the shared vector
 void processPath(const std::string& path, std::vector<std::string>& allIsoFiles) {
+    // Inform about the directory path being processed
     std::cout << "Processing directory path: " << path << std::endl;
+
+    // Vector to store ISO files found in the current directory
     std::vector<std::string> newIsoFiles;
+
+    // Call parallelTraverse to asynchronously find ISO files in the directory
     parallelTraverse(path, newIsoFiles, mtx);
 
-    // Lock the mutex to safely update the shared vector
+    // Lock the mutex to safely update the shared vector of all ISO files
     std::lock_guard<std::mutex> lock(mtx);
+    
+    // Merge the new ISO files into the shared vector
     allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
 
+    // Inform that the cache has been refreshed for the processed directory
     std::cout << "Cache refreshed for directory: " << path << std::endl;
 }
 
@@ -673,17 +757,23 @@ void processPath(const std::string& path, std::vector<std::string>& allIsoFiles)
 
 // UMOUNT FUNCTIONS	\\
 
+// Function to list mounted ISOs in the /mnt directory
 void listMountedISOs() {
+    // Path where ISO directories are expected to be mounted
     const std::string isoPath = "/mnt";
+
+    // Vector to store names of mounted ISOs
     std::vector<std::string> isoDirs;
 
-    // Find and store directories with the name "iso_*" in /mnt
+    // Open the /mnt directory and find directories with names starting with "iso_"
     DIR* dir;
     struct dirent* entry;
 
     if ((dir = opendir(isoPath.c_str())) != NULL) {
         while ((entry = readdir(dir)) != NULL) {
+            // Check if the entry is a directory and has a name starting with "iso_"
             if (entry->d_type == DT_DIR && std::string(entry->d_name).find("iso_") == 0) {
+                // Build the full path and extract the ISO name
                 std::string fullDirPath = isoPath + "/" + entry->d_name;
                 std::string isoName = entry->d_name + 4; // Remove "/mnt/iso_" part
                 isoDirs.push_back(isoName);
@@ -691,25 +781,30 @@ void listMountedISOs() {
         }
         closedir(dir);
     } else {
+        // Print an error message if there is an issue opening the /mnt directory
         std::cerr << "Error opening the /mnt directory." << std::endl;
     }
 
-    // Display a list of mounted ISOs with ISO names in bold and white "List of mounted ISOs" text
+    // Display a list of mounted ISOs with ISO names in bold and magenta text
     if (!isoDirs.empty()) {
         std::cout << "\033[37;1mList of mounted ISOs:\033[0m" << std::endl; // White and bold
         for (size_t i = 0; i < isoDirs.size(); ++i) {
             std::cout << i + 1 << ". \033[1m\033[35m" << isoDirs[i] << "\033[0m" << std::endl; // Bold and magenta
         }
     } else {
+        // Print a message if no ISOs are mounted
         std::cerr << "\033[31mNO ISOS MOUNTED\n\033[0m" << std::endl;
- }
+    }
 }
-
+// Function to unmount an ISO and remove its directory if empty
 void unmountISO(const std::string& isoDir) {
-    // Unmount the ISO and suppress logs
+    // Construct the unmount command with sudo, umount, and suppressing logs
     std::string unmountCommand = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1";
+
+    // Execute the unmount command
     int result = system(unmountCommand.c_str());
 
+    // Check if the unmounting was successful
     if (result == 0) {
         // Omitted log for unmounting success
     } else {
@@ -718,21 +813,29 @@ void unmountISO(const std::string& isoDir) {
 
     // Check if the directory is empty before removing it
     if (std::filesystem::is_empty(isoDir)) {
+        // Construct the remove directory command with sudo, rmdir, and suppressing logs
         std::string removeDirCommand = "sudo rmdir -p " + shell_escape(isoDir) + " 2>/dev/null";
+
+        // Execute the remove directory command
         int removeDirResult = system(removeDirCommand.c_str());
 
+        // Check if the directory removal was successful
         if (removeDirResult == 0) {
             // Omitted log for directory removal
         }
     } else {
+        // Print a message if the directory is not empty
         std::cout << "\033[31mDIRECTORY NOT EMPTY, SKIPPING PROBABLY NOT AN ISO.\033[0m" << std::endl;
         // Handle the case where the directory is not empty, e.g., log an error or take appropriate action.
     }
 }
 
+
+// Function to unmount ISOs based on user input
 void unmountISOs() {
     listMountedISOs(); // Display the initial list of mounted ISOs
 
+    // Path where ISO directories are expected to be mounted
     const std::string isoPath = "/mnt";
 
     while (true) {
@@ -744,15 +847,18 @@ void unmountISOs() {
 
         if ((dir = opendir(isoPath.c_str())) != NULL) {
             while ((entry = readdir(dir)) != NULL) {
+                // Check if the entry is a directory and has a name starting with "iso_"
                 if (entry->d_type == DT_DIR && std::string(entry->d_name).find("iso_") == 0) {
                     isoDirs.push_back(isoPath + "/" + entry->d_name);
                 }
             }
             closedir(dir);
         } else {
-            std::cerr << "\031[33mError opening the /mnt directory.\033[0m" << std::endl;
+            // Print an error message if there is an issue opening the /mnt directory
+            std::cerr << "\033[33mError opening the /mnt directory.\033[0m" << std::endl;
         }
 
+        // Check if there are no mounted ISOs
         if (isoDirs.empty()) {
             std::cout << "\033[33mLIST IS EMPTY, NOTHING TO DO.\n\033[0m";
             std::cout << "Press Enter to continue...";
@@ -765,6 +871,8 @@ void unmountISOs() {
         std::string input;
         std::getline(std::cin, input);
         std::system("clear");
+        
+        // Check if the user wants to return
         if (input == "") {
             break;  // Exit the loop
         }
@@ -785,12 +893,14 @@ void unmountISOs() {
 
         std::string token;
         while (iss >> token) {
+            // Check if the token is a valid number
             if (std::regex_match(token, std::regex("^\\d+$"))) {
                 // Individual number
                 int number = std::stoi(token);
                 if (number >= 1 && static_cast<size_t>(number) <= isoDirs.size()) {
                     unmountIndices.push_back(number);
                 } else {
+                    // Print an error message for an invalid index
                     std::cerr << "\033[31mInvalid index. Please try again.\n\033[0m" << std::endl;
                     continue;  // Restart the loop
                 }
@@ -805,14 +915,17 @@ void unmountISOs() {
                         unmountIndices.push_back(i);
                     }
                 } else {
+                    // Print an error message for an invalid range
                     std::cerr << "\033[31mInvalid range. Please try again.\n\033[0m" << std::endl;
                 }
             } else {
+                // Print an error message for invalid input format
                 std::cerr << "\033[31mInvalid input format. Please try again.\n\033[0m" << std::endl;
             }
         }
 
         if (unmountIndices.empty()) {
+            // Print an error message if no valid indices provided
             std::cerr << "\033[31mNo valid indices provided. Please try again.\n\033[0m" << std::endl;
             continue;  // Restart the loop
         }
@@ -842,38 +955,50 @@ void unmountISOs() {
     }
 }
 
+// Function to unmount and clean up a specific ISO
 void unmountAndCleanISO(const std::string& isoDir) {
+    // Construct the unmount command with sudo, umount, and suppressing logs
     std::string unmountCommand = "sudo umount -l " + shell_escape(isoDir) + " 2>/dev/null";
+
+    // Execute the unmount command
     int result = std::system(unmountCommand.c_str());
 
     // Remove the directory after unmounting
     std::string removeDirCommand = "sudo rmdir " + shell_escape(isoDir);
     int removeDirResult = std::system(removeDirCommand.c_str());
 
+    // Check if the directory removal was not successful and print an error message
     if (removeDirResult != 0) {
-        std::cerr << "\033[31mFailed to remove directory\033[0m" << isoDir << std::endl;
+        std::cerr << "\033[31mFailed to remove directory\033[0m " << isoDir << std::endl;
     }
 }
 
+// Function to clean and unmount a specific ISO with mutex protection
 void cleanAndUnmountISO(const std::string& isoDir) {
     std::lock_guard<std::mutex> lock(mtx);
 
     // Construct a shell-escaped ISO directory path
     std::string IsoDir = (isoDir);
 
+    // Call the unmount and clean function
     unmountAndCleanISO(IsoDir);
 }
 
+// Function to clean and unmount all ISOs
 void cleanAndUnmountAllISOs() {
     std::cout << "\nUnmount All ISOs function." << std::endl;
+
+    // Path where ISO directories are expected to be mounted
     const std::string isoPath = "/mnt";
     std::vector<std::string> isoDirs;
 
+    // Open the /mnt directory and find directories with names starting with "iso_"
     DIR* dir;
     struct dirent* entry;
 
     if ((dir = opendir(isoPath.c_str())) != NULL) {
         while ((entry = readdir(dir)) != NULL) {
+            // Check if the entry is a directory and has a name starting with "iso_"
             if (entry->d_type == DT_DIR && std::string(entry->d_name).find("iso_") == 0) {
                 isoDirs.push_back(isoPath + "/" + entry->d_name);
             }
@@ -881,19 +1006,24 @@ void cleanAndUnmountAllISOs() {
         closedir(dir);
     }
 
+    // Check if there are no ISOs to unmount
     if (isoDirs.empty()) {
         std::cout << "\033[33mNO ISOS TO UNMOUNT\n\033[0m" << std::endl;
         return;
     }
 
+    // Create a vector of threads to clean and unmount ISOs concurrently
     std::vector<std::thread> threads;
 
     for (const std::string& isoDir : isoDirs) {
         // Construct a shell-escaped path
         std::string IsoDir = (isoDir);
+
+        // Use a thread for each ISO to be cleaned and unmounted
         threads.emplace_back(cleanAndUnmountISO, IsoDir);
     }
 
+    // Join the threads to wait for them to finish
     for (std::thread& thread : threads) {
         thread.join();
     }
