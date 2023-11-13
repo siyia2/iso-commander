@@ -129,7 +129,6 @@ bool isCcd2IsoInstalled() {
 
 // Function to convert a BIN file to ISO format
 void convertBINToISO(const std::string& inputPath) {
-	std::system("clear");
     // Check if the input file exists
     if (!std::ifstream(inputPath)) {
         std::cout << "\033[31mThe specified input file '" << inputPath << "' does not exist.\033[0m" << std::endl;
@@ -167,7 +166,6 @@ void convertBINToISO(const std::string& inputPath) {
 
 // Function to convert multiple BIN files to ISO format concurrently
 void convertBINsToISOs(const std::vector<std::string>& inputPaths, int numThreads) {
-	std::system("clear");
     // Check if ccd2iso is installed on the system
     if (!isCcd2IsoInstalled()) {
         std::cout << "\033[31mccd2iso is not installed. Please install it before using this option.\033[0m" << std::endl;
@@ -264,6 +262,7 @@ void select_and_convert_files_to_iso() {
         std::string input;
 
         while (true) {
+			std::system("clear");
 			// Print the list of BIN/IMG files
 			printFileListBin(binImgFiles);
             // Prompt user to choose a file or exit
@@ -272,12 +271,14 @@ void select_and_convert_files_to_iso() {
 
             // Break the loop if user presses Enter
             if (input.empty()) {
-                std::cout << "Exiting..." << std::endl;
+				std::system("clear");
                 break;
             }
 
             // Process user input
             processInputBin(input, binImgFiles);
+            std::cout << "Press enter to continue...";
+			std::cin.ignore();
         }
     }
 }
@@ -447,10 +448,16 @@ bool isMdf2IsoInstalled() {
 
 // Function to convert an MDF file to ISO format using mdf2iso
 void convertMDFToISO(const std::string& inputPath) {
-	std::system("clear");
     // Check if the input file exists
     if (!std::ifstream(inputPath)) {
         std::cout << "\033[31mThe specified input file '" << inputPath << "' does not exist.\033[0m" << std::endl;
+        return;
+    }
+
+    // Check if the corresponding .iso file already exists
+    std::string isoOutputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
+    if (std::ifstream(isoOutputPath)) {
+        std::cout << "\033[33mThe corresponding .iso file already exists for '" << inputPath << "'. Skipping conversion.\033[0m" << std::endl;
         return;
     }
 
@@ -463,9 +470,11 @@ void convertMDFToISO(const std::string& inputPath) {
     // Escape the outputPath before using it in shell commands
     std::string escapedOutputPath = shell_escape(outputPath);
 
+    // Continue with the rest of the conversion logic...
+
     // Execute the conversion using mdf2iso
     std::string conversionCommand = "mdf2iso " + escapedInputPath + " " + escapedOutputPath;
-
+	
     // Capture the output of the mdf2iso command
     FILE* pipe = popen(conversionCommand.c_str(), "r");
     if (!pipe) {
@@ -484,15 +493,15 @@ void convertMDFToISO(const std::string& inputPath) {
     if (conversionStatus == 0) {
         // Check if the conversion output contains the "already ISO9660" message
         if (conversionOutput.find("already ISO") != std::string::npos) {
-            std::cout << "\033[31mThe selected file '" << inputPath << "' is already in ISO format, maybe rename it to .iso?. Skipping conversion.\033[0m" << std::endl;
+            std::cout << "\033[31mThe selected file '" << inputPath << "' is already in ISO format, maybe rename to .iso?. Skipping conversion.\033[0m" << std::endl;
         } else {
             std::cout << "\033[33mImage file converted to ISO:\033[0m " << outputPath << std::endl;
         }
     } else {
         std::cout << "\033[31mConversion of " << inputPath << " failed.\033[0m" << std::endl;
-    }        
-
+    }
 }
+
 // Function to convert multiple MDF files to ISO format using mdf2iso
 void convertMDFsToISOs(const std::vector<std::string>& inputPaths, int numThreads) {
     // Check if mdf2iso is installed
@@ -514,7 +523,7 @@ void convertMDFsToISOs(const std::vector<std::string>& inputPaths, int numThread
 
             // Create a new thread for each conversion
             threads.emplace_back(convertMDFToISO, escapedInputPath);
-            
+
             // Limit the number of concurrent threads to the number of available cores
             if (threads.size() >= numCores) {
                 for (auto& thread : threads) {
@@ -566,13 +575,14 @@ void select_and_convert_files_to_iso_mdf() {
 
     // Continue selecting and converting files until the user decides to exit
     while (true) {
+		std::system("clear");
         printFileListMdf(mdfMdsFiles);
 
         // Prompt the user to enter file numbers or 'exit'
         std::string input = readInputLine("\033[94mEnter the numbers of the files to convert (e.g., '1-2' or '1 2', or simply press enter to return):\033[0m ");
 
         if (input.empty()) {
-            std::cout << "Exiting..." << std::endl;
+			std::system("clear");
             break;
         }
 
@@ -585,6 +595,8 @@ void select_and_convert_files_to_iso_mdf() {
 
             // Convert the selected MDF files to ISO
             convertMDFsToISOs(selectedFiles, numThreads);
+            std::cout << "Press enter to continue...";
+		std::cin.ignore();
         } else {
             std::cout << "Invalid choice. Please enter valid file numbers or 'exit'." << std::endl;
         }
