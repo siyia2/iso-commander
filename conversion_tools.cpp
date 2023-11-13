@@ -493,9 +493,9 @@ void convertMDFToISO(const std::string& inputPath) {
     if (conversionStatus == 0) {
         // Check if the conversion output contains the "already ISO9660" message
         if (conversionOutput.find("already ISO") != std::string::npos) {
-            std::cout << "\033[31mThe selected file '" << inputPath << "' is already in ISO format, maybe rename to .iso?. Skipping conversion.\033[0m" << std::endl;
+            std::cout << "\033[31mThe selected file '" << inputPath << "' is already in ISO format, maybe rename it to .iso?. Skipping conversion.\033[0m" << std::endl;
         } else {
-            std::cout << "\033[33mImage file converted to ISO:\033[0m " << outputPath << std::endl;
+            std::cout << "\033[32mImage file converted to ISO:\033[0m " << outputPath << std::endl;
         }
     } else {
         std::cout << "\033[31mConversion of " << inputPath << " failed.\033[0m" << std::endl;
