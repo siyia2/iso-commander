@@ -480,6 +480,7 @@ bool allFilesExistAndAreIso(const std::vector<std::string>& files) {
     return allExistAndIso;
 }
 
+// Main function to select and mount ISO files by number
 void select_and_mount_files_by_number() {
     std::vector<std::string> isoFiles = loadCache();
 
@@ -509,7 +510,7 @@ void select_and_mount_files_by_number() {
         printIsoFileList(isoFiles);
 
         std::string input;
-        std::cout << "\033[94mChoose .iso files to mount (enter numbers, ranges like '1-3', '00' to mount all, or press Enter to return):\033[0m ";
+        std::cout << "\033[94mChoose .iso files to mount (enter numbers, ranges like '1-3', '1 2', '00' to mount all, or press Enter to return):\033[0m ";
         std::getline(std::cin, input);
         std::system("clear");
 
@@ -549,33 +550,40 @@ void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& moun
     }
 }
 
+// Function to process user input and choose ISO files to mount
 void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
     std::istringstream iss(input);
-    std::string token;
+    int start, end;
+    char separator;
 
-    while (std::getline(iss, token, ' ')) {
-        if (token.find('-') != std::string::npos) {
-            size_t dashPos = token.find('-');
-            int startRange = std::stoi(token.substr(0, dashPos));
-            int endRange = std::stoi(token.substr(dashPos + 1));
-
-            for (int i = startRange; i <= endRange; i++) {
-                int selectedNumber = i - 1;
-
-                if (selectedNumber >= 0 && selectedNumber < isoFiles.size()) {
-                    handleIsoFile(isoFiles[selectedNumber], mountedSet);
-                } else {
-                    std::cout << "\033[31mInvalid range: " << token << ". Please try again.\033[0m" << std::endl;
-                }
+    if ((iss >> start) && (iss >> separator) && (separator == '-') && (iss >> end)) {
+        // Successfully parsed a range
+        if (start >= 1 && static_cast<size_t>(end) <= isoFiles.size() && start <= end) {
+            for (int i = start; i <= end; ++i) {
+                const std::string& selectedIso = isoFiles[i - 1];
+                handleIsoFile(selectedIso, mountedSet);
             }
         } else {
-            int selectedNumber = std::stoi(token);
-            if (selectedNumber >= 1 && selectedNumber <= isoFiles.size()) {
-                handleIsoFile(isoFiles[selectedNumber - 1], mountedSet);
+            std::cerr << "\033[31mInvalid range. Please enter a valid range.\033[0m" << std::endl;
+        }
+    } else if (!input.empty()) {
+        // Attempt to parse as a single number
+        std::stringstream ss(input);
+        std::string singleInput;
+        while (std::getline(ss, singleInput, ' ')) {
+            int userInput;
+            std::istringstream(singleInput) >> userInput;
+
+            if (userInput >= 1 && static_cast<size_t>(userInput) <= isoFiles.size()) {
+                const std::string& selectedIso = isoFiles[userInput - 1];
+                handleIsoFile(selectedIso, mountedSet);
             } else {
-                std::cout << "\033[31mInvalid number: " << selectedNumber << ". Please try again.\033[0m" << std::endl;
+                std::cerr << "\033[31mInvalid selection. Please enter a valid number.\033[0m" << std::endl;
+                return;
             }
         }
+    } else {
+        std::cerr << "\033[31mInvalid input. Please enter a valid number or range.\033[0m" << std::endl;
     }
 }
 
