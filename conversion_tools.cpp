@@ -141,23 +141,24 @@ void convertBINToISO(const std::string& inputPath) {
     // Check if the output ISO file already exists
     if (std::ifstream(outputPath)) {
         std::cout << "\033[33mThe output ISO file '" << outputPath << "' already exists. Skipping conversion.\033[0m" << std::endl;
+        return;  // Skip conversion if the file already exists
+    }
+
+    // Execute the conversion using ccd2iso, with shell-escaped paths
+    std::string conversionCommand = "ccd2iso " + shell_escape(inputPath) + " " + shell_escape(outputPath);
+    int conversionStatus = std::system(conversionCommand.c_str());
+
+    // Check the result of the conversion
+    if (conversionStatus == 0) {
+        std::cout << "\033[32mImage file converted to ISO:\033[0m " << outputPath << std::endl;
     } else {
-        // Execute the conversion using ccd2iso, with shell-escaped paths
-        std::string conversionCommand = "ccd2iso " + shell_escape(inputPath) + " " + shell_escape(outputPath);
-        int conversionStatus = std::system(conversionCommand.c_str());
+        std::cout << "\033[31mConversion of " << inputPath << " failed.\033[0m" << std::endl;
 
-        // Check the result of the conversion
-        if (conversionStatus == 0) {
-            std::cout << "\033[32mImage file converted to ISO:\033[0m " << outputPath << std::endl;
+        // Delete the partially created ISO file
+        if (std::remove(outputPath.c_str()) == 0) {
+            std::cout << "\033[31mDeleted partially created ISO file:\033[0m " << outputPath << std::endl;
         } else {
-            std::cout << "\033[31mConversion of " << inputPath << " failed.\033[0m" << std::endl;
-
-            // Delete the partially created ISO file
-            if (std::remove(outputPath.c_str()) == 0) {
-                std::cout << "\033[31mDeleted partially created ISO file:\033[0m " << outputPath << std::endl;
-            } else {
-                std::cerr << "\033[31mFailed to delete partially created ISO file:\033[0m " << outputPath << std::endl;
-            }
+            std::cerr << "\033[31mFailed to delete partially created ISO file:\033[0m " << outputPath << std::endl;
         }
     }
 }
