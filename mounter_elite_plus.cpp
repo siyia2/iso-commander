@@ -61,11 +61,10 @@ int main() {
         std::cout << "Menu Options:" << std::endl;
         std::cout << "1. Mount" << std::endl;
         std::cout << "2. Unmount" << std::endl;
-        std::cout << "3. Bulk Unmount" << std::endl;
-        std::cout << "4. Conversion Tools" << std::endl;
-        std::cout << "5. Refresh ISO Cache" << std::endl;
-        std::cout << "6. List Mountpoints" << std::endl;
-        std::cout << "7. Exit the Program" << std::endl;
+        std::cout << "3. Conversion Tools" << std::endl;
+        std::cout << "4. Refresh ISO Cache" << std::endl;
+        std::cout << "5. List Mountpoints" << std::endl;
+        std::cout << "6. Exit the Program" << std::endl;
 
         // Prompt for the main menu choice
         //std::cin.clear();
@@ -85,6 +84,7 @@ int main() {
             select_and_mount_files_by_number();
             std::system("clear");
         } else {
+			// Check if the input length is exactly 1
 			if (choice.length() == 1){
             switch (choice[0]) {
             case '2':
@@ -93,12 +93,6 @@ int main() {
                 std::system("clear");
                 break;
             case '3':
-                cleanAndUnmountAllISOs();
-                std::cout << "Press Enter to continue...";
-                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                std::system("clear");
-                break;
-            case '4':
                 while (!returnToMainMenu) {
 					
                     std::cout << "1. Convert to ISO (BIN2ISO)" << std::endl;
@@ -113,9 +107,9 @@ int main() {
 					
                     std::string submenu_choice(submenu_input);
                     free(submenu_input);
+                    // Check if the input length is exactly 1
 					if (submenu_choice.length() == 1){
                     switch (submenu_choice[0]) {		
-				 // Check if the input length is exactly 1
                     case '1':
                         std::system("clear");
                         select_and_convert_files_to_iso();
@@ -132,20 +126,20 @@ int main() {
                     }
                 }
                 break;
-            case '5':
+            case '4':
 				removeNonExistentPathsFromCacheWithOpenMP();
                 manualRefreshCache();
                 std::cout << "Press Enter to continue...";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 std::system("clear");
                 break;
-            case '6':
+            case '5':
                 listMountedISOs();
                 std::cout << "Press Enter to continue...";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 std::system("clear");
                 break;
-            case '7':
+            case '6':
                 exitProgram = true; // Exit the program
                 std::cout << "Exiting the program..." << std::endl;
                 break;
@@ -187,7 +181,7 @@ bool fileExists(const std::string& path) {
     return (stat(path.c_str(), &buffer) == 0);
 }
 
-// Function to remove non-existent paths from the cache with OpenMP (up to 4 cores)
+// Function to remove non-existent paths from the cache with OpenMP
 void removeNonExistentPathsFromCacheWithOpenMP() {
     std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/iso_cache.txt";
     std::vector<std::string> cache;
@@ -953,80 +947,4 @@ void unmountISOs() {
 
         listMountedISOs(); // Display the updated list of mounted ISOs after unmounting
     }
-}
-
-// Function to unmount and clean up a specific ISO
-void unmountAndCleanISO(const std::string& isoDir) {
-    // Construct the unmount command with sudo, umount, and suppressing logs
-    std::string unmountCommand = "sudo umount -l " + shell_escape(isoDir) + " 2>/dev/null";
-
-    // Execute the unmount command
-    int result = std::system(unmountCommand.c_str());
-
-    // Remove the directory after unmounting
-    std::string removeDirCommand = "sudo rmdir " + shell_escape(isoDir);
-    int removeDirResult = std::system(removeDirCommand.c_str());
-
-    // Check if the directory removal was not successful and print an error message
-    if (removeDirResult != 0) {
-        std::cerr << "\033[31mFailed to remove directory\033[0m " << isoDir << std::endl;
-    }
-}
-
-// Function to clean and unmount a specific ISO with mutex protection
-void cleanAndUnmountISO(const std::string& isoDir) {
-    std::lock_guard<std::mutex> lock(mtx);
-
-    // Construct a shell-escaped ISO directory path
-    std::string IsoDir = (isoDir);
-
-    // Call the unmount and clean function
-    unmountAndCleanISO(IsoDir);
-}
-
-// Function to clean and unmount all ISOs
-void cleanAndUnmountAllISOs() {
-    std::cout << "\nUnmount All ISOs function." << std::endl;
-
-    // Path where ISO directories are expected to be mounted
-    const std::string isoPath = "/mnt";
-    std::vector<std::string> isoDirs;
-
-    // Open the /mnt directory and find directories with names starting with "iso_"
-    DIR* dir;
-    struct dirent* entry;
-
-    if ((dir = opendir(isoPath.c_str())) != NULL) {
-        while ((entry = readdir(dir)) != NULL) {
-            // Check if the entry is a directory and has a name starting with "iso_"
-            if (entry->d_type == DT_DIR && std::string(entry->d_name).find("iso_") == 0) {
-                isoDirs.push_back(isoPath + "/" + entry->d_name);
-            }
-        }
-        closedir(dir);
-    }
-
-    // Check if there are no ISOs to unmount
-    if (isoDirs.empty()) {
-        std::cout << "\033[33mNO ISOS TO UNMOUNT\n\033[0m" << std::endl;
-        return;
-    }
-
-    // Create a vector of threads to clean and unmount ISOs concurrently
-    std::vector<std::thread> threads;
-
-    for (const std::string& isoDir : isoDirs) {
-        // Construct a shell-escaped path
-        std::string IsoDir = (isoDir);
-
-        // Use a thread for each ISO to be cleaned and unmounted
-        threads.emplace_back(cleanAndUnmountISO, IsoDir);
-    }
-
-    // Join the threads to wait for them to finish
-    for (std::thread& thread : threads) {
-        thread.join();
-    }
-
-    std::cout << "\033[32mALL ISOS CLEANED\n\033[0m" << std::endl;
 }
