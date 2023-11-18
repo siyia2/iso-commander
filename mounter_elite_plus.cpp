@@ -71,7 +71,6 @@ int main() {
 
         std::cout << " " << std::endl;
         char* input = readline("\033[94mEnter a choice:\033[0m ");
-        std::cout << " " << std::endl;
         if (!input) {
             break; // Exit the program if readline returns NULL (e.g., on EOF or Ctrl+D)
         }
@@ -94,7 +93,7 @@ int main() {
                 break;
             case '3':
                 while (!returnToMainMenu) {
-					
+					std::system("clear");
                     std::cout << "1. Convert to ISO (BIN2ISO)" << std::endl;
                     std::cout << "2. Convert to ISO (MDF2ISO)" << std::endl;
                     std::cout << "3. Back to Main Menu" << std::endl;
