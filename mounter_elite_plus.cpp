@@ -141,6 +141,7 @@ int main() {
             case '6':
                 exitProgram = true; // Exit the program
                 std::cout << "Exiting the program..." << std::endl;
+                std::cout << " " << std::endl;
                 break;
             default:
                 break;
