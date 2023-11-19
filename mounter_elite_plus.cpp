@@ -133,7 +133,9 @@ int main() {
                 std::system("clear");
                 break;
             case '5':
+				std::cout << " " << std::endl;
                 listMountedISOs();
+                std::cout << " " << std::endl;
                 std::cout << "Press Enter to continue...";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 std::system("clear");
