@@ -310,7 +310,6 @@ bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles) 
 // Function to refresh the cache for a single directory
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles) {
 	std::system("clear");
-    std::cout << "\033[33mProcessing directory path: '" << path << "'\033[0m" << std::endl;
     std::vector<std::string> newIsoFiles;
     
     // Perform the cache refresh for the directory (e.g., using parallelTraverse)
@@ -361,7 +360,9 @@ void manualRefreshCache() {
     saveCache(allIsoFiles, maxCacheSize);
 
     // Inform the user that the cache has been successfully refreshed
-    std::cout << "Cache refreshed successfully." << std::endl;
+    std::cout << " " << std::endl;
+    std::cout << "\033[94mCache refreshed successfully.\033[0m" << std::endl;
+    std::cout << " " << std::endl;
 }
 
 //	MOUNT STUFF	\\
