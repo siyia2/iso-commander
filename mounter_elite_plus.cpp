@@ -327,7 +327,7 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 // Function for manual cache refresh
 void manualRefreshCache() {
     // Prompt the user to enter directory paths for manual cache refresh
-    std::string inputLine = readInputLine("\033[94mEnter directory paths to manually refresh the cache (separated by spaces), or simply press enter to cancel:\033[0m ");
+    std::string inputLine = readInputLine("\033[94mEnter directory paths to manually refresh the cache (separated by semicolons), or simply press enter to cancel:\n\033[0m ");
 
     // Check if the user canceled the cache refresh
     if (inputLine.empty()) {
@@ -346,7 +346,7 @@ void manualRefreshCache() {
     std::vector<std::thread> threads;
 
     // Iterate through the entered directory paths
-    while (iss >> path) {
+    while (std::getline(iss, path, ';')) {
         // Create a thread for refreshing the cache for each directory and pass the vector by reference
         threads.emplace_back(std::thread(refreshCacheForDirectory, path, std::ref(allIsoFiles)));
     }
