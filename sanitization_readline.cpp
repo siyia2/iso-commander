@@ -32,5 +32,3 @@ std::string readInputLine(const std::string& prompt) {
 
     return ""; // Return an empty string if readline fails
 }
-    return ""; // Return an empty string if readline fails
-}
