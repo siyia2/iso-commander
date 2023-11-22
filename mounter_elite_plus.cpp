@@ -309,7 +309,7 @@ bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles) 
 
 // Function to refresh the cache for a single directory
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles) {
-	std::system("clear");
+	std::cout << "\033[33mProcessing directory path: '" << path << "'\033[0m" << std::endl;
     std::vector<std::string> newIsoFiles;
     
     // Perform the cache refresh for the directory (e.g., using parallelTraverse)
@@ -326,8 +326,10 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 
 // Function for manual cache refresh
 void manualRefreshCache() {
+	std::system("clear");
     // Prompt the user to enter directory paths for manual cache refresh
     std::string inputLine = readInputLine("\033[94mEnter directory paths to manually refresh the cache (separated by \033[33m;\033[0m\033[94m), or simply press enter to cancel:\n\033[0m");
+    std::cout << " " << std::endl;
 
     // Check if the user canceled the cache refresh
     if (inputLine.empty()) {
