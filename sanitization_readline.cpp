@@ -20,11 +20,19 @@ std::string shell_escape(const std::string& s) {
     return "'" + escaped_string + "'";
 }
 
-// Function to read a line of input using readline
+// Function to read input line
 std::string readInputLine(const std::string& prompt) {
-    char* input = readline(prompt.c_str());
+    std::cout << prompt << std::flush;  // Use std::flush to ensure immediate output
+
+    // Read the input using readline
+    char* input = readline("");
 
     if (input) {
+        // Add input to history
+        if (strlen(input) > 0) {
+            add_history(input);
+        }
+
         std::string inputStr(input);
         free(input); // Free the allocated memory for the input
         return inputStr;

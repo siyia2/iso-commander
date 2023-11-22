@@ -346,7 +346,7 @@ void manualRefreshCache() {
     std::vector<std::thread> threads;
 
     // Iterate through the entered directory paths
-    while (iss >> path) {
+    while (std::getline(iss, path, ';')) {
         // Create a thread for refreshing the cache for each directory and pass the vector by reference
         threads.emplace_back(std::thread(refreshCacheForDirectory, path, std::ref(allIsoFiles)));
     }
