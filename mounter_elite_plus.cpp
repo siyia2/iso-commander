@@ -189,7 +189,7 @@ void removeNonExistentPathsFromCacheWithOpenMP() {
     std::string line;
 
     if (!cacheFile) {
-        std::cerr << "\033[31mError: Unable to open cache file, will attempt to recreate it.\033[0m" << std::endl;
+        std::cerr << "\033[31mError: Unable to find cache file, will attempt to create it.\033[0m" << std::endl;
         return;
     }
 
