@@ -330,7 +330,8 @@ void manualRefreshCache() {
     // Prompt the user to enter directory paths for manual cache refresh
     std::string inputLine = readInputLine("\033[94mEnter directory paths to manually refresh the cache (separated by \033[33m;\033[0m\033[94m), or simply press enter to cancel:\n\033[0m");
     std::cout << " " << std::endl;
-
+	// Start the timer
+	auto start_time = std::chrono::high_resolution_clock::now();
     // Check if the user canceled the cache refresh
     if (inputLine.empty()) {
         std::cout << "\033[33mCache refresh canceled.\033[0m" << std::endl;
@@ -361,8 +362,15 @@ void manualRefreshCache() {
     // Save the combined cache to disk
     saveCache(allIsoFiles, maxCacheSize);
 
-    // Inform the user that the cache has been successfully refreshed
+    // Stop the timer after completing the mounting process
+    auto end_time = std::chrono::high_resolution_clock::now();
+
+    // Calculate and print the elapsed time
     std::cout << " " << std::endl;
+    auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+	// Print the time taken for the entire process in bold with one decimal place
+	std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
+    // Inform the user that the cache has been successfully refreshed
     std::cout << "\033[94mCache refreshed successfully.\033[0m" << std::endl;
     std::cout << " " << std::endl;
 }
@@ -514,6 +522,7 @@ bool allFilesExistAndAreIso(const std::vector<std::string>& files) {
     return allExistAndIso;
 }
 
+
 // Function to select and mount ISO files by number
 void select_and_mount_files_by_number() {
     // Load ISO files from cache
@@ -542,6 +551,9 @@ void select_and_mount_files_by_number() {
     // Set to track mounted ISO files
     std::unordered_set<std::string> mountedSet;
 
+    // Start the timer before the loop
+    auto start_time = std::chrono::high_resolution_clock::now();
+
     // Main loop for selecting and mounting ISO files
     while (true) {
         std::system("clear");
@@ -553,7 +565,10 @@ void select_and_mount_files_by_number() {
         std::cout << "\033[94mChoose .iso files to mount (enter numbers, ranges like '1-3', '1 2', '00' to mount all, or press Enter to return):\033[0m ";
         std::getline(std::cin, input);
         std::system("clear");
-
+		
+		// Start the timer
+		auto start_time = std::chrono::high_resolution_clock::now();
+        
         // Check if the user wants to return
         if (input.empty()) {
             std::cout << "Press Enter to Return" << std::endl;
@@ -570,6 +585,15 @@ void select_and_mount_files_by_number() {
             processInput(input, isoFiles, mountedSet);
         }
 
+        // Stop the timer after completing the mounting process
+        auto end_time = std::chrono::high_resolution_clock::now();
+
+        // Calculate and print the elapsed time
+        std::cout << " " << std::endl;
+        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+		// Print the time taken for the entire process in bold with one decimal place
+		std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
+		std::cout << " " << std::endl;
         std::cout << "Press Enter to continue...";
         std::cin.get();
     }
@@ -870,6 +894,9 @@ void unmountISOs() {
         std::getline(std::cin, input);
         std::system("clear");
         
+        // Start the timer
+		auto start_time = std::chrono::high_resolution_clock::now();
+        
         // Check if the user wants to return
         if (input == "") {
             break;  // Exit the loop
@@ -881,7 +908,15 @@ void unmountISOs() {
                 std::lock_guard<std::mutex> lock(mtx); // Lock the critical section
                 unmountISO(isoDir);
             }
+        
             listMountedISOs(); // Display the updated list of mounted ISOs after unmounting all
+                       // Stop the timer after completing the mounting process
+        auto end_time = std::chrono::high_resolution_clock::now();
+
+        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+		// Print the time taken for the entire process in bold with one decimal place
+		std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
+        std::cout << " " << std::endl;
             continue;  // Restart the loop
         }
 
@@ -948,7 +983,17 @@ void unmountISOs() {
         for (auto& thread : threads) {
             thread.join();
         }
-
+             
         listMountedISOs(); // Display the updated list of mounted ISOs after unmounting
+        
+        // Stop the timer after completing the mounting process
+        auto end_time = std::chrono::high_resolution_clock::now();
+
+        // Calculate and print the elapsed time
+        std::cout << " " << std::endl;
+        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+		// Print the time taken for the entire process in bold with one decimal place
+		std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
+		std::cout << " " << std::endl;  
     }
 }
