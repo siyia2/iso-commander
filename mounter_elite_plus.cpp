@@ -327,11 +327,11 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 // Function for manual cache refresh
 void manualRefreshCache() {
     // Prompt the user to enter directory paths for manual cache refresh
-    std::string inputLine = readInputLine("\033[94mEnter directory paths to manually refresh the cache (separated by semicolons), or simply press enter to cancel:\n\033[0m ");
+    std::string inputLine = readInputLine("\033[94mEnter directory paths to manually refresh the cache (separated by semicolons), or simply press enter to cancel:\n\033[0m");
 
     // Check if the user canceled the cache refresh
     if (inputLine.empty()) {
-        std::cout << "Cache refresh canceled." << std::endl;
+        std::cout << "\033[33mCache refresh canceled.\033[0m" << std::endl;
         return;
     }
 
