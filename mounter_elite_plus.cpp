@@ -787,7 +787,7 @@ void listMountedISOs() {
         }
     } else {
         // Print a message if no ISOs are mounted
-        std::cerr << "\033[31mNO ISOS MOUNTED\n\033[0m" << std::endl;
+        std::cerr << "\033[31mNO MOUNTED ISOS FOUND\n\033[0m" << std::endl;
     }
 }
 // Function to unmount an ISO and remove its directory if empty
