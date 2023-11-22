@@ -233,18 +233,24 @@ void select_and_convert_files_to_iso() {
     // Initialize vectors to store BIN/IMG files and directory paths
     std::vector<std::string> binImgFiles;
     std::vector<std::string> directoryPaths;
-    
+
     // Declare previousPaths as a static variable
     static std::vector<std::string> previousPaths;
-    
-    // Read input for directory paths (allow multiple paths separated by spaces)
-    std::string inputPaths = readInputLine("\033[94mEnter the directory paths (separated by spaces) to search for .bin .img files or simply press enter to return:\033[0m ");
-    std::istringstream iss(inputPaths);
 
-    // Populate the directoryPaths vector
-    std::copy(std::istream_iterator<std::string>(iss),
-              std::istream_iterator<std::string>(),
-              std::back_inserter(directoryPaths));
+    // Read input for directory paths (allow multiple paths separated by semicolons)
+    std::string inputPaths = readInputLine("\033[94mEnter the directory paths (separated by \033[33m;\033[0m\033[94m) to search for .bin .img files or simply press enter to return:\n\033[0m");
+
+    // Use semicolon as a separator to split paths
+    std::istringstream iss(inputPaths);
+    std::string path;
+    while (std::getline(iss, path, ';')) {
+        // Trim leading and trailing whitespaces from each path
+        size_t start = path.find_first_not_of(" \t");
+        size_t end = path.find_last_not_of(" \t");
+        if (start != std::string::npos && end != std::string::npos) {
+            directoryPaths.push_back(path.substr(start, end - start + 1));
+        }
+    }
 
     // Check if directoryPaths is empty
     if (directoryPaths.empty()) {
@@ -345,16 +351,9 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
 
 // MDF/MDS CONVERSION FUNCTIONS	\\
 
-std::vector<std::string> findMdsMdfFiles(const std::string& paths) {
-    // Parse input paths
-    std::vector<std::string> directories;
-    std::istringstream iss(paths);
-    std::copy(std::istream_iterator<std::string>(iss),
-              std::istream_iterator<std::string>(),
-              std::back_inserter(directories));
-
+std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths) {
     // Check if no paths are provided
-    if (directories.empty()) {
+    if (paths.empty()) {
         std::cerr << "No paths provided. Exiting." << std::endl;
         return {};  // Return an empty vector or handle it as needed
     }
@@ -363,7 +362,7 @@ std::vector<std::string> findMdsMdfFiles(const std::string& paths) {
     static std::vector<std::string> cachedPaths;
 
     // Check if the cache is already populated and if the input paths are the same
-    if (!mdfMdsFilesCache.empty() && directories == cachedPaths) {
+    if (!mdfMdsFilesCache.empty() && paths == cachedPaths) {
         return mdfMdsFilesCache;
     }
 
@@ -375,9 +374,9 @@ std::vector<std::string> findMdsMdfFiles(const std::string& paths) {
         const int batchSize = 2; // Tweak the batch size as needed
 
         // Iterate over specified directories
-        for (const auto& directory : directories) {
+        for (const auto& path : paths) {
             // Iterate over files in the directory and its subdirectories
-            for (const auto& entry : std::filesystem::recursive_directory_iterator(directory)) {
+            for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
                 // Check if the entry is a regular file
                 if (entry.is_regular_file()) {
                     // Check file extension and size
@@ -431,9 +430,9 @@ std::vector<std::string> findMdsMdfFiles(const std::string& paths) {
     }
 
     // Update the cache only if the input paths are different
-    if (directories != cachedPaths) {
+    if (paths != cachedPaths) {
         mdfMdsFilesCache = fileNames;
-        cachedPaths = directories;  // Update the cached paths
+        cachedPaths = paths;  // Update the cached paths
     }
 
     return fileNames;
@@ -567,30 +566,50 @@ void processMDFFilesInRange(int start, int end) {
 // Function to interactively select and convert MDF files to ISO
 void select_and_convert_files_to_iso_mdf() {
     int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
-    std::string directoryPath = readInputLine("\033[94mEnter the directory paths (separated by spaces) to search for .mdf files or simply press enter to return:\033[0m ");
+    std::string inputPaths = readInputLine("\033[94mEnter the directory paths (separated by \033[33m;\033[0m\033[94m) to search for .mdf files or simply press enter to return:\n\033[0m");
 
-    if (directoryPath.empty()) {
+    // Initialize vectors to store MDF/MDS files and directory paths
+    std::vector<std::string> mdfMdsFiles;
+    std::vector<std::string> directoryPaths;
+
+    // Declare previousPaths as a static variable
+    static std::vector<std::string> previousPaths;
+
+    // Use semicolon as a separator to split paths
+    std::istringstream iss(inputPaths);
+    std::string path;
+    while (std::getline(iss, path, ';')) {
+        // Trim leading and trailing whitespaces from each path
+        size_t start = path.find_first_not_of(" \t");
+        size_t end = path.find_last_not_of(" \t");
+        if (start != std::string::npos && end != std::string::npos) {
+            directoryPaths.push_back(path.substr(start, end - start + 1));
+        }
+    }
+
+    // Check if directoryPaths is empty
+    if (directoryPaths.empty()) {
         return;
     }
 
     // Call the findMdsMdfFiles function to populate the cache
-    std::vector<std::string> mdfMdsFiles = findMdsMdfFiles(directoryPath);
+    mdfMdsFiles = findMdsMdfFiles(directoryPaths);
 
     if (mdfMdsFiles.empty()) {
-        std::cout << "\033[33mNo .mdf files found in the specified directory and its subdirectories or all files are under 10MB.\n\033[0m";
+        std::cout << "\033[33mNo .mdf files found in the specified directories and their subdirectories or all files are under 10MB.\n\033[0m";
         return;
     }
 
     // Continue selecting and converting files until the user decides to exit
     while (true) {
-		std::system("clear");
+        std::system("clear");
         printFileListMdf(mdfMdsFiles);
 
         // Prompt the user to enter file numbers or 'exit'
         std::string input = readInputLine("\033[94mEnter the numbers of the files to convert (e.g., '1-2' or '1 2', or simply press enter to return):\033[0m ");
 
         if (input.empty()) {
-			std::system("clear");
+            std::system("clear");
             break;
         }
 
@@ -600,11 +619,11 @@ void select_and_convert_files_to_iso_mdf() {
         if (!selectedFileIndices.empty()) {
             // Get the paths of the selected files based on user input
             std::vector<std::string> selectedFiles = getSelectedFiles(selectedFileIndices, mdfMdsFiles);
-			std::system("clear");
+            std::system("clear");
             // Convert the selected MDF files to ISO
             convertMDFsToISOs(selectedFiles, numThreads);
             std::cout << "Press enter to continue...";
-		std::cin.ignore();
+            std::cin.ignore();
         } else {
             std::cout << "Invalid choice. Please enter valid file numbers or 'exit'." << std::endl;
         }

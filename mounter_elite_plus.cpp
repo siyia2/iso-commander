@@ -189,7 +189,7 @@ void removeNonExistentPathsFromCacheWithOpenMP() {
     std::string line;
 
     if (!cacheFile) {
-        std::cerr << "\033[31mError: Unable to open cache file, will attempt to recreate it.\033[0m" << std::endl;
+        std::cerr << "\033[31mError: Unable to find cache file, will attempt to create it.\033[0m" << std::endl;
         return;
     }
 
@@ -309,7 +309,7 @@ bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles) 
 
 // Function to refresh the cache for a single directory
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles) {
-    std::cout << "Processing directory path: " << path << std::endl;
+	std::system("clear");
     std::vector<std::string> newIsoFiles;
     
     // Perform the cache refresh for the directory (e.g., using parallelTraverse)
@@ -321,17 +321,17 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
     // Append the new entries to the shared vector
     allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
     
-    std::cout << "Cache refreshed for directory: " << path << std::endl;
+    std::cout << "\033[32mCache refreshed for directory: '" << path << "'\033[0m" << std::endl;
 }
 
 // Function for manual cache refresh
 void manualRefreshCache() {
     // Prompt the user to enter directory paths for manual cache refresh
-    std::string inputLine = readInputLine("\033[94mEnter directory paths to manually refresh the cache (separated by spaces), or simply press enter to cancel:\033[0m ");
+    std::string inputLine = readInputLine("\033[94mEnter directory paths to manually refresh the cache (separated by \033[33m;\033[0m\033[94m), or simply press enter to cancel:\n\033[0m");
 
     // Check if the user canceled the cache refresh
     if (inputLine.empty()) {
-        std::cout << "Cache refresh canceled." << std::endl;
+        std::cout << "\033[33mCache refresh canceled.\033[0m" << std::endl;
         return;
     }
 
@@ -346,7 +346,7 @@ void manualRefreshCache() {
     std::vector<std::thread> threads;
 
     // Iterate through the entered directory paths
-    while (iss >> path) {
+    while (std::getline(iss, path, ';')) {
         // Create a thread for refreshing the cache for each directory and pass the vector by reference
         threads.emplace_back(std::thread(refreshCacheForDirectory, path, std::ref(allIsoFiles)));
     }
@@ -360,7 +360,9 @@ void manualRefreshCache() {
     saveCache(allIsoFiles, maxCacheSize);
 
     // Inform the user that the cache has been successfully refreshed
-    std::cout << "Cache refreshed successfully." << std::endl;
+    std::cout << " " << std::endl;
+    std::cout << "\033[94mCache refreshed successfully.\033[0m" << std::endl;
+    std::cout << " " << std::endl;
 }
 
 //	MOUNT STUFF	\\
@@ -787,7 +789,7 @@ void listMountedISOs() {
         }
     } else {
         // Print a message if no ISOs are mounted
-        std::cerr << "\033[31mNO ISOS MOUNTED\n\033[0m" << std::endl;
+        std::cerr << "\033[31mNO MOUNTED ISOS FOUND\n\033[0m" << std::endl;
     }
 }
 // Function to unmount an ISO and remove its directory if empty
