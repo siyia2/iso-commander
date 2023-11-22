@@ -186,29 +186,32 @@ void removeNonExistentPathsFromCacheWithOpenMP() {
     std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/iso_cache.txt";
     std::vector<std::string> cache;
     std::ifstream cacheFile(cacheFilePath);
-    std::string line;
 
     if (!cacheFile) {
         std::cerr << "\033[31mError: Unable to find cache file, will attempt to create it.\033[0m" << std::endl;
         return;
     }
 
-    while (std::getline(cacheFile, line)) {
+    // Read the cache file into a vector
+    for (std::string line; std::getline(cacheFile, line);) {
         cache.push_back(line);
     }
 
     cacheFile.close();
 
-    omp_set_num_threads(omp_get_max_threads());
+    std::vector<std::vector<std::string>> privatePaths(omp_get_max_threads());
 
-    std::vector<std::string> retainedPaths;
-
-    #pragma omp parallel for
+    #pragma omp parallel for num_threads(omp_get_max_threads())
     for (int i = 0; i < cache.size(); i++) {
         if (fileExists(cache[i])) {
-            #pragma omp critical
-            retainedPaths.push_back(cache[i]);
+            privatePaths[omp_get_thread_num()].push_back(cache[i]);
         }
+    }
+
+    // Combine private paths into a single shared vector
+    std::vector<std::string> retainedPaths;
+    for (const auto& privatePath : privatePaths) {
+        retainedPaths.insert(retainedPaths.end(), privatePath.begin(), privatePath.end());
     }
 
     std::ofstream updatedCacheFile(cacheFilePath);
@@ -218,11 +221,19 @@ void removeNonExistentPathsFromCacheWithOpenMP() {
         return;
     }
 
+    // Write the retained paths to the updated cache file
     for (const std::string& path : retainedPaths) {
         updatedCacheFile << path << std::endl;
     }
 
     updatedCacheFile.close();
+}
+
+// Helper function to concatenate vectors in a reduction clause
+std::vector<std::string> vec_concat(const std::vector<std::string>& v1, const std::vector<std::string>& v2) {
+    std::vector<std::string> result = v1;
+    result.insert(result.end(), v2.begin(), v2.end());
+    return result;
 }
 
 
@@ -294,18 +305,17 @@ void saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
 bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles) {
     bool allExist = true;
 
-    #pragma omp parallel for shared(allExist) num_threads(omp_get_max_threads())
+    #pragma omp parallel for reduction(&&:allExist) num_threads(omp_get_max_threads())
     for (int i = 0; i < selectedFiles.size(); ++i) {
         if (!std::filesystem::exists(selectedFiles[i])) {
-            #pragma omp critical
-            {
-                allExist = false;
-            }
+            // If a file is not found, update the reduction variable
+            allExist = false;
         }
     }
 
     return allExist;
 }
+
 
 // Function to refresh the cache for a single directory
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles) {
@@ -389,15 +399,12 @@ bool allDirectoriesExistOnDisk(const std::vector<std::string>& directories) {
     bool allExist = true;
 
     // Use OpenMP to parallelize the loop for checking directory existence
-    #pragma omp parallel for shared(allExist) num_threads(omp_get_max_threads())
+    #pragma omp parallel for reduction(&&:allExist) num_threads(omp_get_max_threads())
     for (int i = 0; i < directories.size(); ++i) {
         // Check if the directory at the current index exists
         if (!directoryExists(directories[i])) {
-            // If not, enter a critical section to safely update the shared flag
-            #pragma omp critical
-            {
-                allExist = false;
-            }
+            // If not, update the reduction variable
+            allExist = false;
         }
     }
 
@@ -506,15 +513,12 @@ bool allFilesExistAndAreIso(const std::vector<std::string>& files) {
     bool allExistAndIso = true;
 
     // Use OpenMP to parallelize the loop for checking file existence and extension
-    #pragma omp parallel for shared(allExistAndIso) num_threads(omp_get_max_threads())
+    #pragma omp parallel for reduction(&&:allExistAndIso) num_threads(omp_get_max_threads())
     for (int i = 0; i < files.size(); ++i) {
         // Check if the file exists on disk and has the ".iso" extension
         if (!fileExistsOnDisk(files[i]) || !ends_with_iso(files[i])) {
-            // If not, enter a critical section to safely update the shared flag
-            #pragma omp critical
-            {
-                allExistAndIso = false;
-            }
+            // If not, update the reduction variable
+            allExistAndIso = false;
         }
     }
 
@@ -685,19 +689,16 @@ bool iequals(std::string_view a, std::string_view b) {
         return false;
     }
 
-    // Flag to track equality
+    // Flag to track equality, initialized to true
     bool equal = true;
 
     // Use OpenMP to parallelize the loop for case-insensitive comparison
-    #pragma omp parallel for shared(equal)
+    #pragma omp parallel for reduction(&&:equal)
     for (std::size_t i = 0; i < a.size(); ++i) {
-        // Enter a critical section to safely update the shared flag
-        #pragma omp critical
-        {
-            // Check if characters are not equal (case-insensitive)
-            if (std::tolower(a[i]) != std::tolower(b[i])) {
-                equal = false;
-            }
+        // Check if characters are not equal (case-insensitive)
+        if (std::tolower(a[i]) != std::tolower(b[i])) {
+            // Set the equal flag to false and exit the loop
+            equal = false;
         }
     }
 
@@ -709,7 +710,7 @@ bool iequals(std::string_view a, std::string_view b) {
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mtx) {
     try {
         // Vector to store futures for asynchronous tasks
-        std::vector<std::future<std::vector<std::string>>> futures;
+        std::vector<std::future<void>> futures;
 
         // Iterate through the directory and its subdirectories
         for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
@@ -730,22 +731,21 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
                 // Check if the file has a ".iso" extension
                 if (iequals(extension, ".iso")) {
                     // Use async to run the task of collecting ISO paths in parallel
-                    futures.push_back(std::async(std::launch::async, [filePath]() -> std::vector<std::string> {
-                        // Return a vector containing the path of the ISO file
-                        return std::vector<std::string>{filePath.string()};
+                    futures.push_back(std::async(std::launch::async, [filePath, &isoFiles, &mtx]() {
+                        // Process the file content as needed
+                        // For example, you can check for ISO file signatures, etc.
+
+                        // Lock the mutex to update the shared vector
+                        std::lock_guard<std::mutex> lock(mtx);
+                        isoFiles.push_back(filePath.string());
                     }));
                 }
             }
         }
 
-        // Wait for all async tasks to complete and collect results
+        // Wait for all async tasks to complete
         for (auto& future : futures) {
-            // Retrieve the vector of ISO paths from the completed future
-            auto isoPaths = future.get();
-
-            // Lock the mutex only once to merge local vectors into isoFiles
-            std::lock_guard<std::mutex> lock(mtx);
-            isoFiles.insert(isoFiles.end(), isoPaths.begin(), isoPaths.end());
+            future.get();
         }
     } catch (const std::filesystem::filesystem_error& e) {
         // Handle filesystem errors and print an error message
