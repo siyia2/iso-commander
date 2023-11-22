@@ -233,18 +233,24 @@ void select_and_convert_files_to_iso() {
     // Initialize vectors to store BIN/IMG files and directory paths
     std::vector<std::string> binImgFiles;
     std::vector<std::string> directoryPaths;
-    
+
     // Declare previousPaths as a static variable
     static std::vector<std::string> previousPaths;
-    
-    // Read input for directory paths (allow multiple paths separated by spaces)
-    std::string inputPaths = readInputLine("\033[94mEnter the directory paths (separated by spaces) to search for .bin .img files or simply press enter to return:\033[0m ");
-    std::istringstream iss(inputPaths);
 
-    // Populate the directoryPaths vector
-    std::copy(std::istream_iterator<std::string>(iss),
-              std::istream_iterator<std::string>(),
-              std::back_inserter(directoryPaths));
+    // Read input for directory paths (allow multiple paths separated by semicolons)
+    std::string inputPaths = readInputLine("\033[94mEnter the directory paths (separated by ;) to search for .bin .img files or simply press enter to return:\n\033[0m");
+
+    // Use semicolon as a separator to split paths
+    std::istringstream iss(inputPaths);
+    std::string path;
+    while (std::getline(iss, path, ';')) {
+        // Trim leading and trailing whitespaces from each path
+        size_t start = path.find_first_not_of(" \t");
+        size_t end = path.find_last_not_of(" \t");
+        if (start != std::string::npos && end != std::string::npos) {
+            directoryPaths.push_back(path.substr(start, end - start + 1));
+        }
+    }
 
     // Check if directoryPaths is empty
     if (directoryPaths.empty()) {
