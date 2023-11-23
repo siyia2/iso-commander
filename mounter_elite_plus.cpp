@@ -126,7 +126,6 @@ int main() {
                 }
                 break;
             case '4':
-				removeNonExistentPathsFromCacheWithOpenMP();
                 manualRefreshCache();
                 std::cout << "Press Enter to continue...";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -181,6 +180,7 @@ bool fileExists(const std::string& path) {
     return (stat(path.c_str(), &buffer) == 0);
 }
 
+
 // Function to remove non-existent paths from the cache with OpenMP
 void removeNonExistentPathsFromCacheWithOpenMP() {
     std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/iso_cache.txt";
@@ -229,6 +229,7 @@ void removeNonExistentPathsFromCacheWithOpenMP() {
     updatedCacheFile.close();
 }
 
+
 // Helper function to concatenate vectors in a reduction clause
 std::vector<std::string> vec_concat(const std::vector<std::string>& v1, const std::vector<std::string>& v2) {
     std::vector<std::string> result = v1;
@@ -245,6 +246,7 @@ std::string getHomeDirectory() {
     }
     return "";
 }
+
 
 // Load cache
 std::vector<std::string> loadCache() {
@@ -269,6 +271,8 @@ std::vector<std::string> loadCache() {
 
     return isoFiles;
 }
+
+
 // Save cache
 void saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize) {
     std::filesystem::path cachePath = cacheDirectory;
@@ -300,6 +304,7 @@ void saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
         std::cerr << "Error: Could not open cache file for writing." << std::endl;
     }
 }
+
 
 // Check if all selected files are still present on disk
 bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles) {
@@ -334,14 +339,18 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
     std::cout << "\033[32mCache refreshed for directory: '" << path << "'\033[0m" << std::endl;
 }
 
+
 // Function for manual cache refresh
 void manualRefreshCache() {
-	std::system("clear");
+    std::system("clear");
+    
     // Prompt the user to enter directory paths for manual cache refresh
     std::string inputLine = readInputLine("\033[94mEnter directory paths to manually refresh the cache (separated by \033[33m;\033[0m\033[94m), or simply press enter to cancel:\n\033[0m");
     std::cout << " " << std::endl;
-	// Start the timer
-	auto start_time = std::chrono::high_resolution_clock::now();
+
+    // Start the timer
+    auto start_time = std::chrono::high_resolution_clock::now();
+
     // Check if the user canceled the cache refresh
     if (inputLine.empty()) {
         std::cout << "\033[33mCache refresh canceled.\033[0m" << std::endl;
@@ -372,14 +381,19 @@ void manualRefreshCache() {
     // Save the combined cache to disk
     saveCache(allIsoFiles, maxCacheSize);
 
-    // Stop the timer after completing the mounting process
+    // Remove non-existent paths from the cache
+    removeNonExistentPathsFromCacheWithOpenMP();
+
+    // Stop the timer after completing the cache refresh and removal of non-existent paths
     auto end_time = std::chrono::high_resolution_clock::now();
 
     // Calculate and print the elapsed time
     std::cout << " " << std::endl;
     auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-	// Print the time taken for the entire process in bold with one decimal place
-	std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
+    
+    // Print the time taken for the entire process in bold with one decimal place
+    std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
+
     // Inform the user that the cache has been successfully refreshed
     std::cout << "\033[94mCache refreshed successfully.\033[0m" << std::endl;
     std::cout << " " << std::endl;
@@ -392,6 +406,7 @@ bool directoryExists(const std::string& path) {
     // Use the std::filesystem::is_directory function to check if the path is a directory
     return std::filesystem::is_directory(path);
 }
+
 
 // Function to check if all directories in a vector exist on disk
 bool allDirectoriesExistOnDisk(const std::vector<std::string>& directories) {
@@ -411,6 +426,7 @@ bool allDirectoriesExistOnDisk(const std::vector<std::string>& directories) {
     // Return the final result indicating whether all directories exist
     return allExist;
 }
+
 
 void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>& mountedIsos) {
     // Check if the ISO file is already mounted
@@ -467,6 +483,7 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
     
 }
 
+
 // Function to mount ISO files concurrently using threads
 void mountISO(const std::vector<std::string>& isoFiles) {
     // Map to store mounted ISOs with their corresponding paths
@@ -490,12 +507,14 @@ void mountISO(const std::vector<std::string>& isoFiles) {
     }
 }
 
+
 // Function to check if a file exists on disk
 bool fileExistsOnDisk(const std::string& filename) {
     // Use an ifstream to check the existence of the file
     std::ifstream file(filename);
     return file.good();
 }
+
 
 // Function to check if a string ends with ".iso" (case-insensitive)
 bool ends_with_iso(const std::string& str) {
@@ -506,6 +525,7 @@ bool ends_with_iso(const std::string& str) {
     // Check if the lowercase string ends with ".iso"
     return lowercase.size() >= 4 && lowercase.compare(lowercase.size() - 4, 4, ".iso") == 0;
 }
+
 
 // Function to check if all files in a vector exist on disk and have the ".iso" extension
 bool allFilesExistAndAreIso(const std::vector<std::string>& files) {
@@ -603,12 +623,14 @@ void select_and_mount_files_by_number() {
     }
 }
 
+
 // Function to print the list of ISO files with their corresponding numbers
 void printIsoFileList(const std::vector<std::string>& isoFiles) {
     for (int i = 0; i < isoFiles.size(); i++) {
         std::cout << i + 1 << ". " << isoFiles[i] << std::endl;
     }
 }
+
 
 // Function to handle mounting of a specific ISO file
 void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet) {
@@ -626,6 +648,7 @@ void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& moun
         displayErrorMessage(iso);
     }
 }
+
 
 // Function to process user input and choose ISO files to mount
 void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
@@ -776,7 +799,6 @@ void processPath(const std::string& path, std::vector<std::string>& allIsoFiles)
 }
 
 
-
 // UMOUNT FUNCTIONS	\\
 
 // Function to list mounted ISOs in the /mnt directory
@@ -818,6 +840,8 @@ void listMountedISOs() {
         std::cerr << "\033[31mNO MOUNTED ISOS FOUND\n\033[0m" << std::endl;
     }
 }
+
+
 // Function to unmount an ISO and remove its directory if empty
 void unmountISO(const std::string& isoDir) {
     // Construct the unmount command with sudo, umount, and suppressing logs
