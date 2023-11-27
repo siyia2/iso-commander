@@ -549,6 +549,8 @@ bool allFilesExistAndAreIso(const std::vector<std::string>& files) {
 
 // Function to select and mount ISO files by number
 void select_and_mount_files_by_number() {
+	// Declare a variable to store the time spent in user input
+double user_input_time = 0.0;
     // Load ISO files from cache
     std::vector<std::string> isoFiles = loadCache();
 
@@ -590,8 +592,8 @@ void select_and_mount_files_by_number() {
         std::getline(std::cin, input);
         std::system("clear");
 		
-		// Start the timer
-		auto start_time = std::chrono::high_resolution_clock::now();
+		// Start the timer for user input
+    auto user_input_start_time = std::chrono::high_resolution_clock::now();
         
         // Check if the user wants to return
         if (input.empty()) {
@@ -612,9 +614,13 @@ void select_and_mount_files_by_number() {
         // Stop the timer after completing the mounting process
         auto end_time = std::chrono::high_resolution_clock::now();
 
-        // Calculate and print the elapsed time
-        std::cout << " " << std::endl;
-        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+        // Stop the timer for user input
+		auto user_input_end_time = std::chrono::high_resolution_clock::now();
+		user_input_time += std::chrono::duration_cast<std::chrono::duration<double>>(user_input_end_time - user_input_start_time).count();
+
+		// Calculate and print the elapsed time
+		std::cout << " " << std::endl;
+		auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time - std::chrono::duration<double>(user_input_time)).count();
 		// Print the time taken for the entire process in bold with one decimal place
 		std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
 		std::cout << " " << std::endl;
