@@ -7,7 +7,7 @@ https://github.com/siyia2/mounter_elite
 
 
 
-State of the art secure and blazing fast terminal image mounter/converter written in C++, it allows mounting `ISOs` and/or converting `BIN&IMG&MDF` files to `ISO`. Supports Tab completion on disk cache generation, a curtesy of readline the library. 
+State of the art secure and blazing fast terminal image mounter/converter written in C++, it allows mounting `ISOs` and/or converting `BIN&IMG&MDF` files to `ISO`. Supports Tab completion and on disk cache generation. 
 You can add multiple mounts and/or conversion paths. All paths are mounted under `/mnt/iso_*` format and all conversions take place at their local source directories, script requires `ROOT` access to `mount&unmount ISOs`. 
 
 If you get: `Error: filesystem error: cannot increment recursive directory iterator: Permission denied`.
