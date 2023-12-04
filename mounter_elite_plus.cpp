@@ -549,8 +549,6 @@ bool allFilesExistAndAreIso(const std::vector<std::string>& files) {
 
 // Function to select and mount ISO files by number
 void select_and_mount_files_by_number() {
-	// Declare a variable to store the time spent in user input
-double user_input_time = 0.0;
     // Load ISO files from cache
     std::vector<std::string> isoFiles = loadCache();
 
@@ -592,8 +590,8 @@ double user_input_time = 0.0;
         std::getline(std::cin, input);
         std::system("clear");
 		
-		// Start the timer for user input
-    auto user_input_start_time = std::chrono::high_resolution_clock::now();
+		// Start the timer
+		auto start_time = std::chrono::high_resolution_clock::now();
         
         // Check if the user wants to return
         if (input.empty()) {
@@ -614,13 +612,9 @@ double user_input_time = 0.0;
         // Stop the timer after completing the mounting process
         auto end_time = std::chrono::high_resolution_clock::now();
 
-        // Stop the timer for user input
-		auto user_input_end_time = std::chrono::high_resolution_clock::now();
-		user_input_time += std::chrono::duration_cast<std::chrono::duration<double>>(user_input_end_time - user_input_start_time).count();
-
-		// Calculate and print the elapsed time
-		std::cout << " " << std::endl;
-		auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time - std::chrono::duration<double>(user_input_time)).count();
+        // Calculate and print the elapsed time
+        std::cout << " " << std::endl;
+        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
 		// Print the time taken for the entire process in bold with one decimal place
 		std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
 		std::cout << " " << std::endl;
@@ -923,10 +917,10 @@ void unmountISOs() {
         std::string input;
         std::getline(std::cin, input);
         std::system("clear");
-        
+
         // Start the timer
-		auto start_time = std::chrono::high_resolution_clock::now();
-        
+        auto start_time = std::chrono::high_resolution_clock::now();
+
         // Check if the user wants to return
         if (input == "") {
             break;  // Exit the loop
@@ -938,21 +932,23 @@ void unmountISOs() {
                 std::lock_guard<std::mutex> lock(mtx); // Lock the critical section
                 unmountISO(isoDir);
             }
-        
-            listMountedISOs(); // Display the updated list of mounted ISOs after unmounting all
-                       // Stop the timer after completing the mounting process
-        auto end_time = std::chrono::high_resolution_clock::now();
 
-        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-		// Print the time taken for the entire process in bold with one decimal place
-		std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
-        std::cout << " " << std::endl;
+            listMountedISOs(); // Display the updated list of mounted ISOs after unmounting all
+
+            // Stop the timer after completing the mounting process
+            auto end_time = std::chrono::high_resolution_clock::now();
+
+            auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+            // Print the time taken for the entire process in bold with one decimal place
+            std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
+            std::cout << " " << std::endl;
             continue;  // Restart the loop
         }
 
         // Split the input into tokens
         std::istringstream iss(input);
         std::vector<int> unmountIndices;
+        std::set<int> uniqueIndices;  // Use a set to store unique indices
 
         std::string token;
         while (iss >> token) {
@@ -961,7 +957,12 @@ void unmountISOs() {
                 // Individual number
                 int number = std::stoi(token);
                 if (number >= 1 && static_cast<size_t>(number) <= isoDirs.size()) {
-                    unmountIndices.push_back(number);
+                    // Check for duplicates
+                    if (uniqueIndices.find(number) == uniqueIndices.end()) {
+                        uniqueIndices.insert(number);
+                        unmountIndices.push_back(number);
+                    } 
+                    
                 } else {
                     // Print an error message for an invalid index
                     std::cerr << "\033[31mInvalid index. Please try again.\n\033[0m" << std::endl;
@@ -975,7 +976,11 @@ void unmountISOs() {
                 int endRange = std::stoi(match[2]);
                 if (startRange >= 1 && endRange >= startRange && static_cast<size_t>(endRange) <= isoDirs.size()) {
                     for (int i = startRange; i <= endRange; ++i) {
-                        unmountIndices.push_back(i);
+                        // Check for duplicates
+                        if (uniqueIndices.find(i) == uniqueIndices.end()) {
+                            uniqueIndices.insert(i);
+                            unmountIndices.push_back(i);
+                        } 
                     }
                 } else {
                     // Print an error message for an invalid range
@@ -1013,17 +1018,18 @@ void unmountISOs() {
         for (auto& thread : threads) {
             thread.join();
         }
-             
+
         listMountedISOs(); // Display the updated list of mounted ISOs after unmounting
-        
+
         // Stop the timer after completing the mounting process
         auto end_time = std::chrono::high_resolution_clock::now();
 
         // Calculate and print the elapsed time
         std::cout << " " << std::endl;
         auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-		// Print the time taken for the entire process in bold with one decimal place
-		std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
-		std::cout << " " << std::endl;  
+        // Print the time taken for the entire process in bold with one decimal place
+        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
+        std::cout << " " << std::endl;
     }
 }
+
