@@ -43,8 +43,8 @@ void removeNonExistentPathsFromCacheWithOpenMP();
 void displayErrorMessage(const std::string& iso);
 void printAlreadyMountedMessage(const std::string& iso);
 void printIsoFileList(const std::vector<std::string>& isoFiles);
-void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet);
-void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
+void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet, std::vector<std::string>& isoFiles);
+void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet, std::vector<std::string>& isoFilesRef);
 
 
 std::string directoryPath;					// Declare directoryPath here
@@ -549,8 +549,6 @@ bool allFilesExistAndAreIso(const std::vector<std::string>& files) {
 
 // Function to select and mount ISO files by number
 void select_and_mount_files_by_number() {
-	// Declare a variable to store the time spent in user input
-double user_input_time = 0.0;
     // Load ISO files from cache
     std::vector<std::string> isoFiles = loadCache();
 
@@ -592,8 +590,8 @@ double user_input_time = 0.0;
         std::getline(std::cin, input);
         std::system("clear");
 		
-		// Start the timer for user input
-    auto user_input_start_time = std::chrono::high_resolution_clock::now();
+		// Start the timer
+		auto start_time = std::chrono::high_resolution_clock::now();
         
         // Check if the user wants to return
         if (input.empty()) {
@@ -604,23 +602,19 @@ double user_input_time = 0.0;
         // Check if the user wants to mount all ISO files
         if (input == "00") {
             for (const std::string& iso : isoFiles) {
-                handleIsoFile(iso, mountedSet);
+                handleIsoFile(input, mountedSet, isoFiles);
             }
         } else {
             // Process user input to select and mount specific ISO files
-            processInput(input, isoFiles, mountedSet);
+            processInput(input, isoFiles, mountedSet, isoFiles);
         }
 
         // Stop the timer after completing the mounting process
         auto end_time = std::chrono::high_resolution_clock::now();
 
-        // Stop the timer for user input
-		auto user_input_end_time = std::chrono::high_resolution_clock::now();
-		user_input_time += std::chrono::duration_cast<std::chrono::duration<double>>(user_input_end_time - user_input_start_time).count();
-
-		// Calculate and print the elapsed time
-		std::cout << " " << std::endl;
-		auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time - std::chrono::duration<double>(user_input_time)).count();
+        // Calculate and print the elapsed time
+        std::cout << " " << std::endl;
+        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
 		// Print the time taken for the entire process in bold with one decimal place
 		std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
 		std::cout << " " << std::endl;
@@ -639,7 +633,7 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
 
 
 // Function to handle mounting of a specific ISO file
-void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet) {
+void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet, std::vector<std::string>& isoFiles) {
     // Check if the ISO file exists on disk
     if (fileExistsOnDisk(iso)) {
         // Attempt to insert the ISO file into the set; if it's a new entry, mount it
@@ -652,12 +646,15 @@ void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& moun
     } else {
         // Display an error message if the ISO file doesn't exist on disk
         displayErrorMessage(iso);
+
+        // Refresh the selection list by loading the updated ISO files from cache
+        isoFiles = loadCache();
     }
 }
 
 
 // Function to process user input and choose ISO files to mount
-void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
+void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet, std::vector<std::string>& isoFilesRef) {
     // Input string stream to parse user input
     std::istringstream iss(input);
     int start, end;
@@ -670,7 +667,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
             // Iterate through the specified range and handle each ISO file
             for (int i = start; i <= end; ++i) {
                 const std::string& selectedIso = isoFiles[i - 1];
-                handleIsoFile(selectedIso, mountedSet);
+                handleIsoFile(selectedIso, mountedSet, isoFilesRef);
             }
         } else {
             // Print an error message for an invalid range
@@ -688,7 +685,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
 
             if (userInput >= 1 && static_cast<size_t>(userInput) <= isoFiles.size()) {
                 const std::string& selectedIso = isoFiles[userInput - 1];
-                handleIsoFile(selectedIso, mountedSet);
+                handleIsoFile(selectedIso, mountedSet, isoFilesRef);
             } else {
                 // Print an error message for an invalid number
                 std::cerr << "\033[31mInvalid selection. Please enter a valid number.\033[0m" << std::endl;
@@ -708,7 +705,8 @@ void printAlreadyMountedMessage(const std::string& iso) {
 
 // Function to display an error message when the ISO file does not exist on disk
 void displayErrorMessage(const std::string& iso) {
-    std::cout << "\033[35mISO file '" << iso << "' does not exist on disk. Please refresh the cache from the main menu.\033[0m" << std::endl;
+    std::cout << "\033[35mISO file '" << iso << "' does not exist on disk. Removing non-existent entries from cache...\033[0m" << std::endl;
+    removeNonExistentPathsFromCacheWithOpenMP();
 }
 
 // Function to perform case-insensitive string comparison
@@ -885,14 +883,10 @@ void unmountISO(const std::string& isoDir) {
 
 // Function to unmount ISOs based on user input
 void unmountISOs() {
-	// Declare a variable to store the time spent in user input
-double user_input_time = 0.0;
     listMountedISOs(); // Display the initial list of mounted ISOs
 
     // Path where ISO directories are expected to be mounted
     const std::string isoPath = "/mnt";
-    // Start the timer before the loop
-    auto start_time = std::chrono::high_resolution_clock::now();
 
     while (true) {
         std::vector<std::string> isoDirs;
@@ -927,10 +921,10 @@ double user_input_time = 0.0;
         std::string input;
         std::getline(std::cin, input);
         std::system("clear");
-        
-        // Start the timer for user input
-    auto user_input_start_time = std::chrono::high_resolution_clock::now();
-        
+
+        // Start the timer
+        auto start_time = std::chrono::high_resolution_clock::now();
+
         // Check if the user wants to return
         if (input == "") {
             break;  // Exit the loop
@@ -942,21 +936,23 @@ double user_input_time = 0.0;
                 std::lock_guard<std::mutex> lock(mtx); // Lock the critical section
                 unmountISO(isoDir);
             }
-        
-            listMountedISOs(); // Display the updated list of mounted ISOs after unmounting all
-                       // Stop the timer after completing the mounting process
-        auto end_time = std::chrono::high_resolution_clock::now();
 
-        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-		// Print the time taken for the entire process in bold with one decimal place
-		std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
-        std::cout << " " << std::endl;
+            listMountedISOs(); // Display the updated list of mounted ISOs after unmounting all
+
+            // Stop the timer after completing the mounting process
+            auto end_time = std::chrono::high_resolution_clock::now();
+
+            auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+            // Print the time taken for the entire process in bold with one decimal place
+            std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
+            std::cout << " " << std::endl;
             continue;  // Restart the loop
         }
 
         // Split the input into tokens
         std::istringstream iss(input);
         std::vector<int> unmountIndices;
+        std::set<int> uniqueIndices;  // Use a set to store unique indices
 
         std::string token;
         while (iss >> token) {
@@ -965,7 +961,12 @@ double user_input_time = 0.0;
                 // Individual number
                 int number = std::stoi(token);
                 if (number >= 1 && static_cast<size_t>(number) <= isoDirs.size()) {
-                    unmountIndices.push_back(number);
+                    // Check for duplicates
+                    if (uniqueIndices.find(number) == uniqueIndices.end()) {
+                        uniqueIndices.insert(number);
+                        unmountIndices.push_back(number);
+                    } 
+                    
                 } else {
                     // Print an error message for an invalid index
                     std::cerr << "\033[31mInvalid index. Please try again.\n\033[0m" << std::endl;
@@ -979,7 +980,11 @@ double user_input_time = 0.0;
                 int endRange = std::stoi(match[2]);
                 if (startRange >= 1 && endRange >= startRange && static_cast<size_t>(endRange) <= isoDirs.size()) {
                     for (int i = startRange; i <= endRange; ++i) {
-                        unmountIndices.push_back(i);
+                        // Check for duplicates
+                        if (uniqueIndices.find(i) == uniqueIndices.end()) {
+                            uniqueIndices.insert(i);
+                            unmountIndices.push_back(i);
+                        } 
                     }
                 } else {
                     // Print an error message for an invalid range
@@ -1017,24 +1022,18 @@ double user_input_time = 0.0;
         for (auto& thread : threads) {
             thread.join();
         }
-             
+
         listMountedISOs(); // Display the updated list of mounted ISOs after unmounting
-        
+
         // Stop the timer after completing the mounting process
         auto end_time = std::chrono::high_resolution_clock::now();
 
-        // Stop the timer for user input
-		auto user_input_end_time = std::chrono::high_resolution_clock::now();
-		user_input_time += std::chrono::duration_cast<std::chrono::duration<double>>(user_input_end_time - user_input_start_time).count();
-
-		// Calculate and print the elapsed time
-		std::cout << " " << std::endl;
-		auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time - std::chrono::duration<double>(user_input_time)).count();
-		// Print the time taken for the entire process in bold with one decimal place
-		std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
-		std::cout << " " << std::endl;
-		// Reset the timer to the current time when receiving user input
-        start_time = std::chrono::high_resolution_clock::now();
-        
+        // Calculate and print the elapsed time
+        std::cout << " " << std::endl;
+        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+        // Print the time taken for the entire process in bold with one decimal place
+        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
+        std::cout << " " << std::endl;
     }
 }
+

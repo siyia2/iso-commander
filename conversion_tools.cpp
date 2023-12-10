@@ -306,6 +306,9 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
     std::string token;
     std::vector<std::thread> threads;
 
+    // Set to track processed indices
+    std::set<int> processedIndices;
+
     // Iterate over tokens
     while (iss >> token) {
         std::istringstream tokenStream(token);
@@ -320,18 +323,25 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                 if (start >= 1 && start <= fileList.size() && end >= start && end <= fileList.size()) {
                     for (int i = start; i <= end; i++) {
                         int selectedIndex = i - 1;
-                        std::string selectedFile = fileList[selectedIndex];
-                        threads.emplace_back(convertBINToISO, selectedFile);
+                        // Check if the index has already been processed
+                        if (processedIndices.find(selectedIndex) == processedIndices.end()) {
+                            std::string selectedFile = fileList[selectedIndex];
+                            threads.emplace_back(convertBINToISO, selectedFile);
+                            processedIndices.insert(selectedIndex);
+                        }
                     }
                 } else {
                     std::cout << "\033[31mInvalid range. Please try again.\033[0m" << std::endl;
-                    
                 }
             } else if (start >= 1 && start <= fileList.size()) {
                 // Process a valid single number input
                 int selectedIndex = start - 1;
-                std::string selectedFile = fileList[selectedIndex];
-                threads.emplace_back(convertBINToISO, selectedFile);
+                // Check if the index has already been processed
+                if (processedIndices.find(selectedIndex) == processedIndices.end()) {
+                    std::string selectedFile = fileList[selectedIndex];
+                    threads.emplace_back(convertBINToISO, selectedFile);
+                    processedIndices.insert(selectedIndex);
+                }
             } else {
                 // Handle invalid number input
                 std::cout << "\033[31mInvalid number: " << start << ". Please try again.\033[0m" << std::endl;
@@ -644,6 +654,9 @@ std::vector<int> parseUserInput(const std::string& input, int maxIndex) {
     std::istringstream iss(input);
     std::string token;
 
+    // Set to track processed indices
+    std::set<int> processedIndices;
+
     // Iterate through the tokens in the input string
     while (iss >> token) {
         if (token.find('-') != std::string::npos) {
@@ -655,7 +668,13 @@ std::vector<int> parseUserInput(const std::string& input, int maxIndex) {
             // Add each index within the specified range to the selected indices vector
             for (int i = startRange; i <= endRange; i++) {
                 if (i >= 1 && i <= maxIndex) {
-                    selectedFileIndices.push_back(i - 1);
+                    int currentIndex = i - 1;
+
+                    // Check if the index has already been processed
+                    if (processedIndices.find(currentIndex) == processedIndices.end()) {
+                        selectedFileIndices.push_back(currentIndex);
+                        processedIndices.insert(currentIndex);
+                    }
                 }
             }
         } else {
@@ -664,7 +683,13 @@ std::vector<int> parseUserInput(const std::string& input, int maxIndex) {
 
             // Add the index to the selected indices vector if it is within the valid range
             if (selectedFileIndex >= 1 && selectedFileIndex <= maxIndex) {
-                selectedFileIndices.push_back(selectedFileIndex - 1);
+                int currentIndex = selectedFileIndex - 1;
+
+                // Check if the index has already been processed
+                if (processedIndices.find(currentIndex) == processedIndices.end()) {
+                    selectedFileIndices.push_back(currentIndex);
+                    processedIndices.insert(currentIndex);
+                }
             }
         }
     }
