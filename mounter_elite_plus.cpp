@@ -549,6 +549,9 @@ bool allFilesExistAndAreIso(const std::vector<std::string>& files) {
 
 // Function to select and mount ISO files by number
 void select_and_mount_files_by_number() {
+	// Remove non-existent paths from the cache
+    removeNonExistentPathsFromCacheWithOpenMP();
+
     // Load ISO files from cache
     std::vector<std::string> isoFiles = loadCache();
 
@@ -568,7 +571,7 @@ void select_and_mount_files_by_number() {
 
     // Check if there are any ISO files to mount
     if (isoFiles.empty()) {
-        std::cout << "\033[33mNo more unmounted .iso files in the cache. Please refresh the cache from the main menu.\033[0m" << std::endl;
+        std::cout << "\033[33mNo .iso files in the cache. Please refresh the cache from the main menu.\033[0m" << std::endl;
         return;
     }
 
@@ -702,7 +705,7 @@ void printAlreadyMountedMessage(const std::string& iso) {
 
 // Function to display an error message when the ISO file does not exist on disk
 void displayErrorMessage(const std::string& iso) {
-    std::cout << "\033[35mISO file '" << iso << "' does not exist on disk. Please refresh the cache from the main menu.\033[0m" << std::endl;
+    std::cout << "\033[35mISO file '" << iso << "' does not exist on disk. Please return and re-enter the mount option, or refresh the cache from the main menu.\033[0m" << std::endl;
 }
 
 // Function to perform case-insensitive string comparison
@@ -1032,4 +1035,3 @@ void unmountISOs() {
         std::cout << " " << std::endl;
     }
 }
-
