@@ -22,6 +22,7 @@ bool directoryExists(const std::string& path);
 bool iequals(std::string_view a, std::string_view b);
 bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles);
 bool fileExists(const std::string& path);
+bool handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet, std::vector<std::string>& isoFiles);
 
 //	voids
 
@@ -43,7 +44,6 @@ void removeNonExistentPathsFromCacheWithOpenMP();
 void displayErrorMessage(const std::string& iso);
 void printAlreadyMountedMessage(const std::string& iso);
 void printIsoFileList(const std::vector<std::string>& isoFiles);
-void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet, std::vector<std::string>& isoFiles);
 void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet, std::vector<std::string>& isoFilesRef);
 
 
@@ -633,7 +633,7 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
 
 
 // Function to handle mounting of a specific ISO file
-void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet, std::vector<std::string>& isoFiles) {
+bool handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet, std::vector<std::string>& isoFiles) {
     // Check if the ISO file exists on disk
     if (fileExistsOnDisk(iso)) {
         // Attempt to insert the ISO file into the set; if it's a new entry, mount it
@@ -643,12 +643,15 @@ void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& moun
             // Print a message if the ISO file is already mounted
             printAlreadyMountedMessage(iso);
         }
+        return true; // Successfully processed the file
     } else {
         // Display an error message if the ISO file doesn't exist on disk
         displayErrorMessage(iso);
 
         // Refresh the selection list by loading the updated ISO files from cache
         isoFiles = loadCache();
+
+        return false; // Unable to process the file
     }
 }
 
@@ -667,7 +670,10 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
             // Iterate through the specified range and handle each ISO file
             for (int i = start; i <= end; ++i) {
                 const std::string& selectedIso = isoFiles[i - 1];
-                handleIsoFile(selectedIso, mountedSet, isoFilesRef);
+                if (!handleIsoFile(selectedIso, mountedSet, isoFilesRef)) {
+                    // Stop further processing and return to the selection
+                    return;
+                }
             }
         } else {
             // Print an error message for an invalid range
@@ -685,7 +691,10 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
 
             if (userInput >= 1 && static_cast<size_t>(userInput) <= isoFiles.size()) {
                 const std::string& selectedIso = isoFiles[userInput - 1];
-                handleIsoFile(selectedIso, mountedSet, isoFilesRef);
+                if (!handleIsoFile(selectedIso, mountedSet, isoFilesRef)) {
+                    // Stop further processing and return to the selection
+                    return;
+                }
             } else {
                 // Print an error message for an invalid number
                 std::cerr << "\033[31mInvalid selection. Please enter a valid number.\033[0m" << std::endl;
@@ -705,7 +714,7 @@ void printAlreadyMountedMessage(const std::string& iso) {
 
 // Function to display an error message when the ISO file does not exist on disk
 void displayErrorMessage(const std::string& iso) {
-    std::cout << "\033[35mISO file '" << iso << "' does not exist on disk. Removing non-existent entries from cache...\033[0m" << std::endl;
+    std::cout << "\033[35mISO file '" << iso << "' does not exist on disk. Removing non-existent entries from cache... Please try again.\033[0m" << std::endl;
     removeNonExistentPathsFromCacheWithOpenMP();
 }
 
