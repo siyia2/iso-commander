@@ -705,7 +705,7 @@ void printAlreadyMountedMessage(const std::string& iso) {
 
 // Function to display an error message when the ISO file does not exist on disk
 void displayErrorMessage(const std::string& iso) {
-    std::cout << "\033[35mISO file '" << iso << "' does not exist on disk. Please return and re-enter the mount option, or refresh the cache from the main menu.\033[0m" << std::endl;
+    std::cout << "\033[35mISO file '" << iso << "' does not exist on disk. Please return and re-enter the mount function, or refresh the cache from the main menu.\033[0m" << std::endl;
 }
 
 // Function to perform case-insensitive string comparison
