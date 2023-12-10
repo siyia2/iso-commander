@@ -22,7 +22,7 @@ Added Features:
 * Improved selection procedures.
 * Proper multithreading support added it can now utilize as many cores as are available for maximum performance.
 * Faster search times and cache generetions.
-* Faster mounting&unmounting times, from my tests i found it can mount, up to 30 ISO files in under 5s.
+* Faster mount&unmount times, from my tests i found it can mount, up to 30 ISO files in under 5s.
 * Dropped manual mode for mounting/converting, since caching is way faster and easier to manage.
 * Added support for MDF conversion to ISO by utilizing mdf2iso.
 * Clean codebase, just in case someone decides to contribute in the future.
