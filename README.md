@@ -17,7 +17,7 @@ Added Features:
 * Cached ISO management to reduce disk thrashing.
 * Sanitized shell commands for improved security.
 * Supports all filenames, including special charactes and gaps and ''.
-* Extra checks and error controls so that you don't erase your / or /mnt accidentally (joking).
+* Extra checks and error handling so that you don't erase your / or /mnt accidentally.
 * More robust menu experience.
 * Improved selection procedures.
 * Proper multithreading support, it can utilize as many cores as are available for maximum performance.
