@@ -916,7 +916,7 @@ void unmountISOs() {
         }
 
         // Prompt for unmounting input
-        std::cout << "\033[94mEnter the range of ISOs to unmount (e.g., 1, 1-3, 1 to 3, or individual numbers like 1 2 3), '00' to unmount all, or press Enter to return:\033[0m ";
+        std::cout << "\033[94mEnter the range of ISOs to unmount (enter numbers, ranges like '1-3', '1 2', '00' to unmount all, or press Enter to return):\033[0m ";
         std::string input;
         std::getline(std::cin, input);
         std::system("clear");
