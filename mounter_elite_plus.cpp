@@ -845,7 +845,6 @@ void listMountedISOs() {
 }
 
 
-// Function to unmount an ISO and remove its directory if empty
 void unmountISO(const std::string& isoDir) {
     // Construct the unmount command with sudo, umount, and suppressing logs
     std::string unmountCommand = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1";
@@ -855,11 +854,10 @@ void unmountISO(const std::string& isoDir) {
 
     // Check if the unmounting was successful
     if (result == 0) {
-        // Omitted log for unmounting success
+        std::cout << "\033[32mUnmounted mount point: " << isoDir << "\033[0m" << std::endl; // Print success message
     } else {
-        // Omitted log for unmounting failure
+        std::cerr << "\033[31mFailed to unmount: " << isoDir << "\033[0m" << std::endl; // Print failure message
     }
-
     // Check if the directory is empty before removing it
     if (std::filesystem::is_empty(isoDir)) {
         // Construct the remove directory command with sudo, rmdir, and suppressing logs
@@ -995,7 +993,7 @@ void unmountISOs() {
             }
          
         }
-
+        
         // Determine the number of available CPU cores
         const unsigned int numCores = std::thread::hardware_concurrency();
 
@@ -1016,8 +1014,7 @@ void unmountISOs() {
         for (auto& thread : threads) {
             thread.join();
         }
-		std::cout << " " << std::endl;
-		std::cout << "Press Enter to continue...";
+        std::cout << "Press Enter to continue...";
 		std::cin.get();
 		std::system("clear");
         listMountedISOs(); // Display the updated list of mounted ISOs after unmounting
