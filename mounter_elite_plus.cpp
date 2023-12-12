@@ -863,7 +863,7 @@ void unmountISO(const std::string& isoDir) {
     // Check if the directory is empty before removing it
     if (std::filesystem::is_empty(isoDir)) {
         // Construct the remove directory command with sudo, rmdir, and suppressing logs
-        std::string removeDirCommand = "sudo rmdir -p " + shell_escape(isoDir) + " 2>/dev/null";
+        std::string removeDirCommand = "sudo rmdir " + shell_escape(isoDir) + " 2>/dev/null";
 
         // Execute the remove directory command
         int removeDirResult = system(removeDirCommand.c_str());
@@ -968,7 +968,7 @@ void unmountISOs() {
                     
                 } else {
                     // Print an error message for an invalid index
-                    std::cerr << "\033[31mInvalid index. Please try again.\n\033[0m" << std::endl;
+                    std::cerr << "\033[31mInvalid index. Please try again.\033[0m" << std::endl;
                     continue;  // Restart the loop
                 }
             } else if (std::regex_match(token, std::regex("^(\\d+)-(\\d+)$"))) {
@@ -987,12 +987,13 @@ void unmountISOs() {
                     }
                 } else {
                     // Print an error message for an invalid range
-                    std::cerr << "\033[31mInvalid range. Please try again.\n\033[0m" << std::endl;
+                    std::cerr << "\033[31mInvalid range. Please try again.\033[0m" << std::endl;
                 }
             } else {
                 // Print an error message for invalid input format
-                std::cerr << "\033[31mInvalid input format. Please try again.\n\033[0m" << std::endl;
+                std::cerr << "\033[31mInvalid input format. Please try again.\033[0m" << std::endl;
             }
+         
         }
 
         // Determine the number of available CPU cores
@@ -1015,7 +1016,10 @@ void unmountISOs() {
         for (auto& thread : threads) {
             thread.join();
         }
-
+		std::cout << " " << std::endl;
+		std::cout << "Press Enter to continue...";
+		std::cin.get();
+		std::system("clear");
         listMountedISOs(); // Display the updated list of mounted ISOs after unmounting
 
         // Stop the timer after completing the mounting process
