@@ -995,12 +995,6 @@ void unmountISOs() {
             }
         }
 
-        if (unmountIndices.empty()) {
-            // Print an error message if no valid indices provided
-            std::cerr << "\033[31mNo valid indices provided. Please try again.\n\033[0m" << std::endl;
-            continue;  // Restart the loop
-        }
-
         // Determine the number of available CPU cores
         const unsigned int numCores = std::thread::hardware_concurrency();
 
