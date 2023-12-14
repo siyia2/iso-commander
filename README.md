@@ -3,7 +3,8 @@ Port of bash shell program mounter_elite to C++
 https://github.com/siyia2/mounter_elite
 
 
-![2023-11-21-005235_grim](https://github.com/siyia2/mounter-elite-plus/assets/46220960/c43a7bad-7cf0-4651-a16e-63cc5f3618ca)
+![2023-12-15-012631_grim](https://github.com/siyia2/mounter-elite-plus/assets/46220960/6c04877a-24a4-4521-8263-9fa40994881a)
+
 
 
 
