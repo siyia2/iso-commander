@@ -11,7 +11,7 @@ State of the art secure and blazing fast terminal image mounter/converter writte
 You can add multiple mounts and/or conversion paths. All paths are mounted under `/mnt/iso_*` format and all conversions take place at their local source directories, script requires `ROOT` access to `mount&unmount ISOs`. 
 
 If you get: `Error: filesystem error: cannot increment recursive directory iterator: Permission denied`.
-Make sure your path has `755` and upwards permissions for better cache generation, if not, you can set the executable as an `SUID`, or you can always run it as `ROOT` from the beginning if need be.
+Make sure your path has `755` and upwards permissions for better cache generation, alternatively, you can set the executable as an `SUID`, or you can always run it as `ROOT` from the beginning if need be.
 
 Added Features:
 * Cached ISO management to reduce disk thrashing.
