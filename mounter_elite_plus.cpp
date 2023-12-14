@@ -64,7 +64,7 @@ int main() {
         std::cout << "3. Conversion Tools" << std::endl;
         std::cout << "4. Refresh ISO Cache" << std::endl;
         std::cout << "5. List Mountpoints" << std::endl;
-        std::cout << "6. Exit the Program" << std::endl;
+        std::cout << "6. Exit Program" << std::endl;
 
         // Prompt for the main menu choice
         //std::cin.clear();
@@ -855,25 +855,17 @@ void unmountISO(const std::string& isoDir) {
     // Check if the unmounting was successful
     if (result == 0) {
         std::cout << "\033[32mUnmounted mount point: " << isoDir << "\033[0m" << std::endl; // Print success message
-    } else {
-        std::cerr << "\033[31mFailed to unmount: " << isoDir << "\033[0m" << std::endl; // Print failure message
-    }
-    // Check if the directory is empty before removing it
-    if (std::filesystem::is_empty(isoDir)) {
-        // Construct the remove directory command with sudo, rmdir, and suppressing logs
-        std::string removeDirCommand = "sudo rmdir " + shell_escape(isoDir) + " 2>/dev/null";
 
-        // Execute the remove directory command
-        int removeDirResult = system(removeDirCommand.c_str());
+        // Check if the directory is empty before removing it
+        if (std::filesystem::is_empty(isoDir)) {
+            // Construct the remove directory command with sudo, rmdir, and suppressing logs
+            std::string removeDirCommand = "sudo rmdir " + shell_escape(isoDir) + " 2>/dev/null";
 
-        // Check if the directory removal was successful
-        if (removeDirResult == 0) {
-            // Omitted log for directory removal
+            // Execute the remove directory command
+            int removeDirResult = system(removeDirCommand.c_str());
         }
     } else {
-        // Print a message if the directory is not empty
-        std::cout << "\033[31mDIRECTORY NOT EMPTY, SKIPPING PROBABLY NOT AN ISO.\033[0m" << std::endl;
-        // Handle the case where the directory is not empty, e.g., log an error or take appropriate action.
+        std::cerr << "\033[31mFailed to unmount: " << isoDir << " ...Probably not an ISO mountpoint, check it out manually.\033[0m" << std::endl; // Print failure message
     }
 }
 
