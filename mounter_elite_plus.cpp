@@ -381,9 +381,6 @@ void manualRefreshCache() {
     // Save the combined cache to disk
     saveCache(allIsoFiles, maxCacheSize);
 
-    // Remove non-existent paths from the cache
-    removeNonExistentPathsFromCacheWithOpenMP();
-
     // Stop the timer after completing the cache refresh and removal of non-existent paths
     auto end_time = std::chrono::high_resolution_clock::now();
 
