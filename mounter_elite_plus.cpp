@@ -181,18 +181,21 @@ bool fileExists(const std::string& path) {
 }
 
 
-// Function to remove non-existent paths from the cache with OpenMP
 void removeNonExistentPathsFromCacheWithOpenMP() {
     std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/iso_cache.txt";
     std::vector<std::string> cache;
-    std::ifstream cacheFile(cacheFilePath);
 
+    // Reserve space for the cache vector
+    std::ifstream cacheFile(cacheFilePath);
     if (!cacheFile) {
         std::cerr << "\033[31mError: Unable to find cache file, will attempt to create it.\033[0m" << std::endl;
         return;
     }
 
-    // Read the cache file into a vector
+    cacheFile.seekg(0, std::ios::end);
+    cache.reserve(cacheFile.tellg());
+    cacheFile.seekg(0, std::ios::beg);
+
     for (std::string line; std::getline(cacheFile, line);) {
         cache.push_back(line);
     }
@@ -210,6 +213,8 @@ void removeNonExistentPathsFromCacheWithOpenMP() {
 
     // Combine private paths into a single shared vector
     std::vector<std::string> retainedPaths;
+    retainedPaths.reserve(cache.size()); // Reserve space to avoid reallocations
+
     for (const auto& privatePath : privatePaths) {
         retainedPaths.insert(retainedPaths.end(), privatePath.begin(), privatePath.end());
     }
