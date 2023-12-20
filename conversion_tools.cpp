@@ -331,7 +331,7 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                         }
                     }
                 } else {
-                    std::cout << "\033[31mInvalid range. Please try again.\033[0m" << std::endl;
+                    std::cout << "\033[31mInvalid range. Start value must be less than or equal to end value.\033[0m" << std::endl;
                 }
             } else if (start >= 1 && start <= fileList.size()) {
                 // Process a valid single number input
@@ -344,7 +344,7 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                 }
             } else {
                 // Handle invalid number input
-                std::cout << "\033[31mInvalid number: " << start << ". Please try again.\033[0m" << std::endl;
+                std::cout << "\033[31mFile index " << start << ". does not exist.\033[0m" << std::endl;
             }
         } else {
             // Handle invalid input format
@@ -635,7 +635,10 @@ void select_and_convert_files_to_iso_mdf() {
             std::cout << "Press enter to continue...";
             std::cin.ignore();
         } else {
-            std::cout << "Invalid choice. Please enter valid file numbers or 'exit'." << std::endl;
+			std::system("clear");
+            std::cout << "\033[31mInvalid choice. Index numbers must exist in the provided list and the start of a range must be higher than its end.\033[0m" << std::endl;
+            std::cout << "Press enter to continue...";
+            std::cin.ignore();
         }
     }
 }
