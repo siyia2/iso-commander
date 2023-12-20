@@ -238,7 +238,7 @@ void select_and_convert_files_to_iso() {
     static std::vector<std::string> previousPaths;
 
     // Read input for directory paths (allow multiple paths separated by semicolons)
-    std::string inputPaths = readInputLine("\033[94mEnter the directory paths (separated by \033[33m;\033[0m\033[94m) to search for .bin .img files or simply press enter to return:\n\033[0m");
+    std::string inputPaths = readInputLine("\033[94mEnter the directory path(s) (if many, separate them with \033[33m;\033[0m\033[94m) to search for .bin .img files, or press Enter to return:\n\033[0m");
 
     // Use semicolon as a separator to split paths
     std::istringstream iss(inputPaths);
@@ -273,7 +273,7 @@ void select_and_convert_files_to_iso() {
             // Print the list of BIN/IMG files
             printFileListBin(binImgFiles);
             // Prompt user to choose a file or exit
-            std::cout << "\033[94mChoose a file to process (enter the number or range e.g., 1-5 or 1 or simply press Enter to return):\033[0m ";
+            std::cout << "\033[94mChoose BIN/IMG file(s) to convert (e.g., '1-3' '1 2', or press Enter to return):\033[0m ";
             std::getline(std::cin, input);
 
             // Break the loop if the user presses Enter
@@ -576,7 +576,7 @@ void processMDFFilesInRange(int start, int end) {
 // Function to interactively select and convert MDF files to ISO
 void select_and_convert_files_to_iso_mdf() {
     int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
-    std::string inputPaths = readInputLine("\033[94mEnter the directory paths (separated by \033[33m;\033[0m\033[94m) to search for .mdf files or simply press enter to return:\n\033[0m");
+    std::string inputPaths = readInputLine("\033[94mEnter the directory path(s) (if many, separate them with \033[33m;\033[0m\033[94m) to search for .mdf files, or press Enter to return:\n\033[0m");
 
     // Initialize vectors to store MDF/MDS files and directory paths
     std::vector<std::string> mdfMdsFiles;
@@ -616,7 +616,7 @@ void select_and_convert_files_to_iso_mdf() {
         printFileListMdf(mdfMdsFiles);
 
         // Prompt the user to enter file numbers or 'exit'
-        std::string input = readInputLine("\033[94mEnter the numbers of the files to convert (e.g., '1-2' or '1 2', or simply press enter to return):\033[0m ");
+        std::string input = readInputLine("\033[94mChoose MDF file(s) to convert (e.g., '1-2' or '1 2', or press Enter to return):\033[0m ");
 
         if (input.empty()) {
             std::system("clear");

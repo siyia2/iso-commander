@@ -360,7 +360,7 @@ void manualRefreshCache() {
     std::system("clear");
     
     // Prompt the user to enter directory paths for manual cache refresh
-    std::string inputLine = readInputLine("\033[94mEnter directory paths to manually refresh the cache (separated by \033[33m;\033[0m\033[94m), or simply press enter to cancel:\n\033[0m");
+    std::string inputLine = readInputLine("\033[94mEnter the directory path(s) from which to populate the cache (if many, separate them by \033[33m;\033[0m\033[94m), or press Enter to cancel:\n\033[0m");
     std::cout << " " << std::endl;
 
     // Start the timer
@@ -601,7 +601,7 @@ void select_and_mount_files_by_number() {
 
         // Prompt user for input
         std::string input;
-        std::cout << "\033[94mChoose .iso files to mount (enter numbers, ranges like '1-3', '1 2', '00' to mount all, or press Enter to return):\033[0m ";
+        std::cout << "\033[94mChoose ISO(s) to mount (e.g., '1-3', '1 2', '00' mounts all, or press Enter to return):\033[0m ";
 		std::getline(std::cin, input);
         std::system("clear");
 		
@@ -911,7 +911,7 @@ void unmountISOs() {
         }
 
         // Prompt for unmounting input
-        std::cout << "\033[94mChoose mounted iso(s) to unmount (enter numbers, ranges like '1-3', '1 2', '00' to unmount all, or press Enter to return):\033[0m ";
+        std::cout << "\033[94mChoose ISO(s) to unmount (e.g. '1-3', '1 2', '00' unmounts all, or press Enter to return):\033[0m ";
         std::string input;
         std::getline(std::cin, input);
         std::system("clear");
