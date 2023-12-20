@@ -293,6 +293,7 @@ void select_and_convert_files_to_iso() {
 
 // Function to print the list of BIN/IMG files
 void printFileListBin(const std::vector<std::string>& fileList) {
+	std::cout << "Select file(s) to convert to \033[1m\033[32mISO\033[0m:\n";
     for (int i = 0; i < fileList.size(); i++) {
         std::cout << i + 1 << ". " << fileList[i] << std::endl;
     }
@@ -645,7 +646,7 @@ void select_and_convert_files_to_iso_mdf() {
 
 // Function to print the list of MDF files with their corresponding indices
 void printFileListMdf(const std::vector<std::string>& fileList) {
-    std::cout << "Select files to convert to ISO:\n";
+    std::cout << "Select file(s) to convert to \033[1m\033[32mISO\033[0m:\n";
     for (int i = 0; i < fileList.size(); i++) {
         std::cout << i + 1 << ". " << fileList[i] << std::endl;
     }
