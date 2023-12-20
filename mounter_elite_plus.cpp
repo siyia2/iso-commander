@@ -180,33 +180,41 @@ bool fileExists(const std::string& path) {
     return (stat(path.c_str(), &buffer) == 0);
 }
 
-
+// Function to remove non existent paths from cache
 void removeNonExistentPathsFromCacheWithOpenMP() {
+    // Define the path to the cache file
     std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/iso_cache.txt";
-    std::vector<std::string> cache;
+    std::vector<std::string> cache; // Vector to store paths read from the cache file
 
-    // Reserve space for the cache vector
+    // Attempt to open the cache file
     std::ifstream cacheFile(cacheFilePath);
     if (!cacheFile) {
+        // Display an error message if the cache file is not found
         std::cerr << "\033[31mError: Unable to find cache file, will attempt to create it.\033[0m" << std::endl;
         return;
     }
 
+    // Determine the size of the cache file and reserve space in the cache vector
     cacheFile.seekg(0, std::ios::end);
     cache.reserve(cacheFile.tellg());
     cacheFile.seekg(0, std::ios::beg);
 
+    // Read paths from the cache file into the cache vector
     for (std::string line; std::getline(cacheFile, line);) {
         cache.push_back(line);
     }
 
+    // Close the cache file
     cacheFile.close();
 
+    // Create a vector to hold private paths for each OpenMP thread
     std::vector<std::vector<std::string>> privatePaths(omp_get_max_threads());
 
+    // Parallel loop to check the existence of paths and distribute them among threads
     #pragma omp parallel for num_threads(omp_get_max_threads())
     for (int i = 0; i < cache.size(); i++) {
         if (fileExists(cache[i])) {
+            // Add existing paths to the private vector of the current thread
             privatePaths[omp_get_thread_num()].push_back(cache[i]);
         }
     }
@@ -219,9 +227,10 @@ void removeNonExistentPathsFromCacheWithOpenMP() {
         retainedPaths.insert(retainedPaths.end(), privatePath.begin(), privatePath.end());
     }
 
+    // Open the cache file for writing
     std::ofstream updatedCacheFile(cacheFilePath);
-
     if (!updatedCacheFile) {
+        // Display an error message if unable to open the cache file for writing
         std::cerr << "\033[31mError: Unable to open cache file for writing, check permissions.\033[0m" << std::endl;
         return;
     }
@@ -231,6 +240,7 @@ void removeNonExistentPathsFromCacheWithOpenMP() {
         updatedCacheFile << path << std::endl;
     }
 
+    // Close the updated cache file
     updatedCacheFile.close();
 }
 
@@ -592,7 +602,7 @@ void select_and_mount_files_by_number() {
         // Prompt user for input
         std::string input;
         std::cout << "\033[94mChoose .iso files to mount (enter numbers, ranges like '1-3', '1 2', '00' to mount all, or press Enter to return):\033[0m ";
-        std::getline(std::cin, input);
+		std::getline(std::cin, input);
         std::system("clear");
 		
 		// Start the timer
@@ -655,48 +665,41 @@ void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& moun
 }
 
 
-// Function to process user input and choose ISO files to mount
 void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
     // Input string stream to parse user input
     std::istringstream iss(input);
-    int start, end;
-    char separator;
 
-    // Check if the input is a range in the form of "start-end"
-    if ((iss >> start) && (iss >> separator) && (separator == '-') && (iss >> end)) {
-        // Successfully parsed a range
-        if (start >= 1 && static_cast<size_t>(end) <= isoFiles.size() && start <= end) {
-            // Iterate through the specified range and handle each ISO file
+    // Iterate through the space-separated input
+    std::string token;
+    while (iss >> token) {
+        size_t dashPos = token.find('-');
+        if (dashPos != std::string::npos) {
+            // It's a range, e.g., "1-3"
+            int start = std::stoi(token.substr(0, dashPos));
+            int end = std::stoi(token.substr(dashPos + 1));
+
+            if (start > end) {
+                // Print an error message for an invalid range in red color
+                std::cerr << "\033[31mInvalid range. Start value must be less than or equal to end value.\033[0m" << std::endl;
+                return;
+            }
+
             for (int i = start; i <= end; ++i) {
-                const std::string& selectedIso = isoFiles[i - 1];
-                handleIsoFile(selectedIso, mountedSet);
+                if (i >= 1 && static_cast<size_t>(i) <= isoFiles.size()) {
+                    handleIsoFile(isoFiles[i - 1], mountedSet);
+                }
             }
         } else {
-            // Print an error message for an invalid range
-            std::cerr << "\033[31mInvalid range. Please enter a valid range.\033[0m" << std::endl;
-        }
-    } else if (!input.empty()) {
-        // Attempt to parse as a single number or multiple numbers separated by spaces
-        std::stringstream ss(input);
-        std::string singleInput;
-
-        // Iterate through the space-separated numbers and handle each ISO file
-        while (std::getline(ss, singleInput, ' ')) {
-            int userInput;
-            std::istringstream(singleInput) >> userInput;
-
-            if (userInput >= 1 && static_cast<size_t>(userInput) <= isoFiles.size()) {
-                const std::string& selectedIso = isoFiles[userInput - 1];
-                handleIsoFile(selectedIso, mountedSet);
+            // It's a single number
+            int num = std::stoi(token);
+            if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size()) {
+                handleIsoFile(isoFiles[num - 1], mountedSet);
             } else {
                 // Print an error message for an invalid number
                 std::cerr << "\033[31mInvalid selection. Please enter a valid number.\033[0m" << std::endl;
                 return;
             }
         }
-    } else {
-        // Print an error message for an empty input
-        std::cerr << "\033[31mInvalid input. Please enter a valid number or range.\033[0m" << std::endl;
     }
 }
 
@@ -985,7 +988,7 @@ void unmountISOs() {
                     }
                 } else {
                     // Print an error message for an invalid range
-                    std::cerr << "\033[31mInvalid range. Please try again.\033[0m" << std::endl;
+                    std::cerr << "\033[31mInvalid range. Start value must be less than or equal to end value.\033[0m" << std::endl;
                 }
             } else {
                 // Print an error message for invalid input format
