@@ -349,7 +349,7 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
             }
         } else {
             // Handle invalid input format
-            std::cout << "\033[31mInvalid input format: Please try again.\033[0m" << std::endl;
+            std::cout << "\033[31mInvalid input format.\033[0m" << std::endl;
         }
     }
 
