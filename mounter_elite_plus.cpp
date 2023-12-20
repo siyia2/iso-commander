@@ -979,7 +979,7 @@ void unmountISOs() {
                     
                 } else {
                     // Print an error message for an invalid index
-                    std::cerr << "\033[31mInvalid index. Please try again.\033[0m" << std::endl;
+                    std::cerr << "\033[31mInvalid index.\033[0m" << std::endl;
                     continue;  // Restart the loop
                 }
             } else if (std::regex_match(token, std::regex("^(\\d+)-(\\d+)$"))) {
