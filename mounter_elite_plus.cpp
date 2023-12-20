@@ -1002,7 +1002,7 @@ void unmountISOs() {
                 }
             } else {
                 // Print an error message for invalid input format
-                std::cerr << "\033[31mInvalid input format. Please try again.\033[0m" << std::endl;
+                std::cerr << "\033[31mInvalid input format.\033[0m" << std::endl;
             }
          
         }
