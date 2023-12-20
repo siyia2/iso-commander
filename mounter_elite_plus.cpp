@@ -669,6 +669,9 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
     // Input string stream to parse user input
     std::istringstream iss(input);
 
+    // Flag to track invalid input
+    bool invalidInput = false;
+
     // Iterate through the space-separated input
     std::string token;
     while (iss >> token) {
@@ -679,14 +682,17 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
             int end = std::stoi(token.substr(dashPos + 1));
 
             if (start > end) {
-                // Print an error message for an invalid range in red color
-                std::cerr << "\033[31mInvalid range. Start value must be less than or equal to end value.\033[0m" << std::endl;
-                return;
+                // Set the flag for an invalid range
+                invalidInput = true;
+                continue; // Skip to the next token
             }
 
             for (int i = start; i <= end; ++i) {
                 if (i >= 1 && static_cast<size_t>(i) <= isoFiles.size()) {
                     handleIsoFile(isoFiles[i - 1], mountedSet);
+                } else {
+                    // Set the flag for an invalid number in the range
+                    invalidInput = true;
                 }
             }
         } else {
@@ -695,11 +701,15 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size()) {
                 handleIsoFile(isoFiles[num - 1], mountedSet);
             } else {
-                // Print an error message for an invalid number
-                std::cerr << "\033[31mInvalid selection. Please enter a valid number.\033[0m" << std::endl;
-                return;
+                // Set the flag for an invalid number
+                invalidInput = true;
             }
         }
+    }
+
+    // Print an error message if any invalid input was detected
+    if (invalidInput) {
+        std::cerr << "\033[31mInvalid selection(s). Please enter valid number(s) or ranges.\033[0m" << std::endl;
     }
 }
 
