@@ -22,6 +22,7 @@ bool directoryExists(const std::string& path);
 bool iequals(std::string_view a, std::string_view b);
 bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles);
 bool fileExists(const std::string& path);
+bool isNumeric(const std::string& str);
 
 //	voids
 
@@ -664,52 +665,67 @@ void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& moun
     }
 }
 
+// Function to check if a string is numeric
+bool isNumeric(const std::string& str) {
+    for (char c : str) {
+        if (!std::isdigit(c)) {
+            return false;
+        }
+    }
+    return true;
+}
 
 void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
-    // Input string stream to parse user input
     std::istringstream iss(input);
-
-    // Flag to track invalid input
     bool invalidInput = false;
 
-    // Iterate through the space-separated input
     std::string token;
     while (iss >> token) {
         size_t dashPos = token.find('-');
         if (dashPos != std::string::npos) {
-            // It's a range, e.g., "1-3"
-            int start = std::stoi(token.substr(0, dashPos));
-            int end = std::stoi(token.substr(dashPos + 1));
+            int start, end;
 
-            if (start > end) {
-                // Set the flag for an invalid range
+            try {
+                start = std::stoi(token.substr(0, dashPos));
+                end = std::stoi(token.substr(dashPos + 1));
+            } catch (const std::invalid_argument& e) {
+                // Handle the exception for invalid input
                 invalidInput = true;
-                continue; // Skip to the next token
+                std::cerr << "\033[31mInvalid input format: " << token << "\033[0m" << std::endl;
+                continue;
+            } catch (const std::out_of_range& e) {
+                // Handle the exception for out-of-range input
+                invalidInput = true;
+                std::cerr << "\033[31mInvalid range: " << token << ". Numbers are out of range.\033[0m" << std::endl;
+                continue;
+            }
+
+            if (start > end || start < 1 || static_cast<size_t>(end) > isoFiles.size()) {
+                invalidInput = true;
+                std::cerr << "\033[31mInvalid range: " << start << "-" << end << ". Please enter a valid range.\033[0m" << std::endl;
+                continue;
             }
 
             for (int i = start; i <= end; ++i) {
-                if (i >= 1 && static_cast<size_t>(i) <= isoFiles.size()) {
+                if (static_cast<size_t>(i) <= isoFiles.size()) {
                     handleIsoFile(isoFiles[i - 1], mountedSet);
                 } else {
-                    // Set the flag for an invalid number in the range
                     invalidInput = true;
+                    std::cerr << "\033[31mFile index: " << i << " , does not exist..\033[0m" << std::endl;
                 }
             }
-        } else {
-            // It's a single number
+        } else if (isNumeric(token)) {
             int num = std::stoi(token);
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size()) {
                 handleIsoFile(isoFiles[num - 1], mountedSet);
             } else {
-                // Set the flag for an invalid number
                 invalidInput = true;
+                std::cerr << "\033[31mFile index: " << num << " , does not exist.\033[0m" << std::endl;
             }
+        } else {
+            invalidInput = true;
+            std::cerr << "\033[31mInvalid input: " << token << ". Please enter a valid number or range.\033[0m" << std::endl;
         }
-    }
-
-    // Print an error message if any invalid input was detected
-    if (invalidInput) {
-        std::cerr << "\033[31mInvalid selection(s). Please enter valid number(s) or ranges.\033[0m" << std::endl;
     }
 }
 
@@ -979,7 +995,7 @@ void unmountISOs() {
                     
                 } else {
                     // Print an error message for an invalid index
-                    std::cerr << "\033[31mInvalid index.\033[0m" << std::endl;
+                    std::cerr << "\033[31mFile index: " << number << " , does not exist.\033[0m" << std::endl;
                     continue;  // Restart the loop
                 }
             } else if (std::regex_match(token, std::regex("^(\\d+)-(\\d+)$"))) {
@@ -998,11 +1014,11 @@ void unmountISOs() {
                     }
                 } else {
                     // Print an error message for an invalid range
-                    std::cerr << "\033[31mInvalid range. Start value must be less than or equal to end value.\033[0m" << std::endl;
+                    std::cerr << "\033[31mInvalid range: " << startRange << "-" << endRange << ". Start value must be less than or equal to end value.\033[0m" << std::endl;
                 }
             } else {
                 // Print an error message for invalid input format
-                std::cerr << "\033[31mInvalid input format.\033[0m" << std::endl;
+                std::cerr << "\033[31mInvalid input format: " << token << "\033[0m" << std::endl;
             }
          
         }
