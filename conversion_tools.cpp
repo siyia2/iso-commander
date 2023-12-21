@@ -362,91 +362,63 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
 }
 
 
-// MDF/MDS CONVERSION FUNCTIONS	\\
-
 std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths) {
-    // Combine the previous cache with the new search results
+    static std::vector<std::string> mdfMdsFilesCache;
     static std::vector<std::string> cachedPaths;
-    std::vector<std::string> combinedCache(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end());
 
-    // Check if the cache is already populated and if the input paths are the same
     if (!mdfMdsFilesCache.empty() && paths == cachedPaths) {
         return mdfMdsFilesCache;
     }
 
     std::vector<std::string> fileNames;
+
     try {
-        std::vector<std::future<void>> futures;
         std::mutex mutex;
         const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
-        const int batchSize = 2; // Tweak the batch size as needed
 
-        // Iterate over specified directories
         for (const auto& path : paths) {
-            // Iterate over files in the directory and its subdirectories
             for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
-                // Check if the entry is a regular file
                 if (entry.is_regular_file()) {
-                    // Check file extension and size
                     std::string ext = entry.path().extension();
                     std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) {
                         return std::tolower(c);
                     });
 
-                    if (ext == ".mdf") {
-                        // Process the file if it meets size criteria
-                        if (std::filesystem::file_size(entry) >= 10'000'000) {
-                            // Limit the number of concurrent tasks
-                            while (futures.size() >= maxThreads) {
-                                auto it = std::find_if(futures.begin(), futures.end(),
-                                    [](const std::future<void>& f) {
-                                        return f.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
-                                    });
-                                if (it != futures.end()) {
-                                    it->get();
-                                    futures.erase(it);
-                                }
-                            }
+                    if (ext == ".mdf" && std::filesystem::file_size(entry) >= 10'000'000) {
+                        // Use a lambda to avoid code repetition
+                        auto processFile = [&fileNames, &mutex](const std::filesystem::directory_entry& fileEntry) {
+                            std::string fileName = fileEntry.path().string();
 
-                            // Create a task to process the file
-                            futures.push_back(std::async(std::launch::async, [entry, &fileNames, &mutex] {
-                                std::string fileName = entry.path().string();
+                            std::lock_guard<std::mutex> lock(mutex);
+                            fileNames.push_back(fileName);
+                        };
 
-                                std::lock_guard<std::mutex> lock(mutex);
-                                fileNames.push_back(fileName);
-                            }));
+                        // Process the file asynchronously
+					auto future = std::async(std::launch::async, processFile, entry);
+					future.get();  // Wait for the asynchronous task to complete
 
-                            // Check the batch size and acquire the lock to merge
-                            if (futures.size() >= batchSize) {
-                                for (auto& future : futures) {
-                                    future.get();
-                                }
-                                futures.clear();
-                            }
-                        }
                     }
                 }
             }
-        }
-
-        // Wait for any remaining tasks
-        for (auto& future : futures) {
-            future.get();
         }
     } catch (const std::filesystem::filesystem_error& e) {
         std::cerr << "Filesystem error: " << e.what() << std::endl;
     }
 
-    // Add new unique search results to the combined cache
-    combinedCache.insert(combinedCache.end(), fileNames.begin(), fileNames.end());
+    // Wait for any remaining asynchronous tasks
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    // Remove duplicates from fileNames
+    std::sort(fileNames.begin(), fileNames.end());
+    fileNames.erase(std::unique(fileNames.begin(), fileNames.end()), fileNames.end());
 
     // Update the cache only if the input paths are different
     if (paths != cachedPaths) {
-        mdfMdsFilesCache.assign(combinedCache.begin(), combinedCache.end());
+        mdfMdsFilesCache.swap(fileNames);
         cachedPaths = paths;  // Update the cached paths
     }
 
-    return combinedCache;
+    return mdfMdsFilesCache;
 }
 
 
