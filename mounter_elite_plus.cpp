@@ -1036,10 +1036,10 @@ void unmountISOs() {
             const std::string& isoDir = isoDirs[index - 1];
 
             // Use a thread for each ISO to be unmounted
-            threads.emplace_back([&]() {
-                std::lock_guard<std::mutex> lock(mtx); // Lock the critical section
-                unmountISO(isoDir);
-            });
+            threads.emplace_back([&, isoDir]() {
+			std::lock_guard<std::mutex> lock(mtx); // Lock the critical section
+			unmountISO(isoDir);
+			});
         }
 
         // Join the threads to wait for them to finish
