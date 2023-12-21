@@ -332,7 +332,7 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                         }
                     }
                 } else {
-                    std::cout << "\033[31mInvalid range: " << start << "-" << end << ". Please enter a valid range.\033[0m" << std::endl;
+                    std::cout << "\033[31mInvalid range: " << start << "-" << end << "\033[0m" << std::endl;
                 }
             } else if (start >= 1 && start <= fileList.size()) {
                 // Process a valid single number input
@@ -349,7 +349,7 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
             }
         } else {
             // Handle invalid input format
-            std::cout << "\033[31mInvalid input " << token << ". Please enter a valid number or range.\033[0m" << std::endl;
+            std::cout << "\033[31mInvalid input: " << token << "\033[0m" << std::endl;
         }
     }
 
@@ -703,7 +703,7 @@ std::pair<std::vector<int>, std::vector<std::string>> parseUserInput(const std::
                     }
                 }
             } else {
-                errorMessages.push_back("\033[31mInvalid range " + token + ". Please enter a valid number or range.\033[0m");
+                errorMessages.push_back("\033[31mInvalid range: " + token + "\033[0m");
             }
         } else {
             // Handle individual numbers (e.g., "1")
@@ -712,7 +712,7 @@ std::pair<std::vector<int>, std::vector<std::string>> parseUserInput(const std::
             try {
                 selectedFileIndex = std::stoi(token);
             } catch (const std::invalid_argument& e) {
-                errorMessages.push_back("\033[31mInvalid input " + token + ". Please enter a valid number or range.\033[0m");
+                errorMessages.push_back("\033[31mInvalid input: " + token + "\033[0m");
                 continue;
             } catch (const std::out_of_range& e) {
                 errorMessages.push_back("\033[31mFile index " + token + ", does not exist.\033[0m");
