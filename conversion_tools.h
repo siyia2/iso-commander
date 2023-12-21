@@ -18,6 +18,7 @@
 #include <unordered_set>
 #include <vector>
 #include <iterator>
+#include <cstring>
 
 
 // Function prototypes

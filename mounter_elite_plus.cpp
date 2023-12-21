@@ -97,18 +97,18 @@ int main() {
 					std::system("clear");
                     std::cout << "1. Convert to ISO (BIN2ISO)" << std::endl;
                     std::cout << "2. Convert to ISO (MDF2ISO)" << std::endl;
-                    std::cout << "3. Back to Main Menu" << std::endl;
                     std::cout << " " << std::endl;
-                    char* submenu_input = readline("\033[94mEnter a choice:\033[0m ");
+                    char* submenu_input = readline("\033[94mChoose a function, or press Enter to return:\033[0m ");
 
-                    if (!submenu_input) {
-                        break; // Exit the submenu if readline returns NULL
-                    }
+                    if (!submenu_input || std::strlen(submenu_input) == 0) {
+					delete[] submenu_input;
+					break; // Exit the submenu if input is empty or NULL
+					}
 					
                     std::string submenu_choice(submenu_input);
                     free(submenu_input);
                     // Check if the input length is exactly 1
-					if (submenu_choice.length() == 1){
+					if (submenu_choice.empty() || submenu_choice.length() == 1){
                     switch (submenu_choice[0]) {		
                     case '1':
                         std::system("clear");
@@ -118,9 +118,6 @@ int main() {
                         std::system("clear");
                         select_and_convert_files_to_iso_mdf();
                         break;
-                    case '3':
-                        returnToMainMenu = true;  // Set the flag to return to the main menu
-                        break; // Go back to the main menu
                     default:
                         break;}
                     }
