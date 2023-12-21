@@ -670,9 +670,12 @@ bool isNumeric(const std::string& str) {
     return true;
 }
 
+
+// Function to process the user input for ISO mounting
 void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
     std::istringstream iss(input);
     bool invalidInput = false;
+    std::vector<std::string> errorMessages; // Vector to store error messages
 
     std::string token;
     while (iss >> token) {
@@ -686,18 +689,19 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
             } catch (const std::invalid_argument& e) {
                 // Handle the exception for invalid input
                 invalidInput = true;
-                std::cerr << "\033[31mInvalid input format: " << token << "\033[0m" << std::endl;
+                errorMessages.push_back("\033[31mInvalid input format: " + token + "\033[0m");
                 continue;
             } catch (const std::out_of_range& e) {
                 // Handle the exception for out-of-range input
                 invalidInput = true;
-                std::cerr << "\033[31mInvalid range: " << token << ". Please enter a valid range.\033[0m" << std::endl;
+                errorMessages.push_back("\033[31mInvalid range: " + token + ". Please enter a valid range.\033[0m");
                 continue;
             }
 
             if (start > end || start < 1 || static_cast<size_t>(end) > isoFiles.size()) {
                 invalidInput = true;
-                std::cerr << "\033[31mInvalid range: " << start << "-" << end << ". Please enter a valid range.\033[0m" << std::endl;
+                errorMessages.push_back("\033[31mInvalid range: " + std::to_string(start) + "-" + std::to_string(end) +
+                                        ". Please enter a valid range.\033[0m");
                 continue;
             }
 
@@ -706,7 +710,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
                     handleIsoFile(isoFiles[i - 1], mountedSet);
                 } else {
                     invalidInput = true;
-                    std::cerr << "\033[31mFile index " << i << ", does not exist.\033[0m" << std::endl;
+                    errorMessages.push_back("\033[31mFile index " + std::to_string(i) + ", does not exist.\033[0m");
                 }
             }
         } else if (isNumeric(token)) {
@@ -715,11 +719,18 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
                 handleIsoFile(isoFiles[num - 1], mountedSet);
             } else {
                 invalidInput = true;
-                std::cerr << "\033[31mFile index " << num << ", does not exist.\033[0m" << std::endl;
+                errorMessages.push_back("\033[31mFile index " + std::to_string(num) + ", does not exist.\033[0m");
             }
         } else {
             invalidInput = true;
-            std::cerr << "\033[31mInvalid input: " << token << ". Please enter a valid number or range.\033[0m" << std::endl;
+            errorMessages.push_back("\033[31mInvalid input: " + token + ". Please enter a valid number or range.\033[0m");
+        }
+    }
+
+    // Display errors at the end
+    if (invalidInput) {
+        for (const auto& errorMsg : errorMessages) {
+            std::cerr << errorMsg << std::endl;
         }
     }
 }
