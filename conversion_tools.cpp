@@ -332,7 +332,7 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                         }
                     }
                 } else {
-                    std::cout << "\033[31mInvalid range: " << start << "-" << end << ".\033[0m" << std::endl;
+                    std::cout << "\033[31mInvalid range: " << start << "-" << end << ". Beginning of range needs to be equal or lower than End.\033[0m" << std::endl;
                 }
             } else if (start >= 1 && start <= fileList.size()) {
                 // Process a valid single number input
@@ -703,7 +703,7 @@ std::pair<std::vector<int>, std::vector<std::string>> parseUserInput(const std::
                     }
                 }
             } else {
-                errorMessages.push_back("\033[31mInvalid range: " + token + ".\033[0m");
+                errorMessages.push_back("\033[31mInvalid range: " + token + ". Beginning of range needs to be equal or lower than End.\033[0m");
             }
         } else {
             // Handle individual numbers (e.g., "1")
