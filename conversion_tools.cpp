@@ -3,6 +3,7 @@
 
 
 std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles here
+std::vector<std::string> previousBinImgFilesCache; // Previously cached binImgFiles here
 std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
 
 
@@ -36,10 +37,12 @@ std::string chooseFileToConvert(const std::vector<std::string>& files) {
 
 
 std::vector<std::string> findBinImgFiles(const std::vector<std::string>& directories, const std::vector<std::string>& previousPaths) {
-    // Check if the cache is already populated and return it if available
-    if (!previousPaths.empty() && directories == previousPaths && !binImgFilesCache.empty()) {
-        return binImgFilesCache;
-    }
+    // Combine the previous cache with the new search results
+    std::vector<std::string> combinedCache;
+    combinedCache.reserve(binImgFilesCache.size());
+
+    // Add previous cache to the combined cache
+    combinedCache.insert(combinedCache.end(), binImgFilesCache.begin(), binImgFilesCache.end());
 
     // Vector to store the file names found
     std::vector<std::string> fileNames;
@@ -74,7 +77,7 @@ std::vector<std::string> findBinImgFiles(const std::vector<std::string>& directo
                                     [](const std::future<void>& f) {
                                         return f.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
                                     });
-                                if (it != futures.end()) {
+                                if ( it != futures.end()) {
                                     it->get();
                                     futures.erase(it);
                                 }
@@ -110,10 +113,15 @@ std::vector<std::string> findBinImgFiles(const std::vector<std::string>& directo
         std::cerr << "Filesystem error: " << e.what() << std::endl;
     }
 
-    // Cache the file names for future use
-    binImgFilesCache = fileNames;
-    return fileNames;
+    // Add new search results to the combined cache
+    combinedCache.insert(combinedCache.end(), fileNames.begin(), fileNames.end());
+
+    // Update the cache for future use
+    binImgFilesCache = combinedCache;
+
+    return combinedCache;
 }
+
 
 
 // Check if ccd2iso is installed on the system
