@@ -711,7 +711,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
                     handleIsoFile(isoFiles[i - 1], mountedSet);
                 } else {
                     invalidInput = true;
-                    std::cerr << "\033[31mFile index: " << i << " , does not exist.\033[0m" << std::endl;
+                    std::cerr << "\033[31mFile index " << i << ", does not exist.\033[0m" << std::endl;
                 }
             }
         } else if (isNumeric(token)) {
@@ -720,7 +720,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
                 handleIsoFile(isoFiles[num - 1], mountedSet);
             } else {
                 invalidInput = true;
-                std::cerr << "\033[31mFile index: " << num << " , does not exist.\033[0m" << std::endl;
+                std::cerr << "\033[31mFile index " << num << ", does not exist.\033[0m" << std::endl;
             }
         } else {
             invalidInput = true;
@@ -995,7 +995,7 @@ void unmountISOs() {
                     
                 } else {
                     // Print an error message for an invalid index
-                    std::cerr << "\033[31mFile index: " << number << " , does not exist.\033[0m" << std::endl;
+                    std::cerr << "\033[31mFile index " << number << ", does not exist.\033[0m" << std::endl;
                     continue;  // Restart the loop
                 }
             } else if (std::regex_match(token, std::regex("^(\\d+)-(\\d+)$"))) {

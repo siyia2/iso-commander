@@ -345,11 +345,11 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                 }
             } else {
                 // Handle invalid number input
-                std::cout << "\033[31mFile index " << start << " , does not exist.\033[0m" << std::endl;
+                std::cout << "\033[31mFile index " << start << ", does not exist.\033[0m" << std::endl;
             }
         } else {
             // Handle invalid input format
-            std::cout << "\033[31mInvalid input: " << token << ". Please enter a valid number or range.\033[0m" << std::endl;
+            std::cout << "\033[31mInvalid input " << token << ". Please enter a valid number or range.\033[0m" << std::endl;
         }
     }
 
@@ -619,25 +619,37 @@ void select_and_convert_files_to_iso_mdf() {
             break;
         }
 
-        // Parse the user input to get selected file indices
-        std::vector<int> selectedFileIndices = parseUserInput(input, mdfMdsFiles.size());
+        // Parse the user input to get selected file indices and capture errors
+        std::pair<std::vector<int>, std::vector<std::string>> result = parseUserInput(input, mdfMdsFiles.size());
+        std::vector<int> selectedFileIndices = result.first;
+        std::vector<std::string> errorMessages = result.second;
+        std::system("clear");
 
         if (!selectedFileIndices.empty()) {
             // Get the paths of the selected files based on user input
             std::vector<std::string> selectedFiles = getSelectedFiles(selectedFileIndices, mdfMdsFiles);
-            std::system("clear");
+
             // Convert the selected MDF files to ISO
             convertMDFsToISOs(selectedFiles, numThreads);
+
+            // Display errors if any
+            for (const auto& errorMessage : errorMessages) {
+                std::cerr << errorMessage << std::endl;
+            }
+
             std::cout << "Press enter to continue...";
             std::cin.ignore();
         } else {
-			std::system("clear");
-            std::cout << "\033[31mInvalid choice. Index numbers must exist in the provided list and the start of a range must be higher than its end.\033[0m" << std::endl;
+            // Display parsing errors
+            for (const auto& errorMessage : errorMessages) {
+                std::cerr << errorMessage << std::endl;
+            }
             std::cout << "Press enter to continue...";
             std::cin.ignore();
         }
     }
 }
+
 
 // Function to print the list of MDF files with their corresponding indices
 void printFileListMdf(const std::vector<std::string>& fileList) {
@@ -647,9 +659,11 @@ void printFileListMdf(const std::vector<std::string>& fileList) {
     }
 }
 
-// Function to parse user input and extract selected file indices
-std::vector<int> parseUserInput(const std::string& input, int maxIndex) {
+
+// Function to parse user input and extract selected file indices and errors
+std::pair<std::vector<int>, std::vector<std::string>> parseUserInput(const std::string& input, int maxIndex) {
     std::vector<int> selectedFileIndices;
+    std::vector<std::string> errorMessages;
     std::istringstream iss(input);
     std::string token;
 
@@ -661,12 +675,22 @@ std::vector<int> parseUserInput(const std::string& input, int maxIndex) {
         if (token.find('-') != std::string::npos) {
             // Handle a range (e.g., "1-2")
             size_t dashPos = token.find('-');
-            int startRange = std::stoi(token.substr(0, dashPos));
-            int endRange = std::stoi(token.substr(dashPos + 1));
+            int startRange, endRange;
+
+            try {
+                startRange = std::stoi(token.substr(0, dashPos));
+                endRange = std::stoi(token.substr(dashPos + 1));
+            } catch (const std::invalid_argument& e) {
+                errorMessages.push_back("\033[31mInvalid input " + token + " Please enter a valid number or range.\033[0m");
+                continue;
+            } catch (const std::out_of_range& e) {
+                errorMessages.push_back("\033[31mInvalid input " + token + ". Please enter a valid number or range.\033[0m");
+                continue;
+            }
 
             // Add each index within the specified range to the selected indices vector
-            for (int i = startRange; i <= endRange; i++) {
-                if (i >= 1 && i <= maxIndex) {
+            if (startRange <= endRange && startRange >= 1 && endRange <= maxIndex) {
+                for (int i = startRange; i <= endRange; i++) {
                     int currentIndex = i - 1;
 
                     // Check if the index has already been processed
@@ -675,10 +699,22 @@ std::vector<int> parseUserInput(const std::string& input, int maxIndex) {
                         processedIndices.insert(currentIndex);
                     }
                 }
+            } else {
+                errorMessages.push_back("\033[31mInvalid range " + token + ". Please enter a valid number or range.\033[0m");
             }
         } else {
             // Handle individual numbers (e.g., "1")
-            int selectedFileIndex = std::stoi(token);
+            int selectedFileIndex;
+
+            try {
+                selectedFileIndex = std::stoi(token);
+            } catch (const std::invalid_argument& e) {
+                errorMessages.push_back("\033[31mInvalid input " + token + ". Please enter a valid number or range.\033[0m");
+                continue;
+            } catch (const std::out_of_range& e) {
+                errorMessages.push_back("\033[31mFile index " + token + ", does not exist.\033[0m");
+                continue;
+            }
 
             // Add the index to the selected indices vector if it is within the valid range
             if (selectedFileIndex >= 1 && selectedFileIndex <= maxIndex) {
@@ -689,12 +725,15 @@ std::vector<int> parseUserInput(const std::string& input, int maxIndex) {
                     selectedFileIndices.push_back(currentIndex);
                     processedIndices.insert(currentIndex);
                 }
+            } else {
+                errorMessages.push_back("\033[31mFile index " + token + ", does not exist.\033[0m");
             }
         }
     }
 
-    return selectedFileIndices;
+    return {selectedFileIndices, errorMessages};
 }
+
 
 // Function to retrieve selected files based on their indices
 std::vector<std::string> getSelectedFiles(const std::vector<int>& selectedIndices, const std::vector<std::string>& fileList) {
