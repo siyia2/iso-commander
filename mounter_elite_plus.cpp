@@ -696,7 +696,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
             } catch (const std::out_of_range& e) {
                 // Handle the exception for out-of-range input
                 invalidInput = true;
-                std::cerr << "\033[31mInvalid range: " << token << ". Numbers are out of range.\033[0m" << std::endl;
+                std::cerr << "\033[31mInvalid range: " << token << ". Please enter a valid range.\033[0m" << std::endl;
                 continue;
             }
 
@@ -1014,7 +1014,7 @@ void unmountISOs() {
                     }
                 } else {
                     // Print an error message for an invalid range
-                    std::cerr << "\033[31mInvalid range: " << startRange << "-" << endRange << ". Start value must be less than or equal to end value.\033[0m" << std::endl;
+                    std::cerr << "\033[31mInvalid range: " << startRange << "-" << endRange << ". Please enter a valid range.\033[0m" << std::endl;
                 }
             } else {
                 // Print an error message for invalid input format
