@@ -3,7 +3,6 @@
 
 
 std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles here
-std::vector<std::string> previousBinImgFilesCache; // Previously cached binImgFiles here
 std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
 
 
@@ -38,11 +37,7 @@ std::string chooseFileToConvert(const std::vector<std::string>& files) {
 
 std::vector<std::string> findBinImgFiles(const std::vector<std::string>& directories, const std::vector<std::string>& previousPaths) {
     // Combine the previous cache with the new search results
-    std::vector<std::string> combinedCache;
-    combinedCache.reserve(binImgFilesCache.size());
-
-    // Add previous cache to the combined cache
-    combinedCache.insert(combinedCache.end(), binImgFilesCache.begin(), binImgFilesCache.end());
+    std::set<std::string> combinedCache(binImgFilesCache.begin(), binImgFilesCache.end());
 
     // Vector to store the file names found
     std::vector<std::string> fileNames;
@@ -77,7 +72,7 @@ std::vector<std::string> findBinImgFiles(const std::vector<std::string>& directo
                                     [](const std::future<void>& f) {
                                         return f.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
                                     });
-                                if ( it != futures.end()) {
+                                if (it != futures.end()) {
                                     it->get();
                                     futures.erase(it);
                                 }
@@ -113,13 +108,13 @@ std::vector<std::string> findBinImgFiles(const std::vector<std::string>& directo
         std::cerr << "Filesystem error: " << e.what() << std::endl;
     }
 
-    // Add new search results to the combined cache
-    combinedCache.insert(combinedCache.end(), fileNames.begin(), fileNames.end());
+    // Add new unique search results to the combined cache
+    combinedCache.insert(fileNames.begin(), fileNames.end());
 
     // Update the cache for future use
-    binImgFilesCache = combinedCache;
+    binImgFilesCache.assign(combinedCache.begin(), combinedCache.end());
 
-    return combinedCache;
+    return binImgFilesCache;
 }
 
 
