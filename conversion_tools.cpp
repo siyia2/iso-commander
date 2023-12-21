@@ -364,9 +364,9 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
 // MDF/MDS CONVERSION FUNCTIONS	\\
 
 std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths) {
-
-    // Static variable to store cached paths
+    // Combine the previous cache with the new search results
     static std::vector<std::string> cachedPaths;
+    std::vector<std::string> combinedCache(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end());
 
     // Check if the cache is already populated and if the input paths are the same
     if (!mdfMdsFilesCache.empty() && paths == cachedPaths) {
@@ -436,13 +436,16 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths) 
         std::cerr << "Filesystem error: " << e.what() << std::endl;
     }
 
+    // Add new unique search results to the combined cache
+    combinedCache.insert(combinedCache.end(), fileNames.begin(), fileNames.end());
+
     // Update the cache only if the input paths are different
     if (paths != cachedPaths) {
-        mdfMdsFilesCache = fileNames;
+        mdfMdsFilesCache.assign(combinedCache.begin(), combinedCache.end());
         cachedPaths = paths;  // Update the cached paths
     }
 
-    return fileNames;
+    return combinedCache;
 }
 
 
