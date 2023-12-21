@@ -363,11 +363,6 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
 // MDF/MDS CONVERSION FUNCTIONS	\\
 
 std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths) {
-    // Check if no paths are provided
-    if (paths.empty()) {
-        std::cerr << "No paths provided. Exiting." << std::endl;
-        return {};  // Return an empty vector or handle it as needed
-    }
 
     // Static variable to store cached paths
     static std::vector<std::string> cachedPaths;
