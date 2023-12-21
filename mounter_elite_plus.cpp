@@ -694,13 +694,13 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
             } catch (const std::out_of_range& e) {
                 // Handle the exception for out-of-range input
                 invalidInput = true;
-                errorMessages.push_back("\033[31mInvalid range: " + token + ". Beginning of range needs to be equal or lower than End.\033[0m");
+                errorMessages.push_back("\033[31mInvalid range: " + token + ". Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
                 continue;
             }
 
             if (start > end || start < 1 || static_cast<size_t>(end) > isoFiles.size()) {
                 invalidInput = true;
-                errorMessages.push_back("\033[31mInvalid range: " + std::to_string(start) + "-" + std::to_string(end) + ". Beginning of range needs to be equal or lower than End.\033[0m");
+                errorMessages.push_back("\033[31mInvalid range: " + std::to_string(start) + "-" + std::to_string(end) + ". Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
                 continue;
             }
 
@@ -1017,7 +1017,7 @@ void unmountISOs() {
                     }
                 } else {
                     // Print an error message for an invalid range
-                    std::cerr << "\033[31mInvalid range: " << startRange << "-" << endRange << ". Beginning of range needs to be equal or lower than End.\033[0m" << std::endl;
+                    std::cerr << "\033[31mInvalid range: " << startRange << "-" << endRange << ". Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m" << std::endl;
                 }
             } else {
                 // Print an error message for invalid input format
