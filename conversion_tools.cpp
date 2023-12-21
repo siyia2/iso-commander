@@ -273,8 +273,8 @@ void select_and_convert_files_to_iso() {
             // Print the list of BIN/IMG files
             printFileListBin(binImgFiles);
             // Prompt user to choose a file or exit
-            std::cout << "\033[94mChoose BIN/IMG file(s) to convert (e.g., '1-3' '1 2', or press Enter to return):\033[0m ";
-            std::getline(std::cin, input);
+            std::string input = readInputLine("\033[94mChoose BIN/IMG file(s) to convert (e.g., '1-3' '1 2', or press Enter to return):\033[0m ");
+            
 
             // Break the loop if the user presses Enter
             if (input.empty()) {
@@ -612,7 +612,7 @@ void select_and_convert_files_to_iso_mdf() {
         printFileListMdf(mdfMdsFiles);
 
         // Prompt the user to enter file numbers or 'exit'
-        std::string input = readInputLine("\033[94mChoose MDF file(s) to convert (e.g., '1-2' or '1 2', or press Enter to return):\033[0m ");
+        std::string input = readInputLine("\033[94mChoose MDF file(s) to convert (e.g., '1-2' or '1 2', or press Enter to return): \033[0m");
 
         if (input.empty()) {
             std::system("clear");
