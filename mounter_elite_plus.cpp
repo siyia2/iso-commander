@@ -689,18 +689,18 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
             } catch (const std::invalid_argument& e) {
                 // Handle the exception for invalid input
                 invalidInput = true;
-                errorMessages.push_back("\033[31mInvalid input: " + token + "\033[0m");
+                errorMessages.push_back("\033[31mInvalid input: " + token + ".\033[0m");
                 continue;
             } catch (const std::out_of_range& e) {
                 // Handle the exception for out-of-range input
                 invalidInput = true;
-                errorMessages.push_back("\033[31mInvalid range: " + token + "\033[0m");
+                errorMessages.push_back("\033[31mInvalid range: " + token + ".\033[0m");
                 continue;
             }
 
             if (start > end || start < 1 || static_cast<size_t>(end) > isoFiles.size()) {
                 invalidInput = true;
-                errorMessages.push_back("\033[31mInvalid range: " + std::to_string(start) + "-" + std::to_string(end) + "\033[0m");
+                errorMessages.push_back("\033[31mInvalid range: " + std::to_string(start) + "-" + std::to_string(end) + ".\033[0m");
                 continue;
             }
 
@@ -722,7 +722,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
             }
         } else {
             invalidInput = true;
-            errorMessages.push_back("\033[31mInvalid input: " + token + "\033[0m");
+            errorMessages.push_back("\033[31mInvalid input: " + token + ".\033[0m");
         }
     }
 
@@ -1017,11 +1017,11 @@ void unmountISOs() {
                     }
                 } else {
                     // Print an error message for an invalid range
-                    std::cerr << "\033[31mInvalid range: " << startRange << "-" << endRange << "\033[0m" << std::endl;
+                    std::cerr << "\033[31mInvalid range: " << startRange << "-" << endRange << ".\033[0m" << std::endl;
                 }
             } else {
                 // Print an error message for invalid input format
-                std::cerr << "\033[31mInvalid input: " << token << "\033[0m" << std::endl;
+                std::cerr << "\033[31mInvalid input: " << token << ".\033[0m" << std::endl;
             }
          
         }
