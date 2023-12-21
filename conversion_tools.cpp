@@ -612,7 +612,7 @@ void select_and_convert_files_to_iso_mdf() {
         printFileListMdf(mdfMdsFiles);
 
         // Prompt the user to enter file numbers or 'exit'
-        std::string input = readInputLine("\033[94mChoose MDF file(s) to convert (e.g., '1-2' or '1 2', or press Enter to return): \033[0m");
+        std::string input = readInputLine("\033[94mChoose MDF file(s) to convert (e.g., '1-2' or '1 2', or press Enter to return):\033[0m ");
 
         if (input.empty()) {
             std::system("clear");
