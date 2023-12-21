@@ -265,7 +265,9 @@ void select_and_convert_files_to_iso() {
 
     // Check if binImgFiles is empty
     if (binImgFiles.empty()) {
-        std::cout << "\033[33mNo .bin or .img files found in the specified directories and their subdirectories or all files are under 10MB.\n\033[0m";
+        std::cout << "\033[31mNo .bin or .img files found in the specified directories and their subdirectories or all files are under 10MB.\n\033[0m";
+        std::cout << "Press enter to continue...";
+        std::cin.ignore();
     } else {
 
         while (true) {
@@ -605,7 +607,9 @@ void select_and_convert_files_to_iso_mdf() {
     mdfMdsFiles = findMdsMdfFiles(directoryPaths);
 
     if (mdfMdsFiles.empty()) {
-        std::cout << "\033[33mNo .mdf files found in the specified directories and their subdirectories or all files are under 10MB.\n\033[0m";
+        std::cout << "\033[31mNo .mdf files found in the specified directories and their subdirectories or all files are under 10MB.\n\033[0m";
+        std::cout << "Press enter to continue...";
+        std::cin.ignore();
         return;
     }
 
