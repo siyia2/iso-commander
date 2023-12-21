@@ -265,8 +265,6 @@ void select_and_convert_files_to_iso() {
     if (binImgFiles.empty()) {
         std::cout << "\033[33mNo .bin or .img files found in the specified directories and their subdirectories or all files are under 10MB.\n\033[0m";
     } else {
-        // String for user input
-        std::string input;
 
         while (true) {
             std::system("clear");
