@@ -881,6 +881,12 @@ void listMountedISOs() {
 }
 
 
+bool isDirectoryEmpty(const std::string& path) {
+    std::string checkEmptyCommand = "sudo find " + shell_escape(path) + " -mindepth 1 -maxdepth 1 -print -quit | grep -q .";
+    int result = system(checkEmptyCommand.c_str());
+    return result != 0; // If result is 0, directory is empty; otherwise, it's not empty
+}
+
 void unmountISO(const std::string& isoDir) {
     // Construct the unmount command with sudo, umount, and suppressing logs
     std::string unmountCommand = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1";
@@ -893,12 +899,16 @@ void unmountISO(const std::string& isoDir) {
         std::cout << "\033[32mUnmounted mount point: " << isoDir << "\033[0m" << std::endl; // Print success message
 
         // Check if the directory is empty before removing it
-        if (std::filesystem::is_empty(isoDir)) {
+        if (isDirectoryEmpty(isoDir)) {
             // Construct the remove directory command with sudo, rmdir, and suppressing logs
             std::string removeDirCommand = "sudo rmdir " + shell_escape(isoDir) + " 2>/dev/null";
 
             // Execute the remove directory command
             int removeDirResult = system(removeDirCommand.c_str());
+
+            if (removeDirResult != 0) {
+                std::cerr << "\033[31mFailed to remove directory: " << isoDir << " ...Please check it out manually.\033[0m" << std::endl;
+            }
         }
     } else {
         std::cerr << "\033[31mFailed to unmount: " << isoDir << " ...Probably not an ISO mountpoint, check it out manually.\033[0m" << std::endl; // Print failure message
