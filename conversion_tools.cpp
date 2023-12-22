@@ -603,12 +603,12 @@ void select_and_convert_files_to_iso_mdf() {
     });
 
     if (mdfMdsFiles.empty()) {
-        std::cout << "\033[31mNo .mdf files found in the specified directories and their subdirectories or all files are under 10MB.\n\033[0m";
+        std::cout << "\033[31mNo .mdf files found in the specified directories and their subdirectories or all .mdf files are under 10MB.\n\033[0m";
         std::cout << "Press enter to continue...";
-        std::cin.ignore();
+		std::cin.ignore();
         return;
     }
-	std::cout << "Press enter to continue...";
+    std::cout << "Press enter to continue...";
     std::cin.ignore();
     // Continue selecting and converting files until the user decides to exit
     while (true) {
