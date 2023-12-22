@@ -362,64 +362,85 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
 }
 
 
-std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths) {
+std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback) {
+    // Static variables to cache results for reuse
     static std::vector<std::string> mdfMdsFilesCache;
     static std::vector<std::string> cachedPaths;
 
+    // If the cache is not empty and the input paths are the same as the cached paths, return the cached results
     if (!mdfMdsFilesCache.empty() && paths == cachedPaths) {
         return mdfMdsFilesCache;
     }
 
+    // Vector to store file names that match the criteria
     std::vector<std::string> fileNames;
 
     try {
+        // Mutex to ensure thread safety
         std::mutex mutex;
+        // Determine the maximum number of threads to use based on hardware concurrency
         const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
+        // Iterate through input paths
         for (const auto& path : paths) {
+            // Iterate through files in the given directory and its subdirectories
             for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
                 if (entry.is_regular_file()) {
+                    // Check if the file has a ".mdf" extension and is larger than or equal to 10,000,000 bytes
                     std::string ext = entry.path().extension();
                     std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) {
                         return std::tolower(c);
                     });
 
                     if (ext == ".mdf" && std::filesystem::file_size(entry) >= 10'000'000) {
-                        // Use a lambda to avoid code repetition
-                        auto processFile = [&fileNames, &mutex](const std::filesystem::directory_entry& fileEntry) {
+                        // Use a lambda function to process the file asynchronously
+                        auto processFile = [&fileNames, &mutex, &callback](const std::filesystem::directory_entry& fileEntry) {
                             std::string fileName = fileEntry.path().string();
+                            std::string filePath = fileEntry.path().parent_path().string();  // Get the path of the directory
 
+                            // Lock the mutex to ensure safe access to shared data (fileNames)
                             std::lock_guard<std::mutex> lock(mutex);
                             fileNames.push_back(fileName);
+
+                            // Call the callback function to inform about the found file
+                            callback(fileName, filePath);
                         };
 
                         // Process the file asynchronously
-					auto future = std::async(std::launch::async, processFile, entry);
-					future.get();  // Wait for the asynchronous task to complete
-
+                        auto future = std::async(std::launch::async, processFile, entry);
+                        future.get();  // Wait for the asynchronous task to complete
                     }
                 }
             }
         }
     } catch (const std::filesystem::filesystem_error& e) {
+        // Handle filesystem errors and print an error message
         std::cerr << "Filesystem error: " << e.what() << std::endl;
     }
 
-    // Wait for any remaining asynchronous tasks
+    // Wait for any remaining asynchronous tasks to complete (may not be necessary)
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-    // Remove duplicates from fileNames
+    // Remove duplicates from fileNames by sorting and using unique erase idiom
     std::sort(fileNames.begin(), fileNames.end());
     fileNames.erase(std::unique(fileNames.begin(), fileNames.end()), fileNames.end());
 
     // Update the cache only if the input paths are different
     if (paths != cachedPaths) {
+        // Swap the contents of mdfMdsFilesCache with fileNames to update the cache
         mdfMdsFilesCache.swap(fileNames);
-        cachedPaths = paths;  // Update the cached paths
+        // Update the cached paths
+        cachedPaths = paths;
     }
 
+    // Return the cached or newly computed file names
     return mdfMdsFilesCache;
 }
+
+void fileFoundCallback(const std::string& fileName, const std::string& filePath) {
+    std::cout << "Found .mdf file: " << fileName << " in path: " << filePath << std::endl;
+}
+
 
 
 // Function to check if mdf2iso is installed
@@ -576,7 +597,10 @@ void select_and_convert_files_to_iso_mdf() {
     }
 
     // Call the findMdsMdfFiles function to populate the cache
-    mdfMdsFiles = findMdsMdfFiles(directoryPaths);
+    mdfMdsFiles = findMdsMdfFiles(directoryPaths, [](const std::string& fileName, const std::string& filePath) {
+        // Callback to inform when .mdf files are found
+        std::cout << "Found .mdf file: \033[32m" << fileName << "\033[0m in path: \033[94m" << filePath << "\033[0m" << std::endl;
+    });
 
     if (mdfMdsFiles.empty()) {
         std::cout << "\033[31mNo .mdf files found in the specified directories and their subdirectories or all files are under 10MB.\n\033[0m";
@@ -584,7 +608,8 @@ void select_and_convert_files_to_iso_mdf() {
         std::cin.ignore();
         return;
     }
-
+	std::cout << "Press enter to continue...";
+    std::cin.ignore();
     // Continue selecting and converting files until the user decides to exit
     while (true) {
         std::system("clear");

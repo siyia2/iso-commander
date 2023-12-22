@@ -38,7 +38,8 @@ void printFileListBin(const std::vector<std::string>& fileList);
 // MDF/MDS CONVERSION
 std::vector<std::string> getSelectedFiles(const std::vector<int>& selectedIndices, const std::vector<std::string>& fileList);
 std::pair<std::vector<int>, std::vector<std::string>> parseUserInput(const std::string& input, int maxIndex);
-std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths);
+std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback);
+void fileFoundCallback(const std::string& fileName, const std::string& filePath);
 void convertMDFToISO(const std::string& inputPath);
 void convertMDFsToISOs(const std::vector<std::string>& inputPaths, int numThreads);
 void processMDFFilesInRange(int start, int end);
