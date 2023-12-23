@@ -25,9 +25,8 @@ std::string readInputLine(const std::string& prompt) {
     char* input = readline(prompt.c_str());
 
     if (input) {
-        std::string inputStr(input);
-        free(input); // Free the allocated memory for the input
-        return inputStr;
+        std::unique_ptr<char, decltype(&free)> inputPtr(input, &free);
+        return std::string(inputPtr.get());
     }
 
     return ""; // Return an empty string if readline fails

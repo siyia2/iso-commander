@@ -7,6 +7,7 @@
 #include <readline/history.h>
 #include <iostream>
 #include <string>
+#include <memory>
 
 std::string shell_escape(const std::string& s);
 std::string readInputLine(const std::string& prompt);
