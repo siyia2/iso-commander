@@ -578,7 +578,8 @@ void select_and_mount_files_by_number() {
         std::system("clear");
         std::cout << "\033[33m! IF EXPECTED ISO FILE IS NOT ON THE LIST, REFRESH CACHE FROM MAIN MENU !\n\033[0m" << std::endl;
         printIsoFileList(isoFiles);
-
+        
+		std::cout << " " << std::endl;
         // Prompt user for input
         std::string input = readInputLine("\033[94mChoose ISO(s) to mount (e.g., '1-3', '1 2', '00' mounts all, or press Enter to return):\033[0m ");
         std::system("clear");
@@ -939,7 +940,7 @@ void unmountISOs() {
             std::cin.get(); // Wait for the user to press Enter
             return;
         }
-
+		std::cout << " " << std::endl;
         // Prompt for unmounting input
         std::string input = readInputLine("\033[94mChoose ISO(s) to unmount (e.g. '1-3', '1 2', '00' unmounts all, or press Enter to return):\033[0m ");
         std::system("clear");
