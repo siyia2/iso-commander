@@ -317,6 +317,8 @@ void select_and_convert_files_to_iso() {
             std::system("clear");
             // Print the list of BIN/IMG files
             printFileListBin(binImgFiles);
+            
+            std::cout << " " << std::endl;
             // Prompt user to choose a file or exit
             std::string input = readInputLine("\033[94mChoose BIN/IMG file(s) to convert (e.g., '1-3' '1 2', or press Enter to return):\033[0m ");
 
@@ -345,62 +347,90 @@ void printFileListBin(const std::vector<std::string>& fileList) {
 }
 
 
-// Function to process user input and convert selected BIN/IMG files to ISO format
+// Function to process user input and convert selected BIN files to ISO format
 void processInputBin(const std::string& input, const std::vector<std::string>& fileList) {
     // Tokenize the input string
     std::istringstream iss(input);
     std::string token;
+
+    // Vector to store threads for parallel processing
     std::vector<std::thread> threads;
 
-    // Set to track processed indices
+    // Set to keep track of processed indices to avoid duplicate processing
     std::set<int> processedIndices;
 
-    // Iterate over tokens
+    // Vector to store error messages for reporting after conversions
+    std::vector<std::string> errorMessages;
+
+    // Iterate over tokens in the input string
     while (iss >> token) {
+        // Tokenize each token to check for ranges or single indices
         std::istringstream tokenStream(token);
         int start, end;
         char dash;
 
-        // Attempt to parse the token as a number
+        // Check if the token can be converted to an integer
         if (tokenStream >> start) {
-            // Check for a range input (e.g., 1-5)
+            // Check for a range (e.g., 1-5)
             if (tokenStream >> dash && dash == '-' && tokenStream >> end) {
-                // Process a valid range input
+                // Validate the range and create threads for each index in the range
                 if (start >= 1 && start <= fileList.size() && end >= start && end <= fileList.size()) {
                     for (int i = start; i <= end; i++) {
                         int selectedIndex = i - 1;
-                        // Check if the index has already been processed
+                        // Check if the index has not been processed before
                         if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-                            std::string selectedFile = fileList[selectedIndex];
-                            threads.emplace_back(convertBINToISO, selectedFile);
-                            processedIndices.insert(selectedIndex);
+                            // Check if the index is within the valid range
+                            if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
+                                std::string selectedFile = fileList[selectedIndex];
+                                // Create a thread for conversion
+                                threads.emplace_back(convertBINToISO, selectedFile);
+                                // Mark the index as processed
+                                processedIndices.insert(selectedIndex);
+                            } else {
+                                // Report an error if the index is out of range
+                                errorMessages.push_back("\033[31mFile index " + std::to_string(i) + " does not exist.\033[0m");
+                            }
                         }
                     }
                 } else {
-                    std::cout << "\033[31mInvalid range: " << start << "-" << end << ". Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m" << std::endl;
+                    // Report an error for an invalid range
+                    errorMessages.push_back("\033[31mInvalid range: " + std::to_string(start) + "-" + std::to_string(end) + ". Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
                 }
             } else if (start >= 1 && start <= fileList.size()) {
-                // Process a valid single number input
+                // Process a single index
                 int selectedIndex = start - 1;
-                // Check if the index has already been processed
+                // Check if the index has not been processed before
                 if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-                    std::string selectedFile = fileList[selectedIndex];
-                    threads.emplace_back(convertBINToISO, selectedFile);
-                    processedIndices.insert(selectedIndex);
+                    // Check if the index is within the valid range
+                    if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
+                        std::string selectedFile = fileList[selectedIndex];
+                        // Create a thread for conversion
+                        threads.emplace_back(convertBINToISO, selectedFile);
+                        // Mark the index as processed
+                        processedIndices.insert(selectedIndex);
+                    } else {
+                        // Report an error if the index is out of range
+                        errorMessages.push_back("\033[31mFile index " + std::to_string(start) + " does not exist.\033[0m");
+                    }
                 }
             } else {
-                // Handle invalid number input
-                std::cout << "\033[31mFile index " << start << ", does not exist.\033[0m" << std::endl;
+                // Report an error if the index is out of range
+                errorMessages.push_back("\033[31mFile index " + std::to_string(start) + " does not exist.\033[0m");
             }
         } else {
-            // Handle invalid input format
-            std::cout << "\033[31mInvalid input: " << token << ".\033[0m" << std::endl;
+            // Report an error if the token is not a valid integer
+            errorMessages.push_back("\033[31mInvalid input: " + token + ".\033[0m");
         }
     }
 
-    // Wait for all threads to complete
+    // Wait for all threads to finish
     for (auto& thread : threads) {
         thread.join();
+    }
+
+    // Print all error messages after conversions
+    for (const auto& errorMessage : errorMessages) {
+        std::cout << errorMessage << std::endl;
     }
 }
 
@@ -686,7 +716,8 @@ void select_and_convert_files_to_iso_mdf() {
     while (true) {
         std::system("clear");
         printFileListMdf(mdfMdsFiles);
-
+        
+        std::cout << " " << std::endl;
         // Prompt the user to enter file numbers or 'exit'
         std::string input = readInputLine("\033[94mChoose MDF file(s) to convert (e.g., '1-2' or '1 2', or press Enter to return):\033[0m ");
 
