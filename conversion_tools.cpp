@@ -464,11 +464,6 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
     return mdfMdsFilesCache;
 }
 
-void fileFoundCallback(const std::string& fileName, const std::string& filePath) {
-    std::cout << "Found .mdf file: " << fileName << " in path: " << filePath << std::endl;
-}
-
-
 
 // Function to check if mdf2iso is installed
 bool isMdf2IsoInstalled() {
