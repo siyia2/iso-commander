@@ -35,9 +35,12 @@ std::string chooseFileToConvert(const std::vector<std::string>& files) {
 }
 
 
-std::vector<std::string> findBinImgFiles(const std::vector<std::string>& directories, const std::vector<std::string>& previousPaths) {
+std::vector<std::string> findBinImgFiles(std::vector<std::string>& directories, std::vector<std::string>& previousPaths, const std::function<void(const std::string&, const std::string&)>& callback) {
     // Combine the previous cache with the new search results
     std::set<std::string> combinedCache(binImgFilesCache.begin(), binImgFilesCache.end());
+
+    // Set to store processed file names
+    std::set<std::string> processedFileNames;
 
     // Vector to store the file names found
     std::vector<std::string> fileNames;
@@ -50,6 +53,12 @@ std::vector<std::string> findBinImgFiles(const std::vector<std::string>& directo
 
         // Iterate through the specified directories
         for (const auto& directory : directories) {
+            // Check if the current directory has been searched in a previous call
+            if (std::find(previousPaths.begin(), previousPaths.end(), directory) != previousPaths.end()) {
+                // Skip this directory if it has been searched before
+                continue;
+            }
+
             for (const auto& entry : std::filesystem::recursive_directory_iterator(directory)) {
                 if (entry.is_regular_file()) {
                     // Get the file extension and convert it to lowercase
@@ -78,12 +87,25 @@ std::vector<std::string> findBinImgFiles(const std::vector<std::string>& directo
                                 }
                             }
 
-                            // Asynchronously add the file name to the list
-                            futures.push_back(std::async(std::launch::async, [entry, &fileNames, &mutex] {
+                            // Asynchronously add the file name to the list and invoke the callback
+                            futures.push_back(std::async(std::launch::async, [entry, &fileNames, &mutex, &callback, &processedFileNames] {
                                 std::string fileName = entry.path().string();
+                                std::string filePath = entry.path().parent_path().string();
 
+                                // Lock the mutex to ensure safe access to shared data
                                 std::lock_guard<std::mutex> lock(mutex);
-                                fileNames.push_back(fileName);
+
+                                // Check if the file has already been processed
+                                if (processedFileNames.find(fileName) == processedFileNames.end()) {
+                                    // Add the file name to the list
+                                    fileNames.push_back(fileName);
+
+                                    // Call the callback function to inform about the found file
+                                    callback(fileName, filePath);
+
+                                    // Add the file name to the set of processed file names
+                                    processedFileNames.insert(fileName);
+                                }
                             }));
 
                             // Check if the batch size is reached, and wait for completed tasks
@@ -103,20 +125,27 @@ std::vector<std::string> findBinImgFiles(const std::vector<std::string>& directo
         for (auto& future : futures) {
             future.get();
         }
-    }
-    catch (const std::filesystem::filesystem_error& e) {
+
+        // Add the newly searched paths to the list of updated paths
+        previousPaths.insert(previousPaths.end(), directories.begin(), directories.end());
+
+        // Add new unique search results to the combined cache
+        combinedCache.insert(fileNames.begin(), fileNames.end());
+
+        // Update the cache for future use
+        binImgFilesCache.assign(combinedCache.begin(), combinedCache.end());
+
+    } catch (const std::filesystem::filesystem_error& e) {
         std::cerr << "Filesystem error: " << e.what() << std::endl;
     }
-
-    // Add new unique search results to the combined cache
-    combinedCache.insert(fileNames.begin(), fileNames.end());
-
-    // Update the cache for future use
-    binImgFilesCache.assign(combinedCache.begin(), combinedCache.end());
 
     return binImgFilesCache;
 }
 
+
+void binImgFileFoundCallback(const std::string& fileName, const std::string& filePath) {
+    std::cout << "Found .bin or .img file: " << fileName << " in path: " << filePath << std::endl;
+}
 
 
 // Check if ccd2iso is installed on the system
@@ -261,29 +290,35 @@ void select_and_convert_files_to_iso() {
     }
 
     // Call the findBinImgFiles function to populate the cache
-    binImgFiles = findBinImgFiles(directoryPaths, previousPaths);
+    binImgFiles = findBinImgFiles(directoryPaths, previousPaths,
+        [](const std::string& fileName, const std::string& filePath) {
+        });
 
-    // Check if binImgFiles is empty
+    // Print the found .bin and .img files along with their paths
+    std::cout << "\nFound bin/img files:\n";
+    for (const auto& file : binImgFiles) {
+        std::cout << "File: " << file << std::endl;
+    }
+	std::cout << "Press enter to continue...";
+    std::cin.ignore();
     if (binImgFiles.empty()) {
         std::cout << "\033[31mNo .bin or .img files found in the specified directories and their subdirectories or all files are under 10MB.\n\033[0m";
         std::cout << "Press enter to continue...";
         std::cin.ignore();
     } else {
-
         while (true) {
             std::system("clear");
             // Print the list of BIN/IMG files
             printFileListBin(binImgFiles);
             // Prompt user to choose a file or exit
             std::string input = readInputLine("\033[94mChoose BIN/IMG file(s) to convert (e.g., '1-3' '1 2', or press Enter to return):\033[0m ");
-            
 
             // Break the loop if the user presses Enter
             if (input.empty()) {
                 std::system("clear");
                 break;
             }
-			std::system("clear");
+            std::system("clear");
             // Process user input
             processInputBin(input, binImgFiles);
             std::cout << "Press enter to continue...";
