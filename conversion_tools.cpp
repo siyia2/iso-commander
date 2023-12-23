@@ -283,19 +283,29 @@ void select_and_convert_files_to_iso() {
         return;
     }
 	std::cout << " " << std::endl;
-    // Call the findBinImgFiles function to populate the cache
-    binImgFiles = findBinImgFiles(directoryPaths, previousPaths,
-        [&binImgFiles](const std::string& fileName, const std::string& filePath) {
-            std::cout << "Found file: \033[32m" << fileName << "\033[0m" << std::endl;
-        });  
-	std::cout << " " << std::endl;
+    // Flag to check if new files are found
+	bool newFilesFound = false;
+
+	// Call the findBinImgFiles function to populate the cache
+	binImgFiles = findBinImgFiles(directoryPaths, previousPaths,
+    [&binImgFiles, &newFilesFound](const std::string& fileName, const std::string& filePath) {
+        std::cout << "Found file: \033[32m" << fileName << "\033[0m" << std::endl;
+        newFilesFound = true;
+    });
+
+	// Print a message only if no new files are found
+	if (!newFilesFound && !binImgFiles.empty()) {
+    std::cout << "\033[31mNo new .bin .img files found.\033[0m" << std::endl;
+    std::cout << " " << std::endl;
     std::cout << "Press enter to continue...";
     std::cin.ignore();
+	}
 
     if (binImgFiles.empty()) {
         std::cout << "\033[31mNo .bin or .img files found in the specified directories and their subdirectories or all files are under 10MB.\n\033[0m";
         std::cout << "Press enter to continue...";
         std::cin.ignore();
+        
     } else {
         while (true) {
             std::system("clear");
