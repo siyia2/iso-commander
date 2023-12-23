@@ -439,12 +439,6 @@ bool allDirectoriesExistOnDisk(const std::vector<std::string>& directories) {
 
 
 void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>& mountedIsos) {
-    // Check if the ISO file is already mounted
-    std::lock_guard<std::mutex> lock(mountMutex); // Lock to protect access to mountedIsos
-    if (mountedIsos.find(isoFile) != mountedIsos.end()) {
-        std::cout << "\033[33mALREADY MOUNTED\e[0m: ISO file '" << isoFile << "' is already mounted at '" << mountedIsos[isoFile] << "'.\033[0m" << std::endl;
-        return;
-    }
 
     // Use the filesystem library to extract the ISO file name
     fs::path isoPath(isoFile);
@@ -460,7 +454,7 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
             std::perror("\033[31mFailed to create mount point directory\033[0m");
             return;
         }
-
+		
         // Mount the ISO file to the mount point
         std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
         int mountResult = system(mountCommand.c_str());
@@ -677,6 +671,9 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
     std::istringstream iss(input);
     bool invalidInput = false;
     std::vector<std::string> errorMessages; // Vector to store error messages
+	
+	// Declare the threads vector outside the loop
+	std::vector<std::thread> threads;
 
     std::string token;
     while (iss >> token) {
@@ -705,19 +702,22 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
                 continue;
             }
 
+
             // Create threads to handle ISO files in the specified range
-            std::vector<std::thread> threads;
             for (int i = start; i <= end; ++i) {
-                if (static_cast<size_t>(i) <= isoFiles.size()) {
-                    threads.emplace_back([&]() {
-                        std::lock_guard<std::mutex> lock(mtx);
-                        handleIsoFile(isoFiles[i - 1], mountedSet);
-                    });
-                } else {
-                    invalidInput = true;
-                    errorMessages.push_back("\033[31mFile index " + std::to_string(i) + ", does not exist.\033[0m");
-                }
-            }
+    if (static_cast<size_t>(i) <= isoFiles.size()) {
+        // Create a local variable to capture 'i' by value
+        int index = i;
+
+        threads.emplace_back([index, &isoFiles, &mountedSet]() {
+            std::lock_guard<std::mutex> lock(mtx);
+            handleIsoFile(isoFiles[index - 1], mountedSet);
+        });
+    } else {
+        invalidInput = true;
+        errorMessages.push_back("\033[31mFile index " + std::to_string(i) + ", does not exist.\033[0m");
+    }
+}
 
             // Wait for all threads to finish
             for (auto& thread : threads) {
