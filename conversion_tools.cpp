@@ -48,7 +48,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& directories,
         std::vector<std::future<void>> futures;
         std::mutex mutex;
 
-        // Determine the maximum number of threads to use
+        // Determine the maximum number of threads to use fallback is 2 threads
         const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
         // Iterate through each directory
@@ -416,7 +416,7 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths,
     try {
         // Mutex to ensure thread safety
         std::mutex mutex;
-        // Determine the maximum number of threads to use based on hardware concurrency
+        // Determine the maximum number of threads to use based on hardware concurrency fallback is 2 threads
         const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
         // Iterate through input paths
