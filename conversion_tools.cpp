@@ -239,7 +239,7 @@ void processFilesInRange(int start, int end) {
     // Get a list of BIN/IMG files
     std::vector<std::string> binImgFiles;
 
-    // Determine the number of threads based on CPU cores
+    // Determine the number of threads based on CPU cores fallback is 2 threads
     int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
     // Select files within the specified range
@@ -599,7 +599,7 @@ void convertMDFsToISOs(const std::vector<std::string>& inputPaths) {
 // Function to process a range of MDF files by converting them to ISO
 void processMDFFilesInRange(int start, int end) {
     std::vector<std::string> mdfImgFiles; // Declare mdfImgFiles here
-    int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2; // Determine the number of threads based on CPU cores
+    int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2; // Determine the number of threads based on CPU cores fallback is 2 threads
     std::vector<std::string> selectedFiles;
 
     // Construct a list of selected files based on the specified range
