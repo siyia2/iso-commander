@@ -441,10 +441,6 @@ bool allDirectoriesExistOnDisk(const std::vector<std::string>& directories) {
 void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>& mountedIsos) {
     // Check if the ISO file is already mounted
     std::lock_guard<std::mutex> lock(mountMutex); // Lock to protect access to mountedIsos
-    if (mountedIsos.find(isoFile) != mountedIsos.end()) {
-        std::cout << "\033[33mALREADY MOUNTED\e[0m: ISO file '" << isoFile << "' is already mounted at '" << mountedIsos[isoFile] << "'.\033[0m" << std::endl;
-        return;
-    }
 
     // Use the filesystem library to extract the ISO file name
     fs::path isoPath(isoFile);
@@ -457,40 +453,33 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
         // Create the mount point directory
         std::string mkdirCommand = "sudo mkdir " + shell_escape(mountPoint);
         if (system(mkdirCommand.c_str()) != 0) {
-            std::perror("\033[31mFailed to create mount point directory\033[0m");
+            std::cerr << "\033[31mFailed to create mount point directory\033[0m" << std::endl;
             return;
         }
 
         // Mount the ISO file to the mount point
         std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
         int mountResult = system(mountCommand.c_str());
-			if (mountResult == 0) {
-				std::cout << "\033[32mMounted at: " << mountPoint << "\033[0m" << std::endl;}
-			if (mountResult != 0) {
-				std::cerr << "\033[31mFailed to mount: " << isoFile << "\033[0m" <<std::endl;
-           
+        if (mountResult != 0) {
+            std::cerr << "\033[31mFailed to mount: " << isoFile << "\033[0m" << std::endl;
 
             // Cleanup the mount point directory
             std::string cleanupCommand = "sudo rmdir " + shell_escape(mountPoint);
             if (system(cleanupCommand.c_str()) != 0) {
-                std::perror("\033[31mFailed to clean up mount point directory\033[0m");
+                std::cerr << "\033[31mFailed to clean up mount point directory\033[0m" << std::endl;
             }
 
-            
             return;
         } else {
-            //std::cout << "\033[32mISO file '" << isoFile << "' mounted at '" << mountPoint << "'.\033[0m" << std::endl;
-             //Store the mount point in the map
+            std::cout << "\033[32mMounted at: " << mountPoint << "\033[0m" << std::endl;
+            // Store the mount point in the map
             mountedIsos[isoFile] = mountPoint;
-            
         }
     } else {
         // The mount point directory already exists, so the ISO is considered mounted
         std::cout << "\033[33mISO file '" << isoFile << "' is already mounted at '" << mountPoint << "'.\033[m" << std::endl;
         mountedIsos[isoFile] = mountPoint;
-        
     }
-    
 }
 
 
