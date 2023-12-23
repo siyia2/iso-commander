@@ -411,11 +411,6 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths,
     static std::vector<std::string> mdfMdsFilesCache;
     static std::vector<std::string> cachedPaths;
 
-    // If the cache is not empty and the input paths are the same as the cached paths, return the cached results
-    if (!mdfMdsFilesCache.empty() && paths == cachedPaths) {
-        return mdfMdsFilesCache;
-    }
-
     // Vector to store file names that match the criteria
     std::vector<std::string> fileNames;
 
@@ -437,27 +432,31 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths,
                     });
 
                     if (ext == ".mdf" && std::filesystem::file_size(entry) >= 10'000'000) {
-                        // Automatically determine the batch size based on the number of available threads
-                        const int batchSize = maxThreads * 2;
+                        // Check if the file is already present in the cache to avoid duplicates
+                        std::string fileName = entry.path().string();
+                        if (std::find(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end(), fileName) == mdfMdsFilesCache.end()) {
+                            // Automatically determine the batch size based on the number of available threads
+                            const int batchSize = maxThreads * 2;
 
-                        // Use a lambda function to process the file asynchronously
-                        auto processFile = [&fileNames, &mutex, &callback](const std::filesystem::directory_entry& fileEntry) {
-                            std::string fileName = fileEntry.path().string();
-                            std::string filePath = fileEntry.path().parent_path().string();  // Get the path of the directory
+                            // Use a lambda function to process the file asynchronously
+                            auto processFile = [&fileNames, &mutex, &callback](const std::filesystem::directory_entry& fileEntry) {
+                                std::string fileName = fileEntry.path().string();
+                                std::string filePath = fileEntry.path().parent_path().string();  // Get the path of the directory
 
-                            // Lock the mutex to ensure safe access to shared data (fileNames)
-                            std::lock_guard<std::mutex> lock(mutex);
-                            fileNames.push_back(fileName);
+                                // Lock the mutex to ensure safe access to shared data (fileNames)
+                                std::lock_guard<std::mutex> lock(mutex);
+                                fileNames.push_back(fileName);
 
-                            // Call the callback function to inform about the found file
-                            callback(fileName, filePath);
-                        };
+                                // Call the callback function to inform about the found file
+                                callback(fileName, filePath);
+                            };
 
-                        // Process the file asynchronously
-                        auto future = std::async(std::launch::async, processFile, entry);
+                            // Process the file asynchronously
+                            auto future = std::async(std::launch::async, processFile, entry);
 
-                        // Wait for the asynchronous task to complete
-                        future.get();
+                            // Wait for the asynchronous task to complete
+                            future.get();
+                        }
                     }
                 }
             }
@@ -476,9 +475,6 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths,
 
     // Update the cache by appending fileNames to mdfMdsFilesCache
     mdfMdsFilesCache.insert(mdfMdsFilesCache.end(), fileNames.begin(), fileNames.end());
-
-    // Update the cached paths by appending the new paths
-    cachedPaths.insert(cachedPaths.end(), paths.begin(), paths.end());
 
     // Return the combined results
     return mdfMdsFilesCache;
