@@ -27,15 +27,12 @@ bool isNumeric(const std::string& str);
 //	voids
 
 void mountISO(const std::vector<std::string>& isoFiles);
-void listAndMountISOs();
 void unmountISO(const std::string& isoDir);
 void listMountedISOs();
 void unmountISOs();
 void cleanAndUnmountAllISOs();
-void listMode();
 void select_and_mount_files_by_number();
 void print_ascii();
-void screen_clear();
 void print_ascii();
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mtx);
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles);
