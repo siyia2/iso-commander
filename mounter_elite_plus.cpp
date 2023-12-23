@@ -927,6 +927,7 @@ void unmountISOs() {
 
     while (true) {
         std::vector<std::string> isoDirs;
+        std::vector<std::string> errorMessages;  // Store error messages
 
         // Find and store directories with the name "iso_*" in /mnt using std::filesystem
         for (const auto& entry : std::filesystem::directory_iterator(isoPath)) {
@@ -998,9 +999,8 @@ void unmountISOs() {
                     }
 
                 } else {
-                    // Print an error message for an invalid index
-                    std::cerr << "\033[31mFile index " << number << ", does not exist.\033[0m" << std::endl;
-                    continue;  // Restart the loop
+                    // Store the error message
+                    errorMessages.push_back("\033[31mFile index " + std::to_string(number) + ", does not exist.\033[0m");
                 }
             } else if (std::regex_match(token, std::regex("^(\\d+)-(\\d+)$"))) {
                 // Range input (e.g., "1-3")
@@ -1017,12 +1017,12 @@ void unmountISOs() {
                         }
                     }
                 } else {
-                    // Print an error message for an invalid range
-                    std::cerr << "\033[31mInvalid range: " << startRange << "-" << endRange << ". Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m" << std::endl;
+                    // Store the error message
+                    errorMessages.push_back("\033[31mInvalid range: " + std::to_string(startRange) + "-" + std::to_string(endRange) + ". Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
                 }
             } else {
-                // Print an error message for invalid input format
-                std::cerr << "\033[31mInvalid input: " << token << ".\033[0m" << std::endl;
+                // Store the error message for invalid input format
+                errorMessages.push_back("\033[31mInvalid input: " + token + ".\033[0m");
             }
 
         }
@@ -1056,12 +1056,16 @@ void unmountISOs() {
         std::cout << " " << std::endl;
         std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
 
+        // Print error messages
+        for (const auto& errorMessage : errorMessages) {
+            std::cerr << errorMessage << std::endl;
+        }
+
         std::cout << " " << std::endl;
         std::cout << "Press Enter to continue...";
         std::cin.get();
         std::system("clear");
 
         listMountedISOs(); // Display the updated list of mounted ISOs after unmounting
-
     }
 }
