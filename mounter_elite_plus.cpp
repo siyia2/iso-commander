@@ -939,21 +939,11 @@ void unmountISOs() {
     while (true) {
         std::vector<std::string> isoDirs;
 
-        // Find and store directories with the name "iso_*" in /mnt
-        DIR* dir;
-        struct dirent* entry;
-
-        if ((dir = opendir(isoPath.c_str())) != NULL) {
-            while ((entry = readdir(dir)) != NULL) {
-                // Check if the entry is a directory and has a name starting with "iso_"
-                if (entry->d_type == DT_DIR && std::string(entry->d_name).find("iso_") == 0) {
-                    isoDirs.push_back(isoPath + "/" + entry->d_name);
-                }
+        // Find and store directories with the name "iso_*" in /mnt using std::filesystem
+        for (const auto& entry : std::filesystem::directory_iterator(isoPath)) {
+            if (entry.is_directory() && entry.path().filename().string().find("iso_") == 0) {
+                isoDirs.push_back(entry.path().string());
             }
-            closedir(dir);
-        } else {
-            // Print an error message if there is an issue opening the /mnt directory
-            std::cerr << "\033[33mError opening the /mnt directory.\033[0m" << std::endl;
         }
 
         // Check if there are no mounted ISOs
@@ -989,15 +979,14 @@ void unmountISOs() {
             // Print the time taken for the entire process in bold with one decimal place
             std::cout << " " << std::endl;
             std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
-            
+
             std::cout << " " << std::endl;
             std::cout << "Press Enter to continue...";
-			std::cin.get();
-			std::system("clear");
+            std::cin.get();
+            std::system("clear");
 
             listMountedISOs(); // Display the updated list of mounted ISOs after unmounting all
 
-            
             continue;  // Restart the loop
         }
 
@@ -1017,8 +1006,8 @@ void unmountISOs() {
                     if (uniqueIndices.find(number) == uniqueIndices.end()) {
                         uniqueIndices.insert(number);
                         unmountIndices.push_back(number);
-                    } 
-                    
+                    }
+
                 } else {
                     // Print an error message for an invalid index
                     std::cerr << "\033[31mFile index " << number << ", does not exist.\033[0m" << std::endl;
@@ -1036,7 +1025,7 @@ void unmountISOs() {
                         if (uniqueIndices.find(i) == uniqueIndices.end()) {
                             uniqueIndices.insert(i);
                             unmountIndices.push_back(i);
-                        } 
+                        }
                     }
                 } else {
                     // Print an error message for an invalid range
@@ -1046,9 +1035,9 @@ void unmountISOs() {
                 // Print an error message for invalid input format
                 std::cerr << "\033[31mInvalid input: " << token << ".\033[0m" << std::endl;
             }
-         
+
         }
-        
+
         // Determine the number of available CPU cores
         const unsigned int numCores = std::thread::hardware_concurrency();
 
@@ -1060,16 +1049,16 @@ void unmountISOs() {
 
             // Use a thread for each ISO to be unmounted
             threads.emplace_back([&, isoDir]() {
-			std::lock_guard<std::mutex> lock(mtx); // Lock the critical section
-			unmountISO(isoDir);
-			});
+                std::lock_guard<std::mutex> lock(mtx); // Lock the critical section
+                unmountISO(isoDir);
+            });
         }
 
         // Join the threads to wait for them to finish
         for (auto& thread : threads) {
             thread.join();
         }
-        
+
         // Stop the timer after completing the unmounting process
         auto end_time = std::chrono::high_resolution_clock::now();
 
@@ -1077,14 +1066,13 @@ void unmountISOs() {
         // Print the time taken for the entire process in bold with one decimal place
         std::cout << " " << std::endl;
         std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
-        
-        std::cout << " " << std::endl;      
+
+        std::cout << " " << std::endl;
         std::cout << "Press Enter to continue...";
-		std::cin.get();
-		std::system("clear");
-		
+        std::cin.get();
+        std::system("clear");
+
         listMountedISOs(); // Display the updated list of mounted ISOs after unmounting
 
-      
     }
 }
