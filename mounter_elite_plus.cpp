@@ -471,14 +471,14 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
 
             return;
         } else {
-            std::cout << "\033[32mMounted at: " << mountPoint << "\033[0m" << std::endl;
             // Store the mount point in the map
             mountedIsos[isoFile] = mountPoint;
+            std::cout << "\033[32mMounted at: " << mountPoint << "\033[0m" << std::endl;
         }
     } else {
         // The mount point directory already exists, so the ISO is considered mounted
-        std::cout << "\033[33mISO file '" << isoFile << "' is already mounted at '" << mountPoint << "'.\033[m" << std::endl;
         mountedIsos[isoFile] = mountPoint;
+        std::cout << "\033[33mISO file '" << isoFile << "' is already mounted at '" << mountPoint << "'.\033[m" << std::endl;
     }
 }
 
