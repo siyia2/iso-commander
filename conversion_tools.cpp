@@ -474,15 +474,13 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths,
     std::sort(fileNames.begin(), fileNames.end());
     fileNames.erase(std::unique(fileNames.begin(), fileNames.end()), fileNames.end());
 
-    // Update the cache only if the input paths are different
-    if (paths != cachedPaths) {
-        // Swap the contents of mdfMdsFilesCache with fileNames to update the cache
-        mdfMdsFilesCache.swap(fileNames);
-        // Update the cached paths
-        cachedPaths = paths;
-    }
+    // Update the cache by appending fileNames to mdfMdsFilesCache
+    mdfMdsFilesCache.insert(mdfMdsFilesCache.end(), fileNames.begin(), fileNames.end());
 
-    // Return the cached or newly computed file names
+    // Update the cached paths by appending the new paths
+    cachedPaths.insert(cachedPaths.end(), paths.begin(), paths.end());
+
+    // Return the combined results
     return mdfMdsFilesCache;
 }
 
