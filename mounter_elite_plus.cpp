@@ -45,7 +45,7 @@ void displayErrorMessage(const std::string& iso);
 void printAlreadyMountedMessage(const std::string& iso);
 void printIsoFileList(const std::vector<std::string>& isoFiles);
 void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet);
-void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
+void processInputMultithreaded(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
 
 
 std::string directoryPath;					// Declare directoryPath here
@@ -439,6 +439,12 @@ bool allDirectoriesExistOnDisk(const std::vector<std::string>& directories) {
 
 
 void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>& mountedIsos) {
+    // Check if the ISO file is already mounted
+    std::lock_guard<std::mutex> lock(mountMutex); // Lock to protect access to mountedIsos
+    if (mountedIsos.find(isoFile) != mountedIsos.end()) {
+        std::cout << "\033[33mALREADY MOUNTED\e[0m: ISO file '" << isoFile << "' is already mounted at '" << mountedIsos[isoFile] << "'.\033[0m" << std::endl;
+        return;
+    }
 
     // Use the filesystem library to extract the ISO file name
     fs::path isoPath(isoFile);
@@ -454,7 +460,7 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
             std::perror("\033[31mFailed to create mount point directory\033[0m");
             return;
         }
-		
+
         // Mount the ISO file to the mount point
         std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
         int mountResult = system(mountCommand.c_str());
@@ -553,7 +559,7 @@ bool allFilesExistAndAreIso(const std::vector<std::string>& files) {
 
 // Function to select and mount ISO files by number
 void select_and_mount_files_by_number() {
-	// Remove non-existent paths from the cache
+    // Remove non-existent paths from the cache
     removeNonExistentPathsFromCacheWithOpenMP();
 
     // Load ISO files from cache
@@ -582,9 +588,6 @@ void select_and_mount_files_by_number() {
     // Set to track mounted ISO files
     std::unordered_set<std::string> mountedSet;
 
-    // Start the timer before the loop
-    auto start_time = std::chrono::high_resolution_clock::now();
-
     // Main loop for selecting and mounting ISO files
     while (true) {
         std::system("clear");
@@ -594,10 +597,10 @@ void select_and_mount_files_by_number() {
         // Prompt user for input
         std::string input = readInputLine("\033[94mChoose ISO(s) to mount (e.g., '1-3', '1 2', '00' mounts all, or press Enter to return):\033[0m ");
         std::system("clear");
-		
-		// Start the timer
-		auto start_time = std::chrono::high_resolution_clock::now();
-        
+
+        // Start the timer
+        auto start_time = std::chrono::high_resolution_clock::now();
+
         // Check if the user wants to return
         if (input.empty()) {
             std::cout << "Press Enter to Return" << std::endl;
@@ -606,12 +609,19 @@ void select_and_mount_files_by_number() {
 
         // Check if the user wants to mount all ISO files
         if (input == "00") {
+            std::vector<std::future<void>> futures;
             for (const std::string& iso : isoFiles) {
-                handleIsoFile(iso, mountedSet);
+                // Use std::async to launch each handleIsoFile task in a separate thread
+                futures.emplace_back(std::async(std::launch::async, handleIsoFile, iso, std::ref(mountedSet)));
+            }
+
+            // Wait for all tasks to complete
+            for (auto& future : futures) {
+                future.wait();
             }
         } else {
             // Process user input to select and mount specific ISO files
-            processInput(input, isoFiles, mountedSet);
+            processInputMultithreaded(input, isoFiles, mountedSet);
         }
 
         // Stop the timer after completing the mounting process
@@ -620,9 +630,9 @@ void select_and_mount_files_by_number() {
         // Calculate and print the elapsed time
         std::cout << " " << std::endl;
         auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-		// Print the time taken for the entire process in bold with one decimal place
-		std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
-		std::cout << " " << std::endl;
+        // Print the time taken for the entire process in bold with one decimal place
+        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
+        std::cout << " " << std::endl;
         std::cout << "Press Enter to continue...";
         std::cin.get();
     }
@@ -665,17 +675,15 @@ bool isNumeric(const std::string& str) {
 }
 
 
-
-// Function to process the user input for ISO mounting using multiple threads
-void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
+// Function to process the user input for ISO mounting using multithreading
+void processInputMultithreaded(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
     std::istringstream iss(input);
     bool invalidInput = false;
     std::vector<std::string> errorMessages; // Vector to store error messages
-	
-	// Declare the threads vector outside the loop
-	std::vector<std::thread> threads;
 
     std::string token;
+    std::vector<std::future<void>> futures; // Vector to store std::future objects for each task
+
     while (iss >> token) {
         size_t dashPos = token.find('-');
         if (dashPos != std::string::npos) {
@@ -702,38 +710,20 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
                 continue;
             }
 
-
-            // Create threads to handle ISO files in the specified range
             for (int i = start; i <= end; ++i) {
-    if (static_cast<size_t>(i) <= isoFiles.size()) {
-        // Create a local variable to capture 'i' by value
-        int index = i;
-
-        threads.emplace_back([index, &isoFiles, &mountedSet]() {
-            std::lock_guard<std::mutex> lock(mtx);
-            handleIsoFile(isoFiles[index - 1], mountedSet);
-        });
-    } else {
-        invalidInput = true;
-        errorMessages.push_back("\033[31mFile index " + std::to_string(i) + ", does not exist.\033[0m");
-    }
-}
-
-            // Wait for all threads to finish
-            for (auto& thread : threads) {
-                thread.join();
+                if (static_cast<size_t>(i) <= isoFiles.size()) {
+                    // Use std::async to launch each task in a separate thread
+                    futures.emplace_back(std::async(std::launch::async, handleIsoFile, isoFiles[i - 1], std::ref(mountedSet)));
+                } else {
+                    invalidInput = true;
+                    errorMessages.push_back("\033[31mFile index " + std::to_string(i) + ", does not exist.\033[0m");
+                }
             }
         } else if (isNumeric(token)) {
             int num = std::stoi(token);
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size()) {
-                // Create a thread to handle the ISO file
-                std::thread thread([&]() {
-                    std::lock_guard<std::mutex> lock(mtx);
-                    handleIsoFile(isoFiles[num - 1], mountedSet);
-                });
-
-                // Wait for the thread to finish
-                thread.join();
+                // Use std::async to launch each task in a separate thread
+                futures.emplace_back(std::async(std::launch::async, handleIsoFile, isoFiles[num - 1], std::ref(mountedSet)));
             } else {
                 invalidInput = true;
                 errorMessages.push_back("\033[31mFile index " + std::to_string(num) + ", does not exist.\033[0m");
@@ -742,6 +732,11 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
             invalidInput = true;
             errorMessages.push_back("\033[31mInvalid input: " + token + ".\033[0m");
         }
+    }
+
+    // Wait for all tasks to complete
+    for (auto& future : futures) {
+        future.wait();
     }
 
     // Display errors at the end
