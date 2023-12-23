@@ -552,11 +552,18 @@ void convertMDFToISO(const std::string& inputPath) {
 }
 
 // Function to convert multiple MDF files to ISO format using mdf2iso
-void convertMDFsToISOs(const std::vector<std::string>& inputPaths, int numThreads) {
+void convertMDFsToISOs(const std::vector<std::string>& inputPaths) {
     // Check if mdf2iso is installed
     if (!isMdf2IsoInstalled()) {
         std::cout << "\033[31mmdf2iso is not installed. Please install it before using this option.\033[0m";
         return;
+    }
+
+    // Determine the number of threads based on hardware concurrency, fallback is 2 threads
+    int numThreads = std::thread::hardware_concurrency();
+    if (numThreads <= 0) {
+        // Fallback to a default number of threads if hardware concurrency is not available
+        numThreads = 2;
     }
 
     // Create a thread pool with a limited number of threads
@@ -602,13 +609,11 @@ void processMDFFilesInRange(int start, int end) {
     }
 
     // Call the function to convert selected MDF files to ISO
-    convertMDFsToISOs(selectedFiles, numThreads);
+    convertMDFsToISOs(selectedFiles);
 }
 
 // Function to interactively select and convert MDF files to ISO
 void select_and_convert_files_to_iso_mdf() {
-	// Determine the maximum number of threads to use based on hardware concurrency fallback is 2 threads
-    int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
     // Read input for directory paths (allow multiple paths separated by semicolons)
     std::string inputPaths = readInputLine("\033[94mEnter the directory path(s) (if many, separate them with \033[33m;\033[0m\033[94m) to search for .mdf files, or press Enter to return:\n\033[0m");
 
@@ -681,7 +686,7 @@ void select_and_convert_files_to_iso_mdf() {
             std::vector<std::string> selectedFiles = getSelectedFiles(selectedFileIndices, mdfMdsFiles);
 
             // Convert the selected MDF files to ISO
-            convertMDFsToISOs(selectedFiles, numThreads);
+            convertMDFsToISOs(selectedFiles);
 
             // Display errors if any
             for (const auto& errorMessage : errorMessages) {
