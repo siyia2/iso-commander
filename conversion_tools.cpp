@@ -50,7 +50,6 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& directories,
 
         // Determine the maximum number of threads to use
         const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
-        const int batchSize = 2;
 
         // Iterate through each directory
         for (const auto& directory : directories) {
@@ -77,6 +76,9 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& directories,
 
                         // Check if the file size is greater than or equal to 10,000,000 bytes
                         if (std::filesystem::file_size(entry) >= 10'000'000) {
+                            // Automatically determine the batch size based on the number of available threads
+                            const int batchSize = maxThreads * 2;
+
                             // Ensure the number of concurrent tasks does not exceed the maximum allowed
                             while (futures.size() >= maxThreads) {
                                 auto it = std::find_if(futures.begin(), futures.end(),
@@ -398,7 +400,8 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
 }
 
 // Function to find MDF files in directories
-std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback) {
+std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths,
+                                        const std::function<void(const std::string&, const std::string&)>& callback) {
     // Static variables to cache results for reuse
     static std::vector<std::string> mdfMdsFilesCache;
     static std::vector<std::string> cachedPaths;
@@ -429,6 +432,9 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                     });
 
                     if (ext == ".mdf" && std::filesystem::file_size(entry) >= 10'000'000) {
+                        // Automatically determine the batch size based on the number of available threads
+                        const int batchSize = maxThreads * 2;
+
                         // Use a lambda function to process the file asynchronously
                         auto processFile = [&fileNames, &mutex, &callback](const std::filesystem::directory_entry& fileEntry) {
                             std::string fileName = fileEntry.path().string();
@@ -444,7 +450,9 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
 
                         // Process the file asynchronously
                         auto future = std::async(std::launch::async, processFile, entry);
-                        future.get();  // Wait for the asynchronous task to complete
+
+                        // Wait for the asynchronous task to complete
+                        future.get();
                     }
                 }
             }
