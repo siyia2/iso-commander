@@ -1050,16 +1050,16 @@ void unmountISOs() {
 
         // Stop the timer after completing the unmounting process
         auto end_time = std::chrono::high_resolution_clock::now();
+        
+        // Print error messages
+        for (const auto& errorMessage : errorMessages) {
+            std::cerr << errorMessage << std::endl;
+        }
 
         auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
         // Print the time taken for the entire process in bold with one decimal place
         std::cout << " " << std::endl;
         std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
-
-        // Print error messages
-        for (const auto& errorMessage : errorMessages) {
-            std::cerr << errorMessage << std::endl;
-        }
 
         std::cout << " " << std::endl;
         std::cout << "Press Enter to continue...";
