@@ -289,7 +289,6 @@ void select_and_convert_files_to_iso() {
 	// Call the findBinImgFiles function to populate the cache
 	binImgFiles = findBinImgFiles(directoryPaths, previousPaths,
     [&binImgFiles, &newFilesFound](const std::string& fileName, const std::string& filePath) {
-        std::cout << "Found file: \033[32m" << fileName << "\033[0m" << std::endl;
         newFilesFound = true;
     });
 
@@ -628,11 +627,21 @@ void select_and_convert_files_to_iso_mdf() {
         return;
     }
 	std::cout << " " << std::endl;
-    // Call the findMdsMdfFiles function to populate the cache
-    mdfMdsFiles = findMdsMdfFiles(directoryPaths, [](const std::string& fileName, const std::string& filePath) {
-        // Callback to inform when .mdf files are found
-        std::cout << "Found .mdf file: \033[32m" << fileName << "\033[0m" << std::endl;
-    });
+    // Flag to check if new .mdf files are found
+	bool newMdfFilesFound = false;
+
+	// Call the findMdsMdfFiles function to populate the cache
+	mdfMdsFiles = findMdsMdfFiles(directoryPaths, [&mdfMdsFiles, &newMdfFilesFound](const std::string& fileName, const std::string& filePath) {
+    newMdfFilesFound = true;
+	});
+	
+	// Print a message only if no new .mdf files are found
+	if (!newMdfFilesFound && !mdfMdsFiles.empty()) {
+		std::cout << "\033[31mNo new .mdf files found.\033[0m" << std::endl;
+		std::cout << " " << std::endl;
+		std::cout << "Press enter to continue...";
+		std::cin.ignore();
+	}
 
     if (mdfMdsFiles.empty()) {
         std::cout << "\033[31mNo .mdf files found in the specified directories and their subdirectories or all .mdf files are under 10MB.\n\033[0m";
@@ -640,9 +649,6 @@ void select_and_convert_files_to_iso_mdf() {
 		std::cin.ignore();
         return;
     }
-    std::cout << " " << std::endl;
-    std::cout << "Press enter to continue...";
-    std::cin.ignore();
     // Continue selecting and converting files until the user decides to exit
     while (true) {
         std::system("clear");
