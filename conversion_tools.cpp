@@ -308,7 +308,7 @@ void select_and_convert_files_to_iso() {
 	}
 
     if (binImgFiles.empty()) {
-        std::cout << "\033[31mNo .bin or .img files over 10MB found in the specified directories and their subdirectories or cached in RAM.\n\033[0m";
+        std::cout << "\033[31mNo .bin or .img files over 10MB found in the specified path(s) or cached in RAM.\n\033[0m";
         std::cout << "Press enter to continue...";
         std::cin.ignore();
         
@@ -683,7 +683,7 @@ void select_and_convert_files_to_iso_mdf() {
 	}
 
     if (mdfMdsFiles.empty()) {
-        std::cout << "\033[31mNo .mdf files over 10MB found in the specified directories and their subdirectories or cached in RAM.\n\033[0m";
+        std::cout << "\033[31mNo .mdf files over 10MB found in the specified path(s) or cached in RAM.\n\033[0m";
         std::cout << "Press enter to continue...";
 		std::cin.ignore();
         return;
