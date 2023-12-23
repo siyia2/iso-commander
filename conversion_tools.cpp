@@ -302,7 +302,7 @@ void select_and_convert_files_to_iso() {
 
 	// Print a message only if no new files are found
 	if (!newFilesFound && !binImgFiles.empty()) {
-    std::cout << "\033[31mNo new .bin .img files found to be combined in RAM cache.\033[0m" << std::endl;
+    std::cout << "\033[31mNo new .bin .img files over 10MB found, but file entries exist in RAM cache.\033[0m" << std::endl;
     std::cout << "Press enter to continue...";
     std::cin.ignore();
 	}
@@ -317,7 +317,6 @@ void select_and_convert_files_to_iso() {
             std::system("clear");
             // Print the list of BIN/IMG files
             printFileListBin(binImgFiles);
-            std::cout << " " << std::endl;
             // Prompt user to choose a file or exit
             std::string input = readInputLine("\033[94mChoose BIN/IMG file(s) to convert (e.g., '1-3' '1 2', or press Enter to return):\033[0m ");
 
@@ -475,15 +474,18 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths,
     std::sort(fileNames.begin(), fileNames.end());
     fileNames.erase(std::unique(fileNames.begin(), fileNames.end()), fileNames.end());
 
-    // Update the cache by appending fileNames to mdfMdsFilesCache
-    mdfMdsFilesCache.insert(mdfMdsFilesCache.end(), fileNames.begin(), fileNames.end());
+    // Update the cache only if the input paths are different
+    if (paths != cachedPaths) {
+        // Swap the contents of mdfMdsFilesCache with fileNames to update the cache
+        mdfMdsFilesCache.swap(fileNames);
+        // Update the cached paths
+        cachedPaths = paths;
+    }
 
-    // Update the cached paths by appending the new paths
-    cachedPaths.insert(cachedPaths.end(), paths.begin(), paths.end());
-
-    // Return the combined results
+    // Return the cached or newly computed file names
     return mdfMdsFilesCache;
 }
+
 
 // Function to check if mdf2iso is installed
 bool isMdf2IsoInstalled() {
@@ -673,6 +675,12 @@ void select_and_convert_files_to_iso_mdf() {
     newMdfFilesFound = true;
 	});
 	
+	// Print a message only if no new .mdf files are found
+	if (!newMdfFilesFound && !mdfMdsFiles.empty()) {
+		std::cout << "\033[31mNo new .mdf files over 10MB found, but file entries exist in RAM cache.\033[0m" << std::endl;
+		std::cout << "Press enter to continue...";
+		std::cin.ignore();
+	}
 
     if (mdfMdsFiles.empty()) {
         std::cout << "\033[31mNo .mdf files over 10MB found in the specified directories and their subdirectories or cached in RAM.\n\033[0m";
@@ -684,7 +692,7 @@ void select_and_convert_files_to_iso_mdf() {
     while (true) {
         std::system("clear");
         printFileListMdf(mdfMdsFiles);
-		std::cout << " " << std::endl;
+
         // Prompt the user to enter file numbers or 'exit'
         std::string input = readInputLine("\033[94mChoose MDF file(s) to convert (e.g., '1-2' or '1 2', or press Enter to return):\033[0m ");
 
