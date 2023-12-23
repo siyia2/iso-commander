@@ -35,14 +35,17 @@ std::string chooseFileToConvert(const std::vector<std::string>& files) {
 }
 
 
-std::vector<std::string> findBinImgFiles(std::vector<std::string>& directories, std::vector<std::string>& previousPaths, const std::function<void(const std::string&, const std::string&)>& callback) {
-    std::set<std::string> combinedCache(binImgFilesCache.begin(), binImgFilesCache.end());
-    std::set<std::string> processedFileNames;
+// Function to find binary image files in directories
+std::vector<std::string> findBinImgFiles(std::vector<std::string>& directories,
+                                        std::vector<std::string>& previousPaths,
+                                        const std::function<void(const std::string&, const std::string&)>& callback) {
+    std::vector<std::string> processedFileNames;
     std::vector<std::string> fileNames;
 
     try {
         std::vector<std::future<void>> futures;
         std::mutex mutex;
+
         const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
         const int batchSize = 2;
 
@@ -75,17 +78,16 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& directories, 
                                 }
                             }
 
-                            futures.push_back(std::async(std::launch::async, [entry, &fileNames, &mutex, &callback, &processedFileNames, &combinedCache] {
+                            futures.push_back(std::async(std::launch::async, [entry, &fileNames, &mutex, &callback, &processedFileNames] {
                                 std::string fileName = entry.path().string();
                                 std::string filePath = entry.path().parent_path().string();
 
                                 std::lock_guard<std::mutex> lock(mutex);
 
-                                if (processedFileNames.find(fileName) == processedFileNames.end() &&
-                                    combinedCache.find(fileName) == combinedCache.end()) {
+                                if (std::find(processedFileNames.begin(), processedFileNames.end(), fileName) == processedFileNames.end()) {
                                     fileNames.push_back(fileName);
                                     callback(fileName, filePath);
-                                    processedFileNames.insert(fileName);
+                                    processedFileNames.push_back(fileName);
                                 }
                             }));
 
@@ -106,8 +108,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& directories, 
         }
 
         previousPaths.insert(previousPaths.end(), directories.begin(), directories.end());
-        combinedCache.insert(fileNames.begin(), fileNames.end());
-        binImgFilesCache.assign(combinedCache.begin(), combinedCache.end());
+        binImgFilesCache.insert(binImgFilesCache.end(), fileNames.begin(), fileNames.end());
 
     } catch (const std::filesystem::filesystem_error& e) {
         std::cerr << "Filesystem error: " << e.what() << std::endl;
@@ -363,7 +364,7 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
     }
 }
 
-
+// Function to find MDF files in directories
 std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback) {
     // Static variables to cache results for reuse
     static std::vector<std::string> mdfMdsFilesCache;
