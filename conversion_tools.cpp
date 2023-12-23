@@ -296,14 +296,13 @@ void select_and_convert_files_to_iso() {
 
 	// Print a message only if no new files are found
 	if (!newFilesFound && !binImgFiles.empty()) {
-    std::cout << "\033[31mNo new .bin .img files found.\033[0m" << std::endl;
-    std::cout << " " << std::endl;
+    std::cout << "\033[31mNo new .bin .img files found to be combined in RAM cache.\033[0m" << std::endl;
     std::cout << "Press enter to continue...";
     std::cin.ignore();
 	}
 
     if (binImgFiles.empty()) {
-        std::cout << "\033[31mNo .bin or .img files found in the specified directories and their subdirectories or all files are under 10MB.\n\033[0m";
+        std::cout << "\033[31mNo .bin or .img files over 10MB found in the specified directories and their subdirectories.\n\033[0m";
         std::cout << "Press enter to continue...";
         std::cin.ignore();
         
@@ -645,14 +644,13 @@ void select_and_convert_files_to_iso_mdf() {
 	
 	// Print a message only if no new .mdf files are found
 	if (!newMdfFilesFound && !mdfMdsFiles.empty()) {
-		std::cout << "\033[31mNo new .mdf files found.\033[0m" << std::endl;
-		std::cout << " " << std::endl;
+		std::cout << "\033[31mNo new .mdf files found to be combined in RAM cache.\033[0m" << std::endl;
 		std::cout << "Press enter to continue...";
 		std::cin.ignore();
 	}
 
     if (mdfMdsFiles.empty()) {
-        std::cout << "\033[31mNo .mdf files found in the specified directories and their subdirectories or all .mdf files are under 10MB.\n\033[0m";
+        std::cout << "\033[31mNo .mdf files over 10MB found in the specified directories and their subdirectories.\n\033[0m";
         std::cout << "Press enter to continue...";
 		std::cin.ignore();
         return;
