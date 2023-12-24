@@ -845,10 +845,32 @@ std::pair<std::vector<int>, std::vector<std::string>> parseUserInput(const std::
 // Function to retrieve selected files based on their indices
 std::vector<std::string> getSelectedFiles(const std::vector<int>& selectedIndices, const std::vector<std::string>& fileList) {
     std::vector<std::string> selectedFiles;
+    std::mutex mtx; // Mutex to protect access to the selectedFiles vector
 
-    // Iterate through the selected indices and add corresponding files to the selected files vector
+    // Function to be executed by each thread
+    auto processIndex = [&](int index) {
+        std::string file;
+        // Check if the index is valid
+        if (index >= 0 && index < fileList.size()) {
+            file = fileList[index];
+        }
+
+        // Lock the mutex before modifying the selectedFiles vector
+        std::lock_guard<std::mutex> lock(mtx);
+        selectedFiles.push_back(file);
+    };
+
+    // Create a vector of threads
+    std::vector<std::thread> threads;
+
+    // Iterate through the selected indices and create a thread for each index
     for (int index : selectedIndices) {
-        selectedFiles.push_back(fileList[index]);
+        threads.emplace_back(processIndex, index);
+    }
+
+    // Join all the threads to wait for them to finish
+    for (auto& thread : threads) {
+        thread.join();
     }
 
     return selectedFiles;
