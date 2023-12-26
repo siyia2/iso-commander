@@ -302,7 +302,7 @@ void select_and_convert_files_to_iso() {
 
 	// Print a message only if no new files are found
 	if (!newFilesFound && !binImgFiles.empty()) {
-    std::cout << "\033[31mNo new .bin .img files over 10MB found, but file entries exist in RAM cache.\033[0m" << std::endl;
+    std::cout << "\033[31mNo new .bin .img files over 10MB found, but file entries already exist in RAM cache.\033[0m" << std::endl;
     std::cout << "Press enter to continue...";
     std::cin.ignore();
 	}
@@ -701,7 +701,7 @@ void select_and_convert_files_to_iso_mdf() {
 	
 	// Print a message only if no new .mdf files are found
 	if (!newMdfFilesFound && !mdfMdsFiles.empty()) {
-		std::cout << "\033[31mNo new .mdf files over 10MB found, but file entries exist in RAM cache.\033[0m" << std::endl;
+		std::cout << "\033[31mNo new .mdf files over 10MB found, but file entries already exist in RAM cache.\033[0m" << std::endl;
 		std::cout << "Press enter to continue...";
 		std::cin.ignore();
 	}
