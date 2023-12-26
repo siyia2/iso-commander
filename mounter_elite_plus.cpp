@@ -128,7 +128,6 @@ int main() {
             case '5':
 				std::cout << " " << std::endl;
                 listMountedISOs();
-                std::cout << " " << std::endl;
                 std::cout << "Press Enter to continue...";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 std::system("clear");
@@ -354,8 +353,7 @@ void manualRefreshCache() {
     std::system("clear");
     
     // Prompt the user to enter directory paths for manual cache refresh
-    std::string inputLine = readInputLine("\033[94mEnter the directory path(s) from which to populate the cache (if many, separate them by \033[33m;\033[0m\033[94m), or press Enter to cancel:\n\033[0m");
-    std::cout << " " << std::endl;
+    std::string inputLine = readInputLine("\033[94mEnter the directory path(s) from which to populate the ISO cache (if many, separate them by \033[33m;\033[0m\033[94m), or press Enter to cancel:\n\033[0m");
 
     // Start the timer
     auto start_time = std::chrono::high_resolution_clock::now();
@@ -363,6 +361,8 @@ void manualRefreshCache() {
     // Check if the user canceled the cache refresh
     if (inputLine.empty()) {
         std::cout << "\033[33mCache refresh canceled by user.\033[0m" << std::endl;
+        std::cout << " " << std::endl;
+
         return;
     }
 
@@ -401,7 +401,7 @@ void manualRefreshCache() {
     std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
 
     // Inform the user that the cache has been successfully refreshed
-    std::cout << "\033[94mCache refreshed successfully.\033[0m" << std::endl;
+    std::cout << "\033[32mCache refreshed successfully.\033[0m" << std::endl;
     std::cout << " " << std::endl;
 }
 
