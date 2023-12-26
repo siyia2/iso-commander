@@ -362,7 +362,7 @@ void manualRefreshCache() {
 
     // Check if the user canceled the cache refresh
     if (inputLine.empty()) {
-        std::cout << "\033[33mCache refresh canceled.\033[0m" << std::endl;
+        std::cout << "\033[33mCache refresh canceled by user.\033[0m" << std::endl;
         return;
     }
 
