@@ -869,13 +869,13 @@ void listMountedISOs() {
 
     // Display a list of mounted ISOs with ISO names in bold and magenta text
     if (!isoDirs.empty()) {
-        std::cout << "\033[37;1mList of mounted ISOs:\033[0m" << std::endl; // White and bold
+        std::cout << "\033[37;1mList of mounted ISO(s):\033[0m" << std::endl; // White and bold
         for (size_t i = 0; i < isoDirs.size(); ++i) {
             std::cout << i + 1 << ". \033[1m\033[35m" << isoDirs[i] << "\033[0m" << std::endl; // Bold and magenta
         }
     } else {
         // Print a message if no ISOs are mounted
-        std::cerr << "\033[31mNO MOUNTED ISOS FOUND\n\033[0m" << std::endl;
+        std::cerr << "\033[31mNo mounted ISO(s) found\n\033[0m" << std::endl;
     }
 }
 
@@ -935,7 +935,6 @@ void unmountISOs() {
 
         // Check if there are no mounted ISOs
         if (isoDirs.empty()) {
-            std::cout << "\033[33mLIST IS EMPTY, NOTHING TO DO.\n\033[0m";
             std::cout << "Press Enter to continue...";
             std::cin.get(); // Wait for the user to press Enter
             return;
