@@ -23,6 +23,7 @@ bool iequals(std::string_view a, std::string_view b);
 bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles);
 bool fileExists(const std::string& path);
 bool isNumeric(const std::string& str);
+bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize);
 
 //	voids
 
@@ -282,7 +283,7 @@ std::vector<std::string> loadCache() {
 
 
 // Save cache
-void saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize) {
+bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize) {
     std::filesystem::path cachePath = cacheDirectory;
     cachePath /= cacheFileName;
 
@@ -308,8 +309,12 @@ void saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
             cacheFile << iso << "\n";
         }
         cacheFile.close();
+        return true;  // Cache save successful
     } else {
-        std::cerr << "Error: Could not open cache file for writing." << std::endl;
+		std::cout << " " << std::endl;
+        std::cerr << "\033[91mError: Could not open cache file for writing.\033[0m" << std::endl;
+        std::cout << " " << std::endl;
+        return false;  // Cache save failed
     }
 }
 
@@ -344,7 +349,7 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
     // Append the new entries to the shared vector
     allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
     
-    std::cout << "\033[32mCache refreshed for directory: '" << path << "'\033[0m" << std::endl;
+    std::cout << "\033[32mProcessed directory: '" << path << "'\033[0m" << std::endl;
 }
 
 
@@ -381,14 +386,16 @@ void manualRefreshCache() {
     // Vector to store threads for parallel cache refreshing
     std::vector<std::thread> threads;
 
-    // Flag to determine whether an invalid path was encountered
+    // Flags to determine whether invalid paths or cache write errors were encountered
     bool invalidPathEncountered = false;
+    bool cacheWriteErrorEncountered = false;
 
     // Iterate through the entered directory paths
     while (std::getline(iss, path, ';')) {
         // Check if the directory path is valid
         if (!isValidDirectory(path)) {
             std::cout << "\033[91mInvalid directory path: " << path << ". Skipped.\033[0m" << std::endl;
+            std::cout << " " << std::endl;
             invalidPathEncountered = true;
             continue;
         }
@@ -402,30 +409,25 @@ void manualRefreshCache() {
         t.join();
     }
 
-    if (!invalidPathEncountered) {
         // Save the combined cache to disk
-        saveCache(allIsoFiles, maxCacheSize);
+        bool saveSuccess = saveCache(allIsoFiles, maxCacheSize);
 
-        // Stop the timer after completing the cache refresh and removal of non-existent paths
-        auto end_time = std::chrono::high_resolution_clock::now();
+        if (saveSuccess) {
+            // Stop the timer after completing the cache refresh and removal of non-existent paths
+            auto end_time = std::chrono::high_resolution_clock::now();
 
-        // Calculate and print the elapsed time
-        std::cout << " " << std::endl;
-        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+            // Calculate and print the elapsed time
+            std::cout << " " << std::endl;
+            auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
 
-        // Print the time taken for the entire process in bold with one decimal place
-        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
+            // Print the time taken for the entire process in bold with one decimal place
+            std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
 
-        // Inform the user that the cache has been successfully refreshed
-        std::cout << " " << std::endl;
-        std::cout << "\033[32mCache refreshed successfully.\033[0m" << std::endl;
-        std::cout << " " << std::endl;
-    } else {
-        // Print a message indicating that the cache refresh was not successful due to invalid paths
-        std::cout << " " << std::endl;
-        std::cout << "\033[91mCache refresh encountered errors due to invalid path(s).\033[0m" << std::endl;
-        std::cout << " " << std::endl;
-    }
+            // Inform the user that the cache has been successfully refreshed
+            std::cout << " " << std::endl;
+            std::cout << "\033[32mCache refreshed successfully.\033[0m" << std::endl;
+            std::cout << " " << std::endl;
+     } 
 }
 
 
