@@ -32,7 +32,7 @@ std::string chooseFileToConvert(const std::vector<std::string>& files) {
         return files[choice - 1];
     } else {
         // Print an error message for an invalid choice
-        std::cout << "\033[31mInvalid choice. Please choose a valid file.\033[31m\n";
+        std::cout << "\033[91mInvalid choice. Please choose a valid file.\033[91m\n";
         return "";
     }
 }
@@ -162,7 +162,7 @@ bool isCcd2IsoInstalled() {
 void convertBINToISO(const std::string& inputPath) {
     // Check if the input file exists
     if (!std::ifstream(inputPath)) {
-        std::cout << "\033[31mThe specified input file '" << inputPath << "' does not exist.\033[0m" << std::endl;
+        std::cout << "\033[91mThe specified input file '" << inputPath << "' does not exist.\033[0m" << std::endl;
         return;
     }
 
@@ -183,13 +183,13 @@ void convertBINToISO(const std::string& inputPath) {
     if (conversionStatus == 0) {
         std::cout << "\033[32mImage file converted to ISO:\033[0m " << outputPath << std::endl;
     } else {
-        std::cout << "\033[31mConversion of " << inputPath << " failed.\033[0m" << std::endl;
+        std::cout << "\033[91mConversion of " << inputPath << " failed.\033[0m" << std::endl;
 
         // Delete the partially created ISO file
         if (std::remove(outputPath.c_str()) == 0) {
-            std::cout << "\033[31mDeleted partially created ISO file:\033[0m " << outputPath << std::endl;
+            std::cout << "\033[91mDeleted partially created ISO file:\033[0m " << outputPath << std::endl;
         } else {
-            std::cerr << "\033[31mFailed to delete partially created ISO file:\033[0m " << outputPath << std::endl;
+            std::cerr << "\033[91mFailed to delete partially created ISO file:\033[0m " << outputPath << std::endl;
         }
     }
 }
@@ -199,7 +199,7 @@ void convertBINToISO(const std::string& inputPath) {
 void convertBINsToISOs(const std::vector<std::string>& inputPaths, int numThreads) {
     // Check if ccd2iso is installed on the system
     if (!isCcd2IsoInstalled()) {
-        std::cout << "\033[31mccd2iso is not installed. Please install it before using this option.\033[0m" << std::endl;
+        std::cout << "\033[91mccd2iso is not installed. Please install it before using this option.\033[0m" << std::endl;
         return;
     }
 
@@ -239,7 +239,7 @@ void processFilesInRange(int start, int end) {
     // Get a list of BIN/IMG files
     std::vector<std::string> binImgFiles;
 
-    // Determine the number of threads based on CPU cores
+    // Determine the number of threads based on CPU cores fallback is 2 threads
     int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
     // Select files within the specified range
@@ -302,13 +302,13 @@ void select_and_convert_files_to_iso() {
 
 	// Print a message only if no new files are found
 	if (!newFilesFound && !binImgFiles.empty()) {
-    std::cout << "\033[31mNo new .bin .img files found to be combined in RAM cache.\033[0m" << std::endl;
+    std::cout << "\033[91mNo new .bin .img files over 10MB found, but file entries already exist in RAM cache.\033[0m" << std::endl;
     std::cout << "Press enter to continue...";
     std::cin.ignore();
 	}
 
     if (binImgFiles.empty()) {
-        std::cout << "\033[31mNo .bin or .img files over 10MB found in the specified directories and their subdirectories or cached in RAM.\n\033[0m";
+        std::cout << "\033[91mNo .bin or .img files over 10MB found in the specified path(s) or cached in RAM.\n\033[0m";
         std::cout << "Press enter to continue...";
         std::cin.ignore();
         
@@ -317,6 +317,8 @@ void select_and_convert_files_to_iso() {
             std::system("clear");
             // Print the list of BIN/IMG files
             printFileListBin(binImgFiles);
+            
+            std::cout << " " << std::endl;
             // Prompt user to choose a file or exit
             std::string input = readInputLine("\033[94mChoose BIN/IMG file(s) to convert (e.g., '1-3' '1 2', or press Enter to return):\033[0m ");
 
@@ -345,62 +347,90 @@ void printFileListBin(const std::vector<std::string>& fileList) {
 }
 
 
-// Function to process user input and convert selected BIN/IMG files to ISO format
+// Function to process user input and convert selected BIN files to ISO format
 void processInputBin(const std::string& input, const std::vector<std::string>& fileList) {
     // Tokenize the input string
     std::istringstream iss(input);
     std::string token;
+
+    // Vector to store threads for parallel processing
     std::vector<std::thread> threads;
 
-    // Set to track processed indices
+    // Set to keep track of processed indices to avoid duplicate processing
     std::set<int> processedIndices;
 
-    // Iterate over tokens
+    // Vector to store error messages for reporting after conversions
+    std::vector<std::string> errorMessages;
+
+    // Iterate over tokens in the input string
     while (iss >> token) {
+        // Tokenize each token to check for ranges or single indices
         std::istringstream tokenStream(token);
         int start, end;
         char dash;
 
-        // Attempt to parse the token as a number
+        // Check if the token can be converted to an integer
         if (tokenStream >> start) {
-            // Check for a range input (e.g., 1-5)
+            // Check for a range (e.g., 1-5)
             if (tokenStream >> dash && dash == '-' && tokenStream >> end) {
-                // Process a valid range input
+                // Validate the range and create threads for each index in the range
                 if (start >= 1 && start <= fileList.size() && end >= start && end <= fileList.size()) {
                     for (int i = start; i <= end; i++) {
                         int selectedIndex = i - 1;
-                        // Check if the index has already been processed
+                        // Check if the index has not been processed before
                         if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-                            std::string selectedFile = fileList[selectedIndex];
-                            threads.emplace_back(convertBINToISO, selectedFile);
-                            processedIndices.insert(selectedIndex);
+                            // Check if the index is within the valid range
+                            if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
+                                std::string selectedFile = fileList[selectedIndex];
+                                // Create a thread for conversion
+                                threads.emplace_back(convertBINToISO, selectedFile);
+                                // Mark the index as processed
+                                processedIndices.insert(selectedIndex);
+                            } else {
+                                // Report an error if the index is out of range
+                                errorMessages.push_back("\033[91mFile index " + std::to_string(i) + " does not exist.\033[0m");
+                            }
                         }
                     }
                 } else {
-                    std::cout << "\033[31mInvalid range: " << start << "-" << end << ". Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m" << std::endl;
+                    // Report an error for an invalid range
+                    errorMessages.push_back("\033[91mInvalid range: " + std::to_string(start) + "-" + std::to_string(end) + ". Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
                 }
             } else if (start >= 1 && start <= fileList.size()) {
-                // Process a valid single number input
+                // Process a single index
                 int selectedIndex = start - 1;
-                // Check if the index has already been processed
+                // Check if the index has not been processed before
                 if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-                    std::string selectedFile = fileList[selectedIndex];
-                    threads.emplace_back(convertBINToISO, selectedFile);
-                    processedIndices.insert(selectedIndex);
+                    // Check if the index is within the valid range
+                    if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
+                        std::string selectedFile = fileList[selectedIndex];
+                        // Create a thread for conversion
+                        threads.emplace_back(convertBINToISO, selectedFile);
+                        // Mark the index as processed
+                        processedIndices.insert(selectedIndex);
+                    } else {
+                        // Report an error if the index is out of range
+                        errorMessages.push_back("\033[91mFile index " + std::to_string(start) + " does not exist.\033[0m");
+                    }
                 }
             } else {
-                // Handle invalid number input
-                std::cout << "\033[31mFile index " << start << ", does not exist.\033[0m" << std::endl;
+                // Report an error if the index is out of range
+                errorMessages.push_back("\033[91mFile index " + std::to_string(start) + " does not exist.\033[0m");
             }
         } else {
-            // Handle invalid input format
-            std::cout << "\033[31mInvalid input: " << token << ".\033[0m" << std::endl;
+            // Report an error if the token is not a valid integer
+            errorMessages.push_back("\033[91mInvalid input: " + token + ".\033[0m");
         }
     }
 
-    // Wait for all threads to complete
+    // Wait for all threads to finish
     for (auto& thread : threads) {
         thread.join();
+    }
+
+    // Print all error messages after conversions
+    for (const auto& errorMessage : errorMessages) {
+        std::cout << errorMessage << std::endl;
     }
 }
 
@@ -410,11 +440,6 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths,
     // Static variables to cache results for reuse
     static std::vector<std::string> mdfMdsFilesCache;
     static std::vector<std::string> cachedPaths;
-
-    // If the cache is not empty and the input paths are the same as the cached paths, return the cached results
-    if (!mdfMdsFilesCache.empty() && paths == cachedPaths) {
-        return mdfMdsFilesCache;
-    }
 
     // Vector to store file names that match the criteria
     std::vector<std::string> fileNames;
@@ -437,27 +462,31 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths,
                     });
 
                     if (ext == ".mdf" && std::filesystem::file_size(entry) >= 10'000'000) {
-                        // Automatically determine the batch size based on the number of available threads
-                        const int batchSize = maxThreads * 2;
+                        // Check if the file is already present in the cache to avoid duplicates
+                        std::string fileName = entry.path().string();
+                        if (std::find(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end(), fileName) == mdfMdsFilesCache.end()) {
+                            // Automatically determine the batch size based on the number of available threads
+                            const int batchSize = maxThreads * 2;
 
-                        // Use a lambda function to process the file asynchronously
-                        auto processFile = [&fileNames, &mutex, &callback](const std::filesystem::directory_entry& fileEntry) {
-                            std::string fileName = fileEntry.path().string();
-                            std::string filePath = fileEntry.path().parent_path().string();  // Get the path of the directory
+                            // Use a lambda function to process the file asynchronously
+                            auto processFile = [&fileNames, &mutex, &callback](const std::filesystem::directory_entry& fileEntry) {
+                                std::string fileName = fileEntry.path().string();
+                                std::string filePath = fileEntry.path().parent_path().string();  // Get the path of the directory
 
-                            // Lock the mutex to ensure safe access to shared data (fileNames)
-                            std::lock_guard<std::mutex> lock(mutex);
-                            fileNames.push_back(fileName);
+                                // Lock the mutex to ensure safe access to shared data (fileNames)
+                                std::lock_guard<std::mutex> lock(mutex);
+                                fileNames.push_back(fileName);
 
-                            // Call the callback function to inform about the found file
-                            callback(fileName, filePath);
-                        };
+                                // Call the callback function to inform about the found file
+                                callback(fileName, filePath);
+                            };
 
-                        // Process the file asynchronously
-                        auto future = std::async(std::launch::async, processFile, entry);
+                            // Process the file asynchronously
+                            auto future = std::async(std::launch::async, processFile, entry);
 
-                        // Wait for the asynchronous task to complete
-                        future.get();
+                            // Wait for the asynchronous task to complete
+                            future.get();
+                        }
                     }
                 }
             }
@@ -474,15 +503,10 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths,
     std::sort(fileNames.begin(), fileNames.end());
     fileNames.erase(std::unique(fileNames.begin(), fileNames.end()), fileNames.end());
 
-    // Update the cache only if the input paths are different
-    if (paths != cachedPaths) {
-        // Swap the contents of mdfMdsFilesCache with fileNames to update the cache
-        mdfMdsFilesCache.swap(fileNames);
-        // Update the cached paths
-        cachedPaths = paths;
-    }
+    // Update the cache by appending fileNames to mdfMdsFilesCache
+    mdfMdsFilesCache.insert(mdfMdsFilesCache.end(), fileNames.begin(), fileNames.end());
 
-    // Return the cached or newly computed file names
+    // Return the combined results
     return mdfMdsFilesCache;
 }
 
@@ -505,7 +529,7 @@ bool isMdf2IsoInstalled() {
 void convertMDFToISO(const std::string& inputPath) {
     // Check if the input file exists
     if (!std::ifstream(inputPath)) {
-        std::cout << "\033[31mThe specified input file '" << inputPath << "' does not exist.\033[0m" << std::endl;
+        std::cout << "\033[91mThe specified input file '" << inputPath << "' does not exist.\033[0m" << std::endl;
         return;
     }
 
@@ -533,7 +557,7 @@ void convertMDFToISO(const std::string& inputPath) {
     // Capture the output of the mdf2iso command
     FILE* pipe = popen(conversionCommand.c_str(), "r");
     if (!pipe) {
-        std::cout << "\033[31mFailed to execute conversion command\033[0m" << std::endl;
+        std::cout << "\033[91mFailed to execute conversion command\033[0m" << std::endl;
         return;
     }
 
@@ -548,12 +572,12 @@ void convertMDFToISO(const std::string& inputPath) {
     if (conversionStatus == 0) {
         // Check if the conversion output contains the "already ISO9660" message
         if (conversionOutput.find("already ISO") != std::string::npos) {
-            std::cout << "\033[31mThe selected file '" << inputPath << "' is already in ISO format, maybe rename it to .iso?. Skipping conversion.\033[0m" << std::endl;
+            std::cout << "\033[91mThe selected file '" << inputPath << "' is already in ISO format, maybe rename it to .iso?. Skipping conversion.\033[0m" << std::endl;
         } else {
             std::cout << "\033[32mImage file converted to ISO:\033[0m " << outputPath << std::endl;
         }
     } else {
-        std::cout << "\033[31mConversion of " << inputPath << " failed.\033[0m" << std::endl;
+        std::cout << "\033[91mConversion of " << inputPath << " failed.\033[0m" << std::endl;
     }
 }
 
@@ -561,7 +585,7 @@ void convertMDFToISO(const std::string& inputPath) {
 void convertMDFsToISOs(const std::vector<std::string>& inputPaths) {
     // Check if mdf2iso is installed
     if (!isMdf2IsoInstalled()) {
-        std::cout << "\033[31mmdf2iso is not installed. Please install it before using this option.\033[0m";
+        std::cout << "\033[91mmdf2iso is not installed. Please install it before using this option.\033[0m";
         return;
     }
 
@@ -605,7 +629,7 @@ void convertMDFsToISOs(const std::vector<std::string>& inputPaths) {
 // Function to process a range of MDF files by converting them to ISO
 void processMDFFilesInRange(int start, int end) {
     std::vector<std::string> mdfImgFiles; // Declare mdfImgFiles here
-    int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2; // Determine the number of threads based on CPU cores
+    int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2; // Determine the number of threads based on CPU cores fallback is 2 threads
     std::vector<std::string> selectedFiles;
 
     // Construct a list of selected files based on the specified range
@@ -677,13 +701,13 @@ void select_and_convert_files_to_iso_mdf() {
 	
 	// Print a message only if no new .mdf files are found
 	if (!newMdfFilesFound && !mdfMdsFiles.empty()) {
-		std::cout << "\033[31mNo new .mdf files found to be combined in RAM cache.\033[0m" << std::endl;
+		std::cout << "\033[91mNo new .mdf files over 10MB found, but file entries already exist in RAM cache.\033[0m" << std::endl;
 		std::cout << "Press enter to continue...";
 		std::cin.ignore();
 	}
 
     if (mdfMdsFiles.empty()) {
-        std::cout << "\033[31mNo .mdf files over 10MB found in the specified directories and their subdirectories or cached in RAM.\n\033[0m";
+        std::cout << "\033[91mNo .mdf files over 10MB found in the specified path(s) or cached in RAM.\n\033[0m";
         std::cout << "Press enter to continue...";
 		std::cin.ignore();
         return;
@@ -692,7 +716,8 @@ void select_and_convert_files_to_iso_mdf() {
     while (true) {
         std::system("clear");
         printFileListMdf(mdfMdsFiles);
-
+        
+        std::cout << " " << std::endl;
         // Prompt the user to enter file numbers or 'exit'
         std::string input = readInputLine("\033[94mChoose MDF file(s) to convert (e.g., '1-2' or '1 2', or press Enter to return):\033[0m ");
 
@@ -763,10 +788,10 @@ std::pair<std::vector<int>, std::vector<std::string>> parseUserInput(const std::
                 startRange = std::stoi(token.substr(0, dashPos));
                 endRange = std::stoi(token.substr(dashPos + 1));
             } catch (const std::invalid_argument& e) {
-                errorMessages.push_back("\033[31mInvalid input " + token + ".\033[0m");
+                errorMessages.push_back("\033[91mInvalid input " + token + ".\033[0m");
                 continue;
             } catch (const std::out_of_range& e) {
-                errorMessages.push_back("\033[31mInvalid input " + token + ".\033[0m");
+                errorMessages.push_back("\033[91mInvalid input " + token + ".\033[0m");
                 continue;
             }
 
@@ -782,7 +807,7 @@ std::pair<std::vector<int>, std::vector<std::string>> parseUserInput(const std::
                     }
                 }
             } else {
-                errorMessages.push_back("\033[31mInvalid range: " + token + ". Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
+                errorMessages.push_back("\033[91mInvalid range: " + token + ". Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
             }
         } else {
             // Handle individual numbers (e.g., "1")
@@ -791,10 +816,10 @@ std::pair<std::vector<int>, std::vector<std::string>> parseUserInput(const std::
             try {
                 selectedFileIndex = std::stoi(token);
             } catch (const std::invalid_argument& e) {
-                errorMessages.push_back("\033[31mInvalid input: " + token + ".\033[0m");
+                errorMessages.push_back("\033[91mInvalid input: " + token + ".\033[0m");
                 continue;
             } catch (const std::out_of_range& e) {
-                errorMessages.push_back("\033[31mFile index " + token + ", does not exist.\033[0m");
+                errorMessages.push_back("\033[91mFile index " + token + ", does not exist.\033[0m");
                 continue;
             }
 
@@ -808,7 +833,7 @@ std::pair<std::vector<int>, std::vector<std::string>> parseUserInput(const std::
                     processedIndices.insert(currentIndex);
                 }
             } else {
-                errorMessages.push_back("\033[31mFile index " + token + ", does not exist.\033[0m");
+                errorMessages.push_back("\033[91mFile index " + token + ", does not exist.\033[0m");
             }
         }
     }
@@ -820,10 +845,32 @@ std::pair<std::vector<int>, std::vector<std::string>> parseUserInput(const std::
 // Function to retrieve selected files based on their indices
 std::vector<std::string> getSelectedFiles(const std::vector<int>& selectedIndices, const std::vector<std::string>& fileList) {
     std::vector<std::string> selectedFiles;
+    std::mutex mtx; // Mutex to protect access to the selectedFiles vector
 
-    // Iterate through the selected indices and add corresponding files to the selected files vector
+    // Function to be executed by each thread
+    auto processIndex = [&](int index) {
+        std::string file;
+        // Check if the index is valid
+        if (index >= 0 && index < fileList.size()) {
+            file = fileList[index];
+        }
+
+        // Lock the mutex before modifying the selectedFiles vector
+        std::lock_guard<std::mutex> lock(mtx);
+        selectedFiles.push_back(file);
+    };
+
+    // Create a vector of threads
+    std::vector<std::thread> threads;
+
+    // Iterate through the selected indices and create a thread for each index
     for (int index : selectedIndices) {
-        selectedFiles.push_back(fileList[index]);
+        threads.emplace_back(processIndex, index);
+    }
+
+    // Join all the threads to wait for them to finish
+    for (auto& thread : threads) {
+        thread.join();
     }
 
     return selectedFiles;
