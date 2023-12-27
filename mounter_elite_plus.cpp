@@ -1,7 +1,7 @@
 #include "sanitization_readline.h"
 #include "conversion_tools.h"
 
-// Cache Varables \\
+// Cache Variables \\
 
 const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.cache"; // Construct the full path to the cache directory
 const std::string cacheFileName = "iso_cache.txt";;
