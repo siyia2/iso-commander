@@ -40,13 +40,16 @@ std::string chooseFileToConvert(const std::vector<std::string>& files) {
 // Function to search for .bin and .img files under 10MB
 std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback) {
     // Vector to store cached invalid paths
-    std::vector<std::string> cachedInvalidPaths;
+    static std::vector<std::string> cachedInvalidPaths;
 
     // Static variables to cache results for reuse
     static std::vector<std::string> binImgFilesCache;
 
     // Vector to store file names that match the criteria
     std::vector<std::string> fileNames;
+
+    // Clear the cachedInvalidPaths before processing a new set of paths
+    cachedInvalidPaths.clear();
 
     try {
         // Mutex to ensure thread safety
@@ -112,7 +115,10 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
         std::cerr << "\033[91mFilesystem error: " << e.what() << "\033[0m" << std::endl;
         std::cin.ignore();
     }
-
+		std::cout << " " << std::endl;
+		std::cout << "Press enter to continue...";
+		std::cin.ignore();
+		
     // Remove duplicates from fileNames by sorting and using unique erase idiom
     std::sort(fileNames.begin(), fileNames.end());
     fileNames.erase(std::unique(fileNames.begin(), fileNames.end()), fileNames.end());
@@ -281,11 +287,10 @@ void select_and_convert_files_to_iso() {
 	if (!newFilesFound && !binImgFiles.empty()) {
 		std::system("clear");
 		std::cout << "\033[91mNo new .bin .img files over 10MB found, \033[92mbut file entries already exist in RAM cache.\033[0m" << std::endl;
+		std::cout << " " << std::endl;
+		std::cout << "Press enter to continue...";
+		std::cin.ignore();
 	}
-	
-	std::cout << " " << std::endl;
-	std::cout << "Press enter to continue...";
-	std::cin.ignore();
 
     if (binImgFiles.empty()) {
 		std::system("clear");
