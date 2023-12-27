@@ -38,99 +38,94 @@ std::string chooseFileToConvert(const std::vector<std::string>& files) {
 }
 
 
-std::vector<std::string> findBinImgFiles(std::vector<std::string>& directories, std::vector<std::string>& previousPaths, const std::function<void(const std::string&, const std::string&)>& callback) {
-    std::set<std::string> combinedCache(binImgFilesCache.begin(), binImgFilesCache.end());
-    std::set<std::string> processedFileNames;
+std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback) {    
+    // Vector to store cached invalid paths
+    std::vector<std::string> cachedInvalidPaths;
+    
+    // Static variables to cache results for reuse
+    static std::vector<std::string> binImgFilesCache;
+    
+    // Vector to store file names that match the criteria
     std::vector<std::string> fileNames;
 
     try {
-        std::vector<std::future<void>> futures;
+        // Mutex to ensure thread safety
         std::mutex mutex;
-
+        // Determine the maximum number of threads to use based on hardware concurrency; fallback is 2 threads
         const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
-        for (const auto& directory : directories) {
-            // Skip directories that were processed in a previous call
-            if (std::find(previousPaths.begin(), previousPaths.end(), directory) != previousPaths.end()) {
-                continue;
-            }
-
+        // Iterate through input paths
+        for (const auto& path : paths) {
             try {
-                for (const auto& entry : std::filesystem::recursive_directory_iterator(directory)) {
+                // Iterate through files in the given directory and its subdirectories
+                for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
                     if (entry.is_regular_file()) {
+                        // Check if the file has a ".bin" or ".img" extension and is larger than or equal to 10,000,000 bytes
                         std::string ext = entry.path().extension();
                         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) {
                             return std::tolower(c);
                         });
 
-                        if ((ext == ".bin" || ext == ".img") &&
-                            (entry.path().filename().string().find("data") == std::string::npos) &&
-                            (entry.path().filename().string() != "terrain.bin") &&
-                            (entry.path().filename().string() != "blocklist.bin")) {
-
-                            if (std::filesystem::file_size(entry) >= 10'000'000) {
+                        if ((ext == ".bin" || ext == ".img") && std::filesystem::file_size(entry) >= 10'000'000) {
+                            // Check if the file is already present in the cache to avoid duplicates
+                            std::string fileName = entry.path().string();
+                            if (std::find(binImgFilesCache.begin(), binImgFilesCache.end(), fileName) == binImgFilesCache.end()) {
+                                // Automatically determine the batch size based on the number of available threads
                                 const int batchSize = maxThreads * 2;
+                                
+                                // Use a lambda function to process the file asynchronously
+                                auto processFile = [&fileNames, &mutex, &callback](const std::filesystem::directory_entry& fileEntry) {
+                                    std::string fileName = fileEntry.path().string();
+                                    std::string filePath = fileEntry.path().parent_path().string();  // Get the path of the directory
 
-                                while (futures.size() >= maxThreads) {
-                                    auto it = std::find_if(futures.begin(), futures.end(),
-                                        [](const std::future<void>& f) {
-                                            return f.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
-                                        });
-                                    if (it != futures.end()) {
-                                        it->get();
-                                        futures.erase(it);
-                                    }
-                                }
-
-                                futures.push_back(std::async(std::launch::async, [entry, &fileNames, &mutex, &callback, &processedFileNames, &combinedCache] {
-                                    std::string fileName = entry.path().string();
-                                    std::string filePath = entry.path().parent_path().string();
-
+                                    // Lock the mutex to ensure safe access to shared data (fileNames)
                                     std::lock_guard<std::mutex> lock(mutex);
+                                    fileNames.push_back(fileName);
 
-                                    if (processedFileNames.find(fileName) == processedFileNames.end() &&
-                                        combinedCache.find(fileName) == combinedCache.end()) {
-                                        fileNames.push_back(fileName);
-                                        callback(fileName, filePath);
-                                        processedFileNames.insert(fileName);
-                                    }
-                                }));
+                                    // Call the callback function to inform about the found file
+                                    callback(fileName, filePath);
+                                };
 
-                                if (futures.size() >= batchSize) {
-                                    for (auto& future : futures) {
-                                        future.get();
-                                    }
-                                    futures.clear();
-                                }
+                                // Process the file asynchronously
+                                auto future = std::async(std::launch::async, processFile, entry);
+
+                                // Wait for the asynchronous task to complete
+                                future.get();
                             }
                         }
                     }
                 }
             } catch (const std::filesystem::filesystem_error& e) {
                 // Handle filesystem errors for the current directory
-                std::cerr << "\033[91mInvalid directory: '" << directory << "'. Skipped" << "\033[0m" <<std::endl;
-                std::cout << " " << std::endl;
-                std::cout << "Press enter to continue...";
-				std::cin.ignore();
+                if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
+                    std::cerr << "\033[91mInvalid directory: '" << path << "'. Skipped" << "\033[0m" << std::endl;
+                    std::cout << " " << std::endl;
+                    std::cout << "Press enter to continue...";
+                    std::cin.ignore();
+                    // Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
+                    cachedInvalidPaths.push_back(path);
+                }
             }
         }
-
-        for (auto& future : futures) {
-            future.get();
-        }
-
-        previousPaths.insert(previousPaths.end(), directories.begin(), directories.end());
-        combinedCache.insert(fileNames.begin(), fileNames.end());
-        binImgFilesCache.assign(combinedCache.begin(), combinedCache.end());
-
     } catch (const std::filesystem::filesystem_error& e) {
         // Handle filesystem errors for the overall operation
         std::cerr << "\033[91mFilesystem error: " << e.what() << "\033[0m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "Press enter to continue...";
-		std::cin.ignore();
+        std::cin.ignore();
     }
 
+    // Wait for any remaining asynchronous tasks to complete (may not be necessary)
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    // Remove duplicates from fileNames by sorting and using unique erase idiom
+    std::sort(fileNames.begin(), fileNames.end());
+    fileNames.erase(std::unique(fileNames.begin(), fileNames.end()), fileNames.end());
+
+    // Update the cache by appending fileNames to binImgFilesCache
+    binImgFilesCache.insert(binImgFilesCache.end(), fileNames.begin(), fileNames.end());
+
+    // Return the combined results
     return binImgFilesCache;
 }
 
@@ -283,10 +278,10 @@ void select_and_convert_files_to_iso() {
 	bool newFilesFound = false;
 
 	// Call the findBinImgFiles function to populate the cache
-	binImgFiles = findBinImgFiles(directoryPaths, previousPaths,
-    [&binImgFiles, &newFilesFound](const std::string& fileName, const std::string& filePath) {
-        newFilesFound = true;
-    });
+	binImgFiles = findBinImgFiles(directoryPaths, [&binImgFiles, &newFilesFound](const std::string& fileName, const std::string& filePath) {
+    // Your callback logic here, if needed
+    newFilesFound = true;
+	});
 
 	// Print a message only if no new files are found
 	if (!newFilesFound && !binImgFiles.empty()) {
