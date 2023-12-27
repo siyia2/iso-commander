@@ -427,6 +427,11 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
 }
 
 std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback) {
+    // Vector to store cached valid paths
+    static std::vector<std::string> cachedValidPaths;
+    // Vector to store cached invalid paths
+    std::vector<std::string> cachedInvalidPaths;
+
     // Static variables to cache results for reuse
     static std::vector<std::string> mdfMdsFilesCache;
     static std::vector<std::string> cachedPaths;
@@ -483,10 +488,14 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                 }
             } catch (const std::filesystem::filesystem_error& e) {
                 // Handle filesystem errors for the current directory
-                std::cerr << "\033[91mInvalid directory: '" << path << "'. Skipped" << "\033[0m" <<std::endl;
-                std::cout << " " << std::endl;
-                std::cout << "Press enter to continue...";
-				std::cin.ignore();
+                if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
+                    std::cerr << "\033[91mInvalid directory: '" << path << "'. Skipped" << "\033[0m" << std::endl;
+                    std::cout << " " << std::endl;
+                    std::cout << "Press enter to continue...";
+                    std::cin.ignore();
+                    // Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
+                    cachedInvalidPaths.push_back(path);
+                }
             }
         }
     } catch (const std::filesystem::filesystem_error& e) {
@@ -494,7 +503,7 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
         std::cerr << "\033[91mFilesystem error: " << e.what() << "\033[0m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "Press enter to continue...";
-		std::cin.ignore();
+        std::cin.ignore();
     }
 
     // Wait for any remaining asynchronous tasks to complete (may not be necessary)
