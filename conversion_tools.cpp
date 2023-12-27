@@ -115,10 +115,18 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
         std::cerr << "\033[91mFilesystem error: " << e.what() << "\033[0m" << std::endl;
         std::cin.ignore();
     }
-		std::cout << " " << std::endl;
-		std::cout << "Press enter to continue...";
-		std::cin.ignore();
-		
+
+    // Print success message if files were found
+    if (!fileNames.empty()) {
+        std::cout << "\033[92mSearch successful. Found " << fileNames.size() << " matching files.\033[0m" << std::endl;
+    } else {
+        std::cout << "\033[93mNo matching files found.\033[0m" << std::endl;
+    }
+
+    std::cout << " " << std::endl;
+    std::cout << "Press enter to continue...";
+    std::cin.ignore();
+
     // Remove duplicates from fileNames by sorting and using unique erase idiom
     std::sort(fileNames.begin(), fileNames.end());
     fileNames.erase(std::unique(fileNames.begin(), fileNames.end()), fileNames.end());
@@ -429,6 +437,9 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
     // Vector to store file names that match the criteria
     std::vector<std::string> fileNames;
 
+    // Flag to indicate if any matching files were found
+    bool filesFound = false;
+
     // Clear the cachedInvalidPaths before processing new set of paths
     cachedInvalidPaths.clear();
 
@@ -459,16 +470,17 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                             std::string fileName = entry.path().string();
                             if (std::find(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end(), fileName) == mdfMdsFilesCache.end()) {
                                 // Process the file asynchronously
-                                futures.emplace_back(std::async(std::launch::async, [&fileNames, &callback, &mutex](const std::filesystem::directory_entry& fileEntry) {
+                                futures.emplace_back(std::async(std::launch::async, [&fileNames, &callback, &mutex, &filesFound](const std::filesystem::directory_entry& fileEntry) {
                                     std::string fileName = fileEntry.path().string();
                                     std::string filePath = fileEntry.path().parent_path().string();  // Get the path of the directory
 
                                     // Call the callback function to inform about the found file
                                     callback(fileName, filePath);
 
-                                    // Lock the mutex to ensure safe access to shared data (fileNames)
+                                    // Lock the mutex to ensure safe access to shared data (fileNames and filesFound)
                                     std::lock_guard<std::mutex> lock(mutex);
                                     fileNames.push_back(fileName);
+                                    filesFound = true;
                                 }, entry));
                             }
                         }
@@ -491,11 +503,18 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
         std::cerr << "\033[91mFilesystem error: " << e.what() << "\033[0m" << std::endl;
         std::cin.ignore();
     }
-	
-	std::cout << " " << std::endl;
-	std::cout << "Press enter to continue...";
-	std::cin.ignore();
-	
+
+    // Print success message if files were found
+    if (filesFound) {
+        std::cout << "\033[92mSearch successful. Found " << fileNames.size() << " matching files.\033[0m" << std::endl;
+    } else {
+        std::cout << "\033[93mNo matching files found.\033[0m" << std::endl;
+    }
+
+    std::cout << " " << std::endl;
+    std::cout << "Press enter to continue...";
+    std::cin.ignore();
+
     // Remove duplicates from fileNames by sorting and using unique erase idiom
     std::sort(fileNames.begin(), fileNames.end());
     fileNames.erase(std::unique(fileNames.begin(), fileNames.end()), fileNames.end());
