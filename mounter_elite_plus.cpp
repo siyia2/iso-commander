@@ -381,9 +381,6 @@ void manualRefreshCache() {
     std::string inputLine = readInputLine("\033[94mEnter the directory path(s) from which to populate the \033[1m\033[92mISO Cache\033[94m (if many, separate them with \033[1m\033[93m;\033[0m\033[94m), or press Enter to cancel:\n\033[0m");
     std::cout << " " << std::endl;
 
-    // Start the timer
-    auto start_time = std::chrono::high_resolution_clock::now();
-
     // Check if the user canceled the cache refresh
     if (inputLine.empty()) {
         std::cout << "\033[93mCache refresh canceled by user.\033[0m" << std::endl;
@@ -398,21 +395,37 @@ void manualRefreshCache() {
     // Vector to store all ISO files from multiple directories
     std::vector<std::string> allIsoFiles;
 
-    // Vector to store threads for parallel cache refreshing
-    std::vector<std::thread> threads;
-
     // Vector to store invalid paths
     std::vector<std::string> invalidPaths;
+    
+    // Vector to store threads for parallel cache refreshing
+    std::vector<std::thread> threads;
 
     // Flags to determine whether cache write errors were encountered
     bool cacheWriteErrorEncountered = false;
 
-    // Iterate through the entered directory paths
+    // Iterate through the entered directory paths and print invalid paths
     while (std::getline(iss, path, ';')) {
         // Check if the directory path is valid
         if (!isValidDirectory(path)) {
             invalidPaths.push_back("\033[91mInvalid directory path: " + path + ". Skipped processing.\033[0m");
-            continue;
+        }
+    }
+	
+    // Print invalid paths
+    for (const auto& invalidPath : invalidPaths) {
+        std::cout << invalidPath << std::endl;
+    }
+	std::cout << " " << std::endl;
+    // Start the timer
+    auto start_time = std::chrono::high_resolution_clock::now();
+
+    // Create a thread for each valid directory to refresh the cache and pass the vector by reference
+    std::istringstream iss2(inputLine); // Reset the string stream
+    while (std::getline(iss2, path, ';')) {
+        // Check if the directory path is valid
+        if (!isValidDirectory(path)) {
+            continue; // Skip invalid paths
         }
 
         // Create a thread for refreshing the cache for each directory and pass the vector by reference
@@ -425,11 +438,6 @@ void manualRefreshCache() {
     }
 
     std::cout << " " << std::endl;
-
-    // Print invalid paths
-    for (const auto& invalidPath : invalidPaths) {
-        std::cout << invalidPath << std::endl;
-    }
 
     // Save the combined cache to disk
     bool saveSuccess = saveCache(allIsoFiles, maxCacheSize);
