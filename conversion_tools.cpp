@@ -102,9 +102,6 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
                 // Handle filesystem errors for the current directory
                 if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
                     std::cerr << "\033[91mInvalid directory: '" << path << "'. Skipped" << "\033[0m" << std::endl;
-                    std::cout << " " << std::endl;
-                    std::cout << "Press enter to continue...";
-                    std::cin.ignore();
                     // Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
                     cachedInvalidPaths.push_back(path);
                 }
@@ -285,11 +282,12 @@ void select_and_convert_files_to_iso() {
 	// Print a message only if no new files are found
 	if (!newFilesFound && !binImgFiles.empty()) {
 		std::system("clear");
-		std::cout << "\033[91mNo new .bin .img files over 10MB found, but file entries already exist in RAM cache.\033[0m" << std::endl;
-		std::cout << " " << std::endl;
-		std::cout << "Press enter to continue...";
-		std::cin.ignore();
+		std::cout << "\033[91mNo new .bin .img files over 10MB found, \033[92mbut file entries already exist in RAM cache.\033[0m" << std::endl;
 	}
+	
+	std::cout << " " << std::endl;
+	std::cout << "Press enter to continue...";
+	std::cin.ignore();
 
     if (binImgFiles.empty()) {
 		std::system("clear");
@@ -479,9 +477,6 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                 // Handle filesystem errors for the current directory
                 // Always print the error message and add the invalid path to cachedInvalidPaths
                 std::cerr << "\033[91mInvalid directory: '" << path << "'. Skipped" << "\033[0m" << std::endl;
-                std::cout << " " << std::endl;
-                std::cout << "Press enter to continue...";
-                std::cin.ignore();
                 cachedInvalidPaths.push_back(path);
             }
         }
@@ -696,12 +691,13 @@ void select_and_convert_files_to_iso_mdf() {
 	// Print a message only if no new .mdf files are found
 	if (!newMdfFilesFound && !mdfMdsFiles.empty()) {
 		std::system("clear");
-		std::cout << "\033[91mNo new .mdf files over 10MB found, but file entries already exist in RAM cache.\033[0m" << std::endl;
-		std::cout << " " << std::endl;
-		std::cout << "Press enter to continue...";
-		std::cin.ignore();
+		std::cout << "\033[91mNo new .mdf files over 10MB found, \033[92mbut file entries already exist in RAM cache.\033[0m" << std::endl;
 	}
-
+	
+	std::cout << " " << std::endl;
+	std::cout << "Press enter to continue...";
+	std::cin.ignore();
+	
     if (mdfMdsFiles.empty()) {
 		std::system("clear");
         std::cout << "\033[91mNo .mdf files over 10MB found in the specified path(s) or cached in RAM.\n\033[0m";
