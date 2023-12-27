@@ -14,7 +14,7 @@ std::mutex binImgFilesMutex; // Mutex to protect access to binImgFiles
 // Function to list available files and prompt the user to choose a file for conversion
 std::string chooseFileToConvert(const std::vector<std::string>& files) {
     // Display a header indicating the available .bin and .img files
-    std::cout << "\033[32mFound the following .bin and .img files:\033[0m\n";
+    std::cout << "\033[92mFound the following .bin and .img files:\033[0m\n";
 
     // Iterate through the files and display them with their corresponding numbers
     for (size_t i = 0; i < files.size(); ++i) {
@@ -171,7 +171,7 @@ void convertBINToISO(const std::string& inputPath) {
 
     // Check if the output ISO file already exists
     if (std::ifstream(outputPath)) {
-        std::cout << "\033[33mThe output ISO file '" << outputPath << "' already exists. Skipping conversion.\033[0m" << std::endl;
+        std::cout << "\033[93mThe output ISO file '" << outputPath << "' already exists. Skipping conversion.\033[0m" << std::endl;
         return;  // Skip conversion if the file already exists
     }
 
@@ -181,7 +181,7 @@ void convertBINToISO(const std::string& inputPath) {
 
     // Check the result of the conversion
     if (conversionStatus == 0) {
-        std::cout << "\033[32mImage file converted to ISO:\033[0m " << outputPath << std::endl;
+        std::cout << "\033[92mImage file converted to ISO:\033[0m " << outputPath << std::endl;
     } else {
         std::cout << "\033[91mConversion of " << inputPath << " failed.\033[0m" << std::endl;
 
@@ -272,7 +272,7 @@ void select_and_convert_files_to_iso() {
     static std::vector<std::string> previousPaths;
 
     // Read input for directory paths (allow multiple paths separated by semicolons)
-    std::string inputPaths = readInputLine("\033[94mEnter the directory path(s) (if many, separate them with \033[33m;\033[0m\033[94m) to search for .bin .img files, or press Enter to return:\n\033[0m");
+    std::string inputPaths = readInputLine("\033[94mEnter the directory path(s) (if many, separate them with \033[93m;\033[0m\033[94m) to search for .bin .img files, or press Enter to return:\n\033[0m");
 
     // Use semicolon as a separator to split paths
     std::istringstream iss(inputPaths);
@@ -340,7 +340,7 @@ void select_and_convert_files_to_iso() {
 
 // Function to print the list of BIN/IMG files
 void printFileListBin(const std::vector<std::string>& fileList) {
-	std::cout << "Select file(s) to convert to \033[1m\033[32mISO(s)\033[0m:\n";
+	std::cout << "Select file(s) to convert to \033[1m\033[92mISO(s)\033[0m:\n";
     for (int i = 0; i < fileList.size(); i++) {
         std::cout << i + 1 << ". " << fileList[i] << std::endl;
     }
@@ -536,7 +536,7 @@ void convertMDFToISO(const std::string& inputPath) {
     // Check if the corresponding .iso file already exists
     std::string isoOutputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
     if (std::ifstream(isoOutputPath)) {
-        std::cout << "\033[33mThe corresponding .iso file already exists for '" << inputPath << "'. Skipping conversion.\033[0m" << std::endl;
+        std::cout << "\033[93mThe corresponding .iso file already exists for '" << inputPath << "'. Skipping conversion.\033[0m" << std::endl;
         return;
     }
 
@@ -574,7 +574,7 @@ void convertMDFToISO(const std::string& inputPath) {
         if (conversionOutput.find("already ISO") != std::string::npos) {
             std::cout << "\033[91mThe selected file '" << inputPath << "' is already in ISO format, maybe rename it to .iso?. Skipping conversion.\033[0m" << std::endl;
         } else {
-            std::cout << "\033[32mImage file converted to ISO:\033[0m " << outputPath << std::endl;
+            std::cout << "\033[92mImage file converted to ISO:\033[0m " << outputPath << std::endl;
         }
     } else {
         std::cout << "\033[91mConversion of " << inputPath << " failed.\033[0m" << std::endl;
@@ -665,7 +665,7 @@ void processMDFFilesInRange(int start, int end) {
 // Function to interactively select and convert MDF files to ISO
 void select_and_convert_files_to_iso_mdf() {
     // Read input for directory paths (allow multiple paths separated by semicolons)
-    std::string inputPaths = readInputLine("\033[94mEnter the directory path(s) (if many, separate them with \033[33m;\033[0m\033[94m) to search for .mdf files, or press Enter to return:\n\033[0m");
+    std::string inputPaths = readInputLine("\033[94mEnter the directory path(s) (if many, separate them with \033[93m;\033[0m\033[94m) to search for .mdf files, or press Enter to return:\n\033[0m");
 
     // Initialize vectors to store MDF/MDS files and directory paths
     std::vector<std::string> mdfMdsFiles;
@@ -760,7 +760,7 @@ void select_and_convert_files_to_iso_mdf() {
 
 // Function to print the list of MDF files with their corresponding indices
 void printFileListMdf(const std::vector<std::string>& fileList) {
-    std::cout << "Select file(s) to convert to \033[1m\033[32mISO(s)\033[0m:\n";
+    std::cout << "Select file(s) to convert to \033[1m\033[92mISO(s)\033[0m:\n";
     for (int i = 0; i < fileList.size(); i++) {
         std::cout << i + 1 << ". " << fileList[i] << std::endl;
     }
