@@ -429,6 +429,9 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
     // Vector to store file names that match the criteria
     std::vector<std::string> fileNames;
 
+    // Clear the cachedInvalidPaths before processing new set of paths
+    cachedInvalidPaths.clear();
+
     try {
         // Mutex to ensure thread safety
         std::mutex mutex;
@@ -488,7 +491,11 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
         std::cerr << "\033[91mFilesystem error: " << e.what() << "\033[0m" << std::endl;
         std::cin.ignore();
     }
-
+	
+	std::cout << " " << std::endl;
+	std::cout << "Press enter to continue...";
+	std::cin.ignore();
+	
     // Remove duplicates from fileNames by sorting and using unique erase idiom
     std::sort(fileNames.begin(), fileNames.end());
     fileNames.erase(std::unique(fileNames.begin(), fileNames.end()), fileNames.end());
@@ -693,11 +700,10 @@ void select_and_convert_files_to_iso_mdf() {
 	if (!newMdfFilesFound && !mdfMdsFiles.empty()) {
 		std::system("clear");
 		std::cout << "\033[91mNo new .mdf files over 10MB found, \033[92mbut file entries already exist in RAM cache.\033[0m" << std::endl;
+		std::cout << " " << std::endl;
+		std::cout << "Press enter to continue...";
+		std::cin.ignore();
 	}
-	
-	std::cout << " " << std::endl;
-	std::cout << "Press enter to continue...";
-	std::cin.ignore();
 	
     if (mdfMdsFiles.empty()) {
 		std::system("clear");
