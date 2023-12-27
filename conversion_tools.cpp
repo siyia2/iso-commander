@@ -119,8 +119,6 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
     // Print success message if files were found
     if (!fileNames.empty()) {
         std::cout << "\033[92mSearch successful. Found " << fileNames.size() << " matching files.\033[0m" << std::endl;
-    } else {
-        std::cout << "\033[93mNo matching files found.\033[0m" << std::endl;
     }
 
     std::cout << " " << std::endl;
@@ -503,17 +501,16 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
         std::cerr << "\033[91mFilesystem error: " << e.what() << "\033[0m" << std::endl;
         std::cin.ignore();
     }
-
+    
     // Print success message if files were found
     if (filesFound) {
+		std::cout << " " << std::endl;
         std::cout << "\033[92mSearch successful. Found " << fileNames.size() << " matching files.\033[0m" << std::endl;
-    } else {
-        std::cout << "\033[93mNo matching files found.\033[0m" << std::endl;
+        std::cout << " " << std::endl;
+		std::cout << "Press enter to continue...";
+		std::cin.ignore();
     }
 
-    std::cout << " " << std::endl;
-    std::cout << "Press enter to continue...";
-    std::cin.ignore();
 
     // Remove duplicates from fileNames by sorting and using unique erase idiom
     std::sort(fileNames.begin(), fileNames.end());
@@ -717,7 +714,7 @@ void select_and_convert_files_to_iso_mdf() {
 	
 	// Print a message only if no new .mdf files are found
 	if (!newMdfFilesFound && !mdfMdsFiles.empty()) {
-		std::system("clear");
+		std::cout << " " << std::endl;
 		std::cout << "\033[91mNo new .mdf files over 10MB found, \033[92mbut file entries already exist in RAM cache.\033[0m" << std::endl;
 		std::cout << " " << std::endl;
 		std::cout << "Press enter to continue...";
@@ -725,13 +722,14 @@ void select_and_convert_files_to_iso_mdf() {
 	}
 	
     if (mdfMdsFiles.empty()) {
-		std::system("clear");
+		std::cout << " " << std::endl;
         std::cout << "\033[91mNo .mdf files over 10MB found in the specified path(s) or cached in RAM.\n\033[0m";
         std::cout << " " << std::endl;
-        std::cout << "Press enter to continue...";
+		std::cout << "Press enter to continue...";
 		std::cin.ignore();
         return;
     }
+    
     // Continue selecting and converting files until the user decides to exit
     while (true) {
         std::system("clear");
