@@ -37,7 +37,7 @@ std::string chooseFileToConvert(const std::vector<std::string>& files) {
     }
 }
 
-
+// Function to search for .bin and .img files under 10MB
 std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback) {
     // Vector to store cached invalid paths
     std::vector<std::string> cachedInvalidPaths;
@@ -419,7 +419,7 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
         std::cout << errorMessage << std::endl;
     }
 }
-
+// Function to search for mdf files under 10MB
 std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback) {
     // Static variables to cache results for reuse
     static std::vector<std::string> mdfMdsFilesCache;
