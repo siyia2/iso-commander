@@ -38,9 +38,7 @@ std::string chooseFileToConvert(const std::vector<std::string>& files) {
 }
 
 
-std::vector<std::string> findBinImgFiles(std::vector<std::string>& directories,
-                                        std::vector<std::string>& previousPaths,
-                                        const std::function<void(const std::string&, const std::string&)>& callback) {
+std::vector<std::string> findBinImgFiles(std::vector<std::string>& directories, std::vector<std::string>& previousPaths, const std::function<void(const std::string&, const std::string&)>& callback) {
     std::set<std::string> combinedCache(binImgFilesCache.begin(), binImgFilesCache.end());
     std::set<std::string> processedFileNames;
     std::vector<std::string> fileNames;
@@ -428,8 +426,7 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
     }
 }
 
-std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths,
-                                        const std::function<void(const std::string&, const std::string&)>& callback) {
+std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback) {
     // Static variables to cache results for reuse
     static std::vector<std::string> mdfMdsFilesCache;
     static std::vector<std::string> cachedPaths;
