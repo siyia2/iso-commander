@@ -38,25 +38,42 @@ std::string chooseFileToConvert(const std::vector<std::string>& files) {
 }
 
 
-std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback) {    
+std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback) {
     // Vector to store cached invalid paths
     std::vector<std::string> cachedInvalidPaths;
-    
+
     // Static variables to cache results for reuse
     static std::vector<std::string> binImgFilesCache;
-    
+
     // Vector to store file names that match the criteria
     std::vector<std::string> fileNames;
 
     try {
         // Mutex to ensure thread safety
         std::mutex mutex;
+
         // Determine the maximum number of threads to use based on hardware concurrency; fallback is 2 threads
         const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
         // Iterate through input paths
         for (const auto& path : paths) {
             try {
+                // Use a lambda function to process files asynchronously
+                auto processFileAsync = [&](const std::filesystem::directory_entry& entry) {
+                    std::string fileName = entry.path().string();
+                    std::string filePath = entry.path().parent_path().string();  // Get the path of the directory
+
+                    // Call the callback function to inform about the found file
+                    callback(fileName, filePath);
+
+                    // Lock the mutex to ensure safe access to shared data (fileNames)
+                    std::lock_guard<std::mutex> lock(mutex);
+                    fileNames.push_back(fileName);
+                };
+
+                // Use async to process files concurrently
+                std::vector<std::future<void>> futures;
+
                 // Iterate through files in the given directory and its subdirectories
                 for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
                     if (entry.is_regular_file()) {
@@ -70,30 +87,16 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
                             // Check if the file is already present in the cache to avoid duplicates
                             std::string fileName = entry.path().string();
                             if (std::find(binImgFilesCache.begin(), binImgFilesCache.end(), fileName) == binImgFilesCache.end()) {
-                                // Automatically determine the batch size based on the number of available threads
-                                const int batchSize = maxThreads * 2;
-                                
-                                // Use a lambda function to process the file asynchronously
-                                auto processFile = [&fileNames, &mutex, &callback](const std::filesystem::directory_entry& fileEntry) {
-                                    std::string fileName = fileEntry.path().string();
-                                    std::string filePath = fileEntry.path().parent_path().string();  // Get the path of the directory
-
-                                    // Lock the mutex to ensure safe access to shared data (fileNames)
-                                    std::lock_guard<std::mutex> lock(mutex);
-                                    fileNames.push_back(fileName);
-
-                                    // Call the callback function to inform about the found file
-                                    callback(fileName, filePath);
-                                };
-
                                 // Process the file asynchronously
-                                auto future = std::async(std::launch::async, processFile, entry);
-
-                                // Wait for the asynchronous task to complete
-                                future.get();
+                                futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
                             }
                         }
                     }
+                }
+
+                // Wait for all asynchronous tasks to complete
+                for (auto& future : futures) {
+                    future.get();
                 }
             } catch (const std::filesystem::filesystem_error& e) {
                 // Handle filesystem errors for the current directory
@@ -115,9 +118,6 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
         std::cin.ignore();
     }
 
-    // Wait for any remaining asynchronous tasks to complete (may not be necessary)
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
     // Remove duplicates from fileNames by sorting and using unique erase idiom
     std::sort(fileNames.begin(), fileNames.end());
     fileNames.erase(std::unique(fileNames.begin(), fileNames.end()), fileNames.end());
@@ -128,7 +128,6 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
     // Return the combined results
     return binImgFilesCache;
 }
-
 
 // Check if ccd2iso is installed on the system
 bool isCcd2IsoInstalled() {
@@ -422,14 +421,9 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
 }
 
 std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback) {
-    // Vector to store cached valid paths
-    static std::vector<std::string> cachedValidPaths;
-    // Vector to store cached invalid paths
-    std::vector<std::string> cachedInvalidPaths;
-
     // Static variables to cache results for reuse
     static std::vector<std::string> mdfMdsFilesCache;
-    static std::vector<std::string> cachedPaths;
+    static std::vector<std::string> cachedInvalidPaths;
 
     // Vector to store file names that match the criteria
     std::vector<std::string> fileNames;
@@ -437,12 +431,16 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
     try {
         // Mutex to ensure thread safety
         std::mutex mutex;
-        // Determine the maximum number of threads to use based on hardware concurrency fallback is 2 threads
+        
+        // Determine the maximum number of threads to use based on hardware concurrency; fallback is 2 threads
         const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
         // Iterate through input paths
         for (const auto& path : paths) {
             try {
+                // Use async to process files concurrently
+                std::vector<std::future<void>> futures;
+
                 // Iterate through files in the given directory and its subdirectories
                 for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
                     if (entry.is_regular_file()) {
@@ -456,30 +454,26 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                             // Check if the file is already present in the cache to avoid duplicates
                             std::string fileName = entry.path().string();
                             if (std::find(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end(), fileName) == mdfMdsFilesCache.end()) {
-                                // Automatically determine the batch size based on the number of available threads
-                                const int batchSize = maxThreads * 2;
-
-                                // Use a lambda function to process the file asynchronously
-                                auto processFile = [&fileNames, &mutex, &callback](const std::filesystem::directory_entry& fileEntry) {
+                                // Process the file asynchronously
+                                futures.emplace_back(std::async(std::launch::async, [&fileNames, &callback, &mutex](const std::filesystem::directory_entry& fileEntry) {
                                     std::string fileName = fileEntry.path().string();
                                     std::string filePath = fileEntry.path().parent_path().string();  // Get the path of the directory
+
+                                    // Call the callback function to inform about the found file
+                                    callback(fileName, filePath);
 
                                     // Lock the mutex to ensure safe access to shared data (fileNames)
                                     std::lock_guard<std::mutex> lock(mutex);
                                     fileNames.push_back(fileName);
-
-                                    // Call the callback function to inform about the found file
-                                    callback(fileName, filePath);
-                                };
-
-                                // Process the file asynchronously
-                                auto future = std::async(std::launch::async, processFile, entry);
-
-                                // Wait for the asynchronous task to complete
-                                future.get();
+                                }, entry));
                             }
                         }
                     }
+                }
+
+                // Wait for all asynchronous tasks to complete
+                for (auto& future : futures) {
+                    future.get();
                 }
             } catch (const std::filesystem::filesystem_error& e) {
                 // Handle filesystem errors for the current directory
@@ -500,9 +494,6 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
         std::cout << "Press enter to continue...";
         std::cin.ignore();
     }
-
-    // Wait for any remaining asynchronous tasks to complete (may not be necessary)
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     // Remove duplicates from fileNames by sorting and using unique erase idiom
     std::sort(fileNames.begin(), fileNames.end());
