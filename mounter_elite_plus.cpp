@@ -378,7 +378,7 @@ void manualRefreshCache() {
     std::system("clear");
 
     // Prompt the user to enter directory paths for manual cache refresh
-    std::string inputLine = readInputLine("\033[94mEnter the directory path(s) from which to populate the ISO cache (if many, separate them by \033[93m;\033[0m\033[94m), or press Enter to cancel:\n\033[0m");
+    std::string inputLine = readInputLine("\033[94mEnter the directory path(s) from which to populate the \033[1m\033[92mISO Cache\033[94m (if many, separate them with \033[1m\033[93m;\033[0m\033[94m), or press Enter to cancel:\n\033[0m");
     std::cout << " " << std::endl;
 
     // Start the timer

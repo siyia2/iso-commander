@@ -261,7 +261,7 @@ void select_and_convert_files_to_iso() {
     static std::vector<std::string> previousPaths;
 
     // Read input for directory paths (allow multiple paths separated by semicolons)
-    std::string inputPaths = readInputLine("\033[94mEnter the directory path(s) (if many, separate them with \033[93m;\033[0m\033[94m) to search for \033[92m.bin \033[94mand \033[92m.img\033[94m files, or press Enter to return:\n\033[0m");
+    std::string inputPaths = readInputLine("\033[94mEnter the directory path(s) (if many, separate them with \033[1m\033[93m;\033[0m\033[94m) to search for \033[1m\033[92m.bin \033[94mand \033[1m\033[92m.img\033[94m files, or press Enter to return:\n\033[0m");
 
     // Use semicolon as a separator to split paths
     std::istringstream iss(inputPaths);
@@ -678,7 +678,7 @@ void processMDFFilesInRange(int start, int end) {
 // Function to interactively select and convert MDF files to ISO
 void select_and_convert_files_to_iso_mdf() {
     // Read input for directory paths (allow multiple paths separated by semicolons)
-    std::string inputPaths = readInputLine("\033[94mEnter the directory path(s) (if many, separate them with \033[93m;\033[0m\033[94m) to search for \033[92m.mdf\033[94m files, or press Enter to return:\n\033[0m");
+    std::string inputPaths = readInputLine("\033[94mEnter the directory path(s) (if many, separate them with \033[1m\033[93m;\033[0m\033[94m) to search for \033[1m\033[92m.mdf\033[94m files, or press Enter to return:\n\033[0m");
 
     // Initialize vectors to store MDF/MDS files and directory paths
     std::vector<std::string> mdfMdsFiles;
