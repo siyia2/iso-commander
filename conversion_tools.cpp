@@ -697,6 +697,7 @@ void select_and_convert_files_to_iso_mdf() {
 	
 	// Print a message only if no new .mdf files are found
 	if (!newMdfFilesFound && !mdfMdsFiles.empty()) {
+		std::system("clear");
 		std::cout << "\033[91mNo new .mdf files over 10MB found, but file entries already exist in RAM cache.\033[0m" << std::endl;
 		std::cout << " " << std::endl;
 		std::cout << "Press enter to continue...";
@@ -704,6 +705,7 @@ void select_and_convert_files_to_iso_mdf() {
 	}
 
     if (mdfMdsFiles.empty()) {
+		std::system("clear");
         std::cout << "\033[91mNo .mdf files over 10MB found in the specified path(s) or cached in RAM.\n\033[0m";
         std::cout << " " << std::endl;
         std::cout << "Press enter to continue...";
