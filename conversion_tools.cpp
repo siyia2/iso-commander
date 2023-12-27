@@ -431,7 +431,7 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
     try {
         // Mutex to ensure thread safety
         std::mutex mutex;
-        
+
         // Determine the maximum number of threads to use based on hardware concurrency; fallback is 2 threads
         const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
@@ -477,14 +477,12 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                 }
             } catch (const std::filesystem::filesystem_error& e) {
                 // Handle filesystem errors for the current directory
-                if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
-                    std::cerr << "\033[91mInvalid directory: '" << path << "'. Skipped" << "\033[0m" << std::endl;
-                    std::cout << " " << std::endl;
-                    std::cout << "Press enter to continue...";
-                    std::cin.ignore();
-                    // Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
-                    cachedInvalidPaths.push_back(path);
-                }
+                // Always print the error message and add the invalid path to cachedInvalidPaths
+                std::cerr << "\033[91mInvalid directory: '" << path << "'. Skipped" << "\033[0m" << std::endl;
+                std::cout << " " << std::endl;
+                std::cout << "Press enter to continue...";
+                std::cin.ignore();
+                cachedInvalidPaths.push_back(path);
             }
         }
     } catch (const std::filesystem::filesystem_error& e) {
