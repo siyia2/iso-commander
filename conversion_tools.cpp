@@ -104,7 +104,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
             } catch (const std::filesystem::filesystem_error& e) {
                 // Handle filesystem errors for the current directory
                 if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
-                    std::cerr << "\033[91mInvalid directory: '" << path << "'. Skipped" << "\033[0m" << std::endl;
+                    std::cerr << "\033[91mInvalid directory: '" << path << "'. Skipped." << "\033[0m" << std::endl;
                     // Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
                     cachedInvalidPaths.push_back(path);
                 }
@@ -492,7 +492,7 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
             } catch (const std::filesystem::filesystem_error& e) {
                 // Handle filesystem errors for the current directory
                 // Always print the error message and add the invalid path to cachedInvalidPaths
-                std::cerr << "\033[91mInvalid directory: '" << path << "'. Skipped" << "\033[0m" << std::endl;
+                std::cerr << "\033[91mInvalid directory: '" << path << "'. Skipped." << "\033[0m" << std::endl;
                 cachedInvalidPaths.push_back(path);
             }
         }
