@@ -652,7 +652,7 @@ void select_and_mount_files_by_number() {
     // Check if the cache is empty
     if (isoFiles.empty()) {
         std::system("clear");
-        std::cout << "\033[93mCache is empty. Please refresh the cache from the main menu.\033[0m" << std::endl;
+        std::cout << "\033[93mISO Cache is empty. Please refresh it from the Menu Options.\033[0m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "Press Enter to continue...";
         std::cin.get();
