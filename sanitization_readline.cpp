@@ -28,26 +28,26 @@ std::string shell_escape(const std::string& s) {
 
 // Function to read a line of input using readline and add to history
 std::string readInputLine(const std::string& prompt) {
-    // Read a line of input using the readline function
-    char* input = readline(prompt.c_str());
+    try {
+        // Read a line of input using the readline function
+        std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
 
-    // Check if input is not null (readline successful)
-    if (input) {
-        // Add the input to the history
-        if (input[0] != '\0') {
-            add_history(input);
+        // Check if input is not null (readline successful)
+        if (input && input.get()[0] != '\0' && std::string(input.get()) != "\n") {
+            // Add the input to the history
+            add_history(input.get());
+
+            // Convert the C-style string to a C++ string
+            std::string result(input.get());
+
+            // Return the input string
+            return result;
         }
-
-        // Convert the C-style string to a C++ string
-        std::string result(input);
-
-        // Free the memory allocated by readline
-        free(input);
-
-        // Return the input string
-        return result;
+    } catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
     }
 
-    // Return an empty string if readline fails
+    // Return an empty string if readline fails or input is empty
     return "";
 }
+
