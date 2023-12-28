@@ -426,20 +426,18 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
         std::cout << errorMessage << std::endl;
     }
 }
+
 // Function to search for mdf files under 10MB
 std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback) {
     // Static variables to cache results for reuse
     static std::vector<std::string> mdfMdsFilesCache;
-    static std::vector<std::string> cachedInvalidPaths;
+    static std::set<std::string> printedInvalidPaths; // Keep track of printed invalid paths
 
     // Vector to store file names that match the criteria
     std::vector<std::string> fileNames;
 
     // Flag to indicate if any matching files were found
     bool filesFound = false;
-
-    // Clear the cachedInvalidPaths before processing new set of paths
-    cachedInvalidPaths.clear();
 
     try {
         // Mutex to ensure thread safety
@@ -451,6 +449,11 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
         // Iterate through input paths
         for (const auto& path : paths) {
             try {
+                // Check if the path has already been printed as an invalid path
+                if (printedInvalidPaths.find(path) != printedInvalidPaths.end()) {
+                    continue;
+                }
+
                 // Use async to process files concurrently
                 std::vector<std::future<void>> futures;
 
@@ -489,28 +492,32 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                 for (auto& future : futures) {
                     future.get();
                 }
+
             } catch (const std::filesystem::filesystem_error& e) {
                 // Handle filesystem errors for the current directory
-                // Always print the error message and add the invalid path to cachedInvalidPaths
-                std::cerr << "\033[91mInvalid directory path: " << path << ". Excluded from search." << "\033[0m" << std::endl;
-                cachedInvalidPaths.push_back(path);
+                // Check if the path has already been printed as an invalid path
+                if (printedInvalidPaths.find(path) == printedInvalidPaths.end()) {
+                    // Print the error message and add the invalid path to printedInvalidPaths
+                    std::cerr << "\033[91mInvalid directory path: " << path << ". Excluded from search." << "\033[0m" << std::endl;
+                    printedInvalidPaths.insert(path);
+                }
             }
         }
+
     } catch (const std::filesystem::filesystem_error& e) {
         // Handle filesystem errors for the overall operation
         std::cerr << "\033[91mFilesystem error: " << e.what() << "\033[0m" << std::endl;
         std::cin.ignore();
     }
-    
+
     // Print success message if files were found
     if (filesFound) {
-		std::cout << " " << std::endl;
+        std::cout << " " << std::endl;
         std::cout << "\033[92mSearch successful. Found " << fileNames.size() << " matching files.\033[0m" << std::endl;
         std::cout << " " << std::endl;
-		std::cout << "Press enter to continue...";
-		std::cin.ignore();
+        std::cout << "Press enter to continue...";
+        std::cin.ignore();
     }
-
 
     // Remove duplicates from fileNames by sorting and using unique erase idiom
     std::sort(fileNames.begin(), fileNames.end());
