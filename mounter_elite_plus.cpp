@@ -703,7 +703,7 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
         }
 
         // Print the filename part in green
-        std::cout << "\033[1m\033[92m" << isoFiles[i].substr(lastSlashPos + 1) << "\033[0m" << std::endl;
+        std::cout << "\033[1m\033[95m" << isoFiles[i].substr(lastSlashPos + 1) << "\033[0m" << std::endl;
     }
 }
 
@@ -946,7 +946,7 @@ void listMountedISOs() {
     if (!isoDirs.empty()) {
         std::cout << "\033[37;1mList of mounted ISO(s):\033[0m" << std::endl; // White and bold
         for (size_t i = 0; i < isoDirs.size(); ++i) {
-            std::cout << i + 1 << ". \033[1m\033[35m" << isoDirs[i] << "\033[0m" << std::endl; // Bold and magenta
+            std::cout << i + 1 << ". \033[1m\033[95m" << isoDirs[i] << "\033[0m" << std::endl; // Bold and magenta
         }
     } else {
         // Print a message if no ISOs are mounted
