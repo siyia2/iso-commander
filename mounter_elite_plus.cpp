@@ -312,40 +312,24 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
         return false;  // Cache save failed
     }
 
-    // Check if cache file can be opened for writing
-    std::ofstream cacheFile(cachePath);
-    if (!cacheFile.is_open()) {
-        std::cerr << "\033[91mUnable to open cache file for writing.\033[0m" << std::endl;
-        return false;  // Cache save failed
-    }
-    cacheFile.close();  // Close the file for now
-
     // Load the existing cache
     std::vector<std::string> existingCache = loadCache();
 
-    // Check if the cache is unchanged before attempting to update it
-    if (existingCache == isoFiles) {
-        std::cout << "\033[93mCache remains unaltered due to the absence of valid input paths.\033[0m" << std::endl;
-        std::cout << " " << std::endl;
-        return true;  // Cache save successful (as it hasn't changed)
-    }
-
-    // Append new and unique entries to the existing cache
+    // Combine new and existing entries and remove duplicates
+    std::set<std::string> combinedCache(existingCache.begin(), existingCache.end());
     for (const std::string& iso : isoFiles) {
-        if (std::find(existingCache.begin(), existingCache.end(), iso) == existingCache.end()) {
-            existingCache.push_back(iso);
-        }
+        combinedCache.insert(iso);
     }
 
     // Limit the cache size to the maximum allowed size
-    while (existingCache.size() > maxCacheSize) {
-        existingCache.erase(existingCache.begin());
+    while (combinedCache.size() > maxCacheSize) {
+        combinedCache.erase(combinedCache.begin());
     }
 
     // Open the cache file in write mode (truncating it)
-    cacheFile.open(cachePath, std::ios::out | std::ios::trunc);
+    std::ofstream cacheFile(cachePath, std::ios::out | std::ios::trunc);
     if (cacheFile.is_open()) {
-        for (const std::string& iso : existingCache) {
+        for (const std::string& iso : combinedCache) {
             cacheFile << iso << "\n";
         }
 
@@ -676,7 +660,7 @@ void select_and_mount_files_by_number() {
     // Main loop for selecting and mounting ISO files
     while (true) {
         std::system("clear");
-        std::cout << "\033[93m! IF EXPECTED ISO FILE IS NOT ON THE LIST, REFRESH CACHE FROM MAIN MENU !\n\033[0m" << std::endl;
+        std::cout << "\033[93m! IF EXPECTED ISO FILE IS NOT ON THE LIST, REFRESH THE ISO CACHE FROM MENU OPTIONS !\n\033[0m" << std::endl;
         printIsoFileList(isoFiles);
         
 		std::cout << " " << std::endl;
