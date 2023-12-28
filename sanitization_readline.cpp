@@ -44,7 +44,7 @@ std::string readInputLine(const std::string& prompt) {
             return result;
         }
     } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
+        std::cerr << "\033[91mError: " << e.what() << "\033[0m" << std::endl;
     }
 
     // Return an empty string if readline fails or input is empty
