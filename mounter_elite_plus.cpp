@@ -1,7 +1,7 @@
 #include "sanitization_readline.h"
 #include "conversion_tools.h"
 
-// Cache Varables \\
+// Cache Variables \\
 
 const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.cache"; // Construct the full path to the cache directory
 const std::string cacheFileName = "iso_cache.txt";;
@@ -18,30 +18,46 @@ namespace fs = std::filesystem;
 
 //	bools
 
+bool fileExists(const std::string& path);
 bool directoryExists(const std::string& path);
+bool allDirectoriesExistOnDisk(const std::vector<std::string>& directories);
+bool allFilesExistAndAreIso(const std::vector<std::string>& files);
+bool isValidDirectory(const std::string& path);
+bool isDirectoryEmpty(const std::string& path);
 bool iequals(std::string_view a, std::string_view b);
 bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles);
 bool fileExists(const std::string& path);
+bool ends_with_iso(const std::string& str);
 bool isNumeric(const std::string& str);
+bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize);
 
 //	voids
 
-void mountISO(const std::vector<std::string>& isoFiles);
-void unmountISO(const std::string& isoDir);
 void listMountedISOs();
 void unmountISOs();
 void cleanAndUnmountAllISOs();
 void select_and_mount_files_by_number();
 void print_ascii();
+void manualRefreshCache();
+void mountISO(const std::vector<std::string>& isoFiles);
+void unmountISO(const std::string& isoDir);
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mtx);
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles);
-void manualRefreshCache();
 void removeNonExistentPathsFromCacheWithOpenMP();
 void displayErrorMessage(const std::string& iso);
 void printAlreadyMountedMessage(const std::string& iso);
 void printIsoFileList(const std::vector<std::string>& isoFiles);
 void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet);
 void processInputMultithreaded(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
+void processPath(const std::string& path, std::vector<std::string>& allIsoFiles);
+
+// stds
+
+std::vector<std::string> vec_concat(const std::vector<std::string>& v1, const std::vector<std::string>& v2);
+std::string getHomeDirectory();
+std::vector<std::string> loadCache();
+
+
 
 
 std::string directoryPath;					// Declare directoryPath here
@@ -73,7 +89,6 @@ int main() {
         }
 
         std::string choice(input);
-        free(input);
 
         if (choice == "1") { 
             std::system("clear");
@@ -183,7 +198,7 @@ void removeNonExistentPathsFromCacheWithOpenMP() {
     std::ifstream cacheFile(cacheFilePath);
     if (!cacheFile) {
         // Display an error message if the cache file is not found
-        std::cerr << "\033[31mError: Unable to find cache file, will attempt to create it.\033[0m" << std::endl;
+        std::cerr << "\033[91mError: Unable to find cache file, will attempt to create it.\033[0m" << std::endl;
         return;
     }
 
@@ -224,7 +239,7 @@ void removeNonExistentPathsFromCacheWithOpenMP() {
     std::ofstream updatedCacheFile(cacheFilePath);
     if (!updatedCacheFile) {
         // Display an error message if unable to open the cache file for writing
-        std::cerr << "\033[31mError: Unable to open cache file for writing, check permissions.\033[0m" << std::endl;
+        std::cerr << "\033[91mError: Unable to open cache file for writing, check permissions.\033[0m" << std::endl;
         return;
     }
 
@@ -282,7 +297,7 @@ std::vector<std::string> loadCache() {
 
 
 // Save cache
-void saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize) {
+bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize) {
     std::filesystem::path cachePath = cacheDirectory;
     cachePath /= cacheFileName;
 
@@ -308,8 +323,11 @@ void saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
             cacheFile << iso << "\n";
         }
         cacheFile.close();
+        return true;  // Cache save successful
     } else {
-        std::cerr << "Error: Could not open cache file for writing." << std::endl;
+		std::cout << " " << std::endl;
+        std::cerr << "\033[91mInsufficient read/write permissions, cache refresh failed.\033[0m" << std::endl;
+        return false;  // Cache save failed
     }
 }
 
@@ -332,7 +350,7 @@ bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles) 
 
 // Function to refresh the cache for a single directory
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles) {
-	std::cout << "\033[33mProcessing directory path: '" << path << "'\033[0m" << std::endl;
+	std::cout << "\033[93mProcessing directory path: '" << path << "'\033[0m" << std::endl;
     std::vector<std::string> newIsoFiles;
     
     // Perform the cache refresh for the directory (e.g., using parallelTraverse)
@@ -344,25 +362,28 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
     // Append the new entries to the shared vector
     allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
     
-    std::cout << "\033[32mCache refreshed for directory: '" << path << "'\033[0m" << std::endl;
+    std::cout << "\033[92mProcessed directory path: '" << path << "'\033[0m" << std::endl;
 }
 
 
+// Function to check if a directory is valid
+bool isValidDirectory(const std::string& path) {
+    return std::filesystem::is_directory(path);
+}
+
 // Function for manual cache refresh
 void manualRefreshCache() {
+    // Clear the console screen
     std::system("clear");
-    
-    // Prompt the user to enter directory paths for manual cache refresh
-    std::string inputLine = readInputLine("\033[94mEnter the directory path(s) from which to populate the ISO cache (if many, separate them by \033[33m;\033[0m\033[94m), or press Enter to cancel:\n\033[0m");
 
-    // Start the timer
-    auto start_time = std::chrono::high_resolution_clock::now();
+    // Prompt the user to enter directory paths for manual cache refresh
+    std::string inputLine = readInputLine("\033[94mEnter the directory path(s) from which to populate the \033[1m\033[92mISO Cache\033[94m (if many, separate them with \033[1m\033[93m;\033[0m\033[94m), or press Enter to cancel:\n\033[0m");
+    std::cout << " " << std::endl;
 
     // Check if the user canceled the cache refresh
     if (inputLine.empty()) {
-        std::cout << "\033[33mCache refresh canceled by user.\033[0m" << std::endl;
+        std::cout << "\033[93mCache refresh canceled by user.\033[0m" << std::endl;
         std::cout << " " << std::endl;
-
         return;
     }
 
@@ -373,11 +394,48 @@ void manualRefreshCache() {
     // Vector to store all ISO files from multiple directories
     std::vector<std::string> allIsoFiles;
 
+    // Vector to store invalid paths
+    std::vector<std::string> invalidPaths;
+
+    // Set to store processed invalid paths
+    std::set<std::string> processedInvalidPaths;
+
     // Vector to store threads for parallel cache refreshing
     std::vector<std::thread> threads;
 
-    // Iterate through the entered directory paths
+    // Flags to determine whether cache write errors were encountered
+    bool cacheWriteErrorEncountered = false;
+
+    // Iterate through the entered directory paths and print invalid paths
     while (std::getline(iss, path, ';')) {
+        // Check if the directory path is valid
+        if (!isValidDirectory(path)) {
+            // Check if the path has already been processed
+            if (processedInvalidPaths.find(path) == processedInvalidPaths.end()) {
+                // Print the error message and mark the path as processed
+                invalidPaths.push_back("\033[91mInvalid directory path: " + path + ". Skipped from processing.\033[0m");
+                processedInvalidPaths.insert(path);
+            }
+        }
+    }
+
+    // Print invalid paths
+    for (const auto& invalidPath : invalidPaths) {
+        std::cout << invalidPath << std::endl;
+    }
+    std::cout << " " << std::endl;
+
+    // Start the timer
+    auto start_time = std::chrono::high_resolution_clock::now();
+
+    // Create a thread for each valid directory to refresh the cache and pass the vector by reference
+    std::istringstream iss2(inputLine); // Reset the string stream
+    while (std::getline(iss2, path, ';')) {
+        // Check if the directory path is valid
+        if (!isValidDirectory(path)) {
+            continue; // Skip invalid paths
+        }
+
         // Create a thread for refreshing the cache for each directory and pass the vector by reference
         threads.emplace_back(std::thread(refreshCacheForDirectory, path, std::ref(allIsoFiles)));
     }
@@ -388,7 +446,7 @@ void manualRefreshCache() {
     }
 
     // Save the combined cache to disk
-    saveCache(allIsoFiles, maxCacheSize);
+    bool saveSuccess = saveCache(allIsoFiles, maxCacheSize);
 
     // Stop the timer after completing the cache refresh and removal of non-existent paths
     auto end_time = std::chrono::high_resolution_clock::now();
@@ -396,14 +454,22 @@ void manualRefreshCache() {
     // Calculate and print the elapsed time
     std::cout << " " << std::endl;
     auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-    
+
     // Print the time taken for the entire process in bold with one decimal place
     std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
 
-    // Inform the user that the cache has been successfully refreshed
-    std::cout << "\033[32mCache refreshed successfully.\033[0m" << std::endl;
-    std::cout << " " << std::endl;
+    // Inform the user about the cache refresh status
+     if (saveSuccess) {
+        std::cout << " " << std::endl;
+        std::cout << "\033[92mCache refreshed successfully.\033[0m" << std::endl;
+        std::cout << " " << std::endl;
+    } else {
+        std::cout << " " << std::endl;
+        std::cout << "\033[91mCache refresh failed all paths were invalid.\033[0m" << std::endl;
+        std::cout << " " << std::endl;
+    }
 }
+
 
 //	MOUNT STUFF	\\
 
@@ -449,7 +515,7 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
         // Create the mount point directory
         std::string mkdirCommand = "sudo mkdir " + shell_escape(mountPoint);
         if (system(mkdirCommand.c_str()) != 0) {
-            std::cerr << "\033[31mFailed to create mount point directory\033[0m" << std::endl;
+            std::cerr << "\033[91mFailed to create mount point directory\033[0m" << std::endl;
             return;
         }
 
@@ -457,24 +523,24 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
         std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
         int mountResult = system(mountCommand.c_str());
         if (mountResult != 0) {
-            std::cerr << "\033[31mFailed to mount: " << isoFile << "\033[0m" << std::endl;
+            std::cerr << "\033[91mFailed to mount: " << isoFile << "\033[0m" << std::endl;
 
             // Cleanup the mount point directory
             std::string cleanupCommand = "sudo rmdir " + shell_escape(mountPoint);
             if (system(cleanupCommand.c_str()) != 0) {
-                std::cerr << "\033[31mFailed to clean up mount point directory\033[0m" << std::endl;
+                std::cerr << "\033[91mFailed to clean up mount point directory\033[0m" << std::endl;
             }
 
             return;
         } else {
             // Store the mount point in the map
             mountedIsos[isoFile] = mountPoint;
-            std::cout << "\033[32mMounted at: " << mountPoint << "\033[0m" << std::endl;
+            std::cout << "\033[92mMounted at: " << mountPoint << "\033[0m" << std::endl;
         }
     } else {
         // The mount point directory already exists, so the ISO is considered mounted
         mountedIsos[isoFile] = mountPoint;
-        std::cout << "\033[33mISO file '" << isoFile << "' is already mounted at '" << mountPoint << "'.\033[m" << std::endl;
+        std::cout << "\033[93mISO file '" << isoFile << "' is already mounted at '" << mountPoint << "'.\033[m" << std::endl;
     }
 }
 
@@ -553,7 +619,7 @@ void select_and_mount_files_by_number() {
     // Check if the cache is empty
     if (isoFiles.empty()) {
         std::system("clear");
-        std::cout << "\033[33mCache is empty. Please refresh the cache from the main menu.\033[0m" << std::endl;
+        std::cout << "\033[93mCache is empty. Please refresh the cache from the main menu.\033[0m" << std::endl;
         std::cout << "Press Enter to continue...";
         std::cin.get();
         return;
@@ -566,7 +632,7 @@ void select_and_mount_files_by_number() {
 
     // Check if there are any ISO files to mount
     if (isoFiles.empty()) {
-        std::cout << "\033[33mNo .iso files in the cache. Please refresh the cache from the main menu.\033[0m" << std::endl;
+        std::cout << "\033[93mNo .iso files in the cache. Please refresh the cache from the main menu.\033[0m" << std::endl;
         return;
     }
 
@@ -576,7 +642,7 @@ void select_and_mount_files_by_number() {
     // Main loop for selecting and mounting ISO files
     while (true) {
         std::system("clear");
-        std::cout << "\033[33m! IF EXPECTED ISO FILE IS NOT ON THE LIST, REFRESH CACHE FROM MAIN MENU !\n\033[0m" << std::endl;
+        std::cout << "\033[93m! IF EXPECTED ISO FILE IS NOT ON THE LIST, REFRESH CACHE FROM MAIN MENU !\n\033[0m" << std::endl;
         printIsoFileList(isoFiles);
         
 		std::cout << " " << std::endl;
@@ -681,18 +747,18 @@ void processInputMultithreaded(const std::string& input, const std::vector<std::
             } catch (const std::invalid_argument& e) {
                 // Handle the exception for invalid input
                 invalidInput = true;
-                errorMessages.push_back("\033[31mInvalid input: " + token + ".\033[0m");
+                errorMessages.push_back("\033[91mInvalid input: " + token + ".\033[0m");
                 continue;
             } catch (const std::out_of_range& e) {
                 // Handle the exception for out-of-range input
                 invalidInput = true;
-                errorMessages.push_back("\033[31mInvalid range: " + token + ". Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
+                errorMessages.push_back("\033[91mInvalid range: " + token + ". Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
                 continue;
             }
 
             if (start > end || start < 1 || static_cast<size_t>(end) > isoFiles.size()) {
                 invalidInput = true;
-                errorMessages.push_back("\033[31mInvalid range: " + std::to_string(start) + "-" + std::to_string(end) + ". Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
+                errorMessages.push_back("\033[91mInvalid range: " + std::to_string(start) + "-" + std::to_string(end) + ". Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
                 continue;
             }
 
@@ -702,7 +768,7 @@ void processInputMultithreaded(const std::string& input, const std::vector<std::
                     futures.emplace_back(std::async(std::launch::async, handleIsoFile, isoFiles[i - 1], std::ref(mountedSet)));
                 } else {
                     invalidInput = true;
-                    errorMessages.push_back("\033[31mFile index " + std::to_string(i) + ", does not exist.\033[0m");
+                    errorMessages.push_back("\033[91mFile index " + std::to_string(i) + ", does not exist.\033[0m");
                 }
             }
         } else if (isNumeric(token)) {
@@ -712,11 +778,11 @@ void processInputMultithreaded(const std::string& input, const std::vector<std::
                 futures.emplace_back(std::async(std::launch::async, handleIsoFile, isoFiles[num - 1], std::ref(mountedSet)));
             } else {
                 invalidInput = true;
-                errorMessages.push_back("\033[31mFile index " + std::to_string(num) + ", does not exist.\033[0m");
+                errorMessages.push_back("\033[91mFile index " + std::to_string(num) + ", does not exist.\033[0m");
             }
         } else {
             invalidInput = true;
-            errorMessages.push_back("\033[31mInvalid input: " + token + ".\033[0m");
+            errorMessages.push_back("\033[91mInvalid input: " + token + ".\033[0m");
         }
     }
 
@@ -735,7 +801,7 @@ void processInputMultithreaded(const std::string& input, const std::vector<std::
 
 // Function to print a message indicating that the ISO file is already mounted
 void printAlreadyMountedMessage(const std::string& iso) {
-    std::cout << "\033[33mISO file '" << iso << "' is already mounted.\033[0m" << std::endl;
+    std::cout << "\033[93mISO file '" << iso << "' is already mounted.\033[0m" << std::endl;
 }
 
 // Function to display an error message when the ISO file does not exist on disk
@@ -875,7 +941,7 @@ void listMountedISOs() {
         }
     } else {
         // Print a message if no ISOs are mounted
-        std::cerr << "\033[31mNo mounted ISO(s) found\n\033[0m" << std::endl;
+        std::cerr << "\033[91mNo mounted ISO(s) found.\n\033[0m" << std::endl;
     }
 }
 
@@ -895,7 +961,7 @@ void unmountISO(const std::string& isoDir) {
 
     // Check if the unmounting was successful
     if (result == 0) {
-        std::cout << "\033[32mUnmounted: " << isoDir << "\033[0m" << std::endl; // Print success message
+        std::cout << "\033[92mUnmounted: " << isoDir << "\033[0m" << std::endl; // Print success message
 
         // Check if the directory is empty before removing it
         if (isDirectoryEmpty(isoDir)) {
@@ -906,11 +972,11 @@ void unmountISO(const std::string& isoDir) {
             int removeDirResult = system(removeDirCommand.c_str());
 
             if (removeDirResult != 0) {
-                std::cerr << "\033[31mFailed to remove directory: " << isoDir << " ...Please check it out manually.\033[0m" << std::endl;
+                std::cerr << "\033[91mFailed to remove directory: " << isoDir << " ...Please check it out manually.\033[0m" << std::endl;
             }
         }
     } else {
-        std::cerr << "\033[31mFailed to unmount: " << isoDir << " ...Probably not an ISO mountpoint, check it out manually.\033[0m" << std::endl; // Print failure message
+        std::cerr << "\033[91mFailed to unmount: " << isoDir << " ...Probably not an ISO mountpoint, check it out manually.\033[0m" << std::endl; // Print failure message
     }
 }
 
@@ -996,7 +1062,7 @@ void unmountISOs() {
 
                 } else {
                     // Store the error message
-                    errorMessages.push_back("\033[31mFile index " + std::to_string(number) + ", does not exist.\033[0m");
+                    errorMessages.push_back("\033[91mFile index " + std::to_string(number) + ", does not exist.\033[0m");
                 }
             } else if (std::regex_match(token, std::regex("^(\\d+)-(\\d+)$"))) {
                 // Range input (e.g., "1-3")
@@ -1014,11 +1080,11 @@ void unmountISOs() {
                     }
                 } else {
                     // Store the error message
-                    errorMessages.push_back("\033[31mInvalid range: " + std::to_string(startRange) + "-" + std::to_string(endRange) + ". Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
+                    errorMessages.push_back("\033[91mInvalid range: " + std::to_string(startRange) + "-" + std::to_string(endRange) + ". Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
                 }
             } else {
                 // Store the error message for invalid input format
-                errorMessages.push_back("\033[31mInvalid input: " + token + ".\033[0m");
+                errorMessages.push_back("\033[91mInvalid input: " + token + ".\033[0m");
             }
 
         }
