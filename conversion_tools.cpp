@@ -119,7 +119,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
     // Print success message if files were found
     if (!fileNames.empty()) {
 		std::cout << " " << std::endl;
-        std::cout << "\033[92mSearch successful. Found " << fileNames.size() << " matching file(s)\033[0m" << " \033[93mand " << binImgFilesCache.size() << " are already cached in RAM.\033[0m"<< std::endl;
+        std::cout << "\033[92mSearch successful. Found " << fileNames.size() << " matching file(s)\033[0m" << ".\033[93m " << binImgFilesCache.size() << " cached in RAM from previous searches.\033[0m"<< std::endl;
         std::cout << " " << std::endl;
 		std::cout << "Press enter to continue...";
 		std::cin.ignore();
@@ -513,7 +513,7 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
     // Print success message if files were found
     if (filesFound) {
         std::cout << " " << std::endl;
-        std::cout << "\033[92mSearch successful. Found " << fileNames.size() << " matching file(s)\033[0m" << " \033[93mand " << mdfMdsFilesCache.size() << " are already cached in RAM.\033[0m"<< std::endl;
+        std::cout << "\033[92mSearch successful. Found " << fileNames.size() << " matching file(s)\033[0m" << ". \033[93m" << mdfMdsFilesCache.size() << " cached in RAM from previous searches.\033[0m"<< std::endl;
         std::cout << " " << std::endl;
         std::cout << "Press enter to continue...";
         std::cin.ignore();
