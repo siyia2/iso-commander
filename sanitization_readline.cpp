@@ -26,13 +26,18 @@ std::string shell_escape(const std::string& s) {
     return "'" + escaped_string + "'";
 }
 
-// Function to read a line of input using readline
+// Function to read a line of input using readline and add to history
 std::string readInputLine(const std::string& prompt) {
     // Read a line of input using the readline function
     char* input = readline(prompt.c_str());
 
     // Check if input is not null (readline successful)
     if (input) {
+        // Add the input to the history
+        if (input[0] != '\0') {
+            add_history(input);
+        }
+
         // Convert the C-style string to a C++ string
         std::string result(input);
 
