@@ -325,8 +325,7 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
 
     // Check if the cache is unchanged before attempting to update it
     if (existingCache == isoFiles) {
-        std::cout << " " << std::endl;
-        std::cout << "\033[93mCache remains unchanged.\033[0m" << std::endl;
+        std::cout << "\033[93mCache remains unaltered due to the absence of valid input paths\033[0m" << std::endl;
         std::cout << " " << std::endl;
         return true;  // Cache save successful (as it hasn't changed)
     }
