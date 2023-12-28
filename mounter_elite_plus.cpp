@@ -690,11 +690,20 @@ void select_and_mount_files_by_number() {
     }
 }
 
-
-// Function to print the list of ISO files with their corresponding numbers
+// Function to print ISO file list with filename in green
 void printIsoFileList(const std::vector<std::string>& isoFiles) {
-    for (int i = 0; i < isoFiles.size(); i++) {
-        std::cout << i + 1 << ". " << isoFiles[i] << std::endl;
+
+    for (std::size_t i = 0; i < isoFiles.size(); ++i) {
+        std::cout << std::setw(2) << std::right << i + 1 << ". ";
+
+        // Print the directory part in the default color
+        std::size_t lastSlashPos = isoFiles[i].find_last_of('/');
+        if (lastSlashPos != std::string::npos) {
+            std::cout << isoFiles[i].substr(0, lastSlashPos + 1);
+        }
+
+        // Print the filename part in green
+        std::cout << "\033[1m\033[92m" << isoFiles[i].substr(lastSlashPos + 1) << "\033[0m" << std::endl;
     }
 }
 
