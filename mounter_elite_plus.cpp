@@ -396,7 +396,10 @@ void manualRefreshCache() {
 
     // Vector to store invalid paths
     std::vector<std::string> invalidPaths;
-    
+
+    // Set to store processed invalid paths
+    std::set<std::string> processedInvalidPaths;
+
     // Vector to store threads for parallel cache refreshing
     std::vector<std::thread> threads;
 
@@ -407,15 +410,21 @@ void manualRefreshCache() {
     while (std::getline(iss, path, ';')) {
         // Check if the directory path is valid
         if (!isValidDirectory(path)) {
-            invalidPaths.push_back("\033[91mInvalid directory path: " + path + ". Skipped processing.\033[0m");
+            // Check if the path has already been processed
+            if (processedInvalidPaths.find(path) == processedInvalidPaths.end()) {
+                // Print the error message and mark the path as processed
+                invalidPaths.push_back("\033[91mInvalid directory path: " + path + ". Skipped processing.\033[0m");
+                processedInvalidPaths.insert(path);
+            }
         }
     }
-	
+
     // Print invalid paths
     for (const auto& invalidPath : invalidPaths) {
         std::cout << invalidPath << std::endl;
     }
-	std::cout << " " << std::endl;
+    std::cout << " " << std::endl;
+
     // Start the timer
     auto start_time = std::chrono::high_resolution_clock::now();
 
@@ -436,8 +445,6 @@ void manualRefreshCache() {
         t.join();
     }
 
-    std::cout << " " << std::endl;
-
     // Save the combined cache to disk
     bool saveSuccess = saveCache(allIsoFiles, maxCacheSize);
 
@@ -450,7 +457,6 @@ void manualRefreshCache() {
 
     // Print the time taken for the entire process in bold with one decimal place
     std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
-    std::cout << " " << std::endl;
 
     // Inform the user about the cache refresh status
     if (saveSuccess && !invalidPaths.empty()) {
