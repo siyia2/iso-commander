@@ -325,7 +325,7 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
 
     // Check if the cache is unchanged before attempting to update it
     if (existingCache == isoFiles) {
-        std::cout << "\033[93mCache remains unaltered due to the absence of valid input paths\033[0m" << std::endl;
+        std::cout << "\033[93mCache remains unaltered due to the absence of valid input paths.\033[0m" << std::endl;
         std::cout << " " << std::endl;
         return true;  // Cache save successful (as it hasn't changed)
     }
@@ -653,6 +653,7 @@ void select_and_mount_files_by_number() {
     if (isoFiles.empty()) {
         std::system("clear");
         std::cout << "\033[93mCache is empty. Please refresh the cache from the main menu.\033[0m" << std::endl;
+        std::cout << " " << std::endl;
         std::cout << "Press Enter to continue...";
         std::cin.get();
         return;
