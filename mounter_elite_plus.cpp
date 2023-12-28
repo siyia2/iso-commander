@@ -459,11 +459,7 @@ void manualRefreshCache() {
     std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
 
     // Inform the user about the cache refresh status
-    if (saveSuccess && !invalidPaths.empty()) {
-        std::cout << " " << std::endl;
-        std::cout << "\033[93mCache refreshed with some errors.\033[0m" << std::endl;
-        std::cout << " " << std::endl;
-    } else if (saveSuccess) {
+     if (saveSuccess) {
         std::cout << " " << std::endl;
         std::cout << "\033[92mCache refreshed successfully.\033[0m" << std::endl;
         std::cout << " " << std::endl;
