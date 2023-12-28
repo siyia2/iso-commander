@@ -822,7 +822,7 @@ void processInputMultithreaded(const std::string& input, const std::vector<std::
     // Display errors at the end
     if (invalidInput) {
         for (const auto& errorMsg : errorMessages) {
-            std::cerr << errorMsg << std::endl;
+            std::cerr << "\033[93m" << errorMsg << "\033[0m" << std::endl;
         }
     }
 }
@@ -904,7 +904,7 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
         }
     } catch (const std::filesystem::filesystem_error& e) {
         // Handle filesystem errors and print an error message
-        std::cerr << "Error: " << e.what() << std::endl;
+        std::cerr << "\033[93m" << e.what() << "\033[0m" << std::endl;
     }
 }
 
@@ -958,7 +958,7 @@ void listMountedISOs() {
         closedir(dir);
     } else {
         // Print an error message if there is an issue opening the /mnt directory
-        std::cerr << "Error opening the /mnt directory." << std::endl;
+        std::cerr << "\033[93mError opening the /mnt directory.\033[0m" << std::endl;
     }
 
     // Display a list of mounted ISOs with ISO names in bold and magenta text
@@ -1143,7 +1143,7 @@ void unmountISOs() {
         
         // Print error messages
         for (const auto& errorMessage : errorMessages) {
-            std::cerr << errorMessage << std::endl;
+            std::cerr << "\033[93m" << errorMessage << "\033[0m" << std::endl;
         }
 
         auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
