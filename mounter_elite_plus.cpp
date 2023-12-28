@@ -326,7 +326,7 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
         return true;  // Cache save successful
     } else {
 		std::cout << " " << std::endl;
-        std::cerr << "\033[91mInsufficient read/write permissions, cache refresh failed.\033[0m" << std::endl;
+        std::cerr << "\033[91mInsufficient read/write permissions.\033[0m" << std::endl;
         return false;  // Cache save failed
     }
 }
@@ -465,7 +465,7 @@ void manualRefreshCache() {
         std::cout << " " << std::endl;
     } else {
         std::cout << " " << std::endl;
-        std::cout << "\033[91mCache refresh failed all paths were invalid.\033[0m" << std::endl;
+        std::cout << "\033[91mCache refresh failed.\033[0m" << std::endl;
         std::cout << " " << std::endl;
     }
 }
