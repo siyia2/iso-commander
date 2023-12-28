@@ -296,13 +296,40 @@ std::vector<std::string> loadCache() {
 }
 
 
+// Function to check if a file or directory exists
+bool exists(const std::filesystem::path& path) {
+    return std::filesystem::exists(path);
+}
+
 // Save cache
 bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize) {
     std::filesystem::path cachePath = cacheDirectory;
     cachePath /= cacheFileName;
 
+    // Check if cache directory exists
+    if (!exists(cacheDirectory) || !std::filesystem::is_directory(cacheDirectory)) {
+        std::cerr << "\033[91mInvalid cache directory.\033[0m" << std::endl;
+        return false;  // Cache save failed
+    }
+
+    // Check if cache file can be opened for writing
+    std::ofstream cacheFile(cachePath);
+    if (!cacheFile.is_open()) {
+        std::cerr << "\033[91mUnable to open cache file for writing.\033[0m" << std::endl;
+        return false;  // Cache save failed
+    }
+    cacheFile.close();  // Close the file for now
+
     // Load the existing cache
     std::vector<std::string> existingCache = loadCache();
+
+    // Check if the cache is unchanged before attempting to update it
+    if (existingCache == isoFiles) {
+        std::cout << " " << std::endl;
+        std::cout << "\033[93mCache remains unchanged.\033[0m" << std::endl;
+        std::cout << " " << std::endl;
+        return true;  // Cache save successful (as it hasn't changed)
+    }
 
     // Append new and unique entries to the existing cache
     for (const std::string& iso : isoFiles) {
@@ -317,15 +344,22 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
     }
 
     // Open the cache file in write mode (truncating it)
-    std::ofstream cacheFile(cachePath);
+    cacheFile.open(cachePath, std::ios::out | std::ios::trunc);
     if (cacheFile.is_open()) {
         for (const std::string& iso : existingCache) {
             cacheFile << iso << "\n";
         }
-        cacheFile.close();
-        return true;  // Cache save successful
+
+        // Check if writing to the file was successful
+        if (cacheFile.good()) {
+            cacheFile.close();
+            return true;  // Cache save successful
+        } else {
+            std::cerr << "\033[91mFailed to write to cache file.\033[0m" << std::endl;
+            cacheFile.close();
+            return false;  // Cache save failed
+        }
     } else {
-		std::cout << " " << std::endl;
         std::cerr << "\033[91mInsufficient read/write permissions.\033[0m" << std::endl;
         return false;  // Cache save failed
     }
