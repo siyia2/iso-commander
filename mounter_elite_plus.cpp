@@ -89,7 +89,6 @@ int main() {
         }
 
         std::string choice(input);
-        free(input);
 
         if (choice == "1") { 
             std::system("clear");
