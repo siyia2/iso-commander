@@ -1072,7 +1072,6 @@ void listMountedISOs() {
     } else {
         // Print a message if no ISOs are mounted
         std::cerr << "\033[91mNo mounted ISO(s) found.\033[0m" << std::endl;
-        std::cout << " " << std::endl;
     }
 }
 
@@ -1147,6 +1146,7 @@ void unmountISOs() {
 
         // Check if there are no mounted ISOs
         if (isoDirs.empty()) {
+			std::cout << " " << std::endl;
             std::cout << "Press Enter to continue...";
             std::cin.get(); // Wait for the user to press Enter
             return;
