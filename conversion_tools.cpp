@@ -53,7 +53,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
 
     try {
         // Mutex to ensure thread safety
-        std::mutex mutex;
+        static std::mutex mutex;
 
         // Determine the maximum number of threads to use based on hardware concurrency; fallback is 2 threads
         const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
@@ -118,11 +118,11 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
 
     // Print success message if files were found
     if (!fileNames.empty()) {
-		std::cout << " " << std::endl;
-        std::cout << "\033[92mSearch successful. Found " << fileNames.size() << " matching file(s)\033[0m" << " \033[93mand " << binImgFilesCache.size() << " already cached in RAM.\033[0m"<< std::endl;
         std::cout << " " << std::endl;
-		std::cout << "Press enter to continue...";
-		std::cin.ignore();
+        std::cout << "\033[92mSearch successful. Found " << fileNames.size() << " matching file(s)\033[0m" << ".\033[93m " << binImgFilesCache.size() << " cached in RAM from previous searches.\033[0m"<< std::endl;
+        std::cout << " " << std::endl;
+        std::cout << "Press enter to continue...";
+        std::cin.ignore();
     }
 
     // Remove duplicates from fileNames by sorting and using unique erase idiom
@@ -292,7 +292,7 @@ void select_and_convert_files_to_iso() {
 	// Print a message only if no new files are found
 	if (!newFilesFound && !binImgFiles.empty()) {
 		std::cout << " " << std::endl;
-		std::cout << "\033[91mNo new .bin .img files over 10MB found, \033[92mbut file entries already exist in RAM cache.\033[0m" << std::endl;
+		std::cout << "\033[91mNo new .bin .img files over 10MB found, \033[92mbut " << binImgFiles.size() << " file entries already exist in RAM cache.\033[0m" << std::endl;
 		std::cout << " " << std::endl;
 		std::cout << "Press enter to continue...";
 		std::cin.ignore();
@@ -513,7 +513,7 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
     // Print success message if files were found
     if (filesFound) {
         std::cout << " " << std::endl;
-        std::cout << "\033[92mSearch successful. Found " << fileNames.size() << " matching file(s)\033[0m" << " \033[93mand " << mdfMdsFilesCache.size() << " already cached in RAM.\033[0m"<< std::endl;
+        std::cout << "\033[92mSearch successful. Found " << fileNames.size() << " matching file(s)\033[0m" << ". \033[93m" << mdfMdsFilesCache.size() << " cached in RAM from previous searches.\033[0m"<< std::endl;
         std::cout << " " << std::endl;
         std::cout << "Press enter to continue...";
         std::cin.ignore();

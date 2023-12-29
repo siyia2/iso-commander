@@ -143,6 +143,7 @@ int main() {
             case '5':
 				std::cout << " " << std::endl;
                 listMountedISOs();
+                std::cout << " " << std::endl;
                 std::cout << "Press Enter to continue...";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 std::system("clear");
@@ -296,37 +297,54 @@ std::vector<std::string> loadCache() {
 }
 
 
+// Function to check if a file or directory exists
+bool exists(const std::filesystem::path& path) {
+    return std::filesystem::exists(path);
+}
+
 // Save cache
 bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize) {
     std::filesystem::path cachePath = cacheDirectory;
     cachePath /= cacheFileName;
 
+    // Check if cache directory exists
+    if (!exists(cacheDirectory) || !std::filesystem::is_directory(cacheDirectory)) {
+        std::cerr << "\033[91mInvalid cache directory.\033[0m" << std::endl;
+        return false;  // Cache save failed
+    }
+
     // Load the existing cache
     std::vector<std::string> existingCache = loadCache();
 
-    // Append new and unique entries to the existing cache
+    // Combine new and existing entries and remove duplicates
+    std::set<std::string> combinedCache(existingCache.begin(), existingCache.end());
     for (const std::string& iso : isoFiles) {
-        if (std::find(existingCache.begin(), existingCache.end(), iso) == existingCache.end()) {
-            existingCache.push_back(iso);
-        }
+        combinedCache.insert(iso);
     }
 
     // Limit the cache size to the maximum allowed size
-    while (existingCache.size() > maxCacheSize) {
-        existingCache.erase(existingCache.begin());
+    while (combinedCache.size() > maxCacheSize) {
+        combinedCache.erase(combinedCache.begin());
     }
 
     // Open the cache file in write mode (truncating it)
-    std::ofstream cacheFile(cachePath);
+    std::ofstream cacheFile(cachePath, std::ios::out | std::ios::trunc);
     if (cacheFile.is_open()) {
-        for (const std::string& iso : existingCache) {
+        for (const std::string& iso : combinedCache) {
             cacheFile << iso << "\n";
         }
-        cacheFile.close();
-        return true;  // Cache save successful
+
+        // Check if writing to the file was successful
+        if (cacheFile.good()) {
+            cacheFile.close();
+            return true;  // Cache save successful
+        } else {
+            std::cerr << "\033[91mFailed to write to cache file.\033[0m" << std::endl;
+            cacheFile.close();
+            return false;  // Cache save failed
+        }
     } else {
-		std::cout << " " << std::endl;
-        std::cerr << "\033[91mInsufficient read/write permissions, cache refresh failed.\033[0m" << std::endl;
+        std::cerr << "\033[91mInsufficient read/write permissions.\033[0m" << std::endl;
         return false;  // Cache save failed
     }
 }
@@ -465,7 +483,7 @@ void manualRefreshCache() {
         std::cout << " " << std::endl;
     } else {
         std::cout << " " << std::endl;
-        std::cout << "\033[91mCache refresh failed all paths were invalid.\033[0m" << std::endl;
+        std::cout << "\033[91mCache refresh failed.\033[0m" << std::endl;
         std::cout << " " << std::endl;
     }
 }
@@ -619,7 +637,8 @@ void select_and_mount_files_by_number() {
     // Check if the cache is empty
     if (isoFiles.empty()) {
         std::system("clear");
-        std::cout << "\033[93mCache is empty. Please refresh the cache from the main menu.\033[0m" << std::endl;
+        std::cout << "\033[93mISO Cache is empty. Please refresh it from the Menu Options.\033[0m" << std::endl;
+        std::cout << " " << std::endl;
         std::cout << "Press Enter to continue...";
         std::cin.get();
         return;
@@ -642,7 +661,7 @@ void select_and_mount_files_by_number() {
     // Main loop for selecting and mounting ISO files
     while (true) {
         std::system("clear");
-        std::cout << "\033[93m! IF EXPECTED ISO FILE IS NOT ON THE LIST, REFRESH CACHE FROM MAIN MENU !\n\033[0m" << std::endl;
+        std::cout << "\033[93m! IF EXPECTED ISO FILE IS NOT ON THE LIST, REFRESH THE ISO CACHE FROM THE MAIN MENU OPTIONS !\n\033[0m" << std::endl;
         printIsoFileList(isoFiles);
         
 		std::cout << " " << std::endl;
@@ -690,11 +709,20 @@ void select_and_mount_files_by_number() {
     }
 }
 
-
-// Function to print the list of ISO files with their corresponding numbers
+// Function to print ISO file list with filename in green
 void printIsoFileList(const std::vector<std::string>& isoFiles) {
-    for (int i = 0; i < isoFiles.size(); i++) {
-        std::cout << i + 1 << ". " << isoFiles[i] << std::endl;
+
+    for (std::size_t i = 0; i < isoFiles.size(); ++i) {
+        std::cout << std::setw(2) << std::right << i + 1 << ". ";
+
+        // Print the directory part in the default color
+        std::size_t lastSlashPos = isoFiles[i].find_last_of('/');
+        if (lastSlashPos != std::string::npos) {
+            std::cout << isoFiles[i].substr(0, lastSlashPos + 1);
+        }
+
+        // Print the filename part in green
+        std::cout << "\033[1m\033[95m" << isoFiles[i].substr(lastSlashPos + 1) << "\033[0m" << std::endl;
     }
 }
 
@@ -794,7 +822,7 @@ void processInputMultithreaded(const std::string& input, const std::vector<std::
     // Display errors at the end
     if (invalidInput) {
         for (const auto& errorMsg : errorMessages) {
-            std::cerr << errorMsg << std::endl;
+            std::cerr << "\033[93m" << errorMsg << "\033[0m" << std::endl;
         }
     }
 }
@@ -876,7 +904,7 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
         }
     } catch (const std::filesystem::filesystem_error& e) {
         // Handle filesystem errors and print an error message
-        std::cerr << "Error: " << e.what() << std::endl;
+        std::cerr << "\033[93m" << e.what() << "\033[0m" << std::endl;
     }
 }
 
@@ -930,14 +958,14 @@ void listMountedISOs() {
         closedir(dir);
     } else {
         // Print an error message if there is an issue opening the /mnt directory
-        std::cerr << "Error opening the /mnt directory." << std::endl;
+        std::cerr << "\033[93mError opening the /mnt directory.\033[0m" << std::endl;
     }
 
     // Display a list of mounted ISOs with ISO names in bold and magenta text
     if (!isoDirs.empty()) {
         std::cout << "\033[37;1mList of mounted ISO(s):\033[0m" << std::endl; // White and bold
         for (size_t i = 0; i < isoDirs.size(); ++i) {
-            std::cout << i + 1 << ". \033[1m\033[35m" << isoDirs[i] << "\033[0m" << std::endl; // Bold and magenta
+            std::cout << i + 1 << ". \033[1m\033[95m" << isoDirs[i] << "\033[0m" << std::endl; // Bold and magenta
         }
     } else {
         // Print a message if no ISOs are mounted
@@ -1115,7 +1143,7 @@ void unmountISOs() {
         
         // Print error messages
         for (const auto& errorMessage : errorMessages) {
-            std::cerr << errorMessage << std::endl;
+            std::cerr << "\033[93m" << errorMessage << "\033[0m" << std::endl;
         }
 
         auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
