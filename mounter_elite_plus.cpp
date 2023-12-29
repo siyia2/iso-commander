@@ -1006,7 +1006,7 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
         }
     } catch (const std::filesystem::filesystem_error& e) {
         // Handle filesystem errors and print an error message
-        std::cerr << "\033[93m" << e.what() << "\033[0m" << std::endl;
+        std::cerr << "\033[91m" << e.what() << "\033[0m" << std::endl;
     }
 }
 

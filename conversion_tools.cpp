@@ -114,7 +114,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
 					printedEmptyLine = true;
 				}
 					if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
-					std::cerr << "\033[91mInvalid directory path: " << path << ". Excluded from search." << "\033[0m" << std::endl;
+					std::cerr << "\033[91mInvalid directory path: '" << path << "'. Excluded from search." << "\033[0m" << std::endl;
 					// Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
 					cachedInvalidPaths.push_back(path);
             }
@@ -128,7 +128,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
 		printedEmptyLine = true;
 	}
         // Handle filesystem errors for the overall operation
-        std::cerr << "\033[91mFilesystem error: " << e.what() << "\033[0m" << std::endl;
+        std::cerr << "\033[91mFilesystem error: '" << e.what() << "'\033[0m" << std::endl;
         std::cin.ignore();
     }
 
@@ -539,7 +539,7 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
 				}				
                 // Handle filesystem errors for the current directory
                 if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
-                    std::cerr << "\033[91mInvalid directory path: " << path << ". Excluded from search." << "\033[0m" << std::endl;
+                    std::cerr << "\033[91mInvalid directory path: '" << path << "'. Excluded from search." << "\033[0m" << std::endl;
                     // Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
                     cachedInvalidPaths.push_back(path);
                 }
@@ -552,7 +552,7 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
 		printedEmptyLine = true;
 	}
         // Handle filesystem errors for the overall operation
-        std::cerr << "\033[91mFilesystem error: " << e.what() << "\033[0m" << std::endl;
+        std::cerr << "\033[91mFilesystem error: '" << e.what() << "'\033[0m" << std::endl;
         std::cin.ignore();
     }
 
