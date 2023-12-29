@@ -26,8 +26,8 @@
 // BIN/IMG CONVERSION
 std::string chooseFileToConvert(const std::vector<std::string>& files);
 std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback);
-void convertBINToISO(const std::string& inputPath);
 void convertBINsToISOs(const std::vector<std::string>& inputPaths, int numThreads);
+void processUserInputsConcurrently(const std::vector<std::string>& inputs, int maxIndex,std::vector<std::vector<int>>& allSelectedFileIndices, std::vector<std::vector<std::string>>& allErrorMessages);
 void processFilesInRange(int start, int end);
 void convertBINsToISOs();
 void select_and_convert_files_to_iso();
@@ -39,6 +39,7 @@ void printFileListBin(const std::vector<std::string>& fileList);
 std::vector<std::string> getSelectedFiles(const std::vector<int>& selectedIndices, const std::vector<std::string>& fileList);
 std::pair<std::vector<int>, std::vector<std::string>> parseUserInput(const std::string& input, int maxIndex);
 std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback);
+std::vector<std::future<std::pair<std::vector<int>, std::vector<std::string>>>> parseUserInputMultithreaded(const std::vector<std::string>& inputs, int maxIndex);
 void convertMDFToISO(const std::string& inputPath);
 void convertMDFsToISOs(const std::vector<std::string>& inputPaths);
 void processMDFFilesInRange(int start, int end);

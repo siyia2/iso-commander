@@ -27,6 +27,7 @@ bool isDirectoryEmpty(const std::string& path);
 bool iequals(std::string_view a, std::string_view b);
 bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles);
 bool fileExists(const std::string& path);
+bool parallelFileExistsOnDisk(const std::vector<std::string>& filenames);
 bool ends_with_iso(const std::string& str);
 bool isNumeric(const std::string& str);
 bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize);
@@ -51,9 +52,12 @@ void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& moun
 void processInputMultithreaded(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
 void processPath(const std::string& path, std::vector<std::string>& allIsoFiles);
 
-// stds
+//	stds
 
 std::vector<std::string> vec_concat(const std::vector<std::string>& v1, const std::vector<std::string>& v2);
+std::vector<bool> parallelIsDirectoryEmpty(const std::vector<std::string>& paths);
+std::vector<bool> parallelIsNumeric(const std::vector<std::string>& strings);
+std::vector<bool> parallelEndsWithIso(const std::vector<std::string>& strings);
 std::string getHomeDirectory();
 std::vector<std::string> loadCache();
 
@@ -189,6 +193,7 @@ bool fileExists(const std::string& path) {
     return (stat(path.c_str(), &buffer) == 0);
 }
 
+
 // Function to remove non existent paths from cache
 void removeNonExistentPathsFromCacheWithOpenMP() {
     // Define the path to the cache file
@@ -297,10 +302,22 @@ std::vector<std::string> loadCache() {
 }
 
 
-// Function to check if a file or directory exists
+// Function to check if a file or directory exists using OpenMP
 bool exists(const std::filesystem::path& path) {
-    return std::filesystem::exists(path);
+    bool result = false;
+
+    #pragma omp parallel for
+    for (int i = 0; i < omp_get_max_threads(); ++i) {
+        // Each thread checks the existence independently
+        if (std::filesystem::exists(path)) {
+            #pragma omp atomic write
+            result = true;
+        }
+    }
+
+    return result;
 }
+
 
 // Save cache
 bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize) {
@@ -309,6 +326,7 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
 
     // Check if cache directory exists
     if (!exists(cacheDirectory) || !std::filesystem::is_directory(cacheDirectory)) {
+		std::cout << " " << std::endl;
         std::cerr << "\033[91mInvalid cache directory.\033[0m" << std::endl;
         return false;  // Cache save failed
     }
@@ -339,11 +357,13 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
             cacheFile.close();
             return true;  // Cache save successful
         } else {
+			std::cout << " " << std::endl;
             std::cerr << "\033[91mFailed to write to cache file.\033[0m" << std::endl;
             cacheFile.close();
             return false;  // Cache save failed
         }
     } else {
+		std::cout << " " << std::endl;
         std::cerr << "\033[91mInsufficient read/write permissions.\033[0m" << std::endl;
         return false;  // Cache save failed
     }
@@ -368,7 +388,7 @@ bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles) 
 
 // Function to refresh the cache for a single directory
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles) {
-	std::cout << "\033[93mProcessing directory path: '" << path << "'\033[0m" << std::endl;
+	std::cout << "\033[93mProcessing directory path: '" << path << "'.\033[0m" << std::endl;
     std::vector<std::string> newIsoFiles;
     
     // Perform the cache refresh for the directory (e.g., using parallelTraverse)
@@ -380,14 +400,30 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
     // Append the new entries to the shared vector
     allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
     
-    std::cout << "\033[92mProcessed directory path: '" << path << "'\033[0m" << std::endl;
+    std::cout << "\033[92mProcessed directory path: '" << path << "'.\033[0m" << std::endl;
 }
 
 
-// Function to check if a directory is valid
+// Function to check if a directory is valid using OpenMP
 bool isValidDirectory(const std::string& path) {
-    return std::filesystem::is_directory(path);
+    bool result = false;
+
+    #pragma omp parallel shared(result)
+    {
+        #pragma omp for
+        for (int i = 0; i < omp_get_max_threads(); ++i) {
+            if (std::filesystem::is_directory(path)) {
+                #pragma omp critical
+                {
+                    result = true;
+                }
+            }
+        }
+    }
+
+    return result;
 }
+
 
 // Function for manual cache refresh
 void manualRefreshCache() {
@@ -396,7 +432,6 @@ void manualRefreshCache() {
 
     // Prompt the user to enter directory paths for manual cache refresh
     std::string inputLine = readInputLine("\033[94mEnter the directory path(s) from which to populate the \033[1m\033[92mISO Cache\033[94m (if many, separate them with \033[1m\033[93m;\033[0m\033[94m), or press Enter to cancel:\n\033[0m");
-    std::cout << " " << std::endl;
 
     // Check if the user canceled the cache refresh
     if (inputLine.empty()) {
@@ -436,13 +471,19 @@ void manualRefreshCache() {
             }
         }
     }
-
+    
+    // Check if any invalid paths were encountered and add a gap
+	if (!invalidPaths.empty()) {
+		
+    std::cout << " " << std::endl;
+    
+    }
+    	
     // Print invalid paths
     for (const auto& invalidPath : invalidPaths) {
         std::cout << invalidPath << std::endl;
     }
-    std::cout << " " << std::endl;
-
+	std::cout << " " << std::endl;
     // Start the timer
     auto start_time = std::chrono::high_resolution_clock::now();
 
@@ -491,10 +532,20 @@ void manualRefreshCache() {
 
 //	MOUNT STUFF	\\
 
-// Function to check if a directory exists at the specified path
+// Function to check if a directory exists at the specified path using OpenMP
 bool directoryExists(const std::string& path) {
-    // Use the std::filesystem::is_directory function to check if the path is a directory
-    return std::filesystem::is_directory(path);
+    bool result = false;
+
+    #pragma omp parallel for
+    for (int i = 0; i < omp_get_max_threads(); ++i) {
+        // Each thread checks the existence independently
+        if (std::filesystem::is_directory(path)) {
+            #pragma omp atomic write
+            result = true;
+        }
+    }
+
+    return result;
 }
 
 
@@ -595,6 +646,24 @@ bool fileExistsOnDisk(const std::string& filename) {
 }
 
 
+// Function to check file existence using multiple threads
+bool parallelFileExistsOnDisk(const std::vector<std::string>& filenames) {
+    bool exists = true;
+
+    // Parallelize the file existence check using OpenMP
+    #pragma omp parallel for reduction(&&:exists) num_threads(omp_get_max_threads())
+    for (int i = 0; i < static_cast<int>(filenames.size()); ++i) {
+        if (!fileExistsOnDisk(filenames[i])) {
+            // If any file does not exist, set the exists flag to false
+            #pragma omp atomic write
+            exists = false;
+        }
+    }
+
+    return exists;
+}
+
+
 // Function to check if a string ends with ".iso" (case-insensitive)
 bool ends_with_iso(const std::string& str) {
     // Convert the string to lowercase for a case-insensitive comparison
@@ -603,6 +672,20 @@ bool ends_with_iso(const std::string& str) {
 
     // Check if the lowercase string ends with ".iso"
     return lowercase.size() >= 4 && lowercase.compare(lowercase.size() - 4, 4, ".iso") == 0;
+}
+
+
+// Function to check if multiple strings end with ".iso" using multiple threads
+std::vector<bool> parallelEndsWithIso(const std::vector<std::string>& strings) {
+    std::vector<bool> results(strings.size(), false);
+
+    // Parallelize the ends_with_iso check using OpenMP
+    #pragma omp parallel for num_threads(omp_get_max_threads())
+    for (int i = 0; i < static_cast<int>(strings.size()); ++i) {
+        results[i] = ends_with_iso(strings[i]);
+    }
+
+    return results;
 }
 
 
@@ -661,7 +744,7 @@ void select_and_mount_files_by_number() {
     // Main loop for selecting and mounting ISO files
     while (true) {
         std::system("clear");
-        std::cout << "\033[93m! IF EXPECTED ISO FILE IS NOT ON THE LIST, REFRESH THE ISO CACHE FROM THE MAIN MENU OPTIONS !\n\033[0m" << std::endl;
+        std::cout << "\033[93m! IF EXPECTED ISO FILE IS NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\n\033[0m" << std::endl;
         printIsoFileList(isoFiles);
         
 		std::cout << " " << std::endl;
@@ -709,6 +792,7 @@ void select_and_mount_files_by_number() {
     }
 }
 
+
 // Function to print ISO file list with filename in green
 void printIsoFileList(const std::vector<std::string>& isoFiles) {
 
@@ -721,7 +805,7 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
             std::cout << isoFiles[i].substr(0, lastSlashPos + 1);
         }
 
-        // Print the filename part in green
+        // Print the filename part in magenta and bold
         std::cout << "\033[1m\033[95m" << isoFiles[i].substr(lastSlashPos + 1) << "\033[0m" << std::endl;
     }
 }
@@ -744,6 +828,7 @@ void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& moun
     }
 }
 
+
 // Function to check if a string is numeric
 bool isNumeric(const std::string& str) {
     for (char c : str) {
@@ -752,6 +837,20 @@ bool isNumeric(const std::string& str) {
         }
     }
     return true;
+}
+
+
+// Function to check if multiple strings are numeric using multiple threads
+std::vector<bool> parallelIsNumeric(const std::vector<std::string>& strings) {
+    std::vector<bool> results(strings.size(), false);
+
+    // Parallelize the isNumeric check using OpenMP
+    #pragma omp parallel for num_threads(omp_get_max_threads())
+    for (int i = 0; i < static_cast<int>(strings.size()); ++i) {
+        results[i] = isNumeric(strings[i]);
+    }
+
+    return results;
 }
 
 
@@ -775,18 +874,18 @@ void processInputMultithreaded(const std::string& input, const std::vector<std::
             } catch (const std::invalid_argument& e) {
                 // Handle the exception for invalid input
                 invalidInput = true;
-                errorMessages.push_back("\033[91mInvalid input: " + token + ".\033[0m");
+                errorMessages.push_back("\033[91mInvalid input: '" + token + "'.\033[0m");
                 continue;
             } catch (const std::out_of_range& e) {
                 // Handle the exception for out-of-range input
                 invalidInput = true;
-                errorMessages.push_back("\033[91mInvalid range: " + token + ". Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
+                errorMessages.push_back("\033[91mInvalid range: '" + token + "'. Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
                 continue;
             }
 
             if (start > end || start < 1 || static_cast<size_t>(end) > isoFiles.size()) {
                 invalidInput = true;
-                errorMessages.push_back("\033[91mInvalid range: " + std::to_string(start) + "-" + std::to_string(end) + ". Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
+                errorMessages.push_back("\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
                 continue;
             }
 
@@ -796,7 +895,7 @@ void processInputMultithreaded(const std::string& input, const std::vector<std::
                     futures.emplace_back(std::async(std::launch::async, handleIsoFile, isoFiles[i - 1], std::ref(mountedSet)));
                 } else {
                     invalidInput = true;
-                    errorMessages.push_back("\033[91mFile index " + std::to_string(i) + ", does not exist.\033[0m");
+                    errorMessages.push_back("\033[91mFile index '" + std::to_string(i) + "' does not exist.\033[0m");
                 }
             }
         } else if (isNumeric(token)) {
@@ -806,11 +905,11 @@ void processInputMultithreaded(const std::string& input, const std::vector<std::
                 futures.emplace_back(std::async(std::launch::async, handleIsoFile, isoFiles[num - 1], std::ref(mountedSet)));
             } else {
                 invalidInput = true;
-                errorMessages.push_back("\033[91mFile index " + std::to_string(num) + ", does not exist.\033[0m");
+                errorMessages.push_back("\033[91mFile index '" + std::to_string(num) + "' does not exist.\033[0m");
             }
         } else {
             invalidInput = true;
-            errorMessages.push_back("\033[91mInvalid input: " + token + ".\033[0m");
+            errorMessages.push_back("\033[91mInvalid input: '" + token + "'.\033[0m");
         }
     }
 
@@ -827,15 +926,18 @@ void processInputMultithreaded(const std::string& input, const std::vector<std::
     }
 }
 
+
 // Function to print a message indicating that the ISO file is already mounted
 void printAlreadyMountedMessage(const std::string& iso) {
     std::cout << "\033[93mISO file '" << iso << "' is already mounted.\033[0m" << std::endl;
 }
 
+
 // Function to display an error message when the ISO file does not exist on disk
 void displayErrorMessage(const std::string& iso) {
     std::cout << "\033[35mISO file '" << iso << "' does not exist on disk. Please return and re-enter the mount function, or refresh the cache from the main menu.\033[0m" << std::endl;
 }
+
 
 // Function to perform case-insensitive string comparison
 bool iequals(std::string_view a, std::string_view b) {
@@ -848,7 +950,7 @@ bool iequals(std::string_view a, std::string_view b) {
     bool equal = true;
 
     // Use OpenMP to parallelize the loop for case-insensitive comparison
-    #pragma omp parallel for reduction(&&:equal)
+    #pragma omp parallel for reduction(&&:equal) num_threads(omp_get_max_threads())
     for (std::size_t i = 0; i < a.size(); ++i) {
         // Check if characters are not equal (case-insensitive)
         if (std::tolower(a[i]) != std::tolower(b[i])) {
@@ -974,11 +1076,26 @@ void listMountedISOs() {
 }
 
 
+// Function to check if a directory is empty
 bool isDirectoryEmpty(const std::string& path) {
     std::string checkEmptyCommand = "sudo find " + shell_escape(path) + " -mindepth 1 -maxdepth 1 -print -quit | grep -q .";
     int result = system(checkEmptyCommand.c_str());
     return result != 0; // If result is 0, directory is empty; otherwise, it's not empty
 }
+
+// Function to check if multiple directories are empty using multiple threads
+std::vector<bool> parallelIsDirectoryEmpty(const std::vector<std::string>& paths) {
+    std::vector<bool> results(paths.size(), false);
+
+    // Parallelize the isDirectoryEmpty check using OpenMP
+    #pragma omp parallel for num_threads(omp_get_max_threads())
+    for (int i = 0; i < static_cast<int>(paths.size()); ++i) {
+        results[i] = isDirectoryEmpty(paths[i]);
+    }
+
+    return results;
+}
+
 
 void unmountISO(const std::string& isoDir) {
     // Construct the unmount command with sudo, umount, and suppressing logs
@@ -1090,7 +1207,7 @@ void unmountISOs() {
 
                 } else {
                     // Store the error message
-                    errorMessages.push_back("\033[91mFile index " + std::to_string(number) + ", does not exist.\033[0m");
+                    errorMessages.push_back("\033[91mFile index '" + std::to_string(number) + "' does not exist.\033[0m");
                 }
             } else if (std::regex_match(token, std::regex("^(\\d+)-(\\d+)$"))) {
                 // Range input (e.g., "1-3")
@@ -1108,11 +1225,11 @@ void unmountISOs() {
                     }
                 } else {
                     // Store the error message
-                    errorMessages.push_back("\033[91mInvalid range: " + std::to_string(startRange) + "-" + std::to_string(endRange) + ". Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
+                    errorMessages.push_back("\033[91mInvalid range: '" + std::to_string(startRange) + "-" + std::to_string(endRange) + "'. Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
                 }
             } else {
                 // Store the error message for invalid input format
-                errorMessages.push_back("\033[91mInvalid input: " + token + ".\033[0m");
+                errorMessages.push_back("\033[91mInvalid input: '" + token + "'.\033[0m");
             }
 
         }
