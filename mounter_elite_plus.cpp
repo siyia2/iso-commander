@@ -721,7 +721,7 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
             std::cout << isoFiles[i].substr(0, lastSlashPos + 1);
         }
 
-        // Print the filename part in green
+        // Print the filename part in magenta and bold
         std::cout << "\033[1m\033[95m" << isoFiles[i].substr(lastSlashPos + 1) << "\033[0m" << std::endl;
     }
 }

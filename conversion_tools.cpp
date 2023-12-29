@@ -5,6 +5,8 @@
 static std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles here
 static std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
 
+std::vector<std::string> binImgFiles; // binImgFiles here
+
 std::mutex mdfFilesMutex; // Mutex to protect access to mdfImgFiles
 std::mutex binImgFilesMutex; // Mutex to protect access to binImgFiles
 
@@ -225,9 +227,6 @@ void convertBINsToISOs(const std::vector<std::string>& inputPaths, int numThread
 
 // Function to process a range of files and convert them to ISO format
 void processFilesInRange(int start, int end) {
-    // Get a list of BIN/IMG files
-    std::vector<std::string> binImgFiles;
-
     // Determine the number of threads based on CPU cores fallback is 2 threads
     int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
@@ -246,8 +245,22 @@ void processFilesInRange(int start, int end) {
         escapedSelectedFiles.push_back(shell_escape(file));
     }
 
-    // Call convertBINsToISOs with shell-escaped file paths
-    convertBINsToISOs(escapedSelectedFiles, numThreads);
+    // Divide the work among threads
+    std::vector<std::thread> threads;
+    size_t filesPerThread = escapedSelectedFiles.size() / numThreads;
+    for (int i = 0; i < numThreads; ++i) {
+        size_t startIdx = i * filesPerThread;
+        size_t endIdx = (i == numThreads - 1) ? escapedSelectedFiles.size() : (i + 1) * filesPerThread;
+        std::vector<std::string> threadFiles(escapedSelectedFiles.begin() + startIdx, escapedSelectedFiles.begin() + endIdx);
+        threads.emplace_back([threadFiles, numThreads]() {
+            convertBINsToISOs(threadFiles, numThreads);
+        });
+    }
+
+    // Wait for all threads to finish
+    for (auto& thread : threads) {
+        thread.join();
+    }
 }
 
 
@@ -331,11 +344,26 @@ void select_and_convert_files_to_iso() {
 }
 
 
-// Function to print the list of BIN/IMG files
 void printFileListBin(const std::vector<std::string>& fileList) {
-	std::cout << "Select file(s) to convert to \033[1m\033[92mISO(s)\033[0m:\n";
-    for (int i = 0; i < fileList.size(); i++) {
-        std::cout << i + 1 << ". " << fileList[i] << std::endl;
+    std::cout << "Select file(s) to convert to \033[1m\033[92mISO(s)\033[0m:\n";
+
+    for (std::size_t i = 0; i < fileList.size(); ++i) {
+        std::string filename = fileList[i];
+        std::size_t lastSlashPos = filename.find_last_of('/');
+        std::string path = (lastSlashPos != std::string::npos) ? filename.substr(0, lastSlashPos + 1) : "";
+        std::string fileNameOnly = (lastSlashPos != std::string::npos) ? filename.substr(lastSlashPos + 1) : filename;
+
+        std::size_t dotPos = fileNameOnly.find_last_of('.');
+
+        // Check if the file has a ".img" or ".bin" extension
+        if (dotPos != std::string::npos &&
+            (fileNameOnly.substr(dotPos) == ".img" || fileNameOnly.substr(dotPos) == ".bin")) {
+            // Print path in white and filename in green and bold
+            std::cout << std::setw(2) << std::right << i + 1 << ". \033[0m" << path << "\033[1m\033[38;5;208m" << fileNameOnly << "\033[0m" << std::endl;
+        } else {
+            // Print entire path and filename in white
+            std::cout << std::setw(2) << std::right << i + 1 << ". \033[0m" << filename << std::endl;
+        }
     }
 }
 
@@ -776,14 +804,27 @@ void select_and_convert_files_to_iso_mdf() {
 }
 
 
-// Function to print the list of MDF files with their corresponding indices
 void printFileListMdf(const std::vector<std::string>& fileList) {
     std::cout << "Select file(s) to convert to \033[1m\033[92mISO(s)\033[0m:\n";
-    for (int i = 0; i < fileList.size(); i++) {
-        std::cout << i + 1 << ". " << fileList[i] << std::endl;
+
+    for (std::size_t i = 0; i < fileList.size(); ++i) {
+        std::string filename = fileList[i];
+        std::size_t lastSlashPos = filename.find_last_of('/');
+        std::string path = (lastSlashPos != std::string::npos) ? filename.substr(0, lastSlashPos + 1) : "";
+        std::string fileNameOnly = (lastSlashPos != std::string::npos) ? filename.substr(lastSlashPos + 1) : filename;
+
+        std::size_t dotPos = fileNameOnly.find_last_of('.');
+
+        // Check if the file has a ".mdf" extension
+        if (dotPos != std::string::npos && fileNameOnly.substr(dotPos) == ".mdf") {
+            // Print path in white and filename in orange and bold
+            std::cout << std::setw(2) << std::right << i + 1 << ". \033[0m" << path << "\033[1m\033[38;5;208m" << fileNameOnly << "\033[0m" << std::endl;
+        } else {
+            // Print entire path and filename in white
+            std::cout << std::setw(2) << std::right << i + 1 << ". \033[0m" << filename << std::endl;
+        }
     }
 }
-
 
 // Function to parse user input and extract selected file indices and errors
 std::pair<std::vector<int>, std::vector<std::string>> parseUserInput(const std::string& input, int maxIndex) {
@@ -857,6 +898,45 @@ std::pair<std::vector<int>, std::vector<std::string>> parseUserInput(const std::
     }
 
     return {selectedFileIndices, errorMessages};
+}
+
+// Multithreaded function to parse user input and extract selected file indices and errors
+std::vector<std::future<std::pair<std::vector<int>, std::vector<std::string>>>> parseUserInputMultithreaded(const std::vector<std::string>& inputs, int maxIndex) {
+
+    std::vector<std::future<std::pair<std::vector<int>, std::vector<std::string>>>> futures;
+
+    // Use std::async to perform user input parsing concurrently
+    for (const auto& input : inputs) {
+        futures.push_back(std::async(std::launch::async, parseUserInput, input, maxIndex));
+    }
+
+    return futures;
+}
+
+// Function to process user inputs concurrently using multiple threads
+void processUserInputsConcurrently(const std::vector<std::string>& inputs, int maxIndex,std::vector<std::vector<int>>& allSelectedFileIndices, std::vector<std::vector<std::string>>& allErrorMessages) {
+    std::vector<std::thread> threads;
+    std::mutex resultMutex;  // Mutex to protect shared result vectors
+
+    // Create threads to process each input
+    for (size_t i = 0; i < inputs.size(); ++i) {
+        threads.emplace_back([&, i]() {
+            // Parse the input for each thread
+            auto [selectedFileIndices, errorMessages] = parseUserInput(inputs[i], maxIndex);
+
+            // Lock the mutex before modifying shared result vectors
+            std::lock_guard<std::mutex> lock(resultMutex);
+            
+            // Store results in shared vectors
+            allSelectedFileIndices[i] = selectedFileIndices;
+            allErrorMessages[i] = errorMessages;
+        });
+    }
+
+    // Wait for all threads to finish
+    for (auto& thread : threads) {
+        thread.join();
+    }
 }
 
 
