@@ -128,7 +128,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
 		printedEmptyLine = true;
 	}
         // Handle filesystem errors for the overall operation
-        std::cerr << "\033[91mFilesystem error: '" << e.what() << "'\033[0m" << std::endl;
+        std::cerr << "\033[91m" << e.what() << "\033[0m" << std::endl;
         std::cin.ignore();
     }
 
@@ -552,7 +552,7 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
 		printedEmptyLine = true;
 	}
         // Handle filesystem errors for the overall operation
-        std::cerr << "\033[91mFilesystem error: '" << e.what() << "'\033[0m" << std::endl;
+        std::cerr << "\033[91m" << e.what() << "\033[0m" << std::endl;
         std::cin.ignore();
     }
 
