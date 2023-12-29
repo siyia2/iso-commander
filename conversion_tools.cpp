@@ -52,6 +52,8 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
 
     // Clear the cachedInvalidPaths before processing a new set of paths
     cachedInvalidPaths.clear();
+    
+    bool printedEmptyLine = false;  // Flag to track if an empty line has been printed
 
     try {
         // Mutex to ensure thread safety
@@ -104,17 +106,27 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
                     future.get();
                 }
                 
-            } catch (const std::filesystem::filesystem_error& e) {
-                // Handle filesystem errors for the current directory
-                if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
-                    std::cerr << "\033[91mInvalid directory path: " << path << ". Excluded from search." << "\033[0m" << std::endl;
-                    // Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
-                    cachedInvalidPaths.push_back(path);
-                }
+				} catch (const std::filesystem::filesystem_error& e) {
+					// Handle filesystem errors for the current directory
+					if (!printedEmptyLine) {
+					// Print an empty line before starting to print invalid paths (only once)
+					std::cout << " " << std::endl;
+					printedEmptyLine = true;
+				}
+					if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
+					std::cerr << "\033[91mInvalid directory path: " << path << ". Excluded from search." << "\033[0m" << std::endl;
+					// Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
+					cachedInvalidPaths.push_back(path);
             }
         }
-        std::cout << " " << std::endl;
+    }
+    
     } catch (const std::filesystem::filesystem_error& e) {
+		if (!printedEmptyLine) {
+		// Print an empty line before starting to print invalid paths (only once)
+		std::cout << " " << std::endl;
+		printedEmptyLine = true;
+	}
         // Handle filesystem errors for the overall operation
         std::cerr << "\033[91mFilesystem error: " << e.what() << "\033[0m" << std::endl;
         std::cin.ignore();
@@ -122,6 +134,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
 
     // Print success message if files were found
     if (!fileNames.empty()) {
+		std::cout << " " << std::endl;
         std::cout << "\033[92mFound " << fileNames.size() << " matching file(s)\033[0m" << ".\033[93m " << binImgFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0m"<< std::endl;
         std::cout << " " << std::endl;
         std::cout << "Press enter to continue...";
@@ -288,12 +301,11 @@ void select_and_convert_files_to_iso() {
             directoryPaths.push_back(path.substr(start, end - start + 1));
         }
     }
-
+	
     // Check if directoryPaths is empty
     if (directoryPaths.empty()) {
         return;
     }
-    std::cout << " " << std::endl;
     // Flag to check if new files are found
 	bool newFilesFound = false;
 
@@ -305,6 +317,7 @@ void select_and_convert_files_to_iso() {
 
 	// Print a message only if no new files are found
 	if (!newFilesFound && !binImgFiles.empty()) {
+		std::cout << " " << std::endl;
 		std::cout << "\033[91mNo new .bin .img file(s) over 10MB found. \033[92m" << binImgFiles.size() << " matching file(s) cached in RAM from previous searches.\033[0m" << std::endl;
 		std::cout << " " << std::endl;
 		std::cout << "Press enter to continue...";
@@ -312,6 +325,7 @@ void select_and_convert_files_to_iso() {
 	}
 
     if (binImgFiles.empty()) {
+		std::cout << " " << std::endl;
         std::cout << "\033[91mNo .bin or .img file(s) over 10MB found in the specified path(s) or cached in RAM.\n\033[0m";
         std::cout << " " << std::endl;
         std::cout << "Press enter to continue...";
@@ -464,6 +478,8 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
 
     // Clear the cachedInvalidPaths before processing a new set of paths
     cachedInvalidPaths.clear();
+    
+    bool printedEmptyLine = false;  // Flag to track if an empty line has been printed
 
     try {
         // Mutex to ensure thread safety
@@ -516,6 +532,11 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                     future.get();
                 }
             } catch (const std::filesystem::filesystem_error& e) {
+				if (!printedEmptyLine) {
+					// Print an empty line before starting to print invalid paths (only once)
+					std::cout << " " << std::endl;
+					printedEmptyLine = true;
+				}				
                 // Handle filesystem errors for the current directory
                 if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
                     std::cerr << "\033[91mInvalid directory path: " << path << ". Excluded from search." << "\033[0m" << std::endl;
@@ -524,8 +545,12 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                 }
             }
         }
-        std::cout << " " << std::endl;
     } catch (const std::filesystem::filesystem_error& e) {
+		if (!printedEmptyLine) {
+		// Print an empty line before starting to print invalid paths (only once)
+		std::cout << " " << std::endl;
+		printedEmptyLine = true;
+	}
         // Handle filesystem errors for the overall operation
         std::cerr << "\033[91mFilesystem error: " << e.what() << "\033[0m" << std::endl;
         std::cin.ignore();
@@ -533,6 +558,7 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
 
     // Print success message if files were found
     if (!fileNames.empty()) {
+		std::cout << " " << std::endl;
         std::cout << "\033[92mFound " << fileNames.size() << " matching file(s)\033[0m" << ".\033[93m " << mdfMdsFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0m"<< std::endl;
         std::cout << " " << std::endl;
         std::cout << "Press enter to continue...";
@@ -730,7 +756,6 @@ void select_and_convert_files_to_iso_mdf() {
     if (directoryPaths.empty()) {
         return;
     }
-	std::cout << " " << std::endl;
     // Flag to check if new .mdf files are found
 	bool newMdfFilesFound = false;
 
@@ -741,6 +766,7 @@ void select_and_convert_files_to_iso_mdf() {
 	
 	// Print a message only if no new .mdf files are found
 	if (!newMdfFilesFound && !mdfMdsFiles.empty()) {
+		std::cout << " " << std::endl;
 		std::cout << "\033[91mNo new .mdf file(s) over 10MB found. \033[92m" << mdfMdsFilesCache.size() << " file(s) cached in RAM from previous searches.\033[0m" << std::endl;
 		std::cout << " " << std::endl;
 		std::cout << "Press enter to continue...";
@@ -748,6 +774,7 @@ void select_and_convert_files_to_iso_mdf() {
 	}
 	
     if (mdfMdsFiles.empty()) {
+		std::cout << " " << std::endl;
         std::cout << "\033[91mNo .mdf file(s) over 10MB found in the specified path(s) or cached in RAM.\n\033[0m";
         std::cout << " " << std::endl;
 		std::cout << "Press enter to continue...";
