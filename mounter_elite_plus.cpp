@@ -52,7 +52,7 @@ void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& moun
 void processInputMultithreaded(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
 void processPath(const std::string& path, std::vector<std::string>& allIsoFiles);
 
-// stds
+//	stds
 
 std::vector<std::string> vec_concat(const std::vector<std::string>& v1, const std::vector<std::string>& v2);
 std::vector<bool> parallelIsDirectoryEmpty(const std::vector<std::string>& paths);
