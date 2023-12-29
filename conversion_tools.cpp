@@ -103,6 +103,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
                 for (auto& future : futures) {
                     future.get();
                 }
+                
             } catch (const std::filesystem::filesystem_error& e) {
                 // Handle filesystem errors for the current directory
                 if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
@@ -112,6 +113,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
                 }
             }
         }
+        std::cout << " " << std::endl;
     } catch (const std::filesystem::filesystem_error& e) {
         // Handle filesystem errors for the overall operation
         std::cerr << "\033[91mFilesystem error: " << e.what() << "\033[0m" << std::endl;
@@ -120,8 +122,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
 
     // Print success message if files were found
     if (!fileNames.empty()) {
-        std::cout << " " << std::endl;
-        std::cout << "\033[92mSearch successful. Found " << fileNames.size() << " matching file(s)\033[0m" << ".\033[93m " << binImgFilesCache.size() << " cached in RAM from previous searches.\033[0m"<< std::endl;
+        std::cout << "\033[92mFound " << fileNames.size() << " matching file(s)\033[0m" << ".\033[93m " << binImgFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0m"<< std::endl;
         std::cout << " " << std::endl;
         std::cout << "Press enter to continue...";
         std::cin.ignore();
@@ -292,7 +293,7 @@ void select_and_convert_files_to_iso() {
     if (directoryPaths.empty()) {
         return;
     }
-	std::cout << " " << std::endl;
+    std::cout << " " << std::endl;
     // Flag to check if new files are found
 	bool newFilesFound = false;
 
@@ -304,15 +305,13 @@ void select_and_convert_files_to_iso() {
 
 	// Print a message only if no new files are found
 	if (!newFilesFound && !binImgFiles.empty()) {
-		std::cout << " " << std::endl;
-		std::cout << "\033[91mNo new .bin .img file(s) over 10MB found, \033[92mbut " << binImgFiles.size() << " file(s) already cached in RAM.\033[0m" << std::endl;
+		std::cout << "\033[91mNo new .bin .img file(s) over 10MB found. \033[92m" << binImgFiles.size() << " matching file(s) cached in RAM from previous searches.\033[0m" << std::endl;
 		std::cout << " " << std::endl;
 		std::cout << "Press enter to continue...";
 		std::cin.ignore();
 	}
 
     if (binImgFiles.empty()) {
-		std::cout << " " << std::endl;
         std::cout << "\033[91mNo .bin or .img file(s) over 10MB found in the specified path(s) or cached in RAM.\n\033[0m";
         std::cout << " " << std::endl;
         std::cout << "Press enter to continue...";
@@ -525,6 +524,7 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                 }
             }
         }
+        std::cout << " " << std::endl;
     } catch (const std::filesystem::filesystem_error& e) {
         // Handle filesystem errors for the overall operation
         std::cerr << "\033[91mFilesystem error: " << e.what() << "\033[0m" << std::endl;
@@ -533,8 +533,7 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
 
     // Print success message if files were found
     if (!fileNames.empty()) {
-        std::cout << " " << std::endl;
-        std::cout << "\033[92mSearch successful. Found " << fileNames.size() << " matching file(s)\033[0m" << ".\033[93m " << mdfMdsFilesCache.size() << " cached in RAM from previous searches.\033[0m"<< std::endl;
+        std::cout << "\033[92mFound " << fileNames.size() << " matching file(s)\033[0m" << ".\033[93m " << mdfMdsFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0m"<< std::endl;
         std::cout << " " << std::endl;
         std::cout << "Press enter to continue...";
         std::cin.ignore();
@@ -742,15 +741,13 @@ void select_and_convert_files_to_iso_mdf() {
 	
 	// Print a message only if no new .mdf files are found
 	if (!newMdfFilesFound && !mdfMdsFiles.empty()) {
-		std::cout << " " << std::endl;
-		std::cout << "\033[91mNo new .mdf file(s) over 10MB found, \033[92mbut " << mdfMdsFilesCache.size() << " file(s) already cached in RAM.\033[0m" << std::endl;
+		std::cout << "\033[91mNo new .mdf file(s) over 10MB found. \033[92m" << mdfMdsFilesCache.size() << " file(s) cached in RAM from previous searches.\033[0m" << std::endl;
 		std::cout << " " << std::endl;
 		std::cout << "Press enter to continue...";
 		std::cin.ignore();
 	}
 	
     if (mdfMdsFiles.empty()) {
-		std::cout << " " << std::endl;
         std::cout << "\033[91mNo .mdf file(s) over 10MB found in the specified path(s) or cached in RAM.\n\033[0m";
         std::cout << " " << std::endl;
 		std::cout << "Press enter to continue...";
