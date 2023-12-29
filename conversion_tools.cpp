@@ -422,13 +422,13 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                                 processedIndices.insert(selectedIndex);
                             } else {
                                 // Report an error if the index is out of range
-                                errorMessages.push_back("\033[91mFile index " + std::to_string(i) + " does not exist.\033[0m");
+                                errorMessages.push_back("\033[91mFile index '" + std::to_string(i) + "' does not exist.\033[0m");
                             }
                         }
                     }
                 } else {
                     // Report an error for an invalid range
-                    errorMessages.push_back("\033[91mInvalid range: " + std::to_string(start) + "-" + std::to_string(end) + ". Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
+                    errorMessages.push_back("\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
                 }
             } else if (start >= 1 && start <= fileList.size()) {
                 // Process a single index
@@ -444,19 +444,18 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                         processedIndices.insert(selectedIndex);
                     } else {
                         // Report an error if the index is out of range
-                        errorMessages.push_back("\033[91mFile index " + std::to_string(start) + " does not exist.\033[0m");
+                        errorMessages.push_back("\033[91mFile index '" + std::to_string(start) + "' does not exist.\033[0m");
                     }
                 }
             } else {
                 // Report an error if the index is out of range
-                errorMessages.push_back("\033[91mFile index " + std::to_string(start) + " does not exist.\033[0m");
+                errorMessages.push_back("\033[91mFile index '" + std::to_string(start) + "' does not exist.\033[0m");
             }
         } else {
             // Report an error if the token is not a valid integer
-            errorMessages.push_back("\033[91mInvalid input: " + token + ".\033[0m");
+            errorMessages.push_back("\033[91mInvalid input: '" + token + "'.\033[0m");
         }
     }
-
     // Wait for all threads to finish
     for (auto& thread : threads) {
         thread.join();
@@ -466,6 +465,7 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
     for (const auto& errorMessage : errorMessages) {
         std::cout << errorMessage << std::endl;
     }
+    std::cout << " " << std::endl;
 }
 
 // Function to search for .mdf and .mds files under 10MB
@@ -813,7 +813,7 @@ void select_and_convert_files_to_iso_mdf() {
             for (const auto& errorMessage : errorMessages) {
                 std::cerr << errorMessage << std::endl;
             }
-
+			std::cout << " " << std::endl;
             std::cout << "Press enter to continue...";
             std::cin.ignore();
         } else {
@@ -821,6 +821,7 @@ void select_and_convert_files_to_iso_mdf() {
             for (const auto& errorMessage : errorMessages) {
                 std::cerr << errorMessage << std::endl;
             }
+            std::cout << " " << std::endl;
             std::cout << "Press enter to continue...";
             std::cin.ignore();
         }
@@ -890,7 +891,7 @@ std::pair<std::vector<int>, std::vector<std::string>> parseUserInput(const std::
                     }
                 }
             } else {
-                errorMessages.push_back("\033[91mInvalid range: " + token + ". Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
+                errorMessages.push_back("\033[91mInvalid range: '" + token + "'. Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
             }
         } else {
             // Handle individual numbers (e.g., "1")
@@ -899,10 +900,10 @@ std::pair<std::vector<int>, std::vector<std::string>> parseUserInput(const std::
             try {
                 selectedFileIndex = std::stoi(token);
             } catch (const std::invalid_argument& e) {
-                errorMessages.push_back("\033[91mInvalid input: " + token + ".\033[0m");
+                errorMessages.push_back("\033[91mInvalid input: '" + token + "'.\033[0m");
                 continue;
             } catch (const std::out_of_range& e) {
-                errorMessages.push_back("\033[91mFile index " + token + ", does not exist.\033[0m");
+                errorMessages.push_back("\033[91mFile index '" + token + "', does not exist.\033[0m");
                 continue;
             }
 
@@ -916,7 +917,7 @@ std::pair<std::vector<int>, std::vector<std::string>> parseUserInput(const std::
                     processedIndices.insert(currentIndex);
                 }
             } else {
-                errorMessages.push_back("\033[91mFile index " + token + ", does not exist.\033[0m");
+                errorMessages.push_back("\033[91mFile index '" + token + "', does not exist.\033[0m");
             }
         }
     }

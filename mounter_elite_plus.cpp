@@ -874,18 +874,18 @@ void processInputMultithreaded(const std::string& input, const std::vector<std::
             } catch (const std::invalid_argument& e) {
                 // Handle the exception for invalid input
                 invalidInput = true;
-                errorMessages.push_back("\033[91mInvalid input: " + token + ".\033[0m");
+                errorMessages.push_back("\033[91mInvalid input: '" + token + "'.\033[0m");
                 continue;
             } catch (const std::out_of_range& e) {
                 // Handle the exception for out-of-range input
                 invalidInput = true;
-                errorMessages.push_back("\033[91mInvalid range: " + token + ". Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
+                errorMessages.push_back("\033[91mInvalid range: '" + token + "'. Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
                 continue;
             }
 
             if (start > end || start < 1 || static_cast<size_t>(end) > isoFiles.size()) {
                 invalidInput = true;
-                errorMessages.push_back("\033[91mInvalid range: " + std::to_string(start) + "-" + std::to_string(end) + ". Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
+                errorMessages.push_back("\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
                 continue;
             }
 
@@ -895,7 +895,7 @@ void processInputMultithreaded(const std::string& input, const std::vector<std::
                     futures.emplace_back(std::async(std::launch::async, handleIsoFile, isoFiles[i - 1], std::ref(mountedSet)));
                 } else {
                     invalidInput = true;
-                    errorMessages.push_back("\033[91mFile index " + std::to_string(i) + ", does not exist.\033[0m");
+                    errorMessages.push_back("\033[91mFile index '" + std::to_string(i) + "' does not exist.\033[0m");
                 }
             }
         } else if (isNumeric(token)) {
@@ -905,11 +905,11 @@ void processInputMultithreaded(const std::string& input, const std::vector<std::
                 futures.emplace_back(std::async(std::launch::async, handleIsoFile, isoFiles[num - 1], std::ref(mountedSet)));
             } else {
                 invalidInput = true;
-                errorMessages.push_back("\033[91mFile index " + std::to_string(num) + ", does not exist.\033[0m");
+                errorMessages.push_back("\033[91mFile index '" + std::to_string(num) + "' does not exist.\033[0m");
             }
         } else {
             invalidInput = true;
-            errorMessages.push_back("\033[91mInvalid input: " + token + ".\033[0m");
+            errorMessages.push_back("\033[91mInvalid input: '" + token + "'.\033[0m");
         }
     }
 
@@ -1207,7 +1207,7 @@ void unmountISOs() {
 
                 } else {
                     // Store the error message
-                    errorMessages.push_back("\033[91mFile index " + std::to_string(number) + ", does not exist.\033[0m");
+                    errorMessages.push_back("\033[91mFile index '" + std::to_string(number) + "' does not exist.\033[0m");
                 }
             } else if (std::regex_match(token, std::regex("^(\\d+)-(\\d+)$"))) {
                 // Range input (e.g., "1-3")
@@ -1225,11 +1225,11 @@ void unmountISOs() {
                     }
                 } else {
                     // Store the error message
-                    errorMessages.push_back("\033[91mInvalid range: " + std::to_string(startRange) + "-" + std::to_string(endRange) + ". Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
+                    errorMessages.push_back("\033[91mInvalid range: '" + std::to_string(startRange) + "-" + std::to_string(endRange) + "'. Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
                 }
             } else {
                 // Store the error message for invalid input format
-                errorMessages.push_back("\033[91mInvalid input: " + token + ".\033[0m");
+                errorMessages.push_back("\033[91mInvalid input: '" + token + "'.\033[0m");
             }
 
         }
