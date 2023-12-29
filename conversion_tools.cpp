@@ -2,8 +2,8 @@
 #include "conversion_tools.h"
 
 
-std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles here
-std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
+static std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles here
+static std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
 
 std::mutex mdfFilesMutex; // Mutex to protect access to mdfImgFiles
 std::mutex binImgFilesMutex; // Mutex to protect access to binImgFiles
