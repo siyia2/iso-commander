@@ -193,6 +193,7 @@ bool fileExists(const std::string& path) {
     return (stat(path.c_str(), &buffer) == 0);
 }
 
+
 // Function to remove non existent paths from cache
 void removeNonExistentPathsFromCacheWithOpenMP() {
     // Define the path to the cache file
@@ -423,6 +424,7 @@ bool isValidDirectory(const std::string& path) {
     return result;
 }
 
+
 // Function for manual cache refresh
 void manualRefreshCache() {
     // Clear the console screen
@@ -643,6 +645,7 @@ bool fileExistsOnDisk(const std::string& filename) {
     return file.good();
 }
 
+
 // Function to check file existence using multiple threads
 bool parallelFileExistsOnDisk(const std::vector<std::string>& filenames) {
     bool exists = true;
@@ -670,6 +673,7 @@ bool ends_with_iso(const std::string& str) {
     // Check if the lowercase string ends with ".iso"
     return lowercase.size() >= 4 && lowercase.compare(lowercase.size() - 4, 4, ".iso") == 0;
 }
+
 
 // Function to check if multiple strings end with ".iso" using multiple threads
 std::vector<bool> parallelEndsWithIso(const std::vector<std::string>& strings) {
@@ -788,6 +792,7 @@ void select_and_mount_files_by_number() {
     }
 }
 
+
 // Function to print ISO file list with filename in green
 void printIsoFileList(const std::vector<std::string>& isoFiles) {
 
@@ -822,6 +827,7 @@ void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& moun
         displayErrorMessage(iso);
     }
 }
+
 
 // Function to check if a string is numeric
 bool isNumeric(const std::string& str) {
@@ -920,10 +926,12 @@ void processInputMultithreaded(const std::string& input, const std::vector<std::
     }
 }
 
+
 // Function to print a message indicating that the ISO file is already mounted
 void printAlreadyMountedMessage(const std::string& iso) {
     std::cout << "\033[93mISO file '" << iso << "' is already mounted.\033[0m" << std::endl;
 }
+
 
 // Function to display an error message when the ISO file does not exist on disk
 void displayErrorMessage(const std::string& iso) {
