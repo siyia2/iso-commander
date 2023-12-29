@@ -325,6 +325,7 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
 
     // Check if cache directory exists
     if (!exists(cacheDirectory) || !std::filesystem::is_directory(cacheDirectory)) {
+		std::cout << " " << std::endl;
         std::cerr << "\033[91mInvalid cache directory.\033[0m" << std::endl;
         return false;  // Cache save failed
     }
@@ -355,11 +356,13 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
             cacheFile.close();
             return true;  // Cache save successful
         } else {
+			std::cout << " " << std::endl;
             std::cerr << "\033[91mFailed to write to cache file.\033[0m" << std::endl;
             cacheFile.close();
             return false;  // Cache save failed
         }
     } else {
+		std::cout << " " << std::endl;
         std::cerr << "\033[91mInsufficient read/write permissions.\033[0m" << std::endl;
         return false;  // Cache save failed
     }
@@ -384,7 +387,7 @@ bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles) 
 
 // Function to refresh the cache for a single directory
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles) {
-	std::cout << "\033[93mProcessing directory path: '" << path << "'\033[0m" << std::endl;
+	std::cout << "\033[93mProcessing directory path: '" << path << "'.\033[0m" << std::endl;
     std::vector<std::string> newIsoFiles;
     
     // Perform the cache refresh for the directory (e.g., using parallelTraverse)
@@ -396,7 +399,7 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
     // Append the new entries to the shared vector
     allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
     
-    std::cout << "\033[92mProcessed directory path: '" << path << "'\033[0m" << std::endl;
+    std::cout << "\033[92mProcessed directory path: '" << path << "'.\033[0m" << std::endl;
 }
 
 
@@ -427,7 +430,6 @@ void manualRefreshCache() {
 
     // Prompt the user to enter directory paths for manual cache refresh
     std::string inputLine = readInputLine("\033[94mEnter the directory path(s) from which to populate the \033[1m\033[92mISO Cache\033[94m (if many, separate them with \033[1m\033[93m;\033[0m\033[94m), or press Enter to cancel:\n\033[0m");
-    std::cout << " " << std::endl;
 
     // Check if the user canceled the cache refresh
     if (inputLine.empty()) {
@@ -467,13 +469,19 @@ void manualRefreshCache() {
             }
         }
     }
-
+    
+    // Check if any invalid paths were encountered and add a gap
+	if (!invalidPaths.empty()) {
+		
+    std::cout << " " << std::endl;
+    
+    }
+    	
     // Print invalid paths
     for (const auto& invalidPath : invalidPaths) {
         std::cout << invalidPath << std::endl;
     }
-    std::cout << " " << std::endl;
-
+	std::cout << " " << std::endl;
     // Start the timer
     auto start_time = std::chrono::high_resolution_clock::now();
 
