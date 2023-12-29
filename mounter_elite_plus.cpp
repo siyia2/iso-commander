@@ -720,7 +720,7 @@ void select_and_mount_files_by_number() {
     // Check if the cache is empty
     if (isoFiles.empty()) {
         std::system("clear");
-        std::cout << "\033[93mISO Cache is empty. Please refresh it from the Menu Options.\033[0m" << std::endl;
+        std::cout << "\033[93mISO Cache is empty. Please refresh it from the main Menu Options.\033[0m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "Press Enter to continue...";
         std::cin.get();
@@ -1071,7 +1071,8 @@ void listMountedISOs() {
         }
     } else {
         // Print a message if no ISOs are mounted
-        std::cerr << "\033[91mNo mounted ISO(s) found.\n\033[0m" << std::endl;
+        std::cerr << "\033[91mNo mounted ISO(s) found.\033[0m" << std::endl;
+        std::cout << " " << std::endl;
     }
 }
 
@@ -1150,7 +1151,12 @@ void unmountISOs() {
             std::cin.get(); // Wait for the user to press Enter
             return;
         }
-		std::cout << " " << std::endl;
+        
+        // Check if there are mounted ISOs and add a newline
+        if (!isoDirs.empty()) {
+			std::cout << " " << std::endl;
+		}
+		
         // Prompt for unmounting input
         std::string input = readInputLine("\033[94mChoose ISO(s) to unmount (e.g. '1-3', '1 2', '00' unmounts all, or press Enter to return):\033[0m ");
         std::system("clear");
