@@ -27,6 +27,7 @@ bool isDirectoryEmpty(const std::string& path);
 bool iequals(std::string_view a, std::string_view b);
 bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles);
 bool fileExists(const std::string& path);
+bool parallelFileExistsOnDisk(const std::vector<std::string>& filenames);
 bool ends_with_iso(const std::string& str);
 bool isNumeric(const std::string& str);
 bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize);
@@ -54,6 +55,9 @@ void processPath(const std::string& path, std::vector<std::string>& allIsoFiles)
 // stds
 
 std::vector<std::string> vec_concat(const std::vector<std::string>& v1, const std::vector<std::string>& v2);
+std::vector<bool> parallelIsDirectoryEmpty(const std::vector<std::string>& paths);
+std::vector<bool> parallelIsNumeric(const std::vector<std::string>& strings);
+std::vector<bool> parallelEndsWithIso(const std::vector<std::string>& strings);
 std::string getHomeDirectory();
 std::vector<std::string> loadCache();
 
@@ -297,9 +301,24 @@ std::vector<std::string> loadCache() {
 }
 
 
-// Function to check if a file or directory exists
+// Function to check if a file or directory exists using OpenMP
 bool exists(const std::filesystem::path& path) {
-    return std::filesystem::exists(path);
+    bool result = false;
+
+    #pragma omp parallel shared(result)
+    {
+        #pragma omp for
+        for (int i = 0; i < 1; ++i) {  // Adjust the loop count based on your requirements
+            if (std::filesystem::exists(path)) {
+                #pragma omp critical
+                {
+                    result = true;
+                }
+            }
+        }
+    }
+
+    return result;
 }
 
 // Save cache
@@ -384,9 +403,24 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 }
 
 
-// Function to check if a directory is valid
+// Function to check if a directory is valid using OpenMP
 bool isValidDirectory(const std::string& path) {
-    return std::filesystem::is_directory(path);
+    bool result = false;
+
+    #pragma omp parallel shared(result)
+    {
+        #pragma omp for
+        for (int i = 0; i < 1; ++i) {  // Adjust the loop count based on your requirements
+            if (std::filesystem::is_directory(path)) {
+                #pragma omp critical
+                {
+                    result = true;
+                }
+            }
+        }
+    }
+
+    return result;
 }
 
 // Function for manual cache refresh
@@ -491,10 +525,24 @@ void manualRefreshCache() {
 
 //	MOUNT STUFF	\\
 
-// Function to check if a directory exists at the specified path
+// Function to check if a directory exists at the specified path using OpenMP
 bool directoryExists(const std::string& path) {
-    // Use the std::filesystem::is_directory function to check if the path is a directory
-    return std::filesystem::is_directory(path);
+    bool result = false;
+
+    #pragma omp parallel shared(result)
+    {
+        #pragma omp for
+        for (int i = 0; i < 1; ++i) {  // Adjust the loop count based on your requirements
+            if (std::filesystem::is_directory(path)) {
+                #pragma omp critical
+                {
+                    result = true;
+                }
+            }
+        }
+    }
+
+    return result;
 }
 
 
@@ -594,6 +642,22 @@ bool fileExistsOnDisk(const std::string& filename) {
     return file.good();
 }
 
+// Function to check file existence using multiple threads
+bool parallelFileExistsOnDisk(const std::vector<std::string>& filenames) {
+    bool exists = true;
+
+    // Parallelize the file existence check using OpenMP
+    #pragma omp parallel for reduction(&&:exists)
+    for (int i = 0; i < filenames.size(); ++i) {
+        if (!fileExistsOnDisk(filenames[i])) {
+            // If any file does not exist, set the exists flag to false
+            exists = false;
+        }
+    }
+
+    return exists;
+}
+
 
 // Function to check if a string ends with ".iso" (case-insensitive)
 bool ends_with_iso(const std::string& str) {
@@ -603,6 +667,19 @@ bool ends_with_iso(const std::string& str) {
 
     // Check if the lowercase string ends with ".iso"
     return lowercase.size() >= 4 && lowercase.compare(lowercase.size() - 4, 4, ".iso") == 0;
+}
+
+// Function to check if multiple strings end with ".iso" using multiple threads
+std::vector<bool> parallelEndsWithIso(const std::vector<std::string>& strings) {
+    std::vector<bool> results(strings.size(), false);
+
+    // Parallelize the ends_with_iso check using OpenMP
+    #pragma omp parallel for
+    for (int i = 0; i < strings.size(); ++i) {
+        results[i] = ends_with_iso(strings[i]);
+    }
+
+    return results;
 }
 
 
@@ -752,6 +829,19 @@ bool isNumeric(const std::string& str) {
         }
     }
     return true;
+}
+
+// Function to check if multiple strings are numeric using multiple threads
+std::vector<bool> parallelIsNumeric(const std::vector<std::string>& strings) {
+    std::vector<bool> results(strings.size(), false);
+
+    // Parallelize the isNumeric check using OpenMP
+    #pragma omp parallel for
+    for (int i = 0; i < strings.size(); ++i) {
+        results[i] = isNumeric(strings[i]);
+    }
+
+    return results;
 }
 
 
@@ -979,6 +1069,20 @@ bool isDirectoryEmpty(const std::string& path) {
     int result = system(checkEmptyCommand.c_str());
     return result != 0; // If result is 0, directory is empty; otherwise, it's not empty
 }
+
+// Function to check if multiple directories are empty using multiple threads
+std::vector<bool> parallelIsDirectoryEmpty(const std::vector<std::string>& paths) {
+    std::vector<bool> results(paths.size(), false);
+
+    // Parallelize the isDirectoryEmpty check using OpenMP
+    #pragma omp parallel for
+    for (int i = 0; i < paths.size(); ++i) {
+        results[i] = isDirectoryEmpty(paths[i]);
+    }
+
+    return results;
+}
+
 
 void unmountISO(const std::string& isoDir) {
     // Construct the unmount command with sudo, umount, and suppressing logs
