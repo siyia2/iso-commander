@@ -26,7 +26,6 @@ std::string shell_escape(const std::string& s) {
     return "'" + escaped_string + "'";
 }
 
-// Function to read a line of input using readline and add to history
 std::string readInputLine(const std::string& prompt) {
     try {
         // Read a line of input using the readline function
@@ -34,14 +33,17 @@ std::string readInputLine(const std::string& prompt) {
 
         // Check if input is not null (readline successful)
         if (input && input.get()[0] != '\0' && std::string(input.get()) != "\n") {
-            // Add the input to the history
-            add_history(input.get());
+            // Sanitize the input before adding it to history
+            std::string sanitizedInput(input.get());
+            sanitizedInput.erase(std::remove_if(sanitizedInput.begin(), sanitizedInput.end(),
+                                                [](unsigned char c) { return !std::isprint(c); }),
+                                 sanitizedInput.end());
 
-            // Convert the C-style string to a C++ string
-            std::string result(input.get());
+            // Add the sanitized input to the history
+            add_history(sanitizedInput.c_str());
 
             // Return the input string
-            return result;
+            return sanitizedInput;
         }
     } catch (const std::exception& e) {
         std::cerr << "\033[91mError: " << e.what() << "\033[0m" << std::endl;

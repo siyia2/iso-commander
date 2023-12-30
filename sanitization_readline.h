@@ -8,6 +8,7 @@
 #include <iostream>
 #include <string>
 #include <memory>
+#include <algorithm>
 
 std::string shell_escape(const std::string& s);
 std::string readInputLine(const std::string& prompt);
