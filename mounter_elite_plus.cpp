@@ -715,6 +715,10 @@ bool allFilesExistAndAreIso(const std::vector<std::string>& files) {
     return allExistAndIso;
 }
 
+int customNewline(int count, int key) {
+    // Do nothing or perform your specific actions without adding to history
+    return 0;  // Return 0 to indicate success
+}
 
 // Function to select and mount ISO files by number
 void select_and_mount_files_by_number() {
@@ -755,21 +759,22 @@ void select_and_mount_files_by_number() {
         printIsoFileList(isoFiles);
         
 		std::cout << " " << std::endl;
+		
         // Prompt user for input
-        std::string input = readInputLine("\033[94mChoose ISO(s) to mount (e.g., '1-3', '1 2', '00' mounts all, or press Enter to return):\033[0m ");
+        char* input = readline("\033[94mChoose ISO(s) to mount (e.g., '1-3', '1 2', '00' mounts all, or press Enter to return):\033[0m ");
         std::system("clear");
 
         // Start the timer
         auto start_time = std::chrono::high_resolution_clock::now();
 
         // Check if the user wants to return
-        if (input.empty()) {
+        if (input[0] == '\0') {   
             std::cout << "Press Enter to Return" << std::endl;
             break;
         }
 
         // Check if the user wants to mount all ISO files
-        if (input == "00") {
+        if (std::strcmp(input, "00") == 0) {
             std::vector<std::future<void>> futures;
             for (const std::string& iso : isoFiles) {
                 // Use std::async to launch each handleIsoFile task in a separate thread
@@ -796,6 +801,7 @@ void select_and_mount_files_by_number() {
         std::cout << " " << std::endl;
         std::cout << "Press Enter to continue...";
         std::cin.get();
+        
     }
 }
 
@@ -1165,18 +1171,18 @@ void unmountISOs() {
 		}
 		
         // Prompt for unmounting input
-        std::string input = readInputLine("\033[94mChoose ISO(s) to unmount (e.g. '1-3', '1 2', '00' unmounts all, or press Enter to return):\033[0m ");
+        char* input = readline("\033[94mChoose ISO(s) to unmount (e.g. '1-3', '1 2', '00' unmounts all, or press Enter to return):\033[0m ");
         std::system("clear");
 
         // Start the timer
         auto start_time = std::chrono::high_resolution_clock::now();
 
         // Check if the user wants to return
-        if (input == "") {
+        if (input[0] == '\0') {
             break;  // Exit the loop
         }
 
-        if (input == "00") {
+        if (std::strcmp(input, "00") == 0) {
             // Unmount all ISOs
             for (const std::string& isoDir : isoDirs) {
                 std::lock_guard<std::mutex> lock(mtx); // Lock the critical section
