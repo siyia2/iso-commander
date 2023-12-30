@@ -35,20 +35,15 @@ std::string readInputLine(const std::string& prompt) {
         std::cout.flush();
 
         // Read a line of input using the readline function
-        char* input = readline("");
+        std::unique_ptr<char, decltype(&free)> input(readline(""), &free);
 
         // Check if input is not null (readline successful)
-        if (input && input[0] != '\0' && std::string(input) != "\n") {
+        if (input && input.get()[0] != '\0' && std::string(input.get()) != "\n") {
             // Add the input to the history
-            add_history(input);
+            add_history(input.get());
 
             // Convert the C-style string to a C++ string
-            std::string result(input);
-
-            // Free the memory allocated by readline
-            free(input);
-
-            return result;
+            return std::string(input.get());
         }
     } catch (const std::exception& e) {
         // Log the error or handle it in a way suitable for your application
@@ -58,4 +53,5 @@ std::string readInputLine(const std::string& prompt) {
     // Return an empty string if readline fails or input is empty
     return "";
 }
+
 
