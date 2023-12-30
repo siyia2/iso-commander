@@ -479,11 +479,15 @@ void manualRefreshCache() {
     
     }
     	
+    if (invalidPaths.empty()) {
+		
+    std::cout << " " << std::endl;
+    
+    }	
     // Print invalid paths
     for (const auto& invalidPath : invalidPaths) {
         std::cout << invalidPath << std::endl;
     }
-	std::cout << " " << std::endl;
     // Start the timer
     auto start_time = std::chrono::high_resolution_clock::now();
 
@@ -744,7 +748,7 @@ void select_and_mount_files_by_number() {
     // Main loop for selecting and mounting ISO files
     while (true) {
         std::system("clear");
-        std::cout << "\033[93m! IF EXPECTED ISO FILE IS NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\n\033[0m" << std::endl;
+        std::cout << "\033[93m! IF EXPECTED ISO FILE(s) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\n\033[0m" << std::endl;
         printIsoFileList(isoFiles);
         
 		std::cout << " " << std::endl;
