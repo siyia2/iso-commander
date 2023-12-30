@@ -487,6 +487,7 @@ void manualRefreshCache() {
     // Print invalid paths
     for (const auto& invalidPath : invalidPaths) {
         std::cout << invalidPath << std::endl;
+        std::cout << " " << std::endl;
     }
     // Start the timer
     auto start_time = std::chrono::high_resolution_clock::now();
