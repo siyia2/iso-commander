@@ -446,6 +446,9 @@ void manualRefreshCache() {
 
     // Vector to store all ISO files from multiple directories
     std::vector<std::string> allIsoFiles;
+    
+    // Vector to store valid directory paths
+    std::vector<std::string> validPaths;
 
     // Vector to store invalid paths
     std::vector<std::string> invalidPaths;
@@ -462,7 +465,9 @@ void manualRefreshCache() {
     // Iterate through the entered directory paths and print invalid paths
     while (std::getline(iss, path, ';')) {
         // Check if the directory path is valid
-        if (!isValidDirectory(path)) {
+        if (isValidDirectory(path)) {
+            validPaths.push_back(path); // Store valid paths
+        } else {
             // Check if the path has already been processed
             if (processedInvalidPaths.find(path) == processedInvalidPaths.end()) {
                 // Print the error message and mark the path as processed
@@ -473,22 +478,19 @@ void manualRefreshCache() {
     }
     
     // Check if any invalid paths were encountered and add a gap
-	if (!invalidPaths.empty()) {
-		
+	if (!invalidPaths.empty() || !validPaths.empty()) {	
     std::cout << " " << std::endl;
-    
     }
     	
-    if (invalidPaths.empty()) {
-		
-    std::cout << " " << std::endl;
-    
-    }	
     // Print invalid paths
     for (const auto& invalidPath : invalidPaths) {
         std::cout << invalidPath << std::endl;
-        std::cout << " " << std::endl;
-    }
+	}
+	
+	if (!invalidPaths.empty() && !validPaths.empty()) {
+    std::cout << " " << std::endl;
+	}
+    
     // Start the timer
     auto start_time = std::chrono::high_resolution_clock::now();
 
