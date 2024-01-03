@@ -7,12 +7,10 @@ const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.cache";
 const std::string cacheFileName = "iso_cache.txt";;
 const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
-
-// MULTITHREADING STUFF
 std::mutex mountMutex; // Mutex for thread safety
-std::mutex mtx;
+std::mutex mutexforsearch; // Mutex for thread safety
 
-namespace fs = std::filesystem;
+
 
 //	Function prototypes	\\
 
@@ -20,12 +18,9 @@ namespace fs = std::filesystem;
 
 bool fileExists(const std::string& path);
 bool directoryExists(const std::string& path);
-bool allDirectoriesExistOnDisk(const std::vector<std::string>& directories);
-bool allFilesExistAndAreIso(const std::vector<std::string>& files);
 bool isValidDirectory(const std::string& path);
 bool isDirectoryEmpty(const std::string& path);
 bool iequals(std::string_view a, std::string_view b);
-bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles);
 bool fileExists(const std::string& path);
 bool parallelFileExistsOnDisk(const std::vector<std::string>& filenames);
 bool ends_with_iso(const std::string& str);
@@ -44,7 +39,7 @@ void mountISO(const std::vector<std::string>& isoFiles);
 void unmountISO(const std::string& isoDir);
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mtx);
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles);
-void removeNonExistentPathsFromCacheWithOpenMP();
+void removeNonExistentPathsFromCacheAsync();
 void displayErrorMessage(const std::string& iso);
 void printAlreadyMountedMessage(const std::string& iso);
 void printIsoFileList(const std::vector<std::string>& isoFiles);
@@ -190,8 +185,11 @@ bool fileExists(const std::string& path) {
 }
 
 
-// Function to remove non existent paths from cache
-void removeNonExistentPathsFromCacheWithOpenMP() {
+// Function to remove non-existent paths from cache asynchronously
+void removeNonExistentPathsFromCacheAsync() {
+	
+	std::mutex mutexremoveNonExistentPathsFromCacheAsync; // Mutex for synchronizing access to shared data
+	
     // Define the path to the cache file
     std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/iso_cache.txt";
     std::vector<std::string> cache; // Vector to store paths read from the cache file
@@ -204,11 +202,6 @@ void removeNonExistentPathsFromCacheWithOpenMP() {
         return;
     }
 
-    // Determine the size of the cache file and reserve space in the cache vector
-    cacheFile.seekg(0, std::ios::end);
-    cache.reserve(cacheFile.tellg());
-    cacheFile.seekg(0, std::ios::beg);
-
     // Read paths from the cache file into the cache vector
     for (std::string line; std::getline(cacheFile, line);) {
         cache.push_back(line);
@@ -217,24 +210,28 @@ void removeNonExistentPathsFromCacheWithOpenMP() {
     // Close the cache file
     cacheFile.close();
 
-    // Create a vector to hold private paths for each OpenMP thread
-    std::vector<std::vector<std::string>> privatePaths(omp_get_max_threads());
+    // Create a vector to hold futures for asynchronous tasks
+    std::vector<std::future<std::vector<std::string>>> futures;
 
-    // Parallel loop to check the existence of paths and distribute them among threads
-    #pragma omp parallel for num_threads(omp_get_max_threads())
-    for (int i = 0; i < cache.size(); i++) {
-        if (fileExists(cache[i])) {
-            // Add existing paths to the private vector of the current thread
-            privatePaths[omp_get_thread_num()].push_back(cache[i]);
-        }
+    // Asynchronously check the existence of paths
+    for (const auto& path : cache) {
+        futures.push_back(std::async(std::launch::async, [path]() {
+            std::vector<std::string> result;
+            if (fileExists(path)) {
+                result.push_back(path);
+            }
+            return result;
+        }));
     }
 
-    // Combine private paths into a single shared vector
+    // Wait for all asynchronous tasks to complete and collect the results
     std::vector<std::string> retainedPaths;
-    retainedPaths.reserve(cache.size()); // Reserve space to avoid reallocations
+    for (auto& future : futures) {
+        std::vector<std::string> result = future.get();
 
-    for (const auto& privatePath : privatePaths) {
-        retainedPaths.insert(retainedPaths.end(), privatePath.begin(), privatePath.end());
+        // Protect the critical section with a mutex
+        std::lock_guard<std::mutex> lock(mutexremoveNonExistentPathsFromCacheAsync);
+        retainedPaths.insert(retainedPaths.end(), result.begin(), result.end());
     }
 
     // Open the cache file for writing
@@ -298,20 +295,26 @@ std::vector<std::string> loadCache() {
 }
 
 
-// Function to check if a file or directory exists using OpenMP
+// Function to check if a file or directory exists
 bool exists(const std::filesystem::path& path) {
-    bool result = false;
+    const int numThreads = std::thread::hardware_concurrency();
+    std::vector<std::future<bool>> futures;
 
-    #pragma omp parallel for
-    for (int i = 0; i < omp_get_max_threads(); ++i) {
-        // Each thread checks the existence independently
-        if (std::filesystem::exists(path)) {
-            #pragma omp atomic write
-            result = true;
+    for (int i = 0; i < numThreads; ++i) {
+        futures.emplace_back(std::async(std::launch::async, [&path]() {
+            // Each thread checks the existence independently
+            return std::filesystem::exists(path);
+        }));
+    }
+
+    // Wait for all tasks to complete
+    for (auto& future : futures) {
+        if (future.get()) {
+            return true; // File exists in at least one thread
         }
     }
 
-    return result;
+    return false; // File does not exist in any thread
 }
 
 
@@ -366,32 +369,18 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
 }
 
 
-// Check if all selected files are still present on disk
-bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles) {
-    bool allExist = true;
-
-    #pragma omp parallel for reduction(&&:allExist) num_threads(omp_get_max_threads())
-    for (int i = 0; i < selectedFiles.size(); ++i) {
-        if (!std::filesystem::exists(selectedFiles[i])) {
-            // If a file is not found, update the reduction variable
-            allExist = false;
-        }
-    }
-
-    return allExist;
-}
-
 
 // Function to refresh the cache for a single directory
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles) {
+		
 	std::cout << "\033[93mProcessing directory path: '" << path << "'.\033[0m" << std::endl;
     std::vector<std::string> newIsoFiles;
     
     // Perform the cache refresh for the directory (e.g., using parallelTraverse)
-    parallelTraverse(path, newIsoFiles, mtx);
+    parallelTraverse(path, newIsoFiles, mutexforsearch);
     
     // Lock the mutex to protect the shared 'allIsoFiles' vector
-    std::lock_guard<std::mutex> lock(mtx);
+    std::lock_guard<std::mutex> lock(mutexforsearch);
     
     // Append the new entries to the shared vector
     allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
@@ -400,25 +389,27 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 }
 
 
-// Function to check if a directory is valid using OpenMP
+// Function to check if a directory is valid
 bool isValidDirectory(const std::string& path) {
-    bool result = false;
+    const int numThreads = std::thread::hardware_concurrency();
+    std::vector<std::future<bool>> futures;
 
-    #pragma omp parallel shared(result)
-    {
-        #pragma omp for
-        for (int i = 0; i < omp_get_max_threads(); ++i) {
-            if (std::filesystem::is_directory(path)) {
-                #pragma omp critical
-                {
-                    result = true;
-                }
-            }
+    for (int i = 0; i < numThreads; ++i) {
+        futures.emplace_back(std::async(std::launch::async, [&path]() {
+            return std::filesystem::is_directory(path);
+        }));
+    }
+
+    // Wait for all tasks to complete
+    for (auto& future : futures) {
+        if (future.get()) {
+            return true;
         }
     }
 
-    return result;
+    return false;
 }
+
 
 
 // Function for manual cache refresh
@@ -535,45 +526,35 @@ void manualRefreshCache() {
 
 //	MOUNT STUFF	\\
 
-// Function to check if a directory exists at the specified path using OpenMP
 bool directoryExists(const std::string& path) {
-    bool result = false;
+    const int numThreads = std::thread::hardware_concurrency();
+    std::atomic<bool> result(false);
 
-    #pragma omp parallel for
-    for (int i = 0; i < omp_get_max_threads(); ++i) {
-        // Each thread checks the existence independently
-        if (std::filesystem::is_directory(path)) {
-            #pragma omp atomic write
-            result = true;
-        }
+    std::vector<std::future<void>> futures;
+
+    for (int i = 0; i < numThreads; ++i) {
+        futures.emplace_back(std::async(std::launch::async, [&path, &result]() {
+            // Each thread checks the existence independently
+            if (std::filesystem::is_directory(path)) {
+                result.store(true, std::memory_order_relaxed);
+            }
+        }));
     }
 
-    return result;
-}
-
-
-// Function to check if all directories in a vector exist on disk
-bool allDirectoriesExistOnDisk(const std::vector<std::string>& directories) {
-    // Flag to track whether all directories exist
-    bool allExist = true;
-
-    // Use OpenMP to parallelize the loop for checking directory existence
-    #pragma omp parallel for reduction(&&:allExist) num_threads(omp_get_max_threads())
-    for (int i = 0; i < directories.size(); ++i) {
-        // Check if the directory at the current index exists
-        if (!directoryExists(directories[i])) {
-            // If not, update the reduction variable
-            allExist = false;
-        }
+    // Wait for all tasks to complete
+    for (auto& future : futures) {
+        future.wait();
     }
 
-    // Return the final result indicating whether all directories exist
-    return allExist;
+    return result.load(std::memory_order_relaxed);
 }
+
 
 
 void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>& mountedIsos) {
-    // Check if the ISO file is already mounted
+	
+	namespace fs = std::filesystem;
+	
     std::lock_guard<std::mutex> lock(mountMutex); // Lock to protect access to mountedIsos
 
     // Use the filesystem library to extract the ISO file name
@@ -582,32 +563,43 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
 
     std::string mountPoint = "/mnt/iso_" + isoFileName; // Use the modified ISO file name in the mount point with "iso_" prefix
 
-    // Check if the mount point directory doesn't exist, create it
+    // Check if the mount point directory doesn't exist, create it asynchronously
     if (!directoryExists(mountPoint)) {
-        // Create the mount point directory
-        std::string mkdirCommand = "sudo mkdir " + shell_escape(mountPoint);
-        if (system(mkdirCommand.c_str()) != 0) {
+        // Create the mount point directory asynchronously
+        auto mkdirFuture = std::async(std::launch::async, [&]() {
+            std::string mkdirCommand = "sudo mkdir " + shell_escape(mountPoint);
+            return system(mkdirCommand.c_str());
+        });
+
+        // Wait for the mkdir operation to complete
+        if (mkdirFuture.get() == 0) {
+            // Mount the ISO file to the mount point asynchronously
+            auto mountFuture = std::async(std::launch::async, [&]() {
+                std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
+                return system(mountCommand.c_str());
+            });
+
+            // Wait for the mount operation to complete
+            int mountResult = mountFuture.get();
+
+            if (mountResult != 0) {
+                std::cerr << "\033[91mFailed to mount: " << isoFile << "\033[0m" << std::endl;
+
+                // Cleanup the mount point directory
+                std::string cleanupCommand = "sudo rmdir " + shell_escape(mountPoint);
+                if (system(cleanupCommand.c_str()) != 0) {
+                    std::cerr << "\033[91mFailed to clean up mount point directory\033[0m" << std::endl;
+                }
+
+                return;
+            } else {
+                // Store the mount point in the map
+                mountedIsos[isoFile] = mountPoint;
+                std::cout << "\033[92mMounted at: " << mountPoint << "\033[0m" << std::endl;
+            }
+        } else {
             std::cerr << "\033[91mFailed to create mount point directory\033[0m" << std::endl;
             return;
-        }
-
-        // Mount the ISO file to the mount point
-        std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
-        int mountResult = system(mountCommand.c_str());
-        if (mountResult != 0) {
-            std::cerr << "\033[91mFailed to mount: " << isoFile << "\033[0m" << std::endl;
-
-            // Cleanup the mount point directory
-            std::string cleanupCommand = "sudo rmdir " + shell_escape(mountPoint);
-            if (system(cleanupCommand.c_str()) != 0) {
-                std::cerr << "\033[91mFailed to clean up mount point directory\033[0m" << std::endl;
-            }
-
-            return;
-        } else {
-            // Store the mount point in the map
-            mountedIsos[isoFile] = mountPoint;
-            std::cout << "\033[92mMounted at: " << mountPoint << "\033[0m" << std::endl;
         }
     } else {
         // The mount point directory already exists, so the ISO is considered mounted
@@ -643,83 +635,60 @@ void mountISO(const std::vector<std::string>& isoFiles) {
 
 // Function to check if a file exists on disk
 bool fileExistsOnDisk(const std::string& filename) {
-    // Use an ifstream to check the existence of the file
-    std::ifstream file(filename);
-    return file.good();
-}
+    const int numThreads = std::thread::hardware_concurrency();
+    bool result = false;
 
+    std::vector<std::future<void>> futures;
 
-// Function to check file existence using multiple threads
-bool parallelFileExistsOnDisk(const std::vector<std::string>& filenames) {
-    bool exists = true;
-
-    // Parallelize the file existence check using OpenMP
-    #pragma omp parallel for reduction(&&:exists) num_threads(omp_get_max_threads())
-    for (int i = 0; i < static_cast<int>(filenames.size()); ++i) {
-        if (!fileExistsOnDisk(filenames[i])) {
-            // If any file does not exist, set the exists flag to false
-            #pragma omp atomic write
-            exists = false;
-        }
+    for (int i = 0; i < numThreads; ++i) {
+        futures.emplace_back(std::async(std::launch::async, [&filename, &result]() {
+            // Each thread checks the existence independently
+            std::ifstream file(filename);
+            if (file.good()) {
+                result = true;
+            }
+        }));
     }
 
-    return exists;
+    // Wait for all tasks to complete
+    for (auto& future : futures) {
+        future.wait();
+    }
+
+    return result;
 }
 
 
-// Function to check if a string ends with ".iso" (case-insensitive)
 bool ends_with_iso(const std::string& str) {
-    // Convert the string to lowercase for a case-insensitive comparison
-    std::string lowercase = str;
-    std::transform(lowercase.begin(), lowercase.end(), lowercase.begin(), ::tolower);
+    const int numThreads = std::thread::hardware_concurrency();
+    bool result = false;
 
-    // Check if the lowercase string ends with ".iso"
-    return lowercase.size() >= 4 && lowercase.compare(lowercase.size() - 4, 4, ".iso") == 0;
-}
+    std::vector<std::future<void>> futures;
 
-
-// Function to check if multiple strings end with ".iso" using multiple threads
-std::vector<bool> parallelEndsWithIso(const std::vector<std::string>& strings) {
-    std::vector<bool> results(strings.size(), false);
-
-    // Parallelize the ends_with_iso check using OpenMP
-    #pragma omp parallel for num_threads(omp_get_max_threads())
-    for (int i = 0; i < static_cast<int>(strings.size()); ++i) {
-        results[i] = ends_with_iso(strings[i]);
+    for (int i = 0; i < numThreads; ++i) {
+        futures.emplace_back(std::async(std::launch::async, [&str, &result]() {
+            // Each thread checks the ending independently
+            std::string lowercase = str;
+            std::transform(lowercase.begin(), lowercase.end(), lowercase.begin(), ::tolower);
+            if (lowercase.size() >= 4 && lowercase.compare(lowercase.size() - 4, 4, ".iso") == 0) {
+                result = true;
+            }
+        }));
     }
 
-    return results;
-}
-
-
-// Function to check if all files in a vector exist on disk and have the ".iso" extension
-bool allFilesExistAndAreIso(const std::vector<std::string>& files) {
-    // Flag to track whether all files exist and have the ".iso" extension
-    bool allExistAndIso = true;
-
-    // Use OpenMP to parallelize the loop for checking file existence and extension
-    #pragma omp parallel for reduction(&&:allExistAndIso) num_threads(omp_get_max_threads())
-    for (int i = 0; i < files.size(); ++i) {
-        // Check if the file exists on disk and has the ".iso" extension
-        if (!fileExistsOnDisk(files[i]) || !ends_with_iso(files[i])) {
-            // If not, update the reduction variable
-            allExistAndIso = false;
-        }
+    // Wait for all tasks to complete
+    for (auto& future : futures) {
+        future.wait();
     }
 
-    // Return the final result indicating whether all files meet the criteria
-    return allExistAndIso;
+    return result;
 }
 
-int customNewline(int count, int key) {
-    // Do nothing or perform your specific actions without adding to history
-    return 0;  // Return 0 to indicate success
-}
 
 // Function to select and mount ISO files by number
 void select_and_mount_files_by_number() {
     // Remove non-existent paths from the cache
-    removeNonExistentPathsFromCacheWithOpenMP();
+    removeNonExistentPathsFromCacheAsync();
 
     // Load ISO files from cache
     std::vector<std::string> isoFiles = loadCache();
@@ -849,20 +818,6 @@ bool isNumeric(const std::string& str) {
 }
 
 
-// Function to check if multiple strings are numeric using multiple threads
-std::vector<bool> parallelIsNumeric(const std::vector<std::string>& strings) {
-    std::vector<bool> results(strings.size(), false);
-
-    // Parallelize the isNumeric check using OpenMP
-    #pragma omp parallel for num_threads(omp_get_max_threads())
-    for (int i = 0; i < static_cast<int>(strings.size()); ++i) {
-        results[i] = isNumeric(strings[i]);
-    }
-
-    return results;
-}
-
-
 // Function to process the user input for ISO mounting using multithreading
 void processInputMultithreaded(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
     std::istringstream iss(input);
@@ -949,33 +904,33 @@ void displayErrorMessage(const std::string& iso) {
 }
 
 
-// Function to perform case-insensitive string comparison
+// Function to perform case-insensitive string comparison using std::string_view
 bool iequals(std::string_view a, std::string_view b) {
-    // Check if the string lengths are equal
+    // Check if the string views have different sizes
     if (a.size() != b.size()) {
         return false;
     }
 
-    // Flag to track equality, initialized to true
-    bool equal = true;
-
-    // Use OpenMP to parallelize the loop for case-insensitive comparison
-    #pragma omp parallel for reduction(&&:equal) num_threads(omp_get_max_threads())
+    // Iterate through each character of the string views
     for (std::size_t i = 0; i < a.size(); ++i) {
-        // Check if characters are not equal (case-insensitive)
+        // Compare characters after converting them to lowercase
         if (std::tolower(a[i]) != std::tolower(b[i])) {
-            // Set the equal flag to false and exit the loop
-            equal = false;
+            // If a mismatch is found, return false
+            return false;
         }
     }
 
-    return equal;
+    // If all characters match, return true
+    return true;
 }
 
 
 // Function to parallel traverse a directory and find ISO files
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mtx) {
     try {
+        // Get the maximum number of threads supported by the hardware
+        const unsigned int maxThreads = std::thread::hardware_concurrency();
+
         // Vector to store futures for asynchronous tasks
         std::vector<std::future<void>> futures;
 
@@ -991,8 +946,10 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
                     continue;
                 }
 
-                // Get the file extension as a string and string view
+                // Get the file extension as a string
                 std::string extensionStr = filePath.extension().string();
+
+                // Convert the string to a string view
                 std::string_view extension = extensionStr;
 
                 // Check if the file has a ".iso" extension
@@ -1023,6 +980,7 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
 
 // Function to process a directory path, find ISO files in parallel, and update the shared vector
 void processPath(const std::string& path, std::vector<std::string>& allIsoFiles) {
+		
     // Inform about the directory path being processed
     std::cout << "Processing directory path: " << path << std::endl;
 
@@ -1030,10 +988,10 @@ void processPath(const std::string& path, std::vector<std::string>& allIsoFiles)
     std::vector<std::string> newIsoFiles;
 
     // Call parallelTraverse to asynchronously find ISO files in the directory
-    parallelTraverse(path, newIsoFiles, mtx);
+    parallelTraverse(path, newIsoFiles, mutexforsearch);
 
     // Lock the mutex to safely update the shared vector of all ISO files
-    std::lock_guard<std::mutex> lock(mtx);
+    std::lock_guard<std::mutex> lock(mutexforsearch);
     
     // Merge the new ISO files into the shared vector
     allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
@@ -1088,22 +1046,25 @@ void listMountedISOs() {
 
 // Function to check if a directory is empty
 bool isDirectoryEmpty(const std::string& path) {
-    std::string checkEmptyCommand = "sudo find " + shell_escape(path) + " -mindepth 1 -maxdepth 1 -print -quit | grep -q .";
-    int result = system(checkEmptyCommand.c_str());
-    return result != 0; // If result is 0, directory is empty; otherwise, it's not empty
-}
+    const int numThreads = std::thread::hardware_concurrency();
+    std::vector<std::future<bool>> futures;
 
-// Function to check if multiple directories are empty using multiple threads
-std::vector<bool> parallelIsDirectoryEmpty(const std::vector<std::string>& paths) {
-    std::vector<bool> results(paths.size(), false);
-
-    // Parallelize the isDirectoryEmpty check using OpenMP
-    #pragma omp parallel for num_threads(omp_get_max_threads())
-    for (int i = 0; i < static_cast<int>(paths.size()); ++i) {
-        results[i] = isDirectoryEmpty(paths[i]);
+    for (int i = 0; i < numThreads; ++i) {
+        futures.emplace_back(std::async(std::launch::async, [&path]() {
+            std::string checkEmptyCommand = "sudo find " + shell_escape(path) + " -mindepth 1 -maxdepth 1 -print -quit | grep -q .";
+            int result = system(checkEmptyCommand.c_str());
+            return result != 0;
+        }));
     }
 
-    return results;
+    // Wait for all tasks to complete
+    for (auto& future : futures) {
+        if (!future.get()) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 
@@ -1111,21 +1072,31 @@ void unmountISO(const std::string& isoDir) {
     // Construct the unmount command with sudo, umount, and suppressing logs
     std::string unmountCommand = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1";
 
-    // Execute the unmount command
-    int result = system(unmountCommand.c_str());
+    // Execute the unmount command asynchronously
+    std::future<int> unmountFuture = std::async(std::launch::async, [](const std::string& command) {
+        return system(command.c_str());
+    }, unmountCommand);
 
     // Check if the unmounting was successful
-    if (result == 0) {
+    int unmountResult = unmountFuture.get();
+    if (unmountResult == 0) {
         std::cout << "\033[92mUnmounted: " << isoDir << "\033[0m" << std::endl; // Print success message
 
         // Check if the directory is empty before removing it
-        if (isDirectoryEmpty(isoDir)) {
+        std::future<bool> isEmptyFuture = std::async(std::launch::async, &isDirectoryEmpty, isoDir);
+        bool isEmpty = isEmptyFuture.get();
+
+        if (isEmpty) {
             // Construct the remove directory command with sudo, rmdir, and suppressing logs
             std::string removeDirCommand = "sudo rmdir " + shell_escape(isoDir) + " 2>/dev/null";
 
-            // Execute the remove directory command
-            int removeDirResult = system(removeDirCommand.c_str());
+            // Execute the remove directory command asynchronously
+            std::future<int> removeDirFuture = std::async(std::launch::async, [](const std::string& command) {
+                return system(command.c_str());
+            }, removeDirCommand);
 
+            // Check if the directory removal was successful
+            int removeDirResult = removeDirFuture.get();
             if (removeDirResult != 0) {
                 std::cerr << "\033[91mFailed to remove directory: " << isoDir << " ...Please check it out manually.\033[0m" << std::endl;
             }
@@ -1143,6 +1114,7 @@ bool isValidIndex(int index, size_t isoDirsSize) {
 
 // Function to unmount ISOs based on user input
 void unmountISOs() {
+		
     listMountedISOs(); // Display the initial list of mounted ISOs
 
     // Path where ISO directories are expected to be mounted
@@ -1187,7 +1159,7 @@ void unmountISOs() {
         if (std::strcmp(input, "00") == 0) {
             // Unmount all ISOs
             for (const std::string& isoDir : isoDirs) {
-                std::lock_guard<std::mutex> lock(mtx); // Lock the critical section
+                std::lock_guard<std::mutex> lock(mutexforsearch); // Lock the critical section
                 unmountISO(isoDir);
             }
             // Stop the timer after completing the mounting process
@@ -1294,7 +1266,7 @@ void unmountISOs() {
 
                 // Use a thread for each ISO to be unmounted
                 threads.emplace_back([&, isoDir]() {
-                    std::lock_guard<std::mutex> lock(mtx); // Lock the critical section
+                    std::lock_guard<std::mutex> lock(mutexforsearch); // Lock the critical section
                     unmountISO(isoDir);
                 });
             }
