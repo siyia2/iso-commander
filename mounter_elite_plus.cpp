@@ -386,6 +386,7 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
     
     // Append the new entries to the shared vector
     allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
+    
     std::cout << "\033[92mProcessed directory path: '" << path << "'.\033[0m" << std::endl;
 }
 
@@ -413,7 +414,7 @@ bool isValidDirectory(const std::string& path) {
 
 
 
-// Function for manual cache refresh (asynchronous version)
+// Function for manual cache refresh
 void manualRefreshCache() {
     // Clear the console screen
     std::system("clear");
@@ -432,61 +433,75 @@ void manualRefreshCache() {
     std::istringstream iss(inputLine);
     std::string path;
 
-    // Vectors to store directory paths and error messages
+    // Vector to store all ISO files from multiple directories
+    std::vector<std::string> allIsoFiles;
+    
+    // Vector to store valid directory paths
     std::vector<std::string> validPaths;
+
+    // Vector to store invalid paths
     std::vector<std::string> invalidPaths;
 
     // Set to store processed invalid paths
     std::set<std::string> processedInvalidPaths;
 
-    // Vector to store all ISO files from multiple directories
-    std::vector<std::string> allIsoFiles;
+    // Vector to store threads for parallel cache refreshing
+    std::vector<std::thread> threads;
 
-    // Iterate through the entered directory paths and validate them
+    // Flags to determine whether cache write errors were encountered
+    bool cacheWriteErrorEncountered = false;
+
+    // Iterate through the entered directory paths and print invalid paths
     while (std::getline(iss, path, ';')) {
+        // Check if the directory path is valid
         if (isValidDirectory(path)) {
-            validPaths.push_back(path);
+            validPaths.push_back(path); // Store valid paths
         } else {
+            // Check if the path has already been processed
             if (processedInvalidPaths.find(path) == processedInvalidPaths.end()) {
+                // Print the error message and mark the path as processed
                 invalidPaths.push_back("\033[91mInvalid directory path: '" + path + "'. Skipped from processing.\033[0m");
                 processedInvalidPaths.insert(path);
             }
         }
     }
-
+    
     // Check if any invalid paths were encountered and add a gap
-    if (!invalidPaths.empty() || !validPaths.empty()) {
-        std::cout << " " << std::endl;
+	if (!invalidPaths.empty() || !validPaths.empty()) {	
+    std::cout << " " << std::endl;
     }
-
+    	
     // Print invalid paths
     for (const auto& invalidPath : invalidPaths) {
         std::cout << invalidPath << std::endl;
-    }
-
-    if (!invalidPaths.empty() && !validPaths.empty()) {
-        std::cout << " " << std::endl;
-    }
-
+	}
+	
+	if (!invalidPaths.empty() && !validPaths.empty()) {
+    std::cout << " " << std::endl;
+	}
+    
     // Start the timer
     auto start_time = std::chrono::high_resolution_clock::now();
 
-    // Vector to store asynchronous tasks
-    std::vector<std::future<void>> tasks;
+    // Create a thread for each valid directory to refresh the cache and pass the vector by reference
+    std::istringstream iss2(inputLine); // Reset the string stream
+    while (std::getline(iss2, path, ';')) {
+        // Check if the directory path is valid
+        if (!isValidDirectory(path)) {
+            continue; // Skip invalid paths
+        }
 
-    // Process each valid directory asynchronously
-    for (const auto& validPath : validPaths) {
-        // Use std::async to execute refreshCacheForDirectory asynchronously
-        tasks.emplace_back(std::async(std::launch::async, refreshCacheForDirectory, validPath, std::ref(allIsoFiles)));
+        // Create a thread for refreshing the cache for each directory and pass the vector by reference
+        threads.emplace_back(std::thread(refreshCacheForDirectory, path, std::ref(allIsoFiles)));
     }
-	
-    // Wait for all asynchronous tasks to finish
-    for (auto& task : tasks) {
-        task.get();
+
+    // Wait for all threads to finish
+    for (std::thread& t : threads) {
+        t.join();
     }
 
     // Save the combined cache to disk
-    bool saveSuccess = saveCache(allIsoFiles, /*maxCacheSize*/0); // Adjust maxCacheSize accordingly
+    bool saveSuccess = saveCache(allIsoFiles, maxCacheSize);
 
     // Stop the timer after completing the cache refresh and removal of non-existent paths
     auto end_time = std::chrono::high_resolution_clock::now();
@@ -499,7 +514,7 @@ void manualRefreshCache() {
     std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
 
     // Inform the user about the cache refresh status
-    if (saveSuccess) {
+     if (saveSuccess) {
         std::cout << " " << std::endl;
         std::cout << "\033[92mCache refreshed successfully.\033[0m" << std::endl;
         std::cout << " " << std::endl;
@@ -509,7 +524,6 @@ void manualRefreshCache() {
         std::cout << " " << std::endl;
     }
 }
-
 
 
 //	MOUNT STUFF	\\
@@ -583,7 +597,7 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
             } else {
                 // Store the mount point in the map
                 mountedIsos[isoFile] = mountPoint;
-                std::cout << "\033[92mMounted at: " << mountPoint << "\033[0m" << std::endl;
+                std::cout << "\033[92mISO file: \033[92m'" << isoFile << "' mounted at: '" << mountPoint << "'.\033[0m" << std::endl;
             }
         } else {
             std::cerr << "\033[91mFailed to create mount point directory\033[0m" << std::endl;
@@ -592,7 +606,7 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
     } else {
         // The mount point directory already exists, so the ISO is considered mounted
         mountedIsos[isoFile] = mountPoint;
-        std::cout << "\033[93mISO file: \033[92m'" << isoFile << "'\033[93m is already mounted at: \033[94m'" << mountPoint << "'\033[m" << std::endl;
+        std::cout << "\033[93mISO file: \033[92m'" << isoFile << "'\033[93m is already mounted at: \033[94m'" << mountPoint << "'\033[93m.\033[m" << std::endl;
     }
 }
 
@@ -900,7 +914,7 @@ void printAlreadyMountedMessage(const std::string& isoFile) {
     std::string isoFileName = isoPath.stem().string();
     std::string mountPoint = "/mnt/iso_" + isoFileName;
 
-    std::cout << "\033[93mISO file: \033[92m'" << isoFile << "'\033[93m is already mounted at: \033[94m'" << mountPoint << "'\033[m" << std::endl;
+    std::cout << "\033[93mISO file: \033[92m'" << isoFile << "'\033[93m is already mounted at: \033[94m'" << mountPoint << "'\033[93m.\033[m" << std::endl;
 }
 
 // Function to display an error message when the ISO file does not exist on disk
@@ -1085,7 +1099,7 @@ void unmountISO(const std::string& isoDir) {
     // Check if the unmounting was successful
     int unmountResult = unmountFuture.get();
     if (unmountResult == 0) {
-        std::cout << "\033[92mUnmounted: " << isoDir << "\033[0m" << std::endl; // Print success message
+        std::cout << "\033[92mUnmounted: " << isoDir << ".\033[0m" << std::endl; // Print success message
 
         // Check if the directory is empty before removing it
         std::future<bool> isEmptyFuture = std::async(std::launch::async, &isDirectoryEmpty, isoDir);
