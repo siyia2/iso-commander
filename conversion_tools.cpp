@@ -384,58 +384,102 @@ void printFileListBin(const std::vector<std::string>& fileList) {
 }
 
 
-// Function to process user input and convert selected BIN files to ISO format asynchronously
+// Function to process user input and convert selected BIN files to ISO format
 void processInputBin(const std::string& input, const std::vector<std::string>& fileList) {
+    // Tokenize the input string
     std::istringstream iss(input);
     std::string token;
 
-    // Vector to store futures for parallel processing
-    std::vector<std::future<void>> futures;
+    // Vector to store threads for parallel processing
+    std::vector<std::thread> threads;
 
+    // Set to keep track of processed indices to avoid duplicate processing
     std::set<int> processedIndices;
+
+    // Vector to store error messages for reporting after conversions
     std::vector<std::string> errorMessages;
 
+    // Iterate over tokens in the input string
     while (iss >> token) {
+        // Tokenize each token to check for ranges or single indices
         std::istringstream tokenStream(token);
         int start, end;
         char dash;
 
+        // Check if the token can be converted to an integer
         if (tokenStream >> start) {
+            // Check for a range (e.g., 1-5)
             if (tokenStream >> dash && dash == '-' && tokenStream >> end) {
-                if (start >= 1 && start <= fileList.size() && end >= start && end <= fileList.size()) {
-                    int step = (start <= end) ? 1 : -1;
-                    for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
-                        int selectedIndex = i - 1;
-                        if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-                            std::string selectedFile = fileList[selectedIndex];
-                            // Use std::async for asynchronous execution
-                            futures.emplace_back(std::async(std::launch::async, convertBINToISO, selectedFile));
-                            processedIndices.insert(selectedIndex);
+                // Validate the range and create threads for each index in the range
+                if (start <= end) {
+                    if (start >= 1 && end <= fileList.size()) {
+                        int step = 1;
+                        for (int i = start; i <= end; i += step) {
+                            int selectedIndex = i - 1;
+                            // Check if the index has not been processed before
+                            if (processedIndices.find(selectedIndex) == processedIndices.end()) {
+                                std::string selectedFile = fileList[selectedIndex];
+                                // Create a thread for conversion
+                                threads.emplace_back(convertBINToISO, selectedFile);
+                                // Mark the index as processed
+                                processedIndices.insert(selectedIndex);
+                            }
                         }
+                    } else {
+                        // Report an error if the range is out of range
+                        errorMessages.push_back("\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m");
                     }
                 } else {
-                    errorMessages.push_back("\033[91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0m");
+                    if (start >= 1 && end >= 1 && end <= fileList.size()) {
+                        int step = -1;
+                        for (int i = start; i >= end; i += step) {
+                            int selectedIndex = i - 1;
+                            // Check if the index has not been processed before
+                            if (processedIndices.find(selectedIndex) == processedIndices.end()) {
+                                std::string selectedFile = fileList[selectedIndex];
+                                // Create a thread for conversion
+                                threads.emplace_back(convertBINToISO, selectedFile);
+                                // Mark the index as processed
+                                processedIndices.insert(selectedIndex);
+                            }
+                        }
+                    } else {
+                        // Report an error if the range is out of range
+                        errorMessages.push_back("\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m");
+                    }
                 }
             } else if (start >= 1 && start <= fileList.size()) {
+                // Process a single index
                 int selectedIndex = start - 1;
+                // Check if the index has not been processed before
                 if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-                    std::string selectedFile = fileList[selectedIndex];
-                    futures.emplace_back(std::async(std::launch::async, convertBINToISO, selectedFile));
-                    processedIndices.insert(selectedIndex);
+                    // Check if the index is within the valid range
+                    if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
+                        std::string selectedFile = fileList[selectedIndex];
+                        // Create a thread for conversion
+                        threads.emplace_back(convertBINToISO, selectedFile);
+                        // Mark the index as processed
+                        processedIndices.insert(selectedIndex);
+                    } else {
+                        // Report an error if the index is out of range
+                        errorMessages.push_back("\033[91mFile index '" + std::to_string(start) + "' does not exist.\033[0m");
+                    }
                 }
             } else {
+                // Report an error if the index is out of range
                 errorMessages.push_back("\033[91mFile index '" + std::to_string(start) + "' does not exist.\033[0m");
             }
         } else {
+            // Report an error if the token is not a valid integer
             errorMessages.push_back("\033[91mInvalid input: '" + token + "'.\033[0m");
         }
     }
-
-    // Wait for all asynchronous tasks to finish
-    for (auto& future : futures) {
-        future.wait();
+    // Wait for all threads to finish
+    for (auto& thread : threads) {
+        thread.join();
     }
 
+    // Print all error messages after conversions
     for (const auto& errorMessage : errorMessages) {
         std::cout << errorMessage << std::endl;
     }
