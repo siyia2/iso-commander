@@ -388,6 +388,7 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
     allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
     
     std::cout << "\033[92mProcessed directory path: '" << path << "'.\033[0m" << std::endl;
+    std::cout << " " << std::endl;
 }
 
 
