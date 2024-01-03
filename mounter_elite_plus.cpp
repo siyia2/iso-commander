@@ -835,6 +835,7 @@ void processInputMultithreaded(const std::string& input, const std::vector<std::
     std::istringstream iss(input);
     bool invalidInput = false;
     std::vector<std::string> errorMessages; // Vector to store error messages
+    std::set<int> processedIndices; // Set to keep track of processed indices
 
     std::string token;
     std::vector<std::future<void>> futures; // Vector to store std::future objects for each task
@@ -867,20 +868,22 @@ void processInputMultithreaded(const std::string& input, const std::vector<std::
 
             int step = (start <= end) ? 1 : -1;
             for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
-                if (static_cast<size_t>(i) <= isoFiles.size()) {
+                if (static_cast<size_t>(i) <= isoFiles.size() && processedIndices.find(i) == processedIndices.end()) {
                     // Use std::async to launch each task in a separate thread
                     futures.emplace_back(std::async(std::launch::async, handleIsoFile, isoFiles[i - 1], std::ref(mountedSet)));
-                } else {
+                    processedIndices.insert(i); // Mark index as processed
+                } else if (static_cast<size_t>(i) > isoFiles.size()) {
                     invalidInput = true;
                     errorMessages.push_back("\033[91mFile index '" + std::to_string(i) + "' does not exist.\033[0m");
                 }
             }
         } else if (isNumeric(token)) {
             int num = std::stoi(token);
-            if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size()) {
+            if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && processedIndices.find(num) == processedIndices.end()) {
                 // Use std::async to launch each task in a separate thread
                 futures.emplace_back(std::async(std::launch::async, handleIsoFile, isoFiles[num - 1], std::ref(mountedSet)));
-            } else {
+                processedIndices.insert(num); // Mark index as processed
+            } else if (num > isoFiles.size()) {
                 invalidInput = true;
                 errorMessages.push_back("\033[91mFile index '" + std::to_string(num) + "' does not exist.\033[0m");
             }
