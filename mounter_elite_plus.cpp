@@ -9,6 +9,7 @@ const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
 std::mutex mountMutex; // Mutex for thread safety
 std::mutex mutexforsearch; // Mutex for thread safety
+std::mutex mutexforhandleiso; // Mutex for handleiso
 
 
 
@@ -41,7 +42,7 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles);
 void removeNonExistentPathsFromCacheAsync();
 void displayErrorMessage(const std::string& iso);
-void printAlreadyMountedMessage(const std::string& iso);
+void printAlreadyMountedMessage(const std::string& isoFile) ;
 void printIsoFileList(const std::vector<std::string>& isoFiles);
 void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet);
 void processInputMultithreaded(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
@@ -604,7 +605,7 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
     } else {
         // The mount point directory already exists, so the ISO is considered mounted
         mountedIsos[isoFile] = mountPoint;
-        std::cout << "\033[93mISO file '" << isoFile << "' is already mounted at '" << mountPoint << "'.\033[m" << std::endl;
+        std::cout << "\033[93mISO file: \033[92m'" << isoFile << "'\033[93m is already mounted at: \033[94m'" << mountPoint << "'\033[m" << std::endl;
     }
 }
 
@@ -789,22 +790,33 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
 }
 
 
-// Function to handle mounting of a specific ISO file
+// Function to handle mounting of a specific ISO file asynchronously and thread-safe
 void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet) {
-    // Check if the ISO file exists on disk
-    if (fileExistsOnDisk(iso)) {
-        // Attempt to insert the ISO file into the set; if it's a new entry, mount it
-        if (mountedSet.insert(iso).second) {
-            mountISO({iso});
+    std::lock_guard<std::mutex> lock(mutexforhandleiso);
+
+    // Use std::async to execute the function asynchronously
+    auto future = std::async(std::launch::async, [&iso, &mountedSet]() {
+        // Check if the ISO file exists on disk
+        if (fileExistsOnDisk(iso)) {
+            // Attempt to insert the ISO file into the set; if it's a new entry, mount it
+            if (mountedSet.insert(iso).second) {
+                // Mount the ISO file
+                mountISO({iso});  // Pass a vector with a single string to mountISO
+            } else {
+                // Get the mount path if the ISO file is already mounted
+                std::string result = iso;
+                printAlreadyMountedMessage(iso);
+            }
         } else {
-            // Print a message if the ISO file is already mounted
-            printAlreadyMountedMessage(iso);
+            // Display an error message if the ISO file doesn't exist on disk
+            displayErrorMessage(iso);
         }
-    } else {
-        // Display an error message if the ISO file doesn't exist on disk
-        displayErrorMessage(iso);
-    }
+    });
+
+    // Wait for the asynchronous operation to complete
+    future.wait();
 }
+
 
 
 // Function to check if a string is numeric
@@ -892,11 +904,14 @@ void processInputMultithreaded(const std::string& input, const std::vector<std::
 }
 
 
-// Function to print a message indicating that the ISO file is already mounted
-void printAlreadyMountedMessage(const std::string& iso) {
-    std::cout << "\033[93mISO file '" << iso << "' is already mounted.\033[0m" << std::endl;
-}
+void printAlreadyMountedMessage(const std::string& isoFile) {
+    namespace fs = std::filesystem;
+    fs::path isoPath(isoFile);
+    std::string isoFileName = isoPath.stem().string();
+    std::string mountPoint = "/mnt/iso_" + isoFileName;
 
+    std::cout << "\033[93mISO file: \033[92m'" << isoFile << "'\033[93m is already mounted at: \033[94m'" << mountPoint << "'\033[m" << std::endl;
+}
 
 // Function to display an error message when the ISO file does not exist on disk
 void displayErrorMessage(const std::string& iso) {
