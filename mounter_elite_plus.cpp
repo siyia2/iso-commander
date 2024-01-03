@@ -39,7 +39,6 @@ void manualRefreshCache();
 void mountISO(const std::vector<std::string>& isoFiles);
 void unmountISO(const std::string& isoDir);
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mtx);
-void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles);
 void removeNonExistentPathsFromCacheAsync();
 void displayErrorMessage(const std::string& iso);
 void printAlreadyMountedMessage(const std::string& isoFile) ;
@@ -51,6 +50,7 @@ void processPath(const std::string& path, std::vector<std::string>& allIsoFiles)
 //	stds
 
 std::vector<std::string> vec_concat(const std::vector<std::string>& v1, const std::vector<std::string>& v2);
+std::vector<std::string> refreshCacheForDirectory(const std::string& path);
 std::vector<bool> parallelIsDirectoryEmpty(const std::vector<std::string>& paths);
 std::vector<bool> parallelIsNumeric(const std::vector<std::string>& strings);
 std::vector<bool> parallelEndsWithIso(const std::vector<std::string>& strings);
@@ -372,22 +372,18 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
 
 
 
-// Function to refresh the cache for a single directory
-void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles) {
-		
-	std::cout << "\033[93mProcessing directory path: '" << path << "'.\033[0m" << std::endl;
+// Function to refresh the cache for a single directory (now returning a vector of ISO files)
+std::vector<std::string> refreshCacheForDirectory(const std::string& path) {
+    std::cout << "\033[93mProcessing directory path: '" << path << "'.\033[0m" << std::endl;
     std::vector<std::string> newIsoFiles;
-    
+
     // Perform the cache refresh for the directory (e.g., using parallelTraverse)
     parallelTraverse(path, newIsoFiles, mutexforsearch);
-    
-    // Lock the mutex to protect the shared 'allIsoFiles' vector
-    std::lock_guard<std::mutex> lock(mutexforsearch);
-    
-    // Append the new entries to the shared vector
-    allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
-    
+
     std::cout << "\033[92mProcessed directory path: '" << path << "'.\033[0m" << std::endl;
+
+    // Return the new entries for this directory
+    return newIsoFiles;
 }
 
 
@@ -414,7 +410,7 @@ bool isValidDirectory(const std::string& path) {
 
 
 
-// Function for manual cache refresh
+// Function for manual cache refresh (now asynchronous)
 void manualRefreshCache() {
     // Clear the console screen
     std::system("clear");
@@ -435,7 +431,7 @@ void manualRefreshCache() {
 
     // Vector to store all ISO files from multiple directories
     std::vector<std::string> allIsoFiles;
-    
+
     // Vector to store valid directory paths
     std::vector<std::string> validPaths;
 
@@ -445,8 +441,8 @@ void manualRefreshCache() {
     // Set to store processed invalid paths
     std::set<std::string> processedInvalidPaths;
 
-    // Vector to store threads for parallel cache refreshing
-    std::vector<std::thread> threads;
+    // Vector of futures to store the results of asynchronous tasks
+    std::vector<std::future<std::vector<std::string>>> futures;
 
     // Flags to determine whether cache write errors were encountered
     bool cacheWriteErrorEncountered = false;
@@ -465,21 +461,21 @@ void manualRefreshCache() {
             }
         }
     }
-    
+
     // Check if any invalid paths were encountered and add a gap
-	if (!invalidPaths.empty() || !validPaths.empty()) {	
-    std::cout << " " << std::endl;
+    if (!invalidPaths.empty() || !validPaths.empty()) {
+        std::cout << " " << std::endl;
     }
-    	
+
     // Print invalid paths
     for (const auto& invalidPath : invalidPaths) {
         std::cout << invalidPath << std::endl;
-	}
-	
-	if (!invalidPaths.empty() && !validPaths.empty()) {
-    std::cout << " " << std::endl;
-	}
-    
+    }
+
+    if (!invalidPaths.empty() && !validPaths.empty()) {
+        std::cout << " " << std::endl;
+    }
+
     // Start the timer
     auto start_time = std::chrono::high_resolution_clock::now();
 
@@ -491,13 +487,14 @@ void manualRefreshCache() {
             continue; // Skip invalid paths
         }
 
-        // Create a thread for refreshing the cache for each directory and pass the vector by reference
-        threads.emplace_back(std::thread(refreshCacheForDirectory, path, std::ref(allIsoFiles)));
+        // Launch an asynchronous task for each directory and store the future
+        futures.push_back(std::async(std::launch::async, refreshCacheForDirectory, path));
     }
 
-    // Wait for all threads to finish
-    for (std::thread& t : threads) {
-        t.join();
+    // Wait for all asynchronous tasks to finish and retrieve results
+    for (auto& future : futures) {
+        auto result = future.get(); // Blocking call to get the result
+        allIsoFiles.insert(allIsoFiles.end(), result.begin(), result.end());
     }
 
     // Save the combined cache to disk
@@ -514,7 +511,7 @@ void manualRefreshCache() {
     std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
 
     // Inform the user about the cache refresh status
-     if (saveSuccess) {
+    if (saveSuccess) {
         std::cout << " " << std::endl;
         std::cout << "\033[92mCache refreshed successfully.\033[0m" << std::endl;
         std::cout << " " << std::endl;
