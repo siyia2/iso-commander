@@ -552,28 +552,7 @@ bool directoryExists(const std::string& path) {
 }
 
 
-// Function to check if all directories in a vector exist on disk
-bool allDirectoriesExistOnDisk(const std::vector<std::string>& directories) {
-    // Flag to track whether all directories exist
-    bool allExist = true;
-
-    // Use OpenMP to parallelize the loop for checking directory existence
-    #pragma omp parallel for reduction(&&:allExist) num_threads(omp_get_max_threads())
-    for (int i = 0; i < directories.size(); ++i) {
-        // Check if the directory at the current index exists
-        if (!directoryExists(directories[i])) {
-            // If not, update the reduction variable
-            allExist = false;
-        }
-    }
-
-    // Return the final result indicating whether all directories exist
-    return allExist;
-}
-
-
 void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>& mountedIsos) {
-    // Check if the ISO file is already mounted
     std::lock_guard<std::mutex> lock(mountMutex); // Lock to protect access to mountedIsos
 
     // Use the filesystem library to extract the ISO file name
@@ -582,32 +561,43 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
 
     std::string mountPoint = "/mnt/iso_" + isoFileName; // Use the modified ISO file name in the mount point with "iso_" prefix
 
-    // Check if the mount point directory doesn't exist, create it
+    // Check if the mount point directory doesn't exist, create it asynchronously
     if (!directoryExists(mountPoint)) {
-        // Create the mount point directory
-        std::string mkdirCommand = "sudo mkdir " + shell_escape(mountPoint);
-        if (system(mkdirCommand.c_str()) != 0) {
+        // Create the mount point directory asynchronously
+        auto mkdirFuture = std::async(std::launch::async, [&]() {
+            std::string mkdirCommand = "sudo mkdir " + shell_escape(mountPoint);
+            return system(mkdirCommand.c_str());
+        });
+
+        // Wait for the mkdir operation to complete
+        if (mkdirFuture.get() == 0) {
+            // Mount the ISO file to the mount point asynchronously
+            auto mountFuture = std::async(std::launch::async, [&]() {
+                std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
+                return system(mountCommand.c_str());
+            });
+
+            // Wait for the mount operation to complete
+            int mountResult = mountFuture.get();
+
+            if (mountResult != 0) {
+                std::cerr << "\033[91mFailed to mount: " << isoFile << "\033[0m" << std::endl;
+
+                // Cleanup the mount point directory
+                std::string cleanupCommand = "sudo rmdir " + shell_escape(mountPoint);
+                if (system(cleanupCommand.c_str()) != 0) {
+                    std::cerr << "\033[91mFailed to clean up mount point directory\033[0m" << std::endl;
+                }
+
+                return;
+            } else {
+                // Store the mount point in the map
+                mountedIsos[isoFile] = mountPoint;
+                std::cout << "\033[92mMounted at: " << mountPoint << "\033[0m" << std::endl;
+            }
+        } else {
             std::cerr << "\033[91mFailed to create mount point directory\033[0m" << std::endl;
             return;
-        }
-
-        // Mount the ISO file to the mount point
-        std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
-        int mountResult = system(mountCommand.c_str());
-        if (mountResult != 0) {
-            std::cerr << "\033[91mFailed to mount: " << isoFile << "\033[0m" << std::endl;
-
-            // Cleanup the mount point directory
-            std::string cleanupCommand = "sudo rmdir " + shell_escape(mountPoint);
-            if (system(cleanupCommand.c_str()) != 0) {
-                std::cerr << "\033[91mFailed to clean up mount point directory\033[0m" << std::endl;
-            }
-
-            return;
-        } else {
-            // Store the mount point in the map
-            mountedIsos[isoFile] = mountPoint;
-            std::cout << "\033[92mMounted at: " << mountPoint << "\033[0m" << std::endl;
         }
     } else {
         // The mount point directory already exists, so the ISO is considered mounted
@@ -649,24 +639,6 @@ bool fileExistsOnDisk(const std::string& filename) {
 }
 
 
-// Function to check file existence using multiple threads
-bool parallelFileExistsOnDisk(const std::vector<std::string>& filenames) {
-    bool exists = true;
-
-    // Parallelize the file existence check using OpenMP
-    #pragma omp parallel for reduction(&&:exists) num_threads(omp_get_max_threads())
-    for (int i = 0; i < static_cast<int>(filenames.size()); ++i) {
-        if (!fileExistsOnDisk(filenames[i])) {
-            // If any file does not exist, set the exists flag to false
-            #pragma omp atomic write
-            exists = false;
-        }
-    }
-
-    return exists;
-}
-
-
 // Function to check if a string ends with ".iso" (case-insensitive)
 bool ends_with_iso(const std::string& str) {
     // Convert the string to lowercase for a case-insensitive comparison
@@ -675,20 +647,6 @@ bool ends_with_iso(const std::string& str) {
 
     // Check if the lowercase string ends with ".iso"
     return lowercase.size() >= 4 && lowercase.compare(lowercase.size() - 4, 4, ".iso") == 0;
-}
-
-
-// Function to check if multiple strings end with ".iso" using multiple threads
-std::vector<bool> parallelEndsWithIso(const std::vector<std::string>& strings) {
-    std::vector<bool> results(strings.size(), false);
-
-    // Parallelize the ends_with_iso check using OpenMP
-    #pragma omp parallel for num_threads(omp_get_max_threads())
-    for (int i = 0; i < static_cast<int>(strings.size()); ++i) {
-        results[i] = ends_with_iso(strings[i]);
-    }
-
-    return results;
 }
 
 
@@ -846,20 +804,6 @@ bool isNumeric(const std::string& str) {
         }
     }
     return true;
-}
-
-
-// Function to check if multiple strings are numeric using multiple threads
-std::vector<bool> parallelIsNumeric(const std::vector<std::string>& strings) {
-    std::vector<bool> results(strings.size(), false);
-
-    // Parallelize the isNumeric check using OpenMP
-    #pragma omp parallel for num_threads(omp_get_max_threads())
-    for (int i = 0; i < static_cast<int>(strings.size()); ++i) {
-        results[i] = isNumeric(strings[i]);
-    }
-
-    return results;
 }
 
 
