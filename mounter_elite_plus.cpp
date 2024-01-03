@@ -888,13 +888,13 @@ void processInputMultithreaded(const std::string& input, const std::vector<std::
             } catch (const std::out_of_range& e) {
                 // Handle the exception for out-of-range input
                 invalidInput = true;
-                errorMessages.push_back("\033[91mInvalid range: '" + token + "'. Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
+                errorMessages.push_back("\033[91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0m");
                 continue;
             }
 
             if (start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) {
                 invalidInput = true;
-                errorMessages.push_back("\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
+                errorMessages.push_back("\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m");
                 continue;
             }
 
