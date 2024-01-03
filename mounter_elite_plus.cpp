@@ -669,11 +669,6 @@ bool allFilesExistAndAreIso(const std::vector<std::string>& files) {
     return allExistAndIso;
 }
 
-int customNewline(int count, int key) {
-    // Do nothing or perform your specific actions without adding to history
-    return 0;  // Return 0 to indicate success
-}
-
 // Function to select and mount ISO files by number
 void select_and_mount_files_by_number() {
     // Remove non-existent paths from the cache
@@ -893,29 +888,25 @@ void displayErrorMessage(const std::string& iso) {
 }
 
 
-// Function to perform case-insensitive string comparison
+// Function to perform case-insensitive string comparison using std::string_view
 bool iequals(std::string_view a, std::string_view b) {
-    // Check if the string lengths are equal
+    // Check if the string views have different sizes
     if (a.size() != b.size()) {
         return false;
     }
 
-    // Flag to track equality, initialized to true
-    bool equal = true;
-
-    // Use OpenMP to parallelize the loop for case-insensitive comparison
-    #pragma omp parallel for reduction(&&:equal) num_threads(omp_get_max_threads())
+    // Iterate through each character of the string views
     for (std::size_t i = 0; i < a.size(); ++i) {
-        // Check if characters are not equal (case-insensitive)
+        // Compare characters after converting them to lowercase
         if (std::tolower(a[i]) != std::tolower(b[i])) {
-            // Set the equal flag to false and exit the loop
-            equal = false;
+            // If a mismatch is found, return false
+            return false;
         }
     }
 
-    return equal;
+    // If all characters match, return true
+    return true;
 }
-
 
 // Function to parallel traverse a directory and find ISO files
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mtx) {
@@ -935,8 +926,10 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
                     continue;
                 }
 
-                // Get the file extension as a string and string view
+                // Get the file extension as a string
                 std::string extensionStr = filePath.extension().string();
+
+                // Convert the string to a string view
                 std::string_view extension = extensionStr;
 
                 // Check if the file has a ".iso" extension
