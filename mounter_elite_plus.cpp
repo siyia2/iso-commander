@@ -7,23 +7,21 @@ const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.cache";
 const std::string cacheFileName = "iso_cache.txt";;
 const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
-std::mutex mountMutex; // Mutex for thread safety
-std::mutex mutexforsearch; // Mutex for thread safety
-std::mutex mutexforhandleiso; // Mutex for handleiso
-
+std::mutex mountMutex; // Mutex for mount thread safety
+std::mutex mutexforsearch; // Mutex for search thread safety
+std::mutex mutexforhandleiso; // Mutex for handleiso thread safety
+std::mutex fileExistsMutex; // Mutex for fileExists thread safety
+std::mutex mutexremoveNonExistentPathsFromCacheAsync; // Mutex for removeNonExistentPathsFromCacheAsync thread safety
 
 
 //	Function prototypes	\\
 
 //	bools
 
-bool fileExists(const std::string& path);
 bool directoryExists(const std::string& path);
 bool isValidDirectory(const std::string& path);
 bool isDirectoryEmpty(const std::string& path);
 bool iequals(std::string_view a, std::string_view b);
-bool fileExists(const std::string& path);
-bool parallelFileExistsOnDisk(const std::vector<std::string>& filenames);
 bool ends_with_iso(const std::string& str);
 bool isNumeric(const std::string& str);
 bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize);
@@ -38,7 +36,7 @@ void print_ascii();
 void manualRefreshCache();
 void mountISO(const std::vector<std::string>& isoFiles);
 void unmountISO(const std::string& isoDir);
-void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mtx);
+void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mutexforsearch);
 void removeNonExistentPathsFromCacheAsync();
 void displayErrorMessage(const std::string& iso);
 void printAlreadyMountedMessage(const std::string& isoFile) ;
@@ -50,10 +48,8 @@ void processPath(const std::string& path, std::vector<std::string>& allIsoFiles)
 //	stds
 
 std::vector<std::string> vec_concat(const std::vector<std::string>& v1, const std::vector<std::string>& v2);
+std::future<bool> FileExists(const std::string& path);
 std::vector<std::string> refreshCacheForDirectory(const std::string& path);
-std::vector<bool> parallelIsDirectoryEmpty(const std::vector<std::string>& paths);
-std::vector<bool> parallelIsNumeric(const std::vector<std::string>& strings);
-std::vector<bool> parallelEndsWithIso(const std::vector<std::string>& strings);
 std::string getHomeDirectory();
 std::vector<std::string> loadCache();
 
@@ -180,18 +176,18 @@ void print_ascii() {
 //	CACHE STUFF \\
 
 
-// Function to check if a file or directory exists
-bool fileExists(const std::string& path) {
-    struct stat buffer;
-    return (stat(path.c_str(), &buffer) == 0);
-}
+// Function to check if a file exists
+std::future<bool> FileExists(const std::string& filePath) {
+    return std::async(std::launch::async, [filePath]() {
+        std::lock_guard<std::mutex> lock(mutexremoveNonExistentPathsFromCacheAsync); // Ensure thread safety
 
+        struct stat buffer;
+        return (stat(filePath.c_str(), &buffer) == 0);
+    });
+}
 
 // Function to remove non-existent paths from cache asynchronously
 void removeNonExistentPathsFromCacheAsync() {
-	
-	std::mutex mutexremoveNonExistentPathsFromCacheAsync; // Mutex for synchronizing access to shared data
-	
     // Define the path to the cache file
     std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/iso_cache.txt";
     std::vector<std::string> cache; // Vector to store paths read from the cache file
@@ -219,7 +215,7 @@ void removeNonExistentPathsFromCacheAsync() {
     for (const auto& path : cache) {
         futures.push_back(std::async(std::launch::async, [path]() {
             std::vector<std::string> result;
-            if (fileExists(path)) {
+            if (FileExists(path).get()) {
                 result.push_back(path);
             }
             return result;
@@ -942,7 +938,7 @@ bool iequals(std::string_view a, std::string_view b) {
 
 
 // Function to parallel traverse a directory and find ISO files
-void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mtx) {
+void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mutexforsearch) {
     try {
         // Get the maximum number of threads supported by the hardware
         const unsigned int maxThreads = std::thread::hardware_concurrency();
@@ -971,12 +967,12 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
                 // Check if the file has a ".iso" extension
                 if (iequals(extension, ".iso")) {
                     // Use async to run the task of collecting ISO paths in parallel
-                    futures.push_back(std::async(std::launch::async, [filePath, &isoFiles, &mtx]() {
+                    futures.push_back(std::async(std::launch::async, [filePath, &isoFiles, &mutexforsearch]() {
                         // Process the file content as needed
                         // For example, you can check for ISO file signatures, etc.
 
                         // Lock the mutex to update the shared vector
-                        std::lock_guard<std::mutex> lock(mtx);
+                        std::lock_guard<std::mutex> lock(mutexforsearch);
                         isoFiles.push_back(filePath.string());
                     }));
                 }
