@@ -1136,6 +1136,11 @@ void unmountISO(const std::string& isoDir) {
 }
 
 
+// Function to check if a given index is within the valid range of available ISOs
+bool isValidIndex(int index, size_t isoDirsSize) {
+    return (index >= 1) && (static_cast<size_t>(index) <= isoDirsSize);
+}
+
 // Function to unmount ISOs based on user input
 void unmountISOs() {
     listMountedISOs(); // Display the initial list of mounted ISOs
@@ -1214,7 +1219,7 @@ void unmountISOs() {
             if (std::regex_match(token, std::regex("^\\d+$"))) {
                 // Individual number
                 int number = std::stoi(token);
-                if (number >= 1 && static_cast<size_t>(number) <= isoDirs.size()) {
+                if (isValidIndex(number, isoDirs.size())) {
                     // Check for duplicates
                     if (uniqueIndices.find(number) == uniqueIndices.end()) {
                         uniqueIndices.insert(number);
@@ -1226,18 +1231,48 @@ void unmountISOs() {
                     errorMessages.push_back("\033[91mFile index '" + std::to_string(number) + "' does not exist.\033[0m");
                 }
             } else if (std::regex_match(token, std::regex("^(\\d+)-(\\d+)$"))) {
-                // Range input (e.g., "1-3")
+                // Range input (e.g., "1-3" or "3-1")
                 std::smatch match;
                 std::regex_match(token, match, std::regex("^(\\d+)-(\\d+)$"));
                 int startRange = std::stoi(match[1]);
                 int endRange = std::stoi(match[2]);
-                int step = (startRange <= endRange) ? 1 : -1;
 
-                for (int i = startRange; (startRange <= endRange) ? (i <= endRange) : (i >= endRange); i += step) {
-                    // Check for duplicates
-                    if (uniqueIndices.find(i) == uniqueIndices.end()) {
-                        uniqueIndices.insert(i);
-                        unmountIndices.push_back(i);
+                // Check for valid range
+                if (startRange == endRange) {
+                    // Handle range with the same start and end index
+                    if (isValidIndex(startRange, isoDirs.size())) {
+                        // Check for duplicates
+                        if (uniqueIndices.find(startRange) == uniqueIndices.end()) {
+                            uniqueIndices.insert(startRange);
+                            unmountIndices.push_back(startRange);
+                        }
+                    } else {
+                        // Store the error message for invalid index
+                        errorMessages.push_back("\033[91mFile index '" + std::to_string(startRange) + "' does not exist.\033[0m");
+                    }
+                } else {
+                    int step = (startRange < endRange) ? 1 : -1;
+
+                    // Check if the range includes only valid indices
+                    bool validRange = true;
+                    for (int i = startRange; i != endRange + step; i += step) {
+                        if (!isValidIndex(i, isoDirs.size())) {
+                            validRange = false;
+                            break;
+                        }
+                    }
+
+                    if (validRange) {
+                        for (int i = startRange; i != endRange + step; i += step) {
+                            // Check for duplicates
+                            if (uniqueIndices.find(i) == uniqueIndices.end()) {
+                                uniqueIndices.insert(i);
+                                unmountIndices.push_back(i);
+                            }
+                        }
+                    } else {
+                        // Store the error message for invalid range
+                        errorMessages.push_back("\033[91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0m");
                     }
                 }
             } else {
@@ -1253,13 +1288,16 @@ void unmountISOs() {
         std::vector<std::thread> threads;
 
         for (int index : unmountIndices) {
-            const std::string& isoDir = isoDirs[index - 1];
+            // Check if the index is within the valid range
+            if (isValidIndex(index, isoDirs.size())) {
+                const std::string& isoDir = isoDirs[index - 1];
 
-            // Use a thread for each ISO to be unmounted
-            threads.emplace_back([&, isoDir]() {
-                std::lock_guard<std::mutex> lock(mtx); // Lock the critical section
-                unmountISO(isoDir);
-            });
+                // Use a thread for each ISO to be unmounted
+                threads.emplace_back([&, isoDir]() {
+                    std::lock_guard<std::mutex> lock(mtx); // Lock the critical section
+                    unmountISO(isoDir);
+                });
+            }
         }
 
         // Join the threads to wait for them to finish
