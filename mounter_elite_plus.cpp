@@ -7,28 +7,17 @@ const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.cache";
 const std::string cacheFileName = "iso_cache.txt";;
 const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
-
-// MULTITHREADING STUFF
-std::mutex mountMutex; // Mutex for thread safety
-std::mutex mutex; // Mutex for synchronizing access to shared data
-std::mutex mtx;
-
-namespace fs = std::filesystem;
-
 //	Function prototypes	\\
 
 //	bools
 
 bool fileExists(const std::string& path);
 bool directoryExists(const std::string& path);
-bool allDirectoriesExistOnDisk(const std::vector<std::string>& directories);
 bool allFilesExistAndAreIso(const std::vector<std::string>& files);
 bool isValidDirectory(const std::string& path);
 bool isDirectoryEmpty(const std::string& path);
 bool iequals(std::string_view a, std::string_view b);
 bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles);
-bool fileExists(const std::string& path);
-bool parallelFileExistsOnDisk(const std::vector<std::string>& filenames);
 bool ends_with_iso(const std::string& str);
 bool isNumeric(const std::string& str);
 bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize);
@@ -193,6 +182,9 @@ bool fileExists(const std::string& path) {
 
 // Function to remove non-existent paths from cache asynchronously
 void removeNonExistentPathsFromCacheAsync() {
+	
+	std::mutex mutex; // Mutex for synchronizing access to shared data
+	
     // Define the path to the cache file
     std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/iso_cache.txt";
     std::vector<std::string> cache; // Vector to store paths read from the cache file
@@ -384,14 +376,17 @@ bool allSelectedFilesExistOnDisk(const std::vector<std::string>& selectedFiles) 
 
 // Function to refresh the cache for a single directory
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles) {
+	
+	std::mutex mtxsearch;
+	
 	std::cout << "\033[93mProcessing directory path: '" << path << "'.\033[0m" << std::endl;
     std::vector<std::string> newIsoFiles;
     
     // Perform the cache refresh for the directory (e.g., using parallelTraverse)
-    parallelTraverse(path, newIsoFiles, mtx);
+    parallelTraverse(path, newIsoFiles, mtxsearch);
     
     // Lock the mutex to protect the shared 'allIsoFiles' vector
-    std::lock_guard<std::mutex> lock(mtx);
+    std::lock_guard<std::mutex> lock(mtxsearch );
     
     // Append the new entries to the shared vector
     allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
@@ -553,6 +548,11 @@ bool directoryExists(const std::string& path) {
 
 
 void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>& mountedIsos) {
+	
+	namespace fs = std::filesystem;
+	
+	std::mutex mountMutex; // Mutex for thread safety
+	
     std::lock_guard<std::mutex> lock(mountMutex); // Lock to protect access to mountedIsos
 
     // Use the filesystem library to extract the ISO file name
@@ -967,6 +967,9 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
 
 // Function to process a directory path, find ISO files in parallel, and update the shared vector
 void processPath(const std::string& path, std::vector<std::string>& allIsoFiles) {
+	
+	std::mutex mtxpath;
+	
     // Inform about the directory path being processed
     std::cout << "Processing directory path: " << path << std::endl;
 
@@ -974,10 +977,10 @@ void processPath(const std::string& path, std::vector<std::string>& allIsoFiles)
     std::vector<std::string> newIsoFiles;
 
     // Call parallelTraverse to asynchronously find ISO files in the directory
-    parallelTraverse(path, newIsoFiles, mtx);
+    parallelTraverse(path, newIsoFiles, mtxpath);
 
     // Lock the mutex to safely update the shared vector of all ISO files
-    std::lock_guard<std::mutex> lock(mtx);
+    std::lock_guard<std::mutex> lock(mtxpath);
     
     // Merge the new ISO files into the shared vector
     allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
@@ -1085,6 +1088,8 @@ bool isValidIndex(int index, size_t isoDirsSize) {
 // Function to unmount ISOs based on user input
 void unmountISOs() {
     listMountedISOs(); // Display the initial list of mounted ISOs
+    
+    std::mutex mtxunmount;
 
     // Path where ISO directories are expected to be mounted
     const std::string isoPath = "/mnt";
@@ -1128,7 +1133,7 @@ void unmountISOs() {
         if (std::strcmp(input, "00") == 0) {
             // Unmount all ISOs
             for (const std::string& isoDir : isoDirs) {
-                std::lock_guard<std::mutex> lock(mtx); // Lock the critical section
+                std::lock_guard<std::mutex> lock(mtxunmount); // Lock the critical section
                 unmountISO(isoDir);
             }
             // Stop the timer after completing the mounting process
@@ -1235,7 +1240,7 @@ void unmountISOs() {
 
                 // Use a thread for each ISO to be unmounted
                 threads.emplace_back([&, isoDir]() {
-                    std::lock_guard<std::mutex> lock(mtx); // Lock the critical section
+                    std::lock_guard<std::mutex> lock(mtxunmount); // Lock the critical section
                     unmountISO(isoDir);
                 });
             }
