@@ -10,7 +10,6 @@ const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 std::mutex mountMutex; // Mutex for mount thread safety
 std::mutex mutexforsearch; // Mutex for search thread safety
 std::mutex mutexforhandleiso; // Mutex for handleiso thread safety
-std::mutex fileExistsMutex; // Mutex for fileExists thread safety
 std::mutex mutexremoveNonExistentPathsFromCacheAsync; // Mutex for removeNonExistentPathsFromCacheAsync thread safety
 
 
