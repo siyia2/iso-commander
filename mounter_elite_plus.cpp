@@ -44,7 +44,7 @@ void mountISO(const std::vector<std::string>& isoFiles);
 void unmountISO(const std::string& isoDir);
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mtx);
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles);
-void removeNonExistentPathsFromCacheWithOpenMP();
+void removeNonExistentPathsFromCacheAsync();
 void displayErrorMessage(const std::string& iso);
 void printAlreadyMountedMessage(const std::string& iso);
 void printIsoFileList(const std::vector<std::string>& isoFiles);
@@ -190,8 +190,8 @@ bool fileExists(const std::string& path) {
 }
 
 
-// Function to remove non existent paths from cache
-void removeNonExistentPathsFromCacheWithOpenMP() {
+// Function to remove non-existent paths from cache asynchronously
+void removeNonExistentPathsFromCacheAsync() {
     // Define the path to the cache file
     std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/iso_cache.txt";
     std::vector<std::string> cache; // Vector to store paths read from the cache file
@@ -204,11 +204,6 @@ void removeNonExistentPathsFromCacheWithOpenMP() {
         return;
     }
 
-    // Determine the size of the cache file and reserve space in the cache vector
-    cacheFile.seekg(0, std::ios::end);
-    cache.reserve(cacheFile.tellg());
-    cacheFile.seekg(0, std::ios::beg);
-
     // Read paths from the cache file into the cache vector
     for (std::string line; std::getline(cacheFile, line);) {
         cache.push_back(line);
@@ -217,24 +212,25 @@ void removeNonExistentPathsFromCacheWithOpenMP() {
     // Close the cache file
     cacheFile.close();
 
-    // Create a vector to hold private paths for each OpenMP thread
-    std::vector<std::vector<std::string>> privatePaths(omp_get_max_threads());
+    // Create a vector to hold futures for asynchronous tasks
+    std::vector<std::future<std::vector<std::string>>> futures;
 
-    // Parallel loop to check the existence of paths and distribute them among threads
-    #pragma omp parallel for num_threads(omp_get_max_threads())
-    for (int i = 0; i < cache.size(); i++) {
-        if (fileExists(cache[i])) {
-            // Add existing paths to the private vector of the current thread
-            privatePaths[omp_get_thread_num()].push_back(cache[i]);
-        }
+    // Asynchronously check the existence of paths
+    for (const auto& path : cache) {
+        futures.push_back(std::async(std::launch::async, [path]() {
+            std::vector<std::string> result;
+            if (fileExists(path)) {
+                result.push_back(path);
+            }
+            return result;
+        }));
     }
 
-    // Combine private paths into a single shared vector
+    // Wait for all asynchronous tasks to complete and collect the results
     std::vector<std::string> retainedPaths;
-    retainedPaths.reserve(cache.size()); // Reserve space to avoid reallocations
-
-    for (const auto& privatePath : privatePaths) {
-        retainedPaths.insert(retainedPaths.end(), privatePath.begin(), privatePath.end());
+    for (auto& future : futures) {
+        std::vector<std::string> result = future.get();
+        retainedPaths.insert(retainedPaths.end(), result.begin(), result.end());
     }
 
     // Open the cache file for writing
@@ -677,7 +673,7 @@ int customNewline(int count, int key) {
 // Function to select and mount ISO files by number
 void select_and_mount_files_by_number() {
     // Remove non-existent paths from the cache
-    removeNonExistentPathsFromCacheWithOpenMP();
+    removeNonExistentPathsFromCacheAsync();
 
     // Load ISO files from cache
     std::vector<std::string> isoFiles = loadCache();
