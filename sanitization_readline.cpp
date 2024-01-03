@@ -26,11 +26,16 @@ std::string shell_escape(const std::string& s) {
     return "'" + escaped_string + "'";
 }
 
-// Function to read a line of input using readline and add to history
+
+// Function to autocomplete input
 std::string readInputLine(const std::string& prompt) {
     try {
+        // Ensure the prompt is displayed before reading input
+        std::cout << prompt;
+        std::cout.flush();
+
         // Read a line of input using the readline function
-        std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
+        std::unique_ptr<char, decltype(&free)> input(readline(""), &free);
 
         // Check if input is not null (readline successful)
         if (input && input.get()[0] != '\0' && std::string(input.get()) != "\n") {
@@ -38,16 +43,15 @@ std::string readInputLine(const std::string& prompt) {
             add_history(input.get());
 
             // Convert the C-style string to a C++ string
-            std::string result(input.get());
-
-            // Return the input string
-            return result;
+            return std::string(input.get());
         }
     } catch (const std::exception& e) {
-        std::cerr << "\033[91mError: " << e.what() << "\033[0m" << std::endl;
+        // Log the error or handle it in a way suitable for your application
+        std::cerr << "\033[91m" << e.what() << "\033[0m" << std::endl;
     }
 
     // Return an empty string if readline fails or input is empty
     return "";
 }
+
 

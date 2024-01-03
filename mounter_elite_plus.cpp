@@ -62,10 +62,6 @@ std::string getHomeDirectory();
 std::vector<std::string> loadCache();
 
 
-
-
-std::string directoryPath;					// Declare directoryPath here
-
 int main() {
     bool exitProgram = false;
     std::string choice;
@@ -446,6 +442,9 @@ void manualRefreshCache() {
 
     // Vector to store all ISO files from multiple directories
     std::vector<std::string> allIsoFiles;
+    
+    // Vector to store valid directory paths
+    std::vector<std::string> validPaths;
 
     // Vector to store invalid paths
     std::vector<std::string> invalidPaths;
@@ -462,28 +461,32 @@ void manualRefreshCache() {
     // Iterate through the entered directory paths and print invalid paths
     while (std::getline(iss, path, ';')) {
         // Check if the directory path is valid
-        if (!isValidDirectory(path)) {
+        if (isValidDirectory(path)) {
+            validPaths.push_back(path); // Store valid paths
+        } else {
             // Check if the path has already been processed
             if (processedInvalidPaths.find(path) == processedInvalidPaths.end()) {
                 // Print the error message and mark the path as processed
-                invalidPaths.push_back("\033[91mInvalid directory path: " + path + ". Skipped from processing.\033[0m");
+                invalidPaths.push_back("\033[91mInvalid directory path: '" + path + "'. Skipped from processing.\033[0m");
                 processedInvalidPaths.insert(path);
             }
         }
     }
     
     // Check if any invalid paths were encountered and add a gap
-	if (!invalidPaths.empty()) {
-		
+	if (!invalidPaths.empty() || !validPaths.empty()) {	
     std::cout << " " << std::endl;
-    
     }
     	
     // Print invalid paths
     for (const auto& invalidPath : invalidPaths) {
         std::cout << invalidPath << std::endl;
-    }
-	std::cout << " " << std::endl;
+	}
+	
+	if (!invalidPaths.empty() && !validPaths.empty()) {
+    std::cout << " " << std::endl;
+	}
+    
     // Start the timer
     auto start_time = std::chrono::high_resolution_clock::now();
 
@@ -708,6 +711,10 @@ bool allFilesExistAndAreIso(const std::vector<std::string>& files) {
     return allExistAndIso;
 }
 
+int customNewline(int count, int key) {
+    // Do nothing or perform your specific actions without adding to history
+    return 0;  // Return 0 to indicate success
+}
 
 // Function to select and mount ISO files by number
 void select_and_mount_files_by_number() {
@@ -720,7 +727,7 @@ void select_and_mount_files_by_number() {
     // Check if the cache is empty
     if (isoFiles.empty()) {
         std::system("clear");
-        std::cout << "\033[93mISO Cache is empty. Please refresh it from the Menu Options.\033[0m" << std::endl;
+        std::cout << "\033[93mISO Cache is empty. Please refresh it from the main Menu Options.\033[0m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "Press Enter to continue...";
         std::cin.get();
@@ -744,25 +751,26 @@ void select_and_mount_files_by_number() {
     // Main loop for selecting and mounting ISO files
     while (true) {
         std::system("clear");
-        std::cout << "\033[93m! IF EXPECTED ISO FILE IS NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\n\033[0m" << std::endl;
+        std::cout << "\033[93m! IF EXPECTED ISO FILE(s) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\n\033[0m" << std::endl;
         printIsoFileList(isoFiles);
         
 		std::cout << " " << std::endl;
+		
         // Prompt user for input
-        std::string input = readInputLine("\033[94mChoose ISO(s) to mount (e.g., '1-3', '1 2', '00' mounts all, or press Enter to return):\033[0m ");
+        char* input = readline("\033[94mChoose ISO(s) to mount (e.g., '1-3', '1 2', '00' mounts all, or press Enter to return):\033[0m ");
         std::system("clear");
 
         // Start the timer
         auto start_time = std::chrono::high_resolution_clock::now();
 
         // Check if the user wants to return
-        if (input.empty()) {
+        if (input[0] == '\0') {   
             std::cout << "Press Enter to Return" << std::endl;
             break;
         }
 
         // Check if the user wants to mount all ISO files
-        if (input == "00") {
+        if (std::strcmp(input, "00") == 0) {
             std::vector<std::future<void>> futures;
             for (const std::string& iso : isoFiles) {
                 // Use std::async to launch each handleIsoFile task in a separate thread
@@ -789,6 +797,7 @@ void select_and_mount_files_by_number() {
         std::cout << " " << std::endl;
         std::cout << "Press Enter to continue...";
         std::cin.get();
+        
     }
 }
 
@@ -879,17 +888,18 @@ void processInputMultithreaded(const std::string& input, const std::vector<std::
             } catch (const std::out_of_range& e) {
                 // Handle the exception for out-of-range input
                 invalidInput = true;
-                errorMessages.push_back("\033[91mInvalid range: '" + token + "'. Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
+                errorMessages.push_back("\033[91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0m");
                 continue;
             }
 
-            if (start > end || start < 1 || static_cast<size_t>(end) > isoFiles.size()) {
+            if (start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) {
                 invalidInput = true;
-                errorMessages.push_back("\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
+                errorMessages.push_back("\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m");
                 continue;
             }
 
-            for (int i = start; i <= end; ++i) {
+            int step = (start <= end) ? 1 : -1;
+            for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
                 if (static_cast<size_t>(i) <= isoFiles.size()) {
                     // Use std::async to launch each task in a separate thread
                     futures.emplace_back(std::async(std::launch::async, handleIsoFile, isoFiles[i - 1], std::ref(mountedSet)));
@@ -1006,7 +1016,7 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
         }
     } catch (const std::filesystem::filesystem_error& e) {
         // Handle filesystem errors and print an error message
-        std::cerr << "\033[93m" << e.what() << "\033[0m" << std::endl;
+        std::cerr << "\033[91m" << e.what() << "\033[0m" << std::endl;
     }
 }
 
@@ -1071,7 +1081,7 @@ void listMountedISOs() {
         }
     } else {
         // Print a message if no ISOs are mounted
-        std::cerr << "\033[91mNo mounted ISO(s) found.\n\033[0m" << std::endl;
+        std::cerr << "\033[91mNo mounted ISO(s) found.\033[0m" << std::endl;
     }
 }
 
@@ -1083,39 +1093,36 @@ bool isDirectoryEmpty(const std::string& path) {
     return result != 0; // If result is 0, directory is empty; otherwise, it's not empty
 }
 
-// Function to check if multiple directories are empty using multiple threads
-std::vector<bool> parallelIsDirectoryEmpty(const std::vector<std::string>& paths) {
-    std::vector<bool> results(paths.size(), false);
-
-    // Parallelize the isDirectoryEmpty check using OpenMP
-    #pragma omp parallel for num_threads(omp_get_max_threads())
-    for (int i = 0; i < static_cast<int>(paths.size()); ++i) {
-        results[i] = isDirectoryEmpty(paths[i]);
-    }
-
-    return results;
-}
-
 
 void unmountISO(const std::string& isoDir) {
     // Construct the unmount command with sudo, umount, and suppressing logs
     std::string unmountCommand = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1";
 
-    // Execute the unmount command
-    int result = system(unmountCommand.c_str());
+    // Execute the unmount command asynchronously
+    std::future<int> unmountFuture = std::async(std::launch::async, [](const std::string& command) {
+        return system(command.c_str());
+    }, unmountCommand);
 
     // Check if the unmounting was successful
-    if (result == 0) {
+    int unmountResult = unmountFuture.get();
+    if (unmountResult == 0) {
         std::cout << "\033[92mUnmounted: " << isoDir << "\033[0m" << std::endl; // Print success message
 
         // Check if the directory is empty before removing it
-        if (isDirectoryEmpty(isoDir)) {
+        std::future<bool> isEmptyFuture = std::async(std::launch::async, &isDirectoryEmpty, isoDir);
+        bool isEmpty = isEmptyFuture.get();
+
+        if (isEmpty) {
             // Construct the remove directory command with sudo, rmdir, and suppressing logs
             std::string removeDirCommand = "sudo rmdir " + shell_escape(isoDir) + " 2>/dev/null";
 
-            // Execute the remove directory command
-            int removeDirResult = system(removeDirCommand.c_str());
+            // Execute the remove directory command asynchronously
+            std::future<int> removeDirFuture = std::async(std::launch::async, [](const std::string& command) {
+                return system(command.c_str());
+            }, removeDirCommand);
 
+            // Check if the directory removal was successful
+            int removeDirResult = removeDirFuture.get();
             if (removeDirResult != 0) {
                 std::cerr << "\033[91mFailed to remove directory: " << isoDir << " ...Please check it out manually.\033[0m" << std::endl;
             }
@@ -1125,6 +1132,11 @@ void unmountISO(const std::string& isoDir) {
     }
 }
 
+
+// Function to check if a given index is within the valid range of available ISOs
+bool isValidIndex(int index, size_t isoDirsSize) {
+    return (index >= 1) && (static_cast<size_t>(index) <= isoDirsSize);
+}
 
 // Function to unmount ISOs based on user input
 void unmountISOs() {
@@ -1146,24 +1158,30 @@ void unmountISOs() {
 
         // Check if there are no mounted ISOs
         if (isoDirs.empty()) {
+            std::cout << " " << std::endl;
             std::cout << "Press Enter to continue...";
             std::cin.get(); // Wait for the user to press Enter
             return;
         }
-		std::cout << " " << std::endl;
+
+        // Check if there are mounted ISOs and add a newline
+        if (!isoDirs.empty()) {
+            std::cout << " " << std::endl;
+        }
+
         // Prompt for unmounting input
-        std::string input = readInputLine("\033[94mChoose ISO(s) to unmount (e.g. '1-3', '1 2', '00' unmounts all, or press Enter to return):\033[0m ");
+        char* input = readline("\033[94mChoose ISO(s) to unmount (e.g. '1-3', '1 2', '00' unmounts all, or press Enter to return):\033[0m ");
         std::system("clear");
 
         // Start the timer
         auto start_time = std::chrono::high_resolution_clock::now();
 
         // Check if the user wants to return
-        if (input == "") {
+        if (input[0] == '\0') {
             break;  // Exit the loop
         }
 
-        if (input == "00") {
+        if (std::strcmp(input, "00") == 0) {
             // Unmount all ISOs
             for (const std::string& isoDir : isoDirs) {
                 std::lock_guard<std::mutex> lock(mtx); // Lock the critical section
@@ -1198,7 +1216,7 @@ void unmountISOs() {
             if (std::regex_match(token, std::regex("^\\d+$"))) {
                 // Individual number
                 int number = std::stoi(token);
-                if (number >= 1 && static_cast<size_t>(number) <= isoDirs.size()) {
+                if (isValidIndex(number, isoDirs.size())) {
                     // Check for duplicates
                     if (uniqueIndices.find(number) == uniqueIndices.end()) {
                         uniqueIndices.insert(number);
@@ -1210,28 +1228,54 @@ void unmountISOs() {
                     errorMessages.push_back("\033[91mFile index '" + std::to_string(number) + "' does not exist.\033[0m");
                 }
             } else if (std::regex_match(token, std::regex("^(\\d+)-(\\d+)$"))) {
-                // Range input (e.g., "1-3")
+                // Range input (e.g., "1-3" or "3-1")
                 std::smatch match;
                 std::regex_match(token, match, std::regex("^(\\d+)-(\\d+)$"));
                 int startRange = std::stoi(match[1]);
                 int endRange = std::stoi(match[2]);
-                if (startRange >= 1 && endRange >= startRange && static_cast<size_t>(endRange) <= isoDirs.size()) {
-                    for (int i = startRange; i <= endRange; ++i) {
+
+                // Check for valid range
+                if (startRange == endRange) {
+                    // Handle range with the same start and end index
+                    if (isValidIndex(startRange, isoDirs.size())) {
                         // Check for duplicates
-                        if (uniqueIndices.find(i) == uniqueIndices.end()) {
-                            uniqueIndices.insert(i);
-                            unmountIndices.push_back(i);
+                        if (uniqueIndices.find(startRange) == uniqueIndices.end()) {
+                            uniqueIndices.insert(startRange);
+                            unmountIndices.push_back(startRange);
                         }
+                    } else {
+                        // Store the error message for invalid index
+                        errorMessages.push_back("\033[91mFile index '" + std::to_string(startRange) + "' does not exist.\033[0m");
                     }
                 } else {
-                    // Store the error message
-                    errorMessages.push_back("\033[91mInvalid range: '" + std::to_string(startRange) + "-" + std::to_string(endRange) + "'. Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
+                    int step = (startRange < endRange) ? 1 : -1;
+
+                    // Check if the range includes only valid indices
+                    bool validRange = true;
+                    for (int i = startRange; i != endRange + step; i += step) {
+                        if (!isValidIndex(i, isoDirs.size())) {
+                            validRange = false;
+                            break;
+                        }
+                    }
+
+                    if (validRange) {
+                        for (int i = startRange; i != endRange + step; i += step) {
+                            // Check for duplicates
+                            if (uniqueIndices.find(i) == uniqueIndices.end()) {
+                                uniqueIndices.insert(i);
+                                unmountIndices.push_back(i);
+                            }
+                        }
+                    } else {
+                        // Store the error message for invalid range
+                        errorMessages.push_back("\033[91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0m");
+                    }
                 }
             } else {
                 // Store the error message for invalid input format
                 errorMessages.push_back("\033[91mInvalid input: '" + token + "'.\033[0m");
             }
-
         }
 
         // Determine the number of available CPU cores
@@ -1241,13 +1285,16 @@ void unmountISOs() {
         std::vector<std::thread> threads;
 
         for (int index : unmountIndices) {
-            const std::string& isoDir = isoDirs[index - 1];
+            // Check if the index is within the valid range
+            if (isValidIndex(index, isoDirs.size())) {
+                const std::string& isoDir = isoDirs[index - 1];
 
-            // Use a thread for each ISO to be unmounted
-            threads.emplace_back([&, isoDir]() {
-                std::lock_guard<std::mutex> lock(mtx); // Lock the critical section
-                unmountISO(isoDir);
-            });
+                // Use a thread for each ISO to be unmounted
+                threads.emplace_back([&, isoDir]() {
+                    std::lock_guard<std::mutex> lock(mtx); // Lock the critical section
+                    unmountISO(isoDir);
+                });
+            }
         }
 
         // Join the threads to wait for them to finish
@@ -1257,7 +1304,7 @@ void unmountISOs() {
 
         // Stop the timer after completing the unmounting process
         auto end_time = std::chrono::high_resolution_clock::now();
-        
+
         // Print error messages
         for (const auto& errorMessage : errorMessages) {
             std::cerr << "\033[93m" << errorMessage << "\033[0m" << std::endl;

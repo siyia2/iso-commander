@@ -114,7 +114,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
 					printedEmptyLine = true;
 				}
 					if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
-					std::cerr << "\033[91mInvalid directory path: " << path << ". Excluded from search." << "\033[0m" << std::endl;
+					std::cerr << "\033[91mInvalid directory path: '" << path << "'. Excluded from search." << "\033[0m" << std::endl;
 					// Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
 					cachedInvalidPaths.push_back(path);
             }
@@ -128,7 +128,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
 		printedEmptyLine = true;
 	}
         // Handle filesystem errors for the overall operation
-        std::cerr << "\033[91mFilesystem error: " << e.what() << "\033[0m" << std::endl;
+        std::cerr << "\033[91m" << e.what() << "\033[0m" << std::endl;
         std::cin.ignore();
     }
 
@@ -339,10 +339,10 @@ void select_and_convert_files_to_iso() {
             
             std::cout << " " << std::endl;
             // Prompt user to choose a file or exit
-            std::string input = readInputLine("\033[94mChoose BIN/IMG file(s) to convert (e.g., '1-3' '1 2', or press Enter to return):\033[0m ");
+            char* input = readline("\033[94mChoose BIN/IMG file(s) to convert (e.g., '1-3' '1 2', or press Enter to return):\033[0m ");
 
             // Break the loop if the user presses Enter
-            if (input.empty()) {
+            if (input[0] == '\0') {
                 std::system("clear");
                 break;
             }
@@ -408,27 +408,23 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
             // Check for a range (e.g., 1-5)
             if (tokenStream >> dash && dash == '-' && tokenStream >> end) {
                 // Validate the range and create threads for each index in the range
-                if (start >= 1 && start <= fileList.size() && end >= start && end <= fileList.size()) {
-                    for (int i = start; i <= end; i++) {
-                        int selectedIndex = i - 1;
-                        // Check if the index has not been processed before
-                        if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-                            // Check if the index is within the valid range
-                            if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
-                                std::string selectedFile = fileList[selectedIndex];
-                                // Create a thread for conversion
-                                threads.emplace_back(convertBINToISO, selectedFile);
-                                // Mark the index as processed
-                                processedIndices.insert(selectedIndex);
-                            } else {
-                                // Report an error if the index is out of range
-                                errorMessages.push_back("\033[91mFile index '" + std::to_string(i) + "' does not exist.\033[0m");
-                            }
+                int step = (start <= end) ? 1 : -1;
+                for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
+                    int selectedIndex = i - 1;
+                    // Check if the index has not been processed before
+                    if (processedIndices.find(selectedIndex) == processedIndices.end()) {
+                        // Check if the index is within the valid range
+                        if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
+                            std::string selectedFile = fileList[selectedIndex];
+                            // Create a thread for conversion
+                            threads.emplace_back(convertBINToISO, selectedFile);
+                            // Mark the index as processed
+                            processedIndices.insert(selectedIndex);
+                        } else {
+                            // Report an error if the index is out of range
+                            errorMessages.push_back("\033[91mFile index '" + std::to_string(i) + "' does not exist.\033[0m");
                         }
                     }
-                } else {
-                    // Report an error for an invalid range
-                    errorMessages.push_back("\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
                 }
             } else if (start >= 1 && start <= fileList.size()) {
                 // Process a single index
@@ -539,7 +535,7 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
 				}				
                 // Handle filesystem errors for the current directory
                 if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
-                    std::cerr << "\033[91mInvalid directory path: " << path << ". Excluded from search." << "\033[0m" << std::endl;
+                    std::cerr << "\033[91mInvalid directory path: '" << path << "'. Excluded from search." << "\033[0m" << std::endl;
                     // Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
                     cachedInvalidPaths.push_back(path);
                 }
@@ -552,7 +548,7 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
 		printedEmptyLine = true;
 	}
         // Handle filesystem errors for the overall operation
-        std::cerr << "\033[91mFilesystem error: " << e.what() << "\033[0m" << std::endl;
+        std::cerr << "\033[91m" << e.what() << "\033[0m" << std::endl;
         std::cin.ignore();
     }
 
@@ -789,9 +785,9 @@ void select_and_convert_files_to_iso_mdf() {
         
         std::cout << " " << std::endl;
         // Prompt the user to enter file numbers or 'exit'
-        std::string input = readInputLine("\033[94mChoose MDF file(s) to convert (e.g., '1-2' or '1 2', or press Enter to return):\033[0m ");
+        char* input = readline("\033[94mChoose MDF file(s) to convert (e.g., '1-2' or '1 2', or press Enter to return):\033[0m ");
 
-        if (input.empty()) {
+        if (input[0] == '\0') {
             std::system("clear");
             break;
         }
@@ -880,18 +876,15 @@ std::pair<std::vector<int>, std::vector<std::string>> parseUserInput(const std::
             }
 
             // Add each index within the specified range to the selected indices vector
-            if (startRange <= endRange && startRange >= 1 && endRange <= maxIndex) {
-                for (int i = startRange; i <= endRange; i++) {
-                    int currentIndex = i - 1;
+            int step = (startRange <= endRange) ? 1 : -1;
+            for (int i = startRange; (startRange <= endRange) ? (i <= endRange) : (i >= endRange); i += step) {
+                int currentIndex = i - 1;
 
-                    // Check if the index has already been processed
-                    if (processedIndices.find(currentIndex) == processedIndices.end()) {
-                        selectedFileIndices.push_back(currentIndex);
-                        processedIndices.insert(currentIndex);
-                    }
+                // Check if the index has already been processed
+                if (processedIndices.find(currentIndex) == processedIndices.end()) {
+                    selectedFileIndices.push_back(currentIndex);
+                    processedIndices.insert(currentIndex);
                 }
-            } else {
-                errorMessages.push_back("\033[91mInvalid range: '" + token + "'. Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
             }
         } else {
             // Handle individual numbers (e.g., "1")
