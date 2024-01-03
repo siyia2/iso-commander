@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -O2 -fopenmp
+CXXFLAGS = -O2
 LIBS = -lreadline
 
 # Use the number of available processors from nproc
@@ -28,7 +28,7 @@ clean:
 	rm -f $(OBJ_FILES) $(EXECUTABLE)
 
 run: $(EXECUTABLE)
-	OMP_NUM_THREADS=$(NUM_PROCESSORS) ./$(EXECUTABLE)
+	./$(EXECUTABLE)
 
 install: $(EXECUTABLE)
 	install -m 755 $(EXECUTABLE) $(INSTALL_DIR)
