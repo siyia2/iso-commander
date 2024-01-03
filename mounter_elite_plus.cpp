@@ -10,6 +10,7 @@ const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
 // MULTITHREADING STUFF
 std::mutex mountMutex; // Mutex for thread safety
+std::mutex mutex; // Mutex for synchronizing access to shared data
 std::mutex mtx;
 
 namespace fs = std::filesystem;
@@ -230,6 +231,9 @@ void removeNonExistentPathsFromCacheAsync() {
     std::vector<std::string> retainedPaths;
     for (auto& future : futures) {
         std::vector<std::string> result = future.get();
+
+        // Protect the critical section with a mutex
+        std::lock_guard<std::mutex> lock(mutex);
         retainedPaths.insert(retainedPaths.end(), result.begin(), result.end());
     }
 
