@@ -9,7 +9,6 @@
 #include <fstream>
 #include <future>
 #include <mutex>
-#include <omp.h>
 #include <regex>
 #include <set>
 #include <sys/types.h>
