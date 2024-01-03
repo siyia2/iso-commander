@@ -62,10 +62,6 @@ std::string getHomeDirectory();
 std::vector<std::string> loadCache();
 
 
-
-
-std::string directoryPath;					// Declare directoryPath here
-
 int main() {
     bool exitProgram = false;
     std::string choice;
@@ -896,13 +892,14 @@ void processInputMultithreaded(const std::string& input, const std::vector<std::
                 continue;
             }
 
-            if (start > end || start < 1 || static_cast<size_t>(end) > isoFiles.size()) {
+            if (start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) {
                 invalidInput = true;
                 errorMessages.push_back("\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
                 continue;
             }
 
-            for (int i = start; i <= end; ++i) {
+            int step = (start <= end) ? 1 : -1;
+            for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
                 if (static_cast<size_t>(i) <= isoFiles.size()) {
                     // Use std::async to launch each task in a separate thread
                     futures.emplace_back(std::async(std::launch::async, handleIsoFile, isoFiles[i - 1], std::ref(mountedSet)));
@@ -1159,17 +1156,17 @@ void unmountISOs() {
 
         // Check if there are no mounted ISOs
         if (isoDirs.empty()) {
-			std::cout << " " << std::endl;
+            std::cout << " " << std::endl;
             std::cout << "Press Enter to continue...";
             std::cin.get(); // Wait for the user to press Enter
             return;
         }
-        
+
         // Check if there are mounted ISOs and add a newline
         if (!isoDirs.empty()) {
-			std::cout << " " << std::endl;
-		}
-		
+            std::cout << " " << std::endl;
+        }
+
         // Prompt for unmounting input
         char* input = readline("\033[94mChoose ISO(s) to unmount (e.g. '1-3', '1 2', '00' unmounts all, or press Enter to return):\033[0m ");
         std::system("clear");
@@ -1234,23 +1231,19 @@ void unmountISOs() {
                 std::regex_match(token, match, std::regex("^(\\d+)-(\\d+)$"));
                 int startRange = std::stoi(match[1]);
                 int endRange = std::stoi(match[2]);
-                if (startRange >= 1 && endRange >= startRange && static_cast<size_t>(endRange) <= isoDirs.size()) {
-                    for (int i = startRange; i <= endRange; ++i) {
-                        // Check for duplicates
-                        if (uniqueIndices.find(i) == uniqueIndices.end()) {
-                            uniqueIndices.insert(i);
-                            unmountIndices.push_back(i);
-                        }
+                int step = (startRange <= endRange) ? 1 : -1;
+
+                for (int i = startRange; (startRange <= endRange) ? (i <= endRange) : (i >= endRange); i += step) {
+                    // Check for duplicates
+                    if (uniqueIndices.find(i) == uniqueIndices.end()) {
+                        uniqueIndices.insert(i);
+                        unmountIndices.push_back(i);
                     }
-                } else {
-                    // Store the error message
-                    errorMessages.push_back("\033[91mInvalid range: '" + std::to_string(startRange) + "-" + std::to_string(endRange) + "'. Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
                 }
             } else {
                 // Store the error message for invalid input format
                 errorMessages.push_back("\033[91mInvalid input: '" + token + "'.\033[0m");
             }
-
         }
 
         // Determine the number of available CPU cores
@@ -1276,7 +1269,7 @@ void unmountISOs() {
 
         // Stop the timer after completing the unmounting process
         auto end_time = std::chrono::high_resolution_clock::now();
-        
+
         // Print error messages
         for (const auto& errorMessage : errorMessages) {
             std::cerr << "\033[93m" << errorMessage << "\033[0m" << std::endl;

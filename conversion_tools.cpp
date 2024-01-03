@@ -408,27 +408,23 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
             // Check for a range (e.g., 1-5)
             if (tokenStream >> dash && dash == '-' && tokenStream >> end) {
                 // Validate the range and create threads for each index in the range
-                if (start >= 1 && start <= fileList.size() && end >= start && end <= fileList.size()) {
-                    for (int i = start; i <= end; i++) {
-                        int selectedIndex = i - 1;
-                        // Check if the index has not been processed before
-                        if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-                            // Check if the index is within the valid range
-                            if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
-                                std::string selectedFile = fileList[selectedIndex];
-                                // Create a thread for conversion
-                                threads.emplace_back(convertBINToISO, selectedFile);
-                                // Mark the index as processed
-                                processedIndices.insert(selectedIndex);
-                            } else {
-                                // Report an error if the index is out of range
-                                errorMessages.push_back("\033[91mFile index '" + std::to_string(i) + "' does not exist.\033[0m");
-                            }
+                int step = (start <= end) ? 1 : -1;
+                for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
+                    int selectedIndex = i - 1;
+                    // Check if the index has not been processed before
+                    if (processedIndices.find(selectedIndex) == processedIndices.end()) {
+                        // Check if the index is within the valid range
+                        if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
+                            std::string selectedFile = fileList[selectedIndex];
+                            // Create a thread for conversion
+                            threads.emplace_back(convertBINToISO, selectedFile);
+                            // Mark the index as processed
+                            processedIndices.insert(selectedIndex);
+                        } else {
+                            // Report an error if the index is out of range
+                            errorMessages.push_back("\033[91mFile index '" + std::to_string(i) + "' does not exist.\033[0m");
                         }
                     }
-                } else {
-                    // Report an error for an invalid range
-                    errorMessages.push_back("\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
                 }
             } else if (start >= 1 && start <= fileList.size()) {
                 // Process a single index
@@ -880,18 +876,15 @@ std::pair<std::vector<int>, std::vector<std::string>> parseUserInput(const std::
             }
 
             // Add each index within the specified range to the selected indices vector
-            if (startRange <= endRange && startRange >= 1 && endRange <= maxIndex) {
-                for (int i = startRange; i <= endRange; i++) {
-                    int currentIndex = i - 1;
+            int step = (startRange <= endRange) ? 1 : -1;
+            for (int i = startRange; (startRange <= endRange) ? (i <= endRange) : (i >= endRange); i += step) {
+                int currentIndex = i - 1;
 
-                    // Check if the index has already been processed
-                    if (processedIndices.find(currentIndex) == processedIndices.end()) {
-                        selectedFileIndices.push_back(currentIndex);
-                        processedIndices.insert(currentIndex);
-                    }
+                // Check if the index has already been processed
+                if (processedIndices.find(currentIndex) == processedIndices.end()) {
+                    selectedFileIndices.push_back(currentIndex);
+                    processedIndices.insert(currentIndex);
                 }
-            } else {
-                errorMessages.push_back("\033[91mInvalid range: '" + token + "'. Ensure the starting range is equal to or less than the end, and that numbers align with the list.\033[0m");
             }
         } else {
             // Handle individual numbers (e.g., "1")
