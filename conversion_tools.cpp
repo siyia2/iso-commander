@@ -52,7 +52,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
 
     // Clear the cachedInvalidPaths before processing a new set of paths
     cachedInvalidPaths.clear();
-    
+
     bool printedEmptyLine = false;  // Flag to track if an empty line has been printed
 
     try {
@@ -63,6 +63,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
         const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
         // Iterate through input paths
+        std::vector<std::future<void>> futures;
         for (const auto& path : paths) {
             try {
                 // Use a lambda function to process files asynchronously
@@ -79,54 +80,34 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
                 };
 
                 // Use async to process files concurrently
-                std::vector<std::future<void>> futures;
+                futures.emplace_back(std::async(std::launch::async, processFileAsync, std::filesystem::directory_entry(path)));
 
-                // Iterate through files in the given directory and its subdirectories
-                for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
-                    if (entry.is_regular_file()) {
-                        // Check if the file has a ".bin" or ".img" extension and is larger than or equal to 10,000,000 bytes
-                        std::string ext = entry.path().extension();
-                        std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) {
-                            return std::tolower(c);
-                        });
-
-                        if ((ext == ".bin" || ext == ".img") && std::filesystem::file_size(entry) >= 10'000'000) {
-                            // Check if the file is already present in the cache to avoid duplicates
-                            std::string fileName = entry.path().string();
-                            if (std::find(binImgFilesCache.begin(), binImgFilesCache.end(), fileName) == binImgFilesCache.end()) {
-                                // Process the file asynchronously
-                                futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
-                            }
-                        }
-                    }
+            } catch (const std::filesystem::filesystem_error& e) {
+                // Handle filesystem errors for the current directory
+                if (!printedEmptyLine) {
+                    // Print an empty line before starting to print invalid paths (only once)
+                    std::cout << " " << std::endl;
+                    printedEmptyLine = true;
                 }
-
-                // Wait for all asynchronous tasks to complete
-                for (auto& future : futures) {
-                    future.get();
+                if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
+                    std::cerr << "\033[91mInvalid directory path: '" << path << "'. Excluded from search." << "\033[0m" << std::endl;
+                    // Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
+                    cachedInvalidPaths.push_back(path);
                 }
-                
-				} catch (const std::filesystem::filesystem_error& e) {
-					// Handle filesystem errors for the current directory
-					if (!printedEmptyLine) {
-					// Print an empty line before starting to print invalid paths (only once)
-					std::cout << " " << std::endl;
-					printedEmptyLine = true;
-				}
-					if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
-					std::cerr << "\033[91mInvalid directory path: '" << path << "'. Excluded from search." << "\033[0m" << std::endl;
-					// Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
-					cachedInvalidPaths.push_back(path);
             }
         }
-    }
-    
+
+        // Wait for all asynchronous tasks to complete
+        for (auto& future : futures) {
+            future.get();
+        }
+
     } catch (const std::filesystem::filesystem_error& e) {
-		if (!printedEmptyLine) {
-		// Print an empty line before starting to print invalid paths (only once)
-		std::cout << " " << std::endl;
-		printedEmptyLine = true;
-	}
+        if (!printedEmptyLine) {
+            // Print an empty line before starting to print invalid paths (only once)
+            std::cout << " " << std::endl;
+            printedEmptyLine = true;
+        }
         // Handle filesystem errors for the overall operation
         std::cerr << "\033[91m" << e.what() << "\033[0m" << std::endl;
         std::cin.ignore();
@@ -134,8 +115,9 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
 
     // Print success message if files were found
     if (!fileNames.empty()) {
-		std::cout << " " << std::endl;
-        std::cout << "\033[92mFound " << fileNames.size() << " matching file(s)\033[0m" << ".\033[93m " << binImgFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0m"<< std::endl;
+        std::cout << " " << std::endl;
+        std::cout << "\033[92mFound " << fileNames.size() << " matching file(s)\033[0m"
+                  << ".\033[93m " << binImgFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "Press enter to continue...";
         std::cin.ignore();
@@ -381,76 +363,58 @@ void printFileListBin(const std::vector<std::string>& fileList) {
 }
 
 
-// Function to process user input and convert selected BIN files to ISO format
+// Function to process user input and convert selected BIN files to ISO format asynchronously
 void processInputBin(const std::string& input, const std::vector<std::string>& fileList) {
-    // Tokenize the input string
     std::istringstream iss(input);
     std::string token;
 
-    // Vector to store threads for parallel processing
-    std::vector<std::thread> threads;
+    // Vector to store futures for parallel processing
+    std::vector<std::future<void>> futures;
 
-    // Set to keep track of processed indices to avoid duplicate processing
     std::set<int> processedIndices;
-
-    // Vector to store error messages for reporting after conversions
     std::vector<std::string> errorMessages;
 
-    // Iterate over tokens in the input string
     while (iss >> token) {
-        // Tokenize each token to check for ranges or single indices
         std::istringstream tokenStream(token);
         int start, end;
         char dash;
 
-        // Check if the token can be converted to an integer
         if (tokenStream >> start) {
-            // Check for a range (e.g., 1-5)
             if (tokenStream >> dash && dash == '-' && tokenStream >> end) {
-                // Validate the range and create threads for each valid index in the range
                 if (start >= 1 && start <= fileList.size() && end >= start && end <= fileList.size()) {
                     int step = (start <= end) ? 1 : -1;
                     for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
                         int selectedIndex = i - 1;
-                        // Check if the index has not been processed before
                         if (processedIndices.find(selectedIndex) == processedIndices.end()) {
                             std::string selectedFile = fileList[selectedIndex];
-                            // Create a thread for conversion
-                            threads.emplace_back(convertBINToISO, selectedFile);
-                            // Mark the index as processed
+                            // Use std::async for asynchronous execution
+                            futures.emplace_back(std::async(std::launch::async, convertBINToISO, selectedFile));
                             processedIndices.insert(selectedIndex);
                         }
                     }
                 } else {
-                    // Report an error if the range is invalid
                     errorMessages.push_back("\033[91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0m");
                 }
             } else if (start >= 1 && start <= fileList.size()) {
-                // Process a single index
                 int selectedIndex = start - 1;
-                // Check if the index has not been processed before
                 if (processedIndices.find(selectedIndex) == processedIndices.end()) {
                     std::string selectedFile = fileList[selectedIndex];
-                    // Create a thread for conversion
-                    threads.emplace_back(convertBINToISO, selectedFile);
-                    // Mark the index as processed
+                    futures.emplace_back(std::async(std::launch::async, convertBINToISO, selectedFile));
                     processedIndices.insert(selectedIndex);
                 }
             } else {
-                // Report an error if the index is out of range
                 errorMessages.push_back("\033[91mFile index '" + std::to_string(start) + "' does not exist.\033[0m");
             }
         } else {
-            // Report an error if the token is not a valid integer
             errorMessages.push_back("\033[91mInvalid input: '" + token + "'.\033[0m");
         }
     }
-    // Wait for all threads to finish
-    for (auto& thread : threads) {
-        thread.join();
+
+    // Wait for all asynchronous tasks to finish
+    for (auto& future : futures) {
+        future.wait();
     }
 
-    // Print all error messages after conversions
     for (const auto& errorMessage : errorMessages) {
         std::cout << errorMessage << std::endl;
     }
@@ -468,7 +432,7 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
 
     // Clear the cachedInvalidPaths before processing a new set of paths
     cachedInvalidPaths.clear();
-    
+
     bool printedEmptyLine = false;  // Flag to track if an empty line has been printed
 
     try {
@@ -479,6 +443,7 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
         const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
         // Iterate through input paths
+        std::vector<std::future<void>> futures;
         for (const auto& path : paths) {
             try {
                 // Use a lambda function to process files asynchronously
@@ -495,38 +460,14 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                 };
 
                 // Use async to process files concurrently
-                std::vector<std::future<void>> futures;
+                futures.emplace_back(std::async(std::launch::async, processFileAsync, std::filesystem::directory_entry(path)));
 
-                // Iterate through files in the given directory and its subdirectories
-                for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
-                    if (entry.is_regular_file()) {
-                        // Check if the file has a ".mdf" or ".mds" extension and is larger than or equal to 10,000,000 bytes
-                        std::string ext = entry.path().extension();
-                        std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) {
-                            return std::tolower(c);
-                        });
-
-                        if ((ext == ".mdf" || ext == ".mds") && std::filesystem::file_size(entry) >= 10'000'000) {
-                            // Check if the file is already present in the cache to avoid duplicates
-                            std::string fileName = entry.path().string();
-                            if (std::find(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end(), fileName) == mdfMdsFilesCache.end()) {
-                                // Process the file asynchronously
-                                futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
-                            }
-                        }
-                    }
-                }
-
-                // Wait for all asynchronous tasks to complete
-                for (auto& future : futures) {
-                    future.get();
-                }
             } catch (const std::filesystem::filesystem_error& e) {
-				if (!printedEmptyLine) {
-					// Print an empty line before starting to print invalid paths (only once)
-					std::cout << " " << std::endl;
-					printedEmptyLine = true;
-				}				
+                if (!printedEmptyLine) {
+                    // Print an empty line before starting to print invalid paths (only once)
+                    std::cout << " " << std::endl;
+                    printedEmptyLine = true;
+                }
                 // Handle filesystem errors for the current directory
                 if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
                     std::cerr << "\033[91mInvalid directory path: '" << path << "'. Excluded from search." << "\033[0m" << std::endl;
@@ -535,12 +476,17 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                 }
             }
         }
+
+        // Wait for all asynchronous tasks to complete
+        for (auto& future : futures) {
+            future.get();
+        }
     } catch (const std::filesystem::filesystem_error& e) {
-		if (!printedEmptyLine) {
-		// Print an empty line before starting to print invalid paths (only once)
-		std::cout << " " << std::endl;
-		printedEmptyLine = true;
-	}
+        if (!printedEmptyLine) {
+            // Print an empty line before starting to print invalid paths (only once)
+            std::cout << " " << std::endl;
+            printedEmptyLine = true;
+        }
         // Handle filesystem errors for the overall operation
         std::cerr << "\033[91m" << e.what() << "\033[0m" << std::endl;
         std::cin.ignore();
@@ -548,8 +494,9 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
 
     // Print success message if files were found
     if (!fileNames.empty()) {
-		std::cout << " " << std::endl;
-        std::cout << "\033[92mFound " << fileNames.size() << " matching file(s)\033[0m" << ".\033[93m " << mdfMdsFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0m"<< std::endl;
+        std::cout << " " << std::endl;
+        std::cout << "\033[92mFound " << fileNames.size() << " matching file(s)\033[0m"
+                  << ".\033[93m " << mdfMdsFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "Press enter to continue...";
         std::cin.ignore();
@@ -682,13 +629,12 @@ void convertMDFsToISOs(const std::vector<std::string>& inputPaths) {
     }
 }
 
-// Function to process a range of MDF files by converting them to ISO
+// Function to process a range of MDF files by converting them to ISO asynchronously
 void processMDFFilesInRange(int start, int end) {
     std::vector<std::string> mdfImgFiles; // Declare mdfImgFiles here
     int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2; // Determine the number of threads based on CPU cores fallback is 2 threads
     std::vector<std::string> selectedFiles;
 
-    // Construct a list of selected files based on the specified range
     {
         std::lock_guard<std::mutex> lock(mdfFilesMutex); // Lock the mutex while accessing mdfImgFiles
         for (int i = start; i <= end; i++) {
@@ -697,25 +643,24 @@ void processMDFFilesInRange(int start, int end) {
         }
     } // Unlock the mutex when leaving the scope
 
-    // Split the selected files among threads
     int filesPerThread = selectedFiles.size() / numThreads;
-    std::vector<std::thread> threads;
+    std::vector<std::future<void>> futures;
 
     for (int i = 0; i < numThreads; ++i) {
         int startIdx = i * filesPerThread;
         int endIdx = (i == numThreads - 1) ? selectedFiles.size() : (i + 1) * filesPerThread;
         std::vector<std::string> filesSubset(selectedFiles.begin() + startIdx, selectedFiles.begin() + endIdx);
 
-        // Create a thread for each subset of files
-        threads.emplace_back([filesSubset]() {
+        // Use std::async for asynchronous execution
+        futures.emplace_back(std::async(std::launch::async, [filesSubset]() {
             convertMDFsToISOs(filesSubset);
-        });
+        }));
     }
 
-    // Wait for all threads to finish
-    std::for_each(threads.begin(), threads.end(), [](std::thread& t) {
-        t.join();
-    });
+    // Wait for all asynchronous tasks to finish
+    for (auto& future : futures) {
+        future.wait();
+    }
 }
 
 // Function to interactively select and convert MDF files to ISO
@@ -746,37 +691,38 @@ void select_and_convert_files_to_iso_mdf() {
     if (directoryPaths.empty()) {
         return;
     }
-    // Flag to check if new .mdf files are found
-	bool newMdfFilesFound = false;
 
-	// Call the findMdsMdfFiles function to populate the cache
-	mdfMdsFiles = findMdsMdfFiles(directoryPaths, [&mdfMdsFiles, &newMdfFilesFound](const std::string& fileName, const std::string& filePath) {
-    newMdfFilesFound = true;
-	});
-	
-	// Print a message only if no new .mdf files are found
-	if (!newMdfFilesFound && !mdfMdsFiles.empty()) {
-		std::cout << " " << std::endl;
-		std::cout << "\033[91mNo new .mdf file(s) over 10MB found. \033[92m" << mdfMdsFilesCache.size() << " file(s) cached in RAM from previous searches.\033[0m" << std::endl;
-		std::cout << " " << std::endl;
-		std::cout << "Press enter to continue...";
-		std::cin.ignore();
-	}
-	
+    // Flag to check if new .mdf files are found
+    bool newMdfFilesFound = false;
+
+    // Call the findMdsMdfFiles function to populate the cache
+    mdfMdsFiles = findMdsMdfFiles(directoryPaths, [&mdfMdsFiles, &newMdfFilesFound](const std::string& fileName, const std::string& filePath) {
+        newMdfFilesFound = true;
+    });
+
+    // Print a message only if no new .mdf files are found
+    if (!newMdfFilesFound && !mdfMdsFiles.empty()) {
+        std::cout << " " << std::endl;
+        std::cout << "\033[91mNo new .mdf file(s) over 10MB found. \033[92m" << mdfMdsFiles.size() << " file(s) cached in RAM from previous searches.\033[0m" << std::endl;
+        std::cout << " " << std::endl;
+        std::cout << "Press enter to continue...";
+        std::cin.ignore();
+    }
+
     if (mdfMdsFiles.empty()) {
-		std::cout << " " << std::endl;
+        std::cout << " " << std::endl;
         std::cout << "\033[91mNo .mdf file(s) over 10MB found in the specified path(s) or cached in RAM.\n\033[0m";
         std::cout << " " << std::endl;
-		std::cout << "Press enter to continue...";
-		std::cin.ignore();
+        std::cout << "Press enter to continue...";
+        std::cin.ignore();
         return;
     }
-    
+
     // Continue selecting and converting files until the user decides to exit
     while (true) {
         std::system("clear");
         printFileListMdf(mdfMdsFiles);
-        
+
         std::cout << " " << std::endl;
         // Prompt the user to enter file numbers or 'exit'
         char* input = readline("\033[94mChoose MDF file(s) to convert (e.g., '1-2' or '1 2', or press Enter to return):\033[0m ");
@@ -794,7 +740,10 @@ void select_and_convert_files_to_iso_mdf() {
 
         if (!selectedFileIndices.empty()) {
             // Get the paths of the selected files based on user input
-            std::vector<std::string> selectedFiles = getSelectedFiles(selectedFileIndices, mdfMdsFiles);
+            std::future<std::vector<std::string>> futureSelectedFiles = getSelectedFiles(selectedFileIndices, mdfMdsFiles);
+
+            // Wait for the asynchronous task to complete and retrieve the result
+            std::vector<std::string> selectedFiles = futureSelectedFiles.get();
 
             // Convert the selected MDF files to ISO
             convertMDFsToISOs(selectedFiles);
@@ -803,7 +752,7 @@ void select_and_convert_files_to_iso_mdf() {
             for (const auto& errorMessage : errorMessages) {
                 std::cerr << errorMessage << std::endl;
             }
-			std::cout << " " << std::endl;
+            std::cout << " " << std::endl;
             std::cout << "Press enter to continue...";
             std::cin.ignore();
         } else {
@@ -929,63 +878,41 @@ std::vector<std::future<std::pair<std::vector<int>, std::vector<std::string>>>> 
     return futures;
 }
 
-// Function to process user inputs concurrently using multiple threads
-void processUserInputsConcurrently(const std::vector<std::string>& inputs, int maxIndex,std::vector<std::vector<int>>& allSelectedFileIndices, std::vector<std::vector<std::string>>& allErrorMessages) {
-    std::vector<std::thread> threads;
-    std::mutex resultMutex;  // Mutex to protect shared result vectors
 
-    // Create threads to process each input
-    for (size_t i = 0; i < inputs.size(); ++i) {
-        threads.emplace_back([&, i]() {
-            // Parse the input for each thread
-            auto [selectedFileIndices, errorMessages] = parseUserInput(inputs[i], maxIndex);
+// Function to retrieve selected files based on their indices asynchronously
+std::future<std::vector<std::string>> getSelectedFiles(const std::vector<int>& selectedIndices, const std::vector<std::string>& fileList) {
+    // Use std::async with launch policy to create asynchronous tasks
+    return std::async(std::launch::async | std::launch::deferred, [selectedIndices, fileList]() {
+        std::vector<std::string> selectedFiles;
+        std::mutex mtx; // Mutex to protect access to the selectedFiles vector
 
-            // Lock the mutex before modifying shared result vectors
-            std::lock_guard<std::mutex> lock(resultMutex);
-            
-            // Store results in shared vectors
-            allSelectedFileIndices[i] = selectedFileIndices;
-            allErrorMessages[i] = errorMessages;
-        });
-    }
+        // Function to be executed by each asynchronous task
+        auto processIndex = [&](int index) {
+            std::string file;
+            // Check if the index is valid
+            if (index >= 0 && index < fileList.size()) {
+                file = fileList[index];
+            }
 
-    // Wait for all threads to finish
-    for (auto& thread : threads) {
-        thread.join();
-    }
-}
+            // Lock the mutex before modifying the selectedFiles vector
+            std::lock_guard<std::mutex> lock(mtx);
+            selectedFiles.push_back(file);
+        };
 
+        // Create a vector of asynchronous tasks
+        std::vector<std::future<void>> futures;
 
-// Function to retrieve selected files based on their indices
-std::vector<std::string> getSelectedFiles(const std::vector<int>& selectedIndices, const std::vector<std::string>& fileList) {
-    std::vector<std::string> selectedFiles;
-    std::mutex mtx; // Mutex to protect access to the selectedFiles vector
-
-    // Function to be executed by each thread
-    auto processIndex = [&](int index) {
-        std::string file;
-        // Check if the index is valid
-        if (index >= 0 && index < fileList.size()) {
-            file = fileList[index];
+        // Iterate through the selected indices and create a task for each index
+        for (int index : selectedIndices) {
+            // Use std::async for asynchronous execution
+            futures.emplace_back(std::async(std::launch::async | std::launch::deferred, processIndex, index));
         }
 
-        // Lock the mutex before modifying the selectedFiles vector
-        std::lock_guard<std::mutex> lock(mtx);
-        selectedFiles.push_back(file);
-    };
+        // Wait for all asynchronous tasks to finish
+        for (auto& future : futures) {
+            future.wait();
+        }
 
-    // Create a vector of threads
-    std::vector<std::thread> threads;
-
-    // Iterate through the selected indices and create a thread for each index
-    for (int index : selectedIndices) {
-        threads.emplace_back(processIndex, index);
-    }
-
-    // Join all the threads to wait for them to finish
-    for (auto& thread : threads) {
-        thread.join();
-    }
-
-    return selectedFiles;
+        return selectedFiles;
+    });
 }
