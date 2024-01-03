@@ -52,7 +52,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
 
     // Clear the cachedInvalidPaths before processing a new set of paths
     cachedInvalidPaths.clear();
-    
+
     bool printedEmptyLine = false;  // Flag to track if an empty line has been printed
 
     try {
@@ -61,6 +61,9 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
 
         // Determine the maximum number of threads to use based on hardware concurrency; fallback is 2 threads
         const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
+
+        // Use a thread pool for parallel processing
+        std::vector<std::future<void>> futures;
 
         // Iterate through input paths
         for (const auto& path : paths) {
@@ -79,7 +82,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
                 };
 
                 // Use async to process files concurrently
-                std::vector<std::future<void>> futures;
+                futures.clear();
 
                 // Iterate through files in the given directory and its subdirectories
                 for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
@@ -105,28 +108,28 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
                 for (auto& future : futures) {
                     future.get();
                 }
-                
-				} catch (const std::filesystem::filesystem_error& e) {
-					// Handle filesystem errors for the current directory
-					if (!printedEmptyLine) {
-					// Print an empty line before starting to print invalid paths (only once)
-					std::cout << " " << std::endl;
-					printedEmptyLine = true;
-				}
-					if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
-					std::cerr << "\033[91mInvalid directory path: '" << path << "'. Excluded from search." << "\033[0m" << std::endl;
-					// Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
-					cachedInvalidPaths.push_back(path);
+
+            } catch (const std::filesystem::filesystem_error& e) {
+                // Handle filesystem errors for the current directory
+                if (!printedEmptyLine) {
+                    // Print an empty line before starting to print invalid paths (only once)
+                    std::cout << " " << std::endl;
+                    printedEmptyLine = true;
+                }
+                if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
+                    std::cerr << "\033[91mInvalid directory path: '" << path << "'. Excluded from search." << "\033[0m" << std::endl;
+                    // Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
+                    cachedInvalidPaths.push_back(path);
+                }
             }
         }
-    }
-    
+
     } catch (const std::filesystem::filesystem_error& e) {
-		if (!printedEmptyLine) {
-		// Print an empty line before starting to print invalid paths (only once)
-		std::cout << " " << std::endl;
-		printedEmptyLine = true;
-	}
+        if (!printedEmptyLine) {
+            // Print an empty line before starting to print invalid paths (only once)
+            std::cout << " " << std::endl;
+            printedEmptyLine = true;
+        }
         // Handle filesystem errors for the overall operation
         std::cerr << "\033[91m" << e.what() << "\033[0m" << std::endl;
         std::cin.ignore();
@@ -134,8 +137,8 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
 
     // Print success message if files were found
     if (!fileNames.empty()) {
-		std::cout << " " << std::endl;
-        std::cout << "\033[92mFound " << fileNames.size() << " matching file(s)\033[0m" << ".\033[93m " << binImgFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0m"<< std::endl;
+        std::cout << " " << std::endl;
+        std::cout << "\033[92mFound " << fileNames.size() << " matching file(s)\033[0m" << ".\033[93m " << binImgFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "Press enter to continue...";
         std::cin.ignore();
@@ -445,12 +448,15 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
     // Vector to store cached invalid paths
     static std::vector<std::string> cachedInvalidPaths;
 
+    // Static variables to cache results for reuse
+    static std::vector<std::string> mdfMdsFilesCache;
+
     // Vector to store file names that match the criteria
     std::vector<std::string> fileNames;
 
     // Clear the cachedInvalidPaths before processing a new set of paths
     cachedInvalidPaths.clear();
-    
+
     bool printedEmptyLine = false;  // Flag to track if an empty line has been printed
 
     try {
@@ -459,6 +465,9 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
 
         // Determine the maximum number of threads to use based on hardware concurrency; fallback is 2 threads
         const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
+
+        // Use a thread pool for parallel processing
+        std::vector<std::future<void>> futures;
 
         // Iterate through input paths
         for (const auto& path : paths) {
@@ -476,8 +485,8 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                     fileNames.push_back(fileName);
                 };
 
-                // Use async to process files concurrently
-                std::vector<std::future<void>> futures;
+                // Use thread pool to process files concurrently
+                futures.clear();
 
                 // Iterate through files in the given directory and its subdirectories
                 for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
@@ -492,7 +501,7 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                             // Check if the file is already present in the cache to avoid duplicates
                             std::string fileName = entry.path().string();
                             if (std::find(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end(), fileName) == mdfMdsFilesCache.end()) {
-                                // Process the file asynchronously
+                                // Process the file asynchronously using the thread pool
                                 futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
                             }
                         }
@@ -503,12 +512,13 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                 for (auto& future : futures) {
                     future.get();
                 }
+
             } catch (const std::filesystem::filesystem_error& e) {
-				if (!printedEmptyLine) {
-					// Print an empty line before starting to print invalid paths (only once)
-					std::cout << " " << std::endl;
-					printedEmptyLine = true;
-				}				
+                if (!printedEmptyLine) {
+                    // Print an empty line before starting to print invalid paths (only once)
+                    std::cout << " " << std::endl;
+                    printedEmptyLine = true;
+                }
                 // Handle filesystem errors for the current directory
                 if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
                     std::cerr << "\033[91mInvalid directory path: '" << path << "'. Excluded from search." << "\033[0m" << std::endl;
@@ -517,12 +527,13 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                 }
             }
         }
+
     } catch (const std::filesystem::filesystem_error& e) {
-		if (!printedEmptyLine) {
-		// Print an empty line before starting to print invalid paths (only once)
-		std::cout << " " << std::endl;
-		printedEmptyLine = true;
-	}
+        if (!printedEmptyLine) {
+            // Print an empty line before starting to print invalid paths (only once)
+            std::cout << " " << std::endl;
+            printedEmptyLine = true;
+        }
         // Handle filesystem errors for the overall operation
         std::cerr << "\033[91m" << e.what() << "\033[0m" << std::endl;
         std::cin.ignore();
@@ -530,8 +541,8 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
 
     // Print success message if files were found
     if (!fileNames.empty()) {
-		std::cout << " " << std::endl;
-        std::cout << "\033[92mFound " << fileNames.size() << " matching file(s)\033[0m" << ".\033[93m " << mdfMdsFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0m"<< std::endl;
+        std::cout << " " << std::endl;
+        std::cout << "\033[92mFound " << fileNames.size() << " matching file(s)\033[0m" << ".\033[93m " << mdfMdsFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "Press enter to continue...";
         std::cin.ignore();
