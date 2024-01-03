@@ -585,7 +585,7 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
             int mountResult = mountFuture.get();
 
             if (mountResult != 0) {
-                std::cerr << "\033[91mFailed to mount: " << isoFile << "\033[0m" << std::endl;
+                std::cerr << "\033[91mFailed to mount: \033[93m'" << isoFile << "'\033[0m\033[91m.\033[0m" << std::endl;
 
                 // Cleanup the mount point directory
                 std::string cleanupCommand = "sudo rmdir " + shell_escape(mountPoint);
@@ -597,16 +597,16 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
             } else {
                 // Store the mount point in the map
                 mountedIsos[isoFile] = mountPoint;
-                std::cout << "\033[92mISO file: \033[92m'" << isoFile << "' mounted at: '" << mountPoint << "'.\033[0m" << std::endl;
+                std::cout << "ISO file: \033[92m'" << isoFile << "'\033[0m mounted at: \033[94m'" << mountPoint << "'\033[0m." << std::endl;
             }
         } else {
-            std::cerr << "\033[91mFailed to create mount point directory\033[0m" << std::endl;
+            std::cerr << "\033[91mFailed to create mount point directory.\033[0m" << std::endl;
             return;
         }
     } else {
         // The mount point directory already exists, so the ISO is considered mounted
         mountedIsos[isoFile] = mountPoint;
-        std::cout << "\033[93mISO file: \033[92m'" << isoFile << "'\033[93m is already mounted at: \033[94m'" << mountPoint << "'\033[93m.\033[m" << std::endl;
+        std::cout << "\033[93mISO file: \033[92m'" << isoFile << "'\033[93m is already mounted at: \033[94m'" << mountPoint << "'\033[93m.\033[0m" << std::endl;
     }
 }
 
@@ -914,7 +914,7 @@ void printAlreadyMountedMessage(const std::string& isoFile) {
     std::string isoFileName = isoPath.stem().string();
     std::string mountPoint = "/mnt/iso_" + isoFileName;
 
-    std::cout << "\033[93mISO file: \033[92m'" << isoFile << "'\033[93m is already mounted at: \033[94m'" << mountPoint << "'\033[93m.\033[m" << std::endl;
+    std::cout << "\033[93mISO file: \033[92m'" << isoFile << "'\033[93m is already mounted at: \033[94m'" << mountPoint << "'\033[93m.\033[0m" << std::endl;
 }
 
 // Function to display an error message when the ISO file does not exist on disk
@@ -1099,7 +1099,7 @@ void unmountISO(const std::string& isoDir) {
     // Check if the unmounting was successful
     int unmountResult = unmountFuture.get();
     if (unmountResult == 0) {
-        std::cout << "\033[92mUnmounted: " << isoDir << ".\033[0m" << std::endl; // Print success message
+        std::cout << "Unmounted: \033[92m'" << isoDir << "'\033[0m." << std::endl; // Print success message
 
         // Check if the directory is empty before removing it
         std::future<bool> isEmptyFuture = std::async(std::launch::async, &isDirectoryEmpty, isoDir);
@@ -1117,11 +1117,11 @@ void unmountISO(const std::string& isoDir) {
             // Check if the directory removal was successful
             int removeDirResult = removeDirFuture.get();
             if (removeDirResult != 0) {
-                std::cerr << "\033[91mFailed to remove directory: " << isoDir << " ...Please check it out manually.\033[0m" << std::endl;
+                std::cerr << "\033[91mFailed to remove directory: '" << isoDir << "' ...Please check it out manually.\033[0m" << std::endl;
             }
         }
     } else {
-        std::cerr << "\033[91mFailed to unmount: " << isoDir << " ...Probably not an ISO mountpoint, check it out manually.\033[0m" << std::endl; // Print failure message
+        std::cerr << "\033[91mFailed to unmount: '" << isoDir << " ...Probably not an ISO mountpoint, check it out manually.\033[0m" << std::endl; // Print failure message
     }
 }
 

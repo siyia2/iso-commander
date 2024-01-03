@@ -170,7 +170,7 @@ bool isCcd2IsoInstalled() {
 void convertBINToISO(const std::string& inputPath) {
     // Check if the input file exists
     if (!std::ifstream(inputPath)) {
-        std::cout << "\033[91mThe specified input file '" << inputPath << "' does not exist.\033[0m" << std::endl;
+        std::cout << "\033[91mThe specified input file \033[93m'" << inputPath << "'\033[91m does not exist.\033[0m" << std::endl;
         return;
     }
 
@@ -179,7 +179,7 @@ void convertBINToISO(const std::string& inputPath) {
 
     // Check if the output ISO file already exists
     if (std::ifstream(outputPath)) {
-        std::cout << "\033[93mThe output ISO file '" << outputPath << "' already exists. Skipping conversion.\033[0m" << std::endl;
+        std::cout << "\033[93mThe corresponding .iso file already exists for: \033[92m'" << outputPath << "'\033[93m. Skipping conversion.\033[0m" << std::endl;
         return;  // Skip conversion if the file already exists
     }
 
@@ -189,15 +189,15 @@ void convertBINToISO(const std::string& inputPath) {
 
     // Check the result of the conversion
     if (conversionStatus == 0) {
-        std::cout << "\033[92mImage file converted to ISO:\033[0m " << outputPath << std::endl;
+        std::cout << "Image file converted to ISO:\033[0m \033[92m'" << outputPath << "'\033[0m.\033[0m" << std::endl;
     } else {
-        std::cout << "\033[91mConversion of " << inputPath << " failed.\033[0m" << std::endl;
+        std::cout << "\033[91mConversion of \033[93m'" << inputPath << "'\033[91m failed.\033[0m" << std::endl;
 
         // Delete the partially created ISO file
         if (std::remove(outputPath.c_str()) == 0) {
-            std::cout << "\033[91mDeleted partially created ISO file:\033[0m " << outputPath << std::endl;
+            std::cout << "\033[91mDeleted partially created ISO file:\033[93m '" << outputPath << "'\033[91m failed.\033[0m" << std::endl;
         } else {
-            std::cerr << "\033[91mFailed to delete partially created ISO file:\033[0m " << outputPath << std::endl;
+            std::cerr << "\033[91mFailed to delete partially created ISO file: '" << outputPath << "'.\033[0m" << std::endl;
         }
     }
 }
@@ -622,14 +622,14 @@ bool isMdf2IsoInstalled() {
 void convertMDFToISO(const std::string& inputPath) {
     // Check if the input file exists
     if (!std::ifstream(inputPath)) {
-        std::cout << "\033[91mThe specified input file '" << inputPath << "' does not exist.\033[0m" << std::endl;
+        std::cout << "\033[91mThe specified input file \033[93m'" << inputPath << "'\033[91m does not exist.\033[0m" << std::endl;
         return;
     }
 
     // Check if the corresponding .iso file already exists
     std::string isoOutputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
     if (std::ifstream(isoOutputPath)) {
-        std::cout << "\033[93mThe corresponding .iso file already exists for '" << inputPath << "'. Skipping conversion.\033[0m" << std::endl;
+        std::cout << "\033[93mThe corresponding .iso file already exists for: \033[92m'" << inputPath << "'\033[93m. Skipping conversion.\033[0m" << std::endl;
         return;
     }
 
@@ -665,12 +665,12 @@ void convertMDFToISO(const std::string& inputPath) {
     if (conversionStatus == 0) {
         // Check if the conversion output contains the "already ISO9660" message
         if (conversionOutput.find("already ISO") != std::string::npos) {
-            std::cout << "\033[91mThe selected file '" << inputPath << "' is already in ISO format, maybe rename it to .iso?. Skipping conversion.\033[0m" << std::endl;
+            std::cout << "\033[91mThe selected file \033[93m'" << inputPath << "'\033[91m is already in ISO format, maybe rename it to .iso?. Skipping conversion.\033[0m" << std::endl;
         } else {
-            std::cout << "\033[92mImage file converted to ISO:\033[0m " << outputPath << std::endl;
+            std::cout << "Image file converted to ISO: \033[92m'" << outputPath << "'\033[0m." << std::endl;
         }
     } else {
-        std::cout << "\033[91mConversion of " << inputPath << " failed.\033[0m" << std::endl;
+        std::cout << "\033[91mConversion of \033[93m'" << inputPath << "'\033[91m failed.\033[0m" << std::endl;
     }
 }
 
