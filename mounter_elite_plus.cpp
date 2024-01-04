@@ -7,11 +7,7 @@ const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.cache";
 const std::string cacheFileName = "iso_cache.txt";;
 const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
-// Mutexes \\
-
 std::mutex mountMutex; // Mutex for mount thread safety
-std::mutex indexMutex; // Mutex for isValidIndex thread safety
-std::mutex resultMutex; // Mutex for checking if files are isos or if they exist
 std::mutex mutexforsearch; // Mutex for search thread safety
 std::mutex mutexforhandleiso; // Mutex for handleiso thread safety
 std::mutex mutexremoveNonExistentPathsFromCacheAsync; // Mutex for removeNonExistentPathsFromCacheAsync thread safety
@@ -22,8 +18,8 @@ std::mutex mutexremoveNonExistentPathsFromCacheAsync; // Mutex for removeNonExis
 //	bools
 
 bool directoryExists(const std::string& path);
-bool exists(const std::filesystem::path& path);
 bool isValidDirectory(const std::string& path);
+bool isDirectoryEmpty(const std::string& path);
 bool iequals(std::string_view a, std::string_view b);
 bool ends_with_iso(const std::string& str);
 bool isNumeric(const std::string& str);
@@ -33,11 +29,12 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
 
 void listMountedISOs();
 void unmountISOs();
+void cleanAndUnmountAllISOs();
 void select_and_mount_files_by_number();
 void print_ascii();
 void manualRefreshCache();
-void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>& mountedIsos, std::mutex& mountMutex);
-void mountISOs(const std::vector<std::string>& isoFiles);
+void mountISO(const std::vector<std::string>& isoFiles);
+void unmountISO(const std::string& isoDir);
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mutexforsearch);
 void removeNonExistentPathsFromCacheAsync();
 void displayErrorMessage(const std::string& iso);
@@ -50,9 +47,7 @@ void processPath(const std::string& path, std::vector<std::string>& allIsoFiles)
 //	stds
 
 std::vector<std::string> vec_concat(const std::vector<std::string>& v1, const std::vector<std::string>& v2);
-std::future<void> unmountISO(const std::string& isoDir);
 std::future<bool> FileExists(const std::string& path);
-std::future<bool> isDirectoryEmpty(const std::string& path);
 std::vector<std::string> refreshCacheForDirectory(const std::string& path);
 std::string getHomeDirectory();
 std::vector<std::string> loadCache();
@@ -304,23 +299,19 @@ bool exists(const std::filesystem::path& path) {
 
     for (int i = 0; i < numThreads; ++i) {
         futures.emplace_back(std::async(std::launch::async, [&path]() {
+            // Each thread checks the existence independently
             return std::filesystem::exists(path);
         }));
     }
 
     // Wait for all tasks to complete
     for (auto& future : futures) {
-        future.wait();
-    }
-
-    // Collect results and determine if any thread found the file or directory
-    for (auto& future : futures) {
         if (future.get()) {
-            return true; // File or directory exists in at least one thread
+            return true; // File exists in at least one thread
         }
     }
 
-    return false; // File or directory does not exist in any thread
+    return false; // File does not exist in any thread
 }
 
 
@@ -379,18 +370,10 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
 // Function to refresh the cache for a single directory (now returning a vector of ISO files)
 std::vector<std::string> refreshCacheForDirectory(const std::string& path) {
     std::cout << "\033[93mProcessing directory path: '" << path << "'.\033[0m" << std::endl;
-    
     std::vector<std::string> newIsoFiles;
 
-    // Use std::async to execute parallelTraverse asynchronously
-    std::future<void> asyncResult = std::async(std::launch::async, [path, &newIsoFiles]() {
-        parallelTraverse(path, newIsoFiles, mutexforsearch);
-    });
-
-    // You can perform other tasks here if needed
-
-    // Wait for the asynchronous operation to complete
-    asyncResult.wait();
+    // Perform the cache refresh for the directory (e.g., using parallelTraverse)
+    parallelTraverse(path, newIsoFiles, mutexforsearch);
 
     std::cout << "\033[92mProcessed directory path: '" << path << "'.\033[0m" << std::endl;
 
@@ -412,11 +395,6 @@ bool isValidDirectory(const std::string& path) {
 
     // Wait for all tasks to complete
     for (auto& future : futures) {
-        future.wait();
-    }
-
-    // Collect results and determine if any thread found a valid directory
-    for (auto& future : futures) {
         if (future.get()) {
             return true;
         }
@@ -424,6 +402,7 @@ bool isValidDirectory(const std::string& path) {
 
     return false;
 }
+
 
 
 // Function for manual cache refresh (now asynchronous)
@@ -565,62 +544,55 @@ bool directoryExists(const std::string& path) {
 }
 
 
-// Function to mount single ISO file called from void mountISOs
-void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>& mountedIsos, std::mutex& mountMutex) {
-    // Using C++17 filesystem
-    namespace fs = std::filesystem;
 
-    // Mutex for thread safety
-    std::lock_guard<std::mutex> lock(mountMutex);
+void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>& mountedIsos) {
+	
+	namespace fs = std::filesystem;
+	
+    std::lock_guard<std::mutex> lock(mountMutex); // Lock to protect access to mountedIsos
 
-    // Extracting ISO file name and creating mount point
+    // Use the filesystem library to extract the ISO file name
     fs::path isoPath(isoFile);
-    std::string isoFileName = isoPath.stem().string();
-    std::string mountPoint = "/mnt/iso_" + isoFileName;
+    std::string isoFileName = isoPath.stem().string(); // Remove the .iso extension
 
-    // Flag to track whether directory creation has been attempted
-    static std::map<std::string, bool> createDirAttempted;
+    std::string mountPoint = "/mnt/iso_" + isoFileName; // Use the modified ISO file name in the mount point with "iso_" prefix
 
-    // Check if the mount point directory does not exist
+    // Check if the mount point directory doesn't exist, create it asynchronously
     if (!directoryExists(mountPoint)) {
-        // Use a separate flag to track if directory creation has been attempted
-        if (!createDirAttempted[mountPoint]) {
-            // Mark directory creation as attempted
-            createDirAttempted[mountPoint] = true;
-
-            // Attempt to create the mount point directory
+        // Create the mount point directory asynchronously
+        auto mkdirFuture = std::async(std::launch::async, [&]() {
             std::string mkdirCommand = "sudo mkdir " + shell_escape(mountPoint);
-            if (system(mkdirCommand.c_str()) != 0) {
-                // Handle failure: Print error message and return
-                std::cerr << "\033[91mFailed to create mount point directory.\033[0m" << std::endl;
-                return;
-            }
-        }
-
-        // Asynchronously mount the ISO file
-        auto mountFuture = std::async(std::launch::async, [&]() {
-            // Mounting the ISO file using loop device
-            std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
-            return system(mountCommand.c_str());
+            return system(mkdirCommand.c_str());
         });
 
-        // Wait for both asynchronous operations to complete
-        if (mountFuture.get() == 0) {
-            // Mounting successful: Update map and print success message
-            mountedIsos[isoFile] = mountPoint;
-            std::cout << "ISO file: \033[92m'" << isoFile << "'\033[0m mounted at: \033[94m'" << mountPoint << "'\033[0m." << std::endl;
-        } else {
-            // Handle failure: Print error message, cleanup, and return
-            std::cerr << "\033[91mFailed to mount: \033[93m'" << isoFile << "'\033[0m\033[91m.\033[0m" << std::endl;
+        // Wait for the mkdir operation to complete
+        if (mkdirFuture.get() == 0) {
+            // Mount the ISO file to the mount point asynchronously
+            auto mountFuture = std::async(std::launch::async, [&]() {
+                std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
+                return system(mountCommand.c_str());
+            });
 
-            // Cleanup the mount point directory if it was created in this thread
-            if (createDirAttempted[mountPoint]) {
+            // Wait for the mount operation to complete
+            int mountResult = mountFuture.get();
+
+            if (mountResult != 0) {
+                std::cerr << "\033[91mFailed to mount: \033[93m'" << isoFile << "'\033[0m\033[91m.\033[0m" << std::endl;
+
+                // Cleanup the mount point directory
                 std::string cleanupCommand = "sudo rmdir " + shell_escape(mountPoint);
                 if (system(cleanupCommand.c_str()) != 0) {
                     std::cerr << "\033[91mFailed to clean up mount point directory\033[0m" << std::endl;
                 }
-            }
 
+                return;
+            } else {
+                // Store the mount point in the map
+                mountedIsos[isoFile] = mountPoint;
+                std::cout << "ISO file: \033[92m'" << isoFile << "'\033[0m mounted at: \033[94m'" << mountPoint << "'\033[0m." << std::endl;
+            }
+        } else {
+            std::cerr << "\033[91mFailed to create mount point directory.\033[0m" << std::endl;
             return;
         }
     } else {
@@ -632,20 +604,20 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
 
 
 // Function to mount ISO files concurrently using threads
-void mountISOs(const std::vector<std::string>& isoFiles) {
+void mountISO(const std::vector<std::string>& isoFiles) {
     // Map to store mounted ISOs with their corresponding paths
     std::map<std::string, std::string> mountedIsos;
-
-    // Mutex for thread safety when accessing shared resources
-    std::mutex mountMutex;
 
     // Vector to store threads for parallel mounting
     std::vector<std::thread> threads;
 
     // Iterate through the list of ISO files and spawn a thread for each
     for (const std::string& isoFile : isoFiles) {
-        // Create a thread for mounting the ISO file and pass the map and mutex by reference
-        threads.emplace_back(mountIsoFile, isoFile, std::ref(mountedIsos), std::ref(mountMutex));
+        // Create a copy of the ISO file path for the thread to avoid race conditions
+        std::string IsoFile = (isoFile);
+
+        // Create a thread for mounting the ISO file and pass the map by reference
+        threads.emplace_back(mountIsoFile, IsoFile, std::ref(mountedIsos));
     }
 
     // Join all threads to wait for them to finish
@@ -667,7 +639,6 @@ bool fileExistsOnDisk(const std::string& filename) {
             // Each thread checks the existence independently
             std::ifstream file(filename);
             if (file.good()) {
-                std::lock_guard<std::mutex> lock(resultMutex);
                 result = true;
             }
         }));
@@ -681,7 +652,7 @@ bool fileExistsOnDisk(const std::string& filename) {
     return result;
 }
 
-// Function to check if a file ends with .iso
+
 bool ends_with_iso(const std::string& str) {
     const int numThreads = std::thread::hardware_concurrency();
     bool result = false;
@@ -694,7 +665,6 @@ bool ends_with_iso(const std::string& str) {
             std::string lowercase = str;
             std::transform(lowercase.begin(), lowercase.end(), lowercase.begin(), ::tolower);
             if (lowercase.size() >= 4 && lowercase.compare(lowercase.size() - 4, 4, ".iso") == 0) {
-                std::lock_guard<std::mutex> lock(resultMutex);
                 result = true;
             }
         }));
@@ -824,7 +794,7 @@ void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& moun
             // Attempt to insert the ISO file into the set; if it's a new entry, mount it
             if (mountedSet.insert(iso).second) {
                 // Mount the ISO file
-                mountISOs({iso});  // Pass a vector with a single string to mountISO
+                mountISO({iso});  // Pass a vector with a single string to mountISO
             } else {
                 // Get the mount path if the ISO file is already mounted
                 std::string result = iso;
@@ -841,12 +811,15 @@ void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& moun
 }
 
 
+
 // Function to check if a string is numeric
 bool isNumeric(const std::string& str) {
-    // Use parallel execution policy for parallelization
-    return std::all_of(std::execution::par, str.begin(), str.end(), [](char c) {
-        return std::isdigit(c);
-    });
+    for (char c : str) {
+        if (!std::isdigit(c)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 
@@ -861,12 +834,6 @@ void processInputMultithreaded(const std::string& input, const std::vector<std::
     std::vector<std::future<void>> futures; // Vector to store std::future objects for each task
 
     while (iss >> token) {
-		// Check if the token is '0' and treat it as an invalid index
-        if (token == "0") {
-            invalidInput = true;
-            errorMessages.push_back("\033[91mFile index: '0' does not exist.\033[0m");
-            continue;
-        }
         size_t dashPos = token.find('-');
         if (dashPos != std::string::npos) {
             int start, end;
@@ -1065,51 +1032,63 @@ void listMountedISOs() {
 }
 
 
-// Function to check if directory is empty for unmount functions
-std::future<bool> isDirectoryEmpty(const std::string& path) {
-    return std::async(std::launch::async, [path]() {
-        try {
-            int entryCount = 0;
-            for (const auto& entry : std::filesystem::directory_iterator(path)) {
-                entryCount++;
-            }
-            return entryCount == 0;
-        } catch (const std::filesystem::filesystem_error& ex) {
-            // Handle the exception if necessary
-            std::cerr << "\033[91mError accessing directory: \033[92m'" << ex.what() << "'\033[91m.\033[0m" << std::endl;
-            throw; // Rethrow the exception
+// Function to check if a directory is empty
+bool isDirectoryEmpty(const std::string& path) {
+    const int numThreads = std::thread::hardware_concurrency();
+    std::vector<std::future<bool>> futures;
+
+    for (int i = 0; i < numThreads; ++i) {
+        futures.emplace_back(std::async(std::launch::async, [&path]() {
+            std::string checkEmptyCommand = "sudo find " + shell_escape(path) + " -mindepth 1 -maxdepth 1 -print -quit | grep -q .";
+            int result = system(checkEmptyCommand.c_str());
+            return result != 0;
+        }));
+    }
+
+    // Wait for all tasks to complete
+    for (auto& future : futures) {
+        if (!future.get()) {
+            return false;
         }
-    });
+    }
+
+    return true;
 }
 
 
-// Function to unmount a single ISO called by unmountISOs
-std::future<void> unmountISO(const std::string& isoDir) {
-    return std::async(std::launch::async, [isoDir]() {
-        // Construct the unmount command with sudo and umount, suppressing logs
-        std::string umountCommand = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1";
+void unmountISO(const std::string& isoDir) {
+    // Construct the unmount command with sudo, umount, and suppressing logs
+    std::string unmountCommand = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1";
 
-        // Execute the umount command asynchronously
-        int umountResult = std::system(umountCommand.c_str());
+    // Execute the unmount command
+    int result = system(unmountCommand.c_str());
 
-        // Check if the umount command was successful
-        if (umountResult == 0) {
-            std::cout << "Unmounted: \033[92m'" << isoDir << "'\033[0m." << std::endl;
+    // Check if the unmounting was successful
+    if (result == 0) {
+        std::cout << "\033[92mUnmounted: " << isoDir << "\033[0m" << std::endl; // Print success message
 
-            // Now remove the directory
-            std::string rmdirCommand = "sudo rmdir " + shell_escape(isoDir) + " 2>/dev/null";
-            int rmdirResult = std::system(rmdirCommand.c_str());
+        // Check if the directory is empty before removing it
+        if (isDirectoryEmpty(isoDir)) {
+            // Construct the remove directory command with sudo, rmdir, and suppressing logs
+            std::string removeDirCommand = "sudo rmdir " + shell_escape(isoDir) + " 2>/dev/null";
 
-        } else {
-            std::cerr << "\033[91mFailed to unmount: \033[92m'" << isoDir << "'\033[91m. Check it out manually.\033[0m" << std::endl;
+            // Execute the remove directory command
+            int removeDirResult = system(removeDirCommand.c_str());
+
+            if (removeDirResult != 0) {
+                std::cerr << "\033[91mFailed to remove directory: " << isoDir << " ...Please check it out manually.\033[0m" << std::endl;
+            }
         }
-    });
+    } else {
+        std::cerr << "\033[91mFailed to unmount: " << isoDir << " ...Probably not an ISO mountpoint, check it out manually.\033[0m" << std::endl; // Print failure message
+    }
 }
 
 
 // Function to check if a given index is within the valid range of available ISOs
 bool isValidIndex(int index, size_t isoDirsSize) {
-    std::lock_guard<std::mutex> lock(indexMutex); // Lock the mutex for the duration of this scope
+	std::mutex indexMutex;
+    std::lock_guard<std::mutex> lock(indexMutex);  // Lock the mutex
 
     return (index >= 1) && (static_cast<size_t>(index) <= isoDirsSize);
 }
@@ -1267,13 +1246,8 @@ void unmountISOs() {
 
                 // Use a thread for each ISO to be unmounted
                 threads.emplace_back([&, isoDir]() {
-                    try {
-                        std::lock_guard<std::mutex> lock(mutexforsearch); // Lock the critical section
-                        unmountISO(isoDir);
-                    } catch (const std::exception& e) {
-                        // Handle the exception or log it
-                        std::cerr << "Exception in thread: " << e.what() << std::endl;
-                    }
+                    std::lock_guard<std::mutex> lock(mutexforsearch); // Lock the critical section
+                    unmountISO(isoDir);
                 });
             }
         }
