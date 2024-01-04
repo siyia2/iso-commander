@@ -1095,12 +1095,6 @@ std::future<void> unmountISO(const std::string& isoDir) {
             std::string rmdirCommand = "sudo rmdir " + shell_escape(isoDir) + " 2>/dev/null";
             int rmdirResult = std::system(rmdirCommand.c_str());
 
-            // Check if the rmdir command was successful
-            if (rmdirResult == 0) {
-                std::cout << "Removed: \033[92m'" << isoDir << "'\033[0m." << std::endl;
-            } else {
-                std::cerr << "\033[91mFailed to remove: \033[92m'" << isoDir << "'\033[91m. Check it out manually.\033[0m" << std::endl;
-            }
         } else {
             std::cerr << "\033[91mFailed to unmount: \033[92m'" << isoDir << "'\033[91m. Check it out manually.\033[0m" << std::endl;
         }
