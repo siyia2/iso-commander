@@ -30,12 +30,10 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
 
 void listMountedISOs();
 void unmountISOs();
-void cleanAndUnmountAllISOs();
 void select_and_mount_files_by_number();
 void print_ascii();
 void manualRefreshCache();
-void mountISO(const std::vector<std::string>& isoFiles);
-void unmountISO(const std::string& isoDir);
+void mountISOs(const std::vector<std::string>& isoFiles);
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mutexforsearch);
 void removeNonExistentPathsFromCacheAsync();
 void displayErrorMessage(const std::string& iso);
@@ -48,6 +46,7 @@ void processPath(const std::string& path, std::vector<std::string>& allIsoFiles)
 //	stds
 
 std::vector<std::string> vec_concat(const std::vector<std::string>& v1, const std::vector<std::string>& v2);
+std::future<void> unmountISO(const std::string& isoDir);
 std::future<bool> FileExists(const std::string& path);
 std::vector<std::string> refreshCacheForDirectory(const std::string& path);
 std::string getHomeDirectory();
@@ -553,39 +552,41 @@ bool directoryExists(const std::string& path) {
 }
 
 
-
+// Function to mount single ISO file caled from void mountISOs
 void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>& mountedIsos) {
-	
-	namespace fs = std::filesystem;
-	
-    std::lock_guard<std::mutex> lock(mountMutex); // Lock to protect access to mountedIsos
+    // Using C++17 filesystem
+    namespace fs = std::filesystem;
 
-    // Use the filesystem library to extract the ISO file name
+    // Mutex for thread safety
+    std::lock_guard<std::mutex> lock(mountMutex);
+
+    // Extracting ISO file name and creating mount point
     fs::path isoPath(isoFile);
-    std::string isoFileName = isoPath.stem().string(); // Remove the .iso extension
+    std::string isoFileName = isoPath.stem().string();
+    std::string mountPoint = "/mnt/iso_" + isoFileName;
 
-    std::string mountPoint = "/mnt/iso_" + isoFileName; // Use the modified ISO file name in the mount point with "iso_" prefix
-
-    // Check if the mount point directory doesn't exist, create it asynchronously
+    // Check if the mount point directory does not exist
     if (!directoryExists(mountPoint)) {
-        // Create the mount point directory asynchronously
+        // Asynchronously create the mount point directory
         auto mkdirFuture = std::async(std::launch::async, [&]() {
             std::string mkdirCommand = "sudo mkdir " + shell_escape(mountPoint);
             return system(mkdirCommand.c_str());
         });
 
-        // Wait for the mkdir operation to complete
-        if (mkdirFuture.get() == 0) {
-            // Mount the ISO file to the mount point asynchronously
-            auto mountFuture = std::async(std::launch::async, [&]() {
-                std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
-                return system(mountCommand.c_str());
-            });
+        // Asynchronously mount the ISO file
+        auto mountFuture = std::async(std::launch::async, [&]() {
+            // Mounting the ISO file using loop device
+            std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
+            return system(mountCommand.c_str());
+        });
 
-            // Wait for the mount operation to complete
+        // Wait for both asynchronous operations to complete
+        if (mkdirFuture.get() == 0) {
             int mountResult = mountFuture.get();
 
+            // Check if mounting was successful
             if (mountResult != 0) {
+                // Handle failure: Print error message, cleanup, and return
                 std::cerr << "\033[91mFailed to mount: \033[93m'" << isoFile << "'\033[0m\033[91m.\033[0m" << std::endl;
 
                 // Cleanup the mount point directory
@@ -596,11 +597,12 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
 
                 return;
             } else {
-                // Store the mount point in the map
+                // Mounting successful: Update map and print success message
                 mountedIsos[isoFile] = mountPoint;
                 std::cout << "ISO file: \033[92m'" << isoFile << "'\033[0m mounted at: \033[94m'" << mountPoint << "'\033[0m." << std::endl;
             }
         } else {
+            // Handle failure: Print error message and return
             std::cerr << "\033[91mFailed to create mount point directory.\033[0m" << std::endl;
             return;
         }
@@ -613,7 +615,7 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
 
 
 // Function to mount ISO files concurrently using threads
-void mountISO(const std::vector<std::string>& isoFiles) {
+void mountISOs(const std::vector<std::string>& isoFiles) {
     // Map to store mounted ISOs with their corresponding paths
     std::map<std::string, std::string> mountedIsos;
 
@@ -803,7 +805,7 @@ void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& moun
             // Attempt to insert the ISO file into the set; if it's a new entry, mount it
             if (mountedSet.insert(iso).second) {
                 // Mount the ISO file
-                mountISO({iso});  // Pass a vector with a single string to mountISO
+                mountISOs({iso});  // Pass a vector with a single string to mountISO
             } else {
                 // Get the mount path if the ISO file is already mounted
                 std::string result = iso;
@@ -818,7 +820,6 @@ void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& moun
     // Wait for the asynchronous operation to complete
     future.wait();
 }
-
 
 
 // Function to check if a string is numeric
@@ -1063,42 +1064,45 @@ bool isDirectoryEmpty(const std::string& path) {
 }
 
 
-void unmountISO(const std::string& isoDir) {
-    // Construct the unmount command with sudo, umount, and suppressing logs
-    std::string unmountCommand = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1";
+// Asynchronous unmount and remove directory function
+std::future<void> unmountISO(const std::string& isoDir) {
+    return std::async(std::launch::async, [isoDir]() {
+        // Construct the unmount command with sudo, umount, and suppressing logs
+        std::string unmountCommand = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1";
 
-    // Execute the unmount command asynchronously
-    std::future<int> unmountFuture = std::async(std::launch::async, [](const std::string& command) {
-        return system(command.c_str());
-    }, unmountCommand);
+        // Execute the unmount command asynchronously
+        std::future<int> unmountFuture = std::async(std::launch::async, [](const std::string& command) {
+            return system(command.c_str());
+        }, unmountCommand);
 
-    // Check if the unmounting was successful
-    int unmountResult = unmountFuture.get();
-    if (unmountResult == 0) {
-        std::cout << "Unmounted: \033[92m'" << isoDir << "'\033[0m." << std::endl; // Print success message
+        // Check if the unmounting was successful
+        int unmountResult = unmountFuture.get();
+        if (unmountResult == 0) {
+            std::cout << "Unmounted: \033[92m'" << isoDir << "'\033[0m." << std::endl; // Print success message
 
-        // Check if the directory is empty before removing it
-        std::future<bool> isEmptyFuture = std::async(std::launch::async, &isDirectoryEmpty, isoDir);
-        bool isEmpty = isEmptyFuture.get();
+            // Check if the directory is empty before removing it
+            std::future<bool> isEmptyFuture = std::async(std::launch::async, &isDirectoryEmpty, isoDir);
+            bool isEmpty = isEmptyFuture.get();
 
-        if (isEmpty) {
-            // Construct the remove directory command with sudo, rmdir, and suppressing logs
-            std::string removeDirCommand = "sudo rmdir " + shell_escape(isoDir) + " 2>/dev/null";
+            if (isEmpty) {
+                // Construct the remove directory command with sudo, rmdir, and suppressing logs
+                std::string removeDirCommand = "sudo rmdir " + shell_escape(isoDir) + " 2>/dev/null";
 
-            // Execute the remove directory command asynchronously
-            std::future<int> removeDirFuture = std::async(std::launch::async, [](const std::string& command) {
-                return system(command.c_str());
-            }, removeDirCommand);
+                // Execute the remove directory command asynchronously
+                std::future<int> removeDirFuture = std::async(std::launch::async, [](const std::string& command) {
+                    return system(command.c_str());
+                }, removeDirCommand);
 
-            // Check if the directory removal was successful
-            int removeDirResult = removeDirFuture.get();
-            if (removeDirResult != 0) {
-                std::cerr << "\033[91mFailed to remove directory: '" << isoDir << "' ...Please check it out manually.\033[0m" << std::endl;
+                // Check if the directory removal was successful
+                int removeDirResult = removeDirFuture.get();
+                if (removeDirResult != 0) {
+                    std::cerr << "\033[91mFailed to remove directory: '" << isoDir << "' ...Please check it out manually.\033[0m" << std::endl;
+                }
             }
+        } else {
+            std::cerr << "\033[91mFailed to unmount: '" << isoDir << " ...Probably not an ISO mountpoint, check it out manually.\033[0m" << std::endl; // Print failure message
         }
-    } else {
-        std::cerr << "\033[91mFailed to unmount: '" << isoDir << " ...Probably not an ISO mountpoint, check it out manually.\033[0m" << std::endl; // Print failure message
-    }
+    });
 }
 
 
