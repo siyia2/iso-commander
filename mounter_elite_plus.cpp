@@ -1253,21 +1253,29 @@ void unmountISOs() {
         // Determine the number of available CPU cores
         const unsigned int numCores = std::thread::hardware_concurrency();
 
-        // Create a vector of threads to perform unmounting and directory removal concurrently
-        std::vector<std::thread> threads;
+		// Create a vector of threads to perform unmounting and directory removal concurrently
+		std::vector<std::thread> threads;
 
-        for (int index : unmountIndices) {
-            // Check if the index is within the valid range
-            if (isValidIndex(index, isoDirs.size())) {
-                const std::string& isoDir = isoDirs[index - 1];
+		for (int index : unmountIndices) {
+			// Check if the index is within the valid range
+			if (isValidIndex(index, isoDirs.size())) {
+				const std::string& isoDir = isoDirs[index - 1];
 
-                // Use a thread for each ISO to be unmounted
-                threads.emplace_back([&, isoDir]() {
-                    std::lock_guard<std::mutex> lock(mutexforsearch); // Lock the critical section
-                    unmountISO(isoDir);
-                });
-            }
-        }
+			// Use a thread for each ISO to be unmounted
+			threads.emplace_back([&, isoDir]() {
+				try {
+                std::lock_guard<std::mutex> lock(mutexforsearch); // Lock the critical section
+                unmountISO(isoDir);
+				} catch (const std::exception& e) {
+                // Handle the exception or log it
+                std::cerr << "Exception in thread: " << e.what() << std::endl;
+				}
+			});
+
+			// Detach the thread to allow it to run independently
+			threads.back().detach();
+		}
+		
 
         // Join the threads to wait for them to finish
         for (auto& thread : threads) {
