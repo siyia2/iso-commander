@@ -13,31 +13,6 @@ std::mutex binImgFilesMutex; // Mutex to protect access to binImgFiles
 
 // BIN/IMG CONVERSION FUNCTIONS	\\
 
-// Function to list available files and prompt the user to choose a file for conversion
-std::string chooseFileToConvert(const std::vector<std::string>& files) {
-    // Display a header indicating the available .bin and .img files
-    std::cout << "\033[92mFound the following .bin and .img files:\033[0m\n";
-
-    // Iterate through the files and display them with their corresponding numbers
-    for (size_t i = 0; i < files.size(); ++i) {
-        std::cout << i + 1 << ": " << files[i] << "\n";
-    }
-
-    // Prompt the user to enter the number of the file they want to convert
-    int choice;
-    std::cout << "\033[94mEnter the number of the file you want to convert:\033[0m ";
-    std::cin >> choice;
-
-    // Check if the user's choice is within the valid range
-    if (choice >= 1 && choice <= static_cast<int>(files.size())) {
-        // Return the chosen file path
-        return files[choice - 1];
-    } else {
-        // Print an error message for an invalid choice
-        std::cout << "\033[91mInvalid choice. Please choose a valid file.\033[91m\n";
-        return "";
-    }
-}
 
 // Function to search for .bin and .img files under 10MB
 std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback) {
@@ -726,39 +701,6 @@ void convertMDFsToISOs(const std::vector<std::string>& inputPaths) {
     }
 }
 
-// Function to process a range of MDF files by converting them to ISO asynchronously
-void processMDFFilesInRange(int start, int end) {
-    std::vector<std::string> mdfImgFiles; // Declare mdfImgFiles here
-    int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2; // Determine the number of threads based on CPU cores fallback is 2 threads
-    std::vector<std::string> selectedFiles;
-
-    {
-        std::lock_guard<std::mutex> lock(mdfFilesMutex); // Lock the mutex while accessing mdfImgFiles
-        for (int i = start; i <= end; i++) {
-            std::string filePath = (mdfImgFiles[i - 1]);
-            selectedFiles.push_back(filePath);
-        }
-    } // Unlock the mutex when leaving the scope
-
-    int filesPerThread = selectedFiles.size() / numThreads;
-    std::vector<std::future<void>> futures;
-
-    for (int i = 0; i < numThreads; ++i) {
-        int startIdx = i * filesPerThread;
-        int endIdx = (i == numThreads - 1) ? selectedFiles.size() : (i + 1) * filesPerThread;
-        std::vector<std::string> filesSubset(selectedFiles.begin() + startIdx, selectedFiles.begin() + endIdx);
-
-        // Use std::async for asynchronous execution
-        futures.emplace_back(std::async(std::launch::async, [filesSubset]() {
-            convertMDFsToISOs(filesSubset);
-        }));
-    }
-
-    // Wait for all asynchronous tasks to finish
-    for (auto& future : futures) {
-        future.wait();
-    }
-}
 
 // Function to interactively select and convert MDF files to ISO
 void select_and_convert_files_to_iso_mdf() {
