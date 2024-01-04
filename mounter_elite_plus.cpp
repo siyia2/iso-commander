@@ -22,6 +22,7 @@ std::mutex mutexremoveNonExistentPathsFromCacheAsync; // Mutex for removeNonExis
 //	bools
 
 bool directoryExists(const std::string& path);
+bool exists(const std::filesystem::path& path);
 bool isValidDirectory(const std::string& path);
 bool iequals(std::string_view a, std::string_view b);
 bool ends_with_iso(const std::string& str);
@@ -302,19 +303,23 @@ bool exists(const std::filesystem::path& path) {
 
     for (int i = 0; i < numThreads; ++i) {
         futures.emplace_back(std::async(std::launch::async, [&path]() {
-            // Each thread checks the existence independently
             return std::filesystem::exists(path);
         }));
     }
 
     // Wait for all tasks to complete
     for (auto& future : futures) {
+        future.wait();
+    }
+
+    // Collect results and determine if any thread found the file or directory
+    for (auto& future : futures) {
         if (future.get()) {
-            return true; // File exists in at least one thread
+            return true; // File or directory exists in at least one thread
         }
     }
 
-    return false; // File does not exist in any thread
+    return false; // File or directory does not exist in any thread
 }
 
 
