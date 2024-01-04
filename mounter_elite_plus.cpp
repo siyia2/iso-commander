@@ -371,10 +371,18 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
 // Function to refresh the cache for a single directory (now returning a vector of ISO files)
 std::vector<std::string> refreshCacheForDirectory(const std::string& path) {
     std::cout << "\033[93mProcessing directory path: '" << path << "'.\033[0m" << std::endl;
+    
     std::vector<std::string> newIsoFiles;
 
-    // Perform the cache refresh for the directory (e.g., using parallelTraverse)
-    parallelTraverse(path, newIsoFiles, mutexforsearch);
+    // Use std::async to execute parallelTraverse asynchronously
+    std::future<void> asyncResult = std::async(std::launch::async, [path, &newIsoFiles]() {
+        parallelTraverse(path, newIsoFiles, mutexforsearch);
+    });
+
+    // You can perform other tasks here if needed
+
+    // Wait for the asynchronous operation to complete
+    asyncResult.wait();
 
     std::cout << "\033[92mProcessed directory path: '" << path << "'.\033[0m" << std::endl;
 
