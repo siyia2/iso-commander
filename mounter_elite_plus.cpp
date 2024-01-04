@@ -11,6 +11,7 @@ const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
 std::mutex mountMutex; // Mutex for mount thread safety
 std::mutex indexMutex; // Mutex for isValidIndex thread safety
+std::mutex resultMutex; // Mutex for checking if files are isos or if they exist
 std::mutex mutexforsearch; // Mutex for search thread safety
 std::mutex mutexforhandleiso; // Mutex for handleiso thread safety
 std::mutex mutexremoveNonExistentPathsFromCacheAsync; // Mutex for removeNonExistentPathsFromCacheAsync thread safety
@@ -405,6 +406,11 @@ bool isValidDirectory(const std::string& path) {
 
     // Wait for all tasks to complete
     for (auto& future : futures) {
+        future.wait();
+    }
+
+    // Collect results and determine if any thread found a valid directory
+    for (auto& future : futures) {
         if (future.get()) {
             return true;
         }
@@ -412,7 +418,6 @@ bool isValidDirectory(const std::string& path) {
 
     return false;
 }
-
 
 
 // Function for manual cache refresh (now asynchronous)
@@ -652,6 +657,7 @@ bool fileExistsOnDisk(const std::string& filename) {
             // Each thread checks the existence independently
             std::ifstream file(filename);
             if (file.good()) {
+                std::lock_guard<std::mutex> lock(resultMutex);
                 result = true;
             }
         }));
@@ -665,7 +671,7 @@ bool fileExistsOnDisk(const std::string& filename) {
     return result;
 }
 
-
+// Function to check if a file ends with .iso
 bool ends_with_iso(const std::string& str) {
     const int numThreads = std::thread::hardware_concurrency();
     bool result = false;
@@ -678,6 +684,7 @@ bool ends_with_iso(const std::string& str) {
             std::string lowercase = str;
             std::transform(lowercase.begin(), lowercase.end(), lowercase.begin(), ::tolower);
             if (lowercase.size() >= 4 && lowercase.compare(lowercase.size() - 4, 4, ".iso") == 0) {
+                std::lock_guard<std::mutex> lock(resultMutex);
                 result = true;
             }
         }));
@@ -1058,12 +1065,13 @@ std::future<bool> isDirectoryEmpty(const std::string& path) {
         } catch (const std::filesystem::filesystem_error& ex) {
             // Handle the exception if necessary
             std::cerr << "033[91mError accessing directory: \033[92m'" << ex.what() << "'033[91m.\033[0m" << std::endl;
-            return false;
+            throw; // Rethrow the exception
         }
 
         return true; // Directory is empty
     });
 }
+
 
 // Function to unmount a single ISO called by unmountISOs
 std::future<void> unmountISO(const std::string& isoDir) {
