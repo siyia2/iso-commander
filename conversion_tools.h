@@ -3,6 +3,7 @@
 #ifndef CONVERSION_TOOLS_H
 #define CONVERSION_TOOLS_H
 
+#include <sys/mount.h>
 #include <chrono>
 #include <dirent.h>
 #include <execution>

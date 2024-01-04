@@ -33,7 +33,7 @@ void unmountISOs();
 void select_and_mount_files_by_number();
 void print_ascii();
 void manualRefreshCache();
-void mountISO(const std::vector<std::string>& isoFiles);
+void mountISOs(const std::vector<std::string>& isoFiles);
 void unmountISO(const std::string& isoDir);
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mutexforsearch);
 void removeNonExistentPathsFromCacheAsync();
@@ -291,7 +291,7 @@ std::vector<std::string> loadCache() {
     return isoFiles;
 }
 
-
+// Function to check if filepath exists
 bool exists(const std::filesystem::path& path) {
     return std::filesystem::exists(path);
 }
@@ -348,7 +348,6 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
 }
 
 
-
 // Function to refresh the cache for a single directory (now returning a vector of ISO files)
 std::vector<std::string> refreshCacheForDirectory(const std::string& path) {
     std::cout << "\033[93mProcessing directory path: '" << path << "'.\033[0m" << std::endl;
@@ -371,11 +370,10 @@ std::vector<std::string> refreshCacheForDirectory(const std::string& path) {
     return newIsoFiles;
 }
 
-
+// Function to check if a directory input is valid
 bool isValidDirectory(const std::string& path) {
     return std::filesystem::is_directory(path);
 }
-
 
 
 // Function for manual cache refresh (now asynchronous)
@@ -493,12 +491,13 @@ void manualRefreshCache() {
 
 //	MOUNT STUFF	\\
 
+// Function to check if a directory exists
 bool directoryExists(const std::string& path) {
     return std::filesystem::is_directory(path);
 }
 
 
-
+// Function to mount selected ISO files called from mountISOs
 void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>& mountedIsos) {
     namespace fs = std::filesystem;
 
@@ -567,7 +566,7 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
 }
 
 // Function to mount ISO files concurrently using threads
-void mountISO(const std::vector<std::string>& isoFiles) {
+void mountISOs(const std::vector<std::string>& isoFiles) {
     // Map to store mounted ISOs with their corresponding paths
     std::map<std::string, std::string> mountedIsos;
 
@@ -718,7 +717,7 @@ void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& moun
             // Attempt to insert the ISO file into the set; if it's a new entry, mount it
             if (mountedSet.insert(iso).second) {
                 // Mount the ISO file
-                mountISO({iso});  // Pass a vector with a single string to mountISO
+                mountISOs({iso});  // Pass a vector with a single string to mountISO
             } else {
                 // Get the mount path if the ISO file is already mounted
                 std::string result = iso;
@@ -827,7 +826,7 @@ void processInputMultithreaded(const std::string& input, const std::vector<std::
     }
 }
 
-
+// Function to display already mounted at message when you are already in the selenct_and_mount()
 void printAlreadyMountedMessage(const std::string& isoFile) {
     namespace fs = std::filesystem;
     fs::path isoPath(isoFile);
@@ -959,13 +958,13 @@ void listMountedISOs() {
     }
 }
 
-
+// Function to check if directory is empty
 bool isDirectoryEmpty(const std::string& path) {
     // Use std::filesystem for a safer and more efficient solution
     return std::filesystem::is_empty(path);
 }
 
-
+// Function to unmount selected ISOs called by unmountISOs()
 void unmountISO(const std::string& isoDir) {
     // Local mutex for synchronization
     std::mutex localMutex;
