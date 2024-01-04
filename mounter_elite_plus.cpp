@@ -20,7 +20,6 @@ std::mutex mutexremoveNonExistentPathsFromCacheAsync; // Mutex for removeNonExis
 
 bool directoryExists(const std::string& path);
 bool isValidDirectory(const std::string& path);
-bool isDirectoryEmpty(const std::string& path);
 bool iequals(std::string_view a, std::string_view b);
 bool ends_with_iso(const std::string& str);
 bool isNumeric(const std::string& str);
@@ -48,6 +47,7 @@ void processPath(const std::string& path, std::vector<std::string>& allIsoFiles)
 std::vector<std::string> vec_concat(const std::vector<std::string>& v1, const std::vector<std::string>& v2);
 std::future<void> unmountISO(const std::string& isoDir);
 std::future<bool> FileExists(const std::string& path);
+std::future<bool> isDirectoryEmpty(const std::string& path);
 std::vector<std::string> refreshCacheForDirectory(const std::string& path);
 std::string getHomeDirectory();
 std::vector<std::string> loadCache();
@@ -1040,8 +1040,8 @@ void listMountedISOs() {
 }
 
 
-bool isDirectoryEmpty(const std::string& path) {
-    return std::async(std::launch::async, [path]() {
+std::future<bool> isDirectoryEmpty(const std::string& path) {
+    return std::async(std::launch::deferred, [path]() {
         try {
             for (const auto& entry : std::filesystem::directory_iterator(path)) {
                 return false; // If there's at least one entry, the directory is not empty
@@ -1053,18 +1053,17 @@ bool isDirectoryEmpty(const std::string& path) {
         }
 
         return true; // Directory is empty
-    }).get(); // Wait for the async task to complete and get the result
+    });
 }
 
 
-// Asynchronous unmount and remove directory function
 std::future<void> unmountISO(const std::string& isoDir) {
     return std::async(std::launch::async, [isoDir]() {
         // Construct the unmount and remove directory command with sudo, umount, rmdir, and suppressing logs
         std::string command = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1 && sudo rmdir " + shell_escape(isoDir) + " 2>/dev/null";
 
         // Execute the command asynchronously
-        std::future<int> resultFuture = std::async(std::launch::async, [](const std::string& cmd) {
+        std::future<int> resultFuture = std::async(std::launch::deferred, [](const std::string& cmd) {
             return std::system(cmd.c_str());
         }, command);
 
