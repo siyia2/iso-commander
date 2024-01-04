@@ -30,7 +30,6 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
 
 void listMountedISOs();
 void unmountISOs();
-void cleanAndUnmountAllISOs();
 void select_and_mount_files_by_number();
 void print_ascii();
 void manualRefreshCache();
@@ -293,26 +292,8 @@ std::vector<std::string> loadCache() {
 }
 
 
-// Function to check if a file or directory exists
 bool exists(const std::filesystem::path& path) {
-    const int numThreads = std::thread::hardware_concurrency();
-    std::vector<std::future<bool>> futures;
-
-    for (int i = 0; i < numThreads; ++i) {
-        futures.emplace_back(std::async(std::launch::async, [&path]() {
-            // Each thread checks the existence independently
-            return std::filesystem::exists(path);
-        }));
-    }
-
-    // Wait for all tasks to complete
-    for (auto& future : futures) {
-        if (future.get()) {
-            return true; // File exists in at least one thread
-        }
-    }
-
-    return false; // File does not exist in any thread
+    return std::filesystem::exists(path);
 }
 
 
@@ -391,25 +372,8 @@ std::vector<std::string> refreshCacheForDirectory(const std::string& path) {
 }
 
 
-// Function to check if a directory is valid
 bool isValidDirectory(const std::string& path) {
-    const int numThreads = std::thread::hardware_concurrency();
-    std::vector<std::future<bool>> futures;
-
-    for (int i = 0; i < numThreads; ++i) {
-        futures.emplace_back(std::async(std::launch::async, [&path]() {
-            return std::filesystem::is_directory(path);
-        }));
-    }
-
-    // Wait for all tasks to complete
-    for (auto& future : futures) {
-        if (future.get()) {
-            return true;
-        }
-    }
-
-    return false;
+    return std::filesystem::is_directory(path);
 }
 
 
@@ -530,26 +494,7 @@ void manualRefreshCache() {
 //	MOUNT STUFF	\\
 
 bool directoryExists(const std::string& path) {
-    const int numThreads = std::thread::hardware_concurrency();
-    std::atomic<bool> result(false);
-
-    std::vector<std::future<void>> futures;
-
-    for (int i = 0; i < numThreads; ++i) {
-        futures.emplace_back(std::async(std::launch::async, [&path, &result]() {
-            // Each thread checks the existence independently
-            if (std::filesystem::is_directory(path)) {
-                result.store(true, std::memory_order_relaxed);
-            }
-        }));
-    }
-
-    // Wait for all tasks to complete
-    for (auto& future : futures) {
-        future.wait();
-    }
-
-    return result.load(std::memory_order_relaxed);
+    return std::filesystem::is_directory(path);
 }
 
 
@@ -636,55 +581,16 @@ void mountISO(const std::vector<std::string>& isoFiles) {
 }
 
 
-// Function to check if a file exists on disk
 bool fileExistsOnDisk(const std::string& filename) {
-    const int numThreads = std::thread::hardware_concurrency();
-    bool result = false;
-
-    std::vector<std::future<void>> futures;
-
-    for (int i = 0; i < numThreads; ++i) {
-        futures.emplace_back(std::async(std::launch::async, [&filename, &result]() {
-            // Each thread checks the existence independently
-            std::ifstream file(filename);
-            if (file.good()) {
-                result = true;
-            }
-        }));
-    }
-
-    // Wait for all tasks to complete
-    for (auto& future : futures) {
-        future.wait();
-    }
-
-    return result;
+    std::ifstream file(filename);
+    return file.good();
 }
 
 
 bool ends_with_iso(const std::string& str) {
-    const int numThreads = std::thread::hardware_concurrency();
-    bool result = false;
-
-    std::vector<std::future<void>> futures;
-
-    for (int i = 0; i < numThreads; ++i) {
-        futures.emplace_back(std::async(std::launch::async, [&str, &result]() {
-            // Each thread checks the ending independently
-            std::string lowercase = str;
-            std::transform(lowercase.begin(), lowercase.end(), lowercase.begin(), ::tolower);
-            if (lowercase.size() >= 4 && lowercase.compare(lowercase.size() - 4, 4, ".iso") == 0) {
-                result = true;
-            }
-        }));
-    }
-
-    // Wait for all tasks to complete
-    for (auto& future : futures) {
-        future.wait();
-    }
-
-    return result;
+    std::string lowercase = str;
+    std::transform(lowercase.begin(), lowercase.end(), lowercase.begin(), ::tolower);
+    return (lowercase.size() >= 4) && (lowercase.compare(lowercase.size() - 4, 4, ".iso") == 0);
 }
 
 
@@ -1045,27 +951,9 @@ void listMountedISOs() {
 }
 
 
-// Function to check if a directory is empty
 bool isDirectoryEmpty(const std::string& path) {
-    const int numThreads = std::thread::hardware_concurrency();
-    std::vector<std::future<bool>> futures;
-
-    for (int i = 0; i < numThreads; ++i) {
-        futures.emplace_back(std::async(std::launch::async, [&path]() {
-            std::string checkEmptyCommand = "sudo find " + shell_escape(path) + " -mindepth 1 -maxdepth 1 -print -quit | grep -q .";
-            int result = system(checkEmptyCommand.c_str());
-            return result != 0;
-        }));
-    }
-
-    // Wait for all tasks to complete
-    for (auto& future : futures) {
-        if (!future.get()) {
-            return false;
-        }
-    }
-
-    return true;
+    // Use std::filesystem for a safer and more efficient solution
+    return std::filesystem::is_empty(path);
 }
 
 
