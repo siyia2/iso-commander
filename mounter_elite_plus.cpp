@@ -36,6 +36,7 @@ void unmountISOs();
 void select_and_mount_files_by_number();
 void print_ascii();
 void manualRefreshCache();
+void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>& mountedIsos, std::mutex& mountMutex);
 void mountISOs(const std::vector<std::string>& isoFiles);
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mutexforsearch);
 void removeNonExistentPathsFromCacheAsync();
@@ -577,13 +578,24 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
     std::string isoFileName = isoPath.stem().string();
     std::string mountPoint = "/mnt/iso_" + isoFileName;
 
+    // Flag to track whether directory creation has been attempted
+    static std::map<std::string, bool> createDirAttempted;
+
     // Check if the mount point directory does not exist
     if (!directoryExists(mountPoint)) {
-        // Asynchronously create the mount point directory
-        auto mkdirFuture = std::async(std::launch::async, [&]() {
+        // Use a separate flag to track if directory creation has been attempted
+        if (!createDirAttempted[mountPoint]) {
+            // Mark directory creation as attempted
+            createDirAttempted[mountPoint] = true;
+
+            // Attempt to create the mount point directory
             std::string mkdirCommand = "sudo mkdir " + shell_escape(mountPoint);
-            return system(mkdirCommand.c_str());
-        });
+            if (system(mkdirCommand.c_str()) != 0) {
+                // Handle failure: Print error message and return
+                std::cerr << "\033[91mFailed to create mount point directory.\033[0m" << std::endl;
+                return;
+            }
+        }
 
         // Asynchronously mount the ISO file
         auto mountFuture = std::async(std::launch::async, [&]() {
@@ -593,29 +605,22 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
         });
 
         // Wait for both asynchronous operations to complete
-        if (mkdirFuture.get() == 0) {
-            int mountResult = mountFuture.get();
+        if (mountFuture.get() == 0) {
+            // Mounting successful: Update map and print success message
+            mountedIsos[isoFile] = mountPoint;
+            std::cout << "ISO file: \033[92m'" << isoFile << "'\033[0m mounted at: \033[94m'" << mountPoint << "'\033[0m." << std::endl;
+        } else {
+            // Handle failure: Print error message, cleanup, and return
+            std::cerr << "\033[91mFailed to mount: \033[93m'" << isoFile << "'\033[0m\033[91m.\033[0m" << std::endl;
 
-            // Check if mounting was successful
-            if (mountResult != 0) {
-                // Handle failure: Print error message, cleanup, and return
-                std::cerr << "\033[91mFailed to mount: \033[93m'" << isoFile << "'\033[0m\033[91m.\033[0m" << std::endl;
-
-                // Cleanup the mount point directory
+            // Cleanup the mount point directory if it was created in this thread
+            if (createDirAttempted[mountPoint]) {
                 std::string cleanupCommand = "sudo rmdir " + shell_escape(mountPoint);
                 if (system(cleanupCommand.c_str()) != 0) {
                     std::cerr << "\033[91mFailed to clean up mount point directory\033[0m" << std::endl;
                 }
-
-                return;
-            } else {
-                // Mounting successful: Update map and print success message
-                mountedIsos[isoFile] = mountPoint;
-                std::cout << "ISO file: \033[92m'" << isoFile << "'\033[0m mounted at: \033[94m'" << mountPoint << "'\033[0m." << std::endl;
             }
-        } else {
-            // Handle failure: Print error message and return
-            std::cerr << "\033[91mFailed to create mount point directory.\033[0m" << std::endl;
+
             return;
         }
     } else {
@@ -1111,7 +1116,6 @@ bool isValidIndex(int index, size_t isoDirsSize) {
 
 // Function to unmount ISOs based on user input
 void unmountISOs() {
-		
     listMountedISOs(); // Display the initial list of mounted ISOs
 
     // Path where ISO directories are expected to be mounted
@@ -1253,29 +1257,26 @@ void unmountISOs() {
         // Determine the number of available CPU cores
         const unsigned int numCores = std::thread::hardware_concurrency();
 
-		// Create a vector of threads to perform unmounting and directory removal concurrently
-		std::vector<std::thread> threads;
+        // Create a vector of threads to perform unmounting and directory removal concurrently
+        std::vector<std::thread> threads;
 
-		for (int index : unmountIndices) {
-			// Check if the index is within the valid range
-			if (isValidIndex(index, isoDirs.size())) {
-				const std::string& isoDir = isoDirs[index - 1];
+        for (int index : unmountIndices) {
+            // Check if the index is within the valid range
+            if (isValidIndex(index, isoDirs.size())) {
+                const std::string& isoDir = isoDirs[index - 1];
 
-			// Use a thread for each ISO to be unmounted
-			threads.emplace_back([&, isoDir]() {
-				try {
-                std::lock_guard<std::mutex> lock(mutexforsearch); // Lock the critical section
-                unmountISO(isoDir);
-				} catch (const std::exception& e) {
-                // Handle the exception or log it
-                std::cerr << "Exception in thread: " << e.what() << std::endl;
-				}
-			});
-
-			// Detach the thread to allow it to run independently
-			threads.back().detach();
-		}
-		
+                // Use a thread for each ISO to be unmounted
+                threads.emplace_back([&, isoDir]() {
+                    try {
+                        std::lock_guard<std::mutex> lock(mutexforsearch); // Lock the critical section
+                        unmountISO(isoDir);
+                    } catch (const std::exception& e) {
+                        // Handle the exception or log it
+                        std::cerr << "Exception in thread: " << e.what() << std::endl;
+                    }
+                });
+            }
+        }
 
         // Join the threads to wait for them to finish
         for (auto& thread : threads) {
@@ -1301,6 +1302,5 @@ void unmountISOs() {
         std::system("clear");
 
         listMountedISOs(); // Display the updated list of mounted ISOs after unmounting
-		}
-	}
+    }
 }
