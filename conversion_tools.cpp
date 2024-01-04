@@ -179,7 +179,7 @@ void convertBINToISO(const std::string& inputPath) {
 
     // Check if the output ISO file already exists
     if (std::ifstream(outputPath)) {
-        std::cout << "\033[93mThe corresponding .iso file already exists for: \033[92m'" << outputPath << "'\033[93m. Skipping conversion.\033[0m" << std::endl;
+        std::cout << "\033[93mThe corresponding .iso file already exists for: \033[92m'" << inputPath << "'\033[93m. Skipping conversion.\033[0m" << std::endl;
         return;  // Skip conversion if the file already exists
     }
 
