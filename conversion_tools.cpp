@@ -434,13 +434,20 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                         int step = -1;
                         for (int i = start; i >= end; i += step) {
                             int selectedIndex = i - 1;
-                            // Check if the index has not been processed before
-                            if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-                                std::string selectedFile = fileList[selectedIndex];
-                                // Create a thread for conversion
-                                threads.emplace_back(convertBINToISO, selectedFile);
-                                // Mark the index as processed
-                                processedIndices.insert(selectedIndex);
+                            // Check if the index is within the valid range
+                            if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
+                                // Check if the index has not been processed before
+                                if (processedIndices.find(selectedIndex) == processedIndices.end()) {
+                                    std::string selectedFile = fileList[selectedIndex];
+                                    // Create a thread for conversion
+                                    threads.emplace_back(convertBINToISO, selectedFile);
+                                    // Mark the index as processed
+                                    processedIndices.insert(selectedIndex);
+                                }
+                            } else {
+                                // Report an error if the index is out of range
+                                errorMessages.push_back("\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m");
+                                break; // Exit the loop to avoid further errors
                             }
                         }
                     } else {
