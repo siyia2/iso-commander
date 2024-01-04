@@ -1301,5 +1301,6 @@ void unmountISOs() {
         std::system("clear");
 
         listMountedISOs(); // Display the updated list of mounted ISOs after unmounting
-    }
+		}
+	}
 }
