@@ -989,29 +989,6 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
 }
 
 
-// Function to process a directory path, find ISO files in parallel, and update the shared vector
-void processPath(const std::string& path, std::vector<std::string>& allIsoFiles) {
-		
-    // Inform about the directory path being processed
-    std::cout << "Processing directory path: " << path << std::endl;
-
-    // Vector to store ISO files found in the current directory
-    std::vector<std::string> newIsoFiles;
-
-    // Call parallelTraverse to asynchronously find ISO files in the directory
-    parallelTraverse(path, newIsoFiles, mutexforsearch);
-
-    // Lock the mutex to safely update the shared vector of all ISO files
-    std::lock_guard<std::mutex> lock(mutexforsearch);
-    
-    // Merge the new ISO files into the shared vector
-    allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
-
-    // Inform that the cache has been refreshed for the processed directory
-    std::cout << "Cache refreshed for directory: " << path << std::endl;
-}
-
-
 // UMOUNT FUNCTIONS	\\
 
 // Function to list mounted ISOs in the /mnt directory
