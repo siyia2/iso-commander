@@ -7,6 +7,8 @@ const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.cache";
 const std::string cacheFileName = "iso_cache.txt";;
 const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
+// Mutexes \\
+
 std::mutex mountMutex; // Mutex for mount thread safety
 std::mutex indexMutex; // Mutex for isValidIndex thread safety
 std::mutex mutexforsearch; // Mutex for search thread safety
