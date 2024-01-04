@@ -8,6 +8,7 @@ const std::string cacheFileName = "iso_cache.txt";;
 const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
 std::mutex mountMutex; // Mutex for mount thread safety
+std::mutex indexMutex; // Mutex for isValidIndex thread safety
 std::mutex mutexforsearch; // Mutex for search thread safety
 std::mutex mutexforhandleiso; // Mutex for handleiso thread safety
 std::mutex mutexremoveNonExistentPathsFromCacheAsync; // Mutex for removeNonExistentPathsFromCacheAsync thread safety
@@ -370,10 +371,18 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
 // Function to refresh the cache for a single directory (now returning a vector of ISO files)
 std::vector<std::string> refreshCacheForDirectory(const std::string& path) {
     std::cout << "\033[93mProcessing directory path: '" << path << "'.\033[0m" << std::endl;
+    
     std::vector<std::string> newIsoFiles;
 
-    // Perform the cache refresh for the directory (e.g., using parallelTraverse)
-    parallelTraverse(path, newIsoFiles, mutexforsearch);
+    // Use std::async to execute parallelTraverse asynchronously
+    std::future<void> asyncResult = std::async(std::launch::async, [path, &newIsoFiles]() {
+        parallelTraverse(path, newIsoFiles, mutexforsearch);
+    });
+
+    // You can perform other tasks here if needed
+
+    // Wait for the asynchronous operation to complete
+    asyncResult.wait();
 
     std::cout << "\033[92mProcessed directory path: '" << path << "'.\033[0m" << std::endl;
 
@@ -814,12 +823,10 @@ void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& moun
 
 // Function to check if a string is numeric
 bool isNumeric(const std::string& str) {
-    for (char c : str) {
-        if (!std::isdigit(c)) {
-            return false;
-        }
-    }
-    return true;
+    // Use parallel execution policy for parallelization
+    return std::all_of(std::execution::par, str.begin(), str.end(), [](char c) {
+        return std::isdigit(c);
+    });
 }
 
 
@@ -834,6 +841,12 @@ void processInputMultithreaded(const std::string& input, const std::vector<std::
     std::vector<std::future<void>> futures; // Vector to store std::future objects for each task
 
     while (iss >> token) {
+		// Check if the token is '0' and treat it as an invalid index
+        if (token == "0") {
+            invalidInput = true;
+            errorMessages.push_back("\033[91mFile index: '0' does not exist.\033[0m");
+            continue;
+        }
         size_t dashPos = token.find('-');
         if (dashPos != std::string::npos) {
             int start, end;
@@ -1060,41 +1073,51 @@ void unmountISO(const std::string& isoDir) {
     // Construct the unmount command with sudo, umount, and suppressing logs
     std::string unmountCommand = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1";
 
-    // Execute the unmount command
-    int result = system(unmountCommand.c_str());
+    // Execute the unmount command asynchronously
+    std::future<int> unmountFuture = std::async(std::launch::async, [](const std::string& command) {
+        return system(command.c_str());
+    }, unmountCommand);
 
     // Check if the unmounting was successful
-    if (result == 0) {
-        std::cout << "\033[92mUnmounted: " << isoDir << "\033[0m" << std::endl; // Print success message
+    int unmountResult = unmountFuture.get();
+    if (unmountResult == 0) {
+        std::cout << "Unmounted: \033[92m'" << isoDir << "'\033[0m." << std::endl; // Print success message
 
         // Check if the directory is empty before removing it
-        if (isDirectoryEmpty(isoDir)) {
+        std::future<bool> isEmptyFuture = std::async(std::launch::async, &isDirectoryEmpty, isoDir);
+        bool isEmpty = isEmptyFuture.get();
+
+        if (isEmpty) {
             // Construct the remove directory command with sudo, rmdir, and suppressing logs
             std::string removeDirCommand = "sudo rmdir " + shell_escape(isoDir) + " 2>/dev/null";
 
-            // Execute the remove directory command
-            int removeDirResult = system(removeDirCommand.c_str());
+            // Execute the remove directory command asynchronously
+            std::future<int> removeDirFuture = std::async(std::launch::async, [](const std::string& command) {
+                return system(command.c_str());
+            }, removeDirCommand);
 
+            // Check if the directory removal was successful
+            int removeDirResult = removeDirFuture.get();
             if (removeDirResult != 0) {
-                std::cerr << "\033[91mFailed to remove directory: " << isoDir << " ...Please check it out manually.\033[0m" << std::endl;
+                std::cerr << "\033[91mFailed to remove directory: '" << isoDir << "' ...Please check it out manually.\033[0m" << std::endl;
             }
         }
     } else {
-        std::cerr << "\033[91mFailed to unmount: " << isoDir << " ...Probably not an ISO mountpoint, check it out manually.\033[0m" << std::endl; // Print failure message
+        std::cerr << "\033[91mFailed to unmount: '" << isoDir << " ...Probably not an ISO mountpoint, check it out manually.\033[0m" << std::endl; // Print failure message
     }
 }
 
 
 // Function to check if a given index is within the valid range of available ISOs
 bool isValidIndex(int index, size_t isoDirsSize) {
-	std::mutex indexMutex;
-    std::lock_guard<std::mutex> lock(indexMutex);  // Lock the mutex
+    std::lock_guard<std::mutex> lock(indexMutex); // Lock the mutex for the duration of this scope
 
     return (index >= 1) && (static_cast<size_t>(index) <= isoDirsSize);
 }
 
 // Function to unmount ISOs based on user input
 void unmountISOs() {
+		
     listMountedISOs(); // Display the initial list of mounted ISOs
 
     // Path where ISO directories are expected to be mounted
