@@ -5,6 +5,7 @@
 
 #include <chrono>
 #include <dirent.h>
+#include <execution>
 #include <filesystem>
 #include <fstream>
 #include <future>
