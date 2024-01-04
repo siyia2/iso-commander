@@ -1048,15 +1048,16 @@ void listMountedISOs() {
 }
 
 
+// Function to check if directory is empty for unmount functions
 std::future<bool> isDirectoryEmpty(const std::string& path) {
-    return std::async(std::launch::deferred, [path]() {
+    return std::async(std::launch::async, [path]() {
         try {
             for (const auto& entry : std::filesystem::directory_iterator(path)) {
                 return false; // If there's at least one entry, the directory is not empty
             }
         } catch (const std::filesystem::filesystem_error& ex) {
             // Handle the exception if necessary
-            std::cerr << "Error accessing directory: " << ex.what() << std::endl;
+            std::cerr << "033[91mError accessing directory: \033[92m'" << ex.what() << "'033[91m.\033[0m" << std::endl;
             return false;
         }
 
@@ -1064,23 +1065,20 @@ std::future<bool> isDirectoryEmpty(const std::string& path) {
     });
 }
 
-
+// Function to unmount a single ISO called by unmountISOs
 std::future<void> unmountISO(const std::string& isoDir) {
     return std::async(std::launch::async, [isoDir]() {
         // Construct the unmount and remove directory command with sudo, umount, rmdir, and suppressing logs
         std::string command = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1 && sudo rmdir " + shell_escape(isoDir) + " 2>/dev/null";
 
         // Execute the command asynchronously
-        std::future<int> resultFuture = std::async(std::launch::deferred, [](const std::string& cmd) {
-            return std::system(cmd.c_str());
-        }, command);
+        int result = std::system(command.c_str());
 
         // Check if the command was successful
-        int result = resultFuture.get();
         if (result == 0) {
             std::cout << "Unmounted and Removed: \033[92m'" << isoDir << "'\033[0m." << std::endl;
         } else {
-            std::cerr << "\033[91mFailed to unmount and remove: '" << isoDir << "'.\033[0m" << std::endl;
+            std::cerr << "\033[91mFailed to unmount and remove: \033[92m'" << isoDir << "'\033[91m. Check it out manually.\033[0m" << std::endl;
         }
     });
 }
