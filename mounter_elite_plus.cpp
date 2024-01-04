@@ -1064,16 +1064,16 @@ void listMountedISOs() {
 std::future<bool> isDirectoryEmpty(const std::string& path) {
     return std::async(std::launch::async, [path]() {
         try {
+            int entryCount = 0;
             for (const auto& entry : std::filesystem::directory_iterator(path)) {
-                return false; // If there's at least one entry, the directory is not empty
+                entryCount++;
             }
+            return entryCount == 0;
         } catch (const std::filesystem::filesystem_error& ex) {
             // Handle the exception if necessary
-            std::cerr << "033[91mError accessing directory: \033[92m'" << ex.what() << "'033[91m.\033[0m" << std::endl;
+            std::cerr << "\033[91mError accessing directory: \033[92m'" << ex.what() << "'\033[91m.\033[0m" << std::endl;
             throw; // Rethrow the exception
         }
-
-        return true; // Directory is empty
     });
 }
 
@@ -1081,17 +1081,28 @@ std::future<bool> isDirectoryEmpty(const std::string& path) {
 // Function to unmount a single ISO called by unmountISOs
 std::future<void> unmountISO(const std::string& isoDir) {
     return std::async(std::launch::async, [isoDir]() {
-        // Construct the unmount and remove directory command with sudo, umount, rmdir, and suppressing logs
-        std::string command = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1 && sudo rmdir " + shell_escape(isoDir) + " 2>/dev/null";
+        // Construct the unmount command with sudo and umount, suppressing logs
+        std::string umountCommand = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1";
 
-        // Execute the command asynchronously
-        int result = std::system(command.c_str());
+        // Execute the umount command asynchronously
+        int umountResult = std::system(umountCommand.c_str());
 
-        // Check if the command was successful
-        if (result == 0) {
-            std::cout << "Unmounted and Removed: \033[92m'" << isoDir << "'\033[0m." << std::endl;
+        // Check if the umount command was successful
+        if (umountResult == 0) {
+            std::cout << "Unmounted: \033[92m'" << isoDir << "'\033[0m." << std::endl;
+
+            // Now remove the directory
+            std::string rmdirCommand = "sudo rmdir " + shell_escape(isoDir) + " 2>/dev/null";
+            int rmdirResult = std::system(rmdirCommand.c_str());
+
+            // Check if the rmdir command was successful
+            if (rmdirResult == 0) {
+                std::cout << "Removed: \033[92m'" << isoDir << "'\033[0m." << std::endl;
+            } else {
+                std::cerr << "\033[91mFailed to remove: \033[92m'" << isoDir << "'\033[91m. Check it out manually.\033[0m" << std::endl;
+            }
         } else {
-            std::cerr << "\033[91mFailed to unmount and remove: \033[92m'" << isoDir << "'\033[91m. Check it out manually.\033[0m" << std::endl;
+            std::cerr << "\033[91mFailed to unmount: \033[92m'" << isoDir << "'\033[91m. Check it out manually.\033[0m" << std::endl;
         }
     });
 }
