@@ -8,6 +8,7 @@ const std::string cacheFileName = "iso_cache.txt";;
 const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
 std::mutex mountMutex; // Mutex for mount thread safety
+std::mutex indexMutex; // Mutex for isValidIndex thread safety
 std::mutex mutexforsearch; // Mutex for search thread safety
 std::mutex mutexforhandleiso; // Mutex for handleiso thread safety
 std::mutex mutexremoveNonExistentPathsFromCacheAsync; // Mutex for removeNonExistentPathsFromCacheAsync thread safety
@@ -814,12 +815,10 @@ void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& moun
 
 // Function to check if a string is numeric
 bool isNumeric(const std::string& str) {
-    for (char c : str) {
-        if (!std::isdigit(c)) {
-            return false;
-        }
-    }
-    return true;
+    // Use parallel execution policy for parallelization
+    return std::all_of(std::execution::par, str.begin(), str.end(), [](char c) {
+        return std::isdigit(c);
+    });
 }
 
 
@@ -1097,6 +1096,8 @@ void unmountISO(const std::string& isoDir) {
 
 // Function to check if a given index is within the valid range of available ISOs
 bool isValidIndex(int index, size_t isoDirsSize) {
+    std::lock_guard<std::mutex> lock(indexMutex); // Lock the mutex for the duration of this scope
+
     return (index >= 1) && (static_cast<size_t>(index) <= isoDirsSize);
 }
 
