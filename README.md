@@ -21,7 +21,7 @@ Added Features:
 * Extra checks and error handling so that you don't erase your / or /mnt accidentally.
 * More robust menu experience.
 * Improved selection procedures.
-* Proper multithreading support, it can utilize as many cores as are available for maximum performance.
+* Multithreaded and asynchronous operations for maximum performance.
 * Faster search times and cache generations.
 * Faster mount&unmount times, it can mount up to 30 ISO files in under 5s.
 * Includes a high precision timer to measure performance in mount/unmount and list generation operations.
