@@ -842,6 +842,12 @@ void processInputMultithreaded(const std::string& input, const std::vector<std::
     std::vector<std::future<void>> futures; // Vector to store std::future objects for each task
 
     while (iss >> token) {
+		// Check if the token is '0' and treat it as an invalid index
+        if (token == "0") {
+            invalidInput = true;
+            errorMessages.push_back("\033[91mFile index: '0' does not exist.\033[0m");
+            continue;
+        }
         size_t dashPos = token.find('-');
         if (dashPos != std::string::npos) {
             int start, end;
