@@ -564,8 +564,8 @@ bool directoryExists(const std::string& path) {
 }
 
 
-// Function to mount single ISO file caled from void mountISOs
-void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>& mountedIsos) {
+// Function to mount single ISO file called from void mountISOs
+void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>& mountedIsos, std::mutex& mountMutex) {
     // Using C++17 filesystem
     namespace fs = std::filesystem;
 
@@ -631,16 +631,16 @@ void mountISOs(const std::vector<std::string>& isoFiles) {
     // Map to store mounted ISOs with their corresponding paths
     std::map<std::string, std::string> mountedIsos;
 
+    // Mutex for thread safety when accessing shared resources
+    std::mutex mountMutex;
+
     // Vector to store threads for parallel mounting
     std::vector<std::thread> threads;
 
     // Iterate through the list of ISO files and spawn a thread for each
     for (const std::string& isoFile : isoFiles) {
-        // Create a copy of the ISO file path for the thread to avoid race conditions
-        std::string IsoFile = (isoFile);
-
-        // Create a thread for mounting the ISO file and pass the map by reference
-        threads.emplace_back(mountIsoFile, IsoFile, std::ref(mountedIsos));
+        // Create a thread for mounting the ISO file and pass the map and mutex by reference
+        threads.emplace_back(mountIsoFile, isoFile, std::ref(mountedIsos), std::ref(mountMutex));
     }
 
     // Join all threads to wait for them to finish
