@@ -322,33 +322,49 @@ void printFileListBin(const std::vector<std::string>& fileList) {
 
 // Function to process user input and convert selected BIN files to ISO format
 void processInputBin(const std::string& input, const std::vector<std::string>& fileList) {
+    // Create a string stream to tokenize the input
     std::istringstream iss(input);
     std::string token;
+
+    // Set to track processed indices to avoid duplicates
     std::set<int> processedIndices;
+
+    // Set to track processed error messages to avoid duplicate error reporting
     std::set<std::string> processedErrors;
+
+    // Vector to store asynchronous tasks for file conversion
     std::vector<std::future<void>> futures;
+
+    // Vector to store error messages
     std::vector<std::string> errorMessages;
 
+    // Iterate through the tokens in the input string
     while (iss >> token) {
+        // Create a string stream to further process the token
         std::istringstream tokenStream(token);
         int start, end;
         char dash;
 
+        // Check if the token can be converted to an integer (starting index)
         if (tokenStream >> start) {
+            // Check for the presence of a dash, indicating a range
             if (tokenStream >> dash && dash == '-' && tokenStream >> end) {
                 // Handle a range
                 if (start <= end) {
                     if (start >= 1 && end <= fileList.size()) {
+                        // Process indices in ascending order
                         int step = 1;
                         for (int i = start; i <= end; i += step) {
                             int selectedIndex = i - 1;
                             if (processedIndices.find(selectedIndex) == processedIndices.end()) {
+                                // Convert BIN to ISO asynchronously and store the future in the vector
                                 std::string selectedFile = fileList[selectedIndex];
                                 futures.push_back(std::async(std::launch::async, convertBINToISO, selectedFile));
                                 processedIndices.insert(selectedIndex);
                             }
                         }
                     } else {
+                        // Add an error message for an invalid range
                         std::string errorMessage = "\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m";
                         if (processedErrors.find(errorMessage) == processedErrors.end()) {
                             errorMessages.push_back(errorMessage);
@@ -358,16 +374,19 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                 } else {
                     // Handle reverse range
                     if (start >= 1 && end >= 1 && end <= fileList.size()) {
+                        // Process indices in descending order
                         int step = -1;
                         for (int i = start; i >= end; i += step) {
                             int selectedIndex = i - 1;
                             if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
                                 if (processedIndices.find(selectedIndex) == processedIndices.end()) {
+                                    // Convert BIN to ISO asynchronously and store the future in the vector
                                     std::string selectedFile = fileList[selectedIndex];
                                     futures.push_back(std::async(std::launch::async, convertBINToISO, selectedFile));
                                     processedIndices.insert(selectedIndex);
                                 }
                             } else {
+                                // Add an error message for an invalid range
                                 std::string errorMessage = "\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m";
                                 if (processedErrors.find(errorMessage) == processedErrors.end()) {
                                     errorMessages.push_back(errorMessage);
@@ -377,6 +396,7 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                             }
                         }
                     } else {
+                        // Add an error message for an invalid range
                         std::string errorMessage = "\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m";
                         if (processedErrors.find(errorMessage) == processedErrors.end()) {
                             errorMessages.push_back(errorMessage);
@@ -389,10 +409,12 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                 int selectedIndex = start - 1;
                 if (processedIndices.find(selectedIndex) == processedIndices.end()) {
                     if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
+                        // Convert BIN to ISO asynchronously and store the future in the vector
                         std::string selectedFile = fileList[selectedIndex];
                         futures.push_back(std::async(std::launch::async, convertBINToISO, selectedFile));
                         processedIndices.insert(selectedIndex);
                     } else {
+                        // Add an error message for an invalid file index
                         std::string errorMessage = "\033[91mFile index '" + std::to_string(start) + "' does not exist.\033[0m";
                         if (processedErrors.find(errorMessage) == processedErrors.end()) {
                             errorMessages.push_back(errorMessage);
@@ -401,6 +423,7 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                     }
                 }
             } else {
+                // Add an error message for an invalid file index
                 std::string errorMessage = "\033[91mFile index '" + std::to_string(start) + "' does not exist.\033[0m";
                 if (processedErrors.find(errorMessage) == processedErrors.end()) {
                     errorMessages.push_back(errorMessage);
@@ -408,6 +431,7 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                 }
             }
         } else {
+            // Add an error message for an invalid input
             std::string errorMessage = "\033[91mInvalid input: '" + token + "'.\033[0m";
             if (processedErrors.find(errorMessage) == processedErrors.end()) {
                 errorMessages.push_back(errorMessage);
@@ -427,7 +451,6 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
     }
     std::cout << " " << std::endl;
 }
-
 
 
 // MDF CONVERSION FUNCTIONS	\\
@@ -736,7 +759,7 @@ void select_and_convert_files_to_iso_mdf() {
         }
 
         // Parse the user input to get selected file indices and capture errors
-        std::pair<std::vector<int>, std::vector<std::string>> result = processMDFInput(input, mdfMdsFiles.size());
+        std::pair<std::vector<int>, std::vector<std::string>> result = processInputMDF(input, mdfMdsFiles.size());
         std::vector<int> selectedFileIndices = result.first;
         std::vector<std::string> errorMessages = result.second;
         std::system("clear");
@@ -794,29 +817,37 @@ void printFileListMdf(const std::vector<std::string>& fileList) {
 }
 
 // Function to parse user input and extract selected file indices and errors
-std::pair<std::vector<int>, std::vector<std::string>> processMDFInput(const std::string& input, int maxIndex) {
+std::pair<std::vector<int>, std::vector<std::string>> processInputMDF(const std::string& input, int maxIndex) {
+    // Vector to store selected file indices
     std::vector<int> selectedFileIndices;
+
+    // Vector to store error messages
     std::vector<std::string> errorMessages;
+
+    // Create a string stream to tokenize the input
     std::istringstream iss(input);
     std::string token;
 
-    // Set to track processed indices
+    // Set to track processed indices to avoid duplicates
     std::set<int> processedIndices;
 
-    // Set to track processed error messages
+    // Set to track processed error messages to avoid duplicate error reporting
     std::set<std::string> processedErrors;
 
     // Iterate through the tokens in the input string
     while (iss >> token) {
+        // Check if the token contains a hyphen, indicating a range
         if (token.find('-') != std::string::npos) {
             // Handle a range (e.g., "1-2" or "2-1")
             size_t dashPos = token.find('-');
             int startRange, endRange;
 
             try {
+                // Extract start and end values from the range token
                 startRange = std::stoi(token.substr(0, dashPos));
                 endRange = std::stoi(token.substr(dashPos + 1));
             } catch (const std::invalid_argument& e) {
+                // Handle invalid input and add an error message
                 std::string errorMessage = "\033[91mInvalid input " + token + ".\033[0m";
                 if (processedErrors.find(errorMessage) == processedErrors.end()) {
                     errorMessages.push_back(errorMessage);
@@ -824,6 +855,7 @@ std::pair<std::vector<int>, std::vector<std::string>> processMDFInput(const std:
                 }
                 continue;
             } catch (const std::out_of_range& e) {
+                // Handle out-of-range input and add an error message
                 std::string errorMessage = "\033[91mInvalid input " + token + ".\033[0m";
                 if (processedErrors.find(errorMessage) == processedErrors.end()) {
                     errorMessages.push_back(errorMessage);
@@ -835,6 +867,8 @@ std::pair<std::vector<int>, std::vector<std::string>> processMDFInput(const std:
             // Check if the range is valid before adding indices
             if ((startRange >= 1 && startRange <= maxIndex) && (endRange >= 1 && endRange <= maxIndex)) {
                 int step = (startRange <= endRange) ? 1 : -1;
+                
+                // Iterate through the range and add indices to the vector
                 for (int i = startRange; (startRange <= endRange) ? (i <= endRange) : (i >= endRange); i += step) {
                     int currentIndex = i - 1;
 
@@ -845,6 +879,7 @@ std::pair<std::vector<int>, std::vector<std::string>> processMDFInput(const std:
                     }
                 }
             } else {
+                // Add an error message for an invalid range
                 std::string errorMessage = "\033[91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0m";
                 if (processedErrors.find(errorMessage) == processedErrors.end()) {
                     errorMessages.push_back(errorMessage);
@@ -856,8 +891,10 @@ std::pair<std::vector<int>, std::vector<std::string>> processMDFInput(const std:
             int selectedFileIndex;
 
             try {
+                // Convert token to integer for individual file index
                 selectedFileIndex = std::stoi(token);
             } catch (const std::invalid_argument& e) {
+                // Handle invalid input and add an error message
                 std::string errorMessage = "\033[91mInvalid input: '" + token + "'.\033[0m";
                 if (processedErrors.find(errorMessage) == processedErrors.end()) {
                     errorMessages.push_back(errorMessage);
@@ -865,6 +902,7 @@ std::pair<std::vector<int>, std::vector<std::string>> processMDFInput(const std:
                 }
                 continue;
             } catch (const std::out_of_range& e) {
+                // Handle out-of-range input and add an error message
                 std::string errorMessage = "\033[91mFile index '" + token + "', does not exist.\033[0m";
                 if (processedErrors.find(errorMessage) == processedErrors.end()) {
                     errorMessages.push_back(errorMessage);
@@ -883,6 +921,7 @@ std::pair<std::vector<int>, std::vector<std::string>> processMDFInput(const std:
                     processedIndices.insert(currentIndex);
                 }
             } else {
+                // Add an error message for an invalid file index
                 std::string errorMessage = "\033[91mFile index '" + token + "', does not exist.\033[0m";
                 if (processedErrors.find(errorMessage) == processedErrors.end()) {
                     errorMessages.push_back(errorMessage);
@@ -892,6 +931,7 @@ std::pair<std::vector<int>, std::vector<std::string>> processMDFInput(const std:
         }
     }
 
+    // Return the selected file indices and error messages as a pair
     return {selectedFileIndices, errorMessages};
 }
 
@@ -903,7 +943,7 @@ std::vector<std::future<std::pair<std::vector<int>, std::vector<std::string>>>> 
 
     // Use std::async to perform user input parsing concurrently
     for (const auto& input : inputs) {
-        futures.push_back(std::async(std::launch::async, processMDFInput, input, maxIndex));
+        futures.push_back(std::async(std::launch::async, processInputMDF, input, maxIndex));
     }
 
     return futures;
