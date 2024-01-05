@@ -217,45 +217,6 @@ void convertBINsToISOs(const std::vector<std::string>& inputPaths, int numThread
 }
 
 
-// Function to process a range of files and convert them to ISO format
-void processFilesInRange(int start, int end) {
-    // Determine the number of threads based on CPU cores fallback is 2 threads
-    int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
-
-    // Select files within the specified range
-    std::vector<std::string> selectedFiles;
-    {
-        std::lock_guard<std::mutex> lock(binImgFilesMutex); // Lock the mutex while accessing binImgFiles
-        for (int i = start; i <= end; i++) {
-            selectedFiles.push_back(binImgFiles[i - 1]);
-        }
-    } // Unlock the mutex when leaving the scope
-
-    // Construct the shell-escaped file paths
-    std::vector<std::string> escapedSelectedFiles;
-    for (const std::string& file : selectedFiles) {
-        escapedSelectedFiles.push_back(shell_escape(file));
-    }
-
-    // Divide the work among threads
-    std::vector<std::thread> threads;
-    size_t filesPerThread = escapedSelectedFiles.size() / numThreads;
-    for (int i = 0; i < numThreads; ++i) {
-        size_t startIdx = i * filesPerThread;
-        size_t endIdx = (i == numThreads - 1) ? escapedSelectedFiles.size() : (i + 1) * filesPerThread;
-        std::vector<std::string> threadFiles(escapedSelectedFiles.begin() + startIdx, escapedSelectedFiles.begin() + endIdx);
-        threads.emplace_back([threadFiles, numThreads]() {
-            convertBINsToISOs(threadFiles, numThreads);
-        });
-    }
-
-    // Wait for all threads to finish
-    for (auto& thread : threads) {
-        thread.join();
-    }
-}
-
-
 // Main function to select directories and convert BIN/IMG files to ISO format
 void select_and_convert_files_to_iso() {
     // Initialize vectors to store BIN/IMG files and directory paths
@@ -359,49 +320,35 @@ void printFileListBin(const std::vector<std::string>& fileList) {
 }
 
 
-// Function to process user input and convert selected BIN files to ISO format
+// Asynchronous function to process user input and convert selected BIN files to ISO format
 void processInputBin(const std::string& input, const std::vector<std::string>& fileList) {
-    // Tokenize the input string
     std::istringstream iss(input);
     std::string token;
-
-    // Vector to store threads for parallel processing
-    std::vector<std::thread> threads;
-
-    // Set to keep track of processed indices to avoid duplicate processing
     std::set<int> processedIndices;
-
-    // Vector to store error messages for reporting after conversions
+    std::vector<std::future<void>> futures;  // Use std::future<void> for asynchronous void functions
     std::vector<std::string> errorMessages;
 
-    // Iterate over tokens in the input string
     while (iss >> token) {
-        // Tokenize each token to check for ranges or single indices
         std::istringstream tokenStream(token);
         int start, end;
         char dash;
 
-        // Check if the token can be converted to an integer
         if (tokenStream >> start) {
-            // Check for a range (e.g., 1-5)
             if (tokenStream >> dash && dash == '-' && tokenStream >> end) {
-                // Validate the range and create threads for each index in the range
+                // Handle a range
                 if (start <= end) {
                     if (start >= 1 && end <= fileList.size()) {
                         int step = 1;
                         for (int i = start; i <= end; i += step) {
                             int selectedIndex = i - 1;
-                            // Check if the index has not been processed before
                             if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-                                std::string selectedFile = fileList[selectedIndex];
                                 // Create a thread for conversion
-                                threads.emplace_back(convertBINToISO, selectedFile);
-                                // Mark the index as processed
+                                std::string selectedFile = fileList[selectedIndex];
+                                futures.push_back(std::async(std::launch::async, convertBINToISO, selectedFile));
                                 processedIndices.insert(selectedIndex);
                             }
                         }
                     } else {
-                        // Report an error if the range is out of range
                         errorMessages.push_back("\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m");
                     }
                 } else {
@@ -409,59 +356,49 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                         int step = -1;
                         for (int i = start; i >= end; i += step) {
                             int selectedIndex = i - 1;
-                            // Check if the index is within the valid range
                             if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
-                                // Check if the index has not been processed before
                                 if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-                                    std::string selectedFile = fileList[selectedIndex];
                                     // Create a thread for conversion
-                                    threads.emplace_back(convertBINToISO, selectedFile);
-                                    // Mark the index as processed
+                                    std::string selectedFile = fileList[selectedIndex];
+                                    futures.push_back(std::async(std::launch::async, convertBINToISO, selectedFile));
                                     processedIndices.insert(selectedIndex);
                                 }
                             } else {
-                                // Report an error if the index is out of range
                                 errorMessages.push_back("\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m");
                                 break; // Exit the loop to avoid further errors
                             }
                         }
                     } else {
-                        // Report an error if the range is out of range
                         errorMessages.push_back("\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m");
                     }
                 }
             } else if (start >= 1 && start <= fileList.size()) {
                 // Process a single index
                 int selectedIndex = start - 1;
-                // Check if the index has not been processed before
                 if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-                    // Check if the index is within the valid range
                     if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
-                        std::string selectedFile = fileList[selectedIndex];
                         // Create a thread for conversion
-                        threads.emplace_back(convertBINToISO, selectedFile);
-                        // Mark the index as processed
+                        std::string selectedFile = fileList[selectedIndex];
+                        futures.push_back(std::async(std::launch::async, convertBINToISO, selectedFile));
                         processedIndices.insert(selectedIndex);
                     } else {
-                        // Report an error if the index is out of range
                         errorMessages.push_back("\033[91mFile index '" + std::to_string(start) + "' does not exist.\033[0m");
                     }
                 }
             } else {
-                // Report an error if the index is out of range
                 errorMessages.push_back("\033[91mFile index '" + std::to_string(start) + "' does not exist.\033[0m");
             }
         } else {
-            // Report an error if the token is not a valid integer
             errorMessages.push_back("\033[91mInvalid input: '" + token + "'.\033[0m");
         }
     }
-    // Wait for all threads to finish
-    for (auto& thread : threads) {
-        thread.join();
+
+    // Wait for all futures to finish
+    for (auto& future : futures) {
+        future.wait();
     }
 
-    // Print all error messages after conversions
+    // Print error messages
     for (const auto& errorMessage : errorMessages) {
         std::cout << errorMessage << std::endl;
     }
@@ -735,7 +672,7 @@ void select_and_convert_files_to_iso_mdf() {
     bool newMdfFilesFound = false;
 
     // Call the findMdsMdfFiles function to populate the cache
-        mdfMdsFiles = findMdsMdfFiles(directoryPaths, [&mdfMdsFiles, &newMdfFilesFound](const std::string& fileName, const std::string& filePath) {
+    mdfMdsFiles = findMdsMdfFiles(directoryPaths, [&mdfMdsFiles, &newMdfFilesFound](const std::string& fileName, const std::string& filePath) {
         newMdfFilesFound = true;
     });
 
@@ -770,22 +707,41 @@ void select_and_convert_files_to_iso_mdf() {
             std::system("clear");
             break;
         }
-		std::system("clear");
-        // Use the processMDFinput function to get selected files and errors
-        std::future<std::vector<std::string>> futureSelectedFiles = processMDFinput({input}, mdfMdsFiles.size(), mdfMdsFiles);
 
-        // Wait for the asynchronous task to complete and retrieve the result
-        std::vector<std::string> selectedFiles = futureSelectedFiles.get();
+        // Parse the user input to get selected file indices and capture errors
+        std::pair<std::vector<int>, std::vector<std::string>> result = parseUserInput(input, mdfMdsFiles.size());
+        std::vector<int> selectedFileIndices = result.first;
+        std::vector<std::string> errorMessages = result.second;
+        std::system("clear");
 
-        // Convert the selected MDF files to ISO
-        convertMDFsToISOs(selectedFiles);
+        if (!selectedFileIndices.empty()) {
+            // Get the paths of the selected files based on user input
+            std::future<std::vector<std::string>> futureSelectedFiles = getSelectedFiles(selectedFileIndices, mdfMdsFiles);
 
-        std::cout << " " << std::endl;
-        std::cout << "Press enter to continue...";
-        std::cin.ignore();
+            // Wait for the asynchronous task to complete and retrieve the result
+            std::vector<std::string> selectedFiles = futureSelectedFiles.get();
+
+            // Convert the selected MDF files to ISO
+            convertMDFsToISOs(selectedFiles);
+
+            // Display errors if any
+            for (const auto& errorMessage : errorMessages) {
+                std::cerr << errorMessage << std::endl;
+            }
+            std::cout << " " << std::endl;
+            std::cout << "Press enter to continue...";
+            std::cin.ignore();
+        } else {
+            // Display parsing errors
+            for (const auto& errorMessage : errorMessages) {
+                std::cerr << errorMessage << std::endl;
+            }
+            std::cout << " " << std::endl;
+            std::cout << "Press enter to continue...";
+            std::cin.ignore();
+        }
     }
 }
-
 
 
 void printFileListMdf(const std::vector<std::string>& fileList) {
@@ -810,85 +766,127 @@ void printFileListMdf(const std::vector<std::string>& fileList) {
     }
 }
 
-std::future<std::vector<std::string>> processMDFinput(const std::string& input, int maxIndex, const std::vector<std::string>& fileList) {
-    // Return a future with the selected files
-    return std::async(std::launch::async | std::launch::deferred, [input, maxIndex, &fileList]() {
-        std::vector<std::string> selectedFiles;
-        std::vector<std::string> errorMessages;
-        std::set<int> processedIndices;
-        std::mutex mtx;
+// Function to parse user input and extract selected file indices and errors
+std::pair<std::vector<int>, std::vector<std::string>> parseUserInput(const std::string& input, int maxIndex) {
+    std::vector<int> selectedFileIndices;
+    std::vector<std::string> errorMessages;
+    std::istringstream iss(input);
+    std::string token;
 
+    // Set to track processed indices
+    std::set<int> processedIndices;
+
+    // Iterate through the tokens in the input string
+    while (iss >> token) {
+        if (token.find('-') != std::string::npos) {
+            // Handle a range (e.g., "1-2" or "2-1")
+            size_t dashPos = token.find('-');
+            int startRange, endRange;
+
+            try {
+                startRange = std::stoi(token.substr(0, dashPos));
+                endRange = std::stoi(token.substr(dashPos + 1));
+            } catch (const std::invalid_argument& e) {
+                errorMessages.push_back("\033[91mInvalid input " + token + ".\033[0m");
+                continue;
+            } catch (const std::out_of_range& e) {
+                errorMessages.push_back("\033[91mInvalid input " + token + ".\033[0m");
+                continue;
+            }
+
+            // Check if the range is valid before adding indices
+            if ((startRange >= 1 && startRange <= maxIndex) && (endRange >= 1 && endRange <= maxIndex)) {
+                int step = (startRange <= endRange) ? 1 : -1;
+                for (int i = startRange; (startRange <= endRange) ? (i <= endRange) : (i >= endRange); i += step) {
+                    int currentIndex = i - 1;
+
+                    // Check if the index has already been processed
+                    if (processedIndices.find(currentIndex) == processedIndices.end()) {
+                        selectedFileIndices.push_back(currentIndex);
+                        processedIndices.insert(currentIndex);
+                    }
+                }
+            } else {
+                errorMessages.push_back("\033[91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0m");
+            }
+        } else {
+            // Handle individual numbers (e.g., "1")
+            int selectedFileIndex;
+
+            try {
+                selectedFileIndex = std::stoi(token);
+            } catch (const std::invalid_argument& e) {
+                errorMessages.push_back("\033[91mInvalid input: '" + token + "'.\033[0m");
+                continue;
+            } catch (const std::out_of_range& e) {
+                errorMessages.push_back("\033[91mFile index '" + token + "', does not exist.\033[0m");
+                continue;
+            }
+
+            // Add the index to the selected indices vector if it is within the valid range
+            if (selectedFileIndex >= 1 && selectedFileIndex <= maxIndex) {
+                int currentIndex = selectedFileIndex - 1;
+
+                // Check if the index has already been processed
+                if (processedIndices.find(currentIndex) == processedIndices.end()) {
+                    selectedFileIndices.push_back(currentIndex);
+                    processedIndices.insert(currentIndex);
+                }
+            } else {
+                errorMessages.push_back("\033[91mFile index '" + token + "', does not exist.\033[0m");
+            }
+        }
+    }
+
+    return {selectedFileIndices, errorMessages};
+}
+
+// Multithreaded function to parse user input and extract selected file indices and errors
+std::vector<std::future<std::pair<std::vector<int>, std::vector<std::string>>>> parseUserInputMultithreaded(const std::vector<std::string>& inputs, int maxIndex) {
+
+    std::vector<std::future<std::pair<std::vector<int>, std::vector<std::string>>>> futures;
+
+    // Use std::async to perform user input parsing concurrently
+    for (const auto& input : inputs) {
+        futures.push_back(std::async(std::launch::async, parseUserInput, input, maxIndex));
+    }
+
+    return futures;
+}
+
+
+// Function to retrieve selected files based on their indices asynchronously
+std::future<std::vector<std::string>> getSelectedFiles(const std::vector<int>& selectedIndices, const std::vector<std::string>& fileList) {
+    // Use std::async with launch policy to create asynchronous tasks
+    return std::async(std::launch::async | std::launch::deferred, [selectedIndices, fileList]() {
+        std::vector<std::string> selectedFiles;
+        std::mutex mtx; // Mutex to protect access to the selectedFiles vector
+
+        // Function to be executed by each asynchronous task
         auto processIndex = [&](int index) {
             std::string file;
+            // Check if the index is valid
             if (index >= 0 && index < fileList.size()) {
                 file = fileList[index];
             }
 
+            // Lock the mutex before modifying the selectedFiles vector
             std::lock_guard<std::mutex> lock(mtx);
             selectedFiles.push_back(file);
         };
 
-        std::istringstream iss(input);
-        std::string token;
+        // Create a vector of asynchronous tasks
+        std::vector<std::future<void>> futures;
 
-        while (iss >> token) {
-            if (token.find('-') != std::string::npos) {
-                size_t dashPos = token.find('-');
-                int startRange, endRange;
-
-                try {
-                    startRange = std::stoi(token.substr(0, dashPos));
-                    endRange = std::stoi(token.substr(dashPos + 1));
-                } catch (const std::invalid_argument& e) {
-                    errorMessages.push_back("\033[91mInvalid input " + token + ".\033[0m");
-                    continue;
-                } catch (const std::out_of_range& e) {
-                    errorMessages.push_back("\033[91mInvalid input " + token + ".\033[0m");
-                    continue;
-                }
-
-                if ((startRange >= 1 && startRange <= maxIndex) && (endRange >= 1 && endRange <= maxIndex)) {
-                    int step = (startRange <= endRange) ? 1 : -1;
-                    for (int i = startRange; (startRange <= endRange) ? (i <= endRange) : (i >= endRange); i += step) {
-                        int currentIndex = i - 1;
-
-                        if (processedIndices.find(currentIndex) == processedIndices.end()) {
-                            processIndex(currentIndex);
-                            processedIndices.insert(currentIndex);
-                        }
-                    }
-                } else {
-                    errorMessages.push_back("\033[91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0m");
-                }
-            } else {
-                int selectedFileIndex;
-
-                try {
-                    selectedFileIndex = std::stoi(token);
-                } catch (const std::invalid_argument& e) {
-                    errorMessages.push_back("\033[91mInvalid input: '" + token + "'.\033[0m");
-                    continue;
-                } catch (const std::out_of_range& e) {
-                    errorMessages.push_back("\033[91mFile index '" + token + "', does not exist.\033[0m");
-                    continue;
-                }
-
-                if (selectedFileIndex >= 1 && selectedFileIndex <= maxIndex) {
-                    int currentIndex = selectedFileIndex - 1;
-
-                    if (processedIndices.find(currentIndex) == processedIndices.end()) {
-                        processIndex(currentIndex);
-                        processedIndices.insert(currentIndex);
-                    }
-                } else {
-                    errorMessages.push_back("\033[91mFile index '" + token + "', does not exist.\033[0m");
-                }
-            }
+        // Iterate through the selected indices and create a task for each index
+        for (int index : selectedIndices) {
+            // Use std::async for asynchronous execution
+            futures.emplace_back(std::async(std::launch::async | std::launch::deferred, processIndex, index));
         }
 
-        // Print error messages
-        for (const auto& errorMessage : errorMessages) {
-            std::cerr << errorMessage << std::endl;
+        // Wait for all asynchronous tasks to finish
+        for (auto& future : futures) {
+            future.wait();
         }
 
         return selectedFiles;
