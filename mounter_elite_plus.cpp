@@ -985,32 +985,40 @@ bool isDirectoryEmpty(const std::string& path) {
 }
 
 
+// Function to unmount ISO files asynchronously
 void unmountISO(const std::string& isoDir) {
-    // Construct the unmount command with sudo, umount, and suppressing logs
-    std::string unmountCommand = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1";
+    // Use std::async to unmount and remove the directory asynchronously
+    auto unmountFuture = std::async(std::launch::async, [isoDir]() {
+        // Construct the unmount command with sudo, umount, and suppressing logs
+        std::string unmountCommand = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1";
 
-    // Execute the unmount command
-    int result = system(unmountCommand.c_str());
+        // Execute the unmount command
+        int result = system(unmountCommand.c_str());
 
-    // Check if the unmounting was successful
-    if (result == 0) {
-        std::cout << "Unmounted: \033[92m'" << isoDir << "'\033[0m." << std::endl; // Print success message
+        // Check if the unmounting was successful
+        if (result == 0) {
+            std::cout << "Unmounted: \033[92m'" << isoDir << "'\033[0m." << std::endl; // Print success message
 
-        // Check if the directory is empty before removing it
-        if (isDirectoryEmpty(isoDir)) {
-            // Construct the remove directory command with sudo, rmdir, and suppressing logs
-            std::string removeDirCommand = "sudo rmdir " + shell_escape(isoDir) + " 2>/dev/null";
+            // Check if the directory is empty before removing it
+            if (isDirectoryEmpty(isoDir)) {
+                // Construct the remove directory command with sudo, rmdir, and suppressing logs
+                std::string removeDirCommand = "sudo rmdir " + shell_escape(isoDir) + " 2>/dev/null";
 
-            // Execute the remove directory command
-            int removeDirResult = system(removeDirCommand.c_str());
+                // Execute the remove directory command
+                int removeDirResult = system(removeDirCommand.c_str());
 
-            if (removeDirResult != 0) {
-                std::cerr << "\033[91mFailed to remove directory: \033[93m'" << isoDir << "'\033[91m ...Please check it out manually.\033[0m" << std::endl;
+                if (removeDirResult != 0) {
+                    std::cerr << "\033[91mFailed to remove directory: \033[93m'" << isoDir << "'\033[91m ...Please check it out manually.\033[0m" << std::endl;
+                }
             }
+        } else {
+			// Print failure message
+            std::cerr << "\033[91mFailed to unmount: \033[93m'" << isoDir << "'\033[91m ...Probably not an ISO mountpoint, check it out manually.\033[0m" << std::endl; 
         }
-    } else {
-        std::cerr << "\033[91mFailed to unmount: \033[93m'" << isoDir << "'\033[91m ...Probably not an ISO mountpoint, check it out manually.\033[0m" << std::endl; // Print failure message
-    }
+    });
+
+    // Wait for the asynchronous tasks to complete
+    unmountFuture.get();
 }
 
 // Function to check if a given index is within the valid range of available ISOs
