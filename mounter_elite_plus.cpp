@@ -957,66 +957,65 @@ void listMountedISOs() {
     }
 }
 
-// Function to check if directory is empty
-bool isDirectoryEmpty(const std::string& path) {
-    // Use std::filesystem for a safer and more efficient solution
-    return std::filesystem::is_empty(path);
-}
-
-// Function to unmount selected ISOs called by unmountISOs()
-void unmountISO(const std::string& isoDir) {
-    // Local mutex for synchronization
-    std::mutex localMutex;
-
-    // Construct the unmount command with sudo, umount, and suppressing logs
-    std::string unmountCommand = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1";
-
-    // Execute the unmount command asynchronously
-    std::future<int> unmountFuture = std::async(std::launch::async, [&](const std::string& command) {
-        // Lock the local mutex before executing the command
-        std::lock_guard<std::mutex> innerLock(localMutex);
-
-        return system(command.c_str());
-    }, unmountCommand);
-
-    // Check if the unmounting was successful
-    int unmountResult = unmountFuture.get();
-    if (unmountResult == 0) {
-        std::cout << "Unmounted: \033[92m'" << isoDir << "'\033[0m." << std::endl; // Print success message
-
-        // Check if the directory is empty before removing it
-        bool isEmpty = isDirectoryEmpty(isoDir);
-
-        if (isEmpty) {
-            // Construct the remove directory command with sudo, rmdir, and suppressing logs
-            std::string removeDirCommand = "sudo rmdir " + shell_escape(isoDir) + " 2>/dev/null";
-
-            // Execute the remove directory command asynchronously
-            std::future<int> removeDirFuture = std::async(std::launch::async, [&](const std::string& command) {
-                // Lock the local mutex before executing the command
-                std::lock_guard<std::mutex> innerLock(localMutex);
-
-                return system(command.c_str());
-            }, removeDirCommand);
-
-            // Check if the directory removal was successful
-            int removeDirResult = removeDirFuture.get();
-            if (removeDirResult != 0) {
-                std::cerr << "\033[91mFailed to remove directory: '" << isoDir << "' ...Please check it out manually.\033[0m" << std::endl;
-            }
+// Check if the directory is empty before removing it
+bool isEmptyDirectory(const std::string& path) {
+    // Attempt to check if the directory is empty
+    try {
+        return std::filesystem::is_empty(path);
+    } catch (const std::filesystem::filesystem_error& e) {
+        if (e.code().value() == static_cast<int>(std::errc::permission_denied)) {
+            // Permission denied error, treat it as an empty directory
+            return true;
+        } else {
+            // Other filesystem error, print the error and return false
+            std::cerr << "Error checking if the directory is empty: " << e.what() << std::endl;
+            return false;
         }
-    } else {
-        std::cerr << "\033[91mFailed to unmount: '" << isoDir << " ...Probably not an ISO mountpoint, check it out manually.\033[0m" << std::endl; // Print failure message
     }
 }
 
+//function to check if directory is empty for unmountISO
+bool isDirectoryEmpty(const std::string& path) {
+    std::string checkEmptyCommand = "sudo find " + shell_escape(path) + " -mindepth 1 -maxdepth 1 -print -quit | grep -q .";
+    int result = system(checkEmptyCommand.c_str());
+    return result != 0; // If result is 0, directory is empty; otherwise, it's not empty
+}
 
+
+void unmountISO(const std::string& isoDir) {
+    // Construct the unmount command with sudo, umount, and suppressing logs
+    std::string unmountCommand = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1";
+
+    // Execute the unmount command
+    int result = system(unmountCommand.c_str());
+
+    // Check if the unmounting was successful
+    if (result == 0) {
+        std::cout << "\033[92mUnmounted: " << isoDir << "\033[0m" << std::endl; // Print success message
+
+        // Check if the directory is empty before removing it
+        if (isDirectoryEmpty(isoDir)) {
+            // Construct the remove directory command with sudo, rmdir, and suppressing logs
+            std::string removeDirCommand = "sudo rmdir " + shell_escape(isoDir) + " 2>/dev/null";
+
+            // Execute the remove directory command
+            int removeDirResult = system(removeDirCommand.c_str());
+
+            if (removeDirResult != 0) {
+                std::cerr << "\033[91mFailed to remove directory: " << isoDir << " ...Please check it out manually.\033[0m" << std::endl;
+            }
+        }
+    } else {
+        std::cerr << "\033[91mFailed to unmount: " << isoDir << " ...Probably not an ISO mountpoint, check it out manually.\033[0m" << std::endl; // Print failure message
+    }
+}
 
 // Function to check if a given index is within the valid range of available ISOs
 bool isValidIndex(int index, size_t isoDirsSize) {
-
+	
     return (index >= 1) && (static_cast<size_t>(index) <= isoDirsSize);
 }
+
 
 // Function to unmount ISOs based on user input
 void unmountISOs() {
@@ -1068,119 +1067,89 @@ void unmountISOs() {
                 std::lock_guard<std::mutex> lock(mutexforsearch); // Lock the critical section
                 unmountISO(isoDir);
             }
-            // Stop the timer after completing the mounting process
-            auto end_time = std::chrono::high_resolution_clock::now();
+        } else {
+            // Split the input into tokens
+            std::istringstream iss(input);
+            std::vector<int> unmountIndices;
+            std::set<int> uniqueIndices;  // Use a set to store unique indices
 
-            auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-            // Print the time taken for the entire process in bold with one decimal place
-            std::cout << " " << std::endl;
-            std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
-
-            std::cout << " " << std::endl;
-            std::cout << "Press Enter to continue...";
-            std::cin.get();
-            std::system("clear");
-
-            listMountedISOs(); // Display the updated list of mounted ISOs after unmounting all
-
-            continue;  // Restart the loop
-        }
-
-        // Split the input into tokens
-        std::istringstream iss(input);
-        std::vector<int> unmountIndices;
-        std::set<int> uniqueIndices;  // Use a set to store unique indices
-
-        std::string token;
-        while (iss >> token) {
-            // Check if the token is a valid number
-            if (std::regex_match(token, std::regex("^\\d+$"))) {
-                // Individual number
-                int number = std::stoi(token);
-                if (isValidIndex(number, isoDirs.size())) {
-                    // Check for duplicates
-                    if (uniqueIndices.find(number) == uniqueIndices.end()) {
-                        uniqueIndices.insert(number);
-                        unmountIndices.push_back(number);
-                    }
-
-                } else {
-                    // Store the error message
-                    errorMessages.push_back("\033[91mFile index '" + std::to_string(number) + "' does not exist.\033[0m");
-                }
-            } else if (std::regex_match(token, std::regex("^(\\d+)-(\\d+)$"))) {
-                // Range input (e.g., "1-3" or "3-1")
-                std::smatch match;
-                std::regex_match(token, match, std::regex("^(\\d+)-(\\d+)$"));
-                int startRange = std::stoi(match[1]);
-                int endRange = std::stoi(match[2]);
-
-                // Check for valid range
-                if (startRange == endRange) {
-                    // Handle range with the same start and end index
-                    if (isValidIndex(startRange, isoDirs.size())) {
+            std::string token;
+            while (iss >> token) {
+                // Check if the token is a valid number
+                if (std::regex_match(token, std::regex("^\\d+$"))) {
+                    // Individual number
+                    int number = std::stoi(token);
+                    if (isValidIndex(number, isoDirs.size())) {
                         // Check for duplicates
-                        if (uniqueIndices.find(startRange) == uniqueIndices.end()) {
-                            uniqueIndices.insert(startRange);
-                            unmountIndices.push_back(startRange);
+                        if (uniqueIndices.find(number) == uniqueIndices.end()) {
+                            uniqueIndices.insert(number);
+                            unmountIndices.push_back(number);
+                        }
+
+                    } else {
+                        // Store the error message
+                        errorMessages.push_back("\033[91mFile index '" + std::to_string(number) + "' does not exist.\033[0m");
+                    }
+                } else if (std::regex_match(token, std::regex("^(\\d+)-(\\d+)$"))) {
+                    // Range input (e.g., "1-3" or "3-1")
+                    std::smatch match;
+                    std::regex_match(token, match, std::regex("^(\\d+)-(\\d+)$"));
+                    int startRange = std::stoi(match[1]);
+                    int endRange = std::stoi(match[2]);
+
+                    // Check for valid range
+                    if (startRange == endRange) {
+                        // Handle range with the same start and end index
+                        if (isValidIndex(startRange, isoDirs.size())) {
+                            // Check for duplicates
+                            if (uniqueIndices.find(startRange) == uniqueIndices.end()) {
+                                uniqueIndices.insert(startRange);
+                                unmountIndices.push_back(startRange);
+                            }
+                        } else {
+                            // Store the error message for invalid index
+                            errorMessages.push_back("\033[91mFile index '" + std::to_string(startRange) + "' does not exist.\033[0m");
                         }
                     } else {
-                        // Store the error message for invalid index
-                        errorMessages.push_back("\033[91mFile index '" + std::to_string(startRange) + "' does not exist.\033[0m");
-                    }
-                } else {
-                    int step = (startRange < endRange) ? 1 : -1;
+                        int step = (startRange < endRange) ? 1 : -1;
 
-                    // Check if the range includes only valid indices
-                    bool validRange = true;
-                    for (int i = startRange; i != endRange + step; i += step) {
-                        if (!isValidIndex(i, isoDirs.size())) {
-                            validRange = false;
-                            break;
-                        }
-                    }
-
-                    if (validRange) {
+                        // Check if the range includes only valid indices
+                        bool validRange = true;
                         for (int i = startRange; i != endRange + step; i += step) {
-                            // Check for duplicates
-                            if (uniqueIndices.find(i) == uniqueIndices.end()) {
-                                uniqueIndices.insert(i);
-                                unmountIndices.push_back(i);
+                            if (!isValidIndex(i, isoDirs.size())) {
+                                validRange = false;
+                                break;
                             }
                         }
-                    } else {
-                        // Store the error message for invalid range
-                        errorMessages.push_back("\033[91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0m");
+
+                        if (validRange) {
+                            for (int i = startRange; i != endRange + step; i += step) {
+                                // Check for duplicates
+                                if (uniqueIndices.find(i) == uniqueIndices.end()) {
+                                    uniqueIndices.insert(i);
+                                    unmountIndices.push_back(i);
+                                }
+                            }
+                        } else {
+                            // Store the error message for invalid range
+                            errorMessages.push_back("\033[91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0m");
+                        }
                     }
+                } else {
+                    // Store the error message for invalid input format
+                    errorMessages.push_back("\033[91mInvalid input: '" + token + "'.\033[0m");
                 }
-            } else {
-                // Store the error message for invalid input format
-                errorMessages.push_back("\033[91mInvalid input: '" + token + "'.\033[0m");
             }
-        }
 
-        // Determine the number of available CPU cores
-        const unsigned int numCores = std::thread::hardware_concurrency();
-
-        // Create a vector of threads to perform unmounting and directory removal concurrently
-        std::vector<std::thread> threads;
-
-        for (int index : unmountIndices) {
-            // Check if the index is within the valid range
-            if (isValidIndex(index, isoDirs.size())) {
-                const std::string& isoDir = isoDirs[index - 1];
-
-                // Use a thread for each ISO to be unmounted
-                threads.emplace_back([&, isoDir]() {
+            // Unmount selected ISOs
+            for (int index : unmountIndices) {
+                // Check if the index is within the valid range
+                if (isValidIndex(index, isoDirs.size())) {
+                    const std::string& isoDir = isoDirs[index - 1];
                     std::lock_guard<std::mutex> lock(mutexforsearch); // Lock the critical section
                     unmountISO(isoDir);
-                });
+                }
             }
-        }
-
-        // Join the threads to wait for them to finish
-        for (auto& thread : threads) {
-            thread.join();
         }
 
         // Stop the timer after completing the unmounting process
