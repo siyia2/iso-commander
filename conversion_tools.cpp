@@ -897,8 +897,6 @@ std::future<std::pair<std::vector<int>, std::vector<std::string>>> processInputM
 }
 
 
-
-
 // Function to retrieve selected files based on their indices asynchronously
 std::future<std::vector<std::string>> getSelectedFilesMDF(const std::vector<int>& selectedIndices, const std::vector<std::string>& fileList) {
     // Use std::async with launch policy to create asynchronous tasks

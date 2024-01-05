@@ -29,7 +29,6 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
 void convertBINsToISOs(const std::vector<std::string>& inputPaths, int numThreads);
 void processFilesInRange(int start, int end);
 void convertBINToISO(const std::string& inputPath);
-void convertBINsToISOs();
 void select_and_convert_files_to_iso();
 void processInputBin(const std::string& input, const std::vector<std::string>& fileList);
 bool isCcd2IsoInstalled();
