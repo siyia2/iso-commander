@@ -803,6 +803,9 @@ std::pair<std::vector<int>, std::vector<std::string>> processMDFInput(const std:
     // Set to track processed indices
     std::set<int> processedIndices;
 
+    // Set to track processed error messages
+    std::set<std::string> processedErrors;
+
     // Iterate through the tokens in the input string
     while (iss >> token) {
         if (token.find('-') != std::string::npos) {
@@ -814,10 +817,18 @@ std::pair<std::vector<int>, std::vector<std::string>> processMDFInput(const std:
                 startRange = std::stoi(token.substr(0, dashPos));
                 endRange = std::stoi(token.substr(dashPos + 1));
             } catch (const std::invalid_argument& e) {
-                errorMessages.push_back("\033[91mInvalid input " + token + ".\033[0m");
+                std::string errorMessage = "\033[91mInvalid input " + token + ".\033[0m";
+                if (processedErrors.find(errorMessage) == processedErrors.end()) {
+                    errorMessages.push_back(errorMessage);
+                    processedErrors.insert(errorMessage);
+                }
                 continue;
             } catch (const std::out_of_range& e) {
-                errorMessages.push_back("\033[91mInvalid input " + token + ".\033[0m");
+                std::string errorMessage = "\033[91mInvalid input " + token + ".\033[0m";
+                if (processedErrors.find(errorMessage) == processedErrors.end()) {
+                    errorMessages.push_back(errorMessage);
+                    processedErrors.insert(errorMessage);
+                }
                 continue;
             }
 
@@ -834,7 +845,11 @@ std::pair<std::vector<int>, std::vector<std::string>> processMDFInput(const std:
                     }
                 }
             } else {
-                errorMessages.push_back("\033[91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0m");
+                std::string errorMessage = "\033[91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0m";
+                if (processedErrors.find(errorMessage) == processedErrors.end()) {
+                    errorMessages.push_back(errorMessage);
+                    processedErrors.insert(errorMessage);
+                }
             }
         } else {
             // Handle individual numbers (e.g., "1")
@@ -843,10 +858,18 @@ std::pair<std::vector<int>, std::vector<std::string>> processMDFInput(const std:
             try {
                 selectedFileIndex = std::stoi(token);
             } catch (const std::invalid_argument& e) {
-                errorMessages.push_back("\033[91mInvalid input: '" + token + "'.\033[0m");
+                std::string errorMessage = "\033[91mInvalid input: '" + token + "'.\033[0m";
+                if (processedErrors.find(errorMessage) == processedErrors.end()) {
+                    errorMessages.push_back(errorMessage);
+                    processedErrors.insert(errorMessage);
+                }
                 continue;
             } catch (const std::out_of_range& e) {
-                errorMessages.push_back("\033[91mFile index '" + token + "', does not exist.\033[0m");
+                std::string errorMessage = "\033[91mFile index '" + token + "', does not exist.\033[0m";
+                if (processedErrors.find(errorMessage) == processedErrors.end()) {
+                    errorMessages.push_back(errorMessage);
+                    processedErrors.insert(errorMessage);
+                }
                 continue;
             }
 
@@ -860,13 +883,18 @@ std::pair<std::vector<int>, std::vector<std::string>> processMDFInput(const std:
                     processedIndices.insert(currentIndex);
                 }
             } else {
-                errorMessages.push_back("\033[91mFile index '" + token + "', does not exist.\033[0m");
+                std::string errorMessage = "\033[91mFile index '" + token + "', does not exist.\033[0m";
+                if (processedErrors.find(errorMessage) == processedErrors.end()) {
+                    errorMessages.push_back(errorMessage);
+                    processedErrors.insert(errorMessage);
+                }
             }
         }
     }
 
     return {selectedFileIndices, errorMessages};
 }
+
 
 // Multithreaded function to parse user input and extract selected file indices and errors
 std::vector<std::future<std::pair<std::vector<int>, std::vector<std::string>>>> processMDFInputMultithreaded(const std::vector<std::string>& inputs, int maxIndex) {
