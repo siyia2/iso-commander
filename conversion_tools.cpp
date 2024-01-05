@@ -320,12 +320,13 @@ void printFileListBin(const std::vector<std::string>& fileList) {
 }
 
 
-// function to process user input and convert selected BIN files to ISO format
+// Function to process user input and convert selected BIN files to ISO format
 void processInputBin(const std::string& input, const std::vector<std::string>& fileList) {
     std::istringstream iss(input);
     std::string token;
     std::set<int> processedIndices;
-    std::vector<std::future<void>> futures;  // Use std::future<void> for asynchronous void functions
+    std::set<std::string> processedErrors;
+    std::vector<std::future<void>> futures;
     std::vector<std::string> errorMessages;
 
     while (iss >> token) {
@@ -342,34 +343,45 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                         for (int i = start; i <= end; i += step) {
                             int selectedIndex = i - 1;
                             if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-                                // Create a thread for conversion
                                 std::string selectedFile = fileList[selectedIndex];
                                 futures.push_back(std::async(std::launch::async, convertBINToISO, selectedFile));
                                 processedIndices.insert(selectedIndex);
                             }
                         }
                     } else {
-                        errorMessages.push_back("\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m");
+                        std::string errorMessage = "\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m";
+                        if (processedErrors.find(errorMessage) == processedErrors.end()) {
+                            errorMessages.push_back(errorMessage);
+                            processedErrors.insert(errorMessage);
+                        }
                     }
                 } else {
+                    // Handle reverse range
                     if (start >= 1 && end >= 1 && end <= fileList.size()) {
                         int step = -1;
                         for (int i = start; i >= end; i += step) {
                             int selectedIndex = i - 1;
                             if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
                                 if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-                                    // Create a thread for conversion
                                     std::string selectedFile = fileList[selectedIndex];
                                     futures.push_back(std::async(std::launch::async, convertBINToISO, selectedFile));
                                     processedIndices.insert(selectedIndex);
                                 }
                             } else {
-                                errorMessages.push_back("\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m");
+                                std::string errorMessage = "\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m";
+                                if (processedErrors.find(errorMessage) == processedErrors.end()) {
+                                    errorMessages.push_back(errorMessage);
+                                    processedErrors.insert(errorMessage);
+                                }
                                 break; // Exit the loop to avoid further errors
                             }
                         }
                     } else {
-                        errorMessages.push_back("\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m");
+                        std::string errorMessage = "\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m";
+                        if (processedErrors.find(errorMessage) == processedErrors.end()) {
+                            errorMessages.push_back(errorMessage);
+                            processedErrors.insert(errorMessage);
+                        }
                     }
                 }
             } else if (start >= 1 && start <= fileList.size()) {
@@ -377,19 +389,30 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                 int selectedIndex = start - 1;
                 if (processedIndices.find(selectedIndex) == processedIndices.end()) {
                     if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
-                        // Create a thread for conversion
                         std::string selectedFile = fileList[selectedIndex];
                         futures.push_back(std::async(std::launch::async, convertBINToISO, selectedFile));
                         processedIndices.insert(selectedIndex);
                     } else {
-                        errorMessages.push_back("\033[91mFile index '" + std::to_string(start) + "' does not exist.\033[0m");
+                        std::string errorMessage = "\033[91mFile index '" + std::to_string(start) + "' does not exist.\033[0m";
+                        if (processedErrors.find(errorMessage) == processedErrors.end()) {
+                            errorMessages.push_back(errorMessage);
+                            processedErrors.insert(errorMessage);
+                        }
                     }
                 }
             } else {
-                errorMessages.push_back("\033[91mFile index '" + std::to_string(start) + "' does not exist.\033[0m");
+                std::string errorMessage = "\033[91mFile index '" + std::to_string(start) + "' does not exist.\033[0m";
+                if (processedErrors.find(errorMessage) == processedErrors.end()) {
+                    errorMessages.push_back(errorMessage);
+                    processedErrors.insert(errorMessage);
+                }
             }
         } else {
-            errorMessages.push_back("\033[91mInvalid input: '" + token + "'.\033[0m");
+            std::string errorMessage = "\033[91mInvalid input: '" + token + "'.\033[0m";
+            if (processedErrors.find(errorMessage) == processedErrors.end()) {
+                errorMessages.push_back(errorMessage);
+                processedErrors.insert(errorMessage);
+            }
         }
     }
 
@@ -404,6 +427,7 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
     }
     std::cout << " " << std::endl;
 }
+
 
 
 // MDF CONVERSION FUNCTIONS	\\
