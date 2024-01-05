@@ -22,8 +22,6 @@ Added Features:
 * More robust menu experience.
 * Improved selection procedures.
 * Multithreaded and asynchronous operations for maximum performance.
-* Faster search times and cache generations.
-* Faster mount&unmount times, it can mount up to 30 ISO files in under 5s.
 * Includes a high precision timer to measure performance in mount/unmount and list generation operations.
 * Dropped manual mode for mounting/converting, since caching is way faster and easier to manage.
 * Added support for MDF conversion to ISO by utilizing mdf2iso.
