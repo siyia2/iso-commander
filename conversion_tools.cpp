@@ -709,14 +709,14 @@ void select_and_convert_files_to_iso_mdf() {
         }
 
         // Parse the user input to get selected file indices and capture errors
-        std::pair<std::vector<int>, std::vector<std::string>> result = parseUserInput(input, mdfMdsFiles.size());
+        std::pair<std::vector<int>, std::vector<std::string>> result = processMDFInput(input, mdfMdsFiles.size());
         std::vector<int> selectedFileIndices = result.first;
         std::vector<std::string> errorMessages = result.second;
         std::system("clear");
 
         if (!selectedFileIndices.empty()) {
             // Get the paths of the selected files based on user input
-            std::future<std::vector<std::string>> futureSelectedFiles = getSelectedFiles(selectedFileIndices, mdfMdsFiles);
+            std::future<std::vector<std::string>> futureSelectedFiles = getSelectedFilesMDF(selectedFileIndices, mdfMdsFiles);
 
             // Wait for the asynchronous task to complete and retrieve the result
             std::vector<std::string> selectedFiles = futureSelectedFiles.get();
@@ -767,7 +767,7 @@ void printFileListMdf(const std::vector<std::string>& fileList) {
 }
 
 // Function to parse user input and extract selected file indices and errors
-std::pair<std::vector<int>, std::vector<std::string>> parseUserInput(const std::string& input, int maxIndex) {
+std::pair<std::vector<int>, std::vector<std::string>> processMDFInput(const std::string& input, int maxIndex) {
     std::vector<int> selectedFileIndices;
     std::vector<std::string> errorMessages;
     std::istringstream iss(input);
@@ -842,13 +842,13 @@ std::pair<std::vector<int>, std::vector<std::string>> parseUserInput(const std::
 }
 
 // Multithreaded function to parse user input and extract selected file indices and errors
-std::vector<std::future<std::pair<std::vector<int>, std::vector<std::string>>>> parseUserInputMultithreaded(const std::vector<std::string>& inputs, int maxIndex) {
+std::vector<std::future<std::pair<std::vector<int>, std::vector<std::string>>>> processMDFInputMultithreaded(const std::vector<std::string>& inputs, int maxIndex) {
 
     std::vector<std::future<std::pair<std::vector<int>, std::vector<std::string>>>> futures;
 
     // Use std::async to perform user input parsing concurrently
     for (const auto& input : inputs) {
-        futures.push_back(std::async(std::launch::async, parseUserInput, input, maxIndex));
+        futures.push_back(std::async(std::launch::async, processMDFInput, input, maxIndex));
     }
 
     return futures;
@@ -856,7 +856,7 @@ std::vector<std::future<std::pair<std::vector<int>, std::vector<std::string>>>> 
 
 
 // Function to retrieve selected files based on their indices asynchronously
-std::future<std::vector<std::string>> getSelectedFiles(const std::vector<int>& selectedIndices, const std::vector<std::string>& fileList) {
+std::future<std::vector<std::string>> getSelectedFilesMDF(const std::vector<int>& selectedIndices, const std::vector<std::string>& fileList) {
     // Use std::async with launch policy to create asynchronous tasks
     return std::async(std::launch::async | std::launch::deferred, [selectedIndices, fileList]() {
         std::vector<std::string> selectedFiles;
