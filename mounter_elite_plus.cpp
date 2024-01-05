@@ -1080,8 +1080,6 @@ void unmountISOs() {
             std::cin.get();
             std::system("clear");
 
-            listMountedISOs(); // Display the updated list of mounted ISOs after unmounting all
-
             continue;  // Restart the loop
         }
         // Split the input into tokens
@@ -1209,6 +1207,5 @@ void unmountISOs() {
         std::cin.get();
         std::system("clear");
 
-        listMountedISOs(); // Display the updated list of mounted ISOs after unmounting
     }
 }
