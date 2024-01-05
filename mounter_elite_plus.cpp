@@ -1146,7 +1146,7 @@ void unmountISOs() {
                     }
 
                     if (validRange) {
-                        for (int i = startRange; i != endRange + step; i += step) {
+                        for (int i = startRange; i != endRange - step; i += step) {
                             // Check for duplicates
                             if (uniqueIndices.find(i) == uniqueIndices.end()) {
                                 uniqueIndices.insert(i);
