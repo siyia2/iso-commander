@@ -26,7 +26,6 @@
 
 // BIN/IMG CONVERSION
 std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback);
-void convertBINsToISOs(const std::vector<std::string>& inputPaths, int numThreads);
 void processFilesInRange(int start, int end);
 void convertBINToISO(const std::string& inputPath);
 void select_and_convert_files_to_iso();
