@@ -991,7 +991,7 @@ void unmountISO(const std::string& isoDir) {
 
     // Check if the unmounting was successful
     if (result == 0) {
-        std::cout << "Unmounted: \033[92m'" << isoDir << "'.\033[0m" << std::endl; // Print success message
+        std::cout << "Unmounted: \033[92m'" << isoDir << "'\033[0m." << std::endl; // Print success message
 
         // Check if the directory is empty before removing it
         if (isDirectoryEmpty(isoDir)) {
@@ -1211,4 +1211,3 @@ void unmountISOs() {
         std::system("clear");
     }
 }
-
