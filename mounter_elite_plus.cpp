@@ -33,6 +33,7 @@ void select_and_mount_files_by_number();
 void print_ascii();
 void manualRefreshCache();
 void mountISOs(const std::vector<std::string>& isoFiles);
+void asyncUnmountISO(const std::string& isoDir);
 void unmountISO(const std::string& isoDir);
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mutexforsearch);
 void removeNonExistentPathsFromCache();
@@ -564,27 +565,29 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
     }
 }
 
-// Function to mount ISO files concurrently using threads
+
+// Function to mount ISO files concurrently using asynchronous tasks
 void mountISOs(const std::vector<std::string>& isoFiles) {
     // Map to store mounted ISOs with their corresponding paths
     std::map<std::string, std::string> mountedIsos;
 
-    // Vector to store threads for parallel mounting
-    std::vector<std::thread> threads;
+    // Vector to store futures for parallel mounting
+    std::vector<std::future<void>> futures;
 
-    // Iterate through the list of ISO files and spawn a thread for each
+    // Iterate through the list of ISO files and spawn a future for each
     for (const std::string& isoFile : isoFiles) {
-        // Create a copy of the ISO file path for the thread to avoid race conditions
+        // Create a copy of the ISO file path for the future to avoid race conditions
         std::string IsoFile = isoFile;
 
-        // Create a thread for mounting the ISO file and pass the map by reference
-        threads.emplace_back(mountIsoFile, IsoFile, std::ref(mountedIsos));
+        // Create a future for mounting the ISO file and pass the map by reference
+        futures.push_back(std::async(std::launch::async, mountIsoFile, std::move(IsoFile), std::ref(mountedIsos)));
     }
 
-    // Join all threads to wait for them to finish
-    for (auto& thread : threads) {
-        thread.join();
+    // Wait for all asynchronous tasks to complete
+    for (auto& future : futures) {
+        future.get();
     }
+
 }
 
 
@@ -1017,6 +1020,12 @@ bool isValidIndex(int index, size_t isoDirsSize) {
 }
 
 
+// Function to perform asynchronous unmounting
+void asyncUnmountISO(const std::string& isoDir) {
+    std::lock_guard<std::mutex> lock(mutexforsearch); // Lock the critical section
+    unmountISO(isoDir);
+}
+
 // Main function for unmounting ISOs
 void unmountISOs() {
     // Set to store unique error messages
@@ -1065,12 +1074,18 @@ void unmountISOs() {
         }
 
         if (std::strcmp(input, "00") == 0) {
-            // Unmount all ISOs
+            // Unmount all ISOs asynchronously
+            std::vector<std::future<void>> futures;
             for (const std::string& isoDir : isoDirs) {
-                std::lock_guard<std::mutex> lock(mutexforsearch); // Lock the critical section
-                unmountISO(isoDir);
+                futures.push_back(std::async(std::launch::async, asyncUnmountISO, isoDir));
             }
-            // Stop the timer after completing the mounting process
+
+            // Wait for all asynchronous tasks to complete
+            for (auto& future : futures) {
+                future.get();
+            }
+
+            // Stop the timer after completing the unmounting process
             auto end_time = std::chrono::high_resolution_clock::now();
 
             auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
@@ -1085,6 +1100,7 @@ void unmountISOs() {
 
             continue;  // Restart the loop
         }
+
         // Split the input into tokens
         std::istringstream iss(input);
         std::vector<int> unmountIndices;
