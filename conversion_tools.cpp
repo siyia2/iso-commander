@@ -320,7 +320,7 @@ void printFileListBin(const std::vector<std::string>& fileList) {
 }
 
 
-// Asynchronous function to process user input and convert selected BIN files to ISO format
+// function to process user input and convert selected BIN files to ISO format
 void processInputBin(const std::string& input, const std::vector<std::string>& fileList) {
     std::istringstream iss(input);
     std::string token;
@@ -404,6 +404,9 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
     }
     std::cout << " " << std::endl;
 }
+
+
+// MDF CONVERSION FUNCTIONS	\\
 
 
 // Function to search for .mdf and .mds files under 10MB
