@@ -759,9 +759,13 @@ void select_and_convert_files_to_iso_mdf() {
         }
 
         // Parse the user input to get selected file indices and capture errors
-        std::pair<std::vector<int>, std::vector<std::string>> result = processInputMDF(input, mdfMdsFiles.size());
-        std::vector<int> selectedFileIndices = result.first;
-        std::vector<std::string> errorMessages = result.second;
+		std::future<std::pair<std::vector<int>, std::vector<std::string>>> resultFuture = processInputMDF(input, mdfMdsFiles.size());
+
+		// Wait for the asynchronous task to complete and retrieve the result
+		std::pair<std::vector<int>, std::vector<std::string>> result = resultFuture.get();
+		std::vector<int> selectedFileIndices = result.first;
+		std::vector<std::string> errorMessages = result.second;
+		
         std::system("clear");
 
         if (!selectedFileIndices.empty()) {
@@ -816,138 +820,122 @@ void printFileListMdf(const std::vector<std::string>& fileList) {
     }
 }
 
-// Function to parse user input and extract selected file indices and errors
-std::pair<std::vector<int>, std::vector<std::string>> processInputMDF(const std::string& input, int maxIndex) {
-    // Vector to store selected file indices
-    std::vector<int> selectedFileIndices;
+// Function to parse user input and extract selected file indices and errors asynchronously
+std::future<std::pair<std::vector<int>, std::vector<std::string>>> processInputMDF(const std::string& input, int maxIndex) {
+    return std::async(std::launch::async, [input, maxIndex]() {
+        // Vectors to store selected file indices and error messages
+        std::vector<int> selectedFileIndices;
+        std::vector<std::string> errorMessages;
 
-    // Vector to store error messages
-    std::vector<std::string> errorMessages;
+        // Tokenize the input string
+        std::istringstream iss(input);
+        std::string token;
 
-    // Create a string stream to tokenize the input
-    std::istringstream iss(input);
-    std::string token;
+        // Sets to keep track of processed indices and errors to avoid duplicates
+        std::set<int> processedIndices;
+        std::set<std::string> processedErrors;
 
-    // Set to track processed indices to avoid duplicates
-    std::set<int> processedIndices;
+        // Loop through tokens in the input string
+        while (iss >> token) {
+            if (token.find('-') != std::string::npos) {
+                // Process token as a range (e.g., 1-5)
+                size_t dashPos = token.find('-');
+                int startRange, endRange;
 
-    // Set to track processed error messages to avoid duplicate error reporting
-    std::set<std::string> processedErrors;
-
-    // Iterate through the tokens in the input string
-    while (iss >> token) {
-        // Check if the token contains a hyphen, indicating a range
-        if (token.find('-') != std::string::npos) {
-            // Handle a range (e.g., "1-2" or "2-1")
-            size_t dashPos = token.find('-');
-            int startRange, endRange;
-
-            try {
-                // Extract start and end values from the range token
-                startRange = std::stoi(token.substr(0, dashPos));
-                endRange = std::stoi(token.substr(dashPos + 1));
-            } catch (const std::invalid_argument& e) {
-                // Handle invalid input and add an error message
-                std::string errorMessage = "\033[91mInvalid input " + token + ".\033[0m";
-                if (processedErrors.find(errorMessage) == processedErrors.end()) {
-                    errorMessages.push_back(errorMessage);
-                    processedErrors.insert(errorMessage);
+                try {
+                    // Extract start and end values of the range
+                    startRange = std::stoi(token.substr(0, dashPos));
+                    endRange = std::stoi(token.substr(dashPos + 1));
+                } catch (const std::invalid_argument& e) {
+                    // Handle invalid input exceptions
+                    std::string errorMessage = "\033[91mInvalid input " + token + ".\033[0m";
+                    if (processedErrors.find(errorMessage) == processedErrors.end()) {
+                        errorMessages.push_back(errorMessage);
+                        processedErrors.insert(errorMessage);
+                    }
+                    continue;
+                } catch (const std::out_of_range& e) {
+                    // Handle out-of-range exceptions
+                    std::string errorMessage = "\033[91mInvalid input " + token + ".\033[0m";
+                    if (processedErrors.find(errorMessage) == processedErrors.end()) {
+                        errorMessages.push_back(errorMessage);
+                        processedErrors.insert(errorMessage);
+                    }
+                    continue;
                 }
-                continue;
-            } catch (const std::out_of_range& e) {
-                // Handle out-of-range input and add an error message
-                std::string errorMessage = "\033[91mInvalid input " + token + ".\033[0m";
-                if (processedErrors.find(errorMessage) == processedErrors.end()) {
-                    errorMessages.push_back(errorMessage);
-                    processedErrors.insert(errorMessage);
+
+                // Check if the range is valid and add indices to the selectedFileIndices vector
+                if ((startRange >= 1 && startRange <= maxIndex) && (endRange >= 1 && endRange <= maxIndex)) {
+                    int step = (startRange <= endRange) ? 1 : -1;
+
+                    for (int i = startRange; (startRange <= endRange) ? (i <= endRange) : (i >= endRange); i += step) {
+                        int currentIndex = i - 1;
+
+                        // Avoid duplicate indices
+                        if (processedIndices.find(currentIndex) == processedIndices.end()) {
+                            selectedFileIndices.push_back(currentIndex);
+                            processedIndices.insert(currentIndex);
+                        }
+                    }
+                } else {
+                    // Handle invalid range errors
+                    std::string errorMessage = "\033[91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0m";
+                    if (processedErrors.find(errorMessage) == processedErrors.end()) {
+                        errorMessages.push_back(errorMessage);
+                        processedErrors.insert(errorMessage);
+                    }
                 }
-                continue;
-            }
+            } else {
+                // Process token as a single index
+                int selectedFileIndex;
 
-            // Check if the range is valid before adding indices
-            if ((startRange >= 1 && startRange <= maxIndex) && (endRange >= 1 && endRange <= maxIndex)) {
-                int step = (startRange <= endRange) ? 1 : -1;
-                
-                // Iterate through the range and add indices to the vector
-                for (int i = startRange; (startRange <= endRange) ? (i <= endRange) : (i >= endRange); i += step) {
-                    int currentIndex = i - 1;
+                try {
+                    // Convert token to integer
+                    selectedFileIndex = std::stoi(token);
+                } catch (const std::invalid_argument& e) {
+                    // Handle invalid input exceptions
+                    std::string errorMessage = "\033[91mInvalid input: '" + token + "'.\033[0m";
+                    if (processedErrors.find(errorMessage) == processedErrors.end()) {
+                        errorMessages.push_back(errorMessage);
+                        processedErrors.insert(errorMessage);
+                    }
+                    continue;
+                } catch (const std::out_of_range& e) {
+                    // Handle out-of-range exceptions
+                    std::string errorMessage = "\033[91mFile index '" + token + "', does not exist.\033[0m";
+                    if (processedErrors.find(errorMessage) == processedErrors.end()) {
+                        errorMessages.push_back(errorMessage);
+                        processedErrors.insert(errorMessage);
+                    }
+                    continue;
+                }
 
-                    // Check if the index has already been processed
+                // Check if the index is valid and add it to the selectedFileIndices vector
+                if (selectedFileIndex >= 1 && selectedFileIndex <= maxIndex) {
+                    int currentIndex = selectedFileIndex - 1;
+
+                    // Avoid duplicate indices
                     if (processedIndices.find(currentIndex) == processedIndices.end()) {
                         selectedFileIndices.push_back(currentIndex);
                         processedIndices.insert(currentIndex);
                     }
-                }
-            } else {
-                // Add an error message for an invalid range
-                std::string errorMessage = "\033[91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0m";
-                if (processedErrors.find(errorMessage) == processedErrors.end()) {
-                    errorMessages.push_back(errorMessage);
-                    processedErrors.insert(errorMessage);
-                }
-            }
-        } else {
-            // Handle individual numbers (e.g., "1")
-            int selectedFileIndex;
-
-            try {
-                // Convert token to integer for individual file index
-                selectedFileIndex = std::stoi(token);
-            } catch (const std::invalid_argument& e) {
-                // Handle invalid input and add an error message
-                std::string errorMessage = "\033[91mInvalid input: '" + token + "'.\033[0m";
-                if (processedErrors.find(errorMessage) == processedErrors.end()) {
-                    errorMessages.push_back(errorMessage);
-                    processedErrors.insert(errorMessage);
-                }
-                continue;
-            } catch (const std::out_of_range& e) {
-                // Handle out-of-range input and add an error message
-                std::string errorMessage = "\033[91mFile index '" + token + "', does not exist.\033[0m";
-                if (processedErrors.find(errorMessage) == processedErrors.end()) {
-                    errorMessages.push_back(errorMessage);
-                    processedErrors.insert(errorMessage);
-                }
-                continue;
-            }
-
-            // Add the index to the selected indices vector if it is within the valid range
-            if (selectedFileIndex >= 1 && selectedFileIndex <= maxIndex) {
-                int currentIndex = selectedFileIndex - 1;
-
-                // Check if the index has already been processed
-                if (processedIndices.find(currentIndex) == processedIndices.end()) {
-                    selectedFileIndices.push_back(currentIndex);
-                    processedIndices.insert(currentIndex);
-                }
-            } else {
-                // Add an error message for an invalid file index
-                std::string errorMessage = "\033[91mFile index '" + token + "', does not exist.\033[0m";
-                if (processedErrors.find(errorMessage) == processedErrors.end()) {
-                    errorMessages.push_back(errorMessage);
-                    processedErrors.insert(errorMessage);
+                } else {
+                    // Handle invalid index errors
+                    std::string errorMessage = "\033[91mFile index '" + token + "', does not exist.\033[0m";
+                    if (processedErrors.find(errorMessage) == processedErrors.end()) {
+                        errorMessages.push_back(errorMessage);
+                        processedErrors.insert(errorMessage);
+                    }
                 }
             }
         }
-    }
 
-    // Return the selected file indices and error messages as a pair
-    return {selectedFileIndices, errorMessages};
+        // Return a pair containing selectedFileIndices and errorMessages
+        return std::make_pair(selectedFileIndices, errorMessages);
+    });
 }
 
 
-// Multithreaded function to parse user input and extract selected file indices and errors
-std::vector<std::future<std::pair<std::vector<int>, std::vector<std::string>>>> processMDFInputMultithreaded(const std::vector<std::string>& inputs, int maxIndex) {
-
-    std::vector<std::future<std::pair<std::vector<int>, std::vector<std::string>>>> futures;
-
-    // Use std::async to perform user input parsing concurrently
-    for (const auto& input : inputs) {
-        futures.push_back(std::async(std::launch::async, processInputMDF, input, maxIndex));
-    }
-
-    return futures;
-}
 
 
 // Function to retrieve selected files based on their indices asynchronously
