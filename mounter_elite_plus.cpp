@@ -713,9 +713,8 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
 }
 
 
-// Function to handle mounting of a specific ISO file asynchronously and thread-safe
+// Function to handle mounting of a specific ISO file asynchronously
 void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet) {
-    std::lock_guard<std::mutex> lock(mountMutex);
 
     // Use std::async to execute the function asynchronously
     auto future = std::async(std::launch::async, [&iso, &mountedSet]() {
