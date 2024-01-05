@@ -17,34 +17,48 @@ std::mutex mutexremoveNonExistentPathsFromCacheAsync; // Mutex for removeNonExis
 
 //	bools
 
+// for mount functions
 bool directoryExists(const std::string& path);
-bool isValidDirectory(const std::string& path);
-bool isDirectoryEmpty(const std::string& path);
-bool ends_with_iso(const std::string& str);
 bool isNumeric(const std::string& str);
+
+// for iso cache functions
+bool isValidDirectory(const std::string& path);
+bool ends_with_iso(const std::string& str);
 bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize);
+
+// for unmount functions
+bool isDirectoryEmpty(const std::string& path);
+bool isValidIndex(int index, size_t isoDirsSize);
 
 //	voids
 
-void listMountedISOs();
-void unmountISOs();
-void select_and_mount_files_by_number();
-void print_ascii();
-void manualRefreshCache();
+// for mount functions
 void mountISOs(const std::vector<std::string>& isoFiles);
-void asyncUnmountISO(const std::string& isoDir);
-void unmountISO(const std::string& isoDir);
-void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mutexforsearch);
-void removeNonExistentPathsFromCache();
+void select_and_mount_files_by_number();
 void displayErrorMessage(const std::string& iso);
 void printAlreadyMountedMessage(const std::string& isoFile) ;
 void printIsoFileList(const std::vector<std::string>& isoFiles);
 void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet);
 void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
-void processPath(const std::string& path, std::vector<std::string>& allIsoFiles);
+
+
+// for iso cache functions
+void manualRefreshCache();
+void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mutexforsearch);
+void removeNonExistentPathsFromCache();
+
+// for unmount functions
+void listMountedISOs();
+void unmountISOs();
+void asyncUnmountISO(const std::string& isoDir);
+void unmountISO(const std::string& isoDir);
+
+// art
+void print_ascii();
 
 //	stds
 
+// all exist for iso cache functions
 std::vector<std::string> vec_concat(const std::vector<std::string>& v1, const std::vector<std::string>& v2);
 std::future<bool> iequals(std::string_view a, std::string_view b);
 std::future<bool> FileExists(const std::string& path);
