@@ -770,7 +770,7 @@ void select_and_convert_files_to_iso_mdf() {
             std::system("clear");
             break;
         }
-
+		std::system("clear");
         // Use the processMDFinput function to get selected files and errors
         std::future<std::vector<std::string>> futureSelectedFiles = processMDFinput({input}, mdfMdsFiles.size(), mdfMdsFiles);
 
@@ -779,9 +779,6 @@ void select_and_convert_files_to_iso_mdf() {
 
         // Convert the selected MDF files to ISO
         convertMDFsToISOs(selectedFiles);
-
-        // Display errors if any
-        // ...
 
         std::cout << " " << std::endl;
         std::cout << "Press enter to continue...";
