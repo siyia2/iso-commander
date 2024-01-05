@@ -991,7 +991,7 @@ void unmountISO(const std::string& isoDir) {
 
     // Check if the unmounting was successful
     if (result == 0) {
-        std::cout << "\033[92mUnmounted: " << isoDir << "\033[0m" << std::endl; // Print success message
+        std::cout << "Unmounted: \033[92m'" << isoDir << "'.\033[0m" << std::endl; // Print success message
 
         // Check if the directory is empty before removing it
         if (isDirectoryEmpty(isoDir)) {
@@ -1002,11 +1002,11 @@ void unmountISO(const std::string& isoDir) {
             int removeDirResult = system(removeDirCommand.c_str());
 
             if (removeDirResult != 0) {
-                std::cerr << "\033[91mFailed to remove directory: " << isoDir << " ...Please check it out manually.\033[0m" << std::endl;
+                std::cerr << "\033[91mFailed to remove directory: \033[93m'" << isoDir << "'\033[91m ...Please check it out manually.\033[0m" << std::endl;
             }
         }
     } else {
-        std::cerr << "\033[91mFailed to unmount: " << isoDir << " ...Probably not an ISO mountpoint, check it out manually.\033[0m" << std::endl; // Print failure message
+        std::cerr << "\033[91mFailed to unmount: \033[93m'" << isoDir << "'\033[91m ...Probably not an ISO mountpoint, check it out manually.\033[0m" << std::endl; // Print failure message
     }
 }
 
