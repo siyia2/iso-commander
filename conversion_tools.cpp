@@ -217,45 +217,6 @@ void convertBINsToISOs(const std::vector<std::string>& inputPaths, int numThread
 }
 
 
-// Function to process a range of files and convert them to ISO format
-void processFilesInRange(int start, int end) {
-    // Determine the number of threads based on CPU cores fallback is 2 threads
-    int numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
-
-    // Select files within the specified range
-    std::vector<std::string> selectedFiles;
-    {
-        std::lock_guard<std::mutex> lock(binImgFilesMutex); // Lock the mutex while accessing binImgFiles
-        for (int i = start; i <= end; i++) {
-            selectedFiles.push_back(binImgFiles[i - 1]);
-        }
-    } // Unlock the mutex when leaving the scope
-
-    // Construct the shell-escaped file paths
-    std::vector<std::string> escapedSelectedFiles;
-    for (const std::string& file : selectedFiles) {
-        escapedSelectedFiles.push_back(shell_escape(file));
-    }
-
-    // Divide the work among threads
-    std::vector<std::thread> threads;
-    size_t filesPerThread = escapedSelectedFiles.size() / numThreads;
-    for (int i = 0; i < numThreads; ++i) {
-        size_t startIdx = i * filesPerThread;
-        size_t endIdx = (i == numThreads - 1) ? escapedSelectedFiles.size() : (i + 1) * filesPerThread;
-        std::vector<std::string> threadFiles(escapedSelectedFiles.begin() + startIdx, escapedSelectedFiles.begin() + endIdx);
-        threads.emplace_back([threadFiles, numThreads]() {
-            convertBINsToISOs(threadFiles, numThreads);
-        });
-    }
-
-    // Wait for all threads to finish
-    for (auto& thread : threads) {
-        thread.join();
-    }
-}
-
-
 // Main function to select directories and convert BIN/IMG files to ISO format
 void select_and_convert_files_to_iso() {
     // Initialize vectors to store BIN/IMG files and directory paths
@@ -359,49 +320,35 @@ void printFileListBin(const std::vector<std::string>& fileList) {
 }
 
 
-// Function to process user input and convert selected BIN files to ISO format
+// function to process user input and convert selected BIN files to ISO format
 void processInputBin(const std::string& input, const std::vector<std::string>& fileList) {
-    // Tokenize the input string
     std::istringstream iss(input);
     std::string token;
-
-    // Vector to store threads for parallel processing
-    std::vector<std::thread> threads;
-
-    // Set to keep track of processed indices to avoid duplicate processing
     std::set<int> processedIndices;
-
-    // Vector to store error messages for reporting after conversions
+    std::vector<std::future<void>> futures;  // Use std::future<void> for asynchronous void functions
     std::vector<std::string> errorMessages;
 
-    // Iterate over tokens in the input string
     while (iss >> token) {
-        // Tokenize each token to check for ranges or single indices
         std::istringstream tokenStream(token);
         int start, end;
         char dash;
 
-        // Check if the token can be converted to an integer
         if (tokenStream >> start) {
-            // Check for a range (e.g., 1-5)
             if (tokenStream >> dash && dash == '-' && tokenStream >> end) {
-                // Validate the range and create threads for each index in the range
+                // Handle a range
                 if (start <= end) {
                     if (start >= 1 && end <= fileList.size()) {
                         int step = 1;
                         for (int i = start; i <= end; i += step) {
                             int selectedIndex = i - 1;
-                            // Check if the index has not been processed before
                             if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-                                std::string selectedFile = fileList[selectedIndex];
                                 // Create a thread for conversion
-                                threads.emplace_back(convertBINToISO, selectedFile);
-                                // Mark the index as processed
+                                std::string selectedFile = fileList[selectedIndex];
+                                futures.push_back(std::async(std::launch::async, convertBINToISO, selectedFile));
                                 processedIndices.insert(selectedIndex);
                             }
                         }
                     } else {
-                        // Report an error if the range is out of range
                         errorMessages.push_back("\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m");
                     }
                 } else {
@@ -409,64 +356,57 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                         int step = -1;
                         for (int i = start; i >= end; i += step) {
                             int selectedIndex = i - 1;
-                            // Check if the index is within the valid range
                             if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
-                                // Check if the index has not been processed before
                                 if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-                                    std::string selectedFile = fileList[selectedIndex];
                                     // Create a thread for conversion
-                                    threads.emplace_back(convertBINToISO, selectedFile);
-                                    // Mark the index as processed
+                                    std::string selectedFile = fileList[selectedIndex];
+                                    futures.push_back(std::async(std::launch::async, convertBINToISO, selectedFile));
                                     processedIndices.insert(selectedIndex);
                                 }
                             } else {
-                                // Report an error if the index is out of range
                                 errorMessages.push_back("\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m");
                                 break; // Exit the loop to avoid further errors
                             }
                         }
                     } else {
-                        // Report an error if the range is out of range
                         errorMessages.push_back("\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m");
                     }
                 }
             } else if (start >= 1 && start <= fileList.size()) {
                 // Process a single index
                 int selectedIndex = start - 1;
-                // Check if the index has not been processed before
                 if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-                    // Check if the index is within the valid range
                     if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
-                        std::string selectedFile = fileList[selectedIndex];
                         // Create a thread for conversion
-                        threads.emplace_back(convertBINToISO, selectedFile);
-                        // Mark the index as processed
+                        std::string selectedFile = fileList[selectedIndex];
+                        futures.push_back(std::async(std::launch::async, convertBINToISO, selectedFile));
                         processedIndices.insert(selectedIndex);
                     } else {
-                        // Report an error if the index is out of range
                         errorMessages.push_back("\033[91mFile index '" + std::to_string(start) + "' does not exist.\033[0m");
                     }
                 }
             } else {
-                // Report an error if the index is out of range
                 errorMessages.push_back("\033[91mFile index '" + std::to_string(start) + "' does not exist.\033[0m");
             }
         } else {
-            // Report an error if the token is not a valid integer
             errorMessages.push_back("\033[91mInvalid input: '" + token + "'.\033[0m");
         }
     }
-    // Wait for all threads to finish
-    for (auto& thread : threads) {
-        thread.join();
+
+    // Wait for all futures to finish
+    for (auto& future : futures) {
+        future.wait();
     }
 
-    // Print all error messages after conversions
+    // Print error messages
     for (const auto& errorMessage : errorMessages) {
         std::cout << errorMessage << std::endl;
     }
     std::cout << " " << std::endl;
 }
+
+
+// MDF CONVERSION FUNCTIONS	\\
 
 
 // Function to search for .mdf and .mds files under 10MB
@@ -772,14 +712,14 @@ void select_and_convert_files_to_iso_mdf() {
         }
 
         // Parse the user input to get selected file indices and capture errors
-        std::pair<std::vector<int>, std::vector<std::string>> result = parseUserInput(input, mdfMdsFiles.size());
+        std::pair<std::vector<int>, std::vector<std::string>> result = processMDFInput(input, mdfMdsFiles.size());
         std::vector<int> selectedFileIndices = result.first;
         std::vector<std::string> errorMessages = result.second;
         std::system("clear");
 
         if (!selectedFileIndices.empty()) {
             // Get the paths of the selected files based on user input
-            std::future<std::vector<std::string>> futureSelectedFiles = getSelectedFiles(selectedFileIndices, mdfMdsFiles);
+            std::future<std::vector<std::string>> futureSelectedFiles = getSelectedFilesMDF(selectedFileIndices, mdfMdsFiles);
 
             // Wait for the asynchronous task to complete and retrieve the result
             std::vector<std::string> selectedFiles = futureSelectedFiles.get();
@@ -830,7 +770,7 @@ void printFileListMdf(const std::vector<std::string>& fileList) {
 }
 
 // Function to parse user input and extract selected file indices and errors
-std::pair<std::vector<int>, std::vector<std::string>> parseUserInput(const std::string& input, int maxIndex) {
+std::pair<std::vector<int>, std::vector<std::string>> processMDFInput(const std::string& input, int maxIndex) {
     std::vector<int> selectedFileIndices;
     std::vector<std::string> errorMessages;
     std::istringstream iss(input);
@@ -905,13 +845,13 @@ std::pair<std::vector<int>, std::vector<std::string>> parseUserInput(const std::
 }
 
 // Multithreaded function to parse user input and extract selected file indices and errors
-std::vector<std::future<std::pair<std::vector<int>, std::vector<std::string>>>> parseUserInputMultithreaded(const std::vector<std::string>& inputs, int maxIndex) {
+std::vector<std::future<std::pair<std::vector<int>, std::vector<std::string>>>> processMDFInputMultithreaded(const std::vector<std::string>& inputs, int maxIndex) {
 
     std::vector<std::future<std::pair<std::vector<int>, std::vector<std::string>>>> futures;
 
     // Use std::async to perform user input parsing concurrently
     for (const auto& input : inputs) {
-        futures.push_back(std::async(std::launch::async, parseUserInput, input, maxIndex));
+        futures.push_back(std::async(std::launch::async, processMDFInput, input, maxIndex));
     }
 
     return futures;
@@ -919,7 +859,7 @@ std::vector<std::future<std::pair<std::vector<int>, std::vector<std::string>>>> 
 
 
 // Function to retrieve selected files based on their indices asynchronously
-std::future<std::vector<std::string>> getSelectedFiles(const std::vector<int>& selectedIndices, const std::vector<std::string>& fileList) {
+std::future<std::vector<std::string>> getSelectedFilesMDF(const std::vector<int>& selectedIndices, const std::vector<std::string>& fileList) {
     // Use std::async with launch policy to create asynchronous tasks
     return std::async(std::launch::async | std::launch::deferred, [selectedIndices, fileList]() {
         std::vector<std::string> selectedFiles;

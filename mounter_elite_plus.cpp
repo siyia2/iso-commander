@@ -8,7 +8,6 @@ const std::string cacheFileName = "iso_cache.txt";;
 const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
 std::mutex mountMutex; // Mutex for mount thread safety
-std::mutex indexMutex; // Mutex for isValidIndex thread safety
 std::mutex mutexforsearch; // Mutex for search thread safety
 std::mutex mutexforhandleiso; // Mutex for handleiso thread safety
 std::mutex mutexremoveNonExistentPathsFromCacheAsync; // Mutex for removeNonExistentPathsFromCacheAsync thread safety
@@ -36,12 +35,12 @@ void manualRefreshCache();
 void mountISOs(const std::vector<std::string>& isoFiles);
 void unmountISO(const std::string& isoDir);
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mutexforsearch);
-void removeNonExistentPathsFromCacheAsync();
+void removeNonExistentPathsFromCache();
 void displayErrorMessage(const std::string& iso);
 void printAlreadyMountedMessage(const std::string& isoFile) ;
 void printIsoFileList(const std::vector<std::string>& isoFiles);
 void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet);
-void processInputMultithreaded(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
+void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
 void processPath(const std::string& path, std::vector<std::string>& allIsoFiles);
 
 //	stds
@@ -186,7 +185,7 @@ std::future<bool> FileExists(const std::string& filePath) {
 }
 
 // Function to remove non-existent paths from cache asynchronously
-void removeNonExistentPathsFromCacheAsync() {
+void removeNonExistentPathsFromCache() {
     // Define the path to the cache file
     std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/iso_cache.txt";
     std::vector<std::string> cache; // Vector to store paths read from the cache file
@@ -605,7 +604,7 @@ bool ends_with_iso(const std::string& str) {
 // Function to select and mount ISO files by number
 void select_and_mount_files_by_number() {
     // Remove non-existent paths from the cache
-    removeNonExistentPathsFromCacheAsync();
+    removeNonExistentPathsFromCache();
 
     // Load ISO files from cache
     std::vector<std::string> isoFiles = loadCache();
@@ -669,7 +668,7 @@ void select_and_mount_files_by_number() {
             }
         } else {
             // Process user input to select and mount specific ISO files
-            processInputMultithreaded(input, isoFiles, mountedSet);
+            processInput(input, isoFiles, mountedSet);
         }
 
         // Stop the timer after completing the mounting process
@@ -745,7 +744,7 @@ bool isNumeric(const std::string& str) {
 
 
 // Function to process the user input for ISO mounting using multithreading
-void processInputMultithreaded(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
+void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
     std::istringstream iss(input);
     bool invalidInput = false;
     std::vector<std::string> errorMessages; // Vector to store error messages
@@ -1015,7 +1014,6 @@ void unmountISO(const std::string& isoDir) {
 
 // Function to check if a given index is within the valid range of available ISOs
 bool isValidIndex(int index, size_t isoDirsSize) {
-    std::lock_guard<std::mutex> lock(indexMutex); // Lock the mutex for the duration of this scope
 
     return (index >= 1) && (static_cast<size_t>(index) <= isoDirsSize);
 }

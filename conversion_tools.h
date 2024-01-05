@@ -36,8 +36,9 @@ bool isCcd2IsoInstalled();
 void printFileListBin(const std::vector<std::string>& fileList);
 
 // MDF/MDS CONVERSION
-std::future<std::vector<std::string>> getSelectedFiles(const std::vector<int>& selectedIndices, const std::vector<std::string>& fileList);
-std::pair<std::vector<int>, std::vector<std::string>> parseUserInput(const std::string& input, int maxIndex);
+std::future<std::vector<std::string>> getSelectedFilesMDF(const std::vector<int>& selectedIndices, const std::vector<std::string>& fileList);
+std::pair<std::vector<int>, std::vector<std::string>> processMDFInput(const std::string& input, int maxIndex);
+std::vector<std::future<std::pair<std::vector<int>, std::vector<std::string>>>> processMDFInputMultithreaded(const std::vector<std::string>& inputs, int maxIndex);
 std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback);
 std::vector<std::future<std::pair<std::vector<int>, std::vector<std::string>>>> parseUserInputMultithreaded(const std::vector<std::string>& inputs, int maxIndex);
 void convertMDFToISO(const std::string& inputPath);
