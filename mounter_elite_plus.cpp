@@ -1019,12 +1019,15 @@ bool isValidIndex(int index, size_t isoDirsSize) {
 
 // Main function for unmounting ISOs
 void unmountISOs() {
-	std::set<std::string> uniqueErrorMessages;
+    // Set to store unique error messages
+    std::set<std::string> uniqueErrorMessages;
+
     // Path where ISO directories are expected to be mounted
     const std::string isoPath = "/mnt";
 
     while (true) {
-        listMountedISOs(); // Display the initial list of mounted ISOs
+        // Display the initial list of mounted ISOs
+        listMountedISOs();
 
         std::vector<std::string> isoDirs;
         std::vector<std::string> errorMessages;  // Store error messages
@@ -1115,21 +1118,21 @@ void unmountISOs() {
                 if (startRange == endRange) {
                     // Handle range with the same start and end index
                     if (isValidIndex(startRange, isoDirs.size())) {
-    // Check for duplicates
-    if (uniqueIndices.find(startRange) == uniqueIndices.end()) {
-        uniqueIndices.insert(startRange);
-        unmountIndices.push_back(startRange);
-    }
-} else {
-    // Check if the error message for the invalid index is already stored
-    std::string errorMessage = "\033[91mFile index '" + std::to_string(startRange) + "' does not exist.\033[0m";
+                        // Check for duplicates
+                        if (uniqueIndices.find(startRange) == uniqueIndices.end()) {
+                            uniqueIndices.insert(startRange);
+                            unmountIndices.push_back(startRange);
+                        }
+                    } else {
+                        // Check if the error message for the invalid index is already stored
+                        std::string errorMessage = "\033[91mFile index '" + std::to_string(startRange) + "' does not exist.\033[0m";
 
-    if (uniqueErrorMessages.find(errorMessage) == uniqueErrorMessages.end()) {
-        // If not, store the error message
-        uniqueErrorMessages.insert(errorMessage);
-        errorMessages.push_back(errorMessage);
-    }
-}
+                        if (uniqueErrorMessages.find(errorMessage) == uniqueErrorMessages.end()) {
+                            // If not, store the error message
+                            uniqueErrorMessages.insert(errorMessage);
+                            errorMessages.push_back(errorMessage);
+                        }
+                    }
                 } else {
                     int step = (startRange < endRange) ? 1 : -1;
 
@@ -1206,6 +1209,6 @@ void unmountISOs() {
         std::cout << "Press Enter to continue...";
         std::cin.get();
         std::system("clear");
-
     }
 }
+
