@@ -178,45 +178,6 @@ void convertBINToISO(const std::string& inputPath) {
 }
 
 
-// Function to convert multiple BIN files to ISO format concurrently
-void convertBINsToISOs(const std::vector<std::string>& inputPaths, int numThreads) {
-    // Check if ccd2iso is installed on the system
-    if (!isCcd2IsoInstalled()) {
-        std::cout << "\033[91mccd2iso is not installed. Please install it before using this option.\033[0m" << std::endl;
-        return;
-    }
-
-    // Create a thread pool with a limited number of threads
-    std::vector<std::thread> threads;
-    int numCores = std::min(numThreads, static_cast<int>(std::thread::hardware_concurrency()));
-
-    for (const std::string& inputPath : inputPaths) {
-        if (inputPath == "") {
-            break; // Break the loop if an empty path is encountered
-        } else {
-            // Construct the shell-escaped input path
-            std::string escapedInputPath = shell_escape(inputPath);
-
-            // Create a new thread for each conversion
-            threads.emplace_back(convertBINToISO, escapedInputPath);
-
-            if (threads.size() >= numCores) {
-                // Limit the number of concurrent threads to the number of available cores
-                for (auto& thread : threads) {
-                    thread.join();
-                }
-                threads.clear();
-            }
-        }
-    }
-
-    // Join any remaining threads
-    for (auto& thread : threads) {
-        thread.join();
-    }
-}
-
-
 // Main function to select directories and convert BIN/IMG files to ISO format
 void select_and_convert_files_to_iso() {
     // Initialize vectors to store BIN/IMG files and directory paths
