@@ -652,16 +652,18 @@ void convertMDFsToISOs(const std::vector<std::string>& inputPaths) {
 
 // Function to interactively select and convert MDF files to ISO
 void select_and_convert_files_to_iso_mdf() {
-    // Read input for directory paths (allow multiple paths separated by semicolons)
-    std::string inputPaths = readInputLine("\033[94mEnter the directory path(s) (if many, separate them with \033[1m\033[93m;\033[0m\033[94m) to search for \033[1m\033[92m.mdf\033[94m files, or press Enter to return:\n\033[0m");
-
-    // Initialize vectors to store MDF/MDS files and directory paths
+	
+	// Initialize vectors to store MDF/MDS files and directory paths
     std::vector<std::string> mdfMdsFiles;
     std::vector<std::string> directoryPaths;
-
+    
     // Declare previousPaths as a static variable
     static std::vector<std::string> previousPaths;
 
+	
+    // Read input for directory paths (allow multiple paths separated by semicolons)
+    std::string inputPaths = readInputLine("\033[94mEnter the directory path(s) (if many, separate them with \033[1m\033[93m;\033[0m\033[94m) to search for \033[1m\033[92m.mdf\033[94m files, or press Enter to return:\n\033[0m");
+    
     // Use semicolon as a separator to split paths
     std::istringstream iss(inputPaths);
     std::string path;
@@ -719,44 +721,13 @@ void select_and_convert_files_to_iso_mdf() {
             break;
         }
 
-        // Parse the user input to get selected file indices and capture errors
-		std::future<std::pair<std::vector<int>, std::vector<std::string>>> resultFuture = processInputMDF(input, mdfMdsFiles.size());
-
-		// Wait for the asynchronous task to complete and retrieve the result
-		std::pair<std::vector<int>, std::vector<std::string>> result = resultFuture.get();
-		std::vector<int> selectedFileIndices = result.first;
-		std::vector<std::string> errorMessages = result.second;
-		
         std::system("clear");
-
-        if (!selectedFileIndices.empty()) {
-            // Get the paths of the selected files based on user input
-            std::future<std::vector<std::string>> futureSelectedFiles = getSelectedFilesMDF(selectedFileIndices, mdfMdsFiles);
-
-            // Wait for the asynchronous task to complete and retrieve the result
-            std::vector<std::string> selectedFiles = futureSelectedFiles.get();
-
-            // Convert the selected MDF files to ISO
-            convertMDFsToISOs(selectedFiles);
-
-            // Display errors if any
-            for (const auto& errorMessage : errorMessages) {
-                std::cerr << errorMessage << std::endl;
-            }
-            std::cout << " " << std::endl;
-            std::cout << "Press enter to continue...";
-            std::cin.ignore();
-        } else {
-            // Display parsing errors
-            for (const auto& errorMessage : errorMessages) {
-                std::cerr << errorMessage << std::endl;
-            }
-            std::cout << " " << std::endl;
+            // Process user input
+            processInputMDF(input, mdfMdsFiles);
             std::cout << "Press enter to continue...";
             std::cin.ignore();
         }
     }
-}
 
 
 void printFileListMdf(const std::vector<std::string>& fileList) {
@@ -781,156 +752,134 @@ void printFileListMdf(const std::vector<std::string>& fileList) {
     }
 }
 
-// Function to parse user input and extract selected file indices and errors asynchronously
-std::future<std::pair<std::vector<int>, std::vector<std::string>>> processInputMDF(const std::string& input, int maxIndex) {
-    return std::async(std::launch::async, [input, maxIndex]() {
-        // Vectors to store selected file indices and error messages
-        std::vector<int> selectedFileIndices;
-        std::vector<std::string> errorMessages;
+// Function to process user input and convert selected MDF files to something
+void processInputMDF(const std::string& input, const std::vector<std::string>& fileList) {
+    // Create a string stream to tokenize the input
+    std::istringstream iss(input);
+    std::string token;
 
-        // Tokenize the input string
-        std::istringstream iss(input);
-        std::string token;
+    // Set to track processed indices to avoid duplicates
+    std::set<int> processedIndices;
 
-        // Sets to keep track of processed indices and errors to avoid duplicates
-        std::set<int> processedIndices;
-        std::set<std::string> processedErrors;
+    // Set to track processed error messages to avoid duplicate error reporting
+    std::set<std::string> processedErrors;
 
-        // Loop through tokens in the input string
-        while (iss >> token) {
-            if (token.find('-') != std::string::npos) {
-                // Process token as a range (e.g., 1-5)
-                size_t dashPos = token.find('-');
-                int startRange, endRange;
+    // Vector to store asynchronous tasks for file conversion
+    std::vector<std::future<void>> futures;
 
-                try {
-                    // Extract start and end values of the range
-                    startRange = std::stoi(token.substr(0, dashPos));
-                    endRange = std::stoi(token.substr(dashPos + 1));
-                } catch (const std::invalid_argument& e) {
-                    // Handle invalid input exceptions
-                    std::string errorMessage = "\033[91mInvalid input " + token + ".\033[0m";
-                    if (processedErrors.find(errorMessage) == processedErrors.end()) {
-                        errorMessages.push_back(errorMessage);
-                        processedErrors.insert(errorMessage);
-                    }
-                    continue;
-                } catch (const std::out_of_range& e) {
-                    // Handle out-of-range exceptions
-                    std::string errorMessage = "\033[91mInvalid input " + token + ".\033[0m";
-                    if (processedErrors.find(errorMessage) == processedErrors.end()) {
-                        errorMessages.push_back(errorMessage);
-                        processedErrors.insert(errorMessage);
-                    }
-                    continue;
-                }
+    // Vector to store error messages
+    std::vector<std::string> errorMessages;
 
-                // Check if the range is valid and add indices to the selectedFileIndices vector
-                if ((startRange >= 1 && startRange <= maxIndex) && (endRange >= 1 && endRange <= maxIndex)) {
-                    int step = (startRange <= endRange) ? 1 : -1;
+    // Iterate through the tokens in the input string
+    while (iss >> token) {
+        // Create a string stream to further process the token
+        std::istringstream tokenStream(token);
+        int start, end;
+        char dash;
 
-                    for (int i = startRange; (startRange <= endRange) ? (i <= endRange) : (i >= endRange); i += step) {
-                        int currentIndex = i - 1;
-
-                        // Avoid duplicate indices
-                        if (processedIndices.find(currentIndex) == processedIndices.end()) {
-                            selectedFileIndices.push_back(currentIndex);
-                            processedIndices.insert(currentIndex);
+        // Check if the token can be converted to an integer (starting index)
+        if (tokenStream >> start) {
+            // Check for the presence of a dash, indicating a range
+            if (tokenStream >> dash && dash == '-' && tokenStream >> end) {
+                // Handle a range
+                if (start <= end) {
+                    if (start >= 1 && end <= fileList.size()) {
+                        // Process indices in ascending order
+                        int step = 1;
+                        for (int i = start; i <= end; i += step) {
+                            int selectedIndex = i - 1;
+                            if (processedIndices.find(selectedIndex) == processedIndices.end()) {
+                                // Convert MDF to something asynchronously and store the future in the vector
+                                std::string selectedFile = fileList[selectedIndex];
+                                futures.push_back(std::async(std::launch::async, convertMDFToISO, selectedFile));
+                                processedIndices.insert(selectedIndex);
+                            }
+                        }
+                    } else {
+                        // Add an error message for an invalid range
+                        std::string errorMessage = "\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m";
+                        if (processedErrors.find(errorMessage) == processedErrors.end()) {
+                            errorMessages.push_back(errorMessage);
+                            processedErrors.insert(errorMessage);
                         }
                     }
                 } else {
-                    // Handle invalid range errors
-                    std::string errorMessage = "\033[91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0m";
-                    if (processedErrors.find(errorMessage) == processedErrors.end()) {
-                        errorMessages.push_back(errorMessage);
-                        processedErrors.insert(errorMessage);
+                    // Handle reverse range
+                    if (start >= 1 && end >= 1 && end <= fileList.size()) {
+                        // Process indices in descending order
+                        int step = -1;
+                        for (int i = start; i >= end; i += step) {
+                            int selectedIndex = i - 1;
+                            if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
+                                if (processedIndices.find(selectedIndex) == processedIndices.end()) {
+                                    // Convert MDF to something asynchronously and store the future in the vector
+                                    std::string selectedFile = fileList[selectedIndex];
+                                    futures.push_back(std::async(std::launch::async, convertMDFToISO, selectedFile));
+                                    processedIndices.insert(selectedIndex);
+                                }
+                            } else {
+                                // Add an error message for an invalid range
+                                std::string errorMessage = "\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m";
+                                if (processedErrors.find(errorMessage) == processedErrors.end()) {
+                                    errorMessages.push_back(errorMessage);
+                                    processedErrors.insert(errorMessage);
+                                }
+                                break; // Exit the loop to avoid further errors
+                            }
+                        }
+                    } else {
+                        // Add an error message for an invalid range
+                        std::string errorMessage = "\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m";
+                        if (processedErrors.find(errorMessage) == processedErrors.end()) {
+                            errorMessages.push_back(errorMessage);
+                            processedErrors.insert(errorMessage);
+                        }
+                    }
+                }
+            } else if (start >= 1 && start <= fileList.size()) {
+                // Process a single index
+                int selectedIndex = start - 1;
+                if (processedIndices.find(selectedIndex) == processedIndices.end()) {
+                    if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
+                        // Convert MDF to something asynchronously and store the future in the vector
+                        std::string selectedFile = fileList[selectedIndex];
+                        futures.push_back(std::async(std::launch::async, convertMDFToISO, selectedFile));
+                        processedIndices.insert(selectedIndex);
+                    } else {
+                        // Add an error message for an invalid file index
+                        std::string errorMessage = "\033[91mFile index '" + std::to_string(start) + "' does not exist.\033[0m";
+                        if (processedErrors.find(errorMessage) == processedErrors.end()) {
+                            errorMessages.push_back(errorMessage);
+                            processedErrors.insert(errorMessage);
+                        }
                     }
                 }
             } else {
-                // Process token as a single index
-                int selectedFileIndex;
-
-                try {
-                    // Convert token to integer
-                    selectedFileIndex = std::stoi(token);
-                } catch (const std::invalid_argument& e) {
-                    // Handle invalid input exceptions
-                    std::string errorMessage = "\033[91mInvalid input: '" + token + "'.\033[0m";
-                    if (processedErrors.find(errorMessage) == processedErrors.end()) {
-                        errorMessages.push_back(errorMessage);
-                        processedErrors.insert(errorMessage);
-                    }
-                    continue;
-                } catch (const std::out_of_range& e) {
-                    // Handle out-of-range exceptions
-                    std::string errorMessage = "\033[91mFile index '" + token + "', does not exist.\033[0m";
-                    if (processedErrors.find(errorMessage) == processedErrors.end()) {
-                        errorMessages.push_back(errorMessage);
-                        processedErrors.insert(errorMessage);
-                    }
-                    continue;
-                }
-
-                // Check if the index is valid and add it to the selectedFileIndices vector
-                if (selectedFileIndex >= 1 && selectedFileIndex <= maxIndex) {
-                    int currentIndex = selectedFileIndex - 1;
-
-                    // Avoid duplicate indices
-                    if (processedIndices.find(currentIndex) == processedIndices.end()) {
-                        selectedFileIndices.push_back(currentIndex);
-                        processedIndices.insert(currentIndex);
-                    }
-                } else {
-                    // Handle invalid index errors
-                    std::string errorMessage = "\033[91mFile index '" + token + "', does not exist.\033[0m";
-                    if (processedErrors.find(errorMessage) == processedErrors.end()) {
-                        errorMessages.push_back(errorMessage);
-                        processedErrors.insert(errorMessage);
-                    }
+                // Add an error message for an invalid file index
+                std::string errorMessage = "\033[91mFile index '" + std::to_string(start) + "' does not exist.\033[0m";
+                if (processedErrors.find(errorMessage) == processedErrors.end()) {
+                    errorMessages.push_back(errorMessage);
+                    processedErrors.insert(errorMessage);
                 }
             }
-        }
-
-        // Return a pair containing selectedFileIndices and errorMessages
-        return std::make_pair(selectedFileIndices, errorMessages);
-    });
-}
-
-
-// Function to retrieve selected files based on their indices asynchronously
-std::future<std::vector<std::string>> getSelectedFilesMDF(const std::vector<int>& selectedIndices, const std::vector<std::string>& fileList) {
-    // Use std::async with launch policy to create asynchronous tasks
-    return std::async(std::launch::async | std::launch::deferred, [selectedIndices, fileList]() {
-        std::vector<std::string> selectedFiles;
-        std::mutex mtx; // Mutex to protect access to the selectedFiles vector
-
-        // Function to be executed by each asynchronous task
-        auto processIndex = [&](int index) {
-            std::string file;
-            // Check if the index is valid
-            if (index >= 0 && index < fileList.size()) {
-                file = fileList[index];
+        } else {
+            // Add an error message for an invalid input
+            std::string errorMessage = "\033[91mInvalid input: '" + token + "'.\033[0m";
+            if (processedErrors.find(errorMessage) == processedErrors.end()) {
+                errorMessages.push_back(errorMessage);
+                processedErrors.insert(errorMessage);
             }
-
-            // Lock the mutex before modifying the selectedFiles vector
-            std::lock_guard<std::mutex> lock(mtx);
-            selectedFiles.push_back(file);
-        };
-
-        // Create a vector of asynchronous tasks
-        std::vector<std::future<void>> futures;
-
-        // Iterate through the selected indices and create a task for each index
-        for (int index : selectedIndices) {
-            // Use std::async for asynchronous execution
-            futures.emplace_back(std::async(std::launch::async | std::launch::deferred, processIndex, index));
         }
+    }
 
-        // Wait for all asynchronous tasks to finish
-        for (auto& future : futures) {
-            future.wait();
-        }
+    // Wait for all futures to finish
+    for (auto& future : futures) {
+        future.wait();
+    }
 
-        return selectedFiles;
-    });
+    // Print error messages
+    for (const auto& errorMessage : errorMessages) {
+        std::cout << errorMessage << std::endl;
+    }
+    std::cout << " " << std::endl;
 }
