@@ -604,51 +604,6 @@ void convertMDFToISO(const std::string& inputPath) {
     }
 }
 
-// Function to convert multiple MDF files to ISO format using mdf2iso
-void convertMDFsToISOs(const std::vector<std::string>& inputPaths) {
-    // Check if mdf2iso is installed
-    if (!isMdf2IsoInstalled()) {
-        std::cout << "\033[91mmdf2iso is not installed. Please install it before using this option.\033[0m";
-        return;
-    }
-
-    // Determine the number of threads based on hardware concurrency, fallback is 2 threads
-    int numThreads = std::thread::hardware_concurrency();
-    if (numThreads <= 0) {
-        // Fallback to a default number of threads if hardware concurrency is not available
-        numThreads = 2;
-    }
-
-    // Create a thread pool with a limited number of threads
-    std::vector<std::thread> threads;
-    int numCores = std::min(numThreads, static_cast<int>(std::thread::hardware_concurrency()));
-
-    for (const std::string& inputPath : inputPaths) {
-        if (inputPath == "") {
-            break; // Exit the loop
-        } else {
-            // No need to escape the file path, as we'll handle it in the convertMDFToISO function
-            std::string escapedInputPath = inputPath;
-
-            // Create a new thread for each conversion
-            threads.emplace_back(convertMDFToISO, escapedInputPath);
-
-            // Limit the number of concurrent threads to the number of available cores
-            if (threads.size() >= numCores) {
-                for (auto& thread : threads) {
-                    thread.join();
-                }
-                threads.clear();
-            }
-        }
-    }
-
-    // Join any remaining threads
-    for (auto& thread : threads) {
-        thread.join();
-    }
-}
-
 
 // Function to interactively select and convert MDF files to ISO
 void select_and_convert_files_to_iso_mdf() {
