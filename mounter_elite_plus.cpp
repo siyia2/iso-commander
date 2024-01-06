@@ -167,6 +167,7 @@ int main() {
     return 0;
 }
 
+
 // ... Function definitions ...
 
 void print_ascii() {
@@ -185,6 +186,7 @@ void print_ascii() {
 
 }
 
+
 //	CACHE STUFF \\
 
 
@@ -197,6 +199,7 @@ std::future<bool> FileExists(const std::string& filePath) {
         return (stat(filePath.c_str(), &buffer) == 0);
     });
 }
+
 
 // Function to remove non-existent paths from cache asynchronously
 void removeNonExistentPathsFromCache() {
@@ -304,6 +307,7 @@ std::vector<std::string> loadCache() {
     return isoFiles;
 }
 
+
 // Function to check if filepath exists
 bool exists(const std::filesystem::path& path) {
     return std::filesystem::exists(path);
@@ -382,6 +386,7 @@ std::vector<std::string> refreshCacheForDirectory(const std::string& path) {
     // Return the new entries for this directory
     return newIsoFiles;
 }
+
 
 // Function to check if a directory input is valid
 bool isValidDirectory(const std::string& path) {
@@ -595,7 +600,6 @@ void mountISOs(const std::vector<std::string>& isoFiles) {
 }
 
 
-
 bool fileExistsOnDisk(const std::string& filename) {
     std::ifstream file(filename);
     return file.good();
@@ -740,7 +744,6 @@ void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& moun
 }
 
 
-
 // Function to check if a string is numeric
 bool isNumeric(const std::string& str) {
     // Use parallel execution policy for parallelization
@@ -831,6 +834,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
         }
     }
 }
+
 
 // Function to display already mounted at message when you are already in the selenct_and_mount()
 void printAlreadyMountedMessage(const std::string& isoFile) {
@@ -927,7 +931,6 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
         std::cerr << "\033[91m" << e.what() << "\033[0m" << std::endl;
     }
 }
-
 
 
 // UMOUNT STUFF	\\
