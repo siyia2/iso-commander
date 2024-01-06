@@ -56,8 +56,10 @@ void print_ascii();
 
 //	stds
 
-// Cache functions
+// Unmount functions
 std::future<void> asyncUnmountISO(const std::string& isoDir);
+
+// Cache functions
 std::vector<std::string> vec_concat(const std::vector<std::string>& v1, const std::vector<std::string>& v2);
 std::future<bool> iequals(std::string_view a, std::string_view b);
 std::future<bool> FileExists(const std::string& path);
