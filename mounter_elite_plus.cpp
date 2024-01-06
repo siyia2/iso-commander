@@ -49,7 +49,6 @@ void removeNonExistentPathsFromCache();
 // Unmount functions
 void listMountedISOs();
 void unmountISOs();
-void asyncUnmountISO(const std::string& isoDir);
 void unmountISO(const std::string& isoDir);
 
 // Art
@@ -58,6 +57,7 @@ void print_ascii();
 //	stds
 
 // Cache functions
+std::future<void> asyncUnmountISO(const std::string& isoDir);
 std::vector<std::string> vec_concat(const std::vector<std::string>& v1, const std::vector<std::string>& v2);
 std::future<bool> iequals(std::string_view a, std::string_view b);
 std::future<bool> FileExists(const std::string& path);
@@ -1043,10 +1043,13 @@ bool isValidIndex(int index, size_t isoDirsSize) {
 
 
 // Function to perform asynchronous unmounting
-void asyncUnmountISO(const std::string& isoDir) {
-    std::lock_guard<std::mutex> lock(mutexforsearch); // Lock the critical section
-    unmountISO(isoDir);
+std::future<void> asyncUnmountISO(const std::string& isoDir) {
+    return std::async(std::launch::async, [](const std::string& isoDir) {
+        std::lock_guard<std::mutex> lock(mutexforsearch); // Lock the critical section
+        unmountISO(isoDir);
+    }, isoDir);
 }
+
 
 // Main function for unmounting ISOs
 void unmountISOs() {
@@ -1099,7 +1102,7 @@ void unmountISOs() {
             // Unmount all ISOs asynchronously
             std::vector<std::future<void>> futures;
             for (const std::string& isoDir : isoDirs) {
-                futures.push_back(std::async(std::launch::async, asyncUnmountISO, isoDir));
+                futures.push_back(asyncUnmountISO(isoDir));
             }
 
             // Wait for all asynchronous tasks to complete
