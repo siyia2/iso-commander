@@ -601,7 +601,7 @@ void convertMDFToISO(const std::string& inputPath) {
         }
     } else {
         std::cout << "\033[91mConversion of \033[93m'" << inputPath << "'\033[91m failed.\033[0m" << std::endl;
-    }
+	}
 }
 
 
@@ -681,10 +681,11 @@ void select_and_convert_files_to_iso_mdf() {
             processInputMDF(input, mdfMdsFiles);
             std::cout << "Press enter to continue...";
             std::cin.ignore();
-        }
-    }
+	}
+}
 
 
+// Function to print the found mdf files
 void printFileListMdf(const std::vector<std::string>& fileList) {
     std::cout << "Select file(s) to convert to \033[1m\033[92mISO(s)\033[0m:\n";
 
@@ -706,6 +707,7 @@ void printFileListMdf(const std::vector<std::string>& fileList) {
         }
     }
 }
+
 
 // Function to process user input and convert selected MDF files to something
 void processInputMDF(const std::string& input, const std::vector<std::string>& fileList) {
