@@ -16,22 +16,22 @@ std::mutex mutexremoveNonExistentPathsFromCacheAsync; // Mutex for removeNonExis
 
 //	bools
 
-// for mount functions
+// Mount functions
 bool directoryExists(const std::string& path);
 bool isNumeric(const std::string& str);
 
-// for iso cache functions
+// Iso cache functions
 bool isValidDirectory(const std::string& path);
 bool ends_with_iso(const std::string& str);
 bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize);
 
-// for unmount functions
+// Unmount functions
 bool isDirectoryEmpty(const std::string& path);
 bool isValidIndex(int index, size_t isoDirsSize);
 
 //	voids
 
-// for mount functions
+// Mount functions
 void mountISOs(const std::vector<std::string>& isoFiles);
 void select_and_mount_files_by_number();
 void displayErrorMessage(const std::string& iso);
@@ -41,23 +41,23 @@ void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& moun
 void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
 
 
-// for iso cache functions
+// Iso cache functions
 void manualRefreshCache();
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& mutexforsearch);
 void removeNonExistentPathsFromCache();
 
-// for unmount functions
+// Unmount functions
 void listMountedISOs();
 void unmountISOs();
 void asyncUnmountISO(const std::string& isoDir);
 void unmountISO(const std::string& isoDir);
 
-// art
+// Art
 void print_ascii();
 
 //	stds
 
-// all exist for iso cache functions
+// Cache functions
 std::vector<std::string> vec_concat(const std::vector<std::string>& v1, const std::vector<std::string>& v2);
 std::future<bool> iequals(std::string_view a, std::string_view b);
 std::future<bool> FileExists(const std::string& path);
@@ -930,7 +930,7 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
 
 
 
-// UMOUNT FUNCTIONS	\\
+// UMOUNT STUFF	\\
 
 // Function to list mounted ISOs in the /mnt directory
 void listMountedISOs() {
