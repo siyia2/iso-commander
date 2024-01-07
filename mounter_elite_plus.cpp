@@ -603,52 +603,36 @@ bool directoryExists(const std::string& path) {
 // Function to mount selected ISO files called from mountISOs
 void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>& mountedIsos) {
     namespace fs = std::filesystem;
+
     // Use the filesystem library to extract the ISO file name
     fs::path isoPath(isoFile);
     std::string isoFileName = isoPath.stem().string(); // Remove the .iso extension
 
-    std::string mountPoint = "/mnt/iso_" + isoFileName; // Use the modified ISO file name in the mount point with "iso_" prefix
+    // Use the modified ISO file name in the mount point with "iso_" prefix
+    std::string mountPoint = "/mnt/iso_" + isoFileName;
 
     // Lock the global mutex for synchronization
     std::lock_guard<std::mutex> highLock(Mutex4High);
 
     // Check if the mount point directory doesn't exist, create it asynchronously
-    if (!directoryExists(mountPoint)) {
-        // Reusable string for commands
-        std::string command;
+    if (!fs::exists(mountPoint)) {
+        try {
+            // Create the mount point directory
+            fs::create_directory(mountPoint);
 
-        // Create the mount point directory asynchronously
-        auto mkdirFuture = std::async(std::launch::async, [&]() {
-            command = "sudo mkdir " + shell_escape(mountPoint);
-            return system(command.c_str()) == 0;
-        });
-
-        // Wait for the mkdir operation to complete
-        if (mkdirFuture.get()) {
-            // Mount the ISO file to the mount point asynchronously
-            auto mountFuture = std::async(std::launch::async, [&]() {
-                command = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
-                return system(command.c_str());
-            });
-
-            // Wait for the mount operation to complete
-            int mountResult = mountFuture.get();
-
-            if (mountResult != 0) {
-                std::cerr << "\033[91mFailed to mount: \033[93m'" << isoFile << "'\033[0m\033[91m.\033[0m" << std::endl;
-
-                // Cleanup the mount point directory
-                fs::remove(mountPoint);
-
-                return;
-            } else {
-                // Store the mount point in the map
-                mountedIsos.emplace(isoFile, mountPoint);
-                std::cout << "ISO file: \033[92m'" << isoFile << "'\033[0m mounted at: \033[94m'" << mountPoint << "'\033[0m." << std::endl;
+            // Construct the mount command and execute it
+            std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
+            if (std::system(mountCommand.c_str()) != 0) {
+                throw std::runtime_error("Mount command failed");
             }
-        } else {
-            std::cerr << "\033[91mFailed to create mount point directory.\033[0m" << std::endl;
-            return;
+
+            // Store the mount point in the map
+            mountedIsos.emplace(isoFile, mountPoint);
+            std::cout << "ISO file: \033[92m'" << isoFile << "'\033[0m mounted at: \033[94m'" << mountPoint << "'\033[0m." << std::endl;
+        } catch (const std::exception& e) {
+            // Handle exceptions, log error, and cleanup
+            std::cerr << "\033[91mFailed to mount: \033[93m'" << isoFile << "'\033[0m\033[91m. Error: " << e.what() << "\033[0m" << std::endl;
+            fs::remove(mountPoint);
         }
     } else {
         // The mount point directory already exists, so the ISO is considered mounted
@@ -656,7 +640,6 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
         std::cout << "\033[93mISO file: \033[92m'" << isoFile << "'\033[93m is already mounted at: \033[94m'" << mountPoint << "'\033[93m.\033[0m" << std::endl;
     }
 }
-
 
 // Function to mount ISO files concurrently using asynchronous tasks
 void mountISOs(const std::vector<std::string>& isoFiles) {
@@ -668,11 +651,8 @@ void mountISOs(const std::vector<std::string>& isoFiles) {
 
     // Iterate through the list of ISO files and spawn a future for each
     for (const std::string& isoFile : isoFiles) {
-        // Create a copy of the ISO file path for the future to avoid race conditions
-        std::string IsoFile = isoFile;
-
         // Create a future for mounting the ISO file and pass the map by reference
-        futures.push_back(std::async(std::launch::async, mountIsoFile, std::move(IsoFile), std::ref(mountedIsos)));
+        futures.push_back(std::async(std::launch::async, mountIsoFile, isoFile, std::ref(mountedIsos)));
     }
 
     // Wait for all asynchronous tasks to complete
