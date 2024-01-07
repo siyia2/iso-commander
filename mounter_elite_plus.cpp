@@ -631,7 +631,7 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
             std::cout << "ISO file: \033[92m'" << isoFile << "'\033[0m mounted at: \033[94m'" << mountPoint << "'\033[0m." << std::endl;
         } catch (const std::exception& e) {
             // Handle exceptions, log error, and cleanup
-            std::cerr << "\033[91mFailed to mount: \033[93m'" << isoFile << "'\033[0m\033[91m. Error: " << e.what() << "\033[0m" << std::endl;
+            std::cerr << "\033[91mFailed to mount: \033[93m'" << isoFile << "'\033[0m\033[91m." << std::endl;
             fs::remove(mountPoint);
         }
     } else {
