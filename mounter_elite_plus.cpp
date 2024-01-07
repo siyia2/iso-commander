@@ -640,7 +640,7 @@ void select_and_delete_files_by_number() {
     // Main loop for selecting and deleting ISO files
     while (true) {
         std::system("clear");
-        std::cout << "\033[93m! CAUTION: DELETION OF ISO FILES CANNOT BE REVERSED !\n\033[0m" << std::endl;
+        std::cout << "\033[93m! CAUTION: ISO DELETION IS IRREVERSIBLE !\n\033[0m" << std::endl;
         printIsoFileList(isoFiles);
 
         std::cout << " " << std::endl;
@@ -699,12 +699,12 @@ void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFi
             // Add the ISO file to the set of deleted files
             deletedSet.insert(iso);
 
-            std::cout << "\033[92mDeleted: " << iso << "\033[0m" << std::endl;
+            std::cout << "\033[92mDeleted: \033[0m'" << iso << "'\033[921m." << std::endl;
         } else {
-            std::cout << "\033[91mError deleting: " << iso << "\033[0m" << std::endl;
+            std::cout << "\033[91mError deleting: \033[0m'" << iso << "'\033[91m." << std::endl;
         }
     } else {
-        std::cout << "\033[91mFile not found: " << iso << "\033[0m" << std::endl;
+        std::cout << "\033[93mFile not found: \033[0m'" << iso << "'\033[93m." << std::endl;
     }
 }
 
