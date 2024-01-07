@@ -616,7 +616,7 @@ void select_and_delete_files_by_number() {
     // Check if the cache is empty
     if (isoFiles.empty()) {
         std::system("clear");
-        std::cout << "\033[93mISO Cache is empty. Please refresh it from the main Menu Options.\033[0m" << std::endl;
+        std::cout << "\033[93mNo ISO file(s) available for deletion.\033[0m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "Press Enter to continue...";
         std::cin.get();
@@ -628,11 +628,6 @@ void select_and_delete_files_by_number() {
         return !ends_with_iso(iso);
     }), isoFiles.end());
 
-    // Check if there are any ISO files to delete
-    if (isoFiles.empty()) {
-        std::cout << "\033[93mNo ISO file(s) available for for deletion.\033[0m" << std::endl;
-        return;
-    }
 
     // Set to track deleted ISO files
     std::unordered_set<std::string> deletedSet;
@@ -668,7 +663,7 @@ void select_and_delete_files_by_number() {
         // Check if the ISO file list is empty
 		if (isoFiles.empty()) {
 		std::cout << " " << std::endl;
-        std::cout << "\033[93mNo ISO file(s) available for for deletion.\033[0m" << std::endl;
+        std::cout << "\033[93mNo ISO file(s) available for deletion.\033[0m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "Press Enter to continue..." << std::endl;
         std::cin.get();
