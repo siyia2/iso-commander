@@ -844,7 +844,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
         if (token == "0") {
             if (!invalidInput) {
                 invalidInput = true;
-                errorMessages.push_back("\033[91mFile index: '0' does not exist.\033[0m");
+                errorMessages.push_back("\033[91mFile index '0' does not exist.\033[0m");
             }
 		}
         
@@ -878,7 +878,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
                 if (static_cast<size_t>(i) <= isoFiles.size() && processedIndices.find(i) == processedIndices.end()) {
                     // Use std::async to launch each task in a separate thread
                     futures.emplace_back(std::async(std::launch::async, handleIsoFile, isoFiles[i - 1], std::ref(mountedSet)));
-                    processedIndices.insert(i); // Mark index as processed
+                    processedIndices.insert(i); // Mark  as processed
                 } else if (static_cast<size_t>(i) > isoFiles.size()) {
                     invalidInput = true;
                     errorMessages.push_back("\033[91mFile index '" + std::to_string(i) + "' does not exist.\033[0m");
