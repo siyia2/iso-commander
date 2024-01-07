@@ -1025,7 +1025,7 @@ void unmountISO(const std::string& isoDir) {
 // Function to perform asynchronous unmounting
 std::future<void> asyncUnmountISO(const std::string& isoDir) {
     return std::async(std::launch::async, [](const std::string& isoDir) {
-        std::lock_guard<std::mutex> highLock(Mutex4High); // Lock the critical section
+        std::lock_guard<std::mutex> lowLock(Mutex4Low); // Lock the critical section
         unmountISO(isoDir);
     }, isoDir);
 }
