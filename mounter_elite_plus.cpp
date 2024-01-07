@@ -512,6 +512,86 @@ void manualRefreshCache() {
 }
 
 
+// Function to perform case-insensitive string comparison using std::string_view asynchronously
+std::future<bool> iequals(std::string_view a, std::string_view b) {
+    // Using std::async to perform the comparison asynchronously
+    return std::async(std::launch::async, [a, b]() {
+        // Check if the string views have different sizes, if so, they can't be equal
+        if (a.size() != b.size()) {
+            return false;
+        }
+
+        // Iterate through each character of the string views and compare them
+        for (std::size_t i = 0; i < a.size(); ++i) {
+            // Convert characters to lowercase using std::tolower and compare them
+            if (std::tolower(a[i]) != std::tolower(b[i])) {
+                // If characters are not equal, strings are not equal
+                return false;
+            }
+        }
+
+        // If all characters are equal, the strings are case-insensitively equal
+        return true;
+    });
+}
+
+
+// Function to parallel traverse a directory and find ISO files
+void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& Mutex4High) {
+    try {
+        // Get the maximum number of threads supported by the hardware
+        const unsigned int maxThreads = std::thread::hardware_concurrency();
+
+        // Vector to store futures for asynchronous tasks
+        std::vector<std::future<void>> futures;
+
+        // Iterate through the directory and its subdirectories
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
+            // Check if the entry is a regular file
+            if (entry.is_regular_file()) {
+                // Get the path of the file
+                const std::filesystem::path& filePath = entry.path();
+
+                // Skip empty files or files with ".bin" extension
+                if (std::filesystem::file_size(filePath) == 0 || iequals(filePath.stem().string(), ".bin").get()) {
+                    continue;
+                }
+
+                // Get the file extension as a string
+                std::string extensionStr = filePath.extension().string();
+
+                // Convert the string to a string view
+                std::string_view extension = extensionStr;
+
+                // Perform case-insensitive comparison asynchronously
+                std::future<bool> extensionComparisonFuture = iequals(extension, ".iso");
+
+                // Check the result of the comparison
+                if (extensionComparisonFuture.get()) {
+                    // Use async to run the task of collecting ISO paths in parallel
+                    futures.push_back(std::async(std::launch::async, [filePath, &isoFiles]() {
+                        // Process the file content as needed
+                        // For example, you can check for ISO file signatures, etc.
+
+                        // Lock the mutex to update the shared vector
+                        std::lock_guard<std::mutex> lock(Mutex4Low);
+                        isoFiles.push_back(filePath.string());
+                    }));
+                }
+            }
+        }
+
+        // Wait for all async tasks to complete
+        for (auto& future : futures) {
+            future.get();
+        }
+    } catch (const std::filesystem::filesystem_error& e) {
+        // Handle filesystem errors and print an error message
+        std::cerr << "\033[91m" << e.what() << "\033[0m" << std::endl;
+    }
+}
+
+
 //	MOUNT STUFF	\\
 
 // Function to check if a directory exists
@@ -856,86 +936,6 @@ void printAlreadyMountedMessage(const std::string& isoFile) {
 // Function to display an error message when the ISO file does not exist on disk
 void displayErrorMessage(const std::string& iso) {
     std::cout << "\033[35mISO file '" << iso << "' does not exist on disk. Please return and re-enter the mount function, or refresh the cache from the main menu.\033[0m" << std::endl;
-}
-
-
-// Function to perform case-insensitive string comparison using std::string_view asynchronously
-std::future<bool> iequals(std::string_view a, std::string_view b) {
-    // Using std::async to perform the comparison asynchronously
-    return std::async(std::launch::async, [a, b]() {
-        // Check if the string views have different sizes, if so, they can't be equal
-        if (a.size() != b.size()) {
-            return false;
-        }
-
-        // Iterate through each character of the string views and compare them
-        for (std::size_t i = 0; i < a.size(); ++i) {
-            // Convert characters to lowercase using std::tolower and compare them
-            if (std::tolower(a[i]) != std::tolower(b[i])) {
-                // If characters are not equal, strings are not equal
-                return false;
-            }
-        }
-
-        // If all characters are equal, the strings are case-insensitively equal
-        return true;
-    });
-}
-
-
-// Function to parallel traverse a directory and find ISO files
-void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& Mutex4High) {
-    try {
-        // Get the maximum number of threads supported by the hardware
-        const unsigned int maxThreads = std::thread::hardware_concurrency();
-
-        // Vector to store futures for asynchronous tasks
-        std::vector<std::future<void>> futures;
-
-        // Iterate through the directory and its subdirectories
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
-            // Check if the entry is a regular file
-            if (entry.is_regular_file()) {
-                // Get the path of the file
-                const std::filesystem::path& filePath = entry.path();
-
-                // Skip empty files or files with ".bin" extension
-                if (std::filesystem::file_size(filePath) == 0 || iequals(filePath.stem().string(), ".bin").get()) {
-                    continue;
-                }
-
-                // Get the file extension as a string
-                std::string extensionStr = filePath.extension().string();
-
-                // Convert the string to a string view
-                std::string_view extension = extensionStr;
-
-                // Perform case-insensitive comparison asynchronously
-                std::future<bool> extensionComparisonFuture = iequals(extension, ".iso");
-
-                // Check the result of the comparison
-                if (extensionComparisonFuture.get()) {
-                    // Use async to run the task of collecting ISO paths in parallel
-                    futures.push_back(std::async(std::launch::async, [filePath, &isoFiles]() {
-                        // Process the file content as needed
-                        // For example, you can check for ISO file signatures, etc.
-
-                        // Lock the mutex to update the shared vector
-                        std::lock_guard<std::mutex> lock(Mutex4Low);
-                        isoFiles.push_back(filePath.string());
-                    }));
-                }
-            }
-        }
-
-        // Wait for all async tasks to complete
-        for (auto& future : futures) {
-            future.get();
-        }
-    } catch (const std::filesystem::filesystem_error& e) {
-        // Handle filesystem errors and print an error message
-        std::cerr << "\033[91m" << e.what() << "\033[0m" << std::endl;
-    }
 }
 
 
