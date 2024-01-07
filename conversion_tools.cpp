@@ -27,7 +27,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
 
     try {
         // Mutex to ensure thread safety
-        static std::mutex mutex;
+        static std::mutex mutex4search;
 
         // Determine the maximum number of threads to use based on hardware concurrency; fallback is 2 threads
         const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
@@ -47,7 +47,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
                     callback(fileName, filePath);
 
                     // Lock the mutex to ensure safe access to shared data (fileNames)
-                    std::lock_guard<std::mutex> lock(mutex);
+                    std::lock_guard<std::mutex> lock(mutex4search);
                     fileNames.push_back(fileName);
                 };
 
@@ -457,7 +457,7 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
 
     try {
         // Mutex to ensure thread safety
-        static std::mutex mutex;
+        static std::mutex mutex4search;
 
         // Determine the maximum number of threads to use based on hardware concurrency; fallback is 2 threads
         const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
@@ -477,7 +477,7 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                     callback(fileName, filePath);
 
                     // Lock the mutex to ensure safe access to shared data (fileNames)
-                    std::lock_guard<std::mutex> lock(mutex);
+                    std::lock_guard<std::mutex> lock(mutex4search);
                     fileNames.push_back(fileName);
                 };
 
