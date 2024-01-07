@@ -641,18 +641,28 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
     }
 }
 
+
 // Function to mount ISO files concurrently using asynchronous tasks
 void mountISOs(const std::vector<std::string>& isoFiles) {
     // Map to store mounted ISOs with their corresponding paths
     std::map<std::string, std::string> mountedIsos;
+
+    // Mutex to synchronize access to the map
+    std::mutex mapMutex;
 
     // Vector to store futures for parallel mounting
     std::vector<std::future<void>> futures;
 
     // Iterate through the list of ISO files and spawn a future for each
     for (const std::string& isoFile : isoFiles) {
-        // Create a future for mounting the ISO file and pass the map by reference
-        futures.push_back(std::async(std::launch::async, mountIsoFile, isoFile, std::ref(mountedIsos)));
+        // Create a future for mounting the ISO file and pass the map and mutex by reference
+        futures.push_back(std::async(std::launch::async, [isoFile, &mountedIsos, &mapMutex]() {
+            // Lock the mutex before accessing the shared map
+            std::lock_guard<std::mutex> lock(mapMutex);
+
+            // Call the function that modifies the shared map
+            mountIsoFile(isoFile, mountedIsos);
+        }));
     }
 
     // Wait for all asynchronous tasks to complete
