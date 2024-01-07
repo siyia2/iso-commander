@@ -819,17 +819,16 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
         
 	// Check if the entered character is not 'Y' or 'y'
 	if (!(confirmation == 'y' || confirmation == 'Y')) {
-    std::cout << "Deletion aborted." << std::endl;
+		std::cout << "\033[93mDeletion aborted by user.\033[0m" << std::endl;
+		std::cout << " " << std::endl;
+        std::cout << "Press Enter to continue...";
+        std::cin.get();
 	} else {
 		// Launch deletion tasks
 		for (const auto& index : processedIndices) {
         futures.emplace_back(std::async(std::launch::async, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
 		}
 	}
-
-		// Continue with any additional code outside the if-else block
-		std::cout << " " << std::endl;
-		std::cout << "No valid selections for deletion." << std::endl;
 
     // Wait for all tasks to complete
     for (auto& future : futures) {
