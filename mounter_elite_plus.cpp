@@ -7,8 +7,8 @@ const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.cache";
 const std::string cacheFileName = "iso_cache.txt";;
 const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
-std::mutex MutexGeneral; // Mutex for mount thread safety
-std::mutex Mutex4Search; // Mutex for search thread safety
+std::mutex Mutex4Big; // Mutex for mount thread safety
+std::mutex Mutex4Small; // Mutex for search thread safety
 
 
 //	Function prototypes	\\
@@ -42,7 +42,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
 
 // Iso cache functions
 void manualRefreshCache();
-void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& Mutex4Search);
+void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& Mutex4Small);
 void removeNonExistentPathsFromCache();
 
 // Unmount functions
@@ -194,7 +194,7 @@ void print_ascii() {
 // Function to check if a file exists
 std::future<bool> FileExists(const std::string& filePath) {
     return std::async(std::launch::async, [filePath]() {
-        std::lock_guard<std::mutex> lock(MutexGeneral); // Ensure thread safety
+        std::lock_guard<std::mutex> lock(Mutex4Big); // Ensure thread safety
 
         struct stat buffer;
         return (stat(filePath.c_str(), &buffer) == 0);
@@ -244,7 +244,7 @@ void removeNonExistentPathsFromCache() {
         std::vector<std::string> result = future.get();
 
         // Protect the critical section with a mutex
-        std::lock_guard<std::mutex> lock(MutexGeneral);
+        std::lock_guard<std::mutex> lock(Mutex4Big);
         retainedPaths.insert(retainedPaths.end(), result.begin(), result.end());
     }
 
@@ -374,7 +374,7 @@ std::vector<std::string> refreshCacheForDirectory(const std::string& path) {
 
     // Use std::async to execute parallelTraverse asynchronously
     std::future<void> asyncResult = std::async(std::launch::async, [path, &newIsoFiles]() {
-        parallelTraverse(path, newIsoFiles, Mutex4Search);
+        parallelTraverse(path, newIsoFiles, Mutex4Small);
     });
 
     // You can perform other tasks here if needed
@@ -411,7 +411,7 @@ void manualRefreshCache() {
     }
     
 	// Lock the mutex before accessing shared resources
-	std::lock_guard<std::mutex> lock(MutexGeneral);
+	std::lock_guard<std::mutex> lock(Mutex4Big);
 	
 	
     // Create an input string stream to parse directory paths
@@ -530,7 +530,7 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
     std::string mountPoint = "/mnt/iso_" + isoFileName; // Use the modified ISO file name in the mount point with "iso_" prefix
 
     // Lock the global mutex for synchronization
-    std::lock_guard<std::mutex> globalLock(MutexGeneral);
+    std::lock_guard<std::mutex> globalLock(Mutex4Big);
 
     // Check if the mount point directory doesn't exist, create it asynchronously
     if (!directoryExists(mountPoint)) {
@@ -725,7 +725,7 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
 // Function to handle mounting of a specific ISO file asynchronously
 void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet) {
 	// Lock the mutex before accessing the shared vector
-    std::lock_guard<std::mutex> lock(MutexGeneral);
+    std::lock_guard<std::mutex> lock(Mutex4Small);
     // Use std::async to execute the function asynchronously
     auto future = std::async(std::launch::async, [&iso, &mountedSet]() {
         // Check if the ISO file exists on disk
@@ -884,7 +884,7 @@ std::future<bool> iequals(std::string_view a, std::string_view b) {
 
 
 // Function to parallel traverse a directory and find ISO files
-void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& MutexGeneral) {
+void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& Mutex4Big) {
     try {
         // Get the maximum number of threads supported by the hardware
         const unsigned int maxThreads = std::thread::hardware_concurrency();
@@ -921,7 +921,7 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
                         // For example, you can check for ISO file signatures, etc.
 
                         // Lock the mutex to update the shared vector
-                        std::lock_guard<std::mutex> lock(Mutex4Search);
+                        std::lock_guard<std::mutex> lock(Mutex4Small);
                         isoFiles.push_back(filePath.string());
                     }));
                 }
@@ -1051,7 +1051,7 @@ bool isValidIndex(int index, size_t isoDirsSize) {
 // Function to perform asynchronous unmounting
 std::future<void> asyncUnmountISO(const std::string& isoDir) {
     return std::async(std::launch::async, [](const std::string& isoDir) {
-        std::lock_guard<std::mutex> lock(MutexGeneral); // Lock the critical section
+        std::lock_guard<std::mutex> lock(Mutex4Big); // Lock the critical section
         unmountISO(isoDir);
     }, isoDir);
 }
@@ -1224,7 +1224,7 @@ void unmountISOs() {
 
                 // Use a thread for each ISO to be unmounted
                 threads.emplace_back([&, isoDir]() {
-                    std::lock_guard<std::mutex> lock(MutexGeneral); // Lock the critical section
+                    std::lock_guard<std::mutex> lock(Mutex4Big); // Lock the critical section
                     unmountISO(isoDir);
                 });
             }

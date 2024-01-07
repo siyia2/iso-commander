@@ -5,11 +5,6 @@
 static std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles here
 static std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
 
-std::vector<std::string> binImgFiles; // binImgFiles here
-
-std::mutex mdfFilesMutex; // Mutex to protect access to mdfImgFiles
-std::mutex binImgFilesMutex; // Mutex to protect access to binImgFiles
-
 
 // BIN/IMG CONVERSION FUNCTIONS	\\
 
@@ -283,6 +278,11 @@ void printFileListBin(const std::vector<std::string>& fileList) {
 
 // Function to process user input and convert selected BIN files to ISO format
 void processInputBin(const std::string& input, const std::vector<std::string>& fileList) {
+	
+	// Mutexes to protect the critical sections
+    std::mutex indicesMutex;
+    std::mutex errorsMutex;
+	
     // Create a string stream to tokenize the input
     std::istringstream iss(input);
     std::string token;
@@ -298,6 +298,16 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
 
     // Vector to store error messages
     std::vector<std::string> errorMessages;
+
+    // Number of threads in the thread pool (adjust as needed)
+    const int numThreads = std::thread::hardware_concurrency();
+	
+	// Protect the critical section with a lock
+    std::lock_guard<std::mutex> lock(indicesMutex);
+    // Function to execute asynchronously
+    auto asyncConvertBINToISO = [&](const std::string& selectedFile) {
+        convertBINToISO(selectedFile);
+    };
 
     // Iterate through the tokens in the input string
     while (iss >> token) {
@@ -320,7 +330,7 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                             if (processedIndices.find(selectedIndex) == processedIndices.end()) {
                                 // Convert BIN to ISO asynchronously and store the future in the vector
                                 std::string selectedFile = fileList[selectedIndex];
-                                futures.push_back(std::async(std::launch::async, convertBINToISO, selectedFile));
+                                futures.push_back(std::async(std::launch::async, asyncConvertBINToISO, selectedFile));
                                 processedIndices.insert(selectedIndex);
                             }
                         }
@@ -328,6 +338,8 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                         // Add an error message for an invalid range
                         std::string errorMessage = "\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m";
                         if (processedErrors.find(errorMessage) == processedErrors.end()) {
+							// Protect the critical section with a lock
+                            std::lock_guard<std::mutex> lock(errorsMutex);
                             errorMessages.push_back(errorMessage);
                             processedErrors.insert(errorMessage);
                         }
@@ -343,13 +355,15 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                                 if (processedIndices.find(selectedIndex) == processedIndices.end()) {
                                     // Convert BIN to ISO asynchronously and store the future in the vector
                                     std::string selectedFile = fileList[selectedIndex];
-                                    futures.push_back(std::async(std::launch::async, convertBINToISO, selectedFile));
+                                    futures.push_back(std::async(std::launch::async, asyncConvertBINToISO, selectedFile));
                                     processedIndices.insert(selectedIndex);
                                 }
                             } else {
                                 // Add an error message for an invalid range
                                 std::string errorMessage = "\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m";
                                 if (processedErrors.find(errorMessage) == processedErrors.end()) {
+									// Protect the critical section with a lock
+									std::lock_guard<std::mutex> lock(errorsMutex);
                                     errorMessages.push_back(errorMessage);
                                     processedErrors.insert(errorMessage);
                                 }
@@ -360,6 +374,8 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                         // Add an error message for an invalid range
                         std::string errorMessage = "\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m";
                         if (processedErrors.find(errorMessage) == processedErrors.end()) {
+							// Protect the critical section with a lock
+                            std::lock_guard<std::mutex> lock(errorsMutex);
                             errorMessages.push_back(errorMessage);
                             processedErrors.insert(errorMessage);
                         }
@@ -372,12 +388,14 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                     if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
                         // Convert BIN to ISO asynchronously and store the future in the vector
                         std::string selectedFile = fileList[selectedIndex];
-                        futures.push_back(std::async(std::launch::async, convertBINToISO, selectedFile));
+                        futures.push_back(std::async(std::launch::async, asyncConvertBINToISO, selectedFile));
                         processedIndices.insert(selectedIndex);
                     } else {
                         // Add an error message for an invalid file index
                         std::string errorMessage = "\033[91mFile index '" + std::to_string(start) + "' does not exist.\033[0m";
                         if (processedErrors.find(errorMessage) == processedErrors.end()) {
+							// Protect the critical section with a lock
+                            std::lock_guard<std::mutex> lock(errorsMutex);
                             errorMessages.push_back(errorMessage);
                             processedErrors.insert(errorMessage);
                         }
@@ -387,6 +405,8 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                 // Add an error message for an invalid file index
                 std::string errorMessage = "\033[91mFile index '" + std::to_string(start) + "' does not exist.\033[0m";
                 if (processedErrors.find(errorMessage) == processedErrors.end()) {
+					// Protect the critical section with a lock
+                    std::lock_guard<std::mutex> lock(errorsMutex);
                     errorMessages.push_back(errorMessage);
                     processedErrors.insert(errorMessage);
                 }
@@ -395,6 +415,8 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
             // Add an error message for an invalid input
             std::string errorMessage = "\033[91mInvalid input: '" + token + "'.\033[0m";
             if (processedErrors.find(errorMessage) == processedErrors.end()) {
+				// Protect the critical section with a lock
+                std::lock_guard<std::mutex> lock(errorsMutex);
                 errorMessages.push_back(errorMessage);
                 processedErrors.insert(errorMessage);
             }
@@ -709,8 +731,13 @@ void printFileListMdf(const std::vector<std::string>& fileList) {
 }
 
 
-// Function to process user input and convert selected MDF files to something
+// Function to process user input and convert selected MDF files to something (fully multithreaded)
 void processInputMDF(const std::string& input, const std::vector<std::string>& fileList) {
+	
+	// Mutexes to protect the critical sections
+    std::mutex indicesMutex;
+    std::mutex errorsMutex;
+	
     // Create a string stream to tokenize the input
     std::istringstream iss(input);
     std::string token;
@@ -721,11 +748,16 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
     // Set to track processed error messages to avoid duplicate error reporting
     std::set<std::string> processedErrors;
 
-    // Vector to store asynchronous tasks for file conversion
-    std::vector<std::future<void>> futures;
-
     // Vector to store error messages
     std::vector<std::string> errorMessages;
+
+    // Function to execute asynchronously
+    auto asyncConvertMDFToSomething = [&](const std::string& selectedFile) {
+        convertMDFToISO(selectedFile);
+    };
+
+    // Vector to store asynchronous tasks for file conversion
+    std::vector<std::future<void>> futures;
 
     // Iterate through the tokens in the input string
     while (iss >> token) {
@@ -748,7 +780,7 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
                             if (processedIndices.find(selectedIndex) == processedIndices.end()) {
                                 // Convert MDF to something asynchronously and store the future in the vector
                                 std::string selectedFile = fileList[selectedIndex];
-                                futures.push_back(std::async(std::launch::async, convertMDFToISO, selectedFile));
+                                futures.push_back(std::async(std::launch::async, asyncConvertMDFToSomething, selectedFile));
                                 processedIndices.insert(selectedIndex);
                             }
                         }
@@ -756,6 +788,8 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
                         // Add an error message for an invalid range
                         std::string errorMessage = "\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m";
                         if (processedErrors.find(errorMessage) == processedErrors.end()) {
+							// Protect the critical section with a lock
+                            std::lock_guard<std::mutex> lock(errorsMutex);
                             errorMessages.push_back(errorMessage);
                             processedErrors.insert(errorMessage);
                         }
@@ -771,13 +805,15 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
                                 if (processedIndices.find(selectedIndex) == processedIndices.end()) {
                                     // Convert MDF to something asynchronously and store the future in the vector
                                     std::string selectedFile = fileList[selectedIndex];
-                                    futures.push_back(std::async(std::launch::async, convertMDFToISO, selectedFile));
+                                    futures.push_back(std::async(std::launch::async, asyncConvertMDFToSomething, selectedFile));
                                     processedIndices.insert(selectedIndex);
                                 }
                             } else {
                                 // Add an error message for an invalid range
                                 std::string errorMessage = "\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m";
                                 if (processedErrors.find(errorMessage) == processedErrors.end()) {
+									// Protect the critical section with a lock
+									std::lock_guard<std::mutex> lock(errorsMutex);
                                     errorMessages.push_back(errorMessage);
                                     processedErrors.insert(errorMessage);
                                 }
@@ -788,6 +824,8 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
                         // Add an error message for an invalid range
                         std::string errorMessage = "\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m";
                         if (processedErrors.find(errorMessage) == processedErrors.end()) {
+							// Protect the critical section with a lock
+                            std::lock_guard<std::mutex> lock(errorsMutex);
                             errorMessages.push_back(errorMessage);
                             processedErrors.insert(errorMessage);
                         }
@@ -800,12 +838,14 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
                     if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
                         // Convert MDF to something asynchronously and store the future in the vector
                         std::string selectedFile = fileList[selectedIndex];
-                        futures.push_back(std::async(std::launch::async, convertMDFToISO, selectedFile));
+                        futures.push_back(std::async(std::launch::async, asyncConvertMDFToSomething, selectedFile));
                         processedIndices.insert(selectedIndex);
                     } else {
                         // Add an error message for an invalid file index
                         std::string errorMessage = "\033[91mFile index '" + std::to_string(start) + "' does not exist.\033[0m";
                         if (processedErrors.find(errorMessage) == processedErrors.end()) {
+							// Protect the critical section with a lock
+                            std::lock_guard<std::mutex> lock(errorsMutex);
                             errorMessages.push_back(errorMessage);
                             processedErrors.insert(errorMessage);
                         }
@@ -815,6 +855,8 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
                 // Add an error message for an invalid file index
                 std::string errorMessage = "\033[91mFile index '" + std::to_string(start) + "' does not exist.\033[0m";
                 if (processedErrors.find(errorMessage) == processedErrors.end()) {
+					// Protect the critical section with a lock
+                    std::lock_guard<std::mutex> lock(errorsMutex);
                     errorMessages.push_back(errorMessage);
                     processedErrors.insert(errorMessage);
                 }
@@ -823,6 +865,8 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
             // Add an error message for an invalid input
             std::string errorMessage = "\033[91mInvalid input: '" + token + "'.\033[0m";
             if (processedErrors.find(errorMessage) == processedErrors.end()) {
+				// Protect the critical section with a lock
+                std::lock_guard<std::mutex> lock(errorsMutex);
                 errorMessages.push_back(errorMessage);
                 processedErrors.insert(errorMessage);
             }
@@ -830,9 +874,7 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
     }
 
     // Wait for all futures to finish
-    for (auto& future : futures) {
-        future.wait();
-    }
+    std::for_each(futures.begin(), futures.end(), [](std::future<void>& f) { f.wait(); });
 
     // Print error messages
     for (const auto& errorMessage : errorMessages) {
