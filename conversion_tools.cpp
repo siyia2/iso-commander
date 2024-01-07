@@ -136,7 +136,7 @@ void select_and_convert_files_to_iso() {
     static std::vector<std::string> previousPaths;
 
     // Read input for directory paths (allow multiple paths separated by semicolons)
-    std::string inputPaths = readInputLine("\033[94mEnter the directory path(s) (if many, separate them with \033[1m\033[93m;\033[0m\033[94m) to search for \033[1m\033[92m.bin \033[94mand \033[1m\033[92m.img\033[94m files, or press Enter to return:\n\033[0m");
+    std::string inputPaths = readInputLine("\033[1;94mEnter the directory path(s) (if many, separate them with \033[1m\033[93m;\033[0m\033[1;94m) to search for \033[1m\033[92m.bin \033[1;94mand \033[1m\033[92m.img\033[1;94m files, or press Enter to return:\n\033[0m");
 
     // Use semicolon as a separator to split paths
     std::istringstream iss(inputPaths);
@@ -187,7 +187,7 @@ void select_and_convert_files_to_iso() {
             
             std::cout << " " << std::endl;
             // Prompt user to choose a file or exit
-            char* input = readline("\033[94mChoose BIN/IMG file(s) to convert (e.g., '1-3' '1 2', or press Enter to return):\033[0m ");
+            char* input = readline("\033[1;94mChoose BIN/IMG file(s) to convert (e.g., '1-3' '1 2', or press Enter to return):\033[0m ");
 
             // Break the loop if the user presses Enter
             if (input[0] == '\0') {
@@ -568,7 +568,7 @@ void select_and_convert_files_to_iso_mdf() {
 
 	
     // Read input for directory paths (allow multiple paths separated by semicolons)
-    std::string inputPaths = readInputLine("\033[94mEnter the directory path(s) (if many, separate them with \033[1m\033[93m;\033[0m\033[94m) to search for \033[1m\033[92m.mdf\033[94m files, or press Enter to return:\n\033[0m");
+    std::string inputPaths = readInputLine("\033[1;94mEnter the directory path(s) (if many, separate them with \033[1m\033[93m;\033[0m\033[1;94m) to search for \033[1m\033[92m.mdf\033[1;94m files, or press Enter to return:\n\033[0m");
     
     // Use semicolon as a separator to split paths
     std::istringstream iss(inputPaths);
@@ -620,7 +620,7 @@ void select_and_convert_files_to_iso_mdf() {
 
         std::cout << " " << std::endl;
         // Prompt the user to enter file numbers or 'exit'
-        char* input = readline("\033[94mChoose MDF file(s) to convert (e.g., '1-2' or '1 2', or press Enter to return):\033[0m ");
+        char* input = readline("\033[1;94mChoose MDF file(s) to convert (e.g., '1-2' or '1 2', or press Enter to return):\033[0m ");
 
         if (input[0] == '\0') {
             std::system("clear");
