@@ -649,9 +649,7 @@ void select_and_delete_files_by_number() {
 
         // Check if the user wants to return
         if (input[0] == '\0') {
-			std::cout << " " << std::endl;
-            std::cout << "Press Enter to Return" << std::endl;
-            std::cin.get();
+			std::cout << "Press Enter to Return" << std::endl;
             break;
         }
 
@@ -777,8 +775,6 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
             int step = (start <= end) ? 1 : -1;
             for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
                 if (static_cast<size_t>(i) <= isoFiles.size() && processedIndices.find(i) == processedIndices.end()) {
-                    // Use std::async to launch each task in a separate thread
-                    futures.emplace_back(std::async(std::launch::async, handleDeleteIsoFile, isoFiles[i - 1], std::ref(isoFiles), std::ref(deletedSet)));
                     processedIndices.insert(i); // Mark as processed
                 } else if (static_cast<size_t>(i) > isoFiles.size()) {
                     invalidInput = true;
@@ -788,8 +784,6 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
         } else if (isNumeric(token)) {
             int num = std::stoi(token);
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && processedIndices.find(num) == processedIndices.end()) {
-                // Use std::async to launch each task in a separate thread
-                futures.emplace_back(std::async(std::launch::async, handleDeleteIsoFile, isoFiles[num - 1], std::ref(isoFiles), std::ref(deletedSet)));
                 processedIndices.insert(num); // Mark index as processed
             } else if (num > isoFiles.size()) {
                 invalidInput = true;
@@ -801,18 +795,48 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
         }
     }
 
-    // Wait for all tasks to complete
-    for (auto& future : futures) {
-        future.wait();
-    }
-
     // Display unique errors at the end
     if (invalidInput) {
         for (const auto& errorMsg : uniqueErrorMessages) {
             std::cerr << "\033[93m" << errorMsg << "\033[0m" << std::endl;
         }
     }
+
+    // Display selected deletions
+    if (!processedIndices.empty()) {
+        std::cout << "\033[94mSelected for \033[91mDeletion\033[94m:" << std::endl;
+        std::cout << " " << std::endl;
+        for (const auto& index : processedIndices) {
+            std::cout << "\033[93m'" << isoFiles[index - 1] << "'.\033[0m" << std::endl;
+        }
+	}
+
+        // Prompt for confirmation before proceeding
+        char confirmation;
+        std::cout << " " << std::endl;
+        std::cout << "Do you want to proceed with the selected deletions? (y/n): ";
+        std::cin >> confirmation;
+        
+	// Check if the entered character is not 'Y' or 'y'
+	if (!(confirmation == 'y' || confirmation == 'Y')) {
+    std::cout << "Deletion aborted." << std::endl;
+	} else {
+		// Launch deletion tasks
+		for (const auto& index : processedIndices) {
+        futures.emplace_back(std::async(std::launch::async, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
+		}
+	}
+
+		// Continue with any additional code outside the if-else block
+		std::cout << " " << std::endl;
+		std::cout << "No valid selections for deletion." << std::endl;
+
+    // Wait for all tasks to complete
+    for (auto& future : futures) {
+        future.wait();
+    }
 }
+
 
 
 //	MOUNT STUFF	\\
