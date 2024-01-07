@@ -30,6 +30,12 @@ bool isValidIndex(int index, size_t isoDirsSize);
 
 //	voids
 
+//Delete functions
+bool isAllZeros(const std::string& str);
+void select_and_delete_files_by_number();
+void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
+void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
+
 // Mount functions
 void mountISOs(const std::vector<std::string>& isoFiles);
 void select_and_mount_files_by_number();
@@ -51,6 +57,7 @@ void unmountISOs();
 void unmountISO(const std::string& isoDir);
 
 // Art
+void printMenu();
 void print_ascii();
 
 //	stds
@@ -76,19 +83,10 @@ int main() {
         std::system("clear");
         print_ascii();
         // Display the main menu options
-        std::cout << "Menu Options:" << std::endl;
-        std::cout << "1. Mount" << std::endl;
-        std::cout << "2. Unmount" << std::endl;
-        std::cout << "3. Conversion Tools" << std::endl;
-        std::cout << "4. Refresh ISO Cache" << std::endl;
-        std::cout << "5. List Mountpoints" << std::endl;
-        std::cout << "6. Exit Program" << std::endl;
+        printMenu();
 
         // Prompt for the main menu choice
-        //std::cin.clear();
-
-        std::cout << " " << std::endl;
-        char* input = readline("\033[94mEnter a choice:\033[0m ");
+        char* input = readline("\033[1;94mEnter a choice:\033[0m ");
         if (!input) {
             break; // Exit the program if readline returns NULL (e.g., on EOF or Ctrl+D)
         }
@@ -109,12 +107,22 @@ int main() {
                 std::system("clear");
                 break;
             case '3':
+                std::system("clear");
+                select_and_delete_files_by_number();
+                std::system("clear");
+                break;
+            case '4':
                 while (!returnToMainMenu) {
 					std::system("clear");
-                    std::cout << "1. Convert to ISO (BIN2ISO)" << std::endl;
-                    std::cout << "2. Convert to ISO (MDF2ISO)" << std::endl;
+					std::cout << "\033[1;32m+-------------------------+" << std::endl;
+					std::cout << "\033[1;32m|↵ Convert2ISO             |" << std::endl;
+					std::cout << "\033[1;32m+-------------------------+" << std::endl;
+                    std::cout << "\033[1;32m|1. CCD2ISO              |" << std::endl;
+                    std::cout << "\033[1;32m+-------------------------+" << std::endl;
+                    std::cout << "\033[1;32m|2. MDF2ISO              |" << std::endl;
+                    std::cout << "\033[1;32m+-------------------------+" << std::endl;
                     std::cout << " " << std::endl;
-                    char* submenu_input = readline("\033[94mChoose a function, or press Enter to return:\033[0m ");
+                    char* submenu_input = readline("\033[1;94mChoose a function, or press Enter to return:\033[0m ");
 
                     if (!submenu_input || std::strlen(submenu_input) == 0) {
 					delete[] submenu_input;
@@ -139,21 +147,21 @@ int main() {
                     }
                 }
                 break;
-            case '4':
-                manualRefreshCache();
-                std::cout << "Press Enter to continue...";
-                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                std::system("clear");
-                break;
             case '5':
-				std::cout << " " << std::endl;
-                listMountedISOs();
-                std::cout << " " << std::endl;
-                std::cout << "Press Enter to continue...";
+                manualRefreshCache();
+                std::cout << "\033[1;32mPress enter to continue...\033[0m";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 std::system("clear");
                 break;
             case '6':
+				std::system("clear");
+                listMountedISOs();
+                std::cout << " " << std::endl;
+                std::cout << "\033[1;32mPress enter to continue...\033[0m";
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                std::system("clear");
+                break;
+            case '7':
                 exitProgram = true; // Exit the program
                 std::cout << " " << std::endl;
                 std::cout << "Exiting the program..." << std::endl;
@@ -174,7 +182,7 @@ int main() {
 void print_ascii() {
     // Display ASCII art \\
 
-    const char* greenColor = "\x1B[32m";
+    const char* greenColor = "\x1B[1;32m";
     const char* resetColor = "\x1B[0m"; // Reset color to default
 
     std::cout << greenColor << R"( _____            ___  _____  _____     ___  __   __   ___   _____  _____     __   __   ___  __   __  _   _  _____  _____  ____         ____
@@ -185,6 +193,28 @@ void print_ascii() {
 |_____)/_/    \_\(___)  |_|  |_____)   (___)|_|   |_||_| |_||_|    |_____)   |_|   |_| \___/   |_|   |_| \_|  |_|  |_____)|_|     |__/ |_____)               
                                                                                                                                                                   )" << resetColor << '\n';
 
+}
+
+
+void printMenu() {
+    std::cout << "\033[1;32m+-------------------------+" << std::endl;
+    std::cout << "\033[1;32m|       Menu Options       |" << std::endl;
+    std::cout << "\033[1;32m+-------------------------+\033[0m" << std::endl;
+    std::cout << "\033[1;32m|1. Mount                |" << std::endl;
+    std::cout << "\033[1;32m+-------------------------+" << std::endl;
+    std::cout << "\033[1;32m|2. Unmount              |" << std::endl;
+    std::cout << "\033[1;32m+-------------------------+" << std::endl;
+    std::cout << "\033[1;32m|3. Delete               |" << std::endl;
+    std::cout << "\033[1;32m+-------------------------+" << std::endl;
+    std::cout << "\033[1;32m|4. Convert2ISO          |" << std::endl;
+    std::cout << "\033[1;32m+-------------------------+" << std::endl;
+    std::cout << "\033[1;32m|5. Refresh ISO Cache    |" << std::endl;
+    std::cout << "\033[1;32m+-------------------------+" << std::endl;
+    std::cout << "\033[1;32m|6. List Mountpoints     |" << std::endl;
+    std::cout << "\033[1;32m+-------------------------+" << std::endl;
+    std::cout << "\033[1;32m|7. Exit Program         |" << std::endl;
+    std::cout << "\033[1;32m+-------------------------+" << std::endl;
+    std::cout << std::endl;
 }
 
 
@@ -401,7 +431,7 @@ void manualRefreshCache() {
     std::system("clear");
 
     // Prompt the user to enter directory paths for manual cache refresh
-    std::string inputLine = readInputLine("\033[94mEnter the directory path(s) from which to populate the \033[1m\033[92mISO Cache\033[94m (if many, separate them with \033[1m\033[93m;\033[0m\033[94m), or press Enter to cancel:\n\033[0m");
+    std::string inputLine = readInputLine("\033[1;94mEnter the directory path(s) from which to populate the \033[1m\033[92mISO Cache\033[1;94m (if many, separate them with \033[1m\033[93m;\033[0m\033[1;94m), or press Enter to cancel:\n\033[0m");
 
     // Check if the user canceled the cache refresh
     if (inputLine.empty()) {
@@ -591,6 +621,249 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
     }
 }
 
+// DELETION STUFF \\
+
+// Function to select and delete ISO files by number
+void select_and_delete_files_by_number() {
+    // Remove non-existent paths from the cache
+    removeNonExistentPathsFromCache();
+
+    // Load ISO files from cache
+    std::vector<std::string> isoFiles = loadCache();
+
+    // Check if the cache is empty
+    if (isoFiles.empty()) {
+        std::system("clear");
+        std::cout << "\033[93mNo ISO(s) available for deletion.\033[0m" << std::endl;
+        std::cout << " " << std::endl;
+        std::cout << "\033[1;32mPress enter to continue...\033[0m";
+        std::cin.get();
+        return;
+    }
+
+    // Filter isoFiles to include only entries with ".iso" or ".ISO" extensions
+    isoFiles.erase(std::remove_if(isoFiles.begin(), isoFiles.end(), [](const std::string& iso) {
+        return !ends_with_iso(iso);
+    }), isoFiles.end());
+
+
+    // Set to track deleted ISO files
+    std::unordered_set<std::string> deletedSet;
+
+    // Main loop for selecting and deleting ISO files
+    while (true) {
+        std::system("clear");
+        std::cout << "\033[93m ! ISO DELETION IS IRREVERSIBLE PROCEED WITH CAUTION !\n\033[0m" << std::endl;
+        printIsoFileList(isoFiles);
+
+        std::cout << " " << std::endl;
+
+        // Prompt user for input
+        char* input = readline("\033[1;94mChoose ISO(s) for \033[91mdeletion\033[1;94m (e.g., '1-3', '1 2', or press Enter to return):\033[0m ");
+        std::system("clear");
+        
+        // Start the timer
+        auto start_time = std::chrono::high_resolution_clock::now();
+
+        // Check if the user wants to return
+        if (input[0] == '\0') {
+			std::cout << "Press Enter to Return" << std::endl;
+            break;
+        }
+
+        else {
+            // Process user input to select and delete specific ISO files
+            processDeleteInput(input, isoFiles, deletedSet);
+        }
+        
+        // Check if the ISO file list is empty
+		if (isoFiles.empty()) {
+		std::cout << " " << std::endl;
+        std::cout << "\033[93mNo ISO(s) available for deletion.\033[0m" << std::endl;
+        std::cout << " " << std::endl;
+        std::cout << "Press Enter to continue..." << std::endl;
+        std::cin.get();
+        break;
+		}
+        
+        // Stop the timer after completing the mounting process
+        auto end_time = std::chrono::high_resolution_clock::now();
+
+        // Calculate and print the elapsed time
+        std::cout << " " << std::endl;
+        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+		// Print the time taken for the entire process in bold with one decimal place
+        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
+        std::cout << " " << std::endl;
+        std::cout << "\033[1;32mPress enter to continue...\033[0m";
+        std::cin.get();
+    }
+}
+
+// Function to handle the deletion of an ISO file
+void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
+	
+	std::lock_guard<std::mutex> lowLock(Mutex4Low);
+	
+    // Check if the ISO file is in the cache
+    auto it = std::find(isoFiles.begin(), isoFiles.end(), iso);
+    if (it != isoFiles.end()) {
+        // Escape the ISO file name for the shell command using shell_escape
+        std::string escapedIso = shell_escape(iso);
+
+        // Delete the ISO file from the filesystem
+        std::string command = "sudo rm -f " + escapedIso;
+        int result = std::system(command.c_str());
+
+        if (result == 0) {
+            // Get the index of the found ISO file (starting from 1)
+            int index = std::distance(isoFiles.begin(), it) + 1;
+
+            // Remove the deleted ISO file from the cache using the index
+            isoFiles.erase(isoFiles.begin() + index - 1);
+
+            // Add the ISO file to the set of deleted files
+            deletedSet.insert(iso);
+
+            std::cout << "\033[92mDeleted: \033[91m'" << iso << "'\033[92m." << std::endl;
+        } else {
+            std::cout << "\033[91mError deleting: \033[0m'" << iso << "'\033[91m." << std::endl;
+        }
+    } else {
+        std::cout << "\033[93mFile not found: \033[0m'" << iso << "'\033[93m." << std::endl;
+    }
+}
+
+// Function to check if a string consists only of zeros
+bool isAllZeros(const std::string& str) {
+    return str.find_first_not_of('0') == std::string::npos;
+}
+
+// Function to process user input for selecting and deleting specific ISO files
+void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
+    std::istringstream iss(input);
+    bool invalidInput = false;
+    std::unordered_set<std::string> uniqueErrorMessages; // Set to store unique error messages
+    std::set<int> processedIndices; // Set to keep track of processed indices
+
+    std::string token;
+    std::vector<std::future<void>> futures; // Vector to store std::future objects for each task
+
+    while (iss >> token) {
+        // Check if the token consists only of zeros and treat it as a non-existent index
+        if (isAllZeros(token)) {
+            invalidInput = true;
+            uniqueErrorMessages.insert("\033[91mFile index '" + token + "' is not a valid input.\033[0m");
+            continue;
+        }
+
+        // Check if the token is '0' and treat it as a non-existent index
+        if (token == "0") {
+            if (!invalidInput) {
+                invalidInput = true;
+                uniqueErrorMessages.insert("\033[91mFile index '0' does not exist.\033[0m");
+            }
+        }
+
+        size_t dashPos = token.find('-');
+        if (dashPos != std::string::npos) {
+            int start, end;
+
+            try {
+                start = std::stoi(token.substr(0, dashPos));
+                end = std::stoi(token.substr(dashPos + 1));
+            } catch (const std::invalid_argument& e) {
+                // Handle the exception for invalid input
+                invalidInput = true;
+                uniqueErrorMessages.insert("\033[91mInvalid input: '" + token + "'.\033[0m");
+                continue;
+            } catch (const std::out_of_range& e) {
+                // Handle the exception for out-of-range input
+                invalidInput = true;
+                uniqueErrorMessages.insert("\033[91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0m");
+                continue;
+            }
+
+            if (start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) {
+                invalidInput = true;
+                uniqueErrorMessages.insert("\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m");
+                continue;
+            }
+
+            int step = (start <= end) ? 1 : -1;
+            for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
+                if (static_cast<size_t>(i) <= isoFiles.size() && processedIndices.find(i) == processedIndices.end()) {
+                    processedIndices.insert(i); // Mark as processed
+                } else if (static_cast<size_t>(i) > isoFiles.size()) {
+                    invalidInput = true;
+                    uniqueErrorMessages.insert("\033[91mFile index '" + std::to_string(i) + "' does not exist.\033[0m");
+                }
+            }
+        } else if (isNumeric(token)) {
+            int num = std::stoi(token);
+            if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && processedIndices.find(num) == processedIndices.end()) {
+                processedIndices.insert(num); // Mark index as processed
+            } else if (num > isoFiles.size()) {
+                invalidInput = true;
+                uniqueErrorMessages.insert("\033[91mFile index '" + std::to_string(num) + "' does not exist.\033[0m");
+            }
+        } else {
+            invalidInput = true;
+            uniqueErrorMessages.insert("\033[91mInvalid input: '" + token + "'.\033[0m");
+        }
+    }
+
+    // Display unique errors at the end
+    if (invalidInput) {
+        for (const auto& errorMsg : uniqueErrorMessages) {
+            std::cerr << "\033[93m" << errorMsg << "\033[0m" << std::endl;
+        }
+    }
+
+    // Display selected deletions
+    if (!processedIndices.empty()) {
+        std::cout << "\033[1;94mThe following ISO(s) will be \033[91m*PERMANENTLY DELETED*\033[1;94m :\033[0m" << std::endl;
+        std::cout << " " << std::endl;
+        for (const auto& index : processedIndices) {
+            std::cout << "\033[93m'" << isoFiles[index - 1] << "'\033[0m" << std::endl;
+        }
+	}
+	if (!uniqueErrorMessages.empty() && processedIndices.empty()) {
+		std::cout << " " << std::endl;
+		std::cout << "\033[91mNo valid selection(s) for deletion.\033[0m" << std::endl;
+	} else {
+	// Prompt for confirmation before proceeding
+	char confirmation;
+	std::cout << " " << std::endl;
+	std::cout << "\033[1;94mDo you want to proceed? (y/n):\033[0m ";
+	std::cin.get(confirmation);
+	
+	// Ignore any additional characters in the input buffer, including newline
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+	// Check if the entered character is not 'Y' or 'y'
+	if (!(confirmation == 'y' || confirmation == 'Y')) {
+		std::cout << " " << std::endl;
+		std::cout << "\033[93mDeletion aborted by user.\033[0m" << std::endl;
+        return;
+		
+	} else {
+		std::system("clear");
+		// Launch deletion tasks for valid selections
+		for (const auto& index : processedIndices) {
+			if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
+				futures.emplace_back(std::async(std::launch::async, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
+			}
+		}
+	}
+}
+    // Wait for all tasks to complete
+    for (auto& future : futures) {
+        future.wait();
+    }
+}
+
+
 
 //	MOUNT STUFF	\\
 
@@ -628,7 +901,7 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
 
             // Store the mount point in the map
             mountedIsos.emplace(isoFile, mountPoint);
-            std::cout << "ISO file: \033[92m'" << isoFile << "'\033[0m mounted at: \033[94m'" << mountPoint << "'\033[0m." << std::endl;
+            std::cout << "\033[1mISO file: \033[92m'" << isoFile << "'\033[0m \033[1mmounted at: \033[1;94m'" << mountPoint << "'\033[0m\033[1m.\033[0m" << std::endl;
         } catch (const std::exception& e) {
             // Handle exceptions, log error, and cleanup
             std::cerr << "\033[91mFailed to mount: \033[93m'" << isoFile << "'\033[0m\033[91m." << std::endl;
@@ -637,7 +910,7 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
     } else {
         // The mount point directory already exists, so the ISO is considered mounted
         mountedIsos.emplace(isoFile, mountPoint);
-        std::cout << "\033[93mISO file: \033[92m'" << isoFile << "'\033[93m is already mounted at: \033[94m'" << mountPoint << "'\033[93m.\033[0m" << std::endl;
+        std::cout << "\033[93mISO file: \033[92m'" << isoFile << "'\033[93m is already mounted at: \033[1;94m'" << mountPoint << "'\033[93m.\033[0m" << std::endl;
     }
 }
 
@@ -698,7 +971,7 @@ void select_and_mount_files_by_number() {
         std::system("clear");
         std::cout << "\033[93mISO Cache is empty. Please refresh it from the main Menu Options.\033[0m" << std::endl;
         std::cout << " " << std::endl;
-        std::cout << "Press Enter to continue...";
+        std::cout << "\033[1;32mPress enter to continue...\033[0m";
         std::cin.get();
         return;
     }
@@ -720,13 +993,13 @@ void select_and_mount_files_by_number() {
     // Main loop for selecting and mounting ISO files
     while (true) {
         std::system("clear");
-        std::cout << "\033[93m! IF EXPECTED ISO FILE(s) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\n\033[0m" << std::endl;
+        std::cout << "\033[93m ! IF EXPECTED ISO FILE(s) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\n\033[0m" << std::endl;
         printIsoFileList(isoFiles);
         
 		std::cout << " " << std::endl;
 		
         // Prompt user for input
-        char* input = readline("\033[94mChoose ISO(s) to mount (e.g., '1-3', '1 2', '00' mounts all, or press Enter to return):\033[0m ");
+        char* input = readline("\033[1;94mChoose ISO(s) for \033[92mmount\033[1;94m (e.g., '1-3', '1 2', '00' mounts all, or press Enter to return):\033[0m ");
         std::system("clear");
 
         // Start the timer
@@ -764,7 +1037,7 @@ void select_and_mount_files_by_number() {
         // Print the time taken for the entire process in bold with one decimal place
         std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
         std::cout << " " << std::endl;
-        std::cout << "Press Enter to continue...";
+        std::cout << "\033[1;32mPress enter to continue...\033[0m";
         std::cin.get();
         
     }
@@ -784,7 +1057,7 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
         std::string filename = isoFiles[i].substr(lastSlashPos + 1);
 
         // Print the directory part in the default color
-        std::cout << directory;
+        std::cout << "\033[1m" << directory << "\033[0m";
 
         // Print the filename part in magenta and bold
         std::cout << "\033[1m\033[95m" << filename << "\033[0m" << std::endl;
@@ -921,7 +1194,7 @@ void printAlreadyMountedMessage(const std::string& isoFile) {
     std::string isoFileName = isoPath.stem().string();
     std::string mountPoint = "/mnt/iso_" + isoFileName;
 
-    std::cout << "\033[93mISO file: \033[92m'" << isoFile << "'\033[93m is already mounted at: \033[94m'" << mountPoint << "'\033[93m.\033[0m" << std::endl;
+    std::cout << "\033[93mISO file: \033[92m'" << isoFile << "'\033[93m is already mounted at: \033[1;94m'" << mountPoint << "'\033[93m.\033[0m" << std::endl;
 }
 
 
@@ -964,6 +1237,7 @@ void listMountedISOs() {
     // Display a list of mounted ISOs with ISO names in bold and magenta text
     if (!isoDirs.empty()) {
         std::cout << "\033[37;1mList of mounted ISO(s):\033[0m" << std::endl; // White and bold
+        std::cout << " " << std::endl;
         for (size_t i = 0; i < isoDirs.size(); ++i) {
             std::cout << i + 1 << ". \033[1m\033[95m" << isoDirs[i] << "\033[0m" << std::endl; // Bold and magenta
         }
@@ -1011,7 +1285,7 @@ void unmountISO(const std::string& isoDir) {
 
         // Check if the unmounting was successful
         if (result == 0) {
-            std::cout << "Unmounted: \033[92m'" << isoDir << "'\033[0m." << std::endl; // Print success message
+            std::cout << "\033[1mUnmounted: \033[92m'" << isoDir << "'\033[0m\033[1m.\033[0m" << std::endl; // Print success message
 
             // Check if the directory is empty before removing it
             if (isDirectoryEmpty(isoDir)) {
@@ -1075,7 +1349,7 @@ void unmountISOs() {
         // Check if there are no mounted ISOs
         if (isoDirs.empty()) {
             std::cout << " " << std::endl;
-            std::cout << "Press Enter to continue...";
+            std::cout << "\033[1;32mPress enter to continue...\033[0m";
             std::cin.get(); // Wait for the user to press Enter
             return;
         }
@@ -1086,7 +1360,7 @@ void unmountISOs() {
         }
 
         // Prompt for unmounting input
-        char* input = readline("\033[94mChoose ISO(s) to unmount (e.g. '1-3', '1 2', '00' unmounts all, or press Enter to return):\033[0m ");
+        char* input = readline("\033[1;94mChoose ISO(s) for \033[92munmount\033[1;94m (e.g. '1-3', '1 2', '00' unmounts all, or press Enter to return):\033[0m ");
         std::system("clear");
 
         // Start the timer
@@ -1118,7 +1392,7 @@ void unmountISOs() {
             std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
 
             std::cout << " " << std::endl;
-            std::cout << "Press Enter to continue...";
+            std::cout << "\033[1;32mPress enter to continue...\033[0m";
             std::cin.get();
             std::system("clear");
 
@@ -1246,7 +1520,7 @@ void unmountISOs() {
         std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
 
         std::cout << " " << std::endl;
-        std::cout << "Press Enter to continue...";
+        std::cout << "\033[1;32mPress enter to continue...\033[0m";
         std::cin.get();
         std::system("clear");
     }
