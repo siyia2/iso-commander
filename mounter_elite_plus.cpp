@@ -630,7 +630,7 @@ void select_and_delete_files_by_number() {
 
     // Check if there are any ISO files to delete
     if (isoFiles.empty()) {
-        std::cout << "\033[93mNo .iso files in the cache. Please refresh the cache from the main menu.\033[0m" << std::endl;
+        std::cout << "\033[93mNo ISO file(s) available for for deletion.\033[0m" << std::endl;
         return;
     }
 
@@ -654,7 +654,9 @@ void select_and_delete_files_by_number() {
 
         // Check if the user wants to return
         if (input[0] == '\0') {
+			std::cout << " " << std::endl;
             std::cout << "Press Enter to Return" << std::endl;
+            std::cin.get();
             break;
         }
 
@@ -662,6 +664,16 @@ void select_and_delete_files_by_number() {
             // Process user input to select and delete specific ISO files
             processDeleteInput(input, isoFiles, deletedSet);
         }
+        
+        // Check if the ISO file list is empty
+		if (isoFiles.empty()) {
+		std::cout << " " << std::endl;
+        std::cout << "\033[93mNo ISO file(s) available for for deletion.\033[0m" << std::endl;
+        std::cout << " " << std::endl;
+        std::cout << "Press Enter to continue..." << std::endl;
+        std::cin.get();
+        break;
+		}
         
         // Stop the timer after completing the mounting process
         auto end_time = std::chrono::high_resolution_clock::now();
