@@ -154,14 +154,6 @@ int main() {
                 std::system("clear");
                 break;
             case '6':
-				std::system("clear");
-                listMountedISOs();
-                std::cout << " " << std::endl;
-                std::cout << "\033[1;32mPress enter to continue...\033[0m";
-                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                std::system("clear");
-                break;
-            case '7':
                 exitProgram = true; // Exit the program
                 std::cout << " " << std::endl;
                 std::cout << "Exiting the program..." << std::endl;
@@ -210,9 +202,7 @@ void printMenu() {
     std::cout << "\033[1;32m+-------------------------+" << std::endl;
     std::cout << "\033[1;32m|5. Refresh ISO Cache    |" << std::endl;
     std::cout << "\033[1;32m+-------------------------+" << std::endl;
-    std::cout << "\033[1;32m|6. List Mountpoints     |" << std::endl;
-    std::cout << "\033[1;32m+-------------------------+" << std::endl;
-    std::cout << "\033[1;32m|7. Exit Program         |" << std::endl;
+    std::cout << "\033[1;32m|6. Exit Program         |" << std::endl;
     std::cout << "\033[1;32m+-------------------------+" << std::endl;
     std::cout << std::endl;
 }
