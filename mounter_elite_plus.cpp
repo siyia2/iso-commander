@@ -1057,7 +1057,7 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
         std::string filename = isoFiles[i].substr(lastSlashPos + 1);
 
         // Print the directory part in the default color
-        std::cout << directory;
+        std::cout << "\033[1m" << directory << "\033[0m";
 
         // Print the filename part in magenta and bold
         std::cout << "\033[1m\033[95m" << filename << "\033[0m" << std::endl;

@@ -206,7 +206,8 @@ void select_and_convert_files_to_iso() {
 
 
 void printFileListBin(const std::vector<std::string>& fileList) {
-    std::cout << "Select file(s) to convert to \033[1m\033[92mISO(s)\033[0m:\n";
+    std::cout << "\033[1mSelect file(s) to convert to \033[1m\033[92mISO(s)\033[0m:\n";
+    std::cout << " " << std::endl;
 
     for (std::size_t i = 0; i < fileList.size(); ++i) {
         const std::string& filename = fileList[i];
@@ -219,10 +220,10 @@ void printFileListBin(const std::vector<std::string>& fileList) {
         // Check if the file has a ".img" or ".bin" extension
         if (dotPos != std::string::npos && (fileNameOnly.compare(dotPos, std::string::npos, ".img") == 0 || fileNameOnly.compare(dotPos, std::string::npos, ".bin") == 0)) {
             // Print path in white and filename in green and bold
-            std::cout << std::setw(2) << std::right << i + 1 << ". \033[0m" << path << "\033[1m\033[38;5;208m" << fileNameOnly << "\033[0m" << std::endl;
+            std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << path << "\033[1m\033[38;5;208m" << fileNameOnly << "\033[0m" << std::endl;
         } else {
             // Print entire path and filename in white
-            std::cout << std::setw(2) << std::right << i + 1 << ". \033[0m" << filename << std::endl;
+            std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << filename << std::endl;
         }
     }
 }
@@ -637,7 +638,8 @@ void select_and_convert_files_to_iso_mdf() {
 
 
 void printFileListMdf(const std::vector<std::string>& fileList) {
-    std::cout << "Select file(s) to convert to \033[1m\033[92mISO(s)\033[0m:\n";
+    std::cout << "\033[1mSelect file(s) to convert to \033[1m\033[92mISO(s)\033[0m:\n";
+    std::cout << " " << std::endl;
 
     for (std::size_t i = 0; i < fileList.size(); ++i) {
         const std::string& filename = fileList[i];
@@ -650,10 +652,10 @@ void printFileListMdf(const std::vector<std::string>& fileList) {
         // Check if the file has a ".mdf" extension
         if (dotPos != std::string::npos && fileNameOnly.compare(dotPos, std::string::npos, ".mdf") == 0) {
             // Print path in white and filename in orange and bold
-            std::cout << std::setw(2) << std::right << i + 1 << ". \033[0m" << path << "\033[1m\033[38;5;208m" << fileNameOnly << "\033[0m" << std::endl;
+            std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << path << "\033[1m\033[38;5;208m" << fileNameOnly << "\033[0m" << std::endl;
         } else {
             // Print entire path and filename in white
-            std::cout << std::setw(2) << std::right << i + 1 << ". \033[0m" << filename << std::endl;
+            std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << filename << std::endl;
         }
     }
 }
