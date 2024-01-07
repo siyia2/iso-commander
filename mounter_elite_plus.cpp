@@ -194,7 +194,7 @@ void print_ascii() {
 // Function to check if a file exists
 std::future<bool> FileExists(const std::string& filePath) {
     return std::async(std::launch::async, [filePath]() {
-        std::lock_guard<std::mutex> lock(Mutex4High); // Ensure thread safety
+        std::lock_guard<std::mutex> highLock(Mutex4High); // Ensure thread safety
 
         struct stat buffer;
         return (stat(filePath.c_str(), &buffer) == 0);
@@ -244,7 +244,7 @@ void removeNonExistentPathsFromCache() {
         std::vector<std::string> result = future.get();
 
         // Protect the critical section with a mutex
-        std::lock_guard<std::mutex> lock(Mutex4High);
+        std::lock_guard<std::mutex> highLock(Mutex4High);
         retainedPaths.insert(retainedPaths.end(), result.begin(), result.end());
     }
 
@@ -411,7 +411,7 @@ void manualRefreshCache() {
     }
     
 	// Lock the mutex before accessing shared resources
-	std::lock_guard<std::mutex> lock(Mutex4High);
+	std::lock_guard<std::mutex> highLock(Mutex4High);
 	
 	
     // Create an input string stream to parse directory paths
@@ -574,7 +574,7 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
                         // For example, you can check for ISO file signatures, etc.
 
                         // Lock the mutex to update the shared vector
-                        std::lock_guard<std::mutex> lock(Mutex4Low);
+                        std::lock_guard<std::mutex> lowLock(Mutex4Low);
                         isoFiles.push_back(filePath.string());
                     }));
                 }
@@ -610,7 +610,7 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
     std::string mountPoint = "/mnt/iso_" + isoFileName; // Use the modified ISO file name in the mount point with "iso_" prefix
 
     // Lock the global mutex for synchronization
-    std::lock_guard<std::mutex> globalLock(Mutex4High);
+    std::lock_guard<std::mutex> highLock(Mutex4High);
 
     // Check if the mount point directory doesn't exist, create it asynchronously
     if (!directoryExists(mountPoint)) {
@@ -805,7 +805,7 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
 // Function to handle mounting of a specific ISO file asynchronously
 void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet) {
 	// Lock the mutex before accessing the shared vector
-    std::lock_guard<std::mutex> lock(Mutex4Low);
+    std::lock_guard<std::mutex> lowLock(Mutex4Low);
     // Use std::async to execute the function asynchronously
     auto future = std::async(std::launch::async, [&iso, &mountedSet]() {
         // Check if the ISO file exists on disk
@@ -1051,7 +1051,7 @@ bool isValidIndex(int index, size_t isoDirsSize) {
 // Function to perform asynchronous unmounting
 std::future<void> asyncUnmountISO(const std::string& isoDir) {
     return std::async(std::launch::async, [](const std::string& isoDir) {
-        std::lock_guard<std::mutex> lock(Mutex4High); // Lock the critical section
+        std::lock_guard<std::mutex> highLock(Mutex4High); // Lock the critical section
         unmountISO(isoDir);
     }, isoDir);
 }
@@ -1224,7 +1224,7 @@ void unmountISOs() {
 
                 // Use a thread for each ISO to be unmounted
                 threads.emplace_back([&, isoDir]() {
-                    std::lock_guard<std::mutex> lock(Mutex4High); // Lock the critical section
+                    std::lock_guard<std::mutex> highLock(Mutex4High); // Lock the critical section
                     unmountISO(isoDir);
                 });
             }
