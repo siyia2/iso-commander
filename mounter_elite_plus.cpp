@@ -997,7 +997,7 @@ void select_and_mount_files_by_number() {
 		std::cout << " " << std::endl;
 		
         // Prompt user for input
-        char* input = readline("\033[1;94mChoose ISO(s) to \033[92mmount\033[1;94m (e.g., '1-3', '1 2', '00' mounts all, or press Enter to return):\033[0m ");
+        char* input = readline("\033[1;94mChoose ISO(s) for \033[92mmount\033[1;94m (e.g., '1-3', '1 2', '00' mounts all, or press Enter to return):\033[0m ");
         std::system("clear");
 
         // Start the timer
@@ -1358,7 +1358,7 @@ void unmountISOs() {
         }
 
         // Prompt for unmounting input
-        char* input = readline("\033[1;94mChoose ISO(s) to \033[92munmount\033[1;94m (e.g. '1-3', '1 2', '00' unmounts all, or press Enter to return):\033[0m ");
+        char* input = readline("\033[1;94mChoose ISO(s) for \033[92munmount\033[1;94m (e.g. '1-3', '1 2', '00' unmounts all, or press Enter to return):\033[0m ");
         std::system("clear");
 
         // Start the timer
