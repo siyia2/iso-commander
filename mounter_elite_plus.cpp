@@ -612,7 +612,7 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
     std::string mountPoint = "/mnt/iso_" + isoFileName;
 
     // Lock the global mutex for synchronization
-    std::lock_guard<std::mutex> highLock(Mutex4High);
+    std::lock_guard<std::mutex> lowLock(Mutex4Low);
 
     // Check if the mount point directory doesn't exist, create it asynchronously
     if (!fs::exists(mountPoint)) {
@@ -795,7 +795,7 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
 // Function to handle mounting of a specific ISO file asynchronously
 void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet) {
 	// Lock the mutex before accessing the shared vector
-    std::lock_guard<std::mutex> lowLock(Mutex4Low);
+    std::lock_guard<std::mutex> highLock(Mutex4High);
     // Use std::async to execute the function asynchronously
     auto future = std::async(std::launch::async, [&iso, &mountedSet]() {
         // Check if the ISO file exists on disk
