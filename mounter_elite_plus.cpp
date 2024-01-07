@@ -559,9 +559,6 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
 
                 // Cleanup the mount point directory
                 fs::remove(mountPoint);
-                if (!fs::exists(mountPoint)) {
-                    std::cerr << "\033[91mFailed to clean up mount point directory\033[0m" << std::endl;
-                }
 
                 return;
             } else {
