@@ -818,13 +818,17 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
 	char confirmation;
 	std::cout << " " << std::endl;
 	std::cout << "\033[94mDo you want to proceed with the selected \033[91mdeletions\033[0m? (y/n):\033[0m ";
-	std::cin >> confirmation;
+	std::cin.get(confirmation);
+	
+	// Ignore any additional characters in the input buffer, including newline
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
 	// Check if the entered character is not 'Y' or 'y'
 	if (!(confirmation == 'y' || confirmation == 'Y')) {
 		std::cout << " " << std::endl;
 		std::cout << "\033[93mDeletion aborted by user.\033[0m" << std::endl;
-		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');  // Ignore remaining input
+        return;
+		
 	} else {
 		// Launch deletion tasks for valid selections
 		for (const auto& index : processedIndices) {
