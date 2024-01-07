@@ -110,7 +110,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
         std::cout << " " << std::endl;
         std::cout << "\033[92mFound " << fileNames.size() << " matching file(s)\033[0m" << ".\033[93m " << binImgFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0m" << std::endl;
         std::cout << " " << std::endl;
-        std::cout << "Press enter to continue...";
+        std::cout << "\033[1;32mPress enter to continue...\033[0m";
         std::cin.ignore();
     }
 
@@ -168,7 +168,7 @@ void select_and_convert_files_to_iso() {
 		std::cout << " " << std::endl;
 		std::cout << "\033[91mNo new .bin .img file(s) over 10MB found. \033[92m" << binImgFiles.size() << " matching file(s) cached in RAM from previous searches.\033[0m" << std::endl;
 		std::cout << " " << std::endl;
-		std::cout << "Press enter to continue...";
+		std::cout << "\033[1;32mPress enter to continue...\033[0m";
 		std::cin.ignore();
 	}
 
@@ -176,7 +176,7 @@ void select_and_convert_files_to_iso() {
 		std::cout << " " << std::endl;
         std::cout << "\033[91mNo .bin or .img file(s) over 10MB found in the specified path(s) or cached in RAM.\n\033[0m";
         std::cout << " " << std::endl;
-        std::cout << "Press enter to continue...";
+        std::cout << "\033[1;32mPress enter to continue...\033[0m";
         std::cin.ignore();
         
     } else {
@@ -198,7 +198,7 @@ void select_and_convert_files_to_iso() {
             std::system("clear");
             // Process user input
             processInputBin(input, binImgFiles);
-            std::cout << "Press enter to continue...";
+            std::cout << "\033[1;32mPress enter to continue...\033[0m";
             std::cin.ignore();
         }
     }
@@ -412,7 +412,7 @@ void convertBINToISO(const std::string& inputPath) {
 
     // Check the result of the conversion
     if (conversionStatus == 0) {
-        std::cout << "Image file converted to ISO:\033[0m \033[92m'" << outputPath << "'\033[0m.\033[0m" << std::endl;
+        std::cout << "\033[1mImage file converted to ISO:\033[0m \033[92m'" << outputPath << "'\033[0m.\033[0m" << std::endl;
     } else {
         std::cout << "\033[91mConversion of \033[93m'" << inputPath << "'\033[91m failed.\033[0m" << std::endl;
 
@@ -541,7 +541,7 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
         std::cout << " " << std::endl;
         std::cout << "\033[92mFound " << fileNames.size() << " matching file(s)\033[0m" << ".\033[93m " << mdfMdsFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0m" << std::endl;
         std::cout << " " << std::endl;
-        std::cout << "Press enter to continue...";
+        std::cout << "\033[1;32mPress enter to continue...\033[0m";
         std::cin.ignore();
     }
 
@@ -601,7 +601,7 @@ void select_and_convert_files_to_iso_mdf() {
         std::cout << " " << std::endl;
         std::cout << "\033[91mNo new .mdf file(s) over 10MB found. \033[92m" << mdfMdsFiles.size() << " file(s) cached in RAM from previous searches.\033[0m" << std::endl;
         std::cout << " " << std::endl;
-        std::cout << "Press enter to continue...";
+        std::cout << "\033[1;32mPress enter to continue...\033[0m";
         std::cin.ignore();
     }
 
@@ -609,7 +609,7 @@ void select_and_convert_files_to_iso_mdf() {
         std::cout << " " << std::endl;
         std::cout << "\033[91mNo .mdf file(s) over 10MB found in the specified path(s) or cached in RAM.\n\033[0m";
         std::cout << " " << std::endl;
-        std::cout << "Press enter to continue...";
+        std::cout << "\033[1;32mPress enter to continue...\033[0m";
         std::cin.ignore();
         return;
     }
@@ -631,7 +631,7 @@ void select_and_convert_files_to_iso_mdf() {
         std::system("clear");
             // Process user input
             processInputMDF(input, mdfMdsFiles);
-            std::cout << "Press enter to continue...";
+            std::cout << "\033[1;32mPress enter to continue...\033[0m";
             std::cin.ignore();
 	}
 }
@@ -863,7 +863,7 @@ void convertMDFToISO(const std::string& inputPath) {
         if (conversionOutput.find("already ISO") != std::string::npos) {
             std::cout << "\033[91mThe selected file \033[93m'" << inputPath << "'\033[91m is already in ISO format, maybe rename it to .iso?. Skipping conversion.\033[0m" << std::endl;
         } else {
-            std::cout << "Image file converted to ISO: \033[92m'" << outputPath << "'\033[0m." << std::endl;
+            std::cout << "\033[1mImage file converted to ISO: \033[92m'" << outputPath << "'\033[0m." << std::endl;
         }
     } else {
         std::cout << "\033[91mConversion of \033[93m'" << inputPath << "'\033[91m failed.\033[0m" << std::endl;

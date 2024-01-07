@@ -149,7 +149,7 @@ int main() {
                 break;
             case '5':
                 manualRefreshCache();
-                std::cout << "Press Enter to continue...";
+                std::cout << "\033[1;32mPress enter to continue...\033[0m";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 std::system("clear");
                 break;
@@ -157,7 +157,7 @@ int main() {
 				std::system("clear");
                 listMountedISOs();
                 std::cout << " " << std::endl;
-                std::cout << "Press Enter to continue...";
+                std::cout << "\033[1;32mPress enter to continue...\033[0m";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 std::system("clear");
                 break;
@@ -636,7 +636,7 @@ void select_and_delete_files_by_number() {
         std::system("clear");
         std::cout << "\033[93mNo ISO(s) available for deletion.\033[0m" << std::endl;
         std::cout << " " << std::endl;
-        std::cout << "Press Enter to continue...";
+        std::cout << "\033[1;32mPress enter to continue...\033[0m";
         std::cin.get();
         return;
     }
@@ -695,7 +695,7 @@ void select_and_delete_files_by_number() {
 		// Print the time taken for the entire process in bold with one decimal place
         std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
         std::cout << " " << std::endl;
-        std::cout << "Press Enter to continue...";
+        std::cout << "\033[1;32mPress enter to continue...\033[0m";
         std::cin.get();
     }
 }
@@ -901,7 +901,7 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
 
             // Store the mount point in the map
             mountedIsos.emplace(isoFile, mountPoint);
-            std::cout << "ISO file: \033[92m'" << isoFile << "'\033[0m mounted at: \033[1;94m'" << mountPoint << "'\033[0m." << std::endl;
+            std::cout << "\033[1mISO file: \033[92m'" << isoFile << "'\033[0m \033[1mmounted at: \033[1;94m'" << mountPoint << "'\033[0m\033[1m.\033[0m" << std::endl;
         } catch (const std::exception& e) {
             // Handle exceptions, log error, and cleanup
             std::cerr << "\033[91mFailed to mount: \033[93m'" << isoFile << "'\033[0m\033[91m." << std::endl;
@@ -971,7 +971,7 @@ void select_and_mount_files_by_number() {
         std::system("clear");
         std::cout << "\033[93mISO Cache is empty. Please refresh it from the main Menu Options.\033[0m" << std::endl;
         std::cout << " " << std::endl;
-        std::cout << "Press Enter to continue...";
+        std::cout << "\033[1;32mPress enter to continue...\033[0m";
         std::cin.get();
         return;
     }
@@ -1037,7 +1037,7 @@ void select_and_mount_files_by_number() {
         // Print the time taken for the entire process in bold with one decimal place
         std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
         std::cout << " " << std::endl;
-        std::cout << "Press Enter to continue...";
+        std::cout << "\033[1;32mPress enter to continue...\033[0m";
         std::cin.get();
         
     }
@@ -1285,7 +1285,7 @@ void unmountISO(const std::string& isoDir) {
 
         // Check if the unmounting was successful
         if (result == 0) {
-            std::cout << "Unmounted: \033[92m'" << isoDir << "'\033[0m." << std::endl; // Print success message
+            std::cout << "\033[1mUnmounted: \033[92m'" << isoDir << "'\033[0m\033[1m.\033[0m" << std::endl; // Print success message
 
             // Check if the directory is empty before removing it
             if (isDirectoryEmpty(isoDir)) {
@@ -1349,7 +1349,7 @@ void unmountISOs() {
         // Check if there are no mounted ISOs
         if (isoDirs.empty()) {
             std::cout << " " << std::endl;
-            std::cout << "Press Enter to continue...";
+            std::cout << "\033[1;32mPress enter to continue...\033[0m";
             std::cin.get(); // Wait for the user to press Enter
             return;
         }
@@ -1392,7 +1392,7 @@ void unmountISOs() {
             std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
 
             std::cout << " " << std::endl;
-            std::cout << "Press Enter to continue...";
+            std::cout << "\033[1;32mPress enter to continue...\033[0m";
             std::cin.get();
             std::system("clear");
 
@@ -1520,7 +1520,7 @@ void unmountISOs() {
         std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
 
         std::cout << " " << std::endl;
-        std::cout << "Press Enter to continue...";
+        std::cout << "\033[1;32mPress enter to continue...\033[0m";
         std::cin.get();
         std::system("clear");
     }
