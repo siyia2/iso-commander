@@ -33,16 +33,17 @@ bool isValidIndex(int index, size_t isoDirsSize);
 //Delete functions
 bool isAllZeros(const std::string& str);
 void select_and_delete_files_by_number();
-void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
-void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
+void handleDeleteIsoFile(const std::string& isoFile, std::unordered_set<std::string>& mountedSet);
+void processDeleteInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
 
 // Mount functions
+void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet);
 void mountISOs(const std::vector<std::string>& isoFiles);
 void select_and_mount_files_by_number();
 void displayErrorMessage(const std::string& iso);
 void printAlreadyMountedMessage(const std::string& isoFile) ;
 void printIsoFileList(const std::vector<std::string>& isoFiles);
-void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet);
+void handleDeleteIsoFile(const std::string& isoFile, std::unordered_set<std::string>& mountedSet);
 void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
 
 
@@ -677,68 +678,53 @@ void select_and_delete_files_by_number() {
     }
 }
 
-// Function to handle the deletion of an ISO file
-void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
-    // Check if the ISO file is in the cache
-    auto it = std::find(isoFiles.begin(), isoFiles.end(), iso);
-    if (it != isoFiles.end()) {
-        // Escape the ISO file name for the shell command using shell_escape
-        std::string escapedIso = shell_escape(iso);
+// Function to delete an ISO file and update the set of mounted files
+void handleDeleteIsoFile(const std::string& isoFile, std::unordered_set<std::string>& mountedSet) {
 
-        // Delete the ISO file from the filesystem
-        std::string command = "sudo rm -f " + escapedIso;
-        int result = std::system(command.c_str());
+    // Escape the ISO file path
+    std::string escapedIsoFile = shell_escape(isoFile);
+    
+    // Lock the global mutex for synchronization
+    std::lock_guard<std::mutex> lowLock(Mutex4Low);
 
-        if (result == 0) {
-            // Get the index of the found ISO file (starting from 1)
-            int index = std::distance(isoFiles.begin(), it) + 1;
+    // Use the system call to delete the ISO file
+    std::string deleteCommand = "sudo rm -f " + escapedIsoFile;
+    int result = std::system(deleteCommand.c_str());
 
-            // Remove the deleted ISO file from the cache using the index
-            isoFiles.erase(isoFiles.begin() + index - 1);
-
-            // Add the ISO file to the set of deleted files
-            deletedSet.insert(iso);
-
-            std::cout << "\033[92mDeleted: \033[0m'" << iso << "'\033[921m." << std::endl;
-        } else {
-            std::cout << "\033[91mError deleting: \033[0m'" << iso << "'\033[91m." << std::endl;
-        }
+    if (result == 0) {
+        std::cout << "\033[92mSuccessfully deleted: \033[91m'" << isoFile << "'\033[92m.\033[0m" << std::endl;
+        // Update the set of mounted files after successful deletion
+        mountedSet.erase(isoFile);
     } else {
-        std::cout << "\033[93mFile not found: \033[0m'" << iso << "'\033[93m." << std::endl;
+        std::cerr << "\033[91mError deleting file: \033[93m'" << isoFile << "'\033[91m.\033[0m" << std::endl;
     }
 }
+
 
 // Function to check if a string consists only of zeros
 bool isAllZeros(const std::string& str) {
     return str.find_first_not_of('0') == std::string::npos;
 }
 
-// Function to process user input for selecting and deleting specific ISO files
-void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
+// Function to process the user input for ISO mounting using multithreading
+void processDeleteInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
     std::istringstream iss(input);
     bool invalidInput = false;
-    std::unordered_set<std::string> uniqueErrorMessages; // Set to store unique error messages
+    std::vector<std::string> errorMessages; // Vector to store error messages
     std::set<int> processedIndices; // Set to keep track of processed indices
 
     std::string token;
     std::vector<std::future<void>> futures; // Vector to store std::future objects for each task
 
     while (iss >> token) {
-        // Check if the token consists only of zeros and treat it as a non-existent index
-        if (isAllZeros(token)) {
-            invalidInput = true;
-            uniqueErrorMessages.insert("\033[91mFile index '" + token + "' is not a valid input.\033[0m");
-            continue;
-        }
-
-        // Check if the token is '0' and treat it as a non-existent index
+		       // Check if the token is '0' and treat it as an invalid index
         if (token == "0") {
             if (!invalidInput) {
                 invalidInput = true;
-                uniqueErrorMessages.insert("\033[91mFile index '0' does not exist.\033[0m");
+                errorMessages.push_back("\033[91mFile index '0' does not exist.\033[0m");
             }
-        }
-
+		}
+        
         size_t dashPos = token.find('-');
         if (dashPos != std::string::npos) {
             int start, end;
@@ -749,45 +735,50 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
             } catch (const std::invalid_argument& e) {
                 // Handle the exception for invalid input
                 invalidInput = true;
-                uniqueErrorMessages.insert("\033[91mInvalid input: '" + token + "'.\033[0m");
+                errorMessages.push_back("\033[91mInvalid input: '" + token + "'.\033[0m");
                 continue;
             } catch (const std::out_of_range& e) {
                 // Handle the exception for out-of-range input
                 invalidInput = true;
-                uniqueErrorMessages.insert("\033[91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0m");
+                errorMessages.push_back("\033[91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0m");
                 continue;
             }
 
             if (start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) {
                 invalidInput = true;
-                uniqueErrorMessages.insert("\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m");
+                errorMessages.push_back("\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m");
                 continue;
             }
 
             int step = (start <= end) ? 1 : -1;
-            for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
-                if (static_cast<size_t>(i) <= isoFiles.size() && processedIndices.find(i) == processedIndices.end()) {
-                    // Use std::async to launch each task in a separate thread
-                    futures.emplace_back(std::async(std::launch::async, handleDeleteIsoFile, isoFiles[i - 1], std::ref(isoFiles), std::ref(deletedSet)));
-                    processedIndices.insert(i); // Mark as processed
-                } else if (static_cast<size_t>(i) > isoFiles.size()) {
-                    invalidInput = true;
-                    uniqueErrorMessages.insert("\033[91mFile index '" + std::to_string(i) + "' does not exist.\033[0m");
-                }
-            }
+for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
+    if (static_cast<size_t>(i) <= isoFiles.size() && processedIndices.find(i) == processedIndices.end()) {
+        // Use a lambda function to create a callable object
+        auto task = [isoFile = isoFiles[i - 1], &mountedSet]() {
+            handleDeleteIsoFile(isoFile, mountedSet);
+        };
+        // Use std::async with the lambda function
+        futures.emplace_back(std::async(std::launch::async, task));
+        processedIndices.insert(i); // Mark as processed
+    } else if (static_cast<size_t>(i) > isoFiles.size()) {
+        invalidInput = true;
+        errorMessages.push_back("\033[91mFile index '" + std::to_string(i) + "' does not exist.\033[0m");
+    }
+}
+
         } else if (isNumeric(token)) {
             int num = std::stoi(token);
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && processedIndices.find(num) == processedIndices.end()) {
                 // Use std::async to launch each task in a separate thread
-                futures.emplace_back(std::async(std::launch::async, handleDeleteIsoFile, isoFiles[num - 1], std::ref(isoFiles), std::ref(deletedSet)));
+                futures.emplace_back(std::async(std::launch::async, handleDeleteIsoFile, isoFiles[num - 1], std::ref(mountedSet)));
                 processedIndices.insert(num); // Mark index as processed
             } else if (num > isoFiles.size()) {
                 invalidInput = true;
-                uniqueErrorMessages.insert("\033[91mFile index '" + std::to_string(num) + "' does not exist.\033[0m");
+                errorMessages.push_back("\033[91mFile index '" + std::to_string(num) + "' does not exist.\033[0m");
             }
         } else {
             invalidInput = true;
-            uniqueErrorMessages.insert("\033[91mInvalid input: '" + token + "'.\033[0m");
+            errorMessages.push_back("\033[91mInvalid input: '" + token + "'.\033[0m");
         }
     }
 
@@ -796,9 +787,9 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
         future.wait();
     }
 
-    // Display unique errors at the end
+    // Display errors at the end
     if (invalidInput) {
-        for (const auto& errorMsg : uniqueErrorMessages) {
+        for (const auto& errorMsg : errorMessages) {
             std::cerr << "\033[93m" << errorMsg << "\033[0m" << std::endl;
         }
     }
