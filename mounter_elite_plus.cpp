@@ -717,7 +717,7 @@ bool isAllZeros(const std::string& str) {
 void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
     std::istringstream iss(input);
     bool invalidInput = false;
-    std::vector<std::string> errorMessages; // Vector to store error messages
+    std::unordered_set<std::string> uniqueErrorMessages; // Set to store unique error messages
     std::set<int> processedIndices; // Set to keep track of processed indices
 
     std::string token;
@@ -727,7 +727,7 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
         // Check if the token consists only of zeros and treat it as a non-existent index
         if (isAllZeros(token)) {
             invalidInput = true;
-            errorMessages.push_back("\033[91mFile index '" + token + "' is not a valid input.\033[0m");
+            uniqueErrorMessages.insert("\033[91mFile index '" + token + "' is not a valid input.\033[0m");
             continue;
         }
 
@@ -735,7 +735,7 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
         if (token == "0") {
             if (!invalidInput) {
                 invalidInput = true;
-                errorMessages.push_back("\033[91mFile index '0' does not exist.\033[0m");
+                uniqueErrorMessages.insert("\033[91mFile index '0' does not exist.\033[0m");
             }
         }
 
@@ -749,18 +749,18 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
             } catch (const std::invalid_argument& e) {
                 // Handle the exception for invalid input
                 invalidInput = true;
-                errorMessages.push_back("\033[91mInvalid input: '" + token + "'.\033[0m");
+                uniqueErrorMessages.insert("\033[91mInvalid input: '" + token + "'.\033[0m");
                 continue;
             } catch (const std::out_of_range& e) {
                 // Handle the exception for out-of-range input
                 invalidInput = true;
-                errorMessages.push_back("\033[91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0m");
+                uniqueErrorMessages.insert("\033[91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0m");
                 continue;
             }
 
             if (start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) {
                 invalidInput = true;
-                errorMessages.push_back("\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m");
+                uniqueErrorMessages.insert("\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m");
                 continue;
             }
 
@@ -772,7 +772,7 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
                     processedIndices.insert(i); // Mark as processed
                 } else if (static_cast<size_t>(i) > isoFiles.size()) {
                     invalidInput = true;
-                    errorMessages.push_back("\033[91mFile index '" + std::to_string(i) + "' does not exist.\033[0m");
+                    uniqueErrorMessages.insert("\033[91mFile index '" + std::to_string(i) + "' does not exist.\033[0m");
                 }
             }
         } else if (isNumeric(token)) {
@@ -783,11 +783,11 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
                 processedIndices.insert(num); // Mark index as processed
             } else if (num > isoFiles.size()) {
                 invalidInput = true;
-                errorMessages.push_back("\033[91mFile index '" + std::to_string(num) + "' does not exist.\033[0m");
+                uniqueErrorMessages.insert("\033[91mFile index '" + std::to_string(num) + "' does not exist.\033[0m");
             }
         } else {
             invalidInput = true;
-            errorMessages.push_back("\033[91mInvalid input: '" + token + "'.\033[0m");
+            uniqueErrorMessages.insert("\033[91mInvalid input: '" + token + "'.\033[0m");
         }
     }
 
@@ -796,9 +796,9 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
         future.wait();
     }
 
-    // Display errors at the end
+    // Display unique errors at the end
     if (invalidInput) {
-        for (const auto& errorMsg : errorMessages) {
+        for (const auto& errorMsg : uniqueErrorMessages) {
             std::cerr << "\033[93m" << errorMsg << "\033[0m" << std::endl;
         }
     }
