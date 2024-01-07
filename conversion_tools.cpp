@@ -125,53 +125,6 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
     return binImgFilesCache;
 }
 
-// Check if ccd2iso is installed on the system
-bool isCcd2IsoInstalled() {
-    // Use the system command to check if ccd2iso is available
-    if (std::system("which ccd2iso > /dev/null 2>&1") == 0) {
-        return true; // ccd2iso is installed
-    } else {
-        return false; // ccd2iso is not installed
-    }
-}
-
-
-// Function to convert a BIN file to ISO format
-void convertBINToISO(const std::string& inputPath) {
-    // Check if the input file exists
-    if (!std::ifstream(inputPath)) {
-        std::cout << "\033[91mThe specified input file \033[93m'" << inputPath << "'\033[91m does not exist.\033[0m" << std::endl;
-        return;
-    }
-
-    // Define the output path for the ISO file with only the .iso extension
-    std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
-
-    // Check if the output ISO file already exists
-    if (std::ifstream(outputPath)) {
-        std::cout << "\033[93mThe corresponding .iso file already exists for: \033[92m'" << inputPath << "'\033[93m. Skipping conversion.\033[0m" << std::endl;
-        return;  // Skip conversion if the file already exists
-    }
-
-    // Execute the conversion using ccd2iso, with shell-escaped paths
-    std::string conversionCommand = "ccd2iso " + shell_escape(inputPath) + " " + shell_escape(outputPath);
-    int conversionStatus = std::system(conversionCommand.c_str());
-
-    // Check the result of the conversion
-    if (conversionStatus == 0) {
-        std::cout << "Image file converted to ISO:\033[0m \033[92m'" << outputPath << "'\033[0m.\033[0m" << std::endl;
-    } else {
-        std::cout << "\033[91mConversion of \033[93m'" << inputPath << "'\033[91m failed.\033[0m" << std::endl;
-
-        // Delete the partially created ISO file
-        if (std::remove(outputPath.c_str()) == 0) {
-            std::cout << "\033[91mDeleted partially created ISO file:\033[93m '" << outputPath << "'\033[91m failed.\033[0m" << std::endl;
-        } else {
-            std::cerr << "\033[91mFailed to delete partially created ISO file: '" << outputPath << "'.\033[0m" << std::endl;
-        }
-    }
-}
-
 
 // Main function to select directories and convert BIN/IMG files to ISO format
 void select_and_convert_files_to_iso() {
@@ -435,6 +388,54 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
 }
 
 
+// Function to convert a BIN file to ISO format
+void convertBINToISO(const std::string& inputPath) {
+    // Check if the input file exists
+    if (!std::ifstream(inputPath)) {
+        std::cout << "\033[91mThe specified input file \033[93m'" << inputPath << "'\033[91m does not exist.\033[0m" << std::endl;
+        return;
+    }
+
+    // Define the output path for the ISO file with only the .iso extension
+    std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
+
+    // Check if the output ISO file already exists
+    if (std::ifstream(outputPath)) {
+        std::cout << "\033[93mThe corresponding .iso file already exists for: \033[92m'" << inputPath << "'\033[93m. Skipping conversion.\033[0m" << std::endl;
+        return;  // Skip conversion if the file already exists
+    }
+
+    // Execute the conversion using ccd2iso, with shell-escaped paths
+    std::string conversionCommand = "ccd2iso " + shell_escape(inputPath) + " " + shell_escape(outputPath);
+    int conversionStatus = std::system(conversionCommand.c_str());
+
+    // Check the result of the conversion
+    if (conversionStatus == 0) {
+        std::cout << "Image file converted to ISO:\033[0m \033[92m'" << outputPath << "'\033[0m.\033[0m" << std::endl;
+    } else {
+        std::cout << "\033[91mConversion of \033[93m'" << inputPath << "'\033[91m failed.\033[0m" << std::endl;
+
+        // Delete the partially created ISO file
+        if (std::remove(outputPath.c_str()) == 0) {
+            std::cout << "\033[91mDeleted partially created ISO file:\033[93m '" << outputPath << "'\033[91m failed.\033[0m" << std::endl;
+        } else {
+            std::cerr << "\033[91mFailed to delete partially created ISO file: '" << outputPath << "'.\033[0m" << std::endl;
+        }
+    }
+}
+
+
+// Check if ccd2iso is installed on the system
+bool isCcd2IsoInstalled() {
+    // Use the system command to check if ccd2iso is available
+    if (std::system("which ccd2iso > /dev/null 2>&1") == 0) {
+        return true; // ccd2iso is installed
+    } else {
+        return false; // ccd2iso is not installed
+    }
+}
+
+
 // MDF CONVERSION FUNCTIONS	\\
 
 
@@ -552,77 +553,6 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
 
     // Return the combined results
     return mdfMdsFilesCache;
-}
-
-
-// Function to check if mdf2iso is installed
-bool isMdf2IsoInstalled() {
-    // Construct a command to check if mdf2iso is in the system's PATH
-    std::string command = "which " + shell_escape("mdf2iso");
-
-    // Execute the command and check the result
-    if (std::system((command + " > /dev/null 2>&1").c_str()) == 0) {
-        return true;  // mdf2iso is installed
-    } else {
-        return false;  // mdf2iso is not installed
-    }
-}
-
-
-// Function to convert an MDF file to ISO format using mdf2iso
-void convertMDFToISO(const std::string& inputPath) {
-    // Check if the input file exists
-    if (!std::ifstream(inputPath)) {
-        std::cout << "\033[91mThe specified input file \033[93m'" << inputPath << "'\033[91m does not exist.\033[0m" << std::endl;
-        return;
-    }
-
-    // Check if the corresponding .iso file already exists
-    std::string isoOutputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
-    if (std::ifstream(isoOutputPath)) {
-        std::cout << "\033[93mThe corresponding .iso file already exists for: \033[92m'" << inputPath << "'\033[93m. Skipping conversion.\033[0m" << std::endl;
-        return;
-    }
-
-    // Escape the inputPath before using it in shell commands
-    std::string escapedInputPath = shell_escape(inputPath);
-
-    // Define the output path for the ISO file with only the .iso extension
-    std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
-
-    // Escape the outputPath before using it in shell commands
-    std::string escapedOutputPath = shell_escape(outputPath);
-
-    // Continue with the rest of the conversion logic...
-
-    // Execute the conversion using mdf2iso
-    std::string conversionCommand = "mdf2iso " + escapedInputPath + " " + escapedOutputPath;
-	
-    // Capture the output of the mdf2iso command
-    FILE* pipe = popen(conversionCommand.c_str(), "r");
-    if (!pipe) {
-        std::cout << "\033[91mFailed to execute conversion command\033[0m" << std::endl;
-        return;
-    }
-
-    char buffer[128];
-    std::string conversionOutput;
-    while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
-        conversionOutput += buffer;
-    }
-
-    int conversionStatus = pclose(pipe);
-
-    if (conversionStatus == 0) {
-        // Check if the conversion output contains the "already ISO9660" message
-        if (conversionOutput.find("already ISO") != std::string::npos) {
-            std::cout << "\033[91mThe selected file \033[93m'" << inputPath << "'\033[91m is already in ISO format, maybe rename it to .iso?. Skipping conversion.\033[0m" << std::endl;
-        } else {
-            std::cout << "Image file converted to ISO: \033[92m'" << outputPath << "'\033[0m." << std::endl;
-        }
-    } else {
-        std::cout << "\033[91mConversion of \033[93m'" << inputPath << "'\033[91m failed.\033[0m" << std::endl;
-	}
 }
 
 
@@ -879,4 +809,75 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
         std::cout << errorMessage << std::endl;
     }
     std::cout << " " << std::endl;
+}
+
+
+// Function to convert an MDF file to ISO format using mdf2iso
+void convertMDFToISO(const std::string& inputPath) {
+    // Check if the input file exists
+    if (!std::ifstream(inputPath)) {
+        std::cout << "\033[91mThe specified input file \033[93m'" << inputPath << "'\033[91m does not exist.\033[0m" << std::endl;
+        return;
+    }
+
+    // Check if the corresponding .iso file already exists
+    std::string isoOutputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
+    if (std::ifstream(isoOutputPath)) {
+        std::cout << "\033[93mThe corresponding .iso file already exists for: \033[92m'" << inputPath << "'\033[93m. Skipping conversion.\033[0m" << std::endl;
+        return;
+    }
+
+    // Escape the inputPath before using it in shell commands
+    std::string escapedInputPath = shell_escape(inputPath);
+
+    // Define the output path for the ISO file with only the .iso extension
+    std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
+
+    // Escape the outputPath before using it in shell commands
+    std::string escapedOutputPath = shell_escape(outputPath);
+
+    // Continue with the rest of the conversion logic...
+
+    // Execute the conversion using mdf2iso
+    std::string conversionCommand = "mdf2iso " + escapedInputPath + " " + escapedOutputPath;
+	
+    // Capture the output of the mdf2iso command
+    FILE* pipe = popen(conversionCommand.c_str(), "r");
+    if (!pipe) {
+        std::cout << "\033[91mFailed to execute conversion command\033[0m" << std::endl;
+        return;
+    }
+
+    char buffer[128];
+    std::string conversionOutput;
+    while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
+        conversionOutput += buffer;
+    }
+
+    int conversionStatus = pclose(pipe);
+
+    if (conversionStatus == 0) {
+        // Check if the conversion output contains the "already ISO9660" message
+        if (conversionOutput.find("already ISO") != std::string::npos) {
+            std::cout << "\033[91mThe selected file \033[93m'" << inputPath << "'\033[91m is already in ISO format, maybe rename it to .iso?. Skipping conversion.\033[0m" << std::endl;
+        } else {
+            std::cout << "Image file converted to ISO: \033[92m'" << outputPath << "'\033[0m." << std::endl;
+        }
+    } else {
+        std::cout << "\033[91mConversion of \033[93m'" << inputPath << "'\033[91m failed.\033[0m" << std::endl;
+	}
+}
+
+
+// Function to check if mdf2iso is installed
+bool isMdf2IsoInstalled() {
+    // Construct a command to check if mdf2iso is in the system's PATH
+    std::string command = "which " + shell_escape("mdf2iso");
+
+    // Execute the command and check the result
+    if (std::system((command + " > /dev/null 2>&1").c_str()) == 0) {
+        return true;  // mdf2iso is installed
+    } else {
+        return false;  // mdf2iso is not installed
+    }
 }
