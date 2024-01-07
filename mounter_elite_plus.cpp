@@ -686,7 +686,7 @@ void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFi
         std::string escapedIso = shell_escape(iso);
 
         // Delete the ISO file from the filesystem
-        std::string command = "rm -f " + escapedIso;
+        std::string command = "sudo rm -f " + escapedIso;
         int result = std::system(command.c_str());
 
         if (result == 0) {
