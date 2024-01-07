@@ -822,7 +822,7 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
 
     // Display selected deletions
     if (!processedIndices.empty()) {
-        std::cout << "\033[1;94mThe following ISO(s) will be \033[91m*PERMANENTLY DELETED*\033[1;94m :" << std::endl;
+        std::cout << "\033[1;94mThe following ISO(s) will be \033[91m*PERMANENTLY DELETED*\033[1;94m :\033[0m" << std::endl;
         std::cout << " " << std::endl;
         for (const auto& index : processedIndices) {
             std::cout << "\033[93m'" << isoFiles[index - 1] << "'\033[0m" << std::endl;
