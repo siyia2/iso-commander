@@ -187,7 +187,7 @@ void select_and_convert_files_to_iso() {
             
             std::cout << " " << std::endl;
             // Prompt user to choose a file or exit
-            char* input = readline("\033[1;94mChoose BIN/IMG file(s) to convert (e.g., '1-3' '1 2', or press Enter to return):\033[0m ");
+            char* input = readline("\033[1;94mChoose BIN/IMG file(s) for \033[92mconversion\033[1;94m (e.g., '1-3' '1 2', or press Enter to return):\033[0m ");
 
             // Break the loop if the user presses Enter
             if (input[0] == '\0') {
@@ -620,7 +620,7 @@ void select_and_convert_files_to_iso_mdf() {
 
         std::cout << " " << std::endl;
         // Prompt the user to enter file numbers or 'exit'
-        char* input = readline("\033[1;94mChoose MDF file(s) to convert (e.g., '1-2' or '1 2', or press Enter to return):\033[0m ");
+        char* input = readline("\033[1;94mChoose MDF file(s) for \033[92mconversion\033[1;94m (e.g., '1-2' or '1 2', or press Enter to return):\033[0m ");
 
         if (input[0] == '\0') {
             std::system("clear");
