@@ -31,6 +31,7 @@ bool isValidIndex(int index, size_t isoDirsSize);
 //	voids
 
 //Delete functions
+bool isAllZeros(const std::string& str);
 void select_and_delete_files_by_number();
 void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
 void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
@@ -639,14 +640,17 @@ void select_and_delete_files_by_number() {
     // Main loop for selecting and deleting ISO files
     while (true) {
         std::system("clear");
-        std::cout << "\033[93m! DELETION ACTION FOR ISO FILES CANNOT BE REVERSED !\n\033[0m" << std::endl;
+        std::cout << "\033[93m! CAUTION: DELETION OF ISO FILES CANNOT BE REVERSED !\n\033[0m" << std::endl;
         printIsoFileList(isoFiles);
 
         std::cout << " " << std::endl;
 
         // Prompt user for input
-        char* input = readline("\033[94mChoose ISO(s) to \033[91mdelete\033[94m (e.g., '1-3', '1 2', '00' deletes all, or press Enter to return):\033[0m ");
+        char* input = readline("\033[94mChoose ISO(s) to \033[91mdelete\033[94m (e.g., '1-3', '1 2', or press Enter to return):\033[0m ");
         std::system("clear");
+        
+        // Start the timer
+        auto start_time = std::chrono::high_resolution_clock::now();
 
         // Check if the user wants to return
         if (input[0] == '\0') {
@@ -654,19 +658,19 @@ void select_and_delete_files_by_number() {
             break;
         }
 
-        // Check if the user wants to delete all ISO files
-        if (std::strcmp(input, "00") == 0) {
-            // Delete all ISO files
-            for (const std::string& iso : isoFiles) {
-                handleDeleteIsoFile(iso, isoFiles, deletedSet);
-            }
-        } else {
+        else {
             // Process user input to select and delete specific ISO files
             processDeleteInput(input, isoFiles, deletedSet);
         }
+        
+        // Stop the timer after completing the mounting process
+        auto end_time = std::chrono::high_resolution_clock::now();
+
+        // Calculate and print the elapsed time
+        std::cout << " " << std::endl;
+        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
 
         // Print confirmation message and wait for user input to continue
-        std::cout << "\033[92mSelected ISO file(s) deleted successfully.\033[0m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "Press Enter to continue...";
         std::cin.get();
@@ -704,6 +708,10 @@ void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFi
     }
 }
 
+// Function to check if a string consists only of zeros
+bool isAllZeros(const std::string& str) {
+    return str.find_first_not_of('0') == std::string::npos;
+}
 
 // Function to process user input for selecting and deleting specific ISO files
 void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
@@ -716,7 +724,14 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
     std::vector<std::future<void>> futures; // Vector to store std::future objects for each task
 
     while (iss >> token) {
-        // Check if the token is '0' and treat it as an invalid index
+        // Check if the token consists only of zeros and treat it as a non-existent index
+        if (isAllZeros(token)) {
+            invalidInput = true;
+            errorMessages.push_back("\033[91mFile index '" + token + "' is not a valid input.\033[0m");
+            continue;
+        }
+
+        // Check if the token is '0' and treat it as a non-existent index
         if (token == "0") {
             if (!invalidInput) {
                 invalidInput = true;
@@ -724,8 +739,43 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
             }
         }
 
-        // Assuming isNumeric is a function that checks if a string is numeric
-        if (isNumeric(token)) {
+        size_t dashPos = token.find('-');
+        if (dashPos != std::string::npos) {
+            int start, end;
+
+            try {
+                start = std::stoi(token.substr(0, dashPos));
+                end = std::stoi(token.substr(dashPos + 1));
+            } catch (const std::invalid_argument& e) {
+                // Handle the exception for invalid input
+                invalidInput = true;
+                errorMessages.push_back("\033[91mInvalid input: '" + token + "'.\033[0m");
+                continue;
+            } catch (const std::out_of_range& e) {
+                // Handle the exception for out-of-range input
+                invalidInput = true;
+                errorMessages.push_back("\033[91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0m");
+                continue;
+            }
+
+            if (start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) {
+                invalidInput = true;
+                errorMessages.push_back("\033[91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m");
+                continue;
+            }
+
+            int step = (start <= end) ? 1 : -1;
+            for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
+                if (static_cast<size_t>(i) <= isoFiles.size() && processedIndices.find(i) == processedIndices.end()) {
+                    // Use std::async to launch each task in a separate thread
+                    futures.emplace_back(std::async(std::launch::async, handleDeleteIsoFile, isoFiles[i - 1], std::ref(isoFiles), std::ref(deletedSet)));
+                    processedIndices.insert(i); // Mark as processed
+                } else if (static_cast<size_t>(i) > isoFiles.size()) {
+                    invalidInput = true;
+                    errorMessages.push_back("\033[91mFile index '" + std::to_string(i) + "' does not exist.\033[0m");
+                }
+            }
+        } else if (isNumeric(token)) {
             int num = std::stoi(token);
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && processedIndices.find(num) == processedIndices.end()) {
                 // Use std::async to launch each task in a separate thread
