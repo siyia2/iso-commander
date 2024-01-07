@@ -635,13 +635,13 @@ void select_and_delete_files_by_number() {
     // Main loop for selecting and deleting ISO files
     while (true) {
         std::system("clear");
-        std::cout << "\033[93m! CAUTION: ISO DELETION IS IRREVERSIBLE !\n\033[0m" << std::endl;
+        std::cout << "\033[93m ! ISO DELETION IS IRREVERSIBLE PROCEED WITH CAUTION !\n\033[0m" << std::endl;
         printIsoFileList(isoFiles);
 
         std::cout << " " << std::endl;
 
         // Prompt user for input
-        char* input = readline("\033[94mChoose ISO(s) to \033[91mdelete\033[94m (e.g., '1-3', '1 2', or press Enter to return):\033[0m ");
+        char* input = readline("\033[94mChoose ISO(s) for \033[91mdeletion\033[94m (e.g., '1-3', '1 2', or press Enter to return):\033[0m ");
         std::system("clear");
         
         // Start the timer
@@ -674,8 +674,8 @@ void select_and_delete_files_by_number() {
         // Calculate and print the elapsed time
         std::cout << " " << std::endl;
         auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-
-        // Print confirmation message and wait for user input to continue
+		// Print the time taken for the entire process in bold with one decimal place
+        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "Press Enter to continue...";
         std::cin.get();
@@ -804,7 +804,7 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
 
     // Display selected deletions
     if (!processedIndices.empty()) {
-        std::cout << "\033[94mSelected for \033[91mDeletion\033[94m:" << std::endl;
+        std::cout << "\033[94mThe following ISO(s) will be \033[91m*PERMANENTLY DELETED*\033[94m :" << std::endl;
         std::cout << " " << std::endl;
         for (const auto& index : processedIndices) {
             std::cout << "\033[93m'" << isoFiles[index - 1] << "'.\033[0m" << std::endl;
@@ -812,12 +812,12 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
 	}
 	if (!uniqueErrorMessages.empty() && processedIndices.empty()) {
 		std::cout << " " << std::endl;
-		std::cout << "\033[91mNo valid selections for deletion.\033[0m" << std::endl;
+		std::cout << "\033[91mNo valid selection(s) for deletion.\033[0m" << std::endl;
 	} else {
 	// Prompt for confirmation before proceeding
 	char confirmation;
 	std::cout << " " << std::endl;
-	std::cout << "\033[94mDo you want to proceed with the selected \033[91mdeletions\033[0m? (y/n):\033[0m ";
+	std::cout << "\033[94mDo you want to proceed? (y/n):\033[0m ";
 	std::cin.get(confirmation);
 	
 	// Ignore any additional characters in the input buffer, including newline
@@ -830,6 +830,7 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
         return;
 		
 	} else {
+		std::system("clear");
 		// Launch deletion tasks for valid selections
 		for (const auto& index : processedIndices) {
 			if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
@@ -974,7 +975,7 @@ void select_and_mount_files_by_number() {
     // Main loop for selecting and mounting ISO files
     while (true) {
         std::system("clear");
-        std::cout << "\033[93m! IF EXPECTED ISO FILE(s) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\n\033[0m" << std::endl;
+        std::cout << "\033[93m ! IF EXPECTED ISO FILE(s) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\n\033[0m" << std::endl;
         printIsoFileList(isoFiles);
         
 		std::cout << " " << std::endl;
