@@ -1021,12 +1021,6 @@ void unmountISO(const std::string& isoDir) {
     unmountFuture.get();
 }
 
-// Function to check if a given index is within the valid range of available ISOs
-bool isValidIndex(int index, size_t isoDirsSize) {
-	
-    return (index >= 1) && (static_cast<size_t>(index) <= isoDirsSize);
-}
-
 
 // Function to perform asynchronous unmounting
 std::future<void> asyncUnmountISO(const std::string& isoDir) {
@@ -1034,6 +1028,13 @@ std::future<void> asyncUnmountISO(const std::string& isoDir) {
         std::lock_guard<std::mutex> highLock(Mutex4High); // Lock the critical section
         unmountISO(isoDir);
     }, isoDir);
+}
+
+
+// Function to check if a given index is within the valid range of available ISOs
+bool isValidIndex(int index, size_t isoDirsSize) {
+	
+    return (index >= 1) && (static_cast<size_t>(index) <= isoDirsSize);
 }
 
 
