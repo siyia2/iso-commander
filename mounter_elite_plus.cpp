@@ -840,12 +840,14 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
     std::vector<std::future<void>> futures; // Vector to store std::future objects for each task
 
     while (iss >> token) {
-		// Check if the token is '0' and treat it as an invalid index
+		       // Check if the token is '0' and treat it as an invalid index
         if (token == "0") {
-            invalidInput = true;
-            errorMessages.push_back("\033[91mFile index: '0' does not exist.\033[0m");
-            continue;
-        }
+            if (!invalidInput) {
+                invalidInput = true;
+                errorMessages.push_back("\033[91mFile index: '0' does not exist.\033[0m");
+            }
+		}
+        
         size_t dashPos = token.find('-');
         if (dashPos != std::string::npos) {
             int start, end;
