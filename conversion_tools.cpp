@@ -412,7 +412,7 @@ void convertBINToISO(const std::string& inputPath) {
 
     // Check the result of the conversion
     if (conversionStatus == 0) {
-        std::cout << "\033[1mImage file converted to ISO:\033[0m \033[1;92m'" << outputPath << "'\033[1m.\033[0m" << std::endl;
+        std::cout << "\033[1mImage file converted to ISO:\033[0m \033[1;92m'" << outputPath << "'\033[0m\033[1m.\033[0m" << std::endl;
     } else {
         std::cout << "\033[1;91mConversion of \033[1;93m'" << inputPath << "'\033[1;91m failed.\033[0m" << std::endl;
 
@@ -863,7 +863,7 @@ void convertMDFToISO(const std::string& inputPath) {
         if (conversionOutput.find("already ISO") != std::string::npos) {
             std::cout << "\033[1;91mThe selected file \033[1;93m'" << inputPath << "'\033[1;91m is already in ISO format, maybe rename it to .iso?. Skipping conversion.\033[0m" << std::endl;
         } else {
-            std::cout << "\033[1mImage file converted to ISO: \033[1;92m'" << outputPath << "'\033[1m.\033[0m" << std::endl;
+            std::cout << "\033[1mImage file converted to ISO: \033[1;92m'" << outputPath << "'\033[0m\033[1m.\033[0m" << std::endl;
         }
     } else {
         std::cout << "\033[1;91mConversion of \033[1;93m'" << inputPath << "'\033[1;91m failed.\033[0m" << std::endl;
