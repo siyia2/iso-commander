@@ -401,8 +401,6 @@ std::vector<std::string> refreshCacheForDirectory(const std::string& path) {
         parallelTraverse(path, newIsoFiles, Mutex4Low);
     });
 
-    // You can perform other tasks here if needed
-
     // Wait for the asynchronous operation to complete
     asyncResult.wait();
 
@@ -436,7 +434,6 @@ void manualRefreshCache() {
     
 	// Lock the mutex before accessing shared resources
 	std::lock_guard<std::mutex> highLock(Mutex4High);
-	
 	
     // Create an input string stream to parse directory paths
     std::istringstream iss(inputLine);
