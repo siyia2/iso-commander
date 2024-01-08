@@ -402,7 +402,7 @@ void convertBINToISO(const std::string& inputPath) {
 
     // Check if the output ISO file already exists
     if (std::ifstream(outputPath)) {
-        std::cout << "\033[1;93mThe corresponding .iso file already exists for: \033[1;92m'" << inputPath << "'\033[1;93m. Skipping conversion.\033[0m" << std::endl;
+        std::cout << "\033[1;93mThe corresponding .iso file already exists for: \033[1;92m'" << inputPath << "'\033[1;93m. Skipped conversion.\033[0m" << std::endl;
         return;  // Skip conversion if the file already exists
     }
 
@@ -825,7 +825,7 @@ void convertMDFToISO(const std::string& inputPath) {
     // Check if the corresponding .iso file already exists
     std::string isoOutputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
     if (std::ifstream(isoOutputPath)) {
-        std::cout << "\033[1;93mThe corresponding .iso file already exists for: \033[1;92m'" << inputPath << "'\033[1;93m. Skipping conversion.\033[0m" << std::endl;
+        std::cout << "\033[1;93mThe corresponding .iso file already exists for: \033[1;92m'" << inputPath << "'\033[1;93m. Skipped conversion.\033[0m" << std::endl;
         return;
     }
 
@@ -861,7 +861,7 @@ void convertMDFToISO(const std::string& inputPath) {
     if (conversionStatus == 0) {
         // Check if the conversion output contains the "already ISO9660" message
         if (conversionOutput.find("already ISO") != std::string::npos) {
-            std::cout << "\033[1;91mThe selected file \033[1;93m'" << inputPath << "'\033[1;91m is already in ISO format, maybe rename it to .iso?. Skipping conversion.\033[0m" << std::endl;
+            std::cout << "\033[1;91mThe selected file \033[1;93m'" << inputPath << "'\033[1;91m is already in ISO format, maybe rename it to .iso?. Skipped conversion.\033[0m" << std::endl;
         } else {
             std::cout << "\033[1mImage file converted to ISO: \033[1;92m'" << outputPath << "'\033[0m\033[1m.\033[0m" << std::endl;
         }
