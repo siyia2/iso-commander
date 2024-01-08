@@ -160,7 +160,7 @@ int main() {
             case '6':
                 exitProgram = true; // Exit the program
                 std::cout << " " << std::endl;
-                std::cout << "Exiting the program..." << std::endl;
+                std::cout << "\033[1;32mExiting the program..." << std::endl;
                 std::cout << " " << std::endl;
                 break;
             default:
@@ -392,7 +392,7 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
 
 // Function to refresh the cache for a single directory (now returning a vector of ISO files)
 std::vector<std::string> refreshCacheForDirectory(const std::string& path) {
-    std::cout << "\033[1;93mProcessing directory path: '" << path << "'.\033[1;0m" << std::endl;
+    std::cout << "\033[1;93mProcessing directory path: '" << path << "'\033[1;0m" << std::endl;
     
     std::vector<std::string> newIsoFiles;
 
