@@ -7,8 +7,9 @@ const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.cache";
 const std::string cacheFileName = "iso_cache.txt";;
 const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
-std::mutex Mutex4High; // Mutex for mount thread safety
-std::mutex Mutex4Low; // Mutex for search thread safety
+std::mutex Mutex4High; // Mutex for high level functions
+std::mutex Mutex4Med; // Mutex for middle level functions
+std::mutex Mutex4Low; // Mutex for low level functions
 
 
 //	Function prototypes	\\
@@ -731,6 +732,9 @@ bool isAllZeros(const std::string& str) {
 
 // Function to process user input for selecting and deleting specific ISO files
 void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
+	
+	std::lock_guard<std::mutex> highLock(Mutex4High);
+	
     std::istringstream iss(input);
     bool invalidInput = false;
     std::unordered_set<std::string> uniqueErrorMessages; // Set to store unique error messages
@@ -910,18 +914,15 @@ void mountISOs(const std::vector<std::string>& isoFiles) {
     // Map to store mounted ISOs with their corresponding paths
     std::map<std::string, std::string> mountedIsos;
 
-    // Mutex to synchronize access to the map
-    std::mutex mapMutex;
-
     // Vector to store futures for parallel mounting
     std::vector<std::future<void>> futures;
 
     // Iterate through the list of ISO files and spawn a future for each
     for (const std::string& isoFile : isoFiles) {
         // Create a future for mounting the ISO file and pass the map and mutex by reference
-        futures.push_back(std::async(std::launch::async, [isoFile, &mountedIsos, &mapMutex]() {
-            // Lock the mutex before accessing the shared map
-            std::lock_guard<std::mutex> lock(mapMutex);
+        futures.push_back(std::async(std::launch::async, [&isoFile, &mountedIsos]() {
+            // Lock the mutex before accessing the shared map using Mutex4Med
+            std::lock_guard<std::mutex> medLock(Mutex4Med);
 
             // Call the function that modifies the shared map
             mountIsoFile(isoFile, mountedIsos);
@@ -1058,7 +1059,7 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
 // Function to handle mounting of a specific ISO file asynchronously
 void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet) {
 	// Lock the mutex before accessing the shared vector
-    std::lock_guard<std::mutex> highLock(Mutex4High);
+    std::lock_guard<std::mutex> medLock(std::mutex Mutex4Med);
     // Use std::async to execute the function asynchronously
     auto future = std::async(std::launch::async, [&iso, &mountedSet]() {
         // Check if the ISO file exists on disk
@@ -1094,6 +1095,9 @@ bool isNumeric(const std::string& str) {
 
 // Function to process the user input for ISO mounting using multithreading
 void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
+	
+	std::lock_guard<std::mutex> highLock(Mutex4High);
+	
     std::istringstream iss(input);
     bool invalidInput = false;
     std::vector<std::string> errorMessages; // Vector to store error messages
@@ -1301,7 +1305,7 @@ void unmountISO(const std::string& isoDir) {
 // Function to perform asynchronous unmounting
 std::future<void> asyncUnmountISO(const std::string& isoDir) {
     return std::async(std::launch::async, [](const std::string& isoDir) {
-        std::lock_guard<std::mutex> lowLock(Mutex4Low); // Lock the critical section
+        std::lock_guard<std::mutex> medLock(Mutex4Med); // Lock the critical section
         unmountISO(isoDir);
     }, isoDir);
 }
