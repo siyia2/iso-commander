@@ -918,7 +918,7 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
             std::cout << "\033[1mISO file: \033[1;92m'" << isoFile << "'\033[1;0m \033[1mmounted at: \033[1;94m'" << mountPoint << "'\033[1;0m\033[1m.\033[1;0m" << std::endl;
         } catch (const std::exception& e) {
             // Handle exceptions, log error, and cleanup
-            std::cerr << "\033[1;91mFailed to mount: \033[1;93m'" << isoFile << "'\033[1;0m\033[1;91m." << std::endl;
+            std::cerr << "\033[1;91mFailed to mount: \033[1;93m'" << isoFile << "'\033[1;0m\033[1;91m.\033[1;0m" << std::endl;
             fs::remove(mountPoint);
         }
     } else {
@@ -1073,36 +1073,46 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
         std::cout << "\033[1m" << directory << "\033[1;0m";
 
         // Print the filename part in magenta and bold
-        std::cout << "\033[1m\033[1;95m" << filename << "\033[1;0m" << std::endl;
+        std::cout << "\033[1;95m" << filename << "\033[1;0m" << std::endl;
     }
 }
 
 
 // Function to handle mounting of a specific ISO file asynchronously
 void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet) {
-	// Lock the mutex before accessing the shared vector
-    std::lock_guard<std::mutex> medLock(std::mutex Mutex4Med);
-    // Use std::async to execute the function asynchronously
-    auto future = std::async(std::launch::async, [&iso, &mountedSet]() {
-        // Check if the ISO file exists on disk
-        if (fileExistsOnDisk(iso)) {
-            // Attempt to insert the ISO file into the set; if it's a new entry, mount it
-            if (mountedSet.insert(iso).second) {
-                // Mount the ISO file
-                mountISOs({iso});  // Pass a vector with a single string to mountISO
-            } else {
-                // Get the mount path if the ISO file is already mounted
-                std::string result = iso;
-                printAlreadyMountedMessage(iso);
-            }
-        } else {
-            // Display an error message if the ISO file doesn't exist on disk
-            displayErrorMessage(iso);
-        }
-    });
+    try {
+        // Declare a local mutex
+        std::mutex localMutex;
 
-    // Wait for the asynchronous operation to complete
-    future.wait();
+        // Use std::async to execute the function asynchronously
+        auto future = std::async(std::launch::async, [&iso, &mountedSet, &localMutex]() {
+            // Check if the ISO file exists on disk
+            if (fileExistsOnDisk(iso)) {
+                // Lock the local mutex before accessing the shared set
+                std::lock_guard<std::mutex> medLock(localMutex);
+
+                // Attempt to insert the ISO file into the set; if it's a new entry, mount it
+                auto insertResult = mountedSet.insert(iso);
+                if (insertResult.second) {
+                    // Mount the ISO file
+                    mountISOs({iso});  // Pass a vector with a single string to mountISO
+                } else {
+                    // ISO file is already mounted, get the mount path
+                    std::string mountedIso = *insertResult.first; // Get the existing entry from the set
+                    printAlreadyMountedMessage(mountedIso);
+                }
+            } else {
+                // Display an error message if the ISO file doesn't exist on disk
+                displayErrorMessage(iso);
+            }
+        });
+
+        // You can choose to wait for the asynchronous operation or not based on your requirements
+        // future.wait();
+    } catch (const std::exception& e) {
+        // Handle exceptions thrown in the asynchronous task
+        std::cerr << "Exception: " << e.what() << std::endl;
+    }
 }
 
 
@@ -1210,14 +1220,19 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
 }
 
 
-// Function to display already mounted at message when you are already in the selenct_and_mount()
 void printAlreadyMountedMessage(const std::string& isoFile) {
     namespace fs = std::filesystem;
     fs::path isoPath(isoFile);
     std::string isoFileName = isoPath.stem().string();
     std::string mountPoint = "/mnt/iso_" + isoFileName;
 
-    std::cout << "\033[1;93mISO file: \033[1;92m'" << isoFile << "'\033[1;93m is already mounted at: \033[1;94m'" << mountPoint << "'\033[1;93m.\033[1;0m" << std::endl;
+    // Check if the mount point exists
+    if (fs::exists(mountPoint)) {
+        std::cout << "\033[1;93mISO file: \033[1;92m'" << isoFile << "'\033[1;93m is already mounted at: \033[1;94m'" << mountPoint << "'\033[1;93m.\033[1;0m" << std::endl;
+    } else {
+        // ISO file is not actually mounted at the specified mount point
+        std::cerr << "\033[1;91mFailed to mount: \033[1;93m'" << isoFile << "'\033[1;0m\033[1;91m.\033[1;0m" << std::endl;
+    }
 }
 
 
