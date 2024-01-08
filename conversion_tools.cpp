@@ -270,70 +270,43 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
         char dash;
 
         // Check if the token can be converted to an integer (starting index)
-        if (tokenStream >> start) {
-            // Check for the presence of a dash, indicating a range
-            if (tokenStream >> dash && dash == '-' && tokenStream >> end) {
-                // Handle a range
-                if (start <= end) {
-                    if (start >= 1 && end <= fileList.size()) {
-                        // Process indices in ascending order
-                        int step = 1;
-                        for (int i = start; i <= end; i += step) {
-                            int selectedIndex = i - 1;
-                            if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-                                // Convert BIN to ISO asynchronously and store the future in the vector
-                                std::string selectedFile = fileList[selectedIndex];
-                                futures.push_back(std::async(std::launch::async, asyncConvertBINToISO, selectedFile));
-                                processedIndices.insert(selectedIndex);
-                            }
-                        }
-                    } else {
-                        // Add an error message for an invalid range
-                        std::string errorMessage = "\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[1;0m";
-                        if (processedErrors.find(errorMessage) == processedErrors.end()) {
-							// Protect the critical section with a lock
-                            std::lock_guard<std::mutex> lock(errorsMutex);
-                            errorMessages.push_back(errorMessage);
-                            processedErrors.insert(errorMessage);
-                        }
-                    }
-                } else {
-                    // Handle reverse range
-                    if (start >= 1 && end >= 1 && end <= fileList.size()) {
-                        // Process indices in descending order
-                        int step = -1;
-                        for (int i = start; i >= end; i += step) {
-                            int selectedIndex = i - 1;
-                            if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
-                                if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-                                    // Convert BIN to ISO asynchronously and store the future in the vector
-                                    std::string selectedFile = fileList[selectedIndex];
-                                    futures.push_back(std::async(std::launch::async, asyncConvertBINToISO, selectedFile));
-                                    processedIndices.insert(selectedIndex);
-                                }
-                            } else {
-                                // Add an error message for an invalid range
-                                std::string errorMessage = "\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[1;0m";
-                                if (processedErrors.find(errorMessage) == processedErrors.end()) {
-									// Protect the critical section with a lock
-									std::lock_guard<std::mutex> lock(errorsMutex);
-                                    errorMessages.push_back(errorMessage);
-                                    processedErrors.insert(errorMessage);
-                                }
-                                break; // Exit the loop to avoid further errors
-                            }
-                        }
-                    } else {
-                        // Add an error message for an invalid range
-                        std::string errorMessage = "\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[1;0m";
-                        if (processedErrors.find(errorMessage) == processedErrors.end()) {
-							// Protect the critical section with a lock
-                            std::lock_guard<std::mutex> lock(errorsMutex);
-                            errorMessages.push_back(errorMessage);
-                            processedErrors.insert(errorMessage);
-                        }
+if (tokenStream >> start) {
+    // Check for the presence of a dash, indicating a range
+    if (tokenStream >> dash && dash == '-' && tokenStream >> end) {
+        // Handle a range
+        if (start <= end && start > 0 && end > 0) {  // Add conditions for non-zero start and end
+            if (start >= 1 && end <= fileList.size()) {
+                // Process indices in ascending order
+                int step = 1;
+                for (int i = start; i <= end; i += step) {
+                    int selectedIndex = i - 1;
+                    if (processedIndices.find(selectedIndex) == processedIndices.end()) {
+                        // Convert BIN to ISO asynchronously and store the future in the vector
+                        std::string selectedFile = fileList[selectedIndex];
+                        futures.push_back(std::async(std::launch::async, asyncConvertBINToISO, selectedFile));
+                        processedIndices.insert(selectedIndex);
                     }
                 }
+            } else {
+                // Add an error message for an invalid range
+                std::string errorMessage = "\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[1;0m";
+                if (processedErrors.find(errorMessage) == processedErrors.end()) {
+                    // Protect the critical section with a lock
+                    std::lock_guard<std::mutex> lock(errorsMutex);
+                    errorMessages.push_back(errorMessage);
+                    processedErrors.insert(errorMessage);
+                }
+            }
+        } else {
+            // Add an error message for an invalid range with zero start or end
+            std::string errorMessage = "\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that both start and end are greater than zero.\033[1;0m";
+            if (processedErrors.find(errorMessage) == processedErrors.end()) {
+                // Protect the critical section with a lock
+                std::lock_guard<std::mutex> lock(errorsMutex);
+                errorMessages.push_back(errorMessage);
+                processedErrors.insert(errorMessage);
+            }
+        }
             } else if (start >= 1 && start <= fileList.size()) {
                 // Process a single index
                 int selectedIndex = start - 1;
@@ -682,7 +655,7 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
     std::vector<std::string> errorMessages;
 
     // Function to execute asynchronously
-    auto asyncConvertMDFToSomething = [&](const std::string& selectedFile) {
+    auto asyncConvertMDFToISO = [&](const std::string& selectedFile) {
         convertMDFToISO(selectedFile);
     };
 
@@ -710,7 +683,7 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
                             if (processedIndices.find(selectedIndex) == processedIndices.end()) {
                                 // Convert MDF to something asynchronously and store the future in the vector
                                 std::string selectedFile = fileList[selectedIndex];
-                                futures.push_back(std::async(std::launch::async, asyncConvertMDFToSomething, selectedFile));
+                                futures.push_back(std::async(std::launch::async, asyncConvertMDFToISO, selectedFile));
                                 processedIndices.insert(selectedIndex);
                             }
                         }
@@ -735,7 +708,7 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
                                 if (processedIndices.find(selectedIndex) == processedIndices.end()) {
                                     // Convert MDF to something asynchronously and store the future in the vector
                                     std::string selectedFile = fileList[selectedIndex];
-                                    futures.push_back(std::async(std::launch::async, asyncConvertMDFToSomething, selectedFile));
+                                    futures.push_back(std::async(std::launch::async, asyncConvertMDFToISO, selectedFile));
                                     processedIndices.insert(selectedIndex);
                                 }
                             } else {
@@ -768,7 +741,7 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
                     if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
                         // Convert MDF to something asynchronously and store the future in the vector
                         std::string selectedFile = fileList[selectedIndex];
-                        futures.push_back(std::async(std::launch::async, asyncConvertMDFToSomething, selectedFile));
+                        futures.push_back(std::async(std::launch::async, asyncConvertMDFToISO, selectedFile));
                         processedIndices.insert(selectedIndex);
                     } else {
                         // Add an error message for an invalid file index
