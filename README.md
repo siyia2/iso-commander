@@ -26,6 +26,7 @@ Added Features:
 * Includes a high precision timer to measure performance in mount/unmount and list generation operations.
 * Dropped manual mode for mounting/converting, since caching is way faster and easier to manage.
 * Added support for MDF conversion to ISO by utilizing mdf2iso.
+* Added ability to delete local ISO files.
 * Clean codebase, just in case someone decides to contribute in the future.
 
 Tested the program on my rig: `mounting` at the same time `125 ISOS` and then `unmounting` them, did this a couple of times and it didn't even break a sweat, Rock Solid!!! :)
