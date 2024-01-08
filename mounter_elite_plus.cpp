@@ -737,10 +737,11 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
     while (iss >> token) {
         // Check if the token consists only of zeros and treat it as a non-existent index
         if (isAllZeros(token)) {
-            invalidInput = true;
-            uniqueErrorMessages.insert("\033[1;91mFile index '" + token + "' is not a valid input.\033[1;0m");
-            continue;
-        }
+			if (!invalidInput) {
+				invalidInput = true;
+				uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist.\033[1;0m");
+			}
+		}
 
         // Check if the token is '0' and treat it as a non-existent index
         if (token == "0") {
@@ -1118,7 +1119,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
 		if (token != "00" && isAllZeros(token)) {
 			if (!invalidInput) {
 				invalidInput = true;
-				uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist; if you want to mount everything, enter '00' explicitly.\033[1;0m");
+				uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist.\033[1;0m");
 			}
 		}
         
@@ -1415,7 +1416,6 @@ void unmountISOs() {
 		if (token != "00" && isAllZeros(token)) {
 			if (!invalidInput) {
 				invalidInput = true;
-				errorMessages.push_back("\033[1;91mFile index '0' does not exist; if you want to unmount everything, enter '00' explicitly.\033[1;0m");
 			}
 		}
             // Check if the token is a valid number
