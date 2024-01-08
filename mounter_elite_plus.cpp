@@ -392,7 +392,7 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
 
 // Function to refresh the cache for a single directory (now returning a vector of ISO files)
 std::vector<std::string> refreshCacheForDirectory(const std::string& path) {
-    std::cout << "\033[1;93mProcessing directory path: '" << path << "'.\033[1;0m" << std::endl;
+    std::cout << "\033[1;93mProcessing directory path: '" << path << "'\033[1;0m" << std::endl;
     
     std::vector<std::string> newIsoFiles;
 
@@ -504,11 +504,16 @@ void manualRefreshCache() {
         futures.push_back(std::async(std::launch::async, refreshCacheForDirectory, path));
     }
 
-    // Wait for all asynchronous tasks to finish and retrieve results
-    for (auto& future : futures) {
-        auto result = future.get(); // Blocking call to get the result
-        allIsoFiles.insert(allIsoFiles.end(), result.begin(), result.end());
-    }
+	// Wait for all asynchronous tasks to finish and retrieve results
+	for (auto& future : futures) {
+		auto result = future.get(); // Blocking call to get the result
+
+		// Reserve memory for the expected number of ISO files
+		allIsoFiles.reserve(allIsoFiles.size() + result.size());
+
+		// Move the content of the result vector into allIsoFiles
+		std::move(result.begin(), result.end(), std::back_inserter(allIsoFiles));
+	}
 
     // Save the combined cache to disk
     bool saveSuccess = saveCache(allIsoFiles, maxCacheSize);
@@ -593,13 +598,13 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
                 // Check the result of the comparison
                 if (extensionComparisonFuture.get()) {
                     // Use async to run the task of collecting ISO paths in parallel
-                    futures.push_back(std::async(std::launch::async, [filePath, &isoFiles, &Mutex4Low]() {
+                    futures.push_back(std::async(std::launch::async, [&filePath, &isoFiles, &Mutex4Low]() {
 						// Process the file content as needed
 						// For example, you can check for ISO file signatures, etc.
 
 						// Lock the mutex to update the shared vector
 						std::lock_guard<std::mutex> lowLock(Mutex4Low);
-						isoFiles.push_back(filePath.string());
+						isoFiles.emplace_back(filePath.string());
 					}));
                 }
             }
@@ -1528,7 +1533,7 @@ void unmountISOs() {
                 const std::string& isoDir = isoDirs[index - 1];
 
                 // Use a thread for each ISO to be unmounted
-                threads.emplace_back([&, isoDir]() {
+                threads.emplace_back([&, isoDir = std::move(isoDir)]() {
                     std::lock_guard<std::mutex> highLock(Mutex4High); // Lock the critical section
                     unmountISO(isoDir);
                 });
