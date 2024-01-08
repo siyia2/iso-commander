@@ -280,7 +280,7 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                         // Check for additional hyphens in the range
                         if (tokenStream >> dash) {
                             // Add an error message for ranges with more than one hyphen
-                            std::string errorMessage = "\033[1;91mInvalid range: '" + token + "'. Only single hyphen allowed in a range.\033[1;0m";
+                            std::string errorMessage = "\033[1;91mInvalid input: '" + token + "'.\033[1;0m";
                             if (processedErrors.find(errorMessage) == processedErrors.end()) {
                                 // Protect the critical section with a lock
                                 std::lock_guard<std::mutex> lock(errorsMutex);
@@ -361,7 +361,7 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                         }
                     } else {
                         // Add an error message for an invalid range format
-                        std::string errorMessage = "\033[1;91mInvalid range format: '" + token + "'. Expected format: start-end.\033[1;0m";
+                        std::string errorMessage = "\033[1;91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[1;0m";
                         if (processedErrors.find(errorMessage) == processedErrors.end()) {
                             // Protect the critical section with a lock
                             std::lock_guard<std::mutex> lock(errorsMutex);
@@ -757,7 +757,7 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
                         // Check for additional hyphens in the range
                         if (tokenStream >> dash) {
                             // Add an error message for ranges with more than one hyphen
-                            std::string errorMessage = "\033[1;91mInvalid range: '" + token + "'. Only single hyphen allowed in a range.\033[1;0m";
+                            std::string errorMessage = "\033[1;91mInvalid input: '" + token + "'.\033[1;0m";
                             if (processedErrors.find(errorMessage) == processedErrors.end()) {
                                 // Protect the critical section with a lock
                                 std::lock_guard<std::mutex> lock(errorsMutex);
@@ -838,7 +838,7 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
                         }
                     } else {
                         // Add an error message for an invalid range without an end
-                        std::string errorMessage = "\033[1;91mInvalid range: '" + token + "'. Range must have an end value.\033[1;0m";
+                        std::string errorMessage = "\033[1;91mInvalid input: '" + token + "'.\033[1;0m";
                         if (processedErrors.find(errorMessage) == processedErrors.end()) {
                             // Protect the critical section with a lock
                             std::lock_guard<std::mutex> lock(errorsMutex);

@@ -754,7 +754,7 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
         // Check if there is more than one hyphen in the token
         if (std::count(token.begin(), token.end(), '-') > 1) {
             invalidInput = true;
-            uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'. More than one hyphen in a range.\033[1;0m");
+            uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[1;0m");
             continue;
         }
 
@@ -1142,7 +1142,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
             // Check if there is more than one hyphen in the token
             if (token.find('-', dashPos + 1) != std::string::npos) {
                 invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'. More than one hyphen in a range.\033[1;0m");
+                uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[1;0m");
                 continue;
             }
 
@@ -1510,9 +1510,6 @@ void unmountISOs() {
                 errorMessages.push_back("\033[1;91mInvalid input: '" + token + "'.\033[1;0m");
             }
         }
-
-        // Determine the number of available CPU cores
-        const unsigned int numCores = std::thread::hardware_concurrency();
 
         // Create a vector of threads to perform unmounting and directory removal concurrently
         std::vector<std::thread> threads;
