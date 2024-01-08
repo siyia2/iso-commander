@@ -31,9 +31,11 @@ bool isValidIndex(int index, size_t isoDirsSize);
 
 //	voids
 
+//General functions
+bool isAllZeros(const std::string& str);
+
 //Delete functions
 bool fileExists(const std::string& filename);
-bool isAllZeros(const std::string& str);
 void select_and_delete_files_by_number();
 void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
 void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
