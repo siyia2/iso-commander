@@ -640,7 +640,6 @@ void select_and_delete_files_by_number() {
         return !ends_with_iso(iso);
     }), isoFiles.end());
 
-
     // Set to track deleted ISO files
     std::unordered_set<std::string> deletedSet;
 
@@ -648,35 +647,45 @@ void select_and_delete_files_by_number() {
     while (true) {
         std::system("clear");
         std::cout << "\033[1;93m ! ISO DELETION IS IRREVERSIBLE PROCEED WITH CAUTION !\n\033[1;0m" << std::endl;
+
+        // Remove non-existent paths from the cache
+        removeNonExistentPathsFromCache();
+
+        // Load ISO files from cache
+        isoFiles = loadCache();
+
+        // Filter isoFiles to include only entries with ".iso" or ".ISO" extensions
+        isoFiles.erase(std::remove_if(isoFiles.begin(), isoFiles.end(), [](const std::string& iso) {
+            return !ends_with_iso(iso);
+        }), isoFiles.end());
+
         printIsoFileList(isoFiles);
 
         std::cout << " " << std::endl;
-        
+
         // Prompt user for input
         char* input = readline("\033[1;94mChoose ISO(s) for \033[1;91mdeletion\033[1;94m (e.g., '1-3', '1 2', or press Enter to return):\033[1;0m ");
         std::system("clear");
-        
+
         // Check if the user wants to return
         if (input[0] == '\0') {
-			std::cout << "Press Enter to Return" << std::endl;
+            std::cout << "Press Enter to Return" << std::endl;
             break;
-        }
-
-        else {
+        } else {
             // Process user input to select and delete specific ISO files
             processDeleteInput(input, isoFiles, deletedSet);
         }
-        
+
         // Check if the ISO file list is empty
-		if (isoFiles.empty()) {
-		std::cout << " " << std::endl;
-        std::cout << "\033[1;93mNo ISO(s) available for deletion.\033[1;0m" << std::endl;
-        std::cout << " " << std::endl;
-        std::cout << "Press Enter to continue..." << std::endl;
-        std::cin.get();
-        break;
-		}
-        
+        if (isoFiles.empty()) {
+            std::cout << " " << std::endl;
+            std::cout << "\033[1;93mNo ISO(s) available for deletion.\033[1;0m" << std::endl;
+            std::cout << " " << std::endl;
+            std::cout << "Press Enter to continue..." << std::endl;
+            std::cin.get();
+            break;
+        }
+
         std::cout << " " << std::endl;
         std::cout << "\033[1;32mPress enter to continue...\033[1;0m";
         std::cin.get();
@@ -989,11 +998,6 @@ void select_and_mount_files_by_number() {
         return;
     }
 
-    // Filter isoFiles to include only entries with ".iso" or ".ISO" extensions
-    isoFiles.erase(std::remove_if(isoFiles.begin(), isoFiles.end(), [](const std::string& iso) {
-        return !ends_with_iso(iso);
-    }), isoFiles.end());
-
     // Check if there are any ISO files to mount
     if (isoFiles.empty()) {
         std::cout << "\033[1;93mNo .iso files in the cache. Please refresh the cache from the main menu.\033[1;0m" << std::endl;
@@ -1007,9 +1011,16 @@ void select_and_mount_files_by_number() {
     while (true) {
         std::system("clear");
         std::cout << "\033[1;93m ! IF EXPECTED ISO FILE(s) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\n\033[1;0m" << std::endl;
+        
+		// Remove non-existent paths from the cache after selection
+        removeNonExistentPathsFromCache();
+        
+        // Load ISO files from cache
+        isoFiles = loadCache();
+
         printIsoFileList(isoFiles);
         
-		std::cout << " " << std::endl;
+        std::cout << " " << std::endl;
 		
         // Prompt user for input
         char* input = readline("\033[1;94mChoose ISO(s) for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 2', '00' mounts all, or press Enter to return):\033[1;0m ");
@@ -1216,7 +1227,7 @@ void printAlreadyMountedMessage(const std::string& isoFile) {
 
 // Function to display an error message when the ISO file does not exist on disk
 void displayErrorMessage(const std::string& iso) {
-    std::cout << "\033[1;35mISO file '" << iso << "' does not exist on disk. Please return and re-enter the mount function, or refresh the cache from the main menu.\033[1;0m" << std::endl;
+    std::cout << "\033[1;35mISO file: \033[1;93m'" << iso << "'\033[1;35m does not exist on disk.\033[1;0m" << std::endl;
 }
 
 
