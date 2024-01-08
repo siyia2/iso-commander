@@ -1127,8 +1127,8 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
     std::vector<std::future<void>> futures; // Vector to store std::future objects for each task
 
     while (iss >> token) {
-		// Check if token consists of only zeros and has more than two or less than two zeros
-		if (token.size() != 2 && isAllZeros(token)) {
+		// Check if token consists of only zeros or is not 00
+		if (token != "00" || isAllZeros(token)) {
 			if (!invalidInput) {
 				invalidInput = true;
 				uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist.\033[1;0m");
@@ -1342,6 +1342,8 @@ bool isValidIndex(int index, size_t isoDirsSize) {
 void unmountISOs() {
     // Set to store unique error messages
     std::set<std::string> uniqueErrorMessages;
+    
+    bool invalidInput = false;
 
     // Path where ISO directories are expected to be mounted
     const std::string isoPath = "/mnt";
@@ -1420,6 +1422,13 @@ void unmountISOs() {
 
         std::string token;
         while (iss >> token) {
+		// Check if token consists of only zeros or is not 00
+		if (token != "00" || isAllZeros(token)) {
+			if (!invalidInput) {
+				invalidInput = true;
+				errorMessages.push_back("\033[1;91mFile index '0' does not exist.\033[1;0m");
+			}
+		}
             // Check if the token is a valid number
             if (std::regex_match(token, std::regex("^\\d+$"))) {
                 // Individual number
