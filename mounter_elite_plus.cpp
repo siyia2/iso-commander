@@ -90,7 +90,7 @@ int main() {
         printMenu();
 
         // Prompt for the main menu choice
-        char* input = readline("\033[1;94mEnter a choice:\033[1;0m ");
+        char* input = readline("\033[1;94mChoose an option:\033[1;0m ");
         if (!input) {
             break; // Exit the program if readline returns NULL (e.g., on EOF or Ctrl+D)
         }
@@ -651,7 +651,7 @@ void select_and_delete_files_by_number() {
         printIsoFileList(isoFiles);
 
         std::cout << " " << std::endl;
-		removeNonExistentPathsFromCache();
+        
         // Prompt user for input
         char* input = readline("\033[1;94mChoose ISO(s) for \033[1;91mdeletion\033[1;94m (e.g., '1-3', '1 2', or press Enter to return):\033[1;0m ");
         std::system("clear");
