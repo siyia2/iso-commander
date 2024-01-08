@@ -563,47 +563,36 @@ std::future<bool> iequals(std::string_view a, std::string_view b) {
 // Function to parallel traverse a directory and find ISO files
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& Mutex4Low) {
     try {
-        
-        // Vector to store futures for asynchronous tasks
+        const unsigned int maxThreads = std::thread::hardware_concurrency();
         std::vector<std::future<void>> futures;
 
-        // Traverse the directory and process each entry
         for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
             if (entry.is_regular_file()) {
-                // Get the file path
                 const std::filesystem::path& filePath = entry.path();
 
-                // Skip empty files and files with ".bin" extension
                 if (std::filesystem::file_size(filePath) == 0 || iequals(filePath.stem().string(), ".bin").get()) {
                     continue;
                 }
 
-                // Extract file extension and convert it to string_view for case-insensitive comparison
                 std::string extensionStr = filePath.extension().string();
                 std::string_view extension = extensionStr;
 
-                // Check if the file has a ".iso" extension using a future
                 std::future<bool> extensionComparisonFuture = iequals(extension, ".iso");
 
                 if (extensionComparisonFuture.get()) {
-                    // If the extension is ".iso", push the file path to isoFiles vector in a thread-safe manner
+                    // Capture isoFiles by value in the lambda
                     futures.push_back(std::async(std::launch::async, [filePath, &isoFiles, &Mutex4Low]() {
-                        // Lock the mutex to ensure thread safety
                         std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                        
-                        // Add the file path to the vector
                         isoFiles.push_back(filePath.string());
                     }));
                 }
             }
         }
 
-        // Wait for all asynchronous tasks to complete
         for (auto& future : futures) {
             future.get();
         }
     } catch (const std::filesystem::filesystem_error& e) {
-        // Handle and print filesystem errors
         std::cerr << "\033[1;91m" << e.what() << "\033[1;0m" << std::endl;
     }
 }
