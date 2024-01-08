@@ -1128,7 +1128,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
 
     while (iss >> token) {
 		// Check if token consists of only zeros or is not 00
-		if (token != "00" || isAllZeros(token)) {
+		if (token != "00" && isAllZeros(token)) {
 			if (!invalidInput) {
 				invalidInput = true;
 				uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist.\033[1;0m");
@@ -1427,7 +1427,7 @@ void unmountISOs() {
         std::string token;
         while (iss >> token) {
 		// Check if token consists of only zeros or is not 00
-		if (token != "00" || isAllZeros(token)) {
+		if (token != "00" && isAllZeros(token)) {
 			if (!invalidInput) {
 				invalidInput = true;
 				errorMessages.push_back("\033[1;91mFile index '0' does not exist.\033[1;0m");
