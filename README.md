@@ -2,8 +2,7 @@
 Port of bash shell program mounter_elite to C++ 
 https://github.com/siyia2/mounter_elite
 
-![2024-01-08-213119_grim](https://github.com/siyia2/mounter-elite-plus/assets/46220960/3a491065-f376-405f-bd24-53efa60b9fdf)
-
+![2024-01-08-213233_grim](https://github.com/siyia2/mounter-elite-plus/assets/46220960/34df804b-4a7f-4df3-a325-7d9d2c44a7a5)
 
 State of the art secure and blazing fast terminal image mounter/converter written in C++, it allows mounting `ISOs` and/or converting `BIN&IMG&MDF` files to `ISO`. Supports `Tab completion` and `on-disk cache` generation. 
 You can add multiple mounts and/or conversion paths. All paths are mounted under `/mnt/iso_*` format and all conversions take place at their local source directories, script requires `ROOT` access to `mount&unmount ISOs`. 
