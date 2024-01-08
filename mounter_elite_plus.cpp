@@ -750,6 +750,13 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
                 uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist.\033[1;0m");
             }
         }
+        
+        // Check if there is more than one hyphen in the token
+        if (std::count(token.begin(), token.end(), '-') > 1) {
+            invalidInput = true;
+            uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'. More than one hyphen in a range.\033[1;0m");
+            continue;
+        }
 
         size_t dashPos = token.find('-');
         if (dashPos != std::string::npos) {
@@ -1111,7 +1118,7 @@ bool isNumeric(const std::string& str) {
 // Function to process the user input for ISO mounting using multithreading
 void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
 	
-	std::lock_guard<std::mutex> highLock(Mutex4High);
+    std::lock_guard<std::mutex> highLock(Mutex4High);
 	
     std::istringstream iss(input);
     bool invalidInput = false;
@@ -1132,6 +1139,13 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
         
         size_t dashPos = token.find('-');
         if (dashPos != std::string::npos) {
+            // Check if there is more than one hyphen in the token
+            if (token.find('-', dashPos + 1) != std::string::npos) {
+                invalidInput = true;
+                uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'. More than one hyphen in a range.\033[1;0m");
+                continue;
+            }
+
             int start, end;
 
             try {
@@ -1148,13 +1162,6 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
                 uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[1;0m");
                 continue;
             }
-            
-            if ((start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) ||
-				(start == 0 || end == 0)) {
-				invalidInput = true;
-				uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[1;0m");
-				continue;
-			}
 
             if (start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) {
                 invalidInput = true;
@@ -1167,7 +1174,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
                 if (static_cast<size_t>(i) <= isoFiles.size() && processedIndices.find(i) == processedIndices.end()) {
                     // Use std::async to launch each task in a separate thread
                     futures.emplace_back(std::async(std::launch::async, handleIsoFile, isoFiles[i - 1], std::ref(mountedSet)));
-                    processedIndices.insert(i); // Mark  as processed
+                    processedIndices.insert(i); // Mark as processed
                 } else if (static_cast<size_t>(i) > isoFiles.size()) {
                     invalidInput = true;
                     uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(i) + "' does not exist.\033[1;0m");
