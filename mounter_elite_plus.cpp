@@ -1354,6 +1354,10 @@ void unmountISOs() {
 
         std::vector<std::string> isoDirs;
         std::vector<std::string> errorMessages;  // Store error messages
+        
+        // Reset flags and sets for each iteration
+		invalidInput = false;
+		uniqueErrorMessages.clear();
 
         // Find and store directories with the name "iso_*" in /mnt using std::filesystem
         for (const auto& entry : std::filesystem::directory_iterator(isoPath)) {
