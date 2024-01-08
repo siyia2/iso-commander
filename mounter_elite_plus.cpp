@@ -1120,19 +1120,21 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
 	
     std::istringstream iss(input);
     bool invalidInput = false;
-    std::vector<std::string> errorMessages; // Vector to store error messages
+    std::unordered_set<std::string> uniqueErrorMessages; // Set to store unique error messages
     std::set<int> processedIndices; // Set to keep track of processed indices
 
     std::string token;
     std::vector<std::future<void>> futures; // Vector to store std::future objects for each task
 
     while (iss >> token) {
-		       // Check if the token is '0' and treat it as an invalid index
-        if (token == "0") {
-            if (!invalidInput) {
-                invalidInput = true;
-                errorMessages.push_back("\033[1;91mFile index '0' does not exist.\033[1;0m");
-            }
+		// Check if the token is exactly "00" and treat it as a valid input
+		if (token == "00") {
+		continue;
+		
+		} else {
+			invalidInput = true;
+			uniqueErrorMessages.insert("\033[1;91mFile index '" + token + "' is not a valid input.\033[1;0m");
+			continue;
 		}
         
         size_t dashPos = token.find('-');
@@ -1145,18 +1147,18 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
             } catch (const std::invalid_argument& e) {
                 // Handle the exception for invalid input
                 invalidInput = true;
-                errorMessages.push_back("\033[1;91mInvalid input: '" + token + "'.\033[1;0m");
+                uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[1;0m");
                 continue;
             } catch (const std::out_of_range& e) {
                 // Handle the exception for out-of-range input
                 invalidInput = true;
-                errorMessages.push_back("\033[1;91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[1;0m");
+                uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[1;0m");
                 continue;
             }
 
             if (start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) {
                 invalidInput = true;
-                errorMessages.push_back("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[1;0m");
+                uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[1;0m");
                 continue;
             }
 
@@ -1168,7 +1170,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
                     processedIndices.insert(i); // Mark  as processed
                 } else if (static_cast<size_t>(i) > isoFiles.size()) {
                     invalidInput = true;
-                    errorMessages.push_back("\033[1;91mFile index '" + std::to_string(i) + "' does not exist.\033[1;0m");
+                    uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(i) + "' does not exist.\033[1;0m");
                 }
             }
         } else if (isNumeric(token)) {
@@ -1179,11 +1181,11 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
                 processedIndices.insert(num); // Mark index as processed
             } else if (num > isoFiles.size()) {
                 invalidInput = true;
-                errorMessages.push_back("\033[1;91mFile index '" + std::to_string(num) + "' does not exist.\033[1;0m");
+                uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(num) + "' does not exist.\033[1;0m");
             }
         } else {
             invalidInput = true;
-            errorMessages.push_back("\033[1;91mInvalid input: '" + token + "'.\033[1;0m");
+            uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[1;0m");
         }
     }
 
@@ -1194,7 +1196,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
 
     // Display errors at the end
     if (invalidInput) {
-        for (const auto& errorMsg : errorMessages) {
+        for (const auto& errorMsg : uniqueErrorMessages) {
             std::cerr << "\033[1;93m" << errorMsg << "\033[1;0m" << std::endl;
         }
     }
