@@ -234,11 +234,6 @@ void removeNonExistentPathsFromCache() {
 
     // Attempt to open the cache file
     std::ifstream cacheFile(cacheFilePath);
-    if (!cacheFile) {
-        // Display an error message if the cache file is not found
-        std::cerr << "\033[1;91mError: Unable to find cache file, will attempt to create it.\033[1;0m" << std::endl;
-        return;
-    }
 
     // Read paths from the cache file into the cache vector
     for (std::string line; std::getline(cacheFile, line);) {
