@@ -653,9 +653,6 @@ void select_and_delete_files_by_number() {
         char* input = readline("\033[1;94mChoose ISO(s) for \033[1;91mdeletion\033[1;94m (e.g., '1-3', '1 2', or press Enter to return):\033[0m ");
         std::system("clear");
         
-        // Start the timer
-        auto start_time = std::chrono::high_resolution_clock::now();
-
         // Check if the user wants to return
         if (input[0] == '\0') {
 			std::cout << "Press Enter to Return" << std::endl;
@@ -677,14 +674,6 @@ void select_and_delete_files_by_number() {
         break;
 		}
         
-        // Stop the timer after completing the mounting process
-        auto end_time = std::chrono::high_resolution_clock::now();
-
-        // Calculate and print the elapsed time
-        std::cout << " " << std::endl;
-        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-		// Print the time taken for the entire process in bold with one decimal place
-        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "\033[1;32mPress enter to continue...\033[0m";
         std::cin.get();
@@ -716,12 +705,12 @@ void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFi
             // Add the ISO file to the set of deleted files
             deletedSet.insert(iso);
 
-            std::cout << "\033[1;92mDeleted: \033[1;91m'" << iso << "'\033[1;92m." << std::endl;
+            std::cout << "\033[1;92mDeleted: \033[1;91m'" << iso << "'\033[1;92m.\033[0m" << std::endl;
         } else {
-            std::cout << "\033[1;91mError deleting: \033[0m'" << iso << "'\033[1;91m." << std::endl;
+            std::cout << "\033[1;91mError deleting: \033[0m'" << iso << "'\033[1;91m.\033[0m" << std::endl;
         }
     } else {
-        std::cout << "\033[1;93mFile not found: \033[0m'" << iso << "'\033[1;93m." << std::endl;
+        std::cout << "\033[1;93mFile not found: \033[0m'" << iso << "'\033[1;93m.\033[0m" << std::endl;
     }
 }
 
@@ -822,40 +811,54 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
             std::cout << "\033[1;93m'" << isoFiles[index - 1] << "'\033[0m" << std::endl;
         }
 	}
-	if (!uniqueErrorMessages.empty() && processedIndices.empty()) {
-		std::cout << " " << std::endl;
-		std::cout << "\033[1;91mNo valid selection(s) for deletion.\033[0m" << std::endl;
-	} else {
-	// Prompt for confirmation before proceeding
-	char confirmation;
-	std::cout << " " << std::endl;
-	std::cout << "\033[1;94mDo you want to proceed? (y/n):\033[0m ";
-	std::cin.get(confirmation);
-	
-	// Ignore any additional characters in the input buffer, including newline
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    if (!uniqueErrorMessages.empty() && processedIndices.empty()) {
+        std::cout << " " << std::endl;
+        std::cout << "\033[1;91mNo valid selection(s) for deletion.\033[0m" << std::endl;
+    } else {
+        // Prompt for confirmation before proceeding
+        char confirmation;
+        std::cout << " " << std::endl;
+        std::cout << "\033[1;94mDo you want to proceed? (y/n):\033[0m ";
+        std::cin.get(confirmation);
 
-	// Check if the entered character is not 'Y' or 'y'
-	if (!(confirmation == 'y' || confirmation == 'Y')) {
-		std::cout << " " << std::endl;
-		std::cout << "\033[1;93mDeletion aborted by user.\033[0m" << std::endl;
-        return;
-		
-	} else {
-		std::system("clear");
-		// Launch deletion tasks for valid selections
-		for (const auto& index : processedIndices) {
-			if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
-				futures.emplace_back(std::async(std::launch::async, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
-			}
-		}
-	}
-}
-    // Wait for all tasks to complete
-    for (auto& future : futures) {
-        future.wait();
+        // Ignore any additional characters in the input buffer, including newline
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+        // Check if the entered character is not 'Y' or 'y'
+        if (!(confirmation == 'y' || confirmation == 'Y')) {
+            std::cout << " " << std::endl;
+            std::cout << "\033[1;93mDeletion aborted by user.\033[0m" << std::endl;
+            return;
+        } else {
+            // Start the timer after user confirmation
+            auto start_time = std::chrono::high_resolution_clock::now();
+
+            std::system("clear");
+
+            // Launch deletion tasks for valid selections
+            for (const auto& index : processedIndices) {
+                if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
+                    futures.emplace_back(std::async(std::launch::async, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
+                }              
+            }
+
+            // Wait for all tasks to complete
+            for (auto& future : futures) {
+                future.wait();
+            }
+
+            // Stop the timer after completing all deletion tasks
+            auto end_time = std::chrono::high_resolution_clock::now();
+
+            // Calculate and print the elapsed time
+            std::cout << " " << std::endl;
+            auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+            // Print the time taken for the entire process in bold with one decimal place
+            std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
+        }
     }
 }
+
 
 
 
