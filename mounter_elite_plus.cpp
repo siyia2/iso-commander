@@ -1131,7 +1131,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
 		if (token != "00" && isAllZeros(token)) {
 			if (!invalidInput) {
 				invalidInput = true;
-				uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist; if you prefer to mount everything, use '00' explicitly.\033[1;0m");
+				uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist; if you want to mount everything, enter '00' explicitly.\033[1;0m");
 			}
 		}
         
@@ -1430,7 +1430,7 @@ void unmountISOs() {
 		if (token != "00" && isAllZeros(token)) {
 			if (!invalidInput) {
 				invalidInput = true;
-				errorMessages.push_back("\033[1;91mFile index '0' does not exist; if you prefer to unmount everything, use '00' explicitly.\033[1;0m");
+				errorMessages.push_back("\033[1;91mFile index '0' does not exist; if you want to unmount everything, enter '00' explicitly.\033[1;0m");
 			}
 		}
             // Check if the token is a valid number
