@@ -563,8 +563,6 @@ std::future<bool> iequals(std::string_view a, std::string_view b) {
 // Function to parallel traverse a directory and find ISO files
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& Mutex4Low) {
     try {
-        // Get the maximum number of threads supported by the hardware
-        const unsigned int maxThreads = std::thread::hardware_concurrency();
         
         // Vector to store futures for asynchronous tasks
         std::vector<std::future<void>> futures;
