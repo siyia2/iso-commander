@@ -32,6 +32,7 @@ bool isValidIndex(int index, size_t isoDirsSize);
 //	voids
 
 //Delete functions
+bool fileExists(const std::string& filename);
 bool isAllZeros(const std::string& str);
 void select_and_delete_files_by_number();
 void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
@@ -648,7 +649,7 @@ void select_and_delete_files_by_number() {
         printIsoFileList(isoFiles);
 
         std::cout << " " << std::endl;
-
+		removeNonExistentPathsFromCache();
         // Prompt user for input
         char* input = readline("\033[1;94mChoose ISO(s) for \033[1;91mdeletion\033[1;94m (e.g., '1-3', '1 2', or press Enter to return):\033[1;0m ");
         std::system("clear");
@@ -680,10 +681,18 @@ void select_and_delete_files_by_number() {
     }
 }
 
+
+// Function to check if a file exists
+bool fileExists(const std::string& filename) {
+    std::ifstream file(filename);
+    return file.good();
+}
+
+
 // Function to handle the deletion of an ISO file
 void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
 	
-	std::lock_guard<std::mutex> lowLock(Mutex4Low);
+    std::lock_guard<std::mutex> lowLock(Mutex4Low);
 	
     // Check if the ISO file is in the cache
     auto it = std::find(isoFiles.begin(), isoFiles.end(), iso);
@@ -691,33 +700,41 @@ void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFi
         // Escape the ISO file name for the shell command using shell_escape
         std::string escapedIso = shell_escape(iso);
 
-        // Delete the ISO file from the filesystem
-        std::string command = "sudo rm -f " + escapedIso;
-        int result = std::system(command.c_str());
+        // Check if the file exists before attempting to delete
+        if (fileExists(iso)) {
+            // Delete the ISO file from the filesystem
+            std::string command = "sudo rm -f " + escapedIso;
+            int result = std::system(command.c_str());
 
-        if (result == 0) {
-            // Get the index of the found ISO file (starting from 1)
-            int index = std::distance(isoFiles.begin(), it) + 1;
+            if (result == 0) {
+                // Get the index of the found ISO file (starting from 1)
+                int index = std::distance(isoFiles.begin(), it) + 1;
 
-            // Remove the deleted ISO file from the cache using the index
-            isoFiles.erase(isoFiles.begin() + index - 1);
+                // Remove the deleted ISO file from the cache using the index
+                isoFiles.erase(isoFiles.begin() + index - 1);
 
-            // Add the ISO file to the set of deleted files
-            deletedSet.insert(iso);
+                // Add the ISO file to the set of deleted files
+                deletedSet.insert(iso);
 
-            std::cout << "\033[1;92mDeleted: \033[1;91m'" << iso << "'\033[1;92m.\033[1;0m" << std::endl;
+                std::cout << "\033[1;92mDeleted: \033[1;91m'" << iso << "'\033[1;92m.\033[1;0m" << std::endl;
+            } else {
+                // Print error message in magenta and bold when rm command fails
+                std::cout << "\033[1;91mError deleting: \033[1;0m'" << iso << "'\033[1;95m.\033[1;0m" << std::endl;
+            }
         } else {
-            std::cout << "\033[1;91mError deleting: \033[1;0m'" << iso << "'\033[1;91m.\033[1;0m" << std::endl;
+            std::cout << "\033[1;35mFile not found: \033[1;0m'" << iso << "'\033[1;95m.\033[1;0m" << std::endl;
         }
     } else {
-        std::cout << "\033[1;93mFile not found: \033[1;0m'" << iso << "'\033[1;93m.\033[1;0m" << std::endl;
-    }
+        std::cout << "\033[1;93mFile not found in cache: \033[1;0m'" << iso << "'\033[1;93m.\033[1;0m" << std::endl;
+    }   
 }
+
 
 // Function to check if a string consists only of zeros
 bool isAllZeros(const std::string& str) {
     return str.find_first_not_of('0') == std::string::npos;
 }
+
 
 // Function to process user input for selecting and deleting specific ISO files
 void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
