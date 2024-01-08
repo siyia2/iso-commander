@@ -1301,13 +1301,10 @@ bool isDirectoryEmpty(const std::string& path) {
 
 // Function to unmount ISO files asynchronously
 void unmountISO(const std::string& isoDir) {
-    // Reusable string for commands
-    std::string command;
-
     // Use std::async to unmount and remove the directory asynchronously
-    auto unmountFuture = std::async(std::launch::async, [&isoDir, &command]() {
+    auto unmountFuture = std::async(std::launch::async, [isoDir]() {
         // Construct the unmount command with sudo, umount, and suppressing logs
-        command = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1";
+        std::string command = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1";
         int result = system(command.c_str());
 
         // Check if the unmounting was successful
@@ -1333,6 +1330,7 @@ void unmountISO(const std::string& isoDir) {
     // Wait for the asynchronous tasks to complete
     unmountFuture.get();
 }
+
 
 
 // Function to perform asynchronous unmounting
