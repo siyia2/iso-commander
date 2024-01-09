@@ -810,13 +810,15 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
 	
 	std::lock_guard<std::mutex> highLock(Mutex4High);
 	
+	unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
+	std::vector<std::future<void>> futures(maxThreads);
+	
     std::istringstream iss(input);
     bool invalidInput = false;
     std::unordered_set<std::string> uniqueErrorMessages; // Set to store unique error messages
     std::set<int> processedIndices; // Set to keep track of processed indices
 
     std::string token;
-    std::vector<std::future<void>> futures; // Vector to store std::future objects for each task
 
     while (iss >> token) {
         // Check if the token consists only of zeros and treat it as a non-existent index
@@ -937,10 +939,20 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
             std::system("clear");
 
             // Launch deletion tasks for valid selections
+            int threadIndex = 0;
             for (const auto& index : processedIndices) {
                 if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
-                    futures.emplace_back(std::async(std::launch::async, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
-                }              
+                    if (threadIndex < maxThreads) {
+                        futures[threadIndex] = std::async(std::launch::async, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet));
+                        ++threadIndex;
+                    } else {
+                        for (auto& future : futures) {
+                            future.wait();
+                        }
+                        futures[0] = std::async(std::launch::async, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet));
+                        threadIndex = 1;
+                    }
+                }
             }
 
             // Wait for all tasks to complete
@@ -1184,34 +1196,44 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
 // Function to handle mounting of a specific ISO file asynchronously
 void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet) {
     try {
-        // Declare a local mutex
-        std::mutex localMutex;
+        // Get the maximum number of threads supported by the system
+        unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
-        // Use std::async to execute the function asynchronously
-        auto future = std::async(std::launch::async, [&iso, &mountedSet, &localMutex]() {
-            // Check if the ISO file exists on disk
-            if (fileExistsOnDisk(iso)) {
-                // Lock the local mutex before accessing the shared set
-                std::lock_guard<std::mutex> medLock(localMutex);
+        // Use a thread pool with the specified maxThreads
+        std::vector<std::future<void>> futures;
+        futures.reserve(maxThreads);
 
-                // Attempt to insert the ISO file into the set; if it's a new entry, mount it
-                auto insertResult = mountedSet.insert(iso);
-                if (insertResult.second) {
-                    // Mount the ISO file
-                    mountISOs({iso});  // Pass a vector with a single string to mountISO
+        for (unsigned int i = 0; i < maxThreads; ++i) {
+            futures.push_back(std::async(std::launch::async, [&iso, &mountedSet]() {
+                // Declare a local mutex
+                std::mutex localMutex;
+
+                // Check if the ISO file exists on disk
+                if (fileExistsOnDisk(iso)) {
+                    // Lock the local mutex before accessing the shared set
+                    std::lock_guard<std::mutex> medLock(localMutex);
+
+                    // Attempt to insert the ISO file into the set; if it's a new entry, mount it
+                    auto insertResult = mountedSet.insert(iso);
+                    if (insertResult.second) {
+                        // Mount the ISO file
+                        mountISOs({iso});  // Pass a vector with a single string to mountISO
+                    } else {
+                        // ISO file is already mounted, get the mount path
+                        std::string mountedIso = *insertResult.first; // Get the existing entry from the set
+                        printAlreadyMountedMessage(mountedIso);
+                    }
                 } else {
-                    // ISO file is already mounted, get the mount path
-                    std::string mountedIso = *insertResult.first; // Get the existing entry from the set
-                    printAlreadyMountedMessage(mountedIso);
+                    // Display an error message if the ISO file doesn't exist on disk
+                    displayErrorMessage(iso);
                 }
-            } else {
-                // Display an error message if the ISO file doesn't exist on disk
-                displayErrorMessage(iso);
-            }
-        });
+            }));
+        }
 
-        // You can choose to wait for the asynchronous operation or not based on your requirements
-        // future.wait();
+        // You can choose to wait for the asynchronous operations or not based on your requirements
+        // for (auto& future : futures) {
+        //     future.wait();
+        // }
     } catch (const std::exception& e) {
         // Handle exceptions thrown in the asynchronous task
         std::cerr << "\033[1;91m" << e.what() << " \033[1;91m.\033[1;0m" << std::endl;
