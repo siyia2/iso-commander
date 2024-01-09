@@ -63,6 +63,8 @@ void unmountISO(const std::string& isoDir);
 
 // Art
 void printMenu();
+void submenu1();
+void submenu2();
 void print_ascii();
 
 //	stds
@@ -84,7 +86,6 @@ int main() {
     std::string choice;
 
     while (!exitProgram) {
-        bool returnToMainMenu = false;
         std::system("clear");
         print_ascii();
         // Display the main menu options
@@ -97,68 +98,24 @@ int main() {
         }
 
         std::string choice(input);
-
-        if (choice == "1") { 
-            std::system("clear");
-            select_and_mount_files_by_number();
-            std::system("clear");
-        } else {
+		if (choice == "1") {
+        std::system("clear");
+        submenu1();  // Call the submenu instead of directly calling select_and_mount_files_by_number()
+        std::system("clear");
+		} else {
 			// Check if the input length is exactly 1
 			if (choice.length() == 1){
             switch (choice[0]) {
             case '2':
-                std::system("clear");
-                unmountISOs();
-                std::system("clear");
+                submenu2();
                 break;
             case '3':
-                std::system("clear");
-                select_and_delete_files_by_number();
-                std::system("clear");
-                break;
-            case '4':
-                while (!returnToMainMenu) {
-					std::system("clear");
-					std::cout << "\033[1;32m+-------------------------+" << std::endl;
-					std::cout << "\033[1;32m|↵ Convert2ISO             |" << std::endl;
-					std::cout << "\033[1;32m+-------------------------+" << std::endl;
-                    std::cout << "\033[1;32m|1. CCD2ISO              |" << std::endl;
-                    std::cout << "\033[1;32m+-------------------------+" << std::endl;
-                    std::cout << "\033[1;32m|2. MDF2ISO              |" << std::endl;
-                    std::cout << "\033[1;32m+-------------------------+" << std::endl;
-                    std::cout << " " << std::endl;
-                    char* submenu_input = readline("\033[1;94mChoose a function, or press Enter to return:\033[1;0m ");
-
-                    if (!submenu_input || std::strlen(submenu_input) == 0) {
-					delete[] submenu_input;
-					break; // Exit the submenu if input is empty or NULL
-					}
-					
-                    std::string submenu_choice(submenu_input);
-                    free(submenu_input);
-                    // Check if the input length is exactly 1
-					if (submenu_choice.empty() || submenu_choice.length() == 1){
-                    switch (submenu_choice[0]) {		
-                    case '1':
-                        std::system("clear");
-                        select_and_convert_files_to_iso();
-                        break;
-                    case '2':
-                        std::system("clear");
-                        select_and_convert_files_to_iso_mdf();
-                        break;
-                    default:
-                        break;}
-                    }
-                }
-                break;
-            case '5':
                 manualRefreshCache();
                 std::cout << "\033[1;32mPress enter to continue...\033[1;0m";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 std::system("clear");
                 break;
-            case '6':
+            case '4':
                 exitProgram = true; // Exit the program
                 std::cout << " " << std::endl;
                 std::system("clear");
@@ -194,21 +151,96 @@ std::cout << Color << R"(   *         )               )                  (      
 }
 
 
+void submenu1() {
+    std::string subChoice;
+
+    while (true) {
+        std::system("clear");
+        std::cout << "\033[1;32m+-------------------------+" << std::endl;
+        std::cout << "\033[1;32m|↵ Mount/Unmount/Delete    |" << std::endl;
+        std::cout << "\033[1;32m+-------------------------+" << std::endl;
+        std::cout << "\033[1;32m|2. Mount                 |" << std::endl;
+        std::cout << "\033[1;32m+-------------------------+" << std::endl;
+        std::cout << "\033[1;32m|2. Unmount               |" << std::endl;
+		std::cout << "\033[1;32m+-------------------------+" << std::endl;
+		std::cout << "\033[1;32m|3. Delete                |" << std::endl;
+		std::cout << "\033[1;32m+-------------------------+" << std::endl;
+
+        char* submenu_input = readline("\033[1;94mChoose a function, or press Enter to return:\033[1;0m ");
+
+        if (subChoice.empty()) {
+            // If the user pressed Enter without entering any choice, exit the submenu
+            return;
+        }
+
+        std::system("clear");
+
+        switch (subChoice[0]) {
+            case '1':
+                select_and_mount_files_by_number();
+                break;
+            case '2':
+                unmountISOs();
+                break;
+            case '3':
+                select_and_delete_files_by_number();
+                break;
+            case '4':
+                // The user chose to go back to the main menu, so return from the function
+                return;
+        }
+    }
+}
+
+void submenu2() {
+	while (true) {
+		std::system("clear");
+		std::cout << "\033[1;32m+-------------------------+" << std::endl;
+		std::cout << "\033[1;32m|↵ Convert2ISO             |" << std::endl;
+		std::cout << "\033[1;32m+-------------------------+" << std::endl;
+        std::cout << "\033[1;32m|1. CCD2ISO              |" << std::endl;
+        std::cout << "\033[1;32m+-------------------------+" << std::endl;
+        std::cout << "\033[1;32m|2. MDF2ISO              |" << std::endl;
+        std::cout << "\033[1;32m+-------------------------+" << std::endl;
+        std::cout << " " << std::endl;
+        char* submenu_input = readline("\033[1;94mChoose a function, or press Enter to return:\033[1;0m ");
+
+        if (!submenu_input || std::strlen(submenu_input) == 0) {
+			delete[] submenu_input;
+			break; // Exit the submenu if input is empty or NULL
+		}
+					
+          std::string submenu_choice(submenu_input);
+         // Check if the input length is exactly 1
+		 if (submenu_choice.empty() || submenu_choice.length() == 1){
+         switch (submenu_choice[0]) {		
+             case '1':
+				std::system("clear");
+                select_and_convert_files_to_iso();
+                break;
+             case '2':
+                std::system("clear");
+                select_and_convert_files_to_iso_mdf();
+                break;
+             case '4':
+				return;
+			}
+		}
+	}
+	
+}
+
 void printMenu() {
     std::cout << "\033[1;32m+-------------------------+" << std::endl;
     std::cout << "\033[1;32m|       Menu Options       |" << std::endl;
-    std::cout << "\033[1;32m+-------------------------+\033[1;0m" << std::endl;
-    std::cout << "\033[1;32m|1. Mount                |" << std::endl;
     std::cout << "\033[1;32m+-------------------------+" << std::endl;
-    std::cout << "\033[1;32m|2. Unmount              |" << std::endl;
+    std::cout << "\033[1;32m|1. Mount/Unmount/Delete  | " << std::endl;
     std::cout << "\033[1;32m+-------------------------+" << std::endl;
-    std::cout << "\033[1;32m|3. Delete               |" << std::endl;
+    std::cout << "\033[1;32m|2. Convert2ISO           |" << std::endl;
     std::cout << "\033[1;32m+-------------------------+" << std::endl;
-    std::cout << "\033[1;32m|4. Convert2ISO          |" << std::endl;
+    std::cout << "\033[1;32m|3. Refresh ISO Cache     |" << std::endl;
     std::cout << "\033[1;32m+-------------------------+" << std::endl;
-    std::cout << "\033[1;32m|5. Refresh ISO Cache    |" << std::endl;
-    std::cout << "\033[1;32m+-------------------------+" << std::endl;
-    std::cout << "\033[1;32m|6. Exit Program         |" << std::endl;
+    std::cout << "\033[1;32m|4. Exit Program          |" << std::endl;
     std::cout << "\033[1;32m+-------------------------+" << std::endl;
     std::cout << std::endl;
 }
