@@ -557,7 +557,7 @@ std::future<bool> iequals(std::string_view a, std::string_view b) {
 // Function to parallel traverse a directory and find ISO files
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& Mutex4Low) {
     try {
-        const unsigned int maxThreads = std::thread::hardware_concurrency();
+        
         std::vector<std::future<void>> futures;
 
         for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
@@ -964,7 +964,7 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
         }
     } else {
         // Handle sudo command failure or user didn't provide the password
-        std::cerr << "Failed to authenticate with sudo." << std::endl;
+        std::cerr << "\033[1;91mFailed to authenticate with sudo.\033[1;0m" << std::endl;
         // Your code here
     }
 }
@@ -1054,6 +1054,14 @@ void select_and_mount_files_by_number() {
 		
         // Prompt user for input
         char* input = readline("\033[1;94mChoose ISO(s) for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 2', '00' mounts all, or press Enter to return):\033[1;0m ");
+
+		// Construct the sudo command
+		std::string sudoCommand = "sudo -v";
+
+		// Execute sudo to prompt for password
+		int sudoResult = system(sudoCommand.c_str());
+
+        
         std::system("clear");
 
         // Start the timer
