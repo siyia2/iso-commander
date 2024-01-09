@@ -481,8 +481,9 @@ void manualRefreshCache() {
     // Set to store processed invalid paths
     std::set<std::string> processedInvalidPaths;
 
-    // Set up a thread pool with a maximum number of threads
-    const std::size_t maxThreads = std::thread::hardware_concurrency();
+    // Set up a thread pool with a maximum number of threads, fallback to two threads if hardware concurrency is not available or not positive
+	const std::size_t maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
+
     std::vector<std::future<void>> futures;
     
     // Flags to determine whether cache write errors were encountered
