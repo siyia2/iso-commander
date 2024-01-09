@@ -217,9 +217,11 @@ void submenu2() {
 		 if (submenu_choice.empty() || submenu_choice.length() == 1){
          switch (submenu_choice[0]) {		
              case '1':
+				std::system("clear");
                 select_and_convert_files_to_iso();
                 break;
              case '2':
+				std::system("clear");
                 select_and_convert_files_to_iso_mdf();
                 break;
              case '4':
