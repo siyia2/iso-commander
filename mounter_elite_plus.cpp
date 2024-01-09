@@ -1203,49 +1203,41 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
 // Function to handle mounting of a specific ISO file asynchronously
 void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet) {
     try {
-        // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism fallback is two
-        unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
+        // Declare a local mutex
+        std::mutex localMutex;
 
-        // Use a thread pool with the specified maxThreads
-        std::vector<std::future<void>> futures;
-        futures.reserve(maxThreads);
+        // Use std::async to execute the function asynchronously
+        auto future = std::async(std::launch::async, [&iso, &mountedSet, &localMutex]() {
+            // Check if the ISO file exists on disk
+            if (fileExistsOnDisk(iso)) {
+                // Lock the local mutex before accessing the shared set
+                std::lock_guard<std::mutex> medLock(localMutex);
 
-        for (unsigned int i = 0; i < maxThreads; ++i) {
-            futures.push_back(std::async(std::launch::async, [&iso, &mountedSet]() {
-                // Declare a local mutex
-                std::mutex localMutex;
-
-                // Check if the ISO file exists on disk
-                if (fileExistsOnDisk(iso)) {
-                    // Lock the local mutex before accessing the shared set
-                    std::lock_guard<std::mutex> medLock(localMutex);
-
-                    // Attempt to insert the ISO file into the set; if it's a new entry, mount it
-                    auto insertResult = mountedSet.insert(iso);
-                    if (insertResult.second) {
-                        // Mount the ISO file
-                        mountISOs({iso});  // Pass a vector with a single string to mountISO
-                    } else {
-                        // ISO file is already mounted, get the mount path
-                        std::string mountedIso = *insertResult.first; // Get the existing entry from the set
-                        printAlreadyMountedMessage(mountedIso);
-                    }
+                // Attempt to insert the ISO file into the set; if it's a new entry, mount it
+                auto insertResult = mountedSet.insert(iso);
+                if (insertResult.second) {
+                    // Mount the ISO file
+                    mountISOs({iso});  // Pass a vector with a single string to mountISO
                 } else {
-                    // Display an error message if the ISO file doesn't exist on disk
-                    displayErrorMessage(iso);
+                    // ISO file is already mounted, get the mount path
+                    std::string mountedIso = *insertResult.first; // Get the existing entry from the set
+                    printAlreadyMountedMessage(mountedIso);
                 }
-            }));
-        }
+            } else {
+                // Display an error message if the ISO file doesn't exist on disk
+                displayErrorMessage(iso);
+            }
+        });
 
-        // You can choose to wait for the asynchronous operations or not based on your requirements
-        // for (auto& future : futures) {
-        //     future.wait();
-        // }
+        // You can choose to wait for the asynchronous operation or not based on your requirements
+        // future.wait();
     } catch (const std::exception& e) {
         // Handle exceptions thrown in the asynchronous task
         std::cerr << "\033[1;91m" << e.what() << " \033[1;91m.\033[1;0m" << std::endl;
     }
 }
+
+
 
 
 // Function to check if a string is numeric
