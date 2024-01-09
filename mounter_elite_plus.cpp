@@ -1056,18 +1056,22 @@ void mountISOs(const std::vector<std::string>& isoFiles) {
     // Map to store mounted ISOs with their corresponding paths
     std::map<std::string, std::string> mountedIsos;
 
+    // Determine the number of threads to use (minimum of available threads and ISOs)
+    unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
+    unsigned int numThreads = std::min(maxThreads, static_cast<unsigned int>(isoFiles.size()));
+
     // Vector to store futures for parallel mounting
     std::vector<std::future<void>> futures;
 
     // Iterate through the list of ISO files and spawn a future for each
-    for (const std::string& isoFile : isoFiles) {
+    for (unsigned int i = 0; i < numThreads; ++i) {
         // Create a future for mounting the ISO file and pass the map and mutex by reference
-        futures.push_back(std::async(std::launch::async, [&isoFile, &mountedIsos]() {
+        futures.push_back(std::async(std::launch::async, [i, &isoFiles, &mountedIsos]() {
             // Lock the mutex before accessing the shared map using Mutex4Med
             std::lock_guard<std::mutex> medLock(Mutex4Med);
 
             // Call the function that modifies the shared map
-            mountIsoFile(isoFile, mountedIsos);
+            mountIsoFile(isoFiles[i], mountedIsos);
         }));
     }
 
@@ -1475,12 +1479,18 @@ void unmountISO(const std::string& isoDir) {
 
 // Function to perform asynchronous unmounting
 std::future<void> asyncUnmountISO(const std::string& isoDir) {
-    return std::async(std::launch::async, [](const std::string& isoDir) {
-        std::lock_guard<std::mutex> medLock(Mutex4Med); // Lock the critical section
-        unmountISO(isoDir);
-    }, isoDir);
-}
+    // Determine the number of threads to use (minimum of available threads and 1)
+    unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 1;
+    unsigned int numThreads = std::min(maxThreads, static_cast<unsigned int>(1));
 
+    return std::async(std::launch::async, [isoDir]() {
+        // Lock the mutex before accessing the shared resource using Mutex4Med
+        std::lock_guard<std::mutex> medLock(Mutex4Med);
+
+        // Call the function that modifies the shared resource
+        unmountISO(isoDir);
+    });
+}
 
 // Function to check if a given index is within the valid range of available ISOs
 bool isValidIndex(int index, size_t isoDirsSize) {
