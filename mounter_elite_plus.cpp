@@ -99,9 +99,8 @@ int main() {
 
         std::string choice(input);
 		if (choice == "1") {
-        std::system("clear");
-        submenu1();  // Call the submenu instead of directly calling select_and_mount_files_by_number()
-        std::system("clear");
+        submenu1();
+        
 		} else {
 			// Check if the input length is exactly 1
 			if (choice.length() == 1){
@@ -157,16 +156,19 @@ void submenu1() {
     while (true) {
         std::system("clear");
         std::cout << "\033[1;32m+-------------------------+" << std::endl;
-        std::cout << "\033[1;32m|↵ Mount/Unmount/Delete    |" << std::endl;
+        std::cout << "\033[1;32m|↵ Manage ISO              |" << std::endl;
         std::cout << "\033[1;32m+-------------------------+" << std::endl;
-        std::cout << "\033[1;32m|2. Mount                 |" << std::endl;
+        std::cout << "\033[1;32m|1. Mount                 |" << std::endl;
         std::cout << "\033[1;32m+-------------------------+" << std::endl;
         std::cout << "\033[1;32m|2. Unmount               |" << std::endl;
-		std::cout << "\033[1;32m+-------------------------+" << std::endl;
-		std::cout << "\033[1;32m|3. Delete                |" << std::endl;
-		std::cout << "\033[1;32m+-------------------------+" << std::endl;
-
+        std::cout << "\033[1;32m+-------------------------+" << std::endl;
+        std::cout << "\033[1;32m|3. Delete                |" << std::endl;
+        std::cout << "\033[1;32m+-------------------------+" << std::endl;
+        std::cout << " " << std::endl;
         char* submenu_input = readline("\033[1;94mChoose a function, or press Enter to return:\033[1;0m ");
+
+        // Assign the value of submenu_input to subChoice
+        subChoice = submenu_input;
 
         if (subChoice.empty()) {
             // If the user pressed Enter without entering any choice, exit the submenu
@@ -191,6 +193,7 @@ void submenu1() {
         }
     }
 }
+
 
 void submenu2() {
 	while (true) {
@@ -234,7 +237,7 @@ void printMenu() {
     std::cout << "\033[1;32m+-------------------------+" << std::endl;
     std::cout << "\033[1;32m|       Menu Options       |" << std::endl;
     std::cout << "\033[1;32m+-------------------------+" << std::endl;
-    std::cout << "\033[1;32m|1. Mount/Unmount/Delete  | " << std::endl;
+    std::cout << "\033[1;32m|1. Manage ISO            | " << std::endl;
     std::cout << "\033[1;32m+-------------------------+" << std::endl;
     std::cout << "\033[1;32m|2. Convert2ISO           |" << std::endl;
     std::cout << "\033[1;32m+-------------------------+" << std::endl;
@@ -726,52 +729,55 @@ void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFi
     if (it != isoFiles.end()) {
         // Escape the ISO file name for the shell command using shell_escape
         std::string escapedIso = shell_escape(iso);
-        
-        // Construct the sudo command
-		std::string sudoCommand = "sudo -v";
 
-		// Execute sudo to prompt for password
-		int sudoResult = system(sudoCommand.c_str());
-		
-		// Clear the screen only if it hasn't been done yet
-         if (sudoResult == 0) {
+        // Construct the sudo command
+        std::string sudoCommand = "sudo -v";
+
+        // Execute sudo to prompt for password
+        int sudoResult = system(sudoCommand.c_str());
+
+        // Clear the screen only if it hasn't been done yet
+        if (sudoResult == 0) {
             // Clear the screen only if it hasn't been done yet
             if (!clearScreenDone) {
                 std::system("clear");
                 clearScreenDone = true;
             }
 
-        // Check if the file exists before attempting to delete
-        if (fileExists(iso)) {
+            // Check if the file exists before attempting to delete
+            if (fileExists(iso)) {
 
-            // Delete the ISO file from the filesystem
-            std::string command = "sudo rm -f " + escapedIso + " > /dev/null 2>&1";
-            int result = std::system(command.c_str());
+                // Delete the ISO file from the filesystem
+                std::string command = "sudo rm -f " + escapedIso + " > /dev/null 2>&1";
+                int result = std::system(command.c_str());
 
-            if (result == 0) {
-                // Get the index of the found ISO file (starting from 1)
-                int index = std::distance(isoFiles.begin(), it) + 1;
+                if (result == 0) {
+                    // Get the index of the found ISO file (starting from 1)
+                    int index = std::distance(isoFiles.begin(), it) + 1;
 
-                // Remove the deleted ISO file from the cache using the index
-                isoFiles.erase(isoFiles.begin() + index - 1);
+                    // Remove the deleted ISO file from the cache using the index
+                    isoFiles.erase(isoFiles.begin() + index - 1);
 
-                // Add the ISO file to the set of deleted files
-                deletedSet.insert(iso);
+                    // Add the ISO file to the set of deleted files
+                    deletedSet.insert(iso);
 
-                std::cout << "\033[1;92mDeleted: \033[1;91m'" << iso << "'\033[1;92m.\033[1;0m" << std::endl;
+                    std::cout << "\033[1;92mDeleted: \033[1;91m'" << iso << "'\033[1;92m.\033[1;0m" << std::endl;
+                } else {
+                    // Print error message in magenta and bold when rm command fails
+                    std::cout << "\033[1;91mError deleting: \033[1;0m'" << iso << "'\033[1;95m.\033[1;0m" << std::endl;
+                }
             } else {
-                // Print error message in magenta and bold when rm command fails
-                std::cout << "\033[1;91mError deleting: \033[1;0m'" << iso << "'\033[1;95m.\033[1;0m" << std::endl;
+                std::cout << "\033[1;35mFile not found: \033[1;0m'" << iso << "'\033[1;95m.\033[1;0m" << std::endl;
             }
         } else {
-            std::cout << "\033[1;35mFile not found: \033[1;0m'" << iso << "'\033[1;95m.\033[1;0m" << std::endl;
-			}
-		}
+            // Handle the case when sudo authentication fails
+            std::cout << " " << std::endl;
+            std::cout << "\033[1;91mFailed to authenticate with sudo.\033[1;0m" << std::endl;
+        }
     } else {
         std::cout << "\033[1;93mFile not found in cache: \033[1;0m'" << iso << "'\033[1;93m.\033[1;0m" << std::endl;
     }
 }
-
 
 // Function to check if a string consists only of zeros
 bool isAllZeros(const std::string& str) {
@@ -935,8 +941,6 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
 }
 
 
-
-
 //	MOUNT STUFF	\\
 
 // Function to check if a directory exists
@@ -1003,8 +1007,7 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
     } else {
         // Handle sudo command failure or user didn't provide the password
         std::cout << " " << std::endl;
-        std::cerr << "Failed to authenticate with sudo." << std::endl;
-        // Your code here
+        std::cerr << "\033[1;91mFailed to authenticate with sudo.\033[1;0m" << std::endl;
     }
 }
 
