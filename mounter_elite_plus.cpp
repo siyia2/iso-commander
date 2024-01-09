@@ -11,6 +11,8 @@ std::mutex Mutex4High; // Mutex for high level functions
 std::mutex Mutex4Med; // Mutex for middle level functions
 std::mutex Mutex4Low; // Mutex for low level functions
 
+bool gapPrinted = false; // for cache refresh for directory
+bool gapPrintedtraverse = false; // for traverse
 
 //	Function prototypes	\\
 
@@ -54,6 +56,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
 // Iso cache functions
 void manualRefreshCache();
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& Mutex4Low);
+void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles);
 void removeNonExistentPathsFromCache();
 
 // Unmount functions
@@ -76,7 +79,6 @@ std::future<void> asyncUnmountISO(const std::string& isoDir);
 std::vector<std::string> vec_concat(const std::vector<std::string>& v1, const std::vector<std::string>& v2);
 std::future<bool> iequals(std::string_view a, std::string_view b);
 std::future<bool> FileExists(const std::string& path);
-std::vector<std::string> refreshCacheForDirectory(const std::string& path);
 std::string getHomeDirectory();
 std::vector<std::string> loadCache();
 
@@ -415,24 +417,30 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
 }
 
 
-// Function to refresh the cache for a single directory (now returning a vector of ISO files)
-std::vector<std::string> refreshCacheForDirectory(const std::string& path) {
-    std::cout << "\033[1;93mProcessing directory path: '" << path << "'.\033[1;0m" << std::endl;
+// Function to refresh the cache for a single directory
+void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles) {
+    // Define a static variable to track whether the gap has been printed
     
+
+    std::cout << "\033[93mProcessing directory path: '" << path << "'.\033[0m" << std::endl;
+
     std::vector<std::string> newIsoFiles;
 
-    // Use std::async to execute parallelTraverse asynchronously
-    std::future<void> asyncResult = std::async(std::launch::async, [path, &newIsoFiles]() {
-        parallelTraverse(path, newIsoFiles, Mutex4Low);
-    });
+    // Perform the cache refresh for the directory (e.g., using parallelTraverse)
+    parallelTraverse(path, newIsoFiles, Mutex4Low);
 
-    // Wait for the asynchronous operation to complete
-    asyncResult.wait();
+    // Check if the gap has been printed, if not, print it
+    if (!gapPrinted) {
+        std::cout << " " << std::endl;
+        gapPrinted = true; // Set the flag to true to indicate that the gap has been printed
+    }
 
-    std::cout << "\033[1;92mProcessed directory path: '" << path << "'.\033[1;0m" << std::endl;
+    // Lock the mutex to protect the shared 'allIsoFiles' vector
 
-    // Return the new entries for this directory
-    return newIsoFiles;
+    // Append the new entries to the shared vector
+    allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
+
+    std::cout << "\033[92mProcessed directory path: '" << path << "'.\033[0m" << std::endl;
 }
 
 
@@ -442,31 +450,28 @@ bool isValidDirectory(const std::string& path) {
 }
 
 
-// Function for manual cache refresh (now asynchronous)
+// Function for manual cache refresh
 void manualRefreshCache() {
     // Clear the console screen
     std::system("clear");
-
+	gapPrinted = false;
     // Prompt the user to enter directory paths for manual cache refresh
-    std::string inputLine = readInputLine("\033[1;94mEnter the directory path(s) from which to populate the \033[1m\033[1;92mISO Cache\033[1;94m (if many, separate them with \033[1m\033[1;93m;\033[1;0m\033[1;94m), or press Enter to cancel:\n\033[1;0m");
+    std::string inputLine = readInputLine("\033[94mEnter the directory path(s) from which to populate the \033[1m\033[92mISO Cache\033[94m (if many, separate them with \033[1m\033[93m;\033[0m\033[94m), or press Enter to cancel:\n\033[0m");
 
     // Check if the user canceled the cache refresh
     if (inputLine.empty()) {
-        std::cout << "\033[1;93mCache refresh canceled by user.\033[1;0m" << std::endl;
+        std::cout << "\033[93mCache refresh canceled by user.\033[0m" << std::endl;
         std::cout << " " << std::endl;
         return;
     }
-    
-	// Lock the mutex before accessing shared resources
-	std::lock_guard<std::mutex> highLock(Mutex4High);
-	
+
     // Create an input string stream to parse directory paths
     std::istringstream iss(inputLine);
     std::string path;
 
     // Vector to store all ISO files from multiple directories
     std::vector<std::string> allIsoFiles;
-
+    
     // Vector to store valid directory paths
     std::vector<std::string> validPaths;
 
@@ -476,8 +481,8 @@ void manualRefreshCache() {
     // Set to store processed invalid paths
     std::set<std::string> processedInvalidPaths;
 
-    // Vector of futures to store the results of asynchronous tasks
-    std::vector<std::future<std::vector<std::string>>> futures;
+    // Vector to store threads for parallel cache refreshing
+    std::vector<std::thread> threads;
 
     // Flags to determine whether cache write errors were encountered
     bool cacheWriteErrorEncountered = false;
@@ -491,26 +496,26 @@ void manualRefreshCache() {
             // Check if the path has already been processed
             if (processedInvalidPaths.find(path) == processedInvalidPaths.end()) {
                 // Print the error message and mark the path as processed
-                invalidPaths.push_back("\033[1;91mInvalid directory path: '" + path + "'. Skipped from processing.\033[1;0m");
+                invalidPaths.push_back("\033[91mInvalid directory path: '" + path + "'. Skipped from processing.\033[0m");
                 processedInvalidPaths.insert(path);
             }
         }
     }
-
+    
     // Check if any invalid paths were encountered and add a gap
-    if (!invalidPaths.empty() || !validPaths.empty()) {
-        std::cout << " " << std::endl;
+	if (!invalidPaths.empty() || !validPaths.empty()) {	
+    std::cout << " " << std::endl;
     }
-
+    	
     // Print invalid paths
     for (const auto& invalidPath : invalidPaths) {
         std::cout << invalidPath << std::endl;
-    }
-
-    if (!invalidPaths.empty() && !validPaths.empty()) {
-        std::cout << " " << std::endl;
-    }
-
+	}
+	
+	if (!invalidPaths.empty() && !validPaths.empty()) {
+    std::cout << " " << std::endl;
+	}
+    
     // Start the timer
     auto start_time = std::chrono::high_resolution_clock::now();
 
@@ -522,14 +527,13 @@ void manualRefreshCache() {
             continue; // Skip invalid paths
         }
 
-        // Launch an asynchronous task for each directory and store the future
-        futures.push_back(std::async(std::launch::async, refreshCacheForDirectory, path));
+        // Create a thread for refreshing the cache for each directory and pass the vector by reference
+        threads.emplace_back(std::thread(refreshCacheForDirectory, path, std::ref(allIsoFiles)));
     }
 
-    // Wait for all asynchronous tasks to finish and retrieve results
-    for (auto& future : futures) {
-        auto result = future.get(); // Blocking call to get the result
-        allIsoFiles.insert(allIsoFiles.end(), result.begin(), result.end());
+    // Wait for all threads to finish
+    for (std::thread& t : threads) {
+        t.join();
     }
 
     // Save the combined cache to disk
@@ -543,16 +547,16 @@ void manualRefreshCache() {
     auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
 
     // Print the time taken for the entire process in bold with one decimal place
-    std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[1;0m" << std::endl;
+    std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
 
     // Inform the user about the cache refresh status
-    if (saveSuccess) {
+     if (saveSuccess) {
         std::cout << " " << std::endl;
-        std::cout << "\033[1;92mCache refreshed successfully.\033[1;0m" << std::endl;
+        std::cout << "\033[92mCache refreshed successfully.\033[0m" << std::endl;
         std::cout << " " << std::endl;
     } else {
         std::cout << " " << std::endl;
-        std::cout << "\033[1;91mCache refresh failed.\033[1;0m" << std::endl;
+        std::cout << "\033[91mCache refresh failed.\033[0m" << std::endl;
         std::cout << " " << std::endl;
     }
 }
@@ -615,12 +619,20 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
                 }
             }
         }
-
+		
         for (auto& future : futures) {
             future.get();
         }
+        
     } catch (const std::filesystem::filesystem_error& e) {
+		if (!gapPrintedtraverse) {
+            std::cout << " " << std::endl;
+            gapPrintedtraverse = true;
+        }
+        
         std::cerr << "\033[1;91m" << e.what() << "\033[1;0m" << std::endl;
+        // Introduce a 2-second delay
+		std::this_thread::sleep_for(std::chrono::seconds(2));
     }
 }
 
