@@ -153,7 +153,6 @@ std::cout << Color << R"(   *         )               )                  (      
 
 
 void submenu1() {
-    std::string subChoice;
 
     while (true) {
         std::system("clear");
@@ -169,17 +168,15 @@ void submenu1() {
         std::cout << " " << std::endl;
         char* submenu_input = readline("\033[1;94mChoose a function, or press Enter to return:\033[1;0m ");
 
-        // Assign the value of submenu_input to subChoice
-        subChoice = submenu_input;
-
-        if (subChoice.empty()) {
-            // If the user pressed Enter without entering any choice, exit the submenu
-            return;
-        }
-
-        std::system("clear");
-
-        switch (subChoice[0]) {
+        if (!submenu_input || std::strlen(submenu_input) == 0) {
+			delete[] submenu_input;
+			break; // Exit the submenu if input is empty or NULL
+		}
+					
+          std::string submenu_choice(submenu_input);
+         // Check if the input length is exactly 1
+        if (submenu_choice.empty() || submenu_choice.length() == 1){
+        switch (submenu_choice[0]) {
             case '1':
                 select_and_mount_files_by_number();
                 break;
@@ -192,7 +189,7 @@ void submenu1() {
             case '4':
                 // The user chose to go back to the main menu, so return from the function
                 return;
-        }
+        }	}
     }
 }
 
