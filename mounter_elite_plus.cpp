@@ -810,8 +810,10 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
 	
 	std::lock_guard<std::mutex> highLock(Mutex4High);
 	
+	// Detect and use the minimum of available threads and ISOs to ensure efficient parallelism fallback is two
 	unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
-	std::vector<std::future<void>> futures(maxThreads);
+	
+	std::vector<std::thread> threads(maxThreads);  // Add this line
 	
     std::istringstream iss(input);
     bool invalidInput = false;
@@ -913,7 +915,8 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
         for (const auto& index : processedIndices) {
             std::cout << "\033[1;93m'" << isoFiles[index - 1] << "'\033[1;0m" << std::endl;
         }
-	}
+    }
+
     if (!uniqueErrorMessages.empty() && processedIndices.empty()) {
         std::cout << " " << std::endl;
         std::cout << "\033[1;91mNo valid selection(s) for deletion.\033[1;0m" << std::endl;
@@ -943,21 +946,25 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
             for (const auto& index : processedIndices) {
                 if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
                     if (threadIndex < maxThreads) {
-                        futures[threadIndex] = std::async(std::launch::async, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet));
+                        threads[threadIndex] = std::thread(handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet));
                         ++threadIndex;
                     } else {
-                        for (auto& future : futures) {
-                            future.wait();
+                        for (auto& thread : threads) {
+                            if (thread.joinable()) {
+                                thread.join();
+                            }
                         }
-                        futures[0] = std::async(std::launch::async, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet));
+                        threads[0] = std::thread(handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet));
                         threadIndex = 1;
                     }
                 }
             }
 
-            // Wait for all tasks to complete
-            for (auto& future : futures) {
-                future.wait();
+            // Join any remaining threads
+            for (auto& thread : threads) {
+                if (thread.joinable()) {
+                    thread.join();
+                }
             }
 
             // Stop the timer after completing all deletion tasks
@@ -1196,7 +1203,7 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
 // Function to handle mounting of a specific ISO file asynchronously
 void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet) {
     try {
-        // Get the maximum number of threads supported by the system
+        // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism fallback is two
         unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
         // Use a thread pool with the specified maxThreads
@@ -1544,7 +1551,7 @@ void unmountISOs() {
         }
 
         if (std::strcmp(input, "00") == 0) {
-            // Unmount all ISOs using the maximum available threads
+            // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism fallback is two
             unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
             std::cout << "Max available threads: " << maxThreads << std::endl;
 
@@ -1679,7 +1686,7 @@ void unmountISOs() {
         // Create a vector of threads to perform unmounting and directory removal concurrently
         std::vector<std::thread> threads;
 
-        // Use the minimum of available threads and ISOs to ensure efficient parallelism
+        // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism fallback is two
         unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
         unsigned int numThreads = std::min(static_cast<unsigned int>(isoDirs.size()), maxThreads);
 
