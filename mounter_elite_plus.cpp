@@ -964,6 +964,7 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
         }
     } else {
         // Handle sudo command failure or user didn't provide the password
+        std::cout << " " << std::endl;
         std::cerr << "\033[1;91mFailed to authenticate with sudo.\033[1;0m" << std::endl;
         // Your code here
     }
