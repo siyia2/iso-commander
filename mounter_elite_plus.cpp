@@ -1472,7 +1472,7 @@ bool isValidIndex(int index, size_t isoDirsSize) {
 void unmountISOs() {
     // Set to store unique error messages
     std::set<std::string> uniqueErrorMessages;
-    
+
     bool invalidInput = false;
 
     // Path where ISO directories are expected to be mounted
@@ -1484,10 +1484,10 @@ void unmountISOs() {
 
         std::vector<std::string> isoDirs;
         std::vector<std::string> errorMessages;  // Store error messages
-        
+
         // Reset flags and sets for each iteration
-		invalidInput = false;
-		uniqueErrorMessages.clear();
+        invalidInput = false;
+        uniqueErrorMessages.clear();
 
         // Find and store directories with the name "iso_*" in /mnt using std::filesystem
         for (const auto& entry : std::filesystem::directory_iterator(isoPath)) {
@@ -1510,7 +1510,7 @@ void unmountISOs() {
         }
 
         // Prompt for unmounting input
-        char* input = readline("\033[1;94mChoose ISO(s) for \033[1;92munmount\033[1;94m (e.g. '1-3', '1 2', '00' unmounts all, or press Enter to return):\033[1;0m ");
+        char* input = readline("\033[1;94mChoose ISO(s) for \033[1;92munmount\033[1;94m (e.g., '1-3', '1 2', '00' unmounts all, or press Enter to return):\033[1;0m ");
         std::system("clear");
 
         // Start the timer
@@ -1522,15 +1522,35 @@ void unmountISOs() {
         }
 
         if (std::strcmp(input, "00") == 0) {
-            // Unmount all ISOs asynchronously
-            std::vector<std::future<void>> futures;
+            // Unmount all ISOs using the maximum available threads
+            unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
+            std::cout << "Max available threads: " << maxThreads << std::endl;
+
+            // Use the minimum of available threads and ISOs to ensure efficient parallelism
+            unsigned int numThreads = std::min(static_cast<unsigned int>(isoDirs.size()), maxThreads);
+
+            // Create a vector of threads to perform unmounting and directory removal concurrently
+            std::vector<std::thread> threads;
+
             for (const std::string& isoDir : isoDirs) {
-                futures.push_back(asyncUnmountISO(isoDir));
+                threads.emplace_back([&, isoDir = std::move(isoDir)]() {
+                    std::lock_guard<std::mutex> highLock(Mutex4High); // Lock the critical section
+                    asyncUnmountISO(isoDir).get(); // Synchronously wait for the future
+                });
+
+                // Limit the number of active threads to the available hardware threads
+                if (threads.size() >= numThreads) {
+                    // Join the threads to wait for them to finish
+                    for (auto& thread : threads) {
+                        thread.join();
+                    }
+                    threads.clear(); // Clear the vector for the next batch of threads
+                }
             }
 
-            // Wait for all asynchronous tasks to complete
-            for (auto& future : futures) {
-                future.get();
+            // Join the remaining threads
+            for (auto& thread : threads) {
+                thread.join();
             }
 
             // Stop the timer after completing the unmounting process
@@ -1556,12 +1576,12 @@ void unmountISOs() {
 
         std::string token;
         while (iss >> token) {
-		// Check if token consists of only zeros or is not 00
-		if (token != "00" && isAllZeros(token)) {
-			if (!invalidInput) {
-				invalidInput = true;
-			}
-		}
+            // Check if token consists of only zeros or is not 00
+            if (token != "00" && isAllZeros(token)) {
+                if (!invalidInput) {
+                    invalidInput = true;
+                }
+            }
             // Check if the token is a valid number
             if (std::regex_match(token, std::regex("^\\d+$"))) {
                 // Individual number
@@ -1637,6 +1657,10 @@ void unmountISOs() {
         // Create a vector of threads to perform unmounting and directory removal concurrently
         std::vector<std::thread> threads;
 
+        // Use the minimum of available threads and ISOs to ensure efficient parallelism
+        unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
+        unsigned int numThreads = std::min(static_cast<unsigned int>(isoDirs.size()), maxThreads);
+
         for (int index : unmountIndices) {
             // Check if the index is within the valid range
             if (isValidIndex(index, isoDirs.size())) {
@@ -1647,10 +1671,19 @@ void unmountISOs() {
                     std::lock_guard<std::mutex> highLock(Mutex4High); // Lock the critical section
                     unmountISO(isoDir);
                 });
+
+                // Limit the number of active threads to the available hardware threads
+                if (threads.size() >= numThreads) {
+                    // Join the threads to wait for them to finish
+                    for (auto& thread : threads) {
+                        thread.join();
+                    }
+                    threads.clear(); // Clear the vector for the next batch of threads
+                }
             }
         }
 
-        // Join the threads to wait for them to finish
+        // Join the remaining threads
         for (auto& thread : threads) {
             thread.join();
         }
