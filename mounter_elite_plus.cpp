@@ -218,11 +218,9 @@ void submenu2() {
 		 if (submenu_choice.empty() || submenu_choice.length() == 1){
          switch (submenu_choice[0]) {		
              case '1':
-				std::system("clear");
                 select_and_convert_files_to_iso();
                 break;
              case '2':
-                std::system("clear");
                 select_and_convert_files_to_iso_mdf();
                 break;
              case '4':
@@ -306,11 +304,6 @@ void removeNonExistentPathsFromCache() {
 
     // Open the cache file for writing
     std::ofstream updatedCacheFile(cacheFilePath);
-    if (!updatedCacheFile) {
-        // Display an error message if unable to open the cache file for writing
-        std::cerr << "\033[1;91mError: Unable to open cache file for writing, check permissions.\033[1;0m" << std::endl;
-        return;
-    }
 
     // Write the retained paths to the updated cache file
     for (const std::string& path : retainedPaths) {
