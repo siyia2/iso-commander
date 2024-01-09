@@ -678,17 +678,34 @@ bool fileExists(const std::string& filename) {
 
 // Function to handle the deletion of an ISO file
 void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
-	
     std::lock_guard<std::mutex> lowLock(Mutex4Low);
-	
+
+    // Static variable to track whether the clear has been performed
+    static bool clearScreenDone = false;
+
     // Check if the ISO file is in the cache
     auto it = std::find(isoFiles.begin(), isoFiles.end(), iso);
     if (it != isoFiles.end()) {
         // Escape the ISO file name for the shell command using shell_escape
         std::string escapedIso = shell_escape(iso);
+        
+        // Construct the sudo command
+		std::string sudoCommand = "sudo -v";
+
+		// Execute sudo to prompt for password
+		int sudoResult = system(sudoCommand.c_str());
+		
+		// Clear the screen only if it hasn't been done yet
+         if (sudoResult == 0) {
+            // Clear the screen only if it hasn't been done yet
+            if (!clearScreenDone) {
+                std::system("clear");
+                clearScreenDone = true;
+            }
 
         // Check if the file exists before attempting to delete
         if (fileExists(iso)) {
+
             // Delete the ISO file from the filesystem
             std::string command = "sudo rm -f " + escapedIso;
             int result = std::system(command.c_str());
@@ -710,10 +727,11 @@ void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFi
             }
         } else {
             std::cout << "\033[1;35mFile not found: \033[1;0m'" << iso << "'\033[1;95m.\033[1;0m" << std::endl;
-        }
+			}
+		}
     } else {
         std::cout << "\033[1;93mFile not found in cache: \033[1;0m'" << iso << "'\033[1;93m.\033[1;0m" << std::endl;
-    }   
+    }
 }
 
 
@@ -903,30 +921,51 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
     // Lock the global mutex for synchronization
     std::lock_guard<std::mutex> lowLock(Mutex4Low);
 
-    // Check if the mount point directory doesn't exist, create it asynchronously
-    if (!fs::exists(mountPoint)) {
-        try {
-            // Create the mount point directory
-            fs::create_directory(mountPoint);
+    // Static variable to track whether the clear has been performed
+    static bool clearScreenDone = false;
 
-            // Construct the mount command and execute it
-            std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
-            if (std::system(mountCommand.c_str()) != 0) {
-                throw std::runtime_error("Mount command failed");
+    // Construct the sudo command
+    std::string sudoCommand = "sudo -v";
+
+    // Execute sudo to prompt for password
+    int sudoResult = system(sudoCommand.c_str());
+
+    if (sudoResult == 0) {
+        // Clear the screen only if it hasn't been done yet
+        if (!clearScreenDone) {
+            std::system("clear");
+            clearScreenDone = true;
+        }
+
+        // Check if the mount point directory doesn't exist, create it asynchronously
+        if (!fs::exists(mountPoint)) {
+            try {
+                // Create the mount point directory
+                fs::create_directory(mountPoint);
+
+                // Construct the mount command and execute it
+                std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
+                if (std::system(mountCommand.c_str()) != 0) {
+                    throw std::runtime_error("Mount command failed");
+                }
+
+                // Store the mount point in the map
+                mountedIsos.emplace(isoFile, mountPoint);
+                std::cout << "\033[1mISO file: \033[1;92m'" << isoFile << "'\033[1;0m \033[1mmounted at: \033[1;94m'" << mountPoint << "'\033[1;0m\033[1m.\033[1;0m" << std::endl;
+            } catch (const std::exception& e) {
+                // Handle exceptions, log error, and cleanup
+                std::cerr << "\033[1;91mFailed to mount: \033[1;93m'" << isoFile << "'\033[1;0m\033[1;91m.\033[1;0m" << std::endl;
+                fs::remove(mountPoint);
             }
-
-            // Store the mount point in the map
+        } else {
+            // The mount point directory already exists, so the ISO is considered mounted
             mountedIsos.emplace(isoFile, mountPoint);
-            std::cout << "\033[1mISO file: \033[1;92m'" << isoFile << "'\033[1;0m \033[1mmounted at: \033[1;94m'" << mountPoint << "'\033[1;0m\033[1m.\033[1;0m" << std::endl;
-        } catch (const std::exception& e) {
-            // Handle exceptions, log error, and cleanup
-            std::cerr << "\033[1;91mFailed to mount: \033[1;93m'" << isoFile << "'\033[1;0m\033[1;91m.\033[1;0m" << std::endl;
-            fs::remove(mountPoint);
+            std::cout << "\033[1;93mISO file: \033[1;92m'" << isoFile << "'\033[1;93m is already mounted at: \033[1;94m'" << mountPoint << "'\033[1;93m.\033[1;0m" << std::endl;
         }
     } else {
-        // The mount point directory already exists, so the ISO is considered mounted
-        mountedIsos.emplace(isoFile, mountPoint);
-        std::cout << "\033[1;93mISO file: \033[1;92m'" << isoFile << "'\033[1;93m is already mounted at: \033[1;94m'" << mountPoint << "'\033[1;93m.\033[1;0m" << std::endl;
+        // Handle sudo command failure or user didn't provide the password
+        std::cerr << "Failed to authenticate with sudo." << std::endl;
+        // Your code here
     }
 }
 
@@ -1113,7 +1152,7 @@ void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& moun
         // future.wait();
     } catch (const std::exception& e) {
         // Handle exceptions thrown in the asynchronous task
-        std::cerr << "Exception: " << e.what() << std::endl;
+        std::cerr << "\033[1;91m" << e.what() << " \033[1;91m.\033[1;0m" << std::endl;
     }
 }
 
@@ -1287,22 +1326,6 @@ void listMountedISOs() {
     }
 }
 
-// Check if the directory is empty before removing it
-bool isEmptyDirectory(const std::string& path) {
-    // Attempt to check if the directory is empty
-    try {
-        return std::filesystem::is_empty(path);
-    } catch (const std::filesystem::filesystem_error& e) {
-        if (e.code().value() == static_cast<int>(std::errc::permission_denied)) {
-            // Permission denied error, treat it as an empty directory
-            return true;
-        } else {
-            // Other filesystem error, print the error and return false
-            std::cerr << "Error checking if the directory is empty: " << e.what() << std::endl;
-            return false;
-        }
-    }
-}
 
 //function to check if directory is empty for unmountISO
 bool isDirectoryEmpty(const std::string& path) {
@@ -1314,29 +1337,49 @@ bool isDirectoryEmpty(const std::string& path) {
 
 // Function to unmount ISO files asynchronously
 void unmountISO(const std::string& isoDir) {
+    // Static variable to track whether the clear has been performed
+    static bool clearScreenDone = false;
+
     // Use std::async to unmount and remove the directory asynchronously
     auto unmountFuture = std::async(std::launch::async, [isoDir]() {
-        // Construct the unmount command with sudo, umount, and suppressing logs
-        std::string command = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1";
-        int result = system(command.c_str());
+        // Construct the sudo command
+        std::string sudoCommand = "sudo -v";
 
-        // Check if the unmounting was successful
-        if (result == 0) {
-            std::cout << "\033[1mUnmounted: \033[1;92m'" << isoDir << "'\033[1;0m\033[1m.\033[1;0m" << std::endl; // Print success message
+        // Execute sudo to prompt for password
+        int sudoResult = system(sudoCommand.c_str());
 
-            // Check if the directory is empty before removing it
-            if (isDirectoryEmpty(isoDir)) {
-                // Construct the remove directory command with sudo, rmdir, and suppressing logs
-                command = "sudo rmdir " + shell_escape(isoDir) + " 2>/dev/null";
-                int removeDirResult = system(command.c_str());
+        if (sudoResult == 0) {
+            // Clear the screen only if it hasn't been done yet
+            if (!clearScreenDone) {
+                std::system("clear");
+                clearScreenDone = true;
+            }
 
-                if (removeDirResult != 0) {
-                    std::cerr << "\033[1;91mFailed to remove directory: \033[1;93m'" << isoDir << "'\033[1;91m ...Please check it out manually.\033[1;0m" << std::endl;
+            // Construct the unmount command with sudo, umount, and suppressing logs
+            std::string command = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1";
+            int result = system(command.c_str());
+
+            // Check if the unmounting was successful
+            if (result == 0) {
+                std::cout << "\033[1mUnmounted: \033[1;92m'" << isoDir << "'\033[1;0m\033[1m.\033[1;0m" << std::endl; // Print success message
+
+                // Check if the directory is empty before removing it
+                if (isDirectoryEmpty(isoDir)) {
+                    // Construct the remove directory command with sudo, rmdir, and suppressing logs
+                    command = "sudo rmdir " + shell_escape(isoDir) + " 2>/dev/null";
+                    int removeDirResult = system(command.c_str());
+
+                    if (removeDirResult != 0) {
+                        std::cerr << "\033[1;91mFailed to remove directory: \033[1;93m'" << isoDir << "'\033[1;91m ...Please check it out manually.\033[1;0m" << std::endl;
+                    }
                 }
+            } else {
+                // Print failure message
+                std::cerr << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDir << "'\033[1;91m ...Probably not an ISO mountpoint, check it out manually.\033[1;0m" << std::endl;
             }
         } else {
             // Print failure message
-            std::cerr << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDir << "'\033[1;91m ...Probably not an ISO mountpoint, check it out manually.\033[1;0m" << std::endl;
+            std::cerr << "\033[1;91mFailed to authenticate with sudo.\033[1;0m" << std::endl;
         }
     });
 
