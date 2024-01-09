@@ -452,9 +452,9 @@ bool isValidDirectory(const std::string& path) {
 
 // Function for manual cache refresh
 void manualRefreshCache() {
-    // Clear the console screen
     std::system("clear");
-	gapPrinted = false;
+    gapPrinted = false;
+
     // Prompt the user to enter directory paths for manual cache refresh
     std::string inputLine = readInputLine("\033[94mEnter the directory path(s) from which to populate the \033[1m\033[92mISO Cache\033[94m (if many, separate them with \033[1m\033[93m;\033[0m\033[94m), or press Enter to cancel:\n\033[0m");
 
@@ -471,7 +471,7 @@ void manualRefreshCache() {
 
     // Vector to store all ISO files from multiple directories
     std::vector<std::string> allIsoFiles;
-    
+
     // Vector to store valid directory paths
     std::vector<std::string> validPaths;
 
@@ -481,9 +481,10 @@ void manualRefreshCache() {
     // Set to store processed invalid paths
     std::set<std::string> processedInvalidPaths;
 
-    // Vector to store threads for parallel cache refreshing
-    std::vector<std::thread> threads;
-
+    // Set up a thread pool with a maximum number of threads
+    const std::size_t maxThreads = std::thread::hardware_concurrency();
+    std::vector<std::future<void>> futures;
+    
     // Flags to determine whether cache write errors were encountered
     bool cacheWriteErrorEncountered = false;
 
@@ -501,25 +502,25 @@ void manualRefreshCache() {
             }
         }
     }
-    
+
     // Check if any invalid paths were encountered and add a gap
-	if (!invalidPaths.empty() || !validPaths.empty()) {	
-    std::cout << " " << std::endl;
+    if (!invalidPaths.empty() || !validPaths.empty()) {
+        std::cout << " " << std::endl;
     }
-    	
+
     // Print invalid paths
     for (const auto& invalidPath : invalidPaths) {
         std::cout << invalidPath << std::endl;
-	}
-	
-	if (!invalidPaths.empty() && !validPaths.empty()) {
-    std::cout << " " << std::endl;
-	}
-    
+    }
+
+    if (!invalidPaths.empty() && !validPaths.empty()) {
+        std::cout << " " << std::endl;
+    }
+
     // Start the timer
     auto start_time = std::chrono::high_resolution_clock::now();
 
-    // Create a thread for each valid directory to refresh the cache and pass the vector by reference
+    // Create a task for each valid directory to refresh the cache and pass the vector by reference
     std::istringstream iss2(inputLine); // Reset the string stream
     while (std::getline(iss2, path, ';')) {
         // Check if the directory path is valid
@@ -527,13 +528,23 @@ void manualRefreshCache() {
             continue; // Skip invalid paths
         }
 
-        // Create a thread for refreshing the cache for each directory and pass the vector by reference
-        threads.emplace_back(std::thread(refreshCacheForDirectory, path, std::ref(allIsoFiles)));
+        // Add a task to the thread pool for refreshing the cache for each directory
+        futures.emplace_back(std::async(std::launch::async, refreshCacheForDirectory, path, std::ref(allIsoFiles)));
+        
+        // Limit the number of concurrent tasks to the maximum number of threads
+        if (futures.size() >= maxThreads) {
+            // Wait for the tasks to complete
+            for (auto& future : futures) {
+                future.wait();
+            }
+            // Clear completed tasks from the vector
+            futures.clear();
+        }
     }
 
-    // Wait for all threads to finish
-    for (std::thread& t : threads) {
-        t.join();
+    // Wait for the remaining tasks to complete
+    for (auto& future : futures) {
+        future.wait();
     }
 
     // Save the combined cache to disk
@@ -550,7 +561,7 @@ void manualRefreshCache() {
     std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
 
     // Inform the user about the cache refresh status
-     if (saveSuccess) {
+    if (saveSuccess) {
         std::cout << " " << std::endl;
         std::cout << "\033[92mCache refreshed successfully.\033[0m" << std::endl;
         std::cout << " " << std::endl;
