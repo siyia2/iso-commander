@@ -11,8 +11,8 @@ std::mutex Mutex4High; // Mutex for high level functions
 std::mutex Mutex4Med; // Mutex for middle level functions
 std::mutex Mutex4Low; // Mutex for low level functions
 
-bool gapPrinted = false; // for cache refresh for directory
-bool gapPrintedtraverse = false; // for traverse
+bool gapPrinted = false; // for cache refresh for directory function
+bool gapPrintedtraverse = false; // for traverse function
 
 //	Function prototypes	\\
 
