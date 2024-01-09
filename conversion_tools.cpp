@@ -252,9 +252,6 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
     // Vector to store error messages
     std::vector<std::string> errorMessages;
 
-    // Number of threads in the thread pool (adjust as needed)
-    const int numThreads = std::thread::hardware_concurrency();
-
     // Protect the critical section with a lock
     std::lock_guard<std::mutex> lock(indicesMutex);
 
@@ -728,9 +725,6 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
 
     // Vector to store error messages
     std::vector<std::string> errorMessages;
-
-    // Number of threads in the thread pool (adjust as needed)
-    const int numThreads = std::thread::hardware_concurrency();
 
     // Protect the critical section with a lock
     std::lock_guard<std::mutex> lock(indicesMutex);
