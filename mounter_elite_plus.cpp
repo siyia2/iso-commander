@@ -41,6 +41,7 @@ void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFi
 void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
 
 // Mount functions
+void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>& mountedIsos);
 void mountISOs(const std::vector<std::string>& isoFiles);
 void select_and_mount_files_by_number();
 void displayErrorMessage(const std::string& iso);
@@ -556,13 +557,18 @@ std::future<bool> iequals(std::string_view a, std::string_view b) {
 // Function to parallel traverse a directory and find ISO files
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& Mutex4Low) {
     try {
-        const unsigned int maxThreads = std::thread::hardware_concurrency();
         std::vector<std::future<void>> futures;
 
         for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
             if (entry.is_regular_file()) {
                 const std::filesystem::path& filePath = entry.path();
 
+                // Check file size, skip if less than 5MB
+                if (std::filesystem::file_size(filePath) < 5 * 1024 * 1024) {
+                    continue;
+                }
+
+                // Skip empty files or files with ".bin" extension
                 if (std::filesystem::file_size(filePath) == 0 || iequals(filePath.stem().string(), ".bin").get()) {
                     continue;
                 }
@@ -589,6 +595,7 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
         std::cerr << "\033[1;91m" << e.what() << "\033[1;0m" << std::endl;
     }
 }
+
 
 // DELETION STUFF \\
 
@@ -706,7 +713,7 @@ void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFi
         if (fileExists(iso)) {
 
             // Delete the ISO file from the filesystem
-            std::string command = "sudo rm -f " + escapedIso;
+            std::string command = "sudo rm -f " + escapedIso + " > /dev/null 2>&1";
             int result = std::system(command.c_str());
 
             if (result == 0) {
