@@ -178,13 +178,17 @@ void submenu1() {
         if (submenu_choice.empty() || submenu_choice.length() == 1){
         switch (submenu_choice[0]) {
             case '1':
+				std::system("clear");
                 select_and_mount_files_by_number();
                 break;
             case '2':
+				std::system("clear");
                 unmountISOs();
                 break;
             case '3':
+				std::system("clear");
                 select_and_delete_files_by_number();
+                
                 break;
             case '4':
                 // The user chose to go back to the main menu, so return from the function
