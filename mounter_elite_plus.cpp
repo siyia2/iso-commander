@@ -971,7 +971,6 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
 }
 
 
-
 // Function to mount ISO files concurrently using asynchronous tasks
 void mountISOs(const std::vector<std::string>& isoFiles) {
     // Map to store mounted ISOs with their corresponding paths
@@ -1038,9 +1037,8 @@ void select_and_mount_files_by_number() {
 
     // Set to track mounted ISO files
     std::unordered_set<std::string> mountedSet;
-	char* input = nullptr;
+
     // Main loop for selecting and mounting ISO files
-    bool isFirstIteration = true;
     while (true) {
         std::system("clear");
         std::cout << "\033[1;93m ! IF EXPECTED ISO FILE(s) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\n\033[1;0m" << std::endl;
@@ -1057,27 +1055,25 @@ void select_and_mount_files_by_number() {
 		
         // Prompt user for input
         char* input = readline("\033[1;94mChoose ISO(s) for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 2', '00' mounts all, or press Enter to return):\033[1;0m ");
-        
-        if (isFirstIteration) {
-         // Construct the sudo command
-        std::string sudoCommand = "sudo -v";
-        int sudoResult = system(sudoCommand.c_str());
-        isFirstIteration = false;
-        std::system("clear");
-	}
-        
-        std::system("clear");
-        
-        
 
-// Check if the user wants to return
-    if (input[0] == '\0') {
-        std::cout << "Press Enter to Return" << std::endl;
-        break;
-    }
+		// Construct the sudo command
+		std::string sudoCommand = "sudo -v";
+
+		// Execute sudo to prompt for password
+		int sudoResult = system(sudoCommand.c_str());
+
         
-		// Start the timer
+        std::system("clear");
+
+        // Start the timer
         auto start_time = std::chrono::high_resolution_clock::now();
+
+        // Check if the user wants to return
+        if (input[0] == '\0') {   
+            std::cout << "Press Enter to Return" << std::endl;
+            break;
+        }
+
         // Check if the user wants to mount all ISO files
         if (std::strcmp(input, "00") == 0) {
             std::vector<std::future<void>> futures;
@@ -1109,7 +1105,6 @@ void select_and_mount_files_by_number() {
         
     }
 }
-
 
 
 void printIsoFileList(const std::vector<std::string>& isoFiles) {
