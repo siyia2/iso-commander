@@ -43,7 +43,7 @@ bool isAllZeros(const std::string& str);
 //Delete functions
 void select_and_delete_files_by_number();
 void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
-void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
+void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
 
 // Mount functions
 void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>& mountedIsos);
@@ -810,7 +810,7 @@ bool isAllZeros(const std::string& str) {
 
 
 // Function to process user input for selecting and deleting specific ISO files
-void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
+void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
     
     // Lock to ensure thread safety in a multi-threaded environment
     std::lock_guard<std::mutex> highLock(Mutex4High);
