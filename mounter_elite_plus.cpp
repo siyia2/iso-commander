@@ -814,7 +814,7 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
 	
 	std::lock_guard<std::mutex> highLock(Mutex4High);
 	
-	// Detect and use the minimum of available threads and ISOs to ensure efficient parallelism fallback is two
+	// Detect and use the minimum of available threads and ISOs to ensure efficient parallelism fallback is 2 threads
 	unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 	
     std::istringstream iss(input);
@@ -935,7 +935,7 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
         // Prompt for confirmation before proceeding
         char confirmation;
         std::cout << " " << std::endl;
-        std::cout << "\033[1;94mDo you want to proceed? (y/n):\033[1;0m ";
+        std::cout << "\033[1;94mDo you want to proceed with \033[1;91mremoval\033[1;0m? (y/n):\033[1;0m ";
         std::cin.get(confirmation);
 
         // Ignore any additional characters in the input buffer, including newline
@@ -1239,8 +1239,6 @@ void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& moun
 }
 
 
-
-
 // Function to check if a string is numeric
 bool isNumeric(const std::string& str) {
     // Use parallel execution policy for parallelization
@@ -1511,6 +1509,7 @@ std::future<void> asyncUnmountISO(const std::string& isoDir) {
    return std::future<void>();
 }
 
+
 // Function to check if a given index is within the valid range of available ISOs
 bool isValidIndex(int index, size_t isoDirsSize) {
     // Use size_t for the comparison to avoid signed/unsigned comparison warnings
@@ -1573,12 +1572,9 @@ void unmountISOs() {
         }
 
         if (std::strcmp(input, "00") == 0) {
-            // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism fallback is two
+            // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism fallback is 2 threads
             unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
-            std::cout << "Max available threads: " << maxThreads << std::endl;
-
-            // Use the minimum of available threads and ISOs to ensure efficient parallelism
-            unsigned int numThreads = std::min(static_cast<unsigned int>(isoDirs.size()), maxThreads);
+           
 
             // Create a vector of threads to store the unmounting threads
             std::vector<std::thread> threads;
@@ -1590,7 +1586,7 @@ void unmountISOs() {
                 });
 
                 // Limit the number of active threads to the available hardware threads
-                if (threads.size() >= numThreads) {
+                if (threads.size() >= maxThreads) {
                     // Join the threads to wait for them to finish
                     for (auto& thread : threads) {
                         thread.join();
@@ -1711,9 +1707,8 @@ void unmountISOs() {
         // Create a vector of threads to perform unmounting and directory removal concurrently
         std::vector<std::thread> threads;
 
-        // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism fallback is two
+        // Detect and use the maximum of available threads and ISOs to ensure efficient parallelism fallback is 2 threads
         unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
-        unsigned int numThreads = std::min(static_cast<unsigned int>(isoDirs.size()), maxThreads);
 
         for (int index : unmountIndices) {
             // Check if the index is within the valid range
@@ -1727,7 +1722,7 @@ void unmountISOs() {
                 });
 
                 // Limit the number of active threads to the available hardware threads
-                if (threads.size() >= numThreads) {
+                if (threads.size() >= maxThreads) {
                     // Join the threads to wait for them to finish
                     for (auto& thread : threads) {
                         thread.join();
