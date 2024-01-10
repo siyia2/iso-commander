@@ -1469,10 +1469,16 @@ void unmountISO(const std::string& isoDir) {
             // Construct the unmount command with sudo, umount, and suppressing logs
             std::string command = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1";
             int result = system(command.c_str());
-
+            
+            if (isDirectoryEmpty(isoDir)) {
+                    // Construct the remove directory command with sudo, rmdir, and suppressing logs
+                    command = "sudo rmdir " + shell_escape(isoDir) + " 2>/dev/null";
+                    int removeDirResult = system(command.c_str());
+                    std::cout << "\033[1;92mRemoved empty directory: \033[1;91m'" << isoDir << "'\033[1;92m.\033[1;0m" << std::endl; // Print success message
+				}
             // Check if the unmounting was successful
-            if (result == 0) {
-                std::cout << "\033[1mUnmounted: \033[1;92m'" << isoDir << "'\033[1;0m\033[1m.\033[1;0m" << std::endl; // Print success message
+            else if (result == 0) {
+                std::cout << "\033[1mUnmounted: \033[1;92m'" << isoDir << "'\033[1;0m.m" << std::endl; // Print success message
 
                 // Check if the directory is empty before removing it
                 if (isDirectoryEmpty(isoDir)) {
