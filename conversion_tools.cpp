@@ -303,7 +303,10 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
     // Set to track processed error messages to avoid duplicate error reporting
     std::set<std::string> processedErrors;
 
+    // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism; fallback is 2 threads
     unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
+    unsigned int numThreads = std::min(static_cast<unsigned int>(validIndices.size()), maxThreads);
+    
     // Vector to store asynchronous tasks for file conversion
     std::vector<std::future<void>> futures;
 
@@ -353,9 +356,9 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                                     if (processedIndices.find(selectedIndex) == processedIndices.end()) {
                                         // Convert BIN to ISO asynchronously and store the future in the vector
                                         std::string selectedFile = fileList[selectedIndex];
-                                        futures.push_back(std::async(std::launch::async, asyncConvertBINToISO, selectedFile, maxThreads));
-                                        processedIndices.insert(selectedIndex);
                                         validIndices.insert(selectedIndex);
+                                        futures.push_back(std::async(std::launch::async, asyncConvertBINToISO, selectedFile, numThreads));
+                                        processedIndices.insert(selectedIndex);
                                     }
                                 } else {
                                     // Add an error message for an invalid range
@@ -406,9 +409,9 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                     if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
                         // Convert BIN to ISO asynchronously and store the future in the vector
                         std::string selectedFile = fileList[selectedIndex];
-                        futures.push_back(std::async(std::launch::async, asyncConvertBINToISO, selectedFile, maxThreads));
-                        processedIndices.insert(selectedIndex);
                         validIndices.insert(selectedIndex);
+                        futures.push_back(std::async(std::launch::async, asyncConvertBINToISO, selectedFile, numThreads));
+                        processedIndices.insert(selectedIndex); 
                     } else {
                         // Add an error message for an invalid file index
                         std::string errorMessage = "\033[1;91mFile index '" + std::to_string(start) + "' does not exist.\033[1;0m";
@@ -788,7 +791,9 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
     // Set to track processed error messages to avoid duplicate error reporting
     std::set<std::string> processedErrors;
 
+    // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism; fallback is 2 threads
     unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
+    unsigned int numThreads = std::min(static_cast<unsigned int>(validIndices.size()), maxThreads);
     // Vector to store asynchronous tasks for file conversion
     std::vector<std::future<void>> futures;
 
@@ -838,9 +843,9 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
                                     if (processedIndices.find(selectedIndex) == processedIndices.end()) {
                                         // Convert MDF to ISO asynchronously and store the future in the vector
                                         std::string selectedFile = fileList[selectedIndex];
-                                        futures.push_back(std::async(std::launch::async, asyncConvertMDFToISO, selectedFile, maxThreads));
-                                        processedIndices.insert(selectedIndex);
                                         validIndices.insert(selectedIndex);
+                                        futures.push_back(std::async(std::launch::async, asyncConvertMDFToISO, selectedFile, numThreads));
+                                        processedIndices.insert(selectedIndex);         
                                     }
                                 } else {
                                     // Add an error message for an invalid range
@@ -891,9 +896,9 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
                     if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
                         // Convert MDF to ISO asynchronously and store the future in the vector
                         std::string selectedFile = fileList[selectedIndex];
-                        futures.push_back(std::async(std::launch::async, asyncConvertMDFToISO, selectedFile, maxThreads));
+                        validIndices.insert(selectedIndex);  
+                        futures.push_back(std::async(std::launch::async, asyncConvertMDFToISO, selectedFile, numThreads));
                         processedIndices.insert(selectedIndex);
-                        validIndices.insert(selectedIndex);
                     } else {
                         // Add an error message for an invalid file index
                         std::string errorMessage = "\033[1;91mFile index '" + std::to_string(start) + "' does not exist.\033[1;0m";
