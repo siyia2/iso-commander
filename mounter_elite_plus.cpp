@@ -19,6 +19,9 @@ bool gapPrintedtraverse = false; // for traverse function
 
 //	bools
 
+//Delete functions
+bool fileExists(const std::string& filename);
+
 // Mount functions
 bool directoryExists(const std::string& path);
 bool isNumeric(const std::string& str);
@@ -38,7 +41,6 @@ bool isValidIndex(int index, size_t isoDirsSize);
 bool isAllZeros(const std::string& str);
 
 //Delete functions
-bool fileExists(const std::string& filename);
 void select_and_delete_files_by_number();
 void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
 void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
@@ -259,10 +261,15 @@ void printMenu() {
 // Function to check if a file exists
 std::future<bool> FileExists(const std::string& filePath) {
     return std::async(std::launch::async, [filePath]() {
-        std::lock_guard<std::mutex> highLock(Mutex4High); // Ensure thread safety
+        try {
+            std::lock_guard<std::mutex> medLock(Mutex4Med); // Ensure thread safety
 
-        struct stat buffer;
-        return (stat(filePath.c_str(), &buffer) == 0);
+            struct stat buffer;
+            return (stat(filePath.c_str(), &buffer) == 0);
+        } catch (...) {
+            // Handle exceptions here and return false
+            return false;
+        }
     });
 }
 
@@ -284,15 +291,18 @@ void removeNonExistentPathsFromCache() {
     // Close the cache file
     cacheFile.close();
 
+    // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism (fallback is two)
+    unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
+
     // Create a vector to hold futures for asynchronous tasks
     std::vector<std::future<std::vector<std::string>>> futures;
 
-    // Asynchronously check the existence of paths
-    for (const auto& path : cache) {
-        futures.push_back(std::async(std::launch::async, [path]() {
+    // Asynchronously check the existence of paths using the specified number of threads
+    for (unsigned int i = 0; i < std::min(maxThreads, static_cast<unsigned int>(cache.size())); ++i) {
+        futures.push_back(std::async(std::launch::async, [&cache, i]() {
             std::vector<std::string> result;
-            if (FileExists(path).get()) {
-                result.push_back(path);
+            if (FileExists(cache[i]).get()) {
+                result.push_back(cache[i]);
             }
             return result;
         }));
@@ -319,7 +329,6 @@ void removeNonExistentPathsFromCache() {
     // Close the updated cache file
     updatedCacheFile.close();
 }
-
 
 // Helper function to concatenate vectors in a reduction clause
 std::vector<std::string> vec_concat(const std::vector<std::string>& v1, const std::vector<std::string>& v2) {

@@ -24,6 +24,10 @@
 
 // Function prototypes
 
+// General
+
+bool fileExistsConversions(const std::string& filePath);
+
 // BIN/IMG CONVERSION
 std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback);
 void convertBINToISO(const std::string& inputPath);
