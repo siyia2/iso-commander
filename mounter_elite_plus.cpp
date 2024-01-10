@@ -811,17 +811,13 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
 	
 	std::lock_guard<std::mutex> highLock(Mutex4High);
 	
-	// Detect and use the minimum of available threads and ISOs to ensure efficient parallelism fallback is two
-	unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
-	
-	std::vector<std::thread> threads(maxThreads);  // Add this line
-	
     std::istringstream iss(input);
     bool invalidInput = false;
     std::unordered_set<std::string> uniqueErrorMessages; // Set to store unique error messages
     std::set<int> processedIndices; // Set to keep track of processed indices
 
     std::string token;
+    std::vector<std::future<void>> futures; // Vector to store std::future objects for each task
 
     while (iss >> token) {
         // Check if the token consists only of zeros and treat it as a non-existent index
@@ -916,8 +912,7 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
         for (const auto& index : processedIndices) {
             std::cout << "\033[1;93m'" << isoFiles[index - 1] << "'\033[1;0m" << std::endl;
         }
-    }
-
+	}
     if (!uniqueErrorMessages.empty() && processedIndices.empty()) {
         std::cout << " " << std::endl;
         std::cout << "\033[1;91mNo valid selection(s) for deletion.\033[1;0m" << std::endl;
@@ -943,29 +938,15 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
             std::system("clear");
 
             // Launch deletion tasks for valid selections
-            int threadIndex = 0;
             for (const auto& index : processedIndices) {
                 if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
-                    if (threadIndex < maxThreads) {
-                        threads[threadIndex] = std::thread(handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet));
-                        ++threadIndex;
-                    } else {
-                        for (auto& thread : threads) {
-                            if (thread.joinable()) {
-                                thread.join();
-                            }
-                        }
-                        threads[0] = std::thread(handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet));
-                        threadIndex = 1;
-                    }
-                }
+                    futures.emplace_back(std::async(std::launch::async, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
+                }              
             }
 
-            // Join any remaining threads
-            for (auto& thread : threads) {
-                if (thread.joinable()) {
-                    thread.join();
-                }
+            // Wait for all tasks to complete
+            for (auto& future : futures) {
+                future.wait();
             }
 
             // Stop the timer after completing all deletion tasks
