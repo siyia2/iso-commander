@@ -935,7 +935,7 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
         // Prompt for confirmation before proceeding
         char confirmation;
         std::cout << " " << std::endl;
-        std::cout << "\033[1;94mDo you want to proceed with \033[1;91mremoval\033[1;0m? (y/n):\033[1;0m ";
+        std::cout << "\033[1;94mDo you want to proceed with the \033[1;91mdeletion\033[1;94m of the above? (y/n):\033[1;0m ";
         std::cin.get(confirmation);
 
         // Ignore any additional characters in the input buffer, including newline
