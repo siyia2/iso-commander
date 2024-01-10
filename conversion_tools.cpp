@@ -50,7 +50,10 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
         // Determine the maximum number of threads to use based on hardware concurrency; fallback is 2 threads
         const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
-        // Use a thread pool for parallel processing
+        // Counter to track the number of ongoing tasks
+        int numOngoingTasks = 0;
+
+        // Use a vector to store futures for ongoing tasks
         std::vector<std::future<void>> futures;
 
         // Iterate through input paths
@@ -64,14 +67,17 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
                     // Call the callback function to inform about the found file
                     callback(fileName, filePath);
 
-                    // Lock the mutex to ensure safe access to shared data (fileNames)
+                    // Lock the mutex to ensure safe access to shared data (fileNames and numOngoingTasks)
                     std::lock_guard<std::mutex> lock(mutex4search);
+
+                    // Add the file name to the shared data
                     fileNames.push_back(fileName);
+
+                    // Decrement the ongoing tasks counter
+                    --numOngoingTasks;
                 };
 
                 // Use async to process files concurrently
-                futures.clear();
-
                 // Iterate through files in the given directory and its subdirectories
                 for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
                     if (entry.is_regular_file()) {
@@ -86,13 +92,27 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
                             std::string fileName = entry.path().string();
                             if (std::find(binImgFilesCache.begin(), binImgFilesCache.end(), fileName) == binImgFilesCache.end()) {
                                 // Process the file asynchronously
-                                futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
+                                if (numOngoingTasks < maxThreads) {
+                                    // Increment the ongoing tasks counter
+                                    ++numOngoingTasks;
+                                    // Process the file asynchronously
+                                    futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
+                                } else {
+                                    // Wait for one of the ongoing tasks to complete before adding a new task
+                                    for (auto& future : futures) {
+                                        future.get();
+                                    }
+                                    // Increment the ongoing tasks counter
+                                    ++numOngoingTasks;
+                                    // Process the file asynchronously
+                                    futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
+                                }
                             }
                         }
                     }
                 }
 
-                // Wait for all asynchronous tasks to complete
+                // Wait for remaining asynchronous tasks to complete
                 for (auto& future : futures) {
                     future.get();
                 }
@@ -113,12 +133,12 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
         }
 
     } catch (const std::filesystem::filesystem_error& e) {
+        // Handle filesystem errors for the overall operation
         if (!printedEmptyLine) {
             // Print an empty line before starting to print invalid paths (only once)
             std::cout << " " << std::endl;
             printedEmptyLine = true;
         }
-        // Handle filesystem errors for the overall operation
         std::cerr << "\033[1;91m" << e.what() << "\033[1;0m" << std::endl;
         std::cin.ignore();
     }
@@ -488,8 +508,8 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
         // Determine the maximum number of threads to use based on hardware concurrency; fallback is 2 threads
         const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
-        // Use a thread pool for parallel processing
-        std::vector<std::future<void>> futures;
+        // Counter to track the number of ongoing tasks
+        int numOngoingTasks = 0;
 
         // Iterate through input paths
         for (const auto& path : paths) {
@@ -502,13 +522,18 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                     // Call the callback function to inform about the found file
                     callback(fileName, filePath);
 
-                    // Lock the mutex to ensure safe access to shared data (fileNames)
+                    // Lock the mutex to ensure safe access to shared data (fileNames and numOngoingTasks)
                     std::lock_guard<std::mutex> lock(mutex4search);
+
+                    // Add the file name to the shared data
                     fileNames.push_back(fileName);
+
+                    // Decrement the ongoing tasks counter
+                    --numOngoingTasks;
                 };
 
-                // Use thread pool to process files concurrently
-                futures.clear();
+                // Use a vector to store futures for ongoing tasks
+                std::vector<std::future<void>> futures;
 
                 // Iterate through files in the given directory and its subdirectories
                 for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
@@ -523,14 +548,28 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                             // Check if the file is already present in the cache to avoid duplicates
                             std::string fileName = entry.path().string();
                             if (std::find(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end(), fileName) == mdfMdsFilesCache.end()) {
-                                // Process the file asynchronously using the thread pool
-                                futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
+                                // Process the file asynchronously
+                                if (numOngoingTasks < maxThreads) {
+                                    // Increment the ongoing tasks counter
+                                    ++numOngoingTasks;
+                                    // Process the file asynchronously
+                                    futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
+                                } else {
+                                    // Wait for one of the ongoing tasks to complete before adding a new task
+                                    for (auto& future : futures) {
+                                        future.get();
+                                    }
+                                    // Increment the ongoing tasks counter
+                                    ++numOngoingTasks;
+                                    // Process the file asynchronously
+                                    futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
+                                }
                             }
                         }
                     }
                 }
 
-                // Wait for all asynchronous tasks to complete
+                // Wait for remaining asynchronous tasks to complete
                 for (auto& future : futures) {
                     future.get();
                 }
@@ -580,6 +619,7 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
     // Return the combined results
     return mdfMdsFilesCache;
 }
+
 
 
 // Function to interactively select and convert MDF files to ISO
