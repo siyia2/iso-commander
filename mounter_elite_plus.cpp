@@ -1477,19 +1477,34 @@ void unmountISO(const std::string& isoDir) {
 
 
 
-// Function to perform asynchronous unmounting
 std::future<void> asyncUnmountISO(const std::string& isoDir) {
+    // Map to store unmounted ISOs with their corresponding paths
+    std::map<std::string, bool> unmountedIsos;
+
     // Determine the number of threads to use (minimum of available threads and 1)
-    unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 1;
-    unsigned int numThreads = std::min(maxThreads, static_cast<unsigned int>(1));
+    unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
+    unsigned int numThreads = std::min(maxThreads, static_cast<unsigned int>(unmountedIsos.size()));
 
-    return std::async(std::launch::async, [isoDir]() {
-        // Lock the mutex before accessing the shared resource using Mutex4Med
-        std::lock_guard<std::mutex> medLock(Mutex4Med);
+    // Vector to store futures for parallel unmounting
+    std::vector<std::future<void>> futures;
 
-        // Call the function that modifies the shared resource
-        unmountISO(isoDir);
-    });
+    // Iterate through the list of ISO files and spawn a future for each
+    for (unsigned int i = 0; i < numThreads; ++i) {
+        // Create a future for unmounting the ISO file and pass the map and mutex by reference
+        futures.push_back(std::async(std::launch::async, [i, &isoDir, &unmountedIsos]() {
+            // Lock the mutex before accessing the shared map using Mutex4Med
+            std::lock_guard<std::mutex> medLock(Mutex4Med);
+
+            // Call the function that modifies the shared map
+            unmountISO(isoDir);
+        }));
+    }
+
+    // Wait for all asynchronous tasks to complete
+    for (auto& future : futures) {
+        future.get();
+    }
+   return std::future<void>();
 }
 
 // Function to check if a given index is within the valid range of available ISOs
@@ -1560,13 +1575,13 @@ void unmountISOs() {
             // Use the minimum of available threads and ISOs to ensure efficient parallelism
             unsigned int numThreads = std::min(static_cast<unsigned int>(isoDirs.size()), maxThreads);
 
-            // Create a vector of threads to perform unmounting and directory removal concurrently
+            // Create a vector of threads to store the unmounting threads
             std::vector<std::thread> threads;
 
             for (const std::string& isoDir : isoDirs) {
                 threads.emplace_back([&, isoDir = std::move(isoDir)]() {
                     std::lock_guard<std::mutex> highLock(Mutex4High); // Lock the critical section
-                    asyncUnmountISO(isoDir).get(); // Synchronously wait for the future
+                    unmountISO(isoDir);
                 });
 
                 // Limit the number of active threads to the available hardware threads
