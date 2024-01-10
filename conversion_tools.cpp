@@ -316,8 +316,7 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
 
 	// Set to track processed indices to avoid duplicates
     std::set<int> processedIndices;
-    std::set<int> validIndices;
-
+    
     // Set to track processed error messages to avoid duplicate error reporting
     std::set<std::string> processedErrors;
 
