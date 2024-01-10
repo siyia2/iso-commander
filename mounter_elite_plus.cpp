@@ -811,13 +811,17 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
 	
 	std::lock_guard<std::mutex> highLock(Mutex4High);
 	
+	// Detect and use the minimum of available threads and ISOs to ensure efficient parallelism fallback is two
+	unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
+	
     std::istringstream iss(input);
     bool invalidInput = false;
     std::unordered_set<std::string> uniqueErrorMessages; // Set to store unique error messages
     std::set<int> processedIndices; // Set to keep track of processed indices
 
     std::string token;
-    std::vector<std::future<void>> futures; // Vector to store std::future objects for each task
+    std::vector<std::thread> threads; // Vector to store std::future objects for each task
+    threads.reserve(maxThreads);  // Reserve space for maxThreads threads
 
     while (iss >> token) {
         // Check if the token consists only of zeros and treat it as a non-existent index
@@ -937,18 +941,20 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
 
             std::system("clear");
 
-			// Launch deletion tasks for valid selections
+		// Launch deletion tasks for valid selections
+		std::vector<std::thread> threads;
 			for (const auto& index : processedIndices) {
-			if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
-				// Use std::async to launch the task asynchronously
-				futures.emplace_back(std::async(std::launch::async, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
-				}              
+				if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
+			threads.emplace_back(handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet));
 			}
+		}
 
-            // Wait for all tasks to complete
-            for (auto& future : futures) {
-                future.wait();
-            }
+			// Join all threads
+			for (auto& thread : threads) {
+				if (thread.joinable()) {
+					thread.join();
+			}
+		}
 
             // Stop the timer after completing all deletion tasks
             auto end_time = std::chrono::high_resolution_clock::now();
