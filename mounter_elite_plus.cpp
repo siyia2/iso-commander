@@ -10,6 +10,7 @@ const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 std::mutex Mutex4High; // Mutex for high level functions
 std::mutex Mutex4Med; // Mutex for middle level functions
 std::mutex Mutex4Low; // Mutex for low level functions
+std::mutex Mutex4ISO; // Mutex for handleIsoFile
 
 bool gapPrinted = false; // for cache refresh for directory function
 bool gapPrintedtraverse = false; // for traverse function
@@ -1207,15 +1208,12 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
 // Function to handle mounting of a specific ISO file asynchronously
 void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet) {
     try {
-        // Declare a local mutex
-        std::mutex localMutex;
-
         // Use std::async to execute the function asynchronously
-        auto future = std::async(std::launch::async, [&iso, &mountedSet, &localMutex]() {
+        auto future = std::async(std::launch::async, [&iso, &mountedSet]() {
             // Check if the ISO file exists on disk
             if (fileExistsOnDisk(iso)) {
-                // Lock the local mutex before accessing the shared set
-                std::lock_guard<std::mutex> medLock(localMutex);
+                // Lock the global mutex before accessing the shared set
+                std::lock_guard<std::mutex> lock(Mutex4ISO);
 
                 // Attempt to insert the ISO file into the set; if it's a new entry, mount it
                 auto insertResult = mountedSet.insert(iso);
