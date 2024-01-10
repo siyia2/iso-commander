@@ -280,6 +280,7 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
 
     // Set to track processed indices to avoid duplicates
     std::set<int> processedIndices;
+    std::set<int> validIndices;
 
     // Set to track processed error messages to avoid duplicate error reporting
     std::set<std::string> processedErrors;
@@ -336,6 +337,7 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                                         std::string selectedFile = fileList[selectedIndex];
                                         futures.push_back(std::async(std::launch::async, asyncConvertBINToISO, selectedFile, maxThreads));
                                         processedIndices.insert(selectedIndex);
+                                        validIndices.insert(selectedIndex);
                                     }
                                 } else {
                                     // Add an error message for an invalid range
@@ -388,6 +390,7 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                         std::string selectedFile = fileList[selectedIndex];
                         futures.push_back(std::async(std::launch::async, asyncConvertBINToISO, selectedFile, maxThreads));
                         processedIndices.insert(selectedIndex);
+                        validIndices.insert(selectedIndex);
                     } else {
                         // Add an error message for an invalid file index
                         std::string errorMessage = "\033[1;91mFile index '" + std::to_string(start) + "' does not exist.\033[1;0m";
@@ -425,7 +428,11 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
     for (auto& future : futures) {
         future.wait();
     }
-
+	
+	if (!errorMessages.empty() && !validIndices.empty()) {
+		std::cout << " " << std::endl;	
+	}
+	
     // Print error messages
     for (const auto& errorMessage : errorMessages) {
         std::cout << errorMessage << std::endl;
@@ -739,6 +746,8 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
 
     // Set to track processed indices to avoid duplicates
     std::set<int> processedIndices;
+    
+    std::set<int> validIndices;
 
     // Set to track processed error messages to avoid duplicate error reporting
     std::set<std::string> processedErrors;
@@ -795,6 +804,7 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
                                         std::string selectedFile = fileList[selectedIndex];
                                         futures.push_back(std::async(std::launch::async, asyncConvertMDFToISO, selectedFile, maxThreads));
                                         processedIndices.insert(selectedIndex);
+                                        validIndices.insert(selectedIndex);
                                     }
                                 } else {
                                     // Add an error message for an invalid range
@@ -847,6 +857,7 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
                         std::string selectedFile = fileList[selectedIndex];
                         futures.push_back(std::async(std::launch::async, asyncConvertMDFToISO, selectedFile, maxThreads));
                         processedIndices.insert(selectedIndex);
+                        validIndices.insert(selectedIndex);
                     } else {
                         // Add an error message for an invalid file index
                         std::string errorMessage = "\033[1;91mFile index '" + std::to_string(start) + "' does not exist.\033[1;0m";
@@ -884,7 +895,11 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
     for (auto& future : futures) {
         future.wait();
     }
-
+	
+	if (!errorMessages.empty() && !validIndices.empty()) {
+		std::cout << " " << std::endl;	
+	}
+	
     // Print error messages
     for (const auto& errorMessage : errorMessages) {
         std::cout << errorMessage << std::endl;
