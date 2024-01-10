@@ -527,32 +527,37 @@ void manualRefreshCache() {
     // Start the timer
     auto start_time = std::chrono::high_resolution_clock::now();
 
-    // Create a task for each valid directory to refresh the cache and pass the vector by reference
-    std::istringstream iss2(inputLine); // Reset the string stream
-    while (std::getline(iss2, path, ';')) {
-        // Check if the directory path is valid
-        if (!isValidDirectory(path)) {
-            continue; // Skip invalid paths
-        }
+// Create a task for each valid directory to refresh the cache and pass the vector by reference
+std::istringstream iss2(inputLine); // Reset the string stream
+std::size_t runningTasks = 0;  // Track the number of running tasks
 
-        // Add a task to the thread pool for refreshing the cache for each directory
-        futures.emplace_back(std::async(std::launch::async, refreshCacheForDirectory, path, std::ref(allIsoFiles)));
-        
-        // Limit the number of concurrent tasks to the maximum number of threads
-        if (futures.size() >= maxThreads) {
-            // Wait for the tasks to complete
-            for (auto& future : futures) {
-                future.wait();
-            }
-            // Clear completed tasks from the vector
-            futures.clear();
-        }
+while (std::getline(iss2, path, ';')) {
+    // Check if the directory path is valid
+    if (!isValidDirectory(path)) {
+        continue; // Skip invalid paths
     }
 
-    // Wait for the remaining tasks to complete
-    for (auto& future : futures) {
-        future.wait();
+    // Add a task to the thread pool for refreshing the cache for each directory
+    futures.emplace_back(std::async(std::launch::async, refreshCacheForDirectory, path, std::ref(allIsoFiles)));
+
+    ++runningTasks;
+
+    // Check if the number of running tasks has reached the maximum allowed
+    if (runningTasks >= maxThreads) {
+        // Wait for the tasks to complete
+        for (auto& future : futures) {
+            future.wait();
+        }
+        // Clear completed tasks from the vector
+        futures.clear();
+        runningTasks = 0;  // Reset the count of running tasks
     }
+}
+
+// Wait for the remaining tasks to complete
+for (auto& future : futures) {
+    future.wait();
+}
     
 
     // Save the combined cache to disk
@@ -817,6 +822,7 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
 
     // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism; fallback is 2 threads
     unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
+    unsigned int numThreads = std::min(static_cast<unsigned int>(isoFiles.size()), maxThreads);
 
     // Create an input string stream to tokenize the user input
     std::istringstream iss(input);
@@ -959,7 +965,7 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
 
             // Use std::async to launch asynchronous tasks
             std::vector<std::future<void>> futures;
-            futures.reserve(maxThreads);
+            futures.reserve(numThreads);
 
             // Launch deletion tasks for each selected index
             for (const auto& index : processedIndices) {
@@ -1578,9 +1584,12 @@ void unmountISOs() {
         }
 
         if (std::strcmp(input, "00") == 0) {
-            // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism fallback is 2 threads
+            // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism fallback is two
             unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
-           
+            std::cout << "Max available threads: " << maxThreads << std::endl;
+
+            // Use the minimum of available threads and ISOs to ensure efficient parallelism
+            unsigned int numThreads = std::min(static_cast<unsigned int>(isoDirs.size()), maxThreads);
 
             // Create a vector of threads to store the unmounting threads
             std::vector<std::thread> threads;
@@ -1592,7 +1601,7 @@ void unmountISOs() {
                 });
 
                 // Limit the number of active threads to the available hardware threads
-                if (threads.size() >= maxThreads) {
+                if (threads.size() >= numThreads) {
                     // Join the threads to wait for them to finish
                     for (auto& thread : threads) {
                         thread.join();
@@ -1713,8 +1722,9 @@ void unmountISOs() {
         // Create a vector of threads to perform unmounting and directory removal concurrently
         std::vector<std::thread> threads;
 
-        // Detect and use the maximum of available threads and ISOs to ensure efficient parallelism fallback is 2 threads
+        // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism fallback is two
         unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
+        unsigned int numThreads = std::min(static_cast<unsigned int>(isoDirs.size()), maxThreads);
 
         for (int index : unmountIndices) {
             // Check if the index is within the valid range
@@ -1728,7 +1738,7 @@ void unmountISOs() {
                 });
 
                 // Limit the number of active threads to the available hardware threads
-                if (threads.size() >= maxThreads) {
+                if (threads.size() >= numThreads) {
                     // Join the threads to wait for them to finish
                     for (auto& thread : threads) {
                         thread.join();
