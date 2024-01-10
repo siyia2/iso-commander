@@ -91,7 +91,7 @@ std::vector<std::string> loadCache();
 
 class ThreadPool {
 public:
-    ThreadPool(std::size_t numThreads = std::thread::hardware_concurrency()) : stop(false) {
+        ThreadPool(std::size_t numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2) : stop(false) {
         for (std::size_t i = 0; i < numThreads; ++i)
             workers.emplace_back([this] {
                 while (true) {
