@@ -31,6 +31,9 @@ bool endsWith(const std::string& fullString, const std::string& ending) {
 std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback) {
     // Vector to store cached invalid paths
     static std::vector<std::string> cachedInvalidPaths;
+    
+    // Vector to store permission errors
+    std::set<std::string> uniqueInvalidPaths;
 
     // Static variables to cache results for reuse
     static std::vector<std::string> binImgFilesCache;
@@ -135,16 +138,19 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
             } catch (const std::filesystem::filesystem_error& e) {
                 std::lock_guard<std::mutex> lock(mutex4search);
 
-                // Check if the exception is related to permission error
-                const std::error_code& ec = e.code();
-                if (ec == std::errc::permission_denied) {
-                    if (!printedEmptyLine) {
-                        // Print an empty line before starting to print invalid paths (only once)
-                        std::cout << " " << std::endl;
-                        printedEmptyLine = true;
-                    }
-                    // Handle permission error differently, you can choose to skip or print a specific message
-                    std::cerr << "\033[1;91mInsufficient permissions for directory path: \033[1;93m'" << path << "'\033[1;91m.\033[1;0m" << std::endl;
+                // Check if the exception is related to a permission error
+				const std::error_code& ec = e.code();
+				if (ec == std::errc::permission_denied) {
+					// Check if the path is unique
+					if (uniqueInvalidPaths.insert(path).second) {
+						// If it's a new path, print an empty line before printing the error (only once)
+						if (!printedEmptyLine) {
+							std::cout << " " << std::endl;
+							printedEmptyLine = true;
+						}
+							// Handle permission error differently, you can choose to skip or print a specific message
+							std::cerr << "\033[1;91mInsufficient permissions for directory path: \033[1;93m'" << path << "'\033[1;91m.\033[1;0m" << std::endl;
+					}
                 } else if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
                     if (!printedEmptyLine) {
                         // Print an empty line before starting to print invalid paths (only once)
@@ -529,6 +535,9 @@ bool isCcd2IsoInstalled() {
 std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback) {
     // Vector to store cached invalid paths
     static std::vector<std::string> cachedInvalidPaths;
+    
+    // Vector to store permission errors
+    std::set<std::string> uniqueInvalidPaths;
 
     // Static variables to cache results for reuse
     static std::vector<std::string> mdfMdsFilesCache;
@@ -635,16 +644,18 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
             } catch (const std::filesystem::filesystem_error& e) {
                 std::lock_guard<std::mutex> lock(mutex4search);
 
-                // Check if the exception is related to permission error
-                const std::error_code& ec = e.code();
-                if (ec == std::errc::permission_denied) {
-                    if (!printedEmptyLine) {
-                        // Print an empty line before starting to print invalid paths (only once)
-                        std::cout << " " << std::endl;
-                        printedEmptyLine = true;
-                    }
-                    // Handle permission error differently, you can choose to skip or print a specific message
-                    std::cerr << "\033[1;91mInsufficient permissions for directory path: \033[1;93m'" << path << "'\033[1;91m.\033[1;0m" << std::endl;
+                // Check if the exception is related to a permission error
+				const std::error_code& ec = e.code();
+				if (ec == std::errc::permission_denied) {
+				// Check if the path is unique
+					if (uniqueInvalidPaths.insert(path).second) {
+					// If it's a new path, print an empty line before printing the error (only once)
+						if (!printedEmptyLine) {
+							std::cout << " " << std::endl;
+							printedEmptyLine = true;
+						}
+							// Handle permission error differently, you can choose to skip or print a specific message
+					}		std::cerr << "\033[1;91mInsufficient permissions for directory path: \033[1;93m'" << path << "'\033[1;91m.\033[1;0m" << std::endl;
                 } else if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
                     if (!printedEmptyLine) {
                         // Print an empty line before starting to print invalid paths (only once)
