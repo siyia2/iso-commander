@@ -27,7 +27,7 @@ bool endsWith(const std::string& fullString, const std::string& ending) {
     }
 }
 
-// Function to search for .bin and .img files under 10MB
+// Function to search for .bin and .img files under 5MB
 std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback) {
     // Vector to store cached invalid paths
     static std::vector<std::string> cachedInvalidPaths;
@@ -112,42 +112,42 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
                     }
                 }
 
-        // Wait for remaining asynchronous tasks to complete
-        for (auto& future : futures) {
-            // Check if the future is valid
-            if (future.valid()) {
-                // Block until the future is ready
-                future.get();
-            }
-        }
-			
+                // Wait for remaining asynchronous tasks to complete
+                for (auto& future : futures) {
+                    // Check if the future is valid
+                    if (future.valid()) {
+                        // Block until the future is ready
+                        future.get();
+                    }
+                }
+
             } catch (const std::filesystem::filesystem_error& e) {
-    std::lock_guard<std::mutex> lock(mutex4search);
+                std::lock_guard<std::mutex> lock(mutex4search);
 
-    // Check if the exception is related to permission error
-    const std::error_code& ec = e.code();
-    if (ec == std::errc::permission_denied) {
-		if (!printedEmptyLine) {
-                    // Print an empty line before starting to print invalid paths (only once)
-                    std::cout << " " << std::endl;
-                    printedEmptyLine = true;
+                // Check if the exception is related to permission error
+                const std::error_code& ec = e.code();
+                if (ec == std::errc::permission_denied) {
+                    if (!printedEmptyLine) {
+                        // Print an empty line before starting to print invalid paths (only once)
+                        std::cout << " " << std::endl;
+                        printedEmptyLine = true;
+                    }
+                    // Handle permission error differently, you can choose to skip or print a specific message
+                    std::cerr << "\033[1;91mInsufficient permissions for directory path: \033[1;93m'" << path << "'\033[1;91m.\033[1;0m" << std::endl;
+                } else if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
+                    if (!printedEmptyLine) {
+                        // Print an empty line before starting to print invalid paths (only once)
+                        std::cout << " " << std::endl;
+                        printedEmptyLine = true;
+                    }
+
+                    // Print the specific error details for non-permission errors
+                    std::cerr << "\033[1;91mInvalid directory path: '" << path << "'. Excluded from search." << "\033[1;0m" << std::endl;
+
+                    // Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
+                    cachedInvalidPaths.push_back(path);
                 }
-        // Handle permission error differently, you can choose to skip or print a specific message
-        std::cerr << "\033[1;91mInsufficient permissions for directory path: \033[1;93m'" << path << "'\033[1;91m.\033[1;0m" << std::endl;
-    } else if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
-		if (!printedEmptyLine) {
-                    // Print an empty line before starting to print invalid paths (only once)
-                    std::cout << " " << std::endl;
-                    printedEmptyLine = true;
-                }
-
-        // Print the specific error details for non-permission errors
-        std::cerr << "\033[1;91mInvalid directory path: '" << path << "'. Excluded from search." << "\033[1;0m" << std::endl;
-
-        // Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
-        cachedInvalidPaths.push_back(path);
-    }
-}
+            }
         }
 
     } catch (const std::filesystem::filesystem_error& e) {
@@ -594,42 +594,42 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                     }
                 }
 
-        // Wait for remaining asynchronous tasks to complete
-        for (auto& future : futures) {
-            // Check if the future is valid
-            if (future.valid()) {
-                // Block until the future is ready
-                future.get();
-            }
-        }
+                // Wait for remaining asynchronous tasks to complete
+                for (auto& future : futures) {
+                    // Check if the future is valid
+                    if (future.valid()) {
+                        // Block until the future is ready
+                        future.get();
+                    }
+                }
 
             } catch (const std::filesystem::filesystem_error& e) {
-    std::lock_guard<std::mutex> lock(mutex4search);
+                std::lock_guard<std::mutex> lock(mutex4search);
 
-    // Check if the exception is related to permission error
-    const std::error_code& ec = e.code();
-    if (ec == std::errc::permission_denied) {
-		if (!printedEmptyLine) {
-                    // Print an empty line before starting to print invalid paths (only once)
-                    std::cout << " " << std::endl;
-                    printedEmptyLine = true;
+                // Check if the exception is related to permission error
+                const std::error_code& ec = e.code();
+                if (ec == std::errc::permission_denied) {
+                    if (!printedEmptyLine) {
+                        // Print an empty line before starting to print invalid paths (only once)
+                        std::cout << " " << std::endl;
+                        printedEmptyLine = true;
+                    }
+                    // Handle permission error differently, you can choose to skip or print a specific message
+                    std::cerr << "\033[1;91mInsufficient permissions for directory path: \033[1;93m'" << path << "'\033[1;91m.\033[1;0m" << std::endl;
+                } else if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
+                    if (!printedEmptyLine) {
+                        // Print an empty line before starting to print invalid paths (only once)
+                        std::cout << " " << std::endl;
+                        printedEmptyLine = true;
+                    }
+
+                    // Print the specific error details for non-permission errors
+                    std::cerr << "\033[1;91mInvalid directory path: '" << path << "'. Excluded from search." << "\033[1;0m" << std::endl;
+
+                    // Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
+                    cachedInvalidPaths.push_back(path);
                 }
-        // Handle permission error differently, you can choose to skip or print a specific message
-        std::cerr << "\033[1;91mInsufficient permissions for directory path: \033[1;93m'" << path << "'\033[1;91m.\033[1;0m" << std::endl;
-    } else if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
-		if (!printedEmptyLine) {
-                    // Print an empty line before starting to print invalid paths (only once)
-                    std::cout << " " << std::endl;
-                    printedEmptyLine = true;
-                }
-
-        // Print the specific error details for non-permission errors
-        std::cerr << "\033[1;91mInvalid directory path: '" << path << "'. Excluded from search." << "\033[1;0m" << std::endl;
-
-        // Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
-        cachedInvalidPaths.push_back(path);
-    }
-}
+            }
         }
 
     } catch (const std::filesystem::filesystem_error& e) {
