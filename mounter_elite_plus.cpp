@@ -1522,6 +1522,7 @@ bool isValidIndex(int index, size_t isoDirsSize) {
 void unmountISOs() {
     // Set to store unique error messages
     std::set<std::string> uniqueErrorMessages;
+    std::set<int> validIndices;
 
     bool invalidInput = false;
 
@@ -1640,6 +1641,7 @@ void unmountISOs() {
                     // Check for duplicates
                     if (uniqueIndices.find(number) == uniqueIndices.end()) {
                         uniqueIndices.insert(number);
+                        validIndices.insert(number);
                         unmountIndices.push_back(number);
                     }
 
@@ -1661,6 +1663,7 @@ void unmountISOs() {
                         // Check for duplicates
                         if (uniqueIndices.find(startRange) == uniqueIndices.end()) {
                             uniqueIndices.insert(startRange);
+                            validIndices.insert(startRange);
                             unmountIndices.push_back(startRange);
                         }
                     } else {
@@ -1690,6 +1693,7 @@ void unmountISOs() {
                             // Check for duplicates
                             if (uniqueIndices.find(i) == uniqueIndices.end()) {
                                 uniqueIndices.insert(i);
+                                validIndices.insert(i);
                                 unmountIndices.push_back(i);
                             }
                         }
@@ -1740,7 +1744,11 @@ void unmountISOs() {
 
         // Stop the timer after completing the unmounting process
         auto end_time = std::chrono::high_resolution_clock::now();
-
+		
+		if (invalidInput && !validIndices.empty()) {
+		std::cout << " " << std::endl;	
+	}
+		
         // Print error messages
         for (const auto& errorMessage : errorMessages) {
             if (uniqueErrorMessages.find(errorMessage) == uniqueErrorMessages.end()) {
