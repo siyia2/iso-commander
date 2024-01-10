@@ -811,13 +811,17 @@ bool isAllZeros(const std::string& str) {
 
 // Function to process user input for selecting and deleting specific ISO files
 void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
-	
-	std::lock_guard<std::mutex> highLock(Mutex4High);
-	
-	// Detect and use the minimum of available threads and ISOs to ensure efficient parallelism fallback is 2 threads
-	unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
-	
+    
+    // Lock to ensure thread safety in a multi-threaded environment
+    std::lock_guard<std::mutex> highLock(Mutex4High);
+
+    // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism; fallback is 2 threads
+    unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
+
+    // Create an input string stream to tokenize the user input
     std::istringstream iss(input);
+    
+    // Variables for tracking errors, processed indices, and valid indices
     bool invalidInput = false;
     std::unordered_set<std::string> uniqueErrorMessages; // Set to store unique error messages
     std::set<int> processedIndices; // Set to keep track of processed indices
@@ -827,14 +831,15 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
     std::vector<std::thread> threads; // Vector to store std::future objects for each task
     threads.reserve(maxThreads);  // Reserve space for maxThreads threads
 
+    // Tokenize the input string
     while (iss >> token) {
         // Check if the token consists only of zeros and treat it as a non-existent index
         if (isAllZeros(token)) {
-			if (!invalidInput) {
-				invalidInput = true;
-				uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist.\033[1;0m");
-			}
-		}
+            if (!invalidInput) {
+                invalidInput = true;
+                uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist.\033[1;0m");
+            }
+        }
 
         // Check if the token is '0' and treat it as a non-existent index
         if (token == "0") {
@@ -843,7 +848,7 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
                 uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist.\033[1;0m");
             }
         }
-        
+
         // Check if there is more than one hyphen in the token
         if (std::count(token.begin(), token.end(), '-') > 1) {
             invalidInput = true;
@@ -851,6 +856,7 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
             continue;
         }
 
+        // Process ranges specified with hyphens
         size_t dashPos = token.find('-');
         if (dashPos != std::string::npos) {
             int start, end;
@@ -870,19 +876,15 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
                 continue;
             }
             
+            // Check for validity of the specified range
             if ((start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) ||
-				(start == 0 || end == 0)) {
-				invalidInput = true;
-				uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[1;0m");
-				continue;
-			}
-
-            if (start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) {
+                (start == 0 || end == 0)) {
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[1;0m");
                 continue;
             }
 
+            // Mark indices within the specified range as valid
             int step = (start <= end) ? 1 : -1;
             for (int i = start; ((start <= end) && (i <= end)) || ((start > end) && (i >= end)); i += step) {
                 if (static_cast<size_t>(i) <= isoFiles.size() && processedIndices.find(i) == processedIndices.end()) {
@@ -894,6 +896,7 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
                 }
             }
         } else if (isNumeric(token)) {
+            // Process single numeric indices
             int num = std::stoi(token);
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && processedIndices.find(num) == processedIndices.end()) {
                 processedIndices.insert(num); // Mark index as processed
@@ -907,18 +910,18 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
             uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[1;0m");
         }
     }
+
     // Display unique errors at the end
     if (invalidInput) {
         for (const auto& errorMsg : uniqueErrorMessages) {
             std::cerr << "\033[1;93m" << errorMsg << "\033[1;0m" << std::endl;
         }
     }
-    
-    
+
+    // Display additional information if there are invalid inputs and some valid indices
     if (invalidInput && !validIndices.empty()) {
-		std::cout << " " << std::endl;
-		
-	}
+        std::cout << " " << std::endl;
+    }
 
     // Display selected deletions
     if (!processedIndices.empty()) {
@@ -927,7 +930,9 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
         for (const auto& index : processedIndices) {
             std::cout << "\033[1;93m'" << isoFiles[index - 1] << "'\033[1;0m" << std::endl;
         }
-	}
+    }
+
+    // Display a message if there are no valid selections for deletion
     if (!uniqueErrorMessages.empty() && processedIndices.empty()) {
         std::cout << " " << std::endl;
         std::cout << "\033[1;91mNo valid selection(s) for deletion.\033[1;0m" << std::endl;
@@ -952,18 +957,21 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
 
             std::system("clear");
 
-			for (const auto& index : processedIndices) {
-				if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
-			threads.emplace_back(handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet));
-			}
-		}
+            // Use std::async to launch asynchronous tasks
+            std::vector<std::future<void>> futures;
+            futures.reserve(maxThreads);
 
-			// Join all threads
-			for (auto& thread : threads) {
-				if (thread.joinable()) {
-					thread.join();
-			}
-		}
+            // Launch deletion tasks for each selected index
+            for (const auto& index : processedIndices) {
+                if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
+                    futures.emplace_back(std::async(std::launch::async, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
+                }
+            }
+
+            // Wait for all asynchronous tasks to complete
+            for (auto& future : futures) {
+                future.wait();
+            }
 
             // Stop the timer after completing all deletion tasks
             auto end_time = std::chrono::high_resolution_clock::now();
