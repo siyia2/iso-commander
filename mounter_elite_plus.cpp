@@ -1452,7 +1452,7 @@ void unmountISO(const std::string& isoDir) {
     static bool clearScreenDone = false;
 
     // Use std::async to unmount and remove the directory asynchronously
-    auto unmountFuture = std::async(std::launch::async, [isoDir]() {
+    auto unmountFuture = std::async(std::launch::async, [&isoDir]() {
         // Construct the sudo command
         std::string sudoCommand = "sudo -v";
 
