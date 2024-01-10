@@ -937,12 +937,13 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
 
             std::system("clear");
 
-            // Launch deletion tasks for valid selections
-            for (const auto& index : processedIndices) {
-                if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
-                    futures.emplace_back(std::async(std::launch::async, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
-                }              
-            }
+			// Launch deletion tasks for valid selections
+			for (const auto& index : processedIndices) {
+			if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
+				// Use std::async to launch the task asynchronously
+				futures.emplace_back(std::async(std::launch::async, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
+				}              
+			}
 
             // Wait for all tasks to complete
             for (auto& future : futures) {
