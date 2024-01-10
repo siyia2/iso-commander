@@ -486,6 +486,9 @@ void manualRefreshCache() {
 
     // Set to store processed invalid paths
     std::set<std::string> processedInvalidPaths;
+    
+    // Set to store processed valid paths
+	std::set<std::string> processedValidPaths;
 
     // Set up a thread pool with a maximum number of threads, fallback to two threads if hardware concurrency is not available or not positive
 	const std::size_t maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
@@ -537,10 +540,18 @@ while (std::getline(iss2, path, ';')) {
         continue; // Skip invalid paths
     }
 
+    // Check if the path has already been processed
+    if (processedValidPaths.find(path) != processedValidPaths.end()) {
+        continue; // Skip already processed valid paths
+    }
+
     // Add a task to the thread pool for refreshing the cache for each directory
     futures.emplace_back(std::async(std::launch::async, refreshCacheForDirectory, path, std::ref(allIsoFiles)));
 
     ++runningTasks;
+
+    // Mark the path as processed
+    processedValidPaths.insert(path);
 
     // Check if the number of running tasks has reached the maximum allowed
     if (runningTasks >= maxThreads) {
