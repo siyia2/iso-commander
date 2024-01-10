@@ -81,13 +81,13 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
                 // Iterate through files in the given directory and its subdirectories
                 for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
                     if (entry.is_regular_file()) {
-                        // Check if the file has a ".bin" or ".img" extension and is larger than or equal to 10,000,000 bytes
+                        // Check if the file has a ".bin" or ".img" extension and is larger than or equal to 5,000,000 bytes
                         std::string ext = entry.path().extension();
                         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) {
                             return std::tolower(c);
                         });
 
-                        if ((ext == ".bin" || ext == ".img") && std::filesystem::file_size(entry) >= 10'000'000 && !endsWith(entry.path().filename().string(), "data.bin")) {
+                        if ((ext == ".bin" || ext == ".img") && std::filesystem::file_size(entry) >= 5'000'000 && !endsWith(entry.path().filename().string(), "data.bin")) {
                             // Check if the file is already present in the cache to avoid duplicates
                             std::string fileName = entry.path().string();
                             if (std::find(binImgFilesCache.begin(), binImgFilesCache.end(), fileName) == binImgFilesCache.end()) {
@@ -120,29 +120,43 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
                 future.get();
             }
         }
-
+			
             } catch (const std::filesystem::filesystem_error& e) {
-                // Handle filesystem errors for the current directory
-                if (!printedEmptyLine) {
+    std::lock_guard<std::mutex> lock(mutex4search);
+
+    // Check if the exception is related to permission error
+    const std::error_code& ec = e.code();
+    if (ec == std::errc::permission_denied) {
+		if (!printedEmptyLine) {
                     // Print an empty line before starting to print invalid paths (only once)
                     std::cout << " " << std::endl;
                     printedEmptyLine = true;
                 }
-                if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
-                    std::cerr << "\033[1;91mInvalid directory path: '" << path << "'. Excluded from search." << "\033[1;0m" << std::endl;
-                    // Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
-                    cachedInvalidPaths.push_back(path);
+        // Handle permission error differently, you can choose to skip or print a specific message
+        std::cerr << "\033[1;91mInsufficient permissions for directory path: \033[1;93m'" << path << "'\033[1;91m.\033[1;0m" << std::endl;
+    } else if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
+		if (!printedEmptyLine) {
+                    // Print an empty line before starting to print invalid paths (only once)
+                    std::cout << " " << std::endl;
+                    printedEmptyLine = true;
                 }
-            }
+
+        // Print the specific error details for non-permission errors
+        std::cerr << "\033[1;91mInvalid directory path: '" << path << "'. Excluded from search." << "\033[1;0m" << std::endl;
+
+        // Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
+        cachedInvalidPaths.push_back(path);
+    }
+}
         }
 
     } catch (const std::filesystem::filesystem_error& e) {
-        // Handle filesystem errors for the overall operation
         if (!printedEmptyLine) {
             // Print an empty line before starting to print invalid paths (only once)
             std::cout << " " << std::endl;
             printedEmptyLine = true;
         }
+        // Handle filesystem errors for the overall operation
         std::cerr << "\033[1;91m" << e.what() << "\033[1;0m" << std::endl;
         std::cin.ignore();
     }
@@ -208,7 +222,7 @@ void select_and_convert_files_to_iso() {
 	// Print a message only if no new files are found
 	if (!newFilesFound && !binImgFiles.empty()) {
 		std::cout << " " << std::endl;
-		std::cout << "\033[1;91mNo new .bin .img file(s) over 10MB found. \033[1;92m" << binImgFiles.size() << " matching file(s) cached in RAM from previous searches.\033[1;0m" << std::endl;
+		std::cout << "\033[1;91mNo new .bin .img file(s) over 5MB found. \033[1;92m" << binImgFiles.size() << " matching file(s) cached in RAM from previous searches.\033[1;0m" << std::endl;
 		std::cout << " " << std::endl;
 		std::cout << "\033[1;32mPress enter to continue...\033[1;0m";
 		std::cin.ignore();
@@ -216,7 +230,7 @@ void select_and_convert_files_to_iso() {
 
     if (binImgFiles.empty()) {
 		std::cout << " " << std::endl;
-        std::cout << "\033[1;91mNo .bin or .img file(s) over 10MB found in the specified path(s) or cached in RAM.\n\033[1;0m";
+        std::cout << "\033[1;91mNo .bin or .img file(s) over 5MB found in the specified path(s) or cached in RAM.\n\033[1;0m";
         std::cout << " " << std::endl;
         std::cout << "\033[1;32mPress enter to continue...\033[1;0m";
         std::cin.ignore();
@@ -496,7 +510,7 @@ bool isCcd2IsoInstalled() {
 // MDF CONVERSION FUNCTIONS	\\
 
 
-// Function to search for .mdf and .mds files under 10MB
+// Function to search for .mdf and .mds files under 5MB
 std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback) {
     // Vector to store cached invalid paths
     static std::vector<std::string> cachedInvalidPaths;
@@ -549,13 +563,13 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                 // Iterate through files in the given directory and its subdirectories
                 for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
                     if (entry.is_regular_file()) {
-                        // Check if the file has a ".mdf" or ".mds" extension and is larger than or equal to 10,000,000 bytes
+                        // Check if the file has a ".mdf" or ".mds" extension and is larger than or equal to 5,000,000 bytes
                         std::string ext = entry.path().extension();
                         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) {
                             return std::tolower(c);
                         });
 
-                        if ((ext == ".mdf" || ext == ".mds") && std::filesystem::file_size(entry) >= 10'000'000) {
+                        if ((ext == ".mdf" || ext == ".mds") && std::filesystem::file_size(entry) >= 5'000'000) {
                             // Check if the file is already present in the cache to avoid duplicates
                             std::string fileName = entry.path().string();
                             if (std::find(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end(), fileName) == mdfMdsFilesCache.end()) {
@@ -590,18 +604,32 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
         }
 
             } catch (const std::filesystem::filesystem_error& e) {
-                if (!printedEmptyLine) {
+    std::lock_guard<std::mutex> lock(mutex4search);
+
+    // Check if the exception is related to permission error
+    const std::error_code& ec = e.code();
+    if (ec == std::errc::permission_denied) {
+		if (!printedEmptyLine) {
                     // Print an empty line before starting to print invalid paths (only once)
                     std::cout << " " << std::endl;
                     printedEmptyLine = true;
                 }
-                // Handle filesystem errors for the current directory
-                if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
-                    std::cerr << "\033[1;91mInvalid directory path: '" << path << "'. Excluded from search." << "\033[1;0m" << std::endl;
-                    // Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
-                    cachedInvalidPaths.push_back(path);
+        // Handle permission error differently, you can choose to skip or print a specific message
+        std::cerr << "\033[1;91mInsufficient permissions for directory path: \033[1;93m'" << path << "'\033[1;91m.\033[1;0m" << std::endl;
+    } else if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
+		if (!printedEmptyLine) {
+                    // Print an empty line before starting to print invalid paths (only once)
+                    std::cout << " " << std::endl;
+                    printedEmptyLine = true;
                 }
-            }
+
+        // Print the specific error details for non-permission errors
+        std::cerr << "\033[1;91mInvalid directory path: '" << path << "'. Excluded from search." << "\033[1;0m" << std::endl;
+
+        // Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
+        cachedInvalidPaths.push_back(path);
+    }
+}
         }
 
     } catch (const std::filesystem::filesystem_error& e) {
@@ -679,7 +707,7 @@ void select_and_convert_files_to_iso_mdf() {
     // Print a message only if no new .mdf files are found
     if (!newMdfFilesFound && !mdfMdsFiles.empty()) {
         std::cout << " " << std::endl;
-        std::cout << "\033[1;91mNo new .mdf file(s) over 10MB found. \033[1;92m" << mdfMdsFiles.size() << " file(s) cached in RAM from previous searches.\033[1;0m" << std::endl;
+        std::cout << "\033[1;91mNo new .mdf file(s) over 5MB found. \033[1;92m" << mdfMdsFiles.size() << " file(s) cached in RAM from previous searches.\033[1;0m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "\033[1;32mPress enter to continue...\033[1;0m";
         std::cin.ignore();
@@ -687,7 +715,7 @@ void select_and_convert_files_to_iso_mdf() {
 
     if (mdfMdsFiles.empty()) {
         std::cout << " " << std::endl;
-        std::cout << "\033[1;91mNo .mdf file(s) over 10MB found in the specified path(s) or cached in RAM.\n\033[1;0m";
+        std::cout << "\033[1;91mNo .mdf file(s) over 5MB found in the specified path(s) or cached in RAM.\n\033[1;0m";
         std::cout << " " << std::endl;
         std::cout << "\033[1;32mPress enter to continue...\033[1;0m";
         std::cin.ignore();
