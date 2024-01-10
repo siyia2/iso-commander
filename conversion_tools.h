@@ -29,6 +29,7 @@
 bool fileExistsConversions(const std::string& filePath);
 
 // BIN/IMG CONVERSION
+bool endsWith(const std::string& fullString, const std::string& ending);
 std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback);
 void convertBINToISO(const std::string& inputPath);
 void select_and_convert_files_to_iso();

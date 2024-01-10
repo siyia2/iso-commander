@@ -19,6 +19,14 @@ bool fileExistsConversions(const std::string& filePath) {
 // BIN/IMG CONVERSION FUNCTIONS	\\
 
 
+bool endsWith(const std::string& fullString, const std::string& ending) {
+    if (fullString.length() >= ending.length()) {
+        return (0 == fullString.compare(fullString.length() - ending.length(), ending.length(), ending));
+    } else {
+        return false;
+    }
+}
+
 // Function to search for .bin and .img files under 10MB
 std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback) {
     // Vector to store cached invalid paths
@@ -73,7 +81,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
                             return std::tolower(c);
                         });
 
-                        if ((ext == ".bin" || ext == ".img") && std::filesystem::file_size(entry) >= 10'000'000) {
+                        if ((ext == ".bin" || ext == ".img") && std::filesystem::file_size(entry) >= 10'000'000 && !endsWith(entry.path().filename().string(), "data.bin")) {
                             // Check if the file is already present in the cache to avoid duplicates
                             std::string fileName = entry.path().string();
                             if (std::find(binImgFilesCache.begin(), binImgFilesCache.end(), fileName) == binImgFilesCache.end()) {
