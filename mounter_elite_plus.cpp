@@ -27,6 +27,7 @@ bool directoryExists(const std::string& path);
 bool isNumeric(const std::string& str);
 
 // Iso cache functions
+void ignoreKeyPressUntilFinished();
 bool isValidDirectory(const std::string& path);
 bool ends_with_iso(const std::string& str);
 bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize);
@@ -423,12 +424,24 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
 }
 
 
+// Function to check if a directory input is valid
+bool isValidDirectory(const std::string& path) {
+    return std::filesystem::is_directory(path);
+}
+
+// Function to ignore any key press until the process is finished
+void ignoreKeyPressUntilFinished() {
+    //std::cout << "\033[1;32mPress any key to continue...\033[0m";
+   //std::cin.get(); // Wait for a key press
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n'); // Discard remaining input
+}
+
 // Function to refresh the cache for a single directory
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles) {
     // Define a static variable to track whether the gap has been printed
     
 
-    std::cout << "\033[93mProcessing directory path: '" << path << "'.\033[0m" << std::endl;
+    std::cout << "\033[1;93mProcessing directory path: '" << path << "'.\033[0m" << std::endl;
 
     std::vector<std::string> newIsoFiles;
 
@@ -450,23 +463,17 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 }
 
 
-// Function to check if a directory input is valid
-bool isValidDirectory(const std::string& path) {
-    return std::filesystem::is_directory(path);
-}
-
-
 // Function for manual cache refresh
 void manualRefreshCache() {
     std::system("clear");
     gapPrinted = false;
 
     // Prompt the user to enter directory paths for manual cache refresh
-    std::string inputLine = readInputLine("\033[94mEnter the directory path(s) from which to populate the \033[1m\033[92mISO Cache\033[94m (if many, separate them with \033[1m\033[93m;\033[0m\033[94m), or press Enter to cancel:\n\033[0m");
+    std::string inputLine = readInputLine("\033[94mEnter the directory path(s) from which to populate the \033[1m\033[92mISO Cache\033[94m (if many, separate them with \033[1m\033[1;93m;\033[0m\033[94m), or press Enter to cancel:\n\033[0m");
 
     // Check if the user canceled the cache refresh
     if (inputLine.empty()) {
-        std::cout << "\033[93mCache refresh canceled by user.\033[0m" << std::endl;
+        std::cout << "\033[1;93mCache refresh canceled by user.\033[0m" << std::endl;
         std::cout << " " << std::endl;
         return;
     }
@@ -553,6 +560,10 @@ void manualRefreshCache() {
     for (auto& future : futures) {
         future.wait();
     }
+    
+    // Ignore any key press until the process is finished
+    ignoreKeyPressUntilFinished();
+
 
     // Save the combined cache to disk
     bool saveSuccess = saveCache(allIsoFiles, maxCacheSize);
