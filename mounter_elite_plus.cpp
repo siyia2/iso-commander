@@ -1601,7 +1601,6 @@ void unmountISOs() {
         if (std::strcmp(input, "00") == 0) {
             // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism fallback is two
             unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
-            std::cout << "Max available threads: " << maxThreads << std::endl;
 
             // Use the minimum of available threads and ISOs to ensure efficient parallelism
             unsigned int numThreads = std::min(static_cast<unsigned int>(isoDirs.size()), maxThreads);
