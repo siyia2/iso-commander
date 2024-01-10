@@ -821,6 +821,7 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
     bool invalidInput = false;
     std::unordered_set<std::string> uniqueErrorMessages; // Set to store unique error messages
     std::set<int> processedIndices; // Set to keep track of processed indices
+    std::set<int> validIndices; // Set to keep track of valid indices
 
     std::string token;
     std::vector<std::thread> threads; // Vector to store std::future objects for each task
@@ -886,6 +887,7 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
             for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
                 if (static_cast<size_t>(i) <= isoFiles.size() && processedIndices.find(i) == processedIndices.end()) {
                     processedIndices.insert(i); // Mark as processed
+                    validIndices.insert(i);
                 } else if (static_cast<size_t>(i) > isoFiles.size()) {
                     invalidInput = true;
                     uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(i) + "' does not exist.\033[1;0m");
@@ -895,6 +897,7 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
             int num = std::stoi(token);
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && processedIndices.find(num) == processedIndices.end()) {
                 processedIndices.insert(num); // Mark index as processed
+                validIndices.insert(num);
             } else if (num > isoFiles.size()) {
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(num) + "' does not exist.\033[1;0m");
@@ -904,13 +907,18 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
             uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[1;0m");
         }
     }
-
     // Display unique errors at the end
     if (invalidInput) {
         for (const auto& errorMsg : uniqueErrorMessages) {
             std::cerr << "\033[1;93m" << errorMsg << "\033[1;0m" << std::endl;
         }
     }
+    
+    
+    if (invalidInput && !validIndices.empty()) {
+		std::cout << " " << std::endl;
+		
+	}
 
     // Display selected deletions
     if (!processedIndices.empty()) {
@@ -1251,6 +1259,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
     bool invalidInput = false;
     std::unordered_set<std::string> uniqueErrorMessages; // Set to store unique error messages
     std::set<int> processedIndices; // Set to keep track of processed indices
+    std::set<int> validIndices; // Set to keep track of valid indices
 
     std::string token;
     std::vector<std::future<void>> futures; // Vector to store std::future objects for each task
@@ -1302,6 +1311,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
                     // Use std::async to launch each task in a separate thread
                     futures.emplace_back(std::async(std::launch::async, handleIsoFile, isoFiles[i - 1], std::ref(mountedSet)));
                     processedIndices.insert(i); // Mark as processed
+					validIndices.insert(i); // Store the valid index
                 } else if (static_cast<size_t>(i) > isoFiles.size()) {
                     invalidInput = true;
                     uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(i) + "' does not exist.\033[1;0m");
@@ -1313,6 +1323,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
                 // Use std::async to launch each task in a separate thread
                 futures.emplace_back(std::async(std::launch::async, handleIsoFile, isoFiles[num - 1], std::ref(mountedSet)));
                 processedIndices.insert(num); // Mark index as processed
+                validIndices.insert(num); // Store the valid index
             } else if (num > isoFiles.size()) {
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(num) + "' does not exist.\033[1;0m");
@@ -1327,7 +1338,12 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
     for (auto& future : futures) {
         future.wait();
     }
-
+	
+	if (invalidInput && !validIndices.empty()) {
+		std::cout << " " << std::endl;
+		
+	}
+		
     // Display errors at the end
     if (invalidInput) {
         for (const auto& errorMsg : uniqueErrorMessages) {
