@@ -27,13 +27,16 @@ bool endsWith(const std::string& fullString, const std::string& ending) {
     }
 }
 
-// Function to search for .bin and .img files under 5MB
+// Function to search for .bin and .img files over 5MB
 std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback) {
     // Vector to store cached invalid paths
     static std::vector<std::string> cachedInvalidPaths;
 
     // Static variables to cache results for reuse
     static std::vector<std::string> binImgFilesCache;
+    
+    // Set to store processed paths
+    static std::set<std::string> processedPaths;
 
     // Vector to store file names that match the criteria
     std::vector<std::string> fileNames;
@@ -58,6 +61,11 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
 
         // Iterate through input paths
         for (const auto& path : paths) {
+            // Check if the path has already been processed
+            if (processedPaths.find(path) != processedPaths.end()) {
+                continue; // Skip already processed paths
+            }
+
             try {
                 // Use a lambda function to process files asynchronously
                 auto processFileAsync = [&](const std::filesystem::directory_entry& entry) {
@@ -87,7 +95,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
                             return std::tolower(c);
                         });
 
-                        if ((ext == ".bin" || ext == ".img") && std::filesystem::file_size(entry) >= 5'000'000 && !endsWith(entry.path().filename().string(), "data.bin")) {
+                        if ((ext == ".bin" || ext == ".img") && std::filesystem::file_size(entry) > 5'000'000 && !endsWith(entry.path().filename().string(), "data.bin")) {
                             // Check if the file is already present in the cache to avoid duplicates
                             std::string fileName = entry.path().string();
                             if (std::find(binImgFilesCache.begin(), binImgFilesCache.end(), fileName) == binImgFilesCache.end()) {
@@ -120,6 +128,9 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
                         future.get();
                     }
                 }
+
+                // Add the processed path to the set
+                processedPaths.insert(path);
 
             } catch (const std::filesystem::filesystem_error& e) {
                 std::lock_guard<std::mutex> lock(mutex4search);
@@ -180,6 +191,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
     // Return the combined results
     return binImgFilesCache;
 }
+
 
 
 // Main function to select directories and convert BIN/IMG files to ISO format
@@ -513,13 +525,16 @@ bool isCcd2IsoInstalled() {
 // MDF CONVERSION FUNCTIONS	\\
 
 
-// Function to search for .mdf and .mds files under 5MB
+// Function to search for .mdf and .mds files over 5MB
 std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback) {
     // Vector to store cached invalid paths
     static std::vector<std::string> cachedInvalidPaths;
 
     // Static variables to cache results for reuse
     static std::vector<std::string> mdfMdsFilesCache;
+
+    // Set to store processed paths
+    static std::set<std::string> processedPaths;
 
     // Vector to store file names that match the criteria
     std::vector<std::string> fileNames;
@@ -539,8 +554,16 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
         // Counter to track the number of ongoing tasks
         int numOngoingTasks = 0;
 
+        // Use a vector to store futures for ongoing tasks
+        std::vector<std::future<void>> futures;
+
         // Iterate through input paths
         for (const auto& path : paths) {
+            // Check if the path has already been processed
+            if (processedPaths.find(path) != processedPaths.end()) {
+                continue; // Skip already processed paths
+            }
+
             try {
                 // Use a lambda function to process files asynchronously
                 auto processFileAsync = [&](const std::filesystem::directory_entry& entry) {
@@ -572,7 +595,7 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                             return std::tolower(c);
                         });
 
-                        if ((ext == ".mdf" || ext == ".mds") && std::filesystem::file_size(entry) >= 5'000'000) {
+                        if ((ext == ".mdf" || ext == ".mds") && std::filesystem::file_size(entry) > 5'000'000) {
                             // Check if the file is already present in the cache to avoid duplicates
                             std::string fileName = entry.path().string();
                             if (std::find(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end(), fileName) == mdfMdsFilesCache.end()) {
@@ -605,6 +628,9 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                         future.get();
                     }
                 }
+
+                // Add the processed path to the set
+                processedPaths.insert(path);
 
             } catch (const std::filesystem::filesystem_error& e) {
                 std::lock_guard<std::mutex> lock(mutex4search);
