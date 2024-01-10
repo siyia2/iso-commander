@@ -27,7 +27,6 @@ bool directoryExists(const std::string& path);
 bool isNumeric(const std::string& str);
 
 // Iso cache functions
-void ignoreKeyPressUntilFinished();
 bool isValidDirectory(const std::string& path);
 bool ends_with_iso(const std::string& str);
 bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize);
@@ -429,12 +428,6 @@ bool isValidDirectory(const std::string& path) {
     return std::filesystem::is_directory(path);
 }
 
-// Function to ignore any key press until the process is finished
-void ignoreKeyPressUntilFinished() {
-    //std::cout << "\033[1;32mPress any key to continue...\033[0m";
-   //std::cin.get(); // Wait for a key press
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n'); // Discard remaining input
-}
 
 // Function to refresh the cache for a single directory
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles) {
@@ -561,9 +554,6 @@ void manualRefreshCache() {
         future.wait();
     }
     
-    // Ignore any key press until the process is finished
-    ignoreKeyPressUntilFinished();
-
 
     // Save the combined cache to disk
     bool saveSuccess = saveCache(allIsoFiles, maxCacheSize);
@@ -1475,7 +1465,6 @@ void unmountISO(const std::string& isoDir) {
 }
 
 
-
 std::future<void> asyncUnmountISO(const std::string& isoDir) {
     // Map to store unmounted ISOs with their corresponding paths
     std::map<std::string, bool> unmountedIsos;
@@ -1508,7 +1497,7 @@ std::future<void> asyncUnmountISO(const std::string& isoDir) {
 
 // Function to check if a given index is within the valid range of available ISOs
 bool isValidIndex(int index, size_t isoDirsSize) {
-	
+    // Use size_t for the comparison to avoid signed/unsigned comparison warnings
     return (index >= 1) && (static_cast<size_t>(index) <= isoDirsSize);
 }
 
