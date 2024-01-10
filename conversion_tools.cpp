@@ -112,10 +112,14 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
                     }
                 }
 
-                // Wait for remaining asynchronous tasks to complete
-                for (auto& future : futures) {
-                    future.get();
-                }
+        // Wait for remaining asynchronous tasks to complete
+        for (auto& future : futures) {
+            // Check if the future is valid
+            if (future.valid()) {
+                // Block until the future is ready
+                future.get();
+            }
+        }
 
             } catch (const std::filesystem::filesystem_error& e) {
                 // Handle filesystem errors for the current directory
@@ -576,10 +580,14 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                     }
                 }
 
-                // Wait for remaining asynchronous tasks to complete
-                for (auto& future : futures) {
-                    future.get();
-                }
+        // Wait for remaining asynchronous tasks to complete
+        for (auto& future : futures) {
+            // Check if the future is valid
+            if (future.valid()) {
+                // Block until the future is ready
+                future.get();
+            }
+        }
 
             } catch (const std::filesystem::filesystem_error& e) {
                 if (!printedEmptyLine) {
