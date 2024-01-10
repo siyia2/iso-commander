@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <fstream>
 #include <future>
+#include <queue>
 #include <mutex>
 #include <regex>
 #include <set>
@@ -26,7 +27,7 @@
 
 // General
 
-bool fileExistsConversions(const std::string& filePath);
+bool fileExistsConversions(const std::string& fullPath);
 
 // BIN/IMG CONVERSION
 bool endsWith(const std::string& fullString, const std::string& ending);

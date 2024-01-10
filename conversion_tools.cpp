@@ -9,9 +9,9 @@ std::mutex fileCheckMutex;
 
 // GENERAL \\
 
-bool fileExistsConversions(const std::string& filePath) {
+bool fileExistsConversions(const std::string& fullPath) {
     std::lock_guard<std::mutex> lock(fileCheckMutex);
-    return std::filesystem::exists(filePath);
+        return std::filesystem::exists(fullPath);
 } 
 
 
