@@ -884,7 +884,7 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
             }
 
             int step = (start <= end) ? 1 : -1;
-            for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
+            for (int i = start; ((start <= end) && (i <= end)) || ((start > end) && (i >= end)); i += step) {
                 if (static_cast<size_t>(i) <= isoFiles.size() && processedIndices.find(i) == processedIndices.end()) {
                     processedIndices.insert(i); // Mark as processed
                     validIndices.insert(i);
@@ -952,8 +952,6 @@ void processDeleteInput(char* input, std::vector<std::string>& isoFiles, std::un
 
             std::system("clear");
 
-		// Launch deletion tasks for valid selections
-		std::vector<std::thread> threads;
 			for (const auto& index : processedIndices) {
 				if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
 			threads.emplace_back(handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet));
