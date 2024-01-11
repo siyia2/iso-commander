@@ -12,7 +12,7 @@ Features:
 * Tab completion and history support.
 * Sanitized shell commands for improved security.
 * Multithreaded and asynchronous operations based on unique valid inputs and max available system threads.
-* Includes a high precision timer to measure performance.
+* Includes a high precision timer for performance measurements.
 * Support for BIN/IMG conversion to ISO by utilizing ccd2iso
 * Support for MDF conversion to ISO by utilizing mdf2iso.
 * Clean codebase in case someone decides to contribute in the future.
