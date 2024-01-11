@@ -17,4 +17,7 @@ Features:
 * Support for MDF conversion to ISO by utilizing mdf2iso.
 * Clean codebase in case someone decides to contribute in the future.
 
-Installation: download the binaries from my releases, compile with `make`, or if you are on arch or on an archbased distro install with `yay -S mounter-elite-plus`.
+Installation ways:
+1) Download the binary executable from my releases.
+2) Compile from source with `make`.
+3) If on arch or on an archbased distro install with `yay -S mounter-elite-plus`.
