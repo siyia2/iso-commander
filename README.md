@@ -12,8 +12,7 @@ Features:
 * Utilizes GNU utilities: rm,rmdir,moun,unmount,find.
 * Tab completion and history support.
 * Sanitized shell commands for improved security.
-* Supports all filenames, including special charactes and gaps and ''.
-* Multithreaded and asynchronous operations based on unique valid inputs and max vailable system threads.
+* Multithreaded and asynchronous operations based on unique valid inputs and max available system threads.
 * Includes a high precision timer to measure performance.
 * Support for BIN/IMG conversion to ISO by utilizing ccd2iso
 * Support for MDF conversion to ISO by utilizing mdf2iso.
