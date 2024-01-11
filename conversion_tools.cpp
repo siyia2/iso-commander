@@ -58,36 +58,27 @@ bool blacklistBin(const std::filesystem::path& entry) {
 
     return ((extLower == ".bin" || extLower == ".img") &&
             std::filesystem::file_size(entry) > 5'000'000 &&
-            filenameLowerNoExt != "ou" &&
-            filenameLowerNoExt != "z_outfits" &&
-            filenameLowerNoExt.find("blocklist") == std::string::npos &&
+            
+            filenameLowerNoExt.find("block") == std::string::npos &&
+            filenameLowerNoExt.find("list") == std::string::npos &&
+            filenameLowerNoExt.find("sdcard") == std::string::npos &&
             filenameLowerNoExt.find("index") == std::string::npos &&
             filenameLowerNoExt.find("data") == std::string::npos &&
-            filenameLowerNoExt.find("globalshadercache") == std::string::npos &&
+            filenameLowerNoExt.find("shader") == std::string::npos &&
             filenameLowerNoExt.find("navmesh") == std::string::npos &&
-            filenameLowerNoExt.find("object") == std::string::npos &&
             filenameLowerNoExt.find("obj") == std::string::npos &&
             filenameLowerNoExt.find("flora") == std::string::npos &&
             filenameLowerNoExt.find("terrain") == std::string::npos &&
-            filenameLowerNoExt.find("executionhistory") == std::string::npos &&
-            filenameLowerNoExt.find("scriptcache") == std::string::npos &&
-            filenameLowerNoExt.find("chunkdata") == std::string::npos &&
-            filenameLowerNoExt.find("worlddictionary") == std::string::npos &&
+            filenameLowerNoExt.find("script") == std::string::npos &&
+            filenameLowerNoExt.find("history") == std::string::npos &&
+            filenameLowerNoExt.find("system") == std::string::npos &&
+            filenameLowerNoExt.find("vendor") == std::string::npos &&
+            filenameLowerNoExt.find("cache") == std::string::npos &&
+            filenameLowerNoExt.find("dictionary") == std::string::npos &&
             filenameLowerNoExt.find("initramfs") == std::string::npos &&
-            filenameLowerNoExt.find("map_") == std::string::npos &&
-            filenameLowerNoExt.find("_map") == std::string::npos &&
-            filenameLowerNoExt.find("_map_") == std::string::npos &&
-            filenameLowerNoExt.find("zopo_") == std::string::npos &&
-            filenameLowerNoExt.find("setup_") == std::string::npos &&
-            filenameLowerNoExt.find("_setup") == std::string::npos &&
-            filenameLowerNoExt.find("_setup_") == std::string::npos &&
-            filenameLowerNoExt.find("-setup-") == std::string::npos &&
-            filenameLowerNoExt.find("-setup") == std::string::npos &&
-            filenameLowerNoExt.find("setup-") == std::string::npos &&
-            filenameLowerNoExt.find("_setup-") == std::string::npos &&
-            filenameLowerNoExt.find("-setup_") == std::string::npos &&
-            filenameLowerNoExt.find("gos_") == std::string::npos &&
-            filenameLowerNoExt.find("encryptionkey") == std::string::npos);
+            filenameLowerNoExt.find("map") == std::string::npos &&
+            filenameLowerNoExt.find("setup") == std::string::npos &&
+            filenameLowerNoExt.find("encrypt") == std::string::npos);
 }
 
 
@@ -221,7 +212,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
                     }
 
                     // Print the specific error details for non-permission errors
-                    std::cerr << "\033[1;91mInvalid directory path: '" << path << "'. Excluded from search." << "\033[1;0m" << std::endl;
+                    std::cerr << "\033[1;91mInvalid directory path: '" << path << "'. \033[1;91m" << e.what() << ".\033[1;0m" << std::endl;
 
                     // Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
                     cachedInvalidPaths.push_back(path);
@@ -266,7 +257,6 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
     // Return the combined results
     return binImgFilesCache;
 }
-
 
 
 // Main function to select directories and convert BIN/IMG files to ISO format
@@ -617,7 +607,7 @@ void convertBINToISO(const std::string& inputPath) {
 
         // Delete the partially created ISO file
         if (std::remove(outputPath.c_str()) == 0) {
-            std::cout << "\033[1;91mDeleted partially created ISO file:\033[1;93m '" << outputPath << "'\033[1;91m failed.\033[1;0m" << std::endl;
+            std::cout << "\033[1;91mDeleted incomplete ISO file:\033[1;0m '" << outputPath << "'\033[1;91m.\033[1;0m" << std::endl;
         } else {
             std::cerr << "\033[1;91mFailed to delete partially created ISO file: \033[1;93m'" << outputPath << "'\033[1;91m.\033[1;0m" << std::endl;
         }
@@ -791,7 +781,7 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                     }
 
                     // Print the specific error details for non-permission errors
-                    std::cerr << "\033[1;91mInvalid directory path: '" << path << "'. Excluded from search." << "\033[1;0m" << std::endl;
+                    std::cerr << "\033[1;91mInvalid directory path: '" << path << "'. \033[1;91m" << e.what() << ".\033[1;0m" << std::endl;
 
                     // Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
                     cachedInvalidPaths.push_back(path);

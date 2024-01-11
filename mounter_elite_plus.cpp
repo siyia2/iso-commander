@@ -507,7 +507,7 @@ void manualRefreshCache() {
             // Check if the path has already been processed
             if (processedInvalidPaths.find(path) == processedInvalidPaths.end()) {
                 // Print the error message and mark the path as processed
-                invalidPaths.push_back("\033[91mInvalid directory path: '" + path + "'. Skipped from processing.\033[0m");
+                invalidPaths.push_back("\033[1;91mInvalid directory path: '" + path + "'. Skipped from processing.\033[0m");
                 processedInvalidPaths.insert(path);
             }
         }
@@ -590,7 +590,7 @@ void manualRefreshCache() {
         std::cout << " " << std::endl;
     } else {
         std::cout << " " << std::endl;
-        std::cout << "\033[91mCache refresh failed.\033[0m" << std::endl;
+        std::cout << "\033[1;91mCache refresh failed.\033[0m" << std::endl;
         std::cout << " " << std::endl;
     }
 }
