@@ -8,7 +8,7 @@ State of the art secure and blazing fast terminal image manager written in C++, 
 
 Features:
 * Cached ISO management to reduce disk thrashing.
-* Utilizes GNU/Linux utilities: rm,rmdir,moun,unmount,find.
+* Utilizes GNU/Linux utilities: rm,rmdir,mount,unmount,find.
 * Tab completion and history support.
 * Sanitized shell commands for improved security.
 * Multithreaded and asynchronous operations based on unique valid inputs and max available system threads.
