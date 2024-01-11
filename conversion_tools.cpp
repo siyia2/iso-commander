@@ -48,6 +48,9 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
     cachedInvalidPaths.clear();
 
     bool printedEmptyLine = false;  // Flag to track if an empty line has been printed
+    
+    // Start the timer
+    auto start_time = std::chrono::high_resolution_clock::now();
 
     try {
         // Mutex to ensure thread safety
@@ -180,8 +183,15 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
 
     // Print success message if files were found
     if (!fileNames.empty()) {
+		// Stop the timer after completing the mounting process
+        auto end_time = std::chrono::high_resolution_clock::now();
         std::cout << " " << std::endl;
         std::cout << "\033[1;92mFound " << fileNames.size() << " matching file(s)\033[1;0m" << ".\033[1;93m " << binImgFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[1;0m" << std::endl;
+        // Calculate and print the elapsed time
+        std::cout << " " << std::endl;
+        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+        // Print the time taken for the entire process in bold with one decimal place
+        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[1;0m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "\033[1;32mPress enter to continue...\033[1;0m";
         std::cin.ignore();
@@ -211,7 +221,10 @@ void select_and_convert_files_to_iso() {
 
     // Read input for directory paths (allow multiple paths separated by semicolons)
     std::string inputPaths = readInputLine("\033[1;94mEnter the directory path(s) (if many, separate them with \033[1m\033[1;93m;\033[1;0m\033[1;94m) to search for \033[1m\033[1;92m.bin \033[1;94mand \033[1m\033[1;92m.img\033[1;94m files, or press Enter to return:\n\033[1;0m");
-
+	
+	// Start the timer
+    auto start_time = std::chrono::high_resolution_clock::now();
+	
     // Use semicolon as a separator to split paths
     std::istringstream iss(inputPaths);
     std::string path;
@@ -240,18 +253,31 @@ void select_and_convert_files_to_iso() {
 	// Print a message only if no new files are found
 	if (!newFilesFound && !binImgFiles.empty()) {
 		std::cout << " " << std::endl;
+		// Stop the timer after completing the mounting process
+        auto end_time = std::chrono::high_resolution_clock::now();
 		std::cout << "\033[1;91mNo new .bin .img file(s) over 5MB found. \033[1;92m" << binImgFiles.size() << " matching file(s) cached in RAM from previous searches.\033[1;0m" << std::endl;
 		std::cout << " " << std::endl;
-		std::cout << "\033[1;32mPress enter to continue...\033[1;0m";
-		std::cin.ignore();
+        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+        // Print the time taken for the entire process in bold with one decimal place
+        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[1;0m" << std::endl;
+        std::cout << " " << std::endl;
+        std::cout << "\033[1;32mPress enter to continue...\033[1;0m";
+        std::cin.ignore();
 	}
 
     if (binImgFiles.empty()) {
 		std::cout << " " << std::endl;
+		// Stop the timer after completing the mounting process
+        auto end_time = std::chrono::high_resolution_clock::now();
         std::cout << "\033[1;91mNo .bin or .img file(s) over 5MB found in the specified path(s) or cached in RAM.\n\033[1;0m";
+        std::cout << " " << std::endl;
+        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+        // Print the time taken for the entire process in bold with one decimal place
+        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[1;0m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "\033[1;32mPress enter to continue...\033[1;0m";
         std::cin.ignore();
+        return;
         
     } else {
         while (true) {
@@ -564,6 +590,9 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
     cachedInvalidPaths.clear();
 
     bool printedEmptyLine = false;  // Flag to track if an empty line has been printed
+    
+    // Start the timer
+    auto start_time = std::chrono::high_resolution_clock::now();
 
     try {
         // Mutex to ensure thread safety
@@ -697,8 +726,15 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
 
     // Print success message if files were found
     if (!fileNames.empty()) {
+		// Stop the timer after completing the mounting process
+        auto end_time = std::chrono::high_resolution_clock::now();
         std::cout << " " << std::endl;
         std::cout << "\033[1;92mFound " << fileNames.size() << " matching file(s)\033[1;0m" << ".\033[1;93m " << mdfMdsFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[1;0m" << std::endl;
+        // Calculate and print the elapsed time
+        std::cout << " " << std::endl;
+        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+        // Print the time taken for the entire process in bold with one decimal place
+        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[1;0m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "\033[1;32mPress enter to continue...\033[1;0m";
         std::cin.ignore();
@@ -710,6 +746,7 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
 
     // Update the cache by appending fileNames to mdfMdsFilesCache
     mdfMdsFilesCache.insert(mdfMdsFilesCache.end(), fileNames.begin(), fileNames.end());
+    
 
     // Return the combined results
     return mdfMdsFilesCache;
@@ -730,6 +767,9 @@ void select_and_convert_files_to_iso_mdf() {
 	
     // Read input for directory paths (allow multiple paths separated by semicolons)
     std::string inputPaths = readInputLine("\033[1;94mEnter the directory path(s) (if many, separate them with \033[1m\033[1;93m;\033[1;0m\033[1;94m) to search for \033[1m\033[1;92m.mdf\033[1;94m files, or press Enter to return:\n\033[1;0m");
+    
+    // Start the timer
+    auto start_time = std::chrono::high_resolution_clock::now();
     
     // Use semicolon as a separator to split paths
     std::istringstream iss(inputPaths);
@@ -759,7 +799,13 @@ void select_and_convert_files_to_iso_mdf() {
     // Print a message only if no new .mdf files are found
     if (!newMdfFilesFound && !mdfMdsFiles.empty()) {
         std::cout << " " << std::endl;
+        // Stop the timer after completing the mounting process
+        auto end_time = std::chrono::high_resolution_clock::now();
         std::cout << "\033[1;91mNo new .mdf file(s) over 5MB found. \033[1;92m" << mdfMdsFiles.size() << " file(s) cached in RAM from previous searches.\033[1;0m" << std::endl;
+        std::cout << " " << std::endl;
+        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+        // Print the time taken for the entire process in bold with one decimal place
+        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[1;0m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "\033[1;32mPress enter to continue...\033[1;0m";
         std::cin.ignore();
@@ -767,7 +813,13 @@ void select_and_convert_files_to_iso_mdf() {
 
     if (mdfMdsFiles.empty()) {
         std::cout << " " << std::endl;
+        // Stop the timer after completing the mounting process
+        auto end_time = std::chrono::high_resolution_clock::now();
         std::cout << "\033[1;91mNo .mdf file(s) over 5MB found in the specified path(s) or cached in RAM.\n\033[1;0m";
+        std::cout << " " << std::endl;
+        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+        // Print the time taken for the entire process in bold with one decimal place
+        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[1;0m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "\033[1;32mPress enter to continue...\033[1;0m";
         std::cin.ignore();
