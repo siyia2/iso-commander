@@ -212,7 +212,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
                     }
 
                     // Print the specific error details for non-permission errors
-                    std::cerr << "\033[1;91mInvalid directory path: '" << path << "'. \033[1;91m" << e.what() << ".\033[1;0m" << std::endl;
+                    std::cerr << "\033[1;91m" << e.what() << ".\033[1;0m" << std::endl;
 
                     // Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
                     cachedInvalidPaths.push_back(path);
@@ -227,7 +227,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
             printedEmptyLine = true;
         }
         // Handle filesystem errors for the overall operation
-        std::cerr << "\033[1;91m" << e.what() << "\033[1;0m" << std::endl;
+        std::cerr << "\033[1;91m" << e.what() << ".\033[1;0m" << std::endl;
         std::cin.ignore();
     }
 
@@ -781,7 +781,7 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                     }
 
                     // Print the specific error details for non-permission errors
-                    std::cerr << "\033[1;91mInvalid directory path: '" << path << "'. \033[1;91m" << e.what() << ".\033[1;0m" << std::endl;
+                    std::cerr << "\033[1;91m" << e.what() << ".\033[1;0m" << std::endl;
 
                     // Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
                     cachedInvalidPaths.push_back(path);
