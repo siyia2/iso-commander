@@ -17,8 +17,4 @@ Features:
 * Support for MDF conversion to ISO by utilizing mdf2iso.
 * Clean codebase in case someone decides to contribute in the future.
 
-
-If you get: `Error: filesystem error: cannot increment recursive directory iterator: Permission denied`.
-Make sure your path has `755` and upwards permissions for better cache generation, or alternatively, you can set the executable as an `SUID`, or you can always run it as `ROOT` wit `sudo` from the beginning if need be.
-
 You download the binaries from my releases, compile witk `make`, or if you are on arch or on an archbased distro you can install with `yay -S mounter-elite-plus`.
