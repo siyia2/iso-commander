@@ -663,7 +663,7 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
             gapPrintedtraverse = true;
         }
         
-        std::cerr << "\033[1;91m" << e.what() << "\033[1;0m" << std::endl;
+        std::cerr << "\033[1;91m" << e.what() << ".\033[1;0m" << std::endl;
         // Introduce a 2-second delay
 		std::this_thread::sleep_for(std::chrono::seconds(2));
     }
