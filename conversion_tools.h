@@ -26,7 +26,6 @@
 // Function prototypes
 
 // General
-
 bool fileExistsConversions(const std::string& fullPath);
 std::string toLower(const std::string& str);
 bool endsWith(const std::string& fullString, const std::string& ending);
