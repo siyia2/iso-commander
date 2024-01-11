@@ -355,6 +355,9 @@ void select_and_convert_files_to_iso() {
 
 
 void printFileListBin(const std::vector<std::string>& fileList) {
+    // Apply formatting once before the loop
+    std::cout << std::right;
+
     // Print header for file selection
     std::cout << "\033[1mSelect file(s) to convert to \033[1m\033[1;92mISO(s)\033[1;0m:\n";
     std::cout << " " << std::endl;
@@ -374,15 +377,18 @@ void printFileListBin(const std::vector<std::string>& fileList) {
             std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
 
             if (extension == ".img" || extension == ".bin") {
-                // Print path in white and filename in green and bold
-                std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << path << "\033[1m\033[38;5;208m" << fileNameOnly << "\033[1;0m" << std::endl;
+                // Print index, path in white, filename in green and bold
+                std::cout << std::setw(2) << i + 1 << ". \033[1m" << path << "\033[1m\033[38;5;208m" << fileNameOnly << "\033[1;0m" << std::endl;
+
+                // Print a line of underscores with length equal to the listing's total length
+                std::cout << std::setw(2) << std::setfill('_') << "" << std::setw(path.length() + fileNameOnly.length() + 3) << "" << std::setfill(' ') << std::endl;
             } else {
                 // Print entire path and filename in white
-                std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << filename << std::endl;
+                std::cout << std::setw(2) << i + 1 << ". \033[1m" << filename << std::endl;
             }
         } else {
             // No extension found, print entire path and filename in white
-            std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << filename << std::endl;
+            std::cout << std::setw(2) << i + 1 << ". \033[1m" << filename << std::endl;
         }
     }
 }
@@ -926,6 +932,9 @@ void select_and_convert_files_to_iso_mdf() {
 
 
 void printFileListMdf(const std::vector<std::string>& fileList) {
+    // Apply formatting once before the loop
+    std::cout << std::right;
+
     // Print header for file selection
     std::cout << "\033[1mSelect file(s) to convert to \033[1m\033[1;92mISO(s)\033[1;0m:\n";
     std::cout << " " << std::endl;
@@ -945,15 +954,18 @@ void printFileListMdf(const std::vector<std::string>& fileList) {
             std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
 
             if (extension == ".mdf") {
-                // Print path in white and filename in orange and bold
-                std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << path << "\033[1m\033[38;5;208m" << fileNameOnly << "\033[1;0m" << std::endl;
+                // Print index, path in white, filename in orange and bold
+                std::cout << std::setw(2) << i + 1 << ". \033[1m" << path << "\033[1m\033[38;5;208m" << fileNameOnly << "\033[1;0m" << std::endl;
+
+                // Print a line of underscores with length equal to the listing's total length
+                std::cout << std::setw(2) << std::setfill('_') << "" << std::setw(path.length() + fileNameOnly.length() + 3) << "" << std::setfill(' ') << std::endl;
             } else {
                 // Print entire path and filename in white
-                std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << filename << std::endl;
+                std::cout << std::setw(2) << i + 1 << ". \033[1m" << filename << std::endl;
             }
         } else {
             // No extension found, print entire path and filename in white
-            std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << filename << std::endl;
+            std::cout << std::setw(2) << i + 1 << ". \033[1m" << filename << std::endl;
         }
     }
 }

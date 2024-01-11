@@ -1221,6 +1221,9 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
 
         // Print the filename part in magenta and bold
         std::cout << "\033[1;95m" << filename << "\033[1;0m" << std::endl;
+
+        // Print a line of underscores with length equal to the listing's total length
+        std::cout << std::setw(2) << std::setfill('_') << "" << std::setw(directory.length() + filename.length() + 3) << "" << std::setfill(' ') << std::endl;
     }
 }
 
