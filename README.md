@@ -12,14 +12,15 @@ Make sure your path has `755` and upwards permissions for better cache generatio
 
 Features:
 * Cached ISO management to reduce disk thrashing.
-* Sanitized shell commands rm,rmdir,moun,unmount,find for improved security.
+* Utilizes GNU utilities: rm,rmdir,moun,unmount,find.
+* Sanitized shell commands for improved security.
 * Supports all filenames, including special charactes and gaps and ''.
-* Multithreaded and asynchronous operations for maximum performance.
-* Includes a high precision timer.
+* Multithreaded and asynchronous operations based on user valid input and max vailable system threads.
+* Includes a high precision timer to measure performance.
 * Support for BIN/IMG conversion to ISO by utilizing ccd2iso
 * Support for MDF conversion to ISO by utilizing mdf2iso.
 * Ability to delete cached ISO files.
-* Clean codebase, just in case someone decides to contribute in the future.
+* Clean codebase in case someone decides to contribute in the future.
   
 Compilation requires the readline library installed from your distro. 
 Once dependancies are met, open a terminal inside the source folder and run `make`, this will make a file named `mounter_elite_plus`.
