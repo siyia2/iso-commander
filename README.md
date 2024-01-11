@@ -12,7 +12,7 @@ Make sure your path has `755` and upwards permissions for better cache generatio
 
 Features:
 * Cached ISO management to reduce disk thrashing.
-* Sanitized shell commands rm rmdir moun unmount find for improved security.
+* Sanitized shell commands rm,rmdir,moun,unmount,find for improved security.
 * Supports all filenames, including special charactes and gaps and ''.
 * Multithreaded and asynchronous operations for maximum performance.
 * Includes a high precision timer.
