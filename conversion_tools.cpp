@@ -27,6 +27,14 @@ bool endsWith(const std::string& fullString, const std::string& ending) {
     }
 }
 
+// Function to convert a string to lowercase
+std::string toLower(const std::string& str) {
+    std::string result = str;
+    std::transform(result.begin(), result.end(), result.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    return result;
+}
+
 // Function to search for .bin and .img files over 5MB
 std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback) {
     // Vector to store cached invalid paths
@@ -100,8 +108,19 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
                         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) {
                             return std::tolower(c);
                         });
-
-                        if ((ext == ".bin" || ext == ".img") && std::filesystem::file_size(entry) > 5'000'000 && !endsWith(entry.path().filename().string(), "data.bin")) {
+							std::string filenameLower = toLower(entry.path().filename().string());
+							if ((ext == ".bin" || ext == ".img") && std::filesystem::file_size(entry) > 5'000'000 &&
+							!endsWith(filenameLower, "data.bin") &&
+							!endsWith(filenameLower, "index.bin") &&
+							!endsWith(filenameLower, "blocklist.bin") &&
+							filenameLower != "terrain.bin" &&
+							filenameLower != "flora.bin" &&
+							filenameLower != "ou.bin" &&
+							filenameLower != "navmesh.bin" &&
+							filenameLower.find("globalshadercache-pc-d3d-sm") == std::string::npos &&  // Check for the substring
+							filenameLower.find("executionhistory") == std::string::npos &&  // Check for the substring
+							filenameLower.find("scriptcache") == std::string::npos &&
+							filenameLower.find("encryptionkey") == std::string::npos) {
                             // Check if the file is already present in the cache to avoid duplicates
                             std::string fileName = entry.path().string();
                             if (std::find(binImgFilesCache.begin(), binImgFilesCache.end(), fileName) == binImgFilesCache.end()) {
@@ -306,9 +325,11 @@ void select_and_convert_files_to_iso() {
 
 
 void printFileListBin(const std::vector<std::string>& fileList) {
+    // Print header for file selection
     std::cout << "\033[1mSelect file(s) to convert to \033[1m\033[1;92mISO(s)\033[1;0m:\n";
     std::cout << " " << std::endl;
 
+    // Iterate through the file list
     for (std::size_t i = 0; i < fileList.size(); ++i) {
         const std::string& filename = fileList[i];
         const std::size_t lastSlashPos = filename.find_last_of('/');
@@ -317,16 +338,25 @@ void printFileListBin(const std::vector<std::string>& fileList) {
 
         const std::size_t dotPos = fileNameOnly.find_last_of('.');
 
-        // Check if the file has a ".img" or ".bin" extension
-        if (dotPos != std::string::npos && (fileNameOnly.compare(dotPos, std::string::npos, ".img") == 0 || fileNameOnly.compare(dotPos, std::string::npos, ".bin") == 0)) {
-            // Print path in white and filename in green and bold
-            std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << path << "\033[1m\033[38;5;208m" << fileNameOnly << "\033[1;0m" << std::endl;
+        // Check if the file has a ".img" or ".bin" extension (case-insensitive)
+        if (dotPos != std::string::npos) {
+            std::string extension = fileNameOnly.substr(dotPos);
+            std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+
+            if (extension == ".img" || extension == ".bin") {
+                // Print path in white and filename in green and bold
+                std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << path << "\033[1m\033[38;5;208m" << fileNameOnly << "\033[1;0m" << std::endl;
+            } else {
+                // Print entire path and filename in white
+                std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << filename << std::endl;
+            }
         } else {
-            // Print entire path and filename in white
+            // No extension found, print entire path and filename in white
             std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << filename << std::endl;
         }
     }
 }
+
 
 
 // Function to process user input and convert selected BIN files to ISO format
@@ -850,9 +880,11 @@ void select_and_convert_files_to_iso_mdf() {
 
 
 void printFileListMdf(const std::vector<std::string>& fileList) {
+    // Print header for file selection
     std::cout << "\033[1mSelect file(s) to convert to \033[1m\033[1;92mISO(s)\033[1;0m:\n";
     std::cout << " " << std::endl;
 
+    // Iterate through the file list
     for (std::size_t i = 0; i < fileList.size(); ++i) {
         const std::string& filename = fileList[i];
         const std::size_t lastSlashPos = filename.find_last_of('/');
@@ -861,12 +893,20 @@ void printFileListMdf(const std::vector<std::string>& fileList) {
 
         const std::size_t dotPos = fileNameOnly.find_last_of('.');
 
-        // Check if the file has a ".mdf" extension
-        if (dotPos != std::string::npos && fileNameOnly.compare(dotPos, std::string::npos, ".mdf") == 0) {
-            // Print path in white and filename in orange and bold
-            std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << path << "\033[1m\033[38;5;208m" << fileNameOnly << "\033[1;0m" << std::endl;
+        // Check if the file has a ".mdf" extension (case-insensitive)
+        if (dotPos != std::string::npos) {
+            std::string extension = fileNameOnly.substr(dotPos);
+            std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+
+            if (extension == ".mdf") {
+                // Print path in white and filename in orange and bold
+                std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << path << "\033[1m\033[38;5;208m" << fileNameOnly << "\033[1;0m" << std::endl;
+            } else {
+                // Print entire path and filename in white
+                std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << filename << std::endl;
+            }
         } else {
-            // Print entire path and filename in white
+            // No extension found, print entire path and filename in white
             std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << filename << std::endl;
         }
     }
