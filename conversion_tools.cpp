@@ -58,15 +58,17 @@ bool blacklistBin(const std::filesystem::path& entry) {
 
     return ((extLower == ".bin" || extLower == ".img") &&
             std::filesystem::file_size(entry) > 5'000'000 &&
-            !endsWith(filenameLowerNoExt, "data") &&
-            !endsWith(filenameLowerNoExt, "index") &&
-            !endsWith(filenameLowerNoExt, "blocklist") &&
-            filenameLowerNoExt != "terrain" &&
-            filenameLowerNoExt != "flora" &&
             filenameLowerNoExt != "ou" &&
             filenameLowerNoExt != "z_outfits" &&
-            filenameLowerNoExt != "navmesh" &&
-            filenameLowerNoExt.find("globalshadercache-pc-d3d-sm") == std::string::npos &&
+            filenameLowerNoExt.find("blocklist") == std::string::npos &&
+            filenameLowerNoExt.find("index") == std::string::npos &&
+            filenameLowerNoExt.find("data") == std::string::npos &&
+            filenameLowerNoExt.find("globalshadercache") == std::string::npos &&
+            filenameLowerNoExt.find("navmesh") == std::string::npos &&
+            filenameLowerNoExt.find("object") == std::string::npos &&
+            filenameLowerNoExt.find("obj") == std::string::npos &&
+            filenameLowerNoExt.find("flora") == std::string::npos &&
+            filenameLowerNoExt.find("terrain") == std::string::npos &&
             filenameLowerNoExt.find("executionhistory") == std::string::npos &&
             filenameLowerNoExt.find("scriptcache") == std::string::npos &&
             filenameLowerNoExt.find("chunkdata") == std::string::npos &&
@@ -77,8 +79,13 @@ bool blacklistBin(const std::filesystem::path& entry) {
             filenameLowerNoExt.find("_map_") == std::string::npos &&
             filenameLowerNoExt.find("zopo_") == std::string::npos &&
             filenameLowerNoExt.find("setup_") == std::string::npos &&
+            filenameLowerNoExt.find("_setup") == std::string::npos &&
             filenameLowerNoExt.find("_setup_") == std::string::npos &&
-            filenameLowerNoExt.find("setup_") == std::string::npos &&
+            filenameLowerNoExt.find("-setup-") == std::string::npos &&
+            filenameLowerNoExt.find("-setup") == std::string::npos &&
+            filenameLowerNoExt.find("setup-") == std::string::npos &&
+            filenameLowerNoExt.find("_setup-") == std::string::npos &&
+            filenameLowerNoExt.find("-setup_") == std::string::npos &&
             filenameLowerNoExt.find("gos_") == std::string::npos &&
             filenameLowerNoExt.find("encryptionkey") == std::string::npos);
 }
