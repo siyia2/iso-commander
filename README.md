@@ -4,7 +4,7 @@ https://github.com/siyia2/mounter_elite
 
 ![2024-01-09-185254_grim](https://github.com/siyia2/mounter-elite-plus/assets/46220960/43d6bf11-12a4-46a1-bb1b-7c215e40b28a)
 
-State of the art secure and blazing fast terminal image manager written in C++, it manages `ISOs` and/or converts `BIN&IMG&MDF` files to `ISO`. All paths are mounted under `/mnt/iso_*` format and conversion results are stored in their respective source directories, it requires `ROOT` access to `mount&unmount ISOs`. 
+State of the art secure and blazing fast terminal image manager written in C++, it manages `ISOs` and/or converts `BIN&IMG&MDF` files to `ISO`. All paths are mounted under `/mnt/iso_*` format and conversion results are stored in their respective source directories, it requires `ROOT` access to `mount&unmount&delete ISOs`. 
 
 Features:
 * Cached ISO management to reduce disk thrashing.
