@@ -262,7 +262,7 @@ void select_and_convert_files_to_iso() {
             std::cout << " " << std::endl;
             // Prompt user to choose a file or exit
             char* input = readline("\033[1;94mChoose BIN/IMG file(s) for \033[1;92mconversion\033[1;94m (e.g., '1-3' '1 2', or press Enter to return):\033[1;0m ");
-
+        
             // Break the loop if the user presses Enter
             if (input[0] == '\0') {
                 std::system("clear");
@@ -340,7 +340,8 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
     auto asyncConvertBINToISO = [&](const std::string& selectedFile, unsigned int numThreads) {
         convertBINToISO(selectedFile);
     };
-
+	// Start the timer
+    auto start_time = std::chrono::high_resolution_clock::now();
     // Iterate through the tokens in the input string
     while (iss >> token) {
         // Create a string stream to further process the token
@@ -479,6 +480,15 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
         std::cout << errorMessage << std::endl;
     }
     std::cout << " " << std::endl;
+    
+    // Stop the timer after completing the mounting process
+    auto end_time = std::chrono::high_resolution_clock::now();
+    // Calculate and print the elapsed time
+        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+        // Print the time taken for the entire process in bold with one decimal place
+        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[1;0m" << std::endl;
+        std::cout << " " << std::endl;
+        
 }
 
 
@@ -848,7 +858,8 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
     auto asyncConvertMDFToISO = [&](const std::string& selectedFile, unsigned int numThreads) {
         convertMDFToISO(selectedFile);
     };
-
+	// Start the timer
+    auto start_time = std::chrono::high_resolution_clock::now();
     // Iterate through the tokens in the input string
     while (iss >> token) {
         // Create a string stream to further process the token
@@ -987,6 +998,14 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
         std::cout << errorMessage << std::endl;
     }
     std::cout << " " << std::endl;
+    
+    // Stop the timer after completing the mounting process
+    auto end_time = std::chrono::high_resolution_clock::now();
+    // Calculate and print the elapsed time
+        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+        // Print the time taken for the entire process in bold with one decimal place
+        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[1;0m" << std::endl;
+        std::cout << " " << std::endl;
 }
 
 
