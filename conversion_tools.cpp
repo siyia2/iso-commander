@@ -35,6 +35,34 @@ std::string toLower(const std::string& str) {
     return result;
 }
 
+bool blacklistBin(const std::filesystem::path& entry) {
+    const std::string filenameLower = entry.filename().string();
+    const std::string ext = entry.extension().string();
+
+    return (ext == ".bin" || ext == ".img") &&
+           std::filesystem::file_size(entry) > 5'000'000 &&
+           !endsWith(filenameLower, "data.bin") &&
+           !endsWith(filenameLower, "index.bin") &&
+           !endsWith(filenameLower, "blocklist.bin") &&
+           filenameLower != "terrain.bin" &&
+           filenameLower != "flora.bin" &&
+           filenameLower != "ou.bin" &&
+           filenameLower != "z_outfits.bin" &&
+           filenameLower != "navmesh.bin" &&
+           filenameLower.find("globalshadercache-pc-d3d-sm") == std::string::npos &&
+           filenameLower.find("executionhistory") == std::string::npos &&
+           filenameLower.find("scriptcache") == std::string::npos &&
+           filenameLower.find("chunkdata") == std::string::npos &&
+           filenameLower.find("WorldDictionary") == std::string::npos &&
+           filenameLower.find("map_") == std::string::npos &&
+           filenameLower.find("zopo_") == std::string::npos &&
+           filenameLower.find("setup_") == std::string::npos &&
+           filenameLower.find("_setup_") == std::string::npos &&
+           filenameLower.find("setup_") == std::string::npos &&
+           filenameLower.find("gos_") == std::string::npos &&
+           filenameLower.find("encryptionkey") == std::string::npos;
+}
+
 // Function to search for .bin and .img files over 5MB
 std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback) {
     // Vector to store cached invalid paths
@@ -109,18 +137,8 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
                             return std::tolower(c);
                         });
 							std::string filenameLower = toLower(entry.path().filename().string());
-							if ((ext == ".bin" || ext == ".img") && std::filesystem::file_size(entry) > 5'000'000 &&
-							!endsWith(filenameLower, "data.bin") &&
-							!endsWith(filenameLower, "index.bin") &&
-							!endsWith(filenameLower, "blocklist.bin") &&
-							filenameLower != "terrain.bin" &&
-							filenameLower != "flora.bin" &&
-							filenameLower != "ou.bin" &&
-							filenameLower != "navmesh.bin" &&
-							filenameLower.find("globalshadercache-pc-d3d-sm") == std::string::npos &&  // Check for the substring
-							filenameLower.find("executionhistory") == std::string::npos &&  // Check for the substring
-							filenameLower.find("scriptcache") == std::string::npos &&
-							filenameLower.find("encryptionkey") == std::string::npos) {
+							// Checks image blacklist
+							if (blacklistBin(entry)) {
                             // Check if the file is already present in the cache to avoid duplicates
                             std::string fileName = entry.path().string();
                             if (std::find(binImgFilesCache.begin(), binImgFilesCache.end(), fileName) == binImgFilesCache.end()) {
