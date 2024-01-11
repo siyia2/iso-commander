@@ -19,7 +19,7 @@ Features:
 * Support for BIN/IMG conversion to ISO by utilizing ccd2iso
 * Support for MDF conversion to ISO by utilizing mdf2iso.
 * Ability to delete cached ISO files.
-* Clean codebase, just in case someone decides to contribute in the future.
+* Clean codebase in case someone decides to contribute in the future.
   
 Compilation requires the readline library installed from your distro. 
 Once dependancies are met, open a terminal inside the source folder and run `make`, this will make a file named `mounter_elite_plus`.
