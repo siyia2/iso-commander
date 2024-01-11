@@ -9,14 +9,12 @@ std::mutex fileCheckMutex;
 
 // GENERAL \\
 
+
+// Function to check if a file already exists
 bool fileExistsConversions(const std::string& fullPath) {
     std::lock_guard<std::mutex> lock(fileCheckMutex);
         return std::filesystem::exists(fullPath);
 } 
-
-
-
-// BIN/IMG CONVERSION FUNCTIONS	\\
 
 
 bool endsWith(const std::string& fullString, const std::string& ending) {
@@ -27,6 +25,7 @@ bool endsWith(const std::string& fullString, const std::string& ending) {
     }
 }
 
+
 // Function to convert a string to lowercase
 std::string toLower(const std::string& str) {
     std::string result = str;
@@ -35,33 +34,52 @@ std::string toLower(const std::string& str) {
     return result;
 }
 
+
+// BIN/IMG CONVERSION FUNCTIONS	\\
+
+
+
 bool blacklistBin(const std::filesystem::path& entry) {
     const std::string filenameLower = entry.filename().string();
     const std::string ext = entry.extension().string();
+    
+    // Convert the extension to lowercase for case-insensitive comparison
+    std::string extLower = ext;
+    std::transform(extLower.begin(), extLower.end(), extLower.begin(), [](char c) {
+        return std::tolower(c);
+    });
 
-    return (ext == ".bin" || ext == ".img") &&
-           std::filesystem::file_size(entry) > 5'000'000 &&
-           !endsWith(filenameLower, "data.bin") &&
-           !endsWith(filenameLower, "index.bin") &&
-           !endsWith(filenameLower, "blocklist.bin") &&
-           filenameLower != "terrain.bin" &&
-           filenameLower != "flora.bin" &&
-           filenameLower != "ou.bin" &&
-           filenameLower != "z_outfits.bin" &&
-           filenameLower != "navmesh.bin" &&
-           filenameLower.find("globalshadercache-pc-d3d-sm") == std::string::npos &&
-           filenameLower.find("executionhistory") == std::string::npos &&
-           filenameLower.find("scriptcache") == std::string::npos &&
-           filenameLower.find("chunkdata") == std::string::npos &&
-           filenameLower.find("WorldDictionary") == std::string::npos &&
-           filenameLower.find("map_") == std::string::npos &&
-           filenameLower.find("zopo_") == std::string::npos &&
-           filenameLower.find("setup_") == std::string::npos &&
-           filenameLower.find("_setup_") == std::string::npos &&
-           filenameLower.find("setup_") == std::string::npos &&
-           filenameLower.find("gos_") == std::string::npos &&
-           filenameLower.find("encryptionkey") == std::string::npos;
+    // Convert the filename to lowercase for additional case-insensitive comparisons
+    std::string filenameLowerNoExt = filenameLower;
+    filenameLowerNoExt.erase(filenameLowerNoExt.size() - ext.size()); // Remove extension
+    std::transform(filenameLowerNoExt.begin(), filenameLowerNoExt.end(), filenameLowerNoExt.begin(), [](char c) {
+        return std::tolower(c);
+    });
+
+    return ((extLower == ".bin" || extLower == ".img") &&
+            std::filesystem::file_size(entry) > 5'000'000 &&
+            !endsWith(filenameLowerNoExt, "data") &&
+            !endsWith(filenameLowerNoExt, "index") &&
+            !endsWith(filenameLowerNoExt, "blocklist") &&
+            filenameLowerNoExt != "terrain" &&
+            filenameLowerNoExt != "flora" &&
+            filenameLowerNoExt != "ou" &&
+            filenameLowerNoExt != "z_outfits" &&
+            filenameLowerNoExt != "navmesh" &&
+            filenameLowerNoExt.find("globalshadercache-pc-d3d-sm") == std::string::npos &&
+            filenameLowerNoExt.find("executionhistory") == std::string::npos &&
+            filenameLowerNoExt.find("scriptcache") == std::string::npos &&
+            filenameLowerNoExt.find("chunkdata") == std::string::npos &&
+            filenameLowerNoExt.find("WorldDictionary") == std::string::npos &&
+            filenameLowerNoExt.find("map_") == std::string::npos &&
+            filenameLowerNoExt.find("zopo_") == std::string::npos &&
+            filenameLowerNoExt.find("setup_") == std::string::npos &&
+            filenameLowerNoExt.find("_setup_") == std::string::npos &&
+            filenameLowerNoExt.find("setup_") == std::string::npos &&
+            filenameLowerNoExt.find("gos_") == std::string::npos &&
+            filenameLowerNoExt.find("encryptionkey") == std::string::npos);
 }
+
 
 // Function to search for .bin and .img files over 5MB
 std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback) {
@@ -131,13 +149,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
                 // Iterate through files in the given directory and its subdirectories
                 for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
                     if (entry.is_regular_file()) {
-                        // Check if the file has a ".bin" or ".img" extension and is larger than or equal to 5,000,000 bytes
-                        std::string ext = entry.path().extension();
-                        std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) {
-                            return std::tolower(c);
-                        });
-							std::string filenameLower = toLower(entry.path().filename().string());
-							// Checks image blacklist
+							// Checks .bin .img blacklist
 							if (blacklistBin(entry)) {
                             // Check if the file is already present in the cache to avoid duplicates
                             std::string fileName = entry.path().string();
@@ -617,6 +629,28 @@ bool isCcd2IsoInstalled() {
 // MDF CONVERSION FUNCTIONS	\\
 
 
+bool blacklistMDF(const std::filesystem::path& entry) {
+    const std::string filenameLower = entry.filename().string();
+    const std::string ext = entry.extension().string();
+
+        // Convert the extension to lowercase for case-insensitive comparison
+    std::string extLower = ext;
+    std::transform(extLower.begin(), extLower.end(), extLower.begin(), [](char c) {
+        return std::tolower(c);
+    });
+
+    // Convert the filename to lowercase for additional case-insensitive comparisons
+    std::string filenameLowerNoExt = filenameLower;
+    filenameLowerNoExt.erase(filenameLowerNoExt.size() - ext.size()); // Remove extension
+    std::transform(filenameLowerNoExt.begin(), filenameLowerNoExt.end(), filenameLowerNoExt.begin(), [](char c) {
+        return std::tolower(c);
+    });
+
+    return (extLower == ".mdf") &&
+           std::filesystem::file_size(entry) > 5'000'000;
+}
+
+
 // Function to search for .mdf and .mds files over 5MB
 std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback) {
     // Vector to store cached invalid paths
@@ -686,14 +720,8 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
 
                 // Iterate through files in the given directory and its subdirectories
                 for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
-                    if (entry.is_regular_file()) {
-                        // Check if the file has a ".mdf" or ".mds" extension and is larger than or equal to 5,000,000 bytes
-                        std::string ext = entry.path().extension();
-                        std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) {
-                            return std::tolower(c);
-                        });
-
-                        if ((ext == ".mdf" || ext == ".mds") && std::filesystem::file_size(entry) > 5'000'000) {
+                    if (entry.is_regular_file()) { 
+                        if (blacklistMDF(entry)) {
                             // Check if the file is already present in the cache to avoid duplicates
                             std::string fileName = entry.path().string();
                             if (std::find(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end(), fileName) == mdfMdsFilesCache.end()) {
