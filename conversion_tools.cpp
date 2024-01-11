@@ -42,12 +42,22 @@ std::string toLower(const std::string& str) {
 bool blacklistBin(const std::filesystem::path& entry) {
     const std::string filenameLower = entry.filename().string();
     const std::string ext = entry.extension().string();
-    
+
     // Convert the extension to lowercase for case-insensitive comparison
     std::string extLower = ext;
     std::transform(extLower.begin(), extLower.end(), extLower.begin(), [](char c) {
         return std::tolower(c);
     });
+
+    // Combine extension check
+    if (!(extLower == ".bin" || extLower == ".img")) {
+        return false;
+    }
+
+    // Check file size
+    if (std::filesystem::file_size(entry) <= 5'000'000) {
+        return false;
+    }
 
     // Convert the filename to lowercase for additional case-insensitive comparisons
     std::string filenameLowerNoExt = filenameLower;
@@ -56,29 +66,21 @@ bool blacklistBin(const std::filesystem::path& entry) {
         return std::tolower(c);
     });
 
-    return ((extLower == ".bin" || extLower == ".img") &&
-            std::filesystem::file_size(entry) > 5'000'000 &&
-            
-            filenameLowerNoExt.find("block") == std::string::npos &&
-            filenameLowerNoExt.find("list") == std::string::npos &&
-            filenameLowerNoExt.find("sdcard") == std::string::npos &&
-            filenameLowerNoExt.find("index") == std::string::npos &&
-            filenameLowerNoExt.find("data") == std::string::npos &&
-            filenameLowerNoExt.find("shader") == std::string::npos &&
-            filenameLowerNoExt.find("navmesh") == std::string::npos &&
-            filenameLowerNoExt.find("obj") == std::string::npos &&
-            filenameLowerNoExt.find("flora") == std::string::npos &&
-            filenameLowerNoExt.find("terrain") == std::string::npos &&
-            filenameLowerNoExt.find("script") == std::string::npos &&
-            filenameLowerNoExt.find("history") == std::string::npos &&
-            filenameLowerNoExt.find("system") == std::string::npos &&
-            filenameLowerNoExt.find("vendor") == std::string::npos &&
-            filenameLowerNoExt.find("cache") == std::string::npos &&
-            filenameLowerNoExt.find("dictionary") == std::string::npos &&
-            filenameLowerNoExt.find("initramfs") == std::string::npos &&
-            filenameLowerNoExt.find("map") == std::string::npos &&
-            filenameLowerNoExt.find("setup") == std::string::npos &&
-            filenameLowerNoExt.find("encrypt") == std::string::npos);
+    // Use a set for blacklisted keywords
+    static const std::unordered_set<std::string> blacklistKeywords = {
+        "block", "list", "sdcard", "index", "data", "shader", "navmesh",
+        "obj", "flora", "terrain", "script", "history", "system", "vendor",
+        "cache", "dictionary", "initramfs", "map", "setup", "encrypt"
+    };
+
+    // Check if any blacklisted word is present in the filename
+    for (const auto& keyword : blacklistKeywords) {
+        if (filenameLowerNoExt.find(keyword) != std::string::npos) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 
@@ -633,21 +635,44 @@ bool blacklistMDF(const std::filesystem::path& entry) {
     const std::string filenameLower = entry.filename().string();
     const std::string ext = entry.extension().string();
 
-        // Convert the extension to lowercase for case-insensitive comparison
+    // Convert the extension to lowercase for case-insensitive comparison
     std::string extLower = ext;
     std::transform(extLower.begin(), extLower.end(), extLower.begin(), [](char c) {
         return std::tolower(c);
     });
 
-    // Convert the filename to lowercase for additional case-insensitive comparisons
-    std::string filenameLowerNoExt = filenameLower;
-    filenameLowerNoExt.erase(filenameLowerNoExt.size() - ext.size()); // Remove extension
-    std::transform(filenameLowerNoExt.begin(), filenameLowerNoExt.end(), filenameLowerNoExt.begin(), [](char c) {
-        return std::tolower(c);
-    });
+    // Combine extension check
+    if (!(extLower == ".mdf")) {
+        return false;
+    }
 
-    return (extLower == ".mdf") &&
-           std::filesystem::file_size(entry) > 5'000'000;
+    // Check file size
+    if (std::filesystem::file_size(entry) <= 5'000'000) {
+        return false;
+    }
+
+    // Convert the filename to lowercase for additional case-insensitive comparisons
+    //std::string filenameLowerNoExt = filenameLower;
+    //filenameLowerNoExt.erase(filenameLowerNoExt.size() - ext.size()); // Remove extension
+    //std::transform(filenameLowerNoExt.begin(), filenameLowerNoExt.end(), filenameLowerNoExt.begin(), [](char c) {
+      //  return std::tolower(c);
+    //});
+
+    // Use a set for blacklisted keywords
+    //static const std::unordered_set<std::string> blacklistKeywords = {
+      //  "block", "list", "sdcard", "index", "data", "shader", "navmesh",
+      //  "obj", "flora", "terrain", "script", "history", "system", "vendor",
+      //  "cache", "dictionary", "initramfs", "map", "setup", "encrypt"
+   // };
+
+    // Check if any blacklisted word is present in the filename
+   // for (const auto& keyword : blacklistKeywords) {
+      //  if (filenameLowerNoExt.find(keyword) != std::string::npos) {
+         //   return false;
+       // }
+   // }
+
+    return true;
 }
 
 
