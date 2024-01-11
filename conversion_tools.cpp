@@ -70,8 +70,11 @@ bool blacklistBin(const std::filesystem::path& entry) {
             filenameLowerNoExt.find("executionhistory") == std::string::npos &&
             filenameLowerNoExt.find("scriptcache") == std::string::npos &&
             filenameLowerNoExt.find("chunkdata") == std::string::npos &&
-            filenameLowerNoExt.find("WorldDictionary") == std::string::npos &&
+            filenameLowerNoExt.find("worlddictionary") == std::string::npos &&
+            filenameLowerNoExt.find("initramfs") == std::string::npos &&
             filenameLowerNoExt.find("map_") == std::string::npos &&
+            filenameLowerNoExt.find("_map") == std::string::npos &&
+            filenameLowerNoExt.find("_map_") == std::string::npos &&
             filenameLowerNoExt.find("zopo_") == std::string::npos &&
             filenameLowerNoExt.find("setup_") == std::string::npos &&
             filenameLowerNoExt.find("_setup_") == std::string::npos &&
