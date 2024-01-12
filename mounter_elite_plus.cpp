@@ -1219,6 +1219,44 @@ void select_and_mount_files_by_number() {
     }
 }
 
+namespace fs = std::filesystem;
+
+// Function to extract directory and filename from a path
+std::pair<std::string, std::string> extractDirectoryAndFilename(const std::string& path) {
+    std::string directory;
+    std::string filename;
+
+    std::size_t lastSlashPos = 0;
+    std::size_t currentSlashPos = path.find('/');
+
+    while (currentSlashPos != std::string::npos) {
+        std::string component = path.substr(lastSlashPos, currentSlashPos - lastSlashPos);
+
+        // Limit each component to 10 characters or the first space gap
+        std::size_t maxComponentSize = 15;
+        std::size_t spacePos = component.find(' ');
+
+        if (spacePos != std::string::npos && spacePos <= maxComponentSize) {
+            component = component.substr(0, spacePos);
+        } else {
+            component = component.substr(0, maxComponentSize);
+        }
+
+        directory += component + '/';
+        lastSlashPos = currentSlashPos + 1;
+        currentSlashPos = path.find('/', lastSlashPos);
+    }
+
+    // Extract the last component as the filename
+    filename = path.substr(lastSlashPos);
+
+    // Remove the last '/' if the directory is not empty
+    if (!directory.empty() && directory.back() == '/') {
+        directory.pop_back();
+    }
+
+    return {directory, filename};
+}
 
 void printIsoFileList(const std::vector<std::string>& isoFiles) {
     // Apply formatting once before the loop
@@ -1228,15 +1266,18 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
         std::cout << std::setw(2) << i + 1 << ". ";
 
         // Extract directory and filename
-        std::size_t lastSlashPos = isoFiles[i].find_last_of('/');
-        std::string directory = isoFiles[i].substr(0, lastSlashPos + 1);
-        std::string filename = isoFiles[i].substr(lastSlashPos + 1);
+        auto [directory, filename] = extractDirectoryAndFilename(isoFiles[i]);
+
+        // Convert to relative paths
+        fs::path currentPath = fs::current_path();
+        fs::path relativeDirectory = fs::relative(directory, currentPath);
+        std::string relativePath = relativeDirectory.string();
 
         // Print the directory part in the default color
-        std::cout << "\033[1m" << directory << "\033[1;0m";
+        std::cout << "\033[1m" << relativePath << "\033[1;0m";
 
         // Print the filename part in magenta and bold
-        std::cout << "\033[1;95m" << filename << "\033[1;0m" << std::endl;
+        std::cout << "\033[1m/\033[1;95m" << filename << "\033[1;0m" << std::endl;
     }
 }
 
