@@ -1,4 +1,4 @@
-#include "sanitization_readline.h"
+#include "sanitization_extraction_readline.h"
 #include "conversion_tools.h"
 
 
@@ -361,12 +361,11 @@ void printFileListBin(const std::vector<std::string>& fileList) {
     std::cout << "\033[1mSelect file(s) to convert to \033[1m\033[1;92mISO(s)\033[1;0m:\n";
     std::cout << " " << std::endl;
 
-    // Iterate through the file list
     for (std::size_t i = 0; i < fileList.size(); ++i) {
         const std::string& filename = fileList[i];
-        const std::size_t lastSlashPos = filename.find_last_of('/');
-        const std::string path = (lastSlashPos != std::string::npos) ? filename.substr(0, lastSlashPos + 1) : "";
-        const std::string fileNameOnly = (lastSlashPos != std::string::npos) ? filename.substr(lastSlashPos + 1) : filename;
+
+        // Extract directory and filename
+        auto [directory, fileNameOnly] = extractDirectoryAndFilename(filename);
 
         const std::size_t dotPos = fileNameOnly.find_last_of('.');
 
@@ -376,8 +375,13 @@ void printFileListBin(const std::vector<std::string>& fileList) {
             std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
 
             if (extension == ".img" || extension == ".bin") {
+                // Convert to relative paths
+                std::filesystem::path currentPath = std::filesystem::current_path();
+                std::filesystem::path relativeDirectory = std::filesystem::relative(directory, currentPath);
+                std::string relativePath = relativeDirectory.string();
+
                 // Print path in white and filename in green and bold
-                std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << path << "\033[1m\033[38;5;208m" << fileNameOnly << "\033[1;0m" << std::endl;
+                std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << relativePath << "\033[1m/\033[38;5;208m\033[38;5;208m" << "\033[1;0m\033[38;5;208m" << fileNameOnly << "\033[1;0m" << std::endl;
             } else {
                 // Print entire path and filename in white
                 std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << filename << std::endl;
@@ -854,7 +858,6 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
 }
 
 
-
 // Function to interactively select and convert MDF files to ISO
 void select_and_convert_files_to_iso_mdf() {
 	
@@ -955,12 +958,11 @@ void printFileListMdf(const std::vector<std::string>& fileList) {
     std::cout << "\033[1mSelect file(s) to convert to \033[1m\033[1;92mISO(s)\033[1;0m:\n";
     std::cout << " " << std::endl;
 
-    // Iterate through the file list
     for (std::size_t i = 0; i < fileList.size(); ++i) {
         const std::string& filename = fileList[i];
-        const std::size_t lastSlashPos = filename.find_last_of('/');
-        const std::string path = (lastSlashPos != std::string::npos) ? filename.substr(0, lastSlashPos + 1) : "";
-        const std::string fileNameOnly = (lastSlashPos != std::string::npos) ? filename.substr(lastSlashPos + 1) : filename;
+
+        // Extract directory and filename
+        auto [directory, fileNameOnly] = extractDirectoryAndFilename(filename);
 
         const std::size_t dotPos = fileNameOnly.find_last_of('.');
 
@@ -970,8 +972,13 @@ void printFileListMdf(const std::vector<std::string>& fileList) {
             std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
 
             if (extension == ".mdf") {
+                // Convert to relative paths
+                std::filesystem::path currentPath = std::filesystem::current_path();
+                std::filesystem::path relativeDirectory = std::filesystem::relative(directory, currentPath);
+                std::string relativePath = relativeDirectory.string();
+
                 // Print path in white and filename in orange and bold
-                std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << path << "\033[1m\033[38;5;208m" << fileNameOnly << "\033[1;0m" << std::endl;
+                std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << relativePath << "\033[1m/\033[38;5;208m\033[38;5;208m" << "\033[1;0m\033[38;5;208m" << fileNameOnly << "\033[1;0m" << std::endl;
             } else {
                 // Print entire path and filename in white
                 std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << filename << std::endl;

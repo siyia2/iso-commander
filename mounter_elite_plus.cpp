@@ -1,4 +1,4 @@
-#include "sanitization_readline.h"
+#include "sanitization_extraction_readline.h"
 #include "conversion_tools.h"
 
 // Cache Variables \\
@@ -1219,46 +1219,10 @@ void select_and_mount_files_by_number() {
     }
 }
 
-namespace fs = std::filesystem;
-
-// Function to extract directory and filename from a path
-std::pair<std::string, std::string> extractDirectoryAndFilename(const std::string& path) {
-    std::string directory;
-    std::string filename;
-
-    std::size_t lastSlashPos = 0;
-    std::size_t currentSlashPos = path.find('/');
-
-    while (currentSlashPos != std::string::npos) {
-        std::string component = path.substr(lastSlashPos, currentSlashPos - lastSlashPos);
-
-        // Limit each component to 10 characters or the first space gap
-        std::size_t maxComponentSize = 15;
-        std::size_t spacePos = component.find(' ');
-
-        if (spacePos != std::string::npos && spacePos <= maxComponentSize) {
-            component = component.substr(0, spacePos);
-        } else {
-            component = component.substr(0, maxComponentSize);
-        }
-
-        directory += component + '/';
-        lastSlashPos = currentSlashPos + 1;
-        currentSlashPos = path.find('/', lastSlashPos);
-    }
-
-    // Extract the last component as the filename
-    filename = path.substr(lastSlashPos);
-
-    // Remove the last '/' if the directory is not empty
-    if (!directory.empty() && directory.back() == '/') {
-        directory.pop_back();
-    }
-
-    return {directory, filename};
-}
 
 void printIsoFileList(const std::vector<std::string>& isoFiles) {
+	namespace fs = std::filesystem;
+
     // Apply formatting once before the loop
     std::cout << std::right;
 
