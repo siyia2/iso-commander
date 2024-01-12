@@ -375,13 +375,8 @@ void printFileListBin(const std::vector<std::string>& fileList) {
             std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
 
             if (extension == ".img" || extension == ".bin") {
-                // Convert to relative paths
-                std::filesystem::path currentPath = std::filesystem::current_path();
-                std::filesystem::path relativeDirectory = std::filesystem::relative(directory, currentPath);
-                std::string relativePath = relativeDirectory.string();
-
                 // Print path in white and filename in green and bold
-                std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << relativePath << "\033[1m/\033[38;5;208m\033[38;5;208m" << "\033[1;0m\033[38;5;208m" << fileNameOnly << "\033[1;0m" << std::endl;
+                std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << directory << "\033[1m/\033[38;5;208m" << fileNameOnly << "\033[1;0m" << std::endl;
             } else {
                 // Print entire path and filename in white
                 std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << filename << std::endl;
@@ -972,13 +967,9 @@ void printFileListMdf(const std::vector<std::string>& fileList) {
             std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
 
             if (extension == ".mdf") {
-                // Convert to relative paths
-                std::filesystem::path currentPath = std::filesystem::current_path();
-                std::filesystem::path relativeDirectory = std::filesystem::relative(directory, currentPath);
-                std::string relativePath = relativeDirectory.string();
-
                 // Print path in white and filename in orange and bold
-                std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << relativePath << "\033[1m/\033[38;5;208m\033[38;5;208m" << "\033[1;0m\033[38;5;208m" << fileNameOnly << "\033[1;0m" << std::endl;
+			std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << directory << "\033[1m/\033[38;5;208m" << fileNameOnly << "\033[1;0m" << std::endl;
+
             } else {
                 // Print entire path and filename in white
                 std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << filename << std::endl;
