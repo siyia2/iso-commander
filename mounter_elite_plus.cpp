@@ -774,6 +774,7 @@ bool fileExists(const std::string& filename) {
 // Function to handle the deletion of an ISO file
 void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
     std::lock_guard<std::mutex> lowLock(Mutex4Low);
+    auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(iso);
 
     // Static variable to track whether the clear has been performed
     static bool clearScreenDone = false;
@@ -783,13 +784,13 @@ void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFi
     if (it != isoFiles.end()) {
         // Escape the ISO file name for the shell command using shell_escape
         std::string escapedIso = shell_escape(iso);
-
+        
         // Construct the sudo command
         std::string sudoCommand = "sudo -v";
 
         // Execute sudo to prompt for password
         int sudoResult = system(sudoCommand.c_str());
-
+		
         // Clear the screen only if it hasn't been done yet
         if (sudoResult == 0) {
             // Clear the screen only if it hasn't been done yet
@@ -815,13 +816,13 @@ void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFi
                     // Add the ISO file to the set of deleted files
                     deletedSet.insert(iso);
 
-                    std::cout << "\033[1;92mDeleted: \033[1;91m'" << iso << "'\033[1;92m.\033[1;0m" << std::endl;
+                    std::cout << "\033[1;92mDeleted: \033[1;91m'" << isoDirectory << "/" << isoFilename << "'\033[1;92m.\033[1;0m" << std::endl;
                 } else {
                     // Print error message in magenta and bold when rm command fails
-                    std::cout << "\033[1;91mError deleting: \033[1;0m'" << iso << "'\033[1;95m.\033[1;0m" << std::endl;
+                    std::cout << "\033[1;91mError deleting: \033[1;0m'" << isoDirectory << "/" << isoFilename << "'\033[1;95m.\033[1;0m" << std::endl;
                 }
             } else {
-                std::cout << "\033[1;35mFile not found: \033[1;0m'" << iso << "'\033[1;95m.\033[1;0m" << std::endl;
+                std::cout << "\033[1;35mFile not found: \033[1;0m'" << isoDirectory << "/" << isoFilename << "'\033[1;95m.\033[1;0m" << std::endl;
             }
         } else {
             // Handle the case when sudo authentication fails
@@ -829,7 +830,7 @@ void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFi
             std::cout << "\033[1;91mFailed to authenticate with sudo.\033[1;0m" << std::endl;
         }
     } else {
-        std::cout << "\033[1;93mFile not found in cache: \033[1;0m'" << iso << "'\033[1;93m.\033[1;0m" << std::endl;
+        std::cout << "\033[1;93mFile not found in cache: \033[1;0m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m.\033[1;0m" << std::endl;
     }
 }
 
@@ -959,9 +960,10 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
         std::cout << "\033[1;94mThe following ISO(s) will be \033[1;91m*PERMANENTLY DELETED*\033[1;94m:\033[1;0m" << std::endl;
         std::cout << " " << std::endl;
         for (const auto& index : processedIndices) {
-            std::cout << "\033[1;93m'" << isoFiles[index - 1] << "'\033[1;0m" << std::endl;
-        }
-    }
+        auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFiles[index - 1]);
+        std::cout << "\033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;0m" << std::endl;
+		}
+	}
 
     // Display a message if there are no valid selections for deletion
     if (!uniqueErrorMessages.empty() && processedIndices.empty()) {
@@ -1076,7 +1078,7 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
               << "\033[1mmounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;0m\033[1m.\033[1;0m" << std::endl;
             } catch (const std::exception& e) {
                 // Handle exceptions, log error, and cleanup
-                std::cerr << "\033[1;91mFailed to mount: \033[1;93m'" << isoFile << "'\033[1;0m\033[1;91m.\033[1;0m" << std::endl;
+                std::cerr << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;0m\033[1;91m.\033[1;0m" << std::endl;
                 fs::remove(mountPoint);
             }
         } else {
@@ -1498,15 +1500,20 @@ void unmountISO(const std::string& isoDir) {
             std::string command = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1";
             int result = system(command.c_str());
             
+            auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoDir);
+            // Remove the ".iso" extension from the mountisoFilename
+			std::string isoFilenameWithoutExtension = isoFilename.substr(0, isoFilename.length() - 4);
+            
+            
             if (isDirectoryEmpty(isoDir) && result != 0) {
                     // Construct the remove directory command with sudo, rmdir, and suppressing logs
                     command = "sudo rmdir " + shell_escape(isoDir) + " 2>/dev/null";
                     int removeDirResult = system(command.c_str());
-                    std::cout << "\033[1;92mRemoved empty directory: \033[1;91m'" << isoDir << "'\033[1;92m.\033[1;0m" << std::endl; // Print success message
+                    std::cout << "\033[1;92mRemoved empty directory: \033[1;91m'" << isoDirectory << "/" << isoFilename << "'\033[1;92m.\033[1;0m" << std::endl; // Print success message
 				}
 				// Check if the unmounting was successful
 				else if (result == 0) {
-                std::cout << "\033[1mUnmounted: \033[1;92m'" << isoDir << "'\033[1;0m." << std::endl; // Print success message
+                std::cout << "\033[1mUnmounted: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;0m." << std::endl; // Print success message
 
 					// Check if the directory is empty before removing it
 					if (isDirectoryEmpty(isoDir)) {
@@ -1515,12 +1522,12 @@ void unmountISO(const std::string& isoDir) {
 						int removeDirResult = system(command.c_str());
 
 						if (removeDirResult != 0) {
-							std::cerr << "\033[1;91mFailed to remove directory: \033[1;93m'" << isoDir << "'\033[1;91m ...Please check it out manually.\033[1;0m" << std::endl;
+							std::cerr << "\033[1;91mFailed to remove directory: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;91m ...Please check it out manually.\033[1;0m" << std::endl;
 						}
 					}
 				} else {
 					// Print failure message
-					std::cerr << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDir << "'\033[1;91m ...Probably not an ISO mountpoint, check it out manually.\033[1;0m" << std::endl;
+					std::cerr << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;91m ...Probably not an ISO mountpoint, check it out manually.\033[1;0m" << std::endl;
 				}
 			} else {
 				// Print failure message
