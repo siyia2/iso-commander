@@ -10,6 +10,7 @@
 #include <readline/history.h>
 #include <string>
 #include <stdexcept>
+#include <unordered_map>
 
 std::string shell_escape(const std::string& s);
 std::pair<std::string, std::string> extractDirectoryAndFilename(const std::string& path);

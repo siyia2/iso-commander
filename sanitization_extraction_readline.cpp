@@ -27,14 +27,12 @@ std::string shell_escape(const std::string& s) {
 }
 
 
-// Function to extract directory and filename from a path
 std::pair<std::string, std::string> extractDirectoryAndFilename(const std::string& path) {
-
     std::string directory;
     std::string filename;
 
     std::size_t lastSlashPos = 0;
-    std::size_t currentSlashPos = path.find('/');
+    std::size_t currentSlashPos = path.find_first_of("/\\");
 
     while (currentSlashPos != std::string::npos) {
         std::string component = path.substr(lastSlashPos, currentSlashPos - lastSlashPos);
@@ -51,7 +49,7 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(const std::strin
 
         directory += component + '/';
         lastSlashPos = currentSlashPos + 1;
-        currentSlashPos = path.find('/', lastSlashPos);
+        currentSlashPos = path.find_first_of("/\\", lastSlashPos);
     }
 
     // Extract the last component as the filename
@@ -62,8 +60,32 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(const std::strin
         directory.pop_back();
     }
 
+    // Replace specific Linux standard directories with custom strings
+    std::unordered_map<std::string, std::string> replacements = {
+        {"/home", "~"},
+        {"/usr", "/u"},
+        {"/mnt", "/m"},
+        {"/etc", "/e"},
+        {"/var", "/v"},
+        {"/bin", "/b"},
+        {"/lib", "/l"},
+        {"/sbin", "/s"},
+        {"/opt", "/o"},
+        {"/run", "/r"},
+        // Add more replacements as needed
+    };
+
+    for (const auto& [oldDir, newDir] : replacements) {
+        size_t pos = directory.find(oldDir);
+        if (pos != std::string::npos) {
+            directory.replace(pos, oldDir.length(), newDir);
+        }
+    }
+
     return {directory, filename};
 }
+
+
 
 
 // Function to autocomplete input
