@@ -71,9 +71,7 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(const std::strin
         {"/opt", "/o"},
         {"/run", "/r"},
         {"/tmp", "/t"},
-        {"/media", "/M"},
         {"/dev", "/d"},
-        {"/boot", "/B"},
         // Add more replacements as needed
     };
 
