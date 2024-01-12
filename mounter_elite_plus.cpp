@@ -1221,8 +1221,6 @@ void select_and_mount_files_by_number() {
 
 
 void printIsoFileList(const std::vector<std::string>& isoFiles) {
-	namespace fs = std::filesystem;
-
     // Apply formatting once before the loop
     std::cout << std::right;
 
@@ -1232,13 +1230,8 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
         // Extract directory and filename
         auto [directory, filename] = extractDirectoryAndFilename(isoFiles[i]);
 
-        // Convert to relative paths
-        fs::path currentPath = fs::current_path();
-        fs::path relativeDirectory = fs::relative(directory, currentPath);
-        std::string relativePath = relativeDirectory.string();
-
         // Print the directory part in the default color
-        std::cout << "\033[1m" << relativePath << "\033[1;0m";
+        std::cout << "\033[1m" << directory << "\033[1;0m";
 
         // Print the filename part in magenta and bold
         std::cout << "\033[1m/\033[1;95m" << filename << "\033[1;0m" << std::endl;

@@ -38,7 +38,7 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(const std::strin
         std::string component = path.substr(lastSlashPos, currentSlashPos - lastSlashPos);
 
         // Limit each component to 10 characters or the first space gap
-        std::size_t maxComponentSize = 15;
+        std::size_t maxComponentSize = 28;
         std::size_t spacePos = component.find(' ');
 
         if (spacePos != std::string::npos && spacePos <= maxComponentSize) {
