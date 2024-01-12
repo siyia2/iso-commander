@@ -1162,7 +1162,7 @@ void select_and_mount_files_by_number() {
     // Main loop for selecting and mounting ISO files
     while (true) {
         std::system("clear");
-        std::cout << "\033[1;93m ! IF EXPECTED ISO FILE(s) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\n\033[1;0m" << std::endl;
+        std::cout << "\033[1;93m ! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\n\033[1;0m" << std::endl;
         
 		// Remove non-existent paths from the cache after selection
         removeNonExistentPathsFromCache();
