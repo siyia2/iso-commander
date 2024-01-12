@@ -239,6 +239,7 @@ void submenu2() {
 	
 }
 
+
 void printMenu() {
     std::cout << "\033[1;32m+-------------------------+" << std::endl;
     std::cout << "\033[1;32m|       Menu Options       |" << std::endl;
