@@ -1038,6 +1038,7 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
 
     // Lock the global mutex for synchronization
     std::lock_guard<std::mutex> lowLock(Mutex4Low);
+    auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint);
 	auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
     // Static variable to track whether the clear has been performed
     static bool clearScreenDone = false;
@@ -1066,11 +1067,13 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
                 if (std::system(mountCommand.c_str()) != 0) {
                     throw std::runtime_error("Mount command failed");
                 }
+				// Remove the ".iso" extension from the mountisoFilename
+				std::string mountisoFilenameWithoutExtension = isoFilename.substr(0, isoFilename.length() - 4);
 
                 // Store the mount point in the map
                 mountedIsos.emplace(isoFile, mountPoint);
                 std::cout << "\033[1mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;0m "
-              << "\033[1mmounted at: \033[1;94m'" << mountPoint << "'\033[1;0m\033[1m.\033[1;0m" << std::endl;
+              << "\033[1mmounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;0m\033[1m.\033[1;0m" << std::endl;
             } catch (const std::exception& e) {
                 // Handle exceptions, log error, and cleanup
                 std::cerr << "\033[1;91mFailed to mount: \033[1;93m'" << isoFile << "'\033[1;0m\033[1;91m.\033[1;0m" << std::endl;
@@ -1079,7 +1082,7 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
         } else {
             // The mount point directory already exists, so the ISO is considered mounted
             mountedIsos.emplace(isoFile, mountPoint);
-            std::cout << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m is already mounted at: \033[1;94m'" << mountPoint << "'\033[1;93m.\033[1;0m" << std::endl;
+            std::cout << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m is already mounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;93m.\033[1;0m" << std::endl;
         }
     } else {
         // Handle sudo command failure or user didn't provide the password
@@ -1392,11 +1395,15 @@ void printAlreadyMountedMessage(const std::string& isoFile) {
     fs::path isoPath(isoFile);
     std::string isoFileName = isoPath.stem().string();
     std::string mountPoint = "/mnt/iso_" + isoFileName;
+    auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint);
     auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
+    
+    // Remove the ".iso" extension from the mountisoFilename
+	std::string mountisoFilenameWithoutExtension = isoFilename.substr(0, isoFilename.length() - 4);
 
     // Check if the mount point exists
     if (fs::exists(mountPoint)) {
-        std::cout << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m is already mounted at: \033[1;94m'" << mountPoint << "'\033[1;93m.\033[1;0m" << std::endl;
+        std::cout << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m is already mounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;93m.\033[1;0m" << std::endl;
     } else {
         // ISO file is not actually mounted at the specified mount point
         std::cerr << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;0m\033[1;91m.\033[1;0m" << std::endl;
