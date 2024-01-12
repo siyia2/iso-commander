@@ -258,25 +258,24 @@ void printMenu() {
 //	CACHE STUFF \\
 
 
-// Function to check if a file exists
-std::future<bool> FileExistsAsync(const std::string& path) {
-    return std::async(std::launch::async, [path]() {
-        return std::filesystem::exists(path);
+// Function to check if a file exists asynchronously
+std::future<std::vector<std::string>> FileExistsAsync(const std::vector<std::string>& paths) {
+    return std::async(std::launch::async, [paths]() {
+        std::vector<std::string> result;
+        for (const auto& path : paths) {
+            if (std::filesystem::exists(path)) {
+                result.push_back(path);
+            }
+        }
+        return result;
     });
 }
 
 
-// Function to remove non-existent paths from cache asynchronously
+// Function to remove non-existent paths from cache asynchronously with basic thread control
 void removeNonExistentPathsFromCache() {
     // Define the path to the cache file
     std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/iso_cache.txt";
-
-    // Check if the cache file exists
-    if (!std::filesystem::exists(cacheFilePath)) {
-        std::cerr << "Cache file not found." << std::endl;
-        return;
-    }
-
     std::vector<std::string> cache; // Vector to store paths read from the cache file
 
     // Attempt to open the cache file
@@ -302,16 +301,7 @@ void removeNonExistentPathsFromCache() {
         auto begin = cache.begin() + i;
         auto end = std::min(begin + batchSize, cache.end());
 
-        futures.push_back(std::async(std::launch::async, [begin, end]() {
-            std::vector<std::string> result;
-            for (auto it = begin; it != end; ++it) {
-                // Use FileExists directly
-                if (std::filesystem::exists(*it)) {
-                    result.push_back(*it);
-                }
-            }
-            return result;
-        }));
+        futures.push_back(FileExistsAsync({begin, end}));
     }
 
     // Wait for all asynchronous tasks to complete and collect the results
@@ -335,9 +325,6 @@ void removeNonExistentPathsFromCache() {
     // Close the updated cache file
     updatedCacheFile.close();
 }
-
-
-
 
 
 // Helper function to concatenate vectors in a reduction clause
