@@ -1216,13 +1216,30 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
         std::string directory = isoFiles[i].substr(0, lastSlashPos + 1);
         std::string filename = isoFiles[i].substr(lastSlashPos + 1);
 
-        // Print the directory part in the default color
-        std::cout << "\033[1m" << directory << "\033[1;0m";
+        // Split the directory into parts
+        std::vector<std::string> directoryParts;
+        size_t pos = 0;
+        while ((pos = directory.find('/')) != std::string::npos) {
+            directoryParts.push_back(directory.substr(0, pos + 1));
+            directory.erase(0, pos + 1);
+        }
+        directoryParts.push_back(directory);
+
+        // Limit each part of the directory to 10 characters excluding the last part
+        const std::size_t maxPartLength = 10;
+        for (std::size_t i = 0; i < directoryParts.size(); ++i) {
+            std::size_t partLength = std::min(maxPartLength, directoryParts[i].size());
+            std::string truncatedPart = directoryParts[i].substr(0, partLength);
+            std::cout << "\033[1m" << truncatedPart << "\033[1;0m";
+        }
+        std::cout << "\033[1;0m" << ".../" << "\033[1;95m";
 
         // Print the filename part in magenta and bold
         std::cout << "\033[1;95m" << filename << "\033[1;0m" << std::endl;
     }
 }
+
+
 
 
 // Function to handle mounting of a specific ISO file asynchronously
