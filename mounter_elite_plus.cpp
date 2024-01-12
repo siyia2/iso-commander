@@ -259,12 +259,9 @@ void printMenu() {
 
 
 // Function to check if a file exists
-std::future<bool> FileExists(const std::string& filePath) {
-    return std::async(std::launch::async, [filePath]() {
-        std::lock_guard<std::mutex> highLock(Mutex4High); // Ensure thread safety
-
-        struct stat buffer;
-        return (stat(filePath.c_str(), &buffer) == 0);
+std::future<bool> FileExistsAsync(const std::string& path) {
+    return std::async(std::launch::async, [path]() {
+        return std::filesystem::exists(path);
     });
 }
 
@@ -273,6 +270,13 @@ std::future<bool> FileExists(const std::string& filePath) {
 void removeNonExistentPathsFromCache() {
     // Define the path to the cache file
     std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/iso_cache.txt";
+
+    // Check if the cache file exists
+    if (!std::filesystem::exists(cacheFilePath)) {
+        std::cerr << "Cache file not found." << std::endl;
+        return;
+    }
+
     std::vector<std::string> cache; // Vector to store paths read from the cache file
 
     // Attempt to open the cache file
@@ -289,12 +293,19 @@ void removeNonExistentPathsFromCache() {
     // Create a vector to hold futures for asynchronous tasks
     std::vector<std::future<std::vector<std::string>>> futures;
 
-    // Asynchronously check the existence of paths
-    for (const auto& path : cache) {
-        futures.push_back(std::async(std::launch::async, [path]() {
+    // Batch Processing: Process paths in chunks
+    constexpr size_t batchSize = 10; // Adjust the batch size as needed
+    for (size_t i = 0; i < cache.size(); i += batchSize) {
+        auto begin = cache.begin() + i;
+        auto end = std::min(begin + batchSize, cache.end());
+
+        futures.push_back(std::async(std::launch::async, [begin, end]() {
             std::vector<std::string> result;
-            if (FileExists(path).get()) {
-                result.push_back(path);
+            for (auto it = begin; it != end; ++it) {
+                // Use FileExists directly
+                if (std::filesystem::exists(*it)) {
+                    result.push_back(*it);
+                }
             }
             return result;
         }));
@@ -321,6 +332,7 @@ void removeNonExistentPathsFromCache() {
     // Close the updated cache file
     updatedCacheFile.close();
 }
+
 
 
 // Helper function to concatenate vectors in a reduction clause
@@ -1216,30 +1228,13 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
         std::string directory = isoFiles[i].substr(0, lastSlashPos + 1);
         std::string filename = isoFiles[i].substr(lastSlashPos + 1);
 
-        // Split the directory into parts
-        std::vector<std::string> directoryParts;
-        size_t pos = 0;
-        while ((pos = directory.find('/')) != std::string::npos) {
-            directoryParts.push_back(directory.substr(0, pos + 1));
-            directory.erase(0, pos + 1);
-        }
-        directoryParts.push_back(directory);
-
-        // Limit each part of the directory to 10 characters excluding the last part
-        const std::size_t maxPartLength = 10;
-        for (std::size_t i = 0; i < directoryParts.size(); ++i) {
-            std::size_t partLength = std::min(maxPartLength, directoryParts[i].size());
-            std::string truncatedPart = directoryParts[i].substr(0, partLength);
-            std::cout << "\033[1m" << truncatedPart << "\033[1;0m";
-        }
-        std::cout << "\033[1;0m" << ".../" << "\033[1;95m";
+        // Print the directory part in the default color
+        std::cout << "\033[1m" << directory << "\033[1;0m";
 
         // Print the filename part in magenta and bold
         std::cout << "\033[1;95m" << filename << "\033[1;0m" << std::endl;
     }
 }
-
-
 
 
 // Function to handle mounting of a specific ISO file asynchronously
