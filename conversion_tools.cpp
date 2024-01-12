@@ -69,7 +69,7 @@ bool blacklistBin(const std::filesystem::path& entry) {
     // Use a set for blacklisted keywords
     static const std::unordered_set<std::string> blacklistKeywords = {
         "block", "list", "sdcard", "index", "data", "shader", "navmesh",
-        "obj", "flora", "terrain", "script", "history", "system", "vendor",
+        "obj", "terrain", "script", "history", "system", "vendor",
         "cache", "dictionary", "initramfs", "map", "setup", "encrypt"
     };
 
