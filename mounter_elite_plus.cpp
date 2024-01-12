@@ -457,7 +457,7 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
     // Append the new entries to the shared vector
     allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
 
-    std::cout << "\033[92mProcessed directory path: '" << path << "'.\033[0m" << std::endl;
+    std::cout << "\033[1;92mProcessed directory path: '" << path << "'.\033[0m" << std::endl;
 }
 
 
@@ -467,7 +467,7 @@ void manualRefreshCache() {
     gapPrinted = false;
 
     // Prompt the user to enter directory paths for manual cache refresh
-    std::string inputLine = readInputLine("\033[94mEnter the directory path(s) from which to populate the \033[1m\033[92mISO Cache\033[94m (if many, separate them with \033[1m\033[1;93m;\033[0m\033[94m), or press Enter to cancel:\n\033[0m");
+    std::string inputLine = readInputLine("\033[94mEnter the directory path(s) from which to populate the \033[1m\033[1;92mISO Cache\033[94m (if many, separate them with \033[1m\033[1;93m;\033[0m\033[94m), or press Enter to cancel:\n\033[0m");
 
     // Check if the user canceled the cache refresh
     if (inputLine.empty()) {
@@ -589,11 +589,22 @@ void manualRefreshCache() {
     std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
 
     // Inform the user about the cache refresh status
-    if (saveSuccess) {
+    if (saveSuccess && !validPaths.empty() && invalidPaths.empty()) {
         std::cout << " " << std::endl;
-        std::cout << "\033[92mCache refreshed successfully.\033[0m" << std::endl;
+        std::cout << "\033[1;92mCache refreshed successfully.\033[0m" << std::endl;
         std::cout << " " << std::endl;
-    } else {
+    } 
+    if (saveSuccess && !validPaths.empty() && !invalidPaths.empty()) {
+        std::cout << " " << std::endl;
+        std::cout << "\033[1;93mCache refreshed with errors from invalid path(s).\033[0m" << std::endl;
+        std::cout << " " << std::endl;
+    }
+    if (saveSuccess && validPaths.empty() && !invalidPaths.empty()) {
+        std::cout << " " << std::endl;
+        std::cout << "\033[1;91mCache refresh failed due to missing valid path(s).\033[0m" << std::endl;
+        std::cout << " " << std::endl;
+    } 
+    if (!saveSuccess) {
         std::cout << " " << std::endl;
         std::cout << "\033[1;91mCache refresh failed.\033[0m" << std::endl;
         std::cout << " " << std::endl;
