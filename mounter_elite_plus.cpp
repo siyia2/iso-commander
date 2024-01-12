@@ -291,8 +291,8 @@ void removeNonExistentPathsFromCache() {
     cacheFile.close();
 
     // Calculate dynamic batch size based on the number of available processor cores
-    const size_t numCores = (std::thread::hardware_concurrency() > 1) ? std::thread::hardware_concurrency() : 2;
-    const size_t batchSize = std::max(cache.size() / numCores, static_cast<size_t>(2));
+    const std::size_t maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
+    const size_t batchSize = (maxThreads > 1) ? std::max(cache.size() / maxThreads, static_cast<size_t>(2)) : cache.size();
 
     // Create a vector to hold futures for asynchronous tasks
     std::vector<std::future<std::vector<std::string>>> futures;
