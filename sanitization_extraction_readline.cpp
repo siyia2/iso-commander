@@ -67,11 +67,13 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(const std::strin
         {"/mnt", "/m"},
         {"/etc", "/e"},
         {"/var", "/v"},
-        {"/bin", "/b"},
         {"/lib", "/l"},
-        {"/sbin", "/s"},
         {"/opt", "/o"},
         {"/run", "/r"},
+        {"/tmp", "/t"},
+        {"/media", "/M"},
+        {"/dev", "/d"},
+        {"/boot", "/B"},
         // Add more replacements as needed
     };
 
