@@ -27,14 +27,19 @@ std::string shell_escape(const std::string& s) {
 }
 
 
+// Function to extract directory and filename from a given path
 std::pair<std::string, std::string> extractDirectoryAndFilename(const std::string& path) {
+    // Initialize variables to store directory and filename
     std::string directory;
     std::string filename;
 
+    // Initialize variables to track positions of slashes in the path
     std::size_t lastSlashPos = 0;
     std::size_t currentSlashPos = path.find_first_of("/\\");
 
+    // Loop through the path to extract directory components
     while (currentSlashPos != std::string::npos) {
+        // Extract the current component between slashes
         std::string component = path.substr(lastSlashPos, currentSlashPos - lastSlashPos);
 
         // Limit each component to 10 characters or the first space gap
@@ -47,7 +52,9 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(const std::strin
             component = component.substr(0, maxComponentSize);
         }
 
+        // Append the processed component to the directory
         directory += component + '/';
+        // Update positions for the next iteration
         lastSlashPos = currentSlashPos + 1;
         currentSlashPos = path.find_first_of("/\\", lastSlashPos);
     }
@@ -63,22 +70,12 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(const std::strin
     // Replace specific Linux standard directories with custom strings
     std::unordered_map<std::string, std::string> replacements = {
         {"/home", "~"},
-        {"/usr", "/u"},
-        {"/mnt", "/m"},
-        {"/etc", "/e"},
-        {"/var", "/v"},
-        {"/lib", "/l"},
-        {"/opt", "/o"},
-        {"/run", "/r"},
-        {"/tmp", "/t"},
-        {"/dev", "/d"},
         {"/root", "/R"},
-        {"/media", "/med"},
-        {"/boot", "/b"},
         
         // Add more replacements as needed
     };
 
+    // Iterate through the replacements and update the directory
     for (const auto& [oldDir, newDir] : replacements) {
         size_t pos = directory.find(oldDir);
         if (pos != std::string::npos) {
@@ -86,6 +83,7 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(const std::strin
         }
     }
 
+    // Return the pair of directory and filename
     return {directory, filename};
 }
 
