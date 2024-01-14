@@ -638,29 +638,27 @@ std::future<bool> iequals(std::string_view a, std::string_view b) {
 // Function to parallel traverse a directory and find ISO files
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& Mutex4Low) {
     try {
+        // Vector to store futures for asynchronous tasks
         std::vector<std::future<void>> futures;
 
+        // Iterate over entries in the specified directory and its subdirectories
         for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
+            // Check if the entry is a regular file
             if (entry.is_regular_file()) {
                 const std::filesystem::path& filePath = entry.path();
 
-                // Check file size, skip if less than 5MB
-                if (std::filesystem::file_size(filePath) < 5 * 1024 * 1024) {
+                // Check file size and skip if less than 5MB or empty, or if it has a ".bin" extension
+                const auto fileSize = std::filesystem::file_size(filePath);
+                if (fileSize < 5 * 1024 * 1024 || fileSize == 0 || iequals(filePath.stem().string(), ".bin").get()) {
                     continue;
                 }
 
-                // Skip empty files or files with ".bin" extension
-                if (std::filesystem::file_size(filePath) == 0 || iequals(filePath.stem().string(), ".bin").get()) {
-                    continue;
-                }
+                // Extract the file extension
+                std::string_view extension = filePath.extension().string();
 
-                std::string extensionStr = filePath.extension().string();
-                std::string_view extension = extensionStr;
-
-                std::future<bool> extensionComparisonFuture = iequals(extension, ".iso");
-
-                if (extensionComparisonFuture.get()) {
-                    // Capture isoFiles by value in the lambda
+                // Check if the file has a ".iso" extension
+                if (iequals(extension, ".iso").get()) {
+                    // Asynchronously push the file path to the isoFiles vector while protecting access with a mutex
                     futures.push_back(std::async(std::launch::async, [filePath, &isoFiles, &Mutex4Low]() {
                         std::lock_guard<std::mutex> lowLock(Mutex4Low);
                         isoFiles.push_back(filePath.string());
@@ -668,20 +666,15 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
                 }
             }
         }
-		
+
+        // Wait for all asynchronous tasks to complete
         for (auto& future : futures) {
             future.get();
         }
-        
     } catch (const std::filesystem::filesystem_error& e) {
-		if (!gapPrintedtraverse) {
-            std::cout << " " << std::endl;
-            gapPrintedtraverse = true;
-        }
-        
+        // Handle filesystem errors, print a message, and introduce a 2-second delay
         std::cerr << "\033[1;91m" << e.what() << ".\033[1;0m" << std::endl;
-        // Introduce a 2-second delay
-		std::this_thread::sleep_for(std::chrono::seconds(2));
+        std::this_thread::sleep_for(std::chrono::seconds(2));
     }
 }
 
@@ -842,7 +835,6 @@ bool isAllZeros(const std::string& str) {
 
 // Function to process user input for selecting and deleting specific ISO files
 void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
-    
     // Lock to ensure thread safety in a multi-threaded environment
     std::lock_guard<std::mutex> highLock(Mutex4High);
 
@@ -852,16 +844,16 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
 
     // Create an input string stream to tokenize the user input
     std::istringstream iss(input);
-    
+
     // Variables for tracking errors, processed indices, and valid indices
     bool invalidInput = false;
     std::unordered_set<std::string> uniqueErrorMessages; // Set to store unique error messages
-    std::set<int> processedIndices; // Set to keep track of processed indices
-    std::set<int> validIndices; // Set to keep track of valid indices
+    std::vector<int> processedIndices; // Vector to keep track of processed indices
+    std::vector<int> validIndices;     // Vector to keep track of valid indices
 
     std::string token;
     std::vector<std::thread> threads; // Vector to store std::future objects for each task
-    threads.reserve(maxThreads);  // Reserve space for maxThreads threads
+    threads.reserve(maxThreads);      // Reserve space for maxThreads threads
 
     // Tokenize the input string
     while (iss >> token) {
@@ -907,7 +899,7 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
                 uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[1;0m");
                 continue;
             }
-            
+
             // Check for validity of the specified range
             if ((start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) ||
                 (start == 0 || end == 0)) {
@@ -919,10 +911,10 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
             // Mark indices within the specified range as valid
             int step = (start <= end) ? 1 : -1;
             for (int i = start; ((start <= end) && (i <= end)) || ((start > end) && (i >= end)); i += step) {
-                if (static_cast<size_t>(i) <= isoFiles.size() && processedIndices.find(i) == processedIndices.end()) {
-                    processedIndices.insert(i); // Mark as processed
-                    validIndices.insert(i);
-                } else if (static_cast<size_t>(i) > isoFiles.size()) {
+                if ((i >= 1) && (i <= static_cast<int>(isoFiles.size())) && std::find(processedIndices.begin(), processedIndices.end(), i) == processedIndices.end()) {
+                    processedIndices.push_back(i); // Mark as processed
+                    validIndices.push_back(i);
+                } else if ((i < 1) || (i > static_cast<int>(isoFiles.size()))) {
                     invalidInput = true;
                     uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(i) + "' does not exist.\033[1;0m");
                 }
@@ -930,9 +922,9 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
         } else if (isNumeric(token)) {
             // Process single numeric indices
             int num = std::stoi(token);
-            if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && processedIndices.find(num) == processedIndices.end()) {
-                processedIndices.insert(num); // Mark index as processed
-                validIndices.insert(num);
+            if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && std::find(processedIndices.begin(), processedIndices.end(), num) == processedIndices.end()) {
+                processedIndices.push_back(num); // Mark index as processed
+                validIndices.push_back(num);
             } else if (num > isoFiles.size()) {
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(num) + "' does not exist.\033[1;0m");
@@ -960,10 +952,10 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
         std::cout << "\033[1;94mThe following ISO(s) will be \033[1;91m*PERMANENTLY DELETED*\033[1;94m:\033[1;0m" << std::endl;
         std::cout << " " << std::endl;
         for (const auto& index : processedIndices) {
-        auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFiles[index - 1]);
-        std::cout << "\033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;0m" << std::endl;
-		}
-	}
+            auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFiles[index - 1]);
+            std::cout << "\033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;0m" << std::endl;
+        }
+    }
 
     // Display a message if there are no valid selections for deletion
     if (!uniqueErrorMessages.empty() && processedIndices.empty()) {
