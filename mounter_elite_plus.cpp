@@ -1220,19 +1220,24 @@ void select_and_mount_files_by_number() {
 
 void printIsoFileList(const std::vector<std::string>& isoFiles) {
     // Apply formatting once before the loop
-    std::cout << std::right;
+    std::cout << std::right << std::setw(2);
 
-    for (std::size_t i = 0; i < isoFiles.size(); ++i) {
-        std::cout << std::setw(2) << i + 1 << ". ";
+    // ANSI escape codes for text formatting
+    const std::string defaultColor = "\033[0m";
+    const std::string bold = "\033[1m";
+    const std::string magenta = "\033[95m";
+
+    for (const auto& isoFile : isoFiles) {
+        std::cout << std::setw(2) << &isoFile - &isoFiles[0] + 1 << ". ";
 
         // Extract directory and filename
-        auto [directory, filename] = extractDirectoryAndFilename(isoFiles[i]);
+        auto [directory, filename] = extractDirectoryAndFilename(isoFile);
 
         // Print the directory part in the default color
-        std::cout << "\033[1m" << directory << "\033[1;0m";
+        std::cout << bold << directory << defaultColor;
 
         // Print the filename part in magenta and bold
-        std::cout << "\033[1m/\033[1;95m" << filename << "\033[1;0m" << std::endl;
+        std::cout << bold << "/" << magenta << filename << defaultColor << std::endl;
     }
 }
 

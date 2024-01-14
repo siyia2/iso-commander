@@ -356,34 +356,40 @@ void select_and_convert_files_to_iso() {
 }
 
 
+
 void printFileListBin(const std::vector<std::string>& fileList) {
+    // ANSI escape codes for text formatting
+    const std::string bold = "\033[1m";
+    const std::string reset = "\033[0m";
+    const std::string greenBold = "\033[1;38;5;208m";
+
     // Print header for file selection
-    std::cout << "\033[1mSelect file(s) to convert to \033[1m\033[1;92mISO(s)\033[1;0m:\n";
+    std::cout << bold << "Select file(s) to convert to " << bold << greenBold << "ISO(s)" << reset << ":\n";
     std::cout << " " << std::endl;
 
-    for (std::size_t i = 0; i < fileList.size(); ++i) {
-        const std::string& filename = fileList[i];
+    // Apply formatting once before the loop
+    std::cout << std::right << std::setw(2);
 
+    for (const auto& filename : fileList) {
         // Extract directory and filename
         auto [directory, fileNameOnly] = extractDirectoryAndFilename(filename);
 
         const std::size_t dotPos = fileNameOnly.find_last_of('.');
-
-        // Check if the file has a ".img" or ".bin" extension (case-insensitive)
+        
         if (dotPos != std::string::npos) {
             std::string extension = fileNameOnly.substr(dotPos);
             std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
 
             if (extension == ".img" || extension == ".bin") {
                 // Print path in white and filename in green and bold
-                std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << directory << "\033[1m/\033[38;5;208m" << fileNameOnly << "\033[1;0m" << std::endl;
+                std::cout << std::setw(2) << std::right << bold << directory << bold << "/" << greenBold << fileNameOnly << reset << std::endl;
             } else {
                 // Print entire path and filename in white
-                std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << filename << std::endl;
+                std::cout << std::setw(2) << std::right << bold << filename << reset << std::endl;
             }
         } else {
             // No extension found, print entire path and filename in white
-            std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << filename << std::endl;
+            std::cout << std::setw(2) << std::right << bold << filename << reset << std::endl;
         }
     }
 }
@@ -950,9 +956,17 @@ void select_and_convert_files_to_iso_mdf() {
 
 
 void printFileListMdf(const std::vector<std::string>& fileList) {
+    // ANSI escape codes for text formatting
+    const std::string bold = "\033[1m";
+    const std::string reset = "\033[0m";
+    const std::string orangeBold = "\033[1;38;5;208m";
+
     // Print header for file selection
-    std::cout << "\033[1mSelect file(s) to convert to \033[1m\033[1;92mISO(s)\033[1;0m:\n";
+    std::cout << bold << "Select file(s) to convert to " << bold << "\033[1;92mISO(s)\033[1;0m:\n";
     std::cout << " " << std::endl;
+
+    // Apply formatting once before the loop
+    std::cout << std::right << std::setw(2);
 
     for (std::size_t i = 0; i < fileList.size(); ++i) {
         const std::string& filename = fileList[i];
@@ -969,15 +983,14 @@ void printFileListMdf(const std::vector<std::string>& fileList) {
 
             if (extension == ".mdf") {
                 // Print path in white and filename in orange and bold
-			std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << directory << "\033[1m/\033[38;5;208m" << fileNameOnly << "\033[1;0m" << std::endl;
-
+                std::cout << std::setw(2) << std::right << bold << directory << bold << "/" << orangeBold << fileNameOnly << reset << std::endl;
             } else {
                 // Print entire path and filename in white
-                std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << filename << std::endl;
+                std::cout << std::setw(2) << std::right << bold << filename << reset << std::endl;
             }
         } else {
             // No extension found, print entire path and filename in white
-            std::cout << std::setw(2) << std::right << i + 1 << ". \033[1m" << filename << std::endl;
+            std::cout << std::setw(2) << std::right << bold << filename << reset << std::endl;
         }
     }
 }
