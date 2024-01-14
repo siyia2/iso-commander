@@ -37,6 +37,9 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(const std::strin
     std::size_t lastSlashPos = 0;
     std::size_t currentSlashPos = path.find_first_of("/\\");
 
+    // Use stringstream for efficient string concatenation
+    std::stringstream dirStream;
+
     // Loop through the path to extract directory components
     while (currentSlashPos != std::string::npos) {
         // Extract the current component between slashes
@@ -52,8 +55,8 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(const std::strin
             component = component.substr(0, maxComponentSize);
         }
 
-        // Append the processed component to the directory
-        directory += component + '/';
+        // Append the processed component to the stringstream
+        dirStream << component << '/';
         // Update positions for the next iteration
         lastSlashPos = currentSlashPos + 1;
         currentSlashPos = path.find_first_of("/\\", lastSlashPos);
@@ -63,6 +66,7 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(const std::strin
     filename = path.substr(lastSlashPos);
 
     // Remove the last '/' if the directory is not empty
+    directory = dirStream.str();
     if (!directory.empty() && directory.back() == '/') {
         directory.pop_back();
     }
@@ -71,7 +75,6 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(const std::strin
     std::unordered_map<std::string, std::string> replacements = {
         {"/home", "~"},
         {"/root", "/R"},
-        
         // Add more replacements as needed
     };
 
@@ -86,8 +89,6 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(const std::strin
     // Return the pair of directory and filename
     return {directory, filename};
 }
-
-
 
 
 // Function to autocomplete input

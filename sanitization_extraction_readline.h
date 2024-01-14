@@ -9,6 +9,7 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 #include <string>
+#include <sstream>
 #include <stdexcept>
 #include <unordered_map>
 
