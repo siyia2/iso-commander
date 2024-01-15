@@ -364,7 +364,7 @@ void printFileListBin(const std::vector<std::string>& fileList) {
     const std::string greenBold = "\033[1;38;5;208m";
 
     // Print header for file selection
-    std::cout << bold << "Select file(s) to convert to " << bold << greenBold << "ISO(s)" << reset << ":\n";
+    std::cout << bold << "Select file(s) to convert to " << bold << "\033[1;92mISO(s)\033[1;0m:\n";
     std::cout << " " << std::endl;
 
     // Apply formatting once before the loop
