@@ -1448,7 +1448,7 @@ void listMountedISOs() {
         closedir(dir);
     } else {
         // Print an error message if there is an issue opening the /mnt directory
-        std::cerr << "\033[1;93mError opening the /mnt directory.\033[1;0m" << std::endl;
+        std::cerr << "\033[1;91mError opening the /mnt directory.\033[1;0m" << std::endl;
     }
 
     // Display a list of mounted ISOs with ISO names in bold and magenta text
