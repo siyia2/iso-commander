@@ -91,7 +91,7 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(const std::strin
 }
 
 
-// Function to autocomplete input
+// Function for tab completion and history creation
 std::string readInputLine(const std::string& prompt) {
     try {
         // Ensure the prompt is displayed before reading input
