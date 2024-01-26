@@ -1453,10 +1453,10 @@ void listMountedISOs() {
 
     // Display a list of mounted ISOs with ISO names in bold and magenta text
     if (!isoDirs.empty()) {
-        std::cout << "\033[37;1mList of mounted ISO(s):\033[1;0m" << std::endl; // White and bold
+        std::cout << "\033[1mList of mounted ISO(s):\033[1;0m" << std::endl; // White and bold
         std::cout << " " << std::endl;
         for (size_t i = 0; i < isoDirs.size(); ++i) {
-            std::cout << i + 1 << ". \033[1m\033[1;95m" << isoDirs[i] << "\033[1;0m" << std::endl; // Bold and magenta
+            std::cout << i + 1 << ". \033[1m/mnt/iso_\033[1m\033[1;95m" << isoDirs[i] << "\033[1;0m" << std::endl; // Bold and magenta
         }
     } else {
         // Print a message if no ISOs are mounted
