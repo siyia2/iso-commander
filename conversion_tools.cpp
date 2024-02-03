@@ -367,6 +367,9 @@ void printFileListBin(const std::vector<std::string>& fileList) {
     std::cout << bold << "Select file(s) to convert to " << bold << "\033[1;92mISO(s)\033[1;0m:\n";
     std::cout << " " << std::endl;
 
+    // Counter for line numbering
+    int lineNumber = 1;
+
     // Apply formatting once before the loop
     std::cout << std::right << std::setw(2);
 
@@ -382,18 +385,20 @@ void printFileListBin(const std::vector<std::string>& fileList) {
 
             if (extension == ".img" || extension == ".bin") {
                 // Print path in white and filename in green and bold
-                std::cout << std::setw(2) << std::right << bold << directory << bold << "/" << greenBold << fileNameOnly << reset << std::endl;
+                std::cout << std::setw(2) << std::right  << lineNumber << ". " << bold << directory << bold << "/" << greenBold << fileNameOnly << reset << std::endl;
             } else {
                 // Print entire path and filename in white
-                std::cout << std::setw(2) << std::right << bold << filename << reset << std::endl;
+                std::cout << std::setw(2) << std::right << lineNumber << ". " << bold << filename << reset << std::endl;
             }
         } else {
             // No extension found, print entire path and filename in white
-            std::cout << std::setw(2) << std::right << bold << filename << reset << std::endl;
+            std::cout << std::setw(2) << std::right << lineNumber << ". " << bold << filename << reset << std::endl;
         }
+
+        // Increment line number
+        lineNumber++;
     }
 }
-
 
 
 // Function to process user input and convert selected BIN files to ISO format
@@ -965,6 +970,9 @@ void printFileListMdf(const std::vector<std::string>& fileList) {
     std::cout << bold << "Select file(s) to convert to " << bold << "\033[1;92mISO(s)\033[1;0m:\n";
     std::cout << " " << std::endl;
 
+    // Counter for line numbering
+    int lineNumber = 1;
+
     // Apply formatting once before the loop
     std::cout << std::right << std::setw(2);
 
@@ -983,15 +991,18 @@ void printFileListMdf(const std::vector<std::string>& fileList) {
 
             if (extension == ".mdf") {
                 // Print path in white and filename in orange and bold
-                std::cout << std::setw(2) << std::right << bold << directory << bold << "/" << orangeBold << fileNameOnly << reset << std::endl;
+                std::cout << std::setw(2) << std::right << lineNumber << ". " << bold << directory << bold << "/" << orangeBold << fileNameOnly << reset << std::endl;
             } else {
                 // Print entire path and filename in white
-                std::cout << std::setw(2) << std::right << bold << filename << reset << std::endl;
+                std::cout << std::setw(2) << std::right << lineNumber << ". " << bold << filename << reset << std::endl;
             }
         } else {
             // No extension found, print entire path and filename in white
-            std::cout << std::setw(2) << std::right << bold << filename << reset << std::endl;
+            std::cout << std::setw(2) << std::right << lineNumber << ". " << bold << filename << reset << std::endl;
         }
+
+        // Increment line number
+        lineNumber++;
     }
 }
 
