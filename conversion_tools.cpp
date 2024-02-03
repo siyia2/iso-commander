@@ -356,7 +356,7 @@ void select_and_convert_files_to_iso() {
 }
 
 
-
+// Function to print found BIN/IMG files
 void printFileListBin(const std::vector<std::string>& fileList) {
     // ANSI escape codes for text formatting
     const std::string bold = "\033[1m";
@@ -959,7 +959,7 @@ void select_and_convert_files_to_iso_mdf() {
 	}
 }
 
-
+// Function to print found MDF files
 void printFileListMdf(const std::vector<std::string>& fileList) {
     // ANSI escape codes for text formatting
     const std::string bold = "\033[1m";
