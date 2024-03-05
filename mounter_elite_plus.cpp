@@ -75,8 +75,6 @@ void print_ascii();
 
 //	stds
 
-// Unmount functions
-std::future<void> asyncUnmountISO(const std::string& isoDir);
 
 // Cache functions
 std::vector<std::string> vec_concat(const std::vector<std::string>& v1, const std::vector<std::string>& v2);
@@ -1162,7 +1160,7 @@ void select_and_mount_files_by_number() {
         std::system("clear");
         std::cout << "\033[1;93m ! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\n\033[1;0m" << std::endl;
         
-		// Remove non-existent paths from the cache after selection
+        // Remove non-existent paths from the cache after selection
         removeNonExistentPathsFromCache();
         
         // Load ISO files from cache
@@ -1171,7 +1169,7 @@ void select_and_mount_files_by_number() {
         printIsoFileList(isoFiles);
         
         std::cout << " " << std::endl;
-		
+        
         // Prompt user for input
         char* input = readline("\033[1;94mChoose ISO(s) for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 2', '00' mounts all, or press Enter to return):\033[1;0m ");
         std::system("clear");
@@ -1187,15 +1185,9 @@ void select_and_mount_files_by_number() {
 
         // Check if the user wants to mount all ISO files
         if (std::strcmp(input, "00") == 0) {
-            std::vector<std::future<void>> futures;
             for (const std::string& iso : isoFiles) {
-                // Use std::async to launch each handleIsoFile task in a separate thread
-                futures.emplace_back(std::async(std::launch::async, handleIsoFile, iso, std::ref(mountedSet)));
-            }
-
-            // Wait for all tasks to complete
-            for (auto& future : futures) {
-                future.wait();
+                // Call handleIsoFile to mount each ISO file
+                handleIsoFile(iso, mountedSet);
             }
         } else {
             // Process user input to select and mount specific ISO files
@@ -1535,37 +1527,6 @@ void unmountISO(const std::string& isoDir) {
 
     // Wait for the asynchronous tasks to complete
     unmountFuture.get();
-}
-
-
-std::future<void> asyncUnmountISO(const std::string& isoDir) {
-    // Map to store unmounted ISOs with their corresponding paths
-    std::map<std::string, bool> unmountedIsos;
-
-    // Determine the number of threads to use (minimum of available threads and 1)
-    unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
-    unsigned int numThreads = std::min(maxThreads, static_cast<unsigned int>(unmountedIsos.size()));
-
-    // Vector to store futures for parallel unmounting
-    std::vector<std::future<void>> futures;
-
-    // Iterate through the list of ISO files and spawn a future for each
-    for (unsigned int i = 0; i < numThreads; ++i) {
-        // Create a future for unmounting the ISO file and pass the map and mutex by reference
-        futures.push_back(std::async(std::launch::async, [i, &isoDir, &unmountedIsos]() {
-            // Lock the mutex before accessing the shared map using Mutex4Med
-            std::lock_guard<std::mutex> medLock(Mutex4Med);
-
-            // Call the function that modifies the shared map
-            unmountISO(isoDir);
-        }));
-    }
-
-    // Wait for all asynchronous tasks to complete
-    for (auto& future : futures) {
-        future.get();
-    }
-   return std::future<void>();
 }
 
 
