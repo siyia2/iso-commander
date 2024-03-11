@@ -68,6 +68,7 @@ void unmountISOs();
 void unmountISO(const std::string& isoDir);
 
 // Art
+void printVersionNumber(const std::string& version);
 void printMenu();
 void submenu1();
 void submenu2();
@@ -84,9 +85,14 @@ std::string getHomeDirectory();
 std::vector<std::string> loadCache();
 
 
-int main() {
+int main(int argc, char *argv[]) {
     bool exitProgram = false;
     std::string choice;
+    
+    if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
+        printVersionNumber("2.4.7");
+        return 0;
+    }  
 
     while (!exitProgram) {
         std::system("clear");
@@ -133,6 +139,14 @@ int main() {
 
 
 // ... Function definitions ...
+
+
+// Print the version number of the program
+void printVersionNumber(const std::string& version) {
+    
+    std::cout << "\x1B[32mMounter-elite-plus v" << version << "\x1B[0m\n" << std::endl; // Output the version number in green color
+}
+
 
 void print_ascii() {
     // Display ASCII art \\
