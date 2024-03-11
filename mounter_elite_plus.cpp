@@ -609,6 +609,7 @@ void manualRefreshCache() {
     }
 }
 
+
 // Function to perform case-insensitive string comparison using std::string_view asynchronously
 std::future<bool> iequals(std::string_view a, std::string_view b) {
     // Using std::async to perform the comparison asynchronously
@@ -1237,12 +1238,12 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
 // Function to handle mounting of a specific ISO file asynchronously
 void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet) {
     try {
+		// Lock the global mutex before accessing the shared set
+        std::lock_guard<std::mutex> lock(Mutex4ISO);
         // Use std::async to execute the function asynchronously
         auto future = std::async(std::launch::async, [&iso, &mountedSet]() {
             // Check if the ISO file exists on disk
             if (fileExistsOnDisk(iso)) {
-                // Lock the global mutex before accessing the shared set
-                std::lock_guard<std::mutex> lock(Mutex4ISO);
 
                 // Attempt to insert the ISO file into the set; if it's a new entry, mount it
                 auto insertResult = mountedSet.insert(iso);
