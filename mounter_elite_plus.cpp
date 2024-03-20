@@ -90,7 +90,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
     
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.4.8");
+        printVersionNumber("2.4.9");
         return 0;
     }  
 
@@ -305,16 +305,32 @@ void removeNonExistentPathsFromCache() {
     // Calculate dynamic batch size based on the number of available processor cores
     const std::size_t maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
     const size_t batchSize = (maxThreads > 1) ? std::max(cache.size() / maxThreads, static_cast<size_t>(2)) : cache.size();
+    
+    // Semaphore to limit the number of concurrent threads
+    sem_t semaphore;
+    sem_init(&semaphore, 0, maxThreads); // Initialize the semaphore with the number of threads allowed
 
     // Create a vector to hold futures for asynchronous tasks
     std::vector<std::future<std::vector<std::string>>> futures;
 
     // Process paths in dynamic batches
     for (size_t i = 0; i < cache.size(); i += batchSize) {
+        // Acquire semaphore token
+        sem_wait(&semaphore);
+        
         auto begin = cache.begin() + i;
         auto end = std::min(begin + batchSize, cache.end());
 
-        futures.push_back(FileExistsAsync({begin, end}));
+        futures.push_back(std::async(std::launch::async, [&semaphore, begin, end]() {
+            // Process batch
+			std::future<std::vector<std::string>> futureResult = FileExistsAsync({begin, end});
+			std::vector<std::string> result = futureResult.get();	
+            
+            // Release semaphore token
+            sem_post(&semaphore);
+            
+            return result;
+        }));
     }
 
     // Wait for all asynchronous tasks to complete and collect the results
@@ -326,6 +342,9 @@ void removeNonExistentPathsFromCache() {
         std::lock_guard<std::mutex> highLock(Mutex4High);
         retainedPaths.insert(retainedPaths.end(), result.begin(), result.end());
     }
+    
+    // Clean up semaphore
+    sem_destroy(&semaphore);
 
     // Open the cache file for writing
     std::ofstream updatedCacheFile(cacheFilePath);
@@ -851,6 +870,10 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
     // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism; fallback is 2 threads
     unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
     unsigned int numThreads = std::min(static_cast<unsigned int>(isoFiles.size()), maxThreads);
+    
+    // Semaphore to limit the number of concurrent threads
+    sem_t semaphore;
+    sem_init(&semaphore, 0, maxThreads); // Initialize the semaphore with the number of threads allowed
 
     // Create an input string stream to tokenize the user input
     std::istringstream iss(input);
@@ -1007,6 +1030,9 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
             for (auto& future : futures) {
                 future.wait();
             }
+            
+            // Clean up semaphore
+			sem_destroy(&semaphore);
 
             // Stop the timer after completing all deletion tasks
             auto end_time = std::chrono::high_resolution_clock::now();
@@ -1104,6 +1130,10 @@ void mountISOs(const std::vector<std::string>& isoFiles) {
     // Determine the number of threads to use (minimum of available threads and ISOs)
     unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
     unsigned int numThreads = std::min(maxThreads, static_cast<unsigned int>(isoFiles.size()));
+    
+    // Semaphore to limit the number of concurrent threads
+    sem_t semaphore;
+    sem_init(&semaphore, 0, maxThreads); // Initialize the semaphore with the number of threads allowed
 
     // Vector to store futures for parallel mounting
     std::vector<std::future<void>> futures;
@@ -1124,6 +1154,9 @@ void mountISOs(const std::vector<std::string>& isoFiles) {
     for (auto& future : futures) {
         future.get();
     }
+    
+    // Clean up semaphore
+    sem_destroy(&semaphore);
 }
 
 
@@ -1608,6 +1641,10 @@ void unmountISOs() {
 
             // Use the minimum of available threads and ISOs to ensure efficient parallelism
             unsigned int numThreads = std::min(static_cast<unsigned int>(isoDirs.size()), maxThreads);
+            
+            // Semaphore to limit the number of concurrent threads
+			sem_t semaphore;
+			sem_init(&semaphore, 0, maxThreads); // Initialize the semaphore with the number of threads allowed
 
             // Create a vector of threads to store the unmounting threads
             std::vector<std::thread> threads;
@@ -1632,6 +1669,9 @@ void unmountISOs() {
             for (auto& thread : threads) {
                 thread.join();
             }
+            
+            // Clean up semaphore
+			sem_destroy(&semaphore);
 
             // Stop the timer after completing the unmounting process
             auto end_time = std::chrono::high_resolution_clock::now();
@@ -1743,6 +1783,10 @@ void unmountISOs() {
         // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism fallback is two
         unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
         unsigned int numThreads = std::min(static_cast<unsigned int>(isoDirs.size()), maxThreads);
+        
+        // Semaphore to limit the number of concurrent threads
+		sem_t semaphore;
+		sem_init(&semaphore, 0, maxThreads); // Initialize the semaphore with the number of threads allowed
 
         for (int index : unmountIndices) {
             // Check if the index is within the valid range
@@ -1770,6 +1814,9 @@ void unmountISOs() {
         for (auto& thread : threads) {
             thread.join();
         }
+        
+        // Clean up semaphore
+		sem_destroy(&semaphore);
 
         // Stop the timer after completing the unmounting process
         auto end_time = std::chrono::high_resolution_clock::now();

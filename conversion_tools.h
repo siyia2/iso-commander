@@ -16,6 +16,7 @@
 #include <mutex>
 #include <queue>
 #include <regex>
+#include <semaphore.h>
 #include <set>
 #include <sys/mount.h>
 #include <sys/stat.h>
