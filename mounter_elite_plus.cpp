@@ -1228,12 +1228,26 @@ void select_and_mount_files_by_number() {
             break;
         }
 
-        // Check if the user wants to mount all ISO files
+       // Check if the user wants to mount all ISO files
         if (std::strcmp(input, "00") == 0) {
+			// Determine the number of threads to use (minimum of available threads and ISOs)
+			unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
+    
+			// Semaphore to limit the number of concurrent threads
+			sem_t semaphore;
+			sem_init(&semaphore, 0, maxThreads); // Initialize the semaphore with the number of threads allowed
+            std::vector<std::future<void>> futures;
             for (const std::string& iso : isoFiles) {
-                // Call handleIsoFile to mount each ISO file
-                handleIsoFile(iso, mountedSet);
+                // Use std::async to launch each handleIsoFile task in a separate thread
+                futures.emplace_back(std::async(std::launch::async, handleIsoFile, iso, std::ref(mountedSet)));
             }
+
+            // Wait for all tasks to complete
+            for (auto& future : futures) {
+                future.wait();
+            }
+            // Clean up semaphore
+			sem_destroy(&semaphore);
         } else {
             // Process user input to select and mount specific ISO files
             processInput(input, isoFiles, mountedSet);
