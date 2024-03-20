@@ -1241,26 +1241,31 @@ void select_and_mount_files_by_number() {
         if (std::strcmp(input, "00") == 0) {
 			// Determine the number of threads to use (minimum of available threads and ISOs)
 			unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
-    
-			// Semaphore to limit the number of concurrent threads
-			sem_t semaphore;
-			sem_init(&semaphore, 0, maxThreads); // Initialize the semaphore with the number of threads allowed
-            std::vector<std::future<void>> futures;
-            for (const std::string& iso : isoFiles) {
+
+		// Semaphore to limit the number of concurrent threads
+		sem_t semaphore;
+		sem_init(&semaphore, 0, maxThreads); // Initialize the semaphore with the number of threads allowed
+		std::vector<std::future<void>> futures;
+		auto isoIterator = isoFiles.begin();
+		while (isoIterator != isoFiles.end()) {
+			// Wait for available semaphore slots
+			for (unsigned int i = 0; i < maxThreads; ++i) {
+				if (isoIterator == isoFiles.end()) {
+					break;
+				}
 				// Acquire semaphore before launching task
 				sem_wait(&semaphore);
-                // Use std::async to launch each handleIsoFile task in a separate thread
-                futures.emplace_back(std::async(std::launch::async, handleIsoFile, iso, std::ref(mountedSet)));
-                // Release semaphore after task completes
-				sem_post(&semaphore);
-            }
-
-            // Wait for all tasks to complete
-            for (auto& future : futures) {
-                future.wait();
-            }
-            // Clean up semaphore
-			sem_destroy(&semaphore);
+				// Use std::async to launch each handleIsoFile task in a separate thread
+				futures.emplace_back(std::async(std::launch::async, handleIsoFile, *isoIterator++, std::ref(mountedSet)));
+			}
+			// Wait for all launched tasks to complete
+			for (auto& future : futures) {
+				future.wait();
+			}
+			futures.clear(); // Clear futures vector for next iteration
+		}
+		// Clean up semaphore
+		sem_destroy(&semaphore);
         } else {
             // Process user input to select and mount specific ISO files
             processInput(input, isoFiles, mountedSet);
@@ -1352,9 +1357,10 @@ bool isNumeric(const std::string& str) {
 
 // Function to process the user input for ISO mounting using multithreading
 void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
-	
     std::lock_guard<std::mutex> highLock(Mutex4High);
-	
+    
+    int max_threads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
+
     std::istringstream iss(input);
     bool invalidInput = false;
     std::unordered_set<std::string> uniqueErrorMessages; // Set to store unique error messages
@@ -1362,17 +1368,18 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
     std::set<int> validIndices; // Set to keep track of valid indices
 
     std::string token;
-    std::vector<std::future<void>> futures; // Vector to store std::future objects for each task
+    std::deque<std::function<void()>> tasks; // Queue to store tasks
+    std::atomic_int threadCount = 0; // Atomic counter for active threads
 
     while (iss >> token) {
-		// Check if token consists of only zeros or is not 00
-		if (token != "00" && isAllZeros(token)) {
-			if (!invalidInput) {
-				invalidInput = true;
-				uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist.\033[1;0m");
-			}
-		}
-        
+        // Check if token consists of only zeros or is not 00
+        if (token != "00" && isAllZeros(token)) {
+            if (!invalidInput) {
+                invalidInput = true;
+                uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist.\033[1;0m");
+            }
+        }
+
         size_t dashPos = token.find('-');
         if (dashPos != std::string::npos) {
             // Check if there is more than one hyphen in the token
@@ -1408,10 +1415,11 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
             int step = (start <= end) ? 1 : -1;
             for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
                 if (static_cast<size_t>(i) <= isoFiles.size() && processedIndices.find(i) == processedIndices.end()) {
-                    // Use std::async to launch each task in a separate thread
-                    futures.emplace_back(std::async(std::launch::async, handleIsoFile, isoFiles[i - 1], std::ref(mountedSet)));
+                    tasks.emplace_back([&isoFiles, &mountedSet, i]() {
+                        handleIsoFile(isoFiles[i - 1], mountedSet);
+                    });
                     processedIndices.insert(i); // Mark as processed
-					validIndices.insert(i); // Store the valid index
+                    validIndices.insert(i); // Store the valid index
                 } else if (static_cast<size_t>(i) > isoFiles.size()) {
                     invalidInput = true;
                     uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(i) + "' does not exist.\033[1;0m");
@@ -1420,8 +1428,9 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
         } else if (isNumeric(token)) {
             int num = std::stoi(token);
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && processedIndices.find(num) == processedIndices.end()) {
-                // Use std::async to launch each task in a separate thread
-                futures.emplace_back(std::async(std::launch::async, handleIsoFile, isoFiles[num - 1], std::ref(mountedSet)));
+                tasks.emplace_back([&isoFiles, &mountedSet, num]() {
+                    handleIsoFile(isoFiles[num - 1], mountedSet);
+                });
                 processedIndices.insert(num); // Mark index as processed
                 validIndices.insert(num); // Store the valid index
             } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
@@ -1434,16 +1443,27 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
         }
     }
 
-    // Wait for all tasks to complete
-    for (auto& future : futures) {
-        future.wait();
+    // Process tasks sequentially
+    while (!tasks.empty()) {
+        if (threadCount < max_threads) {
+            auto task = std::move(tasks.front());
+            tasks.pop_front();
+            std::thread([&threadCount, task = std::move(task)]() mutable {
+                ++threadCount;
+                task();
+                --threadCount;
+            }).detach();
+        }
     }
-	
-	if (invalidInput && !validIndices.empty()) {
-		std::cout << " " << std::endl;
-		
-	}
-		
+
+    // Wait until all tasks are completed
+    while (threadCount > 0)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    if (invalidInput && !validIndices.empty()) {
+        std::cout << " " << std::endl;
+    }
+
     // Display errors at the end
     if (invalidInput) {
         for (const auto& errorMsg : uniqueErrorMessages) {
@@ -1451,6 +1471,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
         }
     }
 }
+
 
 
 void printAlreadyMountedMessage(const std::string& isoFile) {
