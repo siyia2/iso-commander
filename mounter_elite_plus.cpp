@@ -1138,24 +1138,18 @@ void mountISOs(const std::vector<std::string>& isoFiles) {
     unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
     unsigned int numThreads = std::min(maxThreads, static_cast<unsigned int>(isoFiles.size()));
     
-    // Semaphore to limit the number of concurrent threads
-    sem_t semaphore;
-    sem_init(&semaphore, 0, maxThreads); // Initialize the semaphore with the number of threads allowed
-
     // Vector to store futures for parallel mounting
     std::vector<std::future<void>> futures;
 
     // Iterate through the list of ISO files and spawn a future for each
     for (unsigned int i = 0; i < numThreads; ++i) {
-         // Create a future for mounting the ISO file and pass the map and mutex by reference
-        futures.push_back(std::async(std::launch::async, [&isoFiles, &mountedIsos, &semaphore, i]() {
-            sem_wait(&semaphore); // Wait for a semaphore slot
+         // Create a future for mounting the ISO file and pass the map by reference
+        futures.push_back(std::async(std::launch::async, [&isoFiles, &mountedIsos, i]() {
             // Lock the mutex before accessing the shared map using Mutex4Med
             std::lock_guard<std::mutex> medLock(Mutex4Med);
 
             // Call the function that modifies the shared map
             mountIsoFile(isoFiles[i], mountedIsos);
-            sem_post(&semaphore); // Release semaphore slot
         }));
     }
 
@@ -1163,9 +1157,6 @@ void mountISOs(const std::vector<std::string>& isoFiles) {
     for (auto& future : futures) {
         future.get();
     }
-    
-    // Clean up semaphore
-    sem_destroy(&semaphore);
 }
 
 
@@ -1473,7 +1464,6 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
 }
 
 
-
 void printAlreadyMountedMessage(const std::string& isoFile) {
     namespace fs = std::filesystem;
     fs::path isoPath(isoFile);
@@ -1689,10 +1679,6 @@ void unmountISOs() {
 
             // Use the minimum of available threads and ISOs to ensure efficient parallelism
             unsigned int numThreads = std::min(static_cast<unsigned int>(isoDirs.size()), maxThreads);
-            
-            // Semaphore to limit the number of concurrent threads
-			sem_t semaphore;
-			sem_init(&semaphore, 0, maxThreads); // Initialize the semaphore with the number of threads allowed
 
             // Create a vector of threads to store the unmounting threads
             std::vector<std::thread> threads;
@@ -1717,9 +1703,6 @@ void unmountISOs() {
             for (auto& thread : threads) {
                 thread.join();
             }
-            
-            // Clean up semaphore
-			sem_destroy(&semaphore);
 
             // Stop the timer after completing the unmounting process
             auto end_time = std::chrono::high_resolution_clock::now();
