@@ -1133,7 +1133,7 @@ void mountISOs(const std::vector<std::string>& isoFiles) {
     
     // Semaphore to limit the number of concurrent threads
     sem_t semaphore;
-    sem_init(&semaphore, 0, numThreads); // Initialize the semaphore with the number of threads allowed
+    sem_init(&semaphore, 0, maxThreads); // Initialize the semaphore with the number of threads allowed
 
     // Vector to store futures for parallel mounting
     std::vector<std::future<void>> futures;
