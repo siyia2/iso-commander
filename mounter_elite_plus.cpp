@@ -1233,9 +1233,6 @@ void select_and_mount_files_by_number() {
 			// Determine the number of threads to use (minimum of available threads and ISOs)
 			unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
-		// Semaphore to limit the number of concurrent threads
-		sem_t semaphore;
-		sem_init(&semaphore, 0, maxThreads); // Initialize the semaphore with the number of threads allowed
 		std::vector<std::future<void>> futures;
 		auto isoIterator = isoFiles.begin();
 		while (isoIterator != isoFiles.end()) {
@@ -1244,8 +1241,6 @@ void select_and_mount_files_by_number() {
 				if (isoIterator == isoFiles.end()) {
 					break;
 				}
-				// Acquire semaphore before launching task
-				sem_wait(&semaphore);
 				// Use std::async to launch each handleIsoFile task in a separate thread
 				futures.emplace_back(std::async(std::launch::async, handleIsoFile, *isoIterator++, std::ref(mountedSet)));
 			}
@@ -1255,8 +1250,7 @@ void select_and_mount_files_by_number() {
 			}
 			futures.clear(); // Clear futures vector for next iteration
 		}
-		// Clean up semaphore
-		sem_destroy(&semaphore);
+		
         } else {
             // Process user input to select and mount specific ISO files
             processInput(input, isoFiles, mountedSet);
