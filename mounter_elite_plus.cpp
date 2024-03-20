@@ -1,7 +1,7 @@
 #include "sanitization_extraction_readline.h"
 #include "conversion_tools.h"
 
-// Cache Variables \\
+// Cache Variables
 
 const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.cache"; // Construct the full path to the cache directory
 const std::string cacheFileName = "iso_cache.txt";;
@@ -15,7 +15,7 @@ std::mutex Mutex4ISO; // Mutex for handleIsoFile
 bool gapPrinted = false; // for cache refresh for directory function
 bool gapPrintedtraverse = false; // for traverse function
 
-//	Function prototypes	\\
+//	Function prototypes
 
 //	bools
 
@@ -90,7 +90,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
     
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.4.7");
+        printVersionNumber("2.4.8");
         return 0;
     }  
 
@@ -149,7 +149,7 @@ void printVersionNumber(const std::string& version) {
 
 
 void print_ascii() {
-    // Display ASCII art \\
+    // Display ASCII art
 
     const char* Color = "\x1B[1;38;5;214m";
     const char* resetColor = "\x1B[0m"; // Reset color to default
@@ -268,7 +268,7 @@ void printMenu() {
 }
 
 
-//	CACHE STUFF \\
+//	CACHE STUFF
 
 
 // Function to check if a file exists asynchronously
@@ -511,9 +511,6 @@ void manualRefreshCache() {
     const std::size_t maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
     std::vector<std::future<void>> futures;
-    
-    // Flags to determine whether cache write errors were encountered
-    bool cacheWriteErrorEncountered = false;
 
     // Iterate through the entered directory paths and print invalid paths
     while (std::getline(iss, path, ';')) {
@@ -692,7 +689,7 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
 }
 
 
-// DELETION STUFF \\
+// DELETION STUFF
 
 // Function to select and delete ISO files by number
 void select_and_delete_files_by_number() {
@@ -850,7 +847,7 @@ bool isAllZeros(const std::string& str) {
 void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
     // Lock to ensure thread safety in a multi-threaded environment
     std::lock_guard<std::mutex> highLock(Mutex4High);
-
+    
     // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism; fallback is 2 threads
     unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
     unsigned int numThreads = std::min(static_cast<unsigned int>(isoFiles.size()), maxThreads);
@@ -938,7 +935,7 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && std::find(processedIndices.begin(), processedIndices.end(), num) == processedIndices.end()) {
                 processedIndices.push_back(num); // Mark index as processed
                 validIndices.push_back(num);
-            } else if (num > isoFiles.size()) {
+            } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(num) + "' does not exist.\033[1;0m");
             }
@@ -1024,7 +1021,7 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
 }
 
 
-//	MOUNT STUFF	\\
+//	MOUNT STUFF
 
 // Function to check if a directory exists
 bool directoryExists(const std::string& path) {
@@ -1367,7 +1364,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
                 futures.emplace_back(std::async(std::launch::async, handleIsoFile, isoFiles[num - 1], std::ref(mountedSet)));
                 processedIndices.insert(num); // Mark index as processed
                 validIndices.insert(num); // Store the valid index
-            } else if (num > isoFiles.size()) {
+            } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(num) + "' does not exist.\033[1;0m");
             }
@@ -1428,7 +1425,7 @@ namespace fs = std::filesystem;
 }
 
 
-// UMOUNT STUFF	\\
+// UMOUNT STUFF
 
 // Function to list mounted ISOs in the /mnt directory
 void listMountedISOs() {
@@ -1512,7 +1509,6 @@ void unmountISO(const std::string& isoDir) {
             if (isDirectoryEmpty(isoDir) && result != 0) {
                     // Construct the remove directory command with sudo, rmdir, and suppressing logs
                     command = "sudo rmdir " + shell_escape(isoDir) + " 2>/dev/null";
-                    int removeDirResult = system(command.c_str());
                     std::cout << "\033[1;92mRemoved empty directory: \033[1;91m'" << isoDirectory << "/" << isoFilename << "'\033[1;92m.\033[1;0m" << std::endl; // Print success message
 				}
 				// Check if the unmounting was successful

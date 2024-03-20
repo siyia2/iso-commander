@@ -1,7 +1,7 @@
 #include "sanitization_extraction_readline.h"
 
 
-//	SANITISATION AND STRING STUFF	\\
+//	SANITISATION AND STRING STUFF
 
 // Function to escape characters in a string for shell usage
 std::string shell_escape(const std::string& s) {

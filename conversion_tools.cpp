@@ -7,7 +7,7 @@ static std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles h
 
 std::mutex fileCheckMutex;
 
-// GENERAL \\
+// GENERAL
 
 
 // Function to check if a file already exists
@@ -35,7 +35,7 @@ std::string toLower(const std::string& str) {
 }
 
 
-// BIN/IMG CONVERSION FUNCTIONS	\\
+// BIN/IMG CONVERSION FUNCTIONS
 
 
 
@@ -464,14 +464,14 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                                 errorMessages.push_back(errorMessage);
                                 processedErrors.insert(errorMessage);
                             }
-                        } else if (start > 0 && end > 0 && start <= fileList.size() && end <= fileList.size()) {  // Check if the range is valid
+                        } else if (start > 0 && end > 0 && start <= static_cast<int>(fileList.size()) && end <= static_cast<int>(fileList.size())) {  // Check if the range is valid
                             // Handle a valid range
                             int step = (start <= end) ? 1 : -1; // Determine the step based on the range direction
                             int selectedIndex;  // Declare selectedIndex outside of the loop
 
                             for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
                                 selectedIndex = i - 1;
-                                if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
+                                if (selectedIndex >= 0 && static_cast<std::vector<std::string>::size_type>(selectedIndex) < fileList.size()) {
                                     if (processedIndices.find(selectedIndex) == processedIndices.end()) {
                                         // Convert BIN to ISO asynchronously and store the future in the vector
                                         std::string selectedFile = fileList[selectedIndex];
@@ -521,11 +521,11 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                         processedErrors.insert(errorMessage);
                     }
                 }
-            } else if (start >= 1 && start <= fileList.size()) {
+            } else if (static_cast<std::vector<std::string>::size_type>(start) >= 1 && static_cast<std::vector<std::string>::size_type>(start) <= fileList.size()) {
                 // Process a single index
                 int selectedIndex = start - 1;
                 if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-                    if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
+                    if (selectedIndex >= 0 && static_cast<std::vector<std::string>::size_type>(selectedIndex) < fileList.size()) {
                         // Convert BIN to ISO asynchronously and store the future in the vector
                         std::string selectedFile = fileList[selectedIndex];
                         uniqueValidIndices.insert(selectedIndex);
@@ -639,7 +639,7 @@ bool isCcd2IsoInstalled() {
 }
 
 
-// MDF CONVERSION FUNCTIONS	\\
+// MDF CONVERSION FUNCTIONS
 
 
 bool blacklistMDF(const std::filesystem::path& entry) {
@@ -1070,14 +1070,17 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
                                 errorMessages.push_back(errorMessage);
                                 processedErrors.insert(errorMessage);
                             }
-                        } else if (start > 0 && end > 0 && start <= fileList.size() && end <= fileList.size()) {  // Check if the range is valid
+                        } else if (static_cast<std::vector<std::string>::size_type>(start) > 0 &&
+								   static_cast<std::vector<std::string>::size_type>(end) > 0 &&
+								   static_cast<std::vector<std::string>::size_type>(start) <= fileList.size() &&
+								   static_cast<std::vector<std::string>::size_type>(end) <= fileList.size()) {  // Check if the range is valid
                             // Handle a valid range
                             int step = (start <= end) ? 1 : -1; // Determine the step based on the range direction
                             int selectedIndex;  // Declare selectedIndex outside of the loop
 
                             for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
                                 selectedIndex = i - 1;
-                                if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
+                                if (selectedIndex >= 0 && static_cast<std::vector<std::string>::size_type>(selectedIndex) < fileList.size()) {
                                     if (processedIndices.find(selectedIndex) == processedIndices.end()) {
                                         // Convert MDF to ISO asynchronously and store the future in the vector
                                         std::string selectedFile = fileList[selectedIndex];
@@ -1127,11 +1130,11 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
                         processedErrors.insert(errorMessage);
                     }
                 }
-            } else if (start >= 1 && start <= fileList.size()) {
+            } else if (static_cast<std::vector<std::string>::size_type>(start) >= 1 && static_cast<std::vector<std::string>::size_type>(start) <= fileList.size()) {
                 // Process a single index
                 int selectedIndex = start - 1;
                 if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-                    if (selectedIndex >= 0 && selectedIndex < fileList.size()) {
+                    if (selectedIndex >= 0 && static_cast<std::vector<std::string>::size_type>(selectedIndex) < fileList.size()) {
                         // Convert MDF to ISO asynchronously and store the future in the vector
                         std::string selectedFile = fileList[selectedIndex];
                         uniqueValidIndices.insert(selectedIndex);  
