@@ -1069,7 +1069,7 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
     // Lock the global mutex for synchronization
     std::lock_guard<std::mutex> lowLock(Mutex4Low);
     auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint);
-	auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
+    auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
     // Static variable to track whether the clear has been performed
     static bool clearScreenDone = false;
 
@@ -1086,33 +1086,40 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
             clearScreenDone = true;
         }
 
-        // Check if the mount point directory doesn't exist, create it asynchronously
-        if (!fs::exists(mountPoint)) {
-            try {
-                // Create the mount point directory
-                fs::create_directory(mountPoint);
+        // Asynchronously check and create the mount point directory
+        auto future = std::async(std::launch::async, [&mountPoint]() {
+            if (!std::filesystem::exists(mountPoint)) {
+                std::filesystem::create_directory(mountPoint);
+            }
+        });
 
+        // Wait for the asynchronous operation to complete
+        future.wait();
+
+        // Check if the mount point directory was created successfully
+        if (std::filesystem::exists(mountPoint)) {
+            try {
                 // Construct the mount command and execute it
                 std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
                 if (std::system(mountCommand.c_str()) != 0) {
                     throw std::runtime_error("Mount command failed");
                 }
-				// Remove the ".iso" extension from the mountisoFilename
-				std::string mountisoFilenameWithoutExtension = isoFilename.substr(0, isoFilename.length() - 4);
+
+                // Remove the ".iso" extension from the mountisoFilename
+                std::string mountisoFilenameWithoutExtension = isoFilename.substr(0, isoFilename.length() - 4);
 
                 // Store the mount point in the map
                 mountedIsos.emplace(isoFile, mountPoint);
                 std::cout << "\033[1mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;0m "
-              << "\033[1mmounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;0m\033[1m.\033[1;0m" << std::endl;
+                          << "\033[1mmounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;0m\033[1m.\033[1;0m" << std::endl;
             } catch (const std::exception& e) {
                 // Handle exceptions, log error, and cleanup
                 std::cerr << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;0m\033[1;91m.\033[1;0m" << std::endl;
                 fs::remove(mountPoint);
             }
         } else {
-            // The mount point directory already exists, so the ISO is considered mounted
-            mountedIsos.emplace(isoFile, mountPoint);
-            std::cout << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m is already mounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;93m.\033[1;0m" << std::endl;
+            // Handle failure to create the mount point directory
+            std::cerr << "\033[1;91mFailed to create mount point directory: \033[1;93m" << mountPoint << "\033[1;0m" << std::endl;
         }
     } else {
         // Handle sudo command failure or user didn't provide the password
@@ -1590,7 +1597,7 @@ void unmountISO(const std::string& isoDir) {
 		});
 
     // Wait for the asynchronous tasks to complete
-    unmountFuture.get();
+   unmountFuture.get();
 }
 
 
