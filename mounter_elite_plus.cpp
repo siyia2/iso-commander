@@ -1204,17 +1204,17 @@ void select_and_mount_files_by_number() {
     while (true) {
         std::system("clear");
         std::cout << "\033[1;93m ! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\n\033[1;0m" << std::endl;
-        
+
         // Remove non-existent paths from the cache after selection
         removeNonExistentPathsFromCache();
-        
+
         // Load ISO files from cache
         isoFiles = loadCache();
 
         printIsoFileList(isoFiles);
-        
+
         std::cout << " " << std::endl;
-        
+
         // Prompt user for input
         char* input = readline("\033[1;94mChoose ISO(s) for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 2', '00' mounts all, or press Enter to return):\033[1;0m ");
         std::system("clear");
@@ -1223,34 +1223,34 @@ void select_and_mount_files_by_number() {
         auto start_time = std::chrono::high_resolution_clock::now();
 
         // Check if the user wants to return
-        if (input[0] == '\0') {   
+        if (input[0] == '\0') {
             std::cout << "Press Enter to Return" << std::endl;
             break;
         }
 
-       // Check if the user wants to mount all ISO files
+        // Check if the user wants to mount all ISO files
         if (std::strcmp(input, "00") == 0) {
-			// Determine the number of threads to use (minimum of available threads and ISOs)
-			unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
+            // Determine the number of threads to use (minimum of available threads and ISOs)
+            unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
-		std::vector<std::future<void>> futures;
-		auto isoIterator = isoFiles.begin();
-		while (isoIterator != isoFiles.end()) {
-			// Wait for available semaphore slots
-			for (unsigned int i = 0; i < maxThreads; ++i) {
-				if (isoIterator == isoFiles.end()) {
-					break;
-				}
-				// Use std::async to launch each handleIsoFile task in a separate thread
-				futures.emplace_back(std::async(std::launch::async, handleIsoFile, *isoIterator++, std::ref(mountedSet)));
-			}
-			// Wait for all launched tasks to complete
-			for (auto& future : futures) {
-				future.wait();
-			}
-			futures.clear(); // Clear futures vector for next iteration
-		}
-		
+            std::vector<std::future<void>> futures;
+            auto isoIterator = isoFiles.begin();
+            while (isoIterator != isoFiles.end()) {
+                // Wait for available semaphore slots
+                for (unsigned int i = 0; i < maxThreads; ++i) {
+                    if (isoIterator == isoFiles.end()) {
+                        break;
+                    }
+                    // Use std::async to launch each handleIsoFile task in a separate thread
+                    futures.emplace_back(std::async(std::launch::async, handleIsoFile, *isoIterator++, std::ref(mountedSet)));
+                }
+                // Wait for all launched tasks to complete
+                for (auto& future : futures) {
+                    future.wait();
+                }
+                futures.clear(); // Clear futures vector for next iteration
+            }
+
         } else {
             // Process user input to select and mount specific ISO files
             processInput(input, isoFiles, mountedSet);
@@ -1267,7 +1267,7 @@ void select_and_mount_files_by_number() {
         std::cout << " " << std::endl;
         std::cout << "\033[1;32mPress enter to continue...\033[1;0m";
         std::cin.get();
-        
+
     }
 }
 
