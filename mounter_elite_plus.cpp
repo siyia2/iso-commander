@@ -90,7 +90,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
     
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.4.9");
+        printVersionNumber("2.5.0");
         return 0;
     }  
 
@@ -1133,20 +1133,22 @@ void mountISOs(const std::vector<std::string>& isoFiles) {
     
     // Semaphore to limit the number of concurrent threads
     sem_t semaphore;
-    sem_init(&semaphore, 0, maxThreads); // Initialize the semaphore with the number of threads allowed
+    sem_init(&semaphore, 0, numThreads); // Initialize the semaphore with the number of threads allowed
 
     // Vector to store futures for parallel mounting
     std::vector<std::future<void>> futures;
 
     // Iterate through the list of ISO files and spawn a future for each
     for (unsigned int i = 0; i < numThreads; ++i) {
-        // Create a future for mounting the ISO file and pass the map and mutex by reference
-        futures.push_back(std::async(std::launch::async, [i, &isoFiles, &mountedIsos]() {
+         // Create a future for mounting the ISO file and pass the map and mutex by reference
+        futures.push_back(std::async(std::launch::async, [&isoFiles, &mountedIsos, &semaphore, i]() {
+            sem_wait(&semaphore); // Wait for a semaphore slot
             // Lock the mutex before accessing the shared map using Mutex4Med
             std::lock_guard<std::mutex> medLock(Mutex4Med);
 
             // Call the function that modifies the shared map
             mountIsoFile(isoFiles[i], mountedIsos);
+            sem_post(&semaphore); // Release semaphore slot
         }));
     }
 
@@ -1238,8 +1240,12 @@ void select_and_mount_files_by_number() {
 			sem_init(&semaphore, 0, maxThreads); // Initialize the semaphore with the number of threads allowed
             std::vector<std::future<void>> futures;
             for (const std::string& iso : isoFiles) {
+				// Acquire semaphore before launching task
+				sem_wait(&semaphore);
                 // Use std::async to launch each handleIsoFile task in a separate thread
                 futures.emplace_back(std::async(std::launch::async, handleIsoFile, iso, std::ref(mountedSet)));
+                // Release semaphore after task completes
+				sem_post(&semaphore);
             }
 
             // Wait for all tasks to complete
@@ -1806,11 +1812,17 @@ void unmountISOs() {
             // Check if the index is within the valid range
             if (isValidIndex(index, isoDirs.size())) {
                 const std::string& isoDir = isoDirs[index - 1];
+                
+                // Acquire semaphore before launching each thread
+				sem_wait(&semaphore);
 
                 // Use a thread for each ISO to be unmounted
                 threads.emplace_back([&, isoDir = std::move(isoDir)]() {
                     std::lock_guard<std::mutex> highLock(Mutex4High); // Lock the critical section
                     unmountISO(isoDir);
+                    
+                    // Release semaphore after thread execution
+					sem_post(&semaphore);
                 });
 
                 // Limit the number of active threads to the available hardware threads
