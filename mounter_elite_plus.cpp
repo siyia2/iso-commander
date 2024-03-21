@@ -868,8 +868,8 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
     std::lock_guard<std::mutex> highLock(Mutex4High);
     
     // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism; fallback is 2 threads
-    unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
-    unsigned int numThreads = std::min(static_cast<unsigned int>(isoFiles.size()), maxThreads);
+    int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
+    int numThreads = std::min(static_cast<int>(isoFiles.size()), maxThreads);
     
     // Create an input string stream to tokenize the user input
     std::istringstream iss(input);
@@ -886,22 +886,6 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
 
     // Tokenize the input string
     while (iss >> token) {
-        // Check if the token consists only of zeros and treat it as a non-existent index
-        if (isAllZeros(token)) {
-            if (!invalidInput) {
-                invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist.\033[1;0m");
-            }
-        }
-
-        // Check if the token is '0' and treat it as a non-existent index
-        if (token == "0") {
-            if (!invalidInput) {
-                invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist.\033[1;0m");
-            }
-        }
-
         // Check if there is more than one hyphen in the token
         if (std::count(token.begin(), token.end(), '-') > 1) {
             invalidInput = true;
@@ -1015,17 +999,40 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
             std::vector<std::future<void>> futures;
             futures.reserve(numThreads);
 
-            // Launch deletion tasks for each selected index
-            for (const auto& index : processedIndices) {
-                if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
-                    futures.emplace_back(std::async(std::launch::deferred, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
-                }
-            }
+            //const int maxThreads = 8;
+			int activeThreads = 0;
 
-            // Wait for all asynchronous tasks to complete
-            for (auto& future : futures) {
-                future.wait();
-            }
+			// Launch deletion tasks for each selected index
+			for (const auto& index : processedIndices) {
+				// Wait for an active thread slot to become available
+				while (activeThreads >= maxThreads) {
+				// Wait for at least one future to finish
+				auto it = std::find_if(futures.begin(), futures.end(), [](const std::future<void>& f) {
+                return f.valid() && f.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+            });
+
+				if (it != futures.end()) {
+					it->get(); // Wait for this future to finish
+					futures.erase(it); // Remove the finished future from the vector
+					--activeThreads; // Decrement the active thread count
+				} else {
+					// Sleep for a short duration if no futures are ready yet
+					std::this_thread::sleep_for(std::chrono::milliseconds(100));
+				}
+			}
+
+			if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
+				// Launch a new task if there is room for more threads
+				futures.emplace_back(std::async(std::launch::async, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
+				++activeThreads; // Increment the active thread count
+			}
+		}
+
+		// Wait for remaining futures to finish
+		for (auto& f : futures) {
+			if (f.valid())
+				f.get();
+		}
 
             // Stop the timer after completing all deletion tasks
             auto end_time = std::chrono::high_resolution_clock::now();
