@@ -999,30 +999,29 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
             std::vector<std::future<void>> futures;
             futures.reserve(numThreads);
 
-            //const int maxThreads = 8;
 			int activeThreads = 0;
+			std::mutex mutex;
+			std::condition_variable cv;
 
-			// Launch deletion tasks for each selected index
-			for (const auto& index : processedIndices) {
-				// Wait for an active thread slot to become available
-				while (activeThreads >= maxThreads) {
-				// Wait for at least one future to finish
-				auto it = std::find_if(futures.begin(), futures.end(), [](const std::future<void>& f) {
-                return f.valid() && f.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
-            });
+		// Launch deletion tasks for each selected index
+		for (const auto& index : processedIndices) {
+			// Wait for an active thread slot to become available
+			std::unique_lock<std::mutex> lock(mutex);
+			cv.wait(lock, [&]{ return activeThreads < maxThreads || !futures.empty(); });
 
-				if (it != futures.end()) {
-					it->get(); // Wait for this future to finish
-					futures.erase(it); // Remove the finished future from the vector
-					--activeThreads; // Decrement the active thread count
-				} else {
-					// Sleep for a short duration if no futures are ready yet
-					std::this_thread::sleep_for(std::chrono::milliseconds(100));
-				}
+			// Check if there are finished tasks
+			auto it = std::find_if(futures.begin(), futures.end(), [](const std::future<void>& f) {
+			return f.valid() && f.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+			});
+
+			if (it != futures.end()) {
+				it->get(); // Wait for this future to finish
+				futures.erase(it); // Remove the finished future from the vector
+				--activeThreads; // Decrement the active thread count
 			}
 
+			// Launch a new task if there is room for more threads
 			if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
-				// Launch a new task if there is room for more threads
 				futures.emplace_back(std::async(std::launch::async, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
 				++activeThreads; // Increment the active thread count
 			}
@@ -1031,8 +1030,9 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
 		// Wait for remaining futures to finish
 		for (auto& f : futures) {
 			if (f.valid())
-				f.get();
+			f.get();
 		}
+
 
             // Stop the timer after completing all deletion tasks
             auto end_time = std::chrono::high_resolution_clock::now();
