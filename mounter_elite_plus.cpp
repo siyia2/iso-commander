@@ -1817,26 +1817,17 @@ void unmountISOs() {
         // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism fallback is two
         unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
         unsigned int numThreads = std::min(static_cast<unsigned int>(isoDirs.size()), maxThreads);
-        
-        // Semaphore to limit the number of concurrent threads
-		sem_t semaphore;
-		sem_init(&semaphore, 0, maxThreads); // Initialize the semaphore with the number of threads allowed
 
         for (int index : unmountIndices) {
             // Check if the index is within the valid range
             if (isValidIndex(index, isoDirs.size())) {
                 const std::string& isoDir = isoDirs[index - 1];
                 
-                // Acquire semaphore before launching each thread
-				sem_wait(&semaphore);
-
                 // Use a thread for each ISO to be unmounted
                 threads.emplace_back([&, isoDir = std::move(isoDir)]() {
                     std::lock_guard<std::mutex> highLock(Mutex4High); // Lock the critical section
                     unmountISO(isoDir);
-                    
-                    // Release semaphore after thread execution
-					sem_post(&semaphore);
+ 
                 });
 
                 // Limit the number of active threads to the available hardware threads
@@ -1854,9 +1845,6 @@ void unmountISOs() {
         for (auto& thread : threads) {
             thread.join();
         }
-        
-        // Clean up semaphore
-		sem_destroy(&semaphore);
 
         // Stop the timer after completing the unmounting process
         auto end_time = std::chrono::high_resolution_clock::now();
