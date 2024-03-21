@@ -871,10 +871,6 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
     unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
     unsigned int numThreads = std::min(static_cast<unsigned int>(isoFiles.size()), maxThreads);
     
-    // Semaphore to limit the number of concurrent threads
-    sem_t semaphore;
-    sem_init(&semaphore, 0, maxThreads); // Initialize the semaphore with the number of threads allowed
-
     // Create an input string stream to tokenize the user input
     std::istringstream iss(input);
 
@@ -1030,9 +1026,6 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
             for (auto& future : futures) {
                 future.wait();
             }
-            
-            // Clean up semaphore
-			sem_destroy(&semaphore);
 
             // Stop the timer after completing all deletion tasks
             auto end_time = std::chrono::high_resolution_clock::now();
@@ -1613,7 +1606,7 @@ void unmountISO(const std::string& isoDir) {
 		});
 
     // Wait for the asynchronous tasks to complete
-   unmountFuture.get();
+   // unmountFuture.get();
 }
 
 
