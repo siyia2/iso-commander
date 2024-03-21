@@ -864,18 +864,29 @@ bool isAllZeros(const std::string& str) {
 
 // Function to process user input for selecting and deleting specific ISO files
 void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
+    // Lock to ensure thread safety in a multi-threaded environment
     std::lock_guard<std::mutex> highLock(Mutex4High);
-
+    
+    // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism; fallback is 2 threads
     unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
     unsigned int numThreads = std::min(static_cast<unsigned int>(isoFiles.size()), maxThreads);
+    
+    // Semaphore to limit the number of concurrent threads
+    sem_t semaphore;
+    sem_init(&semaphore, 0, maxThreads); // Initialize the semaphore with the number of threads allowed
 
+    // Create an input string stream to tokenize the user input
     std::istringstream iss(input);
+
+    // Variables for tracking errors, processed indices, and valid indices
     bool invalidInput = false;
-    std::unordered_set<std::string> uniqueErrorMessages;
-    std::vector<int> processedIndices;
-    std::vector<int> validIndices;
+    std::unordered_set<std::string> uniqueErrorMessages; // Set to store unique error messages
+    std::vector<int> processedIndices; // Vector to keep track of processed indices
+    std::vector<int> validIndices;     // Vector to keep track of valid indices
 
     std::string token;
+    std::vector<std::thread> threads; // Vector to store std::future objects for each task
+    threads.reserve(maxThreads);      // Reserve space for maxThreads threads
 
     // Tokenize the input string
     while (iss >> token) {
@@ -999,33 +1010,29 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
             std::cout << "\033[1;93mDeletion aborted by user.\033[1;0m" << std::endl;
             return;
         } else {
-			// Start the timer after user confirmation
-			auto start_time = std::chrono::high_resolution_clock::now();
+            // Start the timer after user confirmation
+            auto start_time = std::chrono::high_resolution_clock::now();
 
             std::system("clear");
 
-			// Limit the number of tasks launched concurrently to numThreads
+            // Use std::async to launch asynchronous tasks
             std::vector<std::future<void>> futures;
             futures.reserve(numThreads);
 
-            // Launch deletion tasks asynchronously
-            for (const auto& index : validIndices) {
+            // Launch deletion tasks for each selected index
+            for (const auto& index : processedIndices) {
                 if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
-                    if (futures.size() >= numThreads) {
-                        // Wait for one of the launched tasks to finish before launching a new one
-                        for (auto& future : futures) {
-                            future.get();
-                        }
-                        futures.clear();
-                    }
                     futures.emplace_back(std::async(std::launch::async, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
                 }
             }
 
-            // Wait for the remaining tasks to finish
+            // Wait for all asynchronous tasks to complete
             for (auto& future : futures) {
-                future.get();
+                future.wait();
             }
+            
+            // Clean up semaphore
+			sem_destroy(&semaphore);
 
             // Stop the timer after completing all deletion tasks
             auto end_time = std::chrono::high_resolution_clock::now();
