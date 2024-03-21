@@ -1,7 +1,7 @@
 #include "sanitization_extraction_readline.h"
 #include "conversion_tools.h"
 
-// Define a simple thread pool
+// Define a simple thread pool for ISO deletion
 class ThreadPool {
 public:
     ThreadPool(size_t numThreads) : stop(false) {
