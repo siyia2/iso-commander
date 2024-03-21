@@ -1018,7 +1018,7 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
             // Launch deletion tasks for each selected index
             for (const auto& index : processedIndices) {
                 if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
-                    futures.emplace_back(std::async(std::launch::async, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
+                    futures.emplace_back(std::async(std::launch::deferred, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
                 }
             }
 
