@@ -876,8 +876,6 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
     std::vector<int> validIndices;
 
     std::string token;
-    std::vector<std::thread> threads;
-    threads.reserve(numThreads);
 
     // Tokenize the input string
     while (iss >> token) {
@@ -1006,30 +1004,28 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
 
             std::system("clear");
 
-            // Use std::async to launch asynchronous tasks
+			// Limit the number of tasks launched concurrently to numThreads
             std::vector<std::future<void>> futures;
             futures.reserve(numThreads);
 
-            // Launch deletion tasks for each selected index
-			for (const auto& index : validIndices) {
-				if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
-					// Launch thread for deletion task
-					if (threads.size() >= numThreads) {
-						for (auto& thread : threads) {
-							thread.join();
-						}
-						threads.clear();
-					}
-					threads.emplace_back(std::thread(handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
-				}
-			}
-    
+            // Launch deletion tasks asynchronously
+            for (const auto& index : validIndices) {
+                if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
+                    if (futures.size() >= numThreads) {
+                        // Wait for one of the launched tasks to finish before launching a new one
+                        for (auto& future : futures) {
+                            future.get();
+                        }
+                        futures.clear();
+                    }
+                    futures.emplace_back(std::async(std::launch::async, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
+                }
+            }
 
-			// Wait for all threads to complete
-			for (auto& thread : threads) {
-				thread.join();
-			}
-            
+            // Wait for the remaining tasks to finish
+            for (auto& future : futures) {
+                future.get();
+            }
 
             // Stop the timer after completing all deletion tasks
             auto end_time = std::chrono::high_resolution_clock::now();
@@ -1464,7 +1460,6 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
         }
     }
 }
-
 
 
 void printAlreadyMountedMessage(const std::string& isoFile) {
