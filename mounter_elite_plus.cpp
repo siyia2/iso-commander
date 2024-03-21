@@ -869,8 +869,8 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
     
     // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism; fallback is 2 threads
     unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
-    unsigned int numThreads = std::min(static_cast<unsigned int>(isoFiles.size()), static_cast<unsigned int>(maxThreads));
-    
+	unsigned int numThreads = std::min(static_cast<unsigned int>(isoFiles.size()), static_cast<unsigned int>(maxThreads));
+	
     // Create an input string stream to tokenize the user input
     std::istringstream iss(input);
 
@@ -1015,23 +1015,13 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
             // Use std::async to launch asynchronous tasks
             std::vector<std::future<void>> futures;
             futures.reserve(numThreads);
-            
-            // Calculate the total number of tasks to be launched
-	int totalTasks = validIndices.size();
 
             // Launch deletion tasks for each selected index
-for (const auto& index : processedIndices) {
-    if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
-        // Check if the total number of tasks exceeds the double of available hardware threads
-        if (totalTasks <= 2 * maxThreads) {
-            // If so, launch tasks with the deferred policy
-            futures.emplace_back(std::async(std::launch::deferred, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
-        } else {
-            // Otherwise, launch tasks with the async policy
-            futures.emplace_back(std::async(std::launch::async, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
-        }
-    }
-}
+            for (const auto& index : processedIndices) {
+                if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
+                    futures.emplace_back(std::async(std::launch::deferred, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
+                }
+            }
 
             // Wait for all asynchronous tasks to complete
             for (auto& future : futures) {
