@@ -1019,21 +1019,16 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
             std::vector<std::future<void>> futures;
             futures.reserve(numThreads);
 
-			// Launch deletion tasks for each selected index
-			for (size_t i = 0; i < validIndices.size(); ++i) {
-				// Wait until the semaphore allows launching a new thread
-				sem_wait(&semaphore);
-
-				// Launch a thread for deletion task
-				futures.emplace_back(std::async(std::launch::async, [&isoFiles, &deletedSet, &validIndices, i, &semaphore]() {
-				// Perform deletion task for the current index
-				handleDeleteIsoFile(isoFiles[validIndices[i] - 1], isoFiles, deletedSet);
-
-				// Release the semaphore after task completion
-				sem_post(&semaphore);
-			}));
-		}
-
+            // Launch deletion tasks for each selected index
+            for (const auto& index : processedIndices) {
+                if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
+					// Wait on semaphore
+					sem_wait(&semaphore);
+                    futures.emplace_back(std::async(std::launch::async, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
+                    // Release semaphore after task completion
+					sem_post(&semaphore);
+                }
+            }
 
             // Wait for all asynchronous tasks to complete
             for (auto& future : futures) {
@@ -1054,7 +1049,6 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
         }
     }
 }
-
 
 //	MOUNT STUFF
 
@@ -1360,6 +1354,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
     std::unordered_set<std::string> uniqueErrorMessages; // Set to store unique error messages
     std::set<int> processedIndices; // Set to keep track of processed indices
     std::set<int> validIndices; // Set to keep track of valid indices
+    std::unordered_set<std::string> processedIsoNames; // Set to keep track of processed ISO names
 
     std::string token;
     std::vector<std::future<void>> futures; // Vector to store std::future objects for each task
@@ -1418,10 +1413,13 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
                     threads.clear();
                 }
                 if (static_cast<size_t>(i) <= isoFiles.size() && processedIndices.find(i) == processedIndices.end()) {
-                    threads.emplace_back(std::thread([&isoFiles, &mountedSet, &runningThreads, i]() {
-                        handleIsoFile(isoFiles[i - 1], mountedSet);
-                        runningThreads--;
-                    }));
+                    if (processedIsoNames.find(isoFiles[i - 1]) == processedIsoNames.end()) {
+                        threads.emplace_back(std::thread([&isoFiles, &mountedSet, &runningThreads, &processedIsoNames, i]() {
+                            handleIsoFile(isoFiles[i - 1], mountedSet);
+                            runningThreads--;
+                            processedIsoNames.insert(isoFiles[i - 1]); // Mark ISO name as processed
+                        }));
+                    }
                     processedIndices.insert(i); // Mark as processed
                     validIndices.insert(i); // Store the valid index
                     runningThreads++;
@@ -1440,10 +1438,13 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
                 threads.clear();
             }
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && processedIndices.find(num) == processedIndices.end()) {
-                threads.emplace_back(std::thread([&isoFiles, &mountedSet, &runningThreads, num]() {
-                    handleIsoFile(isoFiles[num - 1], mountedSet);
-                    runningThreads--;
-                }));
+                if (processedIsoNames.find(isoFiles[num - 1]) == processedIsoNames.end()) {
+                    threads.emplace_back(std::thread([&isoFiles, &mountedSet, &runningThreads, &processedIsoNames, num]() {
+                        handleIsoFile(isoFiles[num - 1], mountedSet);
+                        runningThreads--;
+                        processedIsoNames.insert(isoFiles[num - 1]); // Mark ISO name as processed
+                    }));
+                }
                 processedIndices.insert(num); // Mark index as processed
                 validIndices.insert(num); // Store the valid index
                 runningThreads++;
