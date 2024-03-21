@@ -1015,18 +1015,27 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
             // Use std::async to launch asynchronous tasks
             std::vector<std::future<void>> futures;
             futures.reserve(numThreads);
+            
+            constexpr int BATCH_SIZE = 10;
 
-            // Launch deletion tasks for each selected index
-            for (const auto& index : processedIndices) {
-                if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
-                    futures.emplace_back(std::async(std::launch::deferred, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
-                }
-            }
-
-            // Wait for all asynchronous tasks to complete
-            for (auto& future : futures) {
-                future.wait();
-            }
+                // Launch deletion tasks in batches of 10
+			for (size_t i = 0; i < processedIndices.size(); i += BATCH_SIZE) {
+				size_t endIndex = std::min(i + BATCH_SIZE, processedIndices.size());
+			for (size_t j = i; j < endIndex; ++j) {
+				const auto& index = processedIndices[j];
+				if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
+					futures.emplace_back(std::async(std::launch::async, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
+				}
+			}
+        
+			// Wait for all asynchronous tasks in this batch to complete
+			for (auto& future : futures) {
+				future.wait();
+			}
+        
+			// Clear the futures vector for the next batch
+			futures.clear();
+		}
 
             // Stop the timer after completing all deletion tasks
             auto end_time = std::chrono::high_resolution_clock::now();
