@@ -1353,7 +1353,7 @@ bool isNumeric(const std::string& str) {
 void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
     std::lock_guard<std::mutex> highLock(Mutex4High);
     
-    int max_threads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
+    unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
     std::istringstream iss(input);
     bool invalidInput = false;
@@ -1362,8 +1362,10 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
     std::set<int> validIndices; // Set to keep track of valid indices
 
     std::string token;
-    std::deque<std::function<void()>> tasks; // Queue to store tasks
-    std::atomic_int threadCount = 0; // Atomic counter for active threads
+    std::vector<std::future<void>> futures; // Vector to store std::future objects for each task
+    std::vector<std::thread> threads; // Vector to store threads
+
+    unsigned int runningThreads = 0;
 
     while (iss >> token) {
         // Check if token consists of only zeros or is not 00
@@ -1408,12 +1410,21 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
 
             int step = (start <= end) ? 1 : -1;
             for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
+                if (runningThreads >= maxThreads) {
+                    for (auto& thread : threads) {
+                        thread.join();
+                        runningThreads--;
+                    }
+                    threads.clear();
+                }
                 if (static_cast<size_t>(i) <= isoFiles.size() && processedIndices.find(i) == processedIndices.end()) {
-                    tasks.emplace_back([&isoFiles, &mountedSet, i]() {
+                    threads.emplace_back(std::thread([&isoFiles, &mountedSet, &runningThreads, i]() {
                         handleIsoFile(isoFiles[i - 1], mountedSet);
-                    });
+                        runningThreads--;
+                    }));
                     processedIndices.insert(i); // Mark as processed
                     validIndices.insert(i); // Store the valid index
+                    runningThreads++;
                 } else if (static_cast<size_t>(i) > isoFiles.size()) {
                     invalidInput = true;
                     uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(i) + "' does not exist.\033[1;0m");
@@ -1421,12 +1432,21 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
             }
         } else if (isNumeric(token)) {
             int num = std::stoi(token);
+            if (runningThreads >= maxThreads) {
+                for (auto& thread : threads) {
+                    thread.join();
+                    runningThreads--;
+                }
+                threads.clear();
+            }
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && processedIndices.find(num) == processedIndices.end()) {
-                tasks.emplace_back([&isoFiles, &mountedSet, num]() {
+                threads.emplace_back(std::thread([&isoFiles, &mountedSet, &runningThreads, num]() {
                     handleIsoFile(isoFiles[num - 1], mountedSet);
-                });
+                    runningThreads--;
+                }));
                 processedIndices.insert(num); // Mark index as processed
                 validIndices.insert(num); // Store the valid index
+                runningThreads++;
             } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(num) + "' does not exist.\033[1;0m");
@@ -1437,25 +1457,9 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
         }
     }
 
-    // Process tasks sequentially
-    while (!tasks.empty()) {
-        if (threadCount < max_threads) {
-            auto task = std::move(tasks.front());
-            tasks.pop_front();
-            std::thread([&threadCount, task = std::move(task)]() mutable {
-                ++threadCount;
-                task();
-                --threadCount;
-            }).detach();
-        }
-    }
-
-    // Wait until all tasks are completed
-    while (threadCount > 0)
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-
-    if (invalidInput && !validIndices.empty()) {
-        std::cout << " " << std::endl;
+    // Wait for all threads to complete
+    for (auto& thread : threads) {
+        thread.join();
     }
 
     // Display errors at the end
@@ -1465,6 +1469,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
         }
     }
 }
+
 
 
 void printAlreadyMountedMessage(const std::string& isoFile) {
