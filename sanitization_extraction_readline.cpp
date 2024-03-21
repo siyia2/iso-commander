@@ -1,6 +1,5 @@
 #include "sanitization_extraction_readline.h"
 
-
 //	SANITISATION AND STRING STUFF
 
 // Function to escape characters in a string for shell usage

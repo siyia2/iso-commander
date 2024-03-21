@@ -1,7 +1,6 @@
 #include "sanitization_extraction_readline.h"
 #include "conversion_tools.h"
 
-
 static std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles here
 static std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
 
@@ -423,11 +422,7 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
 
     // Define and populate uniqueValidIndices before this line
     std::set<int> uniqueValidIndices;
-    
-    // Semaphore to limit the number of concurrent threads
-    sem_t semaphore;
-    sem_init(&semaphore, 0, maxThreads); // Initialize the semaphore with the number of threads allowed
-    
+
     // Vector to store asynchronous tasks for file conversion
     std::vector<std::future<void>> futures;
 
@@ -436,16 +431,15 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
 
     // Protect the critical section with a lock
     std::lock_guard<std::mutex> lock(indicesMutex);
+    
+    ThreadPool pool(maxThreads);
 
     // Function to execute asynchronously
     auto asyncConvertBINToISO = [&](const std::string& selectedFile) {
-		sem_wait(&semaphore); // Wait for semaphore
         convertBINToISO(selectedFile);
-        sem_post(&semaphore); // Release semaphore after conversion
     };
 	// Start the timer
     auto start_time = std::chrono::high_resolution_clock::now();
-    
     // Iterate through the tokens in the input string
     while (iss >> token) {
         // Create a string stream to further process the token
@@ -482,7 +476,7 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                                         // Convert BIN to ISO asynchronously and store the future in the vector
                                         std::string selectedFile = fileList[selectedIndex];
                                         uniqueValidIndices.insert(selectedIndex);
-                                        futures.push_back(std::async(std::launch::async, asyncConvertBINToISO, selectedFile));
+                                        futures.push_back(pool.enqueue(asyncConvertBINToISO, selectedFile));
                                         processedIndices.insert(selectedIndex);
                                     }
                                 } else {
@@ -535,7 +529,7 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                         // Convert BIN to ISO asynchronously and store the future in the vector
                         std::string selectedFile = fileList[selectedIndex];
                         uniqueValidIndices.insert(selectedIndex);
-                        futures.push_back(std::async(std::launch::async, asyncConvertBINToISO, selectedFile));
+                        futures.push_back(pool.enqueue(asyncConvertBINToISO, selectedFile));
                         processedIndices.insert(selectedIndex); 
                     } else {
                         // Add an error message for an invalid file index
@@ -574,9 +568,6 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
     for (auto& future : futures) {
         future.wait();
     }
-    
-    // Clean up semaphore
-    sem_destroy(&semaphore);
 	
 	if (!errorMessages.empty() && !uniqueValidIndices.empty()) {
 		std::cout << " " << std::endl;	
@@ -1038,11 +1029,7 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
 
     // Define and populate uniqueValidIndices before this line
     std::set<int> uniqueValidIndices;
-    
-    // Semaphore to limit the number of concurrent threads
-    sem_t semaphore;
-    sem_init(&semaphore, 0, maxThreads); // Initialize the semaphore with the number of threads allowed
-    
+
     // Vector to store asynchronous tasks for file conversion
     std::vector<std::future<void>> futures;
 
@@ -1051,14 +1038,13 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
 
     // Protect the critical section with a lock
     std::lock_guard<std::mutex> lock(indicesMutex);
+    
+    ThreadPool pool(maxThreads);
 
     // Function to execute asynchronously
     auto asyncConvertMDFToISO = [&](const std::string& selectedFile) {
-        sem_wait(&semaphore); // Wait for semaphore
         convertMDFToISO(selectedFile);
-        sem_post(&semaphore); // Release semaphore after conversion
     };
-    
 	// Start the timer
     auto start_time = std::chrono::high_resolution_clock::now();
     // Iterate through the tokens in the input string
@@ -1100,8 +1086,8 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
                                         // Convert MDF to ISO asynchronously and store the future in the vector
                                         std::string selectedFile = fileList[selectedIndex];
                                         uniqueValidIndices.insert(selectedIndex);
-                                        futures.push_back(std::async(std::launch::async, asyncConvertMDFToISO, selectedFile));
-                                        processedIndices.insert(selectedIndex); 
+                                        futures.push_back(pool.enqueue(asyncConvertMDFToISO, selectedFile));
+                                        processedIndices.insert(selectedIndex);         
                                     }
                                 } else {
                                     // Add an error message for an invalid range
@@ -1153,7 +1139,7 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
                         // Convert MDF to ISO asynchronously and store the future in the vector
                         std::string selectedFile = fileList[selectedIndex];
                         uniqueValidIndices.insert(selectedIndex);  
-                        futures.push_back(std::async(std::launch::async, asyncConvertMDFToISO, selectedFile));
+                        futures.push_back(pool.enqueue(asyncConvertMDFToISO, selectedFile));
                         processedIndices.insert(selectedIndex);
                     } else {
                         // Add an error message for an invalid file index
@@ -1192,9 +1178,6 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
     for (auto& future : futures) {
         future.wait();
     }
-    
-    // Clean up semaphore
-    sem_destroy(&semaphore);
 	
 	if (!errorMessages.empty() && !uniqueValidIndices.empty()) {
 		std::cout << " " << std::endl;	
