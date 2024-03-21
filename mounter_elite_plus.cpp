@@ -1016,40 +1016,17 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
             std::vector<std::future<void>> futures;
             futures.reserve(numThreads);
 
-			int activeThreads = 0;
-			std::mutex mutex;
-			std::condition_variable cv;
+            // Launch deletion tasks for each selected index
+            for (const auto& index : processedIndices) {
+                if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
+                    futures.emplace_back(std::async(std::launch::deferred, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
+                }
+            }
 
-		// Launch deletion tasks for each selected index
-		for (const auto& index : processedIndices) {
-			// Wait for an active thread slot to become available
-			std::unique_lock<std::mutex> lock(mutex);
-			cv.wait(lock, [&]{ return activeThreads < maxThreads || !futures.empty(); });
-
-			// Check if there are finished tasks
-			auto it = std::find_if(futures.begin(), futures.end(), [](const std::future<void>& f) {
-			return f.valid() && f.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
-			});
-
-			if (it != futures.end()) {
-				it->get(); // Wait for this future to finish
-				futures.erase(it); // Remove the finished future from the vector
-				--activeThreads; // Decrement the active thread count
-			}
-
-			// Launch a new task if there is room for more threads
-			if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
-				futures.emplace_back(std::async(std::launch::async, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
-				++activeThreads; // Increment the active thread count
-			}
-		}
-
-		// Wait for remaining futures to finish
-		for (auto& f : futures) {
-			if (f.valid())
-			f.get();
-		}
-
+            // Wait for all asynchronous tasks to complete
+            for (auto& future : futures) {
+                future.wait();
+            }
 
             // Stop the timer after completing all deletion tasks
             auto end_time = std::chrono::high_resolution_clock::now();
