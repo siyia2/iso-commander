@@ -886,6 +886,23 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
 
     // Tokenize the input string
     while (iss >> token) {
+		
+		// Check if the token consists only of zeros and treat it as a non-existent index
+        if (isAllZeros(token)) {
+            if (!invalidInput) {
+                invalidInput = true;
+                uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist.\033[1;0m");
+            }
+        }
+
+        // Check if the token is '0' and treat it as a non-existent index
+        if (token == "0") {
+            if (!invalidInput) {
+                invalidInput = true;
+                uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist.\033[1;0m");
+            }
+        }
+		
         // Check if there is more than one hyphen in the token
         if (std::count(token.begin(), token.end(), '-') > 1) {
             invalidInput = true;
