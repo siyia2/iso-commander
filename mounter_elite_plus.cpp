@@ -864,29 +864,20 @@ bool isAllZeros(const std::string& str) {
 
 // Function to process user input for selecting and deleting specific ISO files
 void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
-    // Lock to ensure thread safety in a multi-threaded environment
     std::lock_guard<std::mutex> highLock(Mutex4High);
-    
-    // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism; fallback is 2 threads
+
     unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
     unsigned int numThreads = std::min(static_cast<unsigned int>(isoFiles.size()), maxThreads);
-    
-    // Semaphore to limit the number of concurrent threads
-    sem_t semaphore;
-    sem_init(&semaphore, 0, maxThreads); // Initialize the semaphore with the number of threads allowed
 
-    // Create an input string stream to tokenize the user input
     std::istringstream iss(input);
-
-    // Variables for tracking errors, processed indices, and valid indices
     bool invalidInput = false;
-    std::unordered_set<std::string> uniqueErrorMessages; // Set to store unique error messages
-    std::vector<int> processedIndices; // Vector to keep track of processed indices
-    std::vector<int> validIndices;     // Vector to keep track of valid indices
+    std::unordered_set<std::string> uniqueErrorMessages;
+    std::vector<int> processedIndices;
+    std::vector<int> validIndices;
 
     std::string token;
-    std::vector<std::thread> threads; // Vector to store std::future objects for each task
-    threads.reserve(maxThreads);      // Reserve space for maxThreads threads
+    std::vector<std::thread> threads;
+    threads.reserve(numThreads);
 
     // Tokenize the input string
     while (iss >> token) {
@@ -1010,8 +1001,8 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
             std::cout << "\033[1;93mDeletion aborted by user.\033[1;0m" << std::endl;
             return;
         } else {
-            // Start the timer after user confirmation
-            auto start_time = std::chrono::high_resolution_clock::now();
+			// Start the timer after user confirmation
+			auto start_time = std::chrono::high_resolution_clock::now();
 
             std::system("clear");
 
@@ -1020,23 +1011,25 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
             futures.reserve(numThreads);
 
             // Launch deletion tasks for each selected index
-            for (const auto& index : processedIndices) {
-                if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
-					// Wait on semaphore
-					sem_wait(&semaphore);
-                    futures.emplace_back(std::async(std::launch::async, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
-                    // Release semaphore after task completion
-					sem_post(&semaphore);
-                }
-            }
+			for (const auto& index : validIndices) {
+				if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
+					// Launch thread for deletion task
+					if (threads.size() >= numThreads) {
+						for (auto& thread : threads) {
+							thread.join();
+						}
+						threads.clear();
+					}
+					threads.emplace_back(std::thread(handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
+				}
+			}
+    
 
-            // Wait for all asynchronous tasks to complete
-            for (auto& future : futures) {
-                future.wait();
-            }
+			// Wait for all threads to complete
+			for (auto& thread : threads) {
+				thread.join();
+			}
             
-            // Clean up semaphore
-			sem_destroy(&semaphore);
 
             // Stop the timer after completing all deletion tasks
             auto end_time = std::chrono::high_resolution_clock::now();
@@ -1049,6 +1042,7 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
         }
     }
 }
+
 
 //	MOUNT STUFF
 
