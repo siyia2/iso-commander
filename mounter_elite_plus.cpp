@@ -90,7 +90,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
     
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.5.1");
+        printVersionNumber("2.5.2");
         return 0;
     }  
 
@@ -1019,12 +1019,21 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
             std::vector<std::future<void>> futures;
             futures.reserve(numThreads);
 
-            // Launch deletion tasks for each selected index
-            for (const auto& index : processedIndices) {
-                if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
-                    futures.emplace_back(std::async(std::launch::async, handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
-                }
-            }
+			// Launch deletion tasks for each selected index
+			for (size_t i = 0; i < validIndices.size(); ++i) {
+				// Wait until the semaphore allows launching a new thread
+				sem_wait(&semaphore);
+
+				// Launch a thread for deletion task
+				futures.emplace_back(std::async(std::launch::async, [&isoFiles, &deletedSet, &validIndices, i, &semaphore]() {
+				// Perform deletion task for the current index
+				handleDeleteIsoFile(isoFiles[validIndices[i] - 1], isoFiles, deletedSet);
+
+				// Release the semaphore after task completion
+				sem_post(&semaphore);
+			}));
+		}
+
 
             // Wait for all asynchronous tasks to complete
             for (auto& future : futures) {
