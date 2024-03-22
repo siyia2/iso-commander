@@ -1335,12 +1335,6 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     // Create a ThreadPool with maxThreads
     ThreadPool pool(maxThreads);
 
-    // Mutexes for thread safety
-    std::mutex processedIndicesMutex;
-    std::mutex validIndicesMutex;
-    std::mutex processedRangesMutex;
-    std::mutex mountedSetMutex;
-
     // Iterate through each token in the input stream
     std::string token;
     while (iss >> token) {
@@ -1384,13 +1378,13 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                 uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[1;0m");
                 continue;
             }
-
+			// Lock the global mutex for synchronization
+			std::lock_guard<std::mutex> highLock(Mutex4High);
             // Check if the range has been processed before
             std::pair<int, int> range(start, end);
             if (processedRanges.find(range) == processedRanges.end()) {
                 // Enqueue task for marking range as processed
                 pool.enqueue([&]() {
-                    std::lock_guard<std::mutex> guard(processedRangesMutex);
                     processedRanges.insert(range);
                 });
 
@@ -1401,13 +1395,11 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                     if (processedIndices.find(i) == processedIndices.end()) {
                         // Enqueue task for marking index as processed
                         pool.enqueue([&]() {
-                            std::lock_guard<std::mutex> guard(processedIndicesMutex);
                             processedIndices.insert(i);
                         });
 
                         // Enqueue mounting task
                         pool.enqueue([&, i]() {
-                            std::lock_guard<std::mutex> guard(validIndicesMutex);
                             if (validIndices.find(i) == validIndices.end()) { // Ensure not processed before
                                 validIndices.insert(i);
                                 mountIsoFile(isoFiles[i - 1], mountedSet);
@@ -1417,18 +1409,18 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                 }
             }
         } else if (isNumeric(token)) {
+			// Lock the global mutex for synchronization
+			std::lock_guard<std::mutex> highLock(Mutex4High);
             // Handle single index token
             int num = std::stoi(token);
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && processedIndices.find(num) == processedIndices.end()) {
                 // Enqueue task for marking index as processed
                 pool.enqueue([&]() {
-                    std::lock_guard<std::mutex> guard(processedIndicesMutex);
                     processedIndices.insert(num);
                 });
 
                 // Enqueue mounting task
                 pool.enqueue([&, num]() {
-                    std::lock_guard<std::mutex> guard(validIndicesMutex);
                     if (validIndices.find(num) == validIndices.end()) { // Ensure not processed before
                         validIndices.insert(num);
                         mountIsoFile(isoFiles[num - 1], mountedSet);
