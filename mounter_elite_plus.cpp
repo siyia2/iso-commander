@@ -1224,15 +1224,15 @@ void select_and_mount_files_by_number() {
         // Check if the user wants to mount all ISO files
         if (std::strcmp(input, "00") == 0) {
             // Create a ThreadPool with maxThreads
-            ThreadPool pool(maxThreads);
+			ThreadPool pool(maxThreads);
 
-            // Process all ISO files asynchronously
-            for (const auto& isoFile : isoFiles) {
-                // Enqueue the mounting task to the thread pool
-                pool.enqueue([&isoFile, &mountedSet]() {
-                    mountIsoFile(isoFile, mountedSet);
-                });
-            }
+			// Process all ISO files asynchronously
+			for (size_t i = 0; i < isoFiles.size(); ++i) {
+				// Enqueue the mounting task to the thread pool with associated index
+				pool.enqueue([i, &isoFiles, &mountedSet]() {
+				mountIsoFile(isoFiles[i], mountedSet);
+				});
+			}
         } else {
             // Process user input to select and mount specific ISO files
             processInput(input, isoFiles, mountedSet);
