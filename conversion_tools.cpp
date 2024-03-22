@@ -616,7 +616,7 @@ void convertBINToISO(const std::string& inputPath) {
         if (std::remove(outputPath.c_str()) == 0) {
             std::cout << "\n\033[1;92mDeleted incomplete ISO file:\033[1;91m '" << outDirectory << "/" << outFileNameOnly << "'\033[1;92m.\033[1;0m" << std::endl;
         } else {
-            std::cerr << "\033[1;91mFailed to delete partially created ISO file: \033[1;93m'" << outDirectory << "/" << outFileNameOnly << "'\033[1;91m.\033[1;0m" << std::endl;
+            std::cerr << "\n\033[1;91mFailed to delete partially created ISO file: \033[1;93m'" << outDirectory << "/" << outFileNameOnly << "'\033[1;91m.\033[1;0m" << std::endl;
         }
     }
 }
