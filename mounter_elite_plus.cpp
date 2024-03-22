@@ -17,6 +17,8 @@ std::mutex Mutex4Low; // Mutex for low level functions
 bool gapPrinted = false; // for cache refresh for directory function
 bool gapPrintedtraverse = false; // for traverse function
 
+std::vector<std::string> errorMessages;
+
 //	Function prototypes
 
 //	bools
@@ -1116,10 +1118,12 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
                 std::cout << "\033[1mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;0m "
                           << "\033[1mmounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;0m\033[1m.\033[1;0m" << std::endl;
             } catch (const std::exception& e) {
-                // Handle exceptions, log error, and cleanup
-                std::cerr << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;0m\033[1;91m.\033[1;0m" << std::endl;
-                fs::remove(mountPoint);
-            }
+				// Handle exceptions and cleanup
+				std::stringstream errorMessage;
+				errorMessage << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;0m\033[1;91m.\033[1;0m" << std::endl;
+				fs::remove(mountPoint);
+				errorMessages.push_back(errorMessage.str());
+			}
         } else {
             // Handle failure to create the mount point directory
             std::cerr << "\033[1;91mFailed to create mount point directory: \033[1;93m" << mountPoint << "\033[1;0m" << std::endl;
@@ -1241,6 +1245,15 @@ void select_and_mount_files_by_number() {
             // Process user input to select and mount specific ISO files
             processAndMountIsoFiles(input, isoFiles, mountedSet);
         }
+        
+        // Print all the stored error messages
+        if (!errorMessages.empty()) {
+			std::cout << " " << std::endl;
+		}
+			
+		for (const auto& errorMessage : errorMessages) {
+			std::cerr << errorMessage;
+		}
 
         // Stop the timer after completing the mounting process
         auto end_time = std::chrono::high_resolution_clock::now();
