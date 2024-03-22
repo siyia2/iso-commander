@@ -1121,17 +1121,17 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
                           << "\033[1mmounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;0m\033[1m.\033[1;0m" << std::endl;
             } catch (const std::exception& e) {
 				// Handle exceptions and cleanup
-    std::stringstream errorMessage;
-    errorMessage << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;0m\033[1;91m.\033[1;0m" << std::endl;
-    fs::remove(mountPoint);
+				std::stringstream errorMessage;
+				errorMessage << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;0m\033[1;91m.\033[1;0m" << std::endl;
+				fs::remove(mountPoint);
     
-    // Check if the error message already exists in the vector
-    auto it = std::find(errorMessages.begin(), errorMessages.end(), errorMessage.str());
-    if (it == errorMessages.end()) {
-        // Error message not found, add it to the vector
-        errorMessages.push_back(errorMessage.str());
-    }
-}
+			// Check if the error message already exists in the vector
+			auto it = std::find(errorMessages.begin(), errorMessages.end(), errorMessage.str());
+			if (it == errorMessages.end()) {
+				// Error message not found, add it to the vector
+				errorMessages.push_back(errorMessage.str());
+			}
+		}
         } else {
             // Handle failure to create the mount point directory
             std::cerr << "\033[1;91mFailed to create mount point directory: \033[1;93m" << mountPoint << "\033[1;0m" << std::endl;
