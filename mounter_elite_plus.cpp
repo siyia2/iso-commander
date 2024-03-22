@@ -479,7 +479,6 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
         std::cout << " " << std::endl;
         gapPrinted = true; // Set the flag to true to indicate that the gap has been printed
     }
-
 	// Lock the mutex to protect the shared 'allIsoFiles' vector
     std::lock_guard<std::mutex> lock(Mutex4Med);
     // Append the new entries to the shared vector
