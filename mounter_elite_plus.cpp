@@ -1143,13 +1143,6 @@ bool isAlreadyMounted(const std::string& mountPoint) {
     return false;
 }
 
-// Function to pass isofile to mountIsoFile
-void mountIsoFileAsync(const std::string& isoFile, std::unordered_set<std::string>& mountedSet, ThreadPool& pool) {
-    pool.enqueue([&isoFile, &mountedSet]() {
-        mountIsoFile(isoFile, mountedSet);
-    });
-}
-
 
 bool fileExistsOnDisk(const std::string& filename) {
     std::ifstream file(filename);
