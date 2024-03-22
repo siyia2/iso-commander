@@ -51,12 +51,9 @@ void handleIsoFiles(const std::vector<std::string>& isos, std::unordered_set<std
 
 // Mount functions
 void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& mountedSet);
-void mountISOs(const std::vector<std::string>& isoFiles);
 void select_and_mount_files_by_number();
 void printIsoFileList(const std::vector<std::string>& isoFiles);
-void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
-void mountIsoFileAsync(const std::string& isoFile, std::unordered_set<std::string>& mountedSet, ThreadPool& pool);
-
+void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
 
 // Iso cache functions
 void manualRefreshCache();
@@ -1063,7 +1060,7 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
     std::string mountPoint = "/mnt/iso_" + isoFileName;
 
     // Lock the global mutex for synchronization
-    std::lock_guard<std::mutex> lowLock(Mutex4Low);
+    std::lock_guard<std::mutex> medLock(Mutex4Med);
     auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint);
     auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
     // Static variable to track whether the clear has been performed
@@ -1095,6 +1092,7 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
         // Check if the mount point directory was created successfully
         if (std::filesystem::exists(mountPoint)) {
             try {
+				std::lock_guard<std::mutex> lowLock(Mutex4Low);
                 // Check if the mount point is already mounted
                 if (isAlreadyMounted(mountPoint)) {
                     // If already mounted, print a message and return
@@ -1235,7 +1233,7 @@ void select_and_mount_files_by_number() {
 			}
         } else {
             // Process user input to select and mount specific ISO files
-            processInput(input, isoFiles, mountedSet);
+            processAndMountIsoFiles(input, isoFiles, mountedSet);
         }
 
         // Stop the timer after completing the mounting process
@@ -1286,8 +1284,8 @@ bool isNumeric(const std::string& str) {
 }
 
 
-// Function to process and push user input from select_and_mount_files_by_number
-void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
+// Function to process input and mount ISO files asynchronously
+void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
     // Initialize input string stream with the provided input
     std::istringstream iss(input);
     
@@ -1315,6 +1313,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist.\033[1;0m");
             }
+            continue;
         }
 
         // Check for presence of dash in token
@@ -1354,7 +1353,9 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
             for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
                 // Enqueue task for mounting ISO file if index is valid and not processed before
                 if (static_cast<size_t>(i) <= isoFiles.size() && processedIndices.find(i) == processedIndices.end()) {
-                    mountIsoFileAsync(isoFiles[i - 1], mountedSet, pool);
+                    pool.enqueue([&, i]() {
+                        mountIsoFile(isoFiles[i - 1], mountedSet);
+                    });
                     processedIndices.insert(i);
                     validIndices.insert(i);
                 } else if (static_cast<size_t>(i) > isoFiles.size()) {
@@ -1366,7 +1367,9 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
             // Handle single index token
             int num = std::stoi(token);
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && processedIndices.find(num) == processedIndices.end()) {
-                mountIsoFileAsync(isoFiles[num - 1], mountedSet, pool);
+                pool.enqueue([&, num]() {
+                    mountIsoFile(isoFiles[num - 1], mountedSet);
+                });
                 processedIndices.insert(num);
                 validIndices.insert(num);
             } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
