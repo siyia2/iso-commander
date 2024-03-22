@@ -1700,56 +1700,64 @@ void unmountISOs() {
             }
 
             // Check if token represents a range or a single index
-            bool isRange = (std::count(token.begin(), token.end(), '-') == 1 && token.find_first_not_of('-') != std::string::npos && token.find_last_not_of('-') != std::string::npos && token.find('-') > 0 && token.find('-') < token.length() - 1);
-            bool isValidToken = std::all_of(token.begin(), token.end(), [](char c) { return std::isdigit(c) || c == '-'; });
+			bool isRange = (std::count(token.begin(), token.end(), '-') == 1 && token.find_first_not_of('-') != std::string::npos && token.find_last_not_of('-') != std::string::npos && token.find('-') > 0 && token.find('-') < token.length() - 1);
+			bool isValidToken = std::all_of(token.begin(), token.end(), [](char c) { return std::isdigit(c) || c == '-'; });
 
-            if (isValidToken) {
-                if (isRange) {
-                    std::istringstream rangeStream(token);
-                    int startRange, endRange;
-                    char delimiter;
-                    rangeStream >> startRange >> delimiter >> endRange;
+			if (isValidToken) {
+				if (isRange) {
+					std::istringstream rangeStream(token);
+					int startRange, endRange;
+					char delimiter;
+					rangeStream >> startRange >> delimiter >> endRange;
 
-                    if (delimiter == '-') {
-						int minRange = std::min(startRange, endRange);
-						int maxRange = std::max(startRange, endRange);
-						if (minRange >= 1 && maxRange <= static_cast<int>(isoDirs.size())) {
-							for (int i = minRange; i <= maxRange; ++i) {
-								if (uniqueIndices.find(i) == uniqueIndices.end()) {
-								uniqueIndices.insert(i);
-								validIndices.insert(i);
-								unmountIndices.push_back(i);
-								}
-							}
+					int step = (startRange < endRange) ? 1 : -1;
+
+					// Check if the range includes only valid indices
+					bool validRange = true;
+					for (int i = startRange; i != endRange + step; i += step) {
+						if (!isValidIndex(i, isoDirs.size())) {
+							validRange = false;
+							break;
 						}
-                    } else {
-                        errorMessages.push_back("\033[1;91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[1;0m");
-                        invalidInput = true;
-                    }
-                } else {
-                    // Check if the token is just a single number with a hyphen
-                    if (token.front() == '-' || token.back() == '-') {
-                        errorMessages.push_back("\033[1;91mInvalid input: '" + token + "'.\033[1;0m");
-                        invalidInput = true;
-                    } else {
-                        int number = std::stoi(token);
-                        if (isValidIndex(number, isoDirs.size())) {
-                            if (uniqueIndices.find(number) == uniqueIndices.end()) {
-                                uniqueIndices.insert(number);
-                                validIndices.insert(number);
-                                unmountIndices.push_back(number);
-                            }
-                        } else {
-                            errorMessages.push_back("\033[1;91mFile index '" + std::to_string(number) + "' does not exist.\033[1;0m");
-                            invalidInput = true;
-                        }
-                    }
-                }
-            } else {
-                errorMessages.push_back("\033[1;91mInvalid input: '" + token + "'.\033[1;0m");
-                invalidInput = true;
-            }
-        }
+					}
+
+			if (validRange) {
+				for (int i = startRange; i != endRange + step; i += step) {
+				// Check for duplicates
+				if (uniqueIndices.find(i) == uniqueIndices.end()) {
+					uniqueIndices.insert(i);
+					validIndices.insert(i);
+					unmountIndices.push_back(i);
+					}
+				}
+        } else {
+            errorMessages.push_back("\033[1;91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[1;0m");
+            invalidInput = true;
+			}
+		} else {
+			// Check if the token is just a single number with a hyphen
+			if (token.front() == '-' || token.back() == '-') {
+				errorMessages.push_back("\033[1;91mInvalid input: '" + token + "'.\033[1;0m");
+				invalidInput = true;
+		} else {
+			int number = std::stoi(token);
+			if (isValidIndex(number, isoDirs.size())) {
+				if (uniqueIndices.find(number) == uniqueIndices.end()) {
+					uniqueIndices.insert(number);
+					validIndices.insert(number);
+					unmountIndices.push_back(number);
+						}
+				} else {
+					errorMessages.push_back("\033[1;91mFile index '" + std::to_string(number) + "' does not exist.\033[1;0m");
+					invalidInput = true;
+					}
+				}
+			}
+		} else {
+			errorMessages.push_back("\033[1;91mInvalid input: '" + token + "'.\033[1;0m");
+			invalidInput = true;
+			}
+		}
 
         std::vector<std::thread> threads;
         // Create a thread pool with a limited number of threads
