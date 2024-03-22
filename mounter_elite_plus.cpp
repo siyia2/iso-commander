@@ -1453,7 +1453,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
         // Print a separator if there is any invalid input and valid indices are present
     if (invalidInput && !validIndices.empty()) {
         std::cout << " " << std::endl;
-    }
+		}
     }
 }
 
