@@ -54,7 +54,7 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
 void handleIsoFiles(const std::vector<std::string>& isos, std::unordered_set<std::string>& mountedSet);
 
 // Mount functions
-void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& mountedSet);
+void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& mountedSet, std::unordered_set<std::string>& uniqueErrorMessages);
 void select_and_mount_files_by_number();
 void printIsoFileList(const std::vector<std::string>& isoFiles);
 void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
@@ -93,7 +93,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
     
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.6.1");
+        printVersionNumber("2.6.2");
         return 0;
     }  
 
@@ -1055,7 +1055,7 @@ bool directoryExists(const std::string& path) {
 
 
 // Function to mount selected ISO files called from mountISOs
-void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& mountedSet) {
+void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& mountedSet, std::unordered_set<std::string>& uniqueErrorMessages) {
 	
 	// Lock the global mutex for synchronization
     std::lock_guard<std::mutex> medLock(Mutex4Med);
@@ -1085,6 +1085,13 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
         if (!clearScreenDone) {
             std::system("clear");
             clearScreenDone = true;
+            // Print unique error messages for invalid inputs if the set is not empty
+			if (!uniqueErrorMessages.empty()) {
+				for (const auto& errorMsg : uniqueErrorMessages) {
+					std::cerr << "\033[1;93m" << errorMsg << "\033[1;0m" << std::endl;
+					}
+					std::cout << " " << std::endl; // Print a separator
+				}
         }
 
         // Asynchronously check and create the mount point directory
@@ -1245,9 +1252,11 @@ void select_and_mount_files_by_number() {
 
 			// Process all ISO files asynchronously
 			for (size_t i = 0; i < isoFiles.size(); ++i) {
+				// Set to store unique error messages
+				std::unordered_set<std::string> uniqueErrorMessages;
 				// Enqueue the mounting task to the thread pool with associated index
-				pool.enqueue([i, &isoFiles, &mountedSet]() {
-				mountIsoFile(isoFiles[i], mountedSet);
+				pool.enqueue([&i, &isoFiles, &mountedSet, &uniqueErrorMessages]() {
+				mountIsoFile(isoFiles[i], mountedSet, uniqueErrorMessages);
 				});
 			}
         } else {
@@ -1410,7 +1419,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                             std::lock_guard<std::mutex> validLock(MutexForValidIndices);
                             if (validIndices.find(i) == validIndices.end()) { // Ensure not processed before
                                 validIndices.insert(i);
-                                mountIsoFile(isoFiles[i - 1], mountedSet);
+                                mountIsoFile(isoFiles[i - 1], mountedSet, uniqueErrorMessages);
                             }
                         });
                     }
@@ -1436,7 +1445,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                     std::lock_guard<std::mutex> validLock(MutexForValidIndices);
                     if (validIndices.find(num) == validIndices.end()) { // Ensure not processed before
                         validIndices.insert(num);
-                        mountIsoFile(isoFiles[num - 1], mountedSet);
+                        mountIsoFile(isoFiles[num - 1], mountedSet, uniqueErrorMessages);
                     }
                 });
             } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
