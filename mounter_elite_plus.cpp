@@ -480,8 +480,8 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
         gapPrinted = true; // Set the flag to true to indicate that the gap has been printed
     }
 
-    // Lock the mutex to protect the shared 'allIsoFiles' vector
-
+	// Lock the mutex to protect the shared 'allIsoFiles' vector
+    std::lock_guard<std::mutex> lock(Mutex4Med);
     // Append the new entries to the shared vector
     allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
 
@@ -1050,6 +1050,10 @@ bool directoryExists(const std::string& path) {
 
 // Function to mount selected ISO files called from mountISOs
 void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& mountedSet) {
+	
+	// Lock the global mutex for synchronization
+    std::lock_guard<std::mutex> medLock(Mutex4Med);
+	
     namespace fs = std::filesystem;
 
     // Use the filesystem library to extract the ISO file name
@@ -1059,8 +1063,6 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
     // Use the modified ISO file name in the mount point with "iso_" prefix
     std::string mountPoint = "/mnt/iso_" + isoFileName;
 
-    // Lock the global mutex for synchronization
-    std::lock_guard<std::mutex> medLock(Mutex4Med);
     auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint);
     auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
     // Static variable to track whether the clear has been performed
