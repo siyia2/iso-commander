@@ -21,6 +21,9 @@ bool gapPrintedtraverse = false; // for traverse function
 // Variable to track whether the clear has been performed
 bool clearScreenDone = false;
 
+// Set to store unique error messages
+std::unordered_set<std::string> uniqueErrorMessages;
+
 // Vector to store ISO mount errors
 std::vector<std::string> errorMessages;
 
@@ -57,7 +60,7 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
 void handleIsoFiles(const std::vector<std::string>& isos, std::unordered_set<std::string>& mountedSet);
 
 // Mount functions
-void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& mountedSet, std::unordered_set<std::string>& uniqueErrorMessages);
+void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& mountedSet);
 void select_and_mount_files_by_number();
 void printIsoFileList(const std::vector<std::string>& isoFiles);
 void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
@@ -1058,7 +1061,7 @@ bool directoryExists(const std::string& path) {
 
 
 // Function to mount selected ISO files called from mountISOs
-void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& mountedSet, std::unordered_set<std::string>& uniqueErrorMessages) {
+void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& mountedSet) {
 	
 	// Lock the global mutex for synchronization
     std::lock_guard<std::mutex> medLock(Mutex4Med);
@@ -1253,11 +1256,9 @@ void select_and_mount_files_by_number() {
 
 			// Process all ISO files asynchronously
 			for (size_t i = 0; i < isoFiles.size(); ++i) {
-				// Set to store unique error messages
-				std::unordered_set<std::string> uniqueErrorMessages;
 				// Enqueue the mounting task to the thread pool with associated index
-				pool.enqueue([&i, &isoFiles, &mountedSet, &uniqueErrorMessages]() {
-				mountIsoFile(isoFiles[i], mountedSet, uniqueErrorMessages);
+				pool.enqueue([i, &isoFiles, &mountedSet]() {
+				mountIsoFile(isoFiles[i], mountedSet);
 				});
 			}
         } else {
@@ -1329,9 +1330,6 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     
     // Flag to track if any invalid input is encountered
     bool invalidInput = false;
-    
-    // Set to store unique error messages
-    std::unordered_set<std::string> uniqueErrorMessages;
     
     // Set to store indices of processed tokens
     std::set<int> processedIndices;
@@ -1420,7 +1418,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                             std::lock_guard<std::mutex> validLock(MutexForValidIndices);
                             if (validIndices.find(i) == validIndices.end()) { // Ensure not processed before
                                 validIndices.insert(i);
-                                mountIsoFile(isoFiles[i - 1], mountedSet, uniqueErrorMessages);
+                                mountIsoFile(isoFiles[i - 1], mountedSet);
                             }
                         });
                     }
@@ -1446,7 +1444,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                     std::lock_guard<std::mutex> validLock(MutexForValidIndices);
                     if (validIndices.find(num) == validIndices.end()) { // Ensure not processed before
                         validIndices.insert(num);
-                        mountIsoFile(isoFiles[num - 1], mountedSet, uniqueErrorMessages);
+                        mountIsoFile(isoFiles[num - 1], mountedSet);
                     }
                 });
             } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
@@ -1472,8 +1470,6 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     }
 }
 
-
-// UMOUNT STUFF
 
 // Function to list mounted ISOs in the /mnt directory
 void listMountedISOs() {
