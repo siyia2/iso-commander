@@ -1134,27 +1134,38 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
 
 // Function to check if a directory is already mounted
 bool isAlreadyMounted(const std::string& mountPoint) {
+    // Open the file '/proc/mounts' for reading
     std::ifstream mountFile("/proc/mounts");
     std::string line;
+    // Read each line from the '/proc/mounts' file
     while (std::getline(mountFile, line)) {
+        // Tokenize the line using whitespace as delimiter
         std::istringstream iss(line);
         std::vector<std::string> tokens{std::istream_iterator<std::string>{iss}, std::istream_iterator<std::string>{}};
+        // Check if the token at index 1 (which represents the mount point) matches the provided mountPoint
         if (tokens.size() >= 2 && tokens[1] == mountPoint)
-            return true;
+            return true; // If a match is found, return true indicating the directory is already mounted
     }
+    // If no match is found, return false indicating the directory is not mounted
     return false;
 }
 
 
+// Function to check if a file exists on disk
 bool fileExistsOnDisk(const std::string& filename) {
+    // Open the file for reading
     std::ifstream file(filename);
+    // Check if the file stream is in a good state, indicating the file exists
     return file.good();
 }
 
 
+// Function to check if a string ends with ".iso" (case-insensitive)
 bool ends_with_iso(const std::string& str) {
+    // Convert the string to lowercase
     std::string lowercase = str;
     std::transform(lowercase.begin(), lowercase.end(), lowercase.begin(), ::tolower);
+    // Check if the string ends with ".iso" by comparing the last 4 characters
     return (lowercase.size() >= 4) && (lowercase.compare(lowercase.size() - 4, 4, ".iso") == 0);
 }
 
