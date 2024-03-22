@@ -1125,12 +1125,11 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
 				errorMessage << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;0m\033[1;91m.\033[1;0m" << std::endl;
 				fs::remove(mountPoint);
     
-				// Check if the error message already exists in the vector
-				auto it = std::find(errorMessages.begin(), errorMessages.end(), errorMessage.str());
-				if (it == errorMessages.end()) {
+				std::unordered_set<std::string> errorSet(errorMessages.begin(), errorMessages.end());
+				if (errorSet.find(errorMessage.str()) == errorSet.end()) {
 					// Error message not found, add it to the vector
 					errorMessages.push_back(errorMessage.str());
-				}
+					}
 			}
         } else {
             // Handle failure to create the mount point directory
