@@ -93,7 +93,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
     
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.5.9");
+        printVersionNumber("2.6.0");
         return 0;
     }  
 
@@ -1334,6 +1334,10 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
 
     // Create a ThreadPool with maxThreads
     ThreadPool pool(maxThreads);
+    
+    // Define mutexes for synchronization
+    std::mutex MutexForProcessedIndices;
+    std::mutex MutexForValidIndices;
 
     // Iterate through each token in the input stream
     std::string token;
@@ -1351,7 +1355,8 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
         size_t dashPos = token.find('-');
         if (dashPos != std::string::npos) {
             // Check for multiple dashes
-            if (token.find('-', dashPos + 1) != std::string::npos) {
+            if (token.find('-', dashPos + 1) != std::string::npos || 
+                (dashPos == 0 || dashPos == token.size() - 1 || !std::isdigit(token[dashPos - 1]) || !std::isdigit(token[dashPos + 1]))) {
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[1;0m");
                 continue;
@@ -1378,8 +1383,9 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                 uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[1;0m");
                 continue;
             }
-			// Lock the global mutex for synchronization
-			std::lock_guard<std::mutex> highLock(Mutex4High);
+            
+            // Lock the global mutex for synchronization
+            std::lock_guard<std::mutex> highLock(Mutex4High);
             // Check if the range has been processed before
             std::pair<int, int> range(start, end);
             if (processedRanges.find(range) == processedRanges.end()) {
@@ -1395,11 +1401,13 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                     if (processedIndices.find(i) == processedIndices.end()) {
                         // Enqueue task for marking index as processed
                         pool.enqueue([&]() {
+                            std::lock_guard<std::mutex> processedLock(MutexForProcessedIndices);
                             processedIndices.insert(i);
                         });
 
                         // Enqueue mounting task
                         pool.enqueue([&, i]() {
+                            std::lock_guard<std::mutex> validLock(MutexForValidIndices);
                             if (validIndices.find(i) == validIndices.end()) { // Ensure not processed before
                                 validIndices.insert(i);
                                 mountIsoFile(isoFiles[i - 1], mountedSet);
@@ -1409,18 +1417,23 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                 }
             }
         } else if (isNumeric(token)) {
-			// Lock the global mutex for synchronization
-			std::lock_guard<std::mutex> highLock(Mutex4High);
+            // Lock the global mutex for synchronization
+            std::lock_guard<std::mutex> highLock(Mutex4High);
+
             // Handle single index token
             int num = std::stoi(token);
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && processedIndices.find(num) == processedIndices.end()) {
                 // Enqueue task for marking index as processed
                 pool.enqueue([&]() {
+                    // Lock the mutex for processedIndices
+                    std::lock_guard<std::mutex> processedLock(MutexForProcessedIndices);
                     processedIndices.insert(num);
                 });
 
                 // Enqueue mounting task
                 pool.enqueue([&, num]() {
+                    // Lock the mutex for validIndices
+                    std::lock_guard<std::mutex> validLock(MutexForValidIndices);
                     if (validIndices.find(num) == validIndices.end()) { // Ensure not processed before
                         validIndices.insert(num);
                         mountIsoFile(isoFiles[num - 1], mountedSet);
@@ -1443,9 +1456,9 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
             std::cerr << "\033[1;93m" << errorMsg << "\033[1;0m" << std::endl;
         }
         // Print a separator if there is any invalid input and valid indices are present
-    if (invalidInput && !validIndices.empty()) {
-        std::cout << " " << std::endl;
-		}
+        if (invalidInput && !validIndices.empty()) {
+            std::cout << " " << std::endl;
+        }
     }
 }
 
