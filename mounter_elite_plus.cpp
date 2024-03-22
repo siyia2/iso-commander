@@ -1304,22 +1304,30 @@ void handleIsoFiles(const std::vector<std::string>& isos, std::unordered_set<std
         // Lock to ensure thread safety when accessing mountedSet
         std::lock_guard<std::mutex> lock(Mutex4ISO);
         
+        // Vector to store ISO files that need to be mounted
+        std::vector<std::string> isosToMount;
+        
         // Iterate over each ISO file individually
         for (const auto& iso : isos) {
             // Try to insert the ISO file into the mounted set
             auto insertResult = mountedSet.insert(iso);
             
-            // If the insertion was successful, mount the ISO file
+            // If the insertion was successful, add the ISO file to the list of files to mount
             if (insertResult.second) {
-                mountISOs({iso});
+                isosToMount.push_back(iso);
             } else {
                 // If the ISO file is already mounted, print a message
                 printAlreadyMountedMessage(iso);
             }
         }
+        
+        // If there are ISO files to mount, call mountISOs with the vector of paths
+        if (!isosToMount.empty()) {
+            mountISOs(isosToMount);
+        }
     } catch (const std::exception& e) {
         // Catch any exceptions and print an error message
-       // std::cerr << "\033[1;91m" << e.what() << " \033[1;91m.\033[1;0m" << std::endl;
+        std::cerr << "\033[1;91m" << e.what() << " \033[1;91m.\033[1;0m" << std::endl;
     }
 }
 
