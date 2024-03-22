@@ -112,11 +112,8 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
         // Mutex to ensure thread safety
         static std::mutex mutex4search;
 
-        // Determine the maximum number of threads to use based on hardware concurrency; fallback is 2 threads
-        const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
-
         // Counter to track the number of ongoing tasks
-        int numOngoingTasks = 0;
+        unsigned int numOngoingTasks = 0;
 
         // Use a vector to store futures for ongoing tasks
         std::vector<std::future<void>> futures;
@@ -417,9 +414,6 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
     // Set to track processed error messages to avoid duplicate error reporting
     std::set<std::string> processedErrors;
 
-    // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism; fallback is 2 threads
-    unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
-
     // Define and populate uniqueValidIndices before this line
     std::set<int> uniqueValidIndices;
 
@@ -616,11 +610,11 @@ void convertBINToISO(const std::string& inputPath) {
     if (conversionStatus == 0) {
         std::cout << "\033[1mImage file converted to ISO:\033[1;0m \033[1;92m'" << outDirectory << "/" << outFileNameOnly << "'\033[1;0m\033[1m.\033[1;0m" << std::endl;
     } else {
-        std::cout << "\033[1;91mConversion of \033[1;93m'" << directory << "/" << fileNameOnly << "'\033[1;91m failed.\033[1;0m" << std::endl;
+        std::cout << "\n\033[1;91mConversion of \033[1;93m'" << directory << "/" << fileNameOnly << "'\033[1;91m failed.\033[1;0m" << std::endl;
 
         // Delete the partially created ISO file
         if (std::remove(outputPath.c_str()) == 0) {
-            std::cout << "\033[1;92mDeleted incomplete ISO file:\033[1;91m '" << outDirectory << "/" << outFileNameOnly << "'\033[1;92m.\033[1;0m" << std::endl;
+            std::cout << "\n\033[1;92mDeleted incomplete ISO file:\033[1;91m '" << outDirectory << "/" << outFileNameOnly << "'\033[1;92m.\033[1;0m" << std::endl;
         } else {
             std::cerr << "\033[1;91mFailed to delete partially created ISO file: \033[1;93m'" << outDirectory << "/" << outFileNameOnly << "'\033[1;91m.\033[1;0m" << std::endl;
         }
@@ -716,11 +710,8 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
         // Mutex to ensure thread safety
         static std::mutex mutex4search;
 
-        // Determine the maximum number of threads to use based on hardware concurrency; fallback is 2 threads
-        const int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
-
         // Counter to track the number of ongoing tasks
-        int numOngoingTasks = 0;
+        unsigned int numOngoingTasks = 0;
 
         // Use a vector to store futures for ongoing tasks
         std::vector<std::future<void>> futures;
@@ -1024,9 +1015,6 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
     // Set to track processed error messages to avoid duplicate error reporting
     std::set<std::string> processedErrors;
 
-    // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism; fallback is 2 threads
-    unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
-
     // Define and populate uniqueValidIndices before this line
     std::set<int> uniqueValidIndices;
 
@@ -1252,7 +1240,7 @@ void convertMDFToISO(const std::string& inputPath) {
             std::cout << "\033[1mImage file converted to ISO: \033[1;92m'" << outDirectory << "/" << outFileNameOnly << "'\033[1;0m\033[1m.\033[1;0m" << std::endl;
         }
     } else {
-        std::cout << "\033[1;91mConversion of \033[1;93m'" << directory << "/" << fileNameOnly << "'\033[1;91m failed.\033[1;0m" << std::endl;
+        std::cout << "\n\033[1;91mConversion of \033[1;93m'" << directory << "/" << fileNameOnly << "'\033[1;91m failed.\033[1;0m" << std::endl;
 	}
 }
 

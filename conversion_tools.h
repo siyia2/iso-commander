@@ -85,6 +85,9 @@ private:
     bool stop;
 };
 
+// Get max available CPU cores for global use, fallback is 2 cores
+extern unsigned int maxThreads;
+
 
 // Function prototypes
 

@@ -1,6 +1,9 @@
 #include "sanitization_extraction_readline.h"
 #include "conversion_tools.h"
 
+// Get max available CPU cores for global use, fallback is 2 cores
+unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
+
 // Cache Variables
 
 const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.cache"; // Construct the full path to the cache directory
@@ -90,7 +93,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
     
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.5.5");
+        printVersionNumber("2.5.6");
         return 0;
     }  
 
@@ -467,9 +470,7 @@ bool isValidDirectory(const std::string& path) {
 
 // Function to refresh the cache for a single directory
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles) {
-    // Define a static variable to track whether the gap has been printed
     
-
     std::cout << "\033[1;93mProcessing directory path: '" << path << "'.\033[0m" << std::endl;
 
     std::vector<std::string> newIsoFiles;
@@ -525,9 +526,6 @@ void manualRefreshCache() {
     
     // Set to store processed valid paths
     std::set<std::string> processedValidPaths;
-
-    // Set up a thread pool with a maximum number of threads, fallback to two threads if hardware concurrency is not available or not positive
-    const std::size_t maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
     std::vector<std::future<void>> futures;
 
@@ -866,7 +864,6 @@ bool isAllZeros(const std::string& str) {
 void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
     
     // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism; fallback is 2 threads
-    unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 	unsigned int numThreads = std::min(static_cast<unsigned int>(isoFiles.size()), static_cast<unsigned int>(maxThreads));
 	
     // Create an input string stream to tokenize the user input
@@ -1135,7 +1132,6 @@ void mountISOs(const std::vector<std::string>& isoFiles) {
     std::map<std::string, std::string> mountedIsos;
 
     // Determine the number of threads to use (minimum of available threads and ISOs)
-    unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
     unsigned int numThreads = std::min(maxThreads, static_cast<unsigned int>(isoFiles.size()));
     
     // Vector to store futures for parallel mounting
@@ -1230,8 +1226,6 @@ void select_and_mount_files_by_number() {
 
         // Check if the user wants to mount all ISO files
         if (std::strcmp(input, "00") == 0) {
-			// Determine the number of threads to use (minimum of available threads and ISOs)
-			unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
 			std::vector<std::future<void>> futures;
 			auto isoIterator = isoFiles.begin();
@@ -1357,9 +1351,6 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
 
     std::string token;
     std::vector<std::future<void>> futures; // Vector to store std::future objects for each task
-    
-    // Determine the number of threads to use (minimum of available threads and ISOs)
-    unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
     
     ThreadPool pool(maxThreads);
 
@@ -1664,8 +1655,6 @@ void unmountISOs() {
         }
 
         if (std::strcmp(input, "00") == 0) {
-            // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism fallback is two
-            unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
             // Create a vector of threads to store the unmounting threads
             std::vector<std::thread> threads;
@@ -1798,10 +1787,7 @@ void unmountISOs() {
 
         // Create a vector of threads to perform unmounting and directory removal concurrently
         std::vector<std::thread> threads;
-
-        // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism fallback is two
-		unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
-
+        
 		// Create a thread pool with the specified number of threads
 		ThreadPool pool(maxThreads);
 		std::vector<std::future<void>> futures;
