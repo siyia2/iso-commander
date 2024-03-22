@@ -1250,7 +1250,7 @@ void select_and_mount_files_by_number() {
         }
 
         // Check if the user wants to mount all ISO files
-        if (std::strcmp(input, "00") == 0) {
+        if (std::strcmp(input, "00") == 0 && std::strlen(input) == 2) {
             // Create a ThreadPool with maxThreads
 			ThreadPool pool(maxThreads);
 
@@ -1266,15 +1266,6 @@ void select_and_mount_files_by_number() {
             processAndMountIsoFiles(input, isoFiles, mountedSet);
         }
         
-        // Print all the stored error messages
-        if (!errorMessages.empty()) {
-			std::cout << " " << std::endl;
-		}
-			
-		for (const auto& errorMessage : errorMessages) {
-			std::cerr << errorMessage;
-		}
-
         // Stop the timer after completing the mounting process
         auto end_time = std::chrono::high_resolution_clock::now();
 
@@ -1537,7 +1528,14 @@ void unmountISO(const std::string& isoDir) {
             if (!clearScreenDone) {
                 std::system("clear");
                 clearScreenDone = true;
-            }
+				// Print unique error messages for invalid inputs if the set is not empty
+				if (!uniqueErrorMessages.empty()) {
+					for (const auto& errorMsg : uniqueErrorMessages) {
+						std::cerr << "\033[1;93m" << errorMsg << "\033[1;0m" << std::endl;
+						}
+						std::cout << " " << std::endl; // Print a separator
+					}
+				}
 
             // Construct the unmount command with sudo, umount, and suppressing logs
             std::string command = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1";
@@ -1592,8 +1590,7 @@ bool isValidIndex(int index, size_t isoDirsSize) {
 
 // Main function for unmounting ISOs
 void unmountISOs() {
-    // Set to store unique error messages
-    std::set<std::string> uniqueErrorMessages;
+    
     // Set to store valid indices selected for unmounting
     std::set<int> validIndices;
 
@@ -1762,22 +1759,22 @@ void unmountISOs() {
 			invalidInput = true;
 			}
 		}
-
-        // Lock access to error messages
-        std::lock_guard<std::mutex> errorMessagesLock(errorMessagesMutex);
-
-        // Print error messages
-        for (const auto& errorMessage : errorMessages) {
-            if (uniqueErrorMessages.find(errorMessage) == uniqueErrorMessages.end()) {
-                // If not found, store the error message and print it
-                uniqueErrorMessages.insert(errorMessage);
-                std::cerr << "\033[1;93m" << errorMessage << "\033[1;0m" << std::endl;
-            }
-        }
+		if (clearScreenDone) {
+		// Lock access to error messages
+			std::lock_guard<std::mutex> errorMessagesLock(errorMessagesMutex);
+			// Print error messages
+			for (const auto& errorMessage : errorMessages) {
+				if (uniqueErrorMessages.find(errorMessage) == uniqueErrorMessages.end()) {
+					// If not found, store the error message and print it
+					uniqueErrorMessages.insert(errorMessage);
+					std::cerr << "\033[1;93m" << errorMessage << "\033[1;0m" << std::endl;
+					}
+				}
         
-        if (invalidInput && !validIndices.empty()) {
-            std::cout << " " << std::endl;
-        }
+			if (invalidInput && !validIndices.empty()) {
+				std::cout << " " << std::endl;
+			}
+		}
 
         std::vector<std::thread> threads;
         // Create a thread pool with a limited number of threads
