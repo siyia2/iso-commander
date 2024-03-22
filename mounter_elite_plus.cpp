@@ -1130,7 +1130,7 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
 					// Error message not found, add it to the vector
 					errorMessages.push_back(errorMessage.str());
 					}
-			}
+				}
         } else {
             // Handle failure to create the mount point directory
             std::cerr << "\033[1;91mFailed to create mount point directory: \033[1;93m" << mountPoint << "\033[1;0m" << std::endl;
