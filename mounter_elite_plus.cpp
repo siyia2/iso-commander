@@ -1586,30 +1586,39 @@ bool isValidIndex(int index, size_t isoDirsSize) {
 }
 
 
+// Main function for unmounting ISOs
 void unmountISOs() {
+    // Set to store unique error messages
     std::set<std::string> uniqueErrorMessages;
+    // Set to store valid indices selected for unmounting
     std::set<int> validIndices;
 
+    // Flag to check for invalid input
     bool invalidInput = false;
     
+    // Mutexes for synchronization
     std::mutex isoDirsMutex;
     std::mutex errorMessagesMutex;
     std::mutex uniqueErrorMessagesMutex;
 
+    // Path where ISOs are mounted
     const std::string isoPath = "/mnt";
 
     while (true) {
         listMountedISOs();
 
+        // Vectors to store ISO directories and error messages
         std::vector<std::string> isoDirs;
         std::vector<std::string> errorMessages;
         
+        // Reset flags and clear containers
         invalidInput = false;
         uniqueErrorMessages.clear();
 
         {
             std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
             
+            // Iterate through the ISO path to find mounted ISOs
             for (const auto& entry : std::filesystem::directory_iterator(isoPath)) {
                 if (entry.is_directory() && entry.path().filename().string().find("iso_") == 0) {
                     isoDirs.push_back(entry.path().string());
@@ -1617,6 +1626,7 @@ void unmountISOs() {
             }
         }
 
+        // If no ISOs are mounted, prompt user to continue
         if (isoDirs.empty()) {
             std::cout << " " << std::endl;
             std::cout << "\033[1;32mPress enter to continue...\033[1;0m";
@@ -1624,26 +1634,32 @@ void unmountISOs() {
             return;
         }
 
+        // Display separator if ISOs are mounted
         if (!isoDirs.empty()) {
             std::cout << " " << std::endl;
         }
 
+        // Prompt user to choose ISOs for unmounting
         char* input = readline("\033[1;94mChoose ISO(s) for \033[1;92munmount\033[1;94m (e.g., '1-3', '1 2', '00' unmounts all, or press Enter to return):\033[1;0m ");
         std::system("clear");
 
         auto start_time = std::chrono::high_resolution_clock::now();
 
+        // Break loop if user presses Enter
         if (input[0] == '\0') {
             break;
         }
 
+        // Unmount all ISOs if '00' is entered
         if (std::strcmp(input, "00") == 0) {
             std::vector<std::thread> threads;
+            // Create a thread pool with a limited number of threads
             ThreadPool pool(maxThreads);
             std::vector<std::future<void>> futures;
 
             std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
 
+            // Enqueue unmounting tasks for all mounted ISOs
             for (const std::string& isoDir : isoDirs) {
                 futures.emplace_back(pool.enqueue([isoDir]() {
                     std::lock_guard<std::mutex> highLock(Mutex4High);
@@ -1651,6 +1667,7 @@ void unmountISOs() {
                 }));
             }
 
+            // Wait for all tasks to finish
             for (auto& future : futures) {
                 future.wait();
             }
@@ -1669,6 +1686,7 @@ void unmountISOs() {
             continue;
         }
 
+        // Parse user input to extract indices for unmounting
         std::istringstream iss(input);
         std::vector<int> unmountIndices;
         std::set<int> uniqueIndices;
@@ -1681,7 +1699,8 @@ void unmountISOs() {
                 }
             }
 
-            bool isRange = (std::count(token.begin(), token.end(), '-') == 1);
+            // Check if token represents a range or a single index
+            bool isRange = (std::count(token.begin(), token.end(), '-') == 1 && token.find_first_not_of('-') != std::string::npos && token.find_last_not_of('-') != std::string::npos && token.find('-') > 0 && token.find('-') < token.length() - 1);
             bool isValidToken = std::all_of(token.begin(), token.end(), [](char c) { return std::isdigit(c) || c == '-'; });
 
             if (isValidToken) {
@@ -1704,16 +1723,22 @@ void unmountISOs() {
                         invalidInput = true;
                     }
                 } else {
-                    int number = std::stoi(token);
-                    if (isValidIndex(number, isoDirs.size())) {
-                        if (uniqueIndices.find(number) == uniqueIndices.end()) {
-                            uniqueIndices.insert(number);
-                            validIndices.insert(number);
-                            unmountIndices.push_back(number);
-                        }
-                    } else {
-                        errorMessages.push_back("\033[1;91mFile index '" + std::to_string(number) + "' does not exist.\033[1;0m");
+                    // Check if the token is just a single number with a hyphen
+                    if (token.front() == '-' || token.back() == '-') {
+                        errorMessages.push_back("\033[1;91mInvalid input: '" + token + "'.\033[1;0m");
                         invalidInput = true;
+                    } else {
+                        int number = std::stoi(token);
+                        if (isValidIndex(number, isoDirs.size())) {
+                            if (uniqueIndices.find(number) == uniqueIndices.end()) {
+                                uniqueIndices.insert(number);
+                                validIndices.insert(number);
+                                unmountIndices.push_back(number);
+                            }
+                        } else {
+                            errorMessages.push_back("\033[1;91mFile index '" + std::to_string(number) + "' does not exist.\033[1;0m");
+                            invalidInput = true;
+                        }
                     }
                 }
             } else {
@@ -1723,11 +1748,12 @@ void unmountISOs() {
         }
 
         std::vector<std::thread> threads;
+        // Create a thread pool with a limited number of threads
         ThreadPool pool(maxThreads);
         std::vector<std::future<void>> futures;
 
         std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
-
+		// Enqueue unmounting tasks for all mounted ISOs
         for (int index : unmountIndices) {
             if (isValidIndex(index, isoDirs.size())) {
                 const std::string& isoDir = isoDirs[index - 1];
