@@ -849,6 +849,7 @@ void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFi
     }
 }
 
+
 // Function to check if a string consists only of zeros
 bool isAllZeros(const std::string& str) {
     return str.find_first_not_of('0') == std::string::npos;
