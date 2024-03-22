@@ -864,8 +864,6 @@ bool isAllZeros(const std::string& str) {
 
 // Function to process user input for selecting and deleting specific ISO files
 void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
-    // Lock to ensure thread safety in a multi-threaded environment
-    std::lock_guard<std::mutex> highLock(Mutex4High);
     
     // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism; fallback is 2 threads
     unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
@@ -929,6 +927,9 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
                 uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[1;0m");
                 continue;
             }
+            
+            // Lock to ensure thread safety in a multi-threaded environment
+			std::lock_guard<std::mutex> highLock(Mutex4High);
 
             // Check for validity of the specified range
             if ((start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) ||
@@ -1018,7 +1019,9 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
             futures.reserve(numThreads);
             
             
-
+			// Lock to ensure thread safety in a multi-threaded environment
+			std::lock_guard<std::mutex> highLock(Mutex4High);
+			
             // Launch deletion tasks for each selected index
             for (const auto& index : processedIndices) {
                 if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
@@ -1346,8 +1349,6 @@ bool isNumeric(const std::string& str) {
 // Function to process the user input for ISO mounting using multithreading
 void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
 	
-    std::lock_guard<std::mutex> highLock(Mutex4High);
-	
     std::istringstream iss(input);
     bool invalidInput = false;
     std::unordered_set<std::string> uniqueErrorMessages; // Set to store unique error messages
@@ -1402,10 +1403,11 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
                 uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[1;0m");
                 continue;
             }
-
+            
             int step = (start <= end) ? 1 : -1;
             for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
                 if (static_cast<size_t>(i) <= isoFiles.size() && processedIndices.find(i) == processedIndices.end()) {
+					std::lock_guard<std::mutex> highLock(Mutex4High);
                     // Use std::async to launch each task in a separate thread
                     futures.emplace_back(pool.enqueue(handleIsoFile, isoFiles[i - 1], std::ref(mountedSet)));
                     processedIndices.insert(i); // Mark as processed
@@ -1418,6 +1420,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
         } else if (isNumeric(token)) {
             int num = std::stoi(token);
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && processedIndices.find(num) == processedIndices.end()) {
+				std::lock_guard<std::mutex> highLock(Mutex4High);
                 // Use std::async to launch each task in a separate thread
                 futures.emplace_back(pool.enqueue(handleIsoFile, isoFiles[num - 1], std::ref(mountedSet)));
                 processedIndices.insert(num); // Mark index as processed
@@ -1664,32 +1667,30 @@ void unmountISOs() {
             // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism fallback is two
             unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
-            // Use the minimum of available threads and ISOs to ensure efficient parallelism
-            unsigned int numThreads = std::min(static_cast<unsigned int>(isoDirs.size()), maxThreads);
-
             // Create a vector of threads to store the unmounting threads
             std::vector<std::thread> threads;
 
-            for (const std::string& isoDir : isoDirs) {
-                threads.emplace_back([&, isoDir = std::move(isoDir)]() {
-                    std::lock_guard<std::mutex> highLock(Mutex4High); // Lock the critical section
-                    unmountISO(isoDir);
-                });
+            // Create a thread pool with the specified number of threads
+			ThreadPool pool(maxThreads);
 
-                // Limit the number of active threads to the available hardware threads
-                if (threads.size() >= numThreads) {
-                    // Join the threads to wait for them to finish
-                    for (auto& thread : threads) {
-                        thread.join();
-                    }
-                    threads.clear(); // Clear the vector for the next batch of threads
-                }
-            }
+			// Vector to store futures of each task
+			std::vector<std::future<void>> futures;
 
-            // Join the remaining threads
-            for (auto& thread : threads) {
-                thread.join();
-            }
+			// Loop through each ISO directory
+			for (const std::string& isoDir : isoDirs) {
+				// Submit a task to the thread pool to unmount the ISO directory
+				futures.emplace_back(pool.enqueue([isoDir]() {
+					// Lock the critical section if necessary
+					std::lock_guard<std::mutex> highLock(Mutex4High); 
+					// Call the unmountISO function
+					unmountISO(isoDir);
+				}));
+			}
+
+			// Wait for all tasks to complete
+			for (auto& future : futures) {
+				future.wait();
+			}
 
             // Stop the timer after completing the unmounting process
             auto end_time = std::chrono::high_resolution_clock::now();
