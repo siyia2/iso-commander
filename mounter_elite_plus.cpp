@@ -47,6 +47,7 @@ bool isAllZeros(const std::string& str);
 void select_and_delete_files_by_number();
 void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
 void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
+void handleIsoFiles(const std::vector<std::string>& isos, std::unordered_set<std::string>& mountedSet);
 
 // Mount functions
 void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>& mountedIsos);
@@ -93,7 +94,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
     
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.5.6");
+        printVersionNumber("2.5.7");
         return 0;
     }  
 
@@ -1225,36 +1226,37 @@ void select_and_mount_files_by_number() {
         }
 
         // Check if the user wants to mount all ISO files
-        if (std::strcmp(input, "00") == 0) {
-
+		if (std::strcmp(input, "00") == 0) {
 			std::vector<std::future<void>> futures;
-			auto isoIterator = isoFiles.begin();
 
 			// Create a thread pool with the determined number of threads
 			ThreadPool pool(maxThreads);
 
-			while (isoIterator != isoFiles.end()) {
-				for (unsigned int i = 0; i < maxThreads; ++i) {
-					if (isoIterator == isoFiles.end()) {
-						break;
-					}
+			auto isoIterator = isoFiles.begin();
 
-					// Submit each handleIsoFile task to the thread pool
-					futures.emplace_back(pool.enqueue(handleIsoFile, *isoIterator++, std::ref(mountedSet)));
-				}
+			// Iterate over ISO files and submit tasks to the thread pool
+			while (isoIterator != isoFiles.end()) {
+				// Determine the number of tasks to submit in this iteration
+				unsigned int tasksToSubmit = std::min(static_cast<unsigned int>(std::distance(isoIterator, isoFiles.end())), maxThreads);
+
+				// Submit tasks to the thread pool
+				for (unsigned int i = 0; i < tasksToSubmit; ++i) {
+					futures.emplace_back(pool.enqueue(handleIsoFiles, std::vector<std::string>{*isoIterator}, std::ref(mountedSet)));
+					++isoIterator;
+					}
 
 				// Wait for all launched tasks to complete
 				for (auto& future : futures) {
 					future.wait();
 				}
 
-				futures.clear(); // Clear futures vector for next iteration
+				// Clear futures vector for next iteration
+				futures.clear();
 			}
-
-        } else {
-            // Process user input to select and mount specific ISO files
-            processInput(input, isoFiles, mountedSet);
-        }
+		} else {
+			// Process user input to select and mount specific ISO files
+			processInput(input, isoFiles, mountedSet);
+		}
 
         // Stop the timer after completing the mounting process
         auto end_time = std::chrono::high_resolution_clock::now();
@@ -1296,37 +1298,28 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
 }
 
 
-// Function to handle mounting of a specific ISO file asynchronously
-void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet) {
+// Function to handle mounting of a vector of ISO files asynchronously
+void handleIsoFiles(const std::vector<std::string>& isos, std::unordered_set<std::string>& mountedSet) {
     try {
-		// Lock the global mutex before accessing the shared set
+        // Lock to ensure thread safety when accessing mountedSet
         std::lock_guard<std::mutex> lock(Mutex4ISO);
-        // Use std::async to execute the function asynchronously
-        auto future = std::async(std::launch::async, [&iso, &mountedSet]() {
-            // Check if the ISO file exists on disk
-            if (fileExistsOnDisk(iso)) {
-
-                // Attempt to insert the ISO file into the set; if it's a new entry, mount it
-                auto insertResult = mountedSet.insert(iso);
-                if (insertResult.second) {
-                    // Mount the ISO file
-                    mountISOs({iso});  // Pass a vector with a single string to mountISO
-                } else {
-                    // ISO file is already mounted, get the mount path
-                    std::string mountedIso = *insertResult.first; // Get the existing entry from the set
-                    printAlreadyMountedMessage(mountedIso);
-                }
+        
+        // Iterate over each ISO file individually
+        for (const auto& iso : isos) {
+            // Try to insert the ISO file into the mounted set
+            auto insertResult = mountedSet.insert(iso);
+            
+            // If the insertion was successful, mount the ISO file
+            if (insertResult.second) {
+                mountISOs({iso});
             } else {
-                // Display an error message if the ISO file doesn't exist on disk
-                displayErrorMessage(iso);
+                // If the ISO file is already mounted, print a message
+                printAlreadyMountedMessage(iso);
             }
-        });
-
-        // You can choose to wait for the asynchronous operation or not based on your requirements
-        // future.wait();
+        }
     } catch (const std::exception& e) {
-        // Handle exceptions thrown in the asynchronous task
-        std::cerr << "\033[1;91m" << e.what() << " \033[1;91m.\033[1;0m" << std::endl;
+        // Catch any exceptions and print an error message
+       // std::cerr << "\033[1;91m" << e.what() << " \033[1;91m.\033[1;0m" << std::endl;
     }
 }
 
@@ -1340,110 +1333,122 @@ bool isNumeric(const std::string& str) {
 }
 
 
-// Function to process the user input for ISO mounting using multithreading
+// Function to process input tokens and handle ISO files
 void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
-	
+    // Initialize input string stream with the provided input
     std::istringstream iss(input);
-    bool invalidInput = false;
-    std::unordered_set<std::string> uniqueErrorMessages; // Set to store unique error messages
-    std::set<int> processedIndices; // Set to keep track of processed indices
-    std::set<int> validIndices; // Set to keep track of valid indices
-
-    std::string token;
-    std::vector<std::future<void>> futures; // Vector to store std::future objects for each task
     
+    // Flag to track if any invalid input is encountered
+    bool invalidInput = false;
+    
+    // Set to store unique error messages
+    std::unordered_set<std::string> uniqueErrorMessages;
+    
+    // Set to store indices of processed tokens
+    std::set<int> processedIndices;
+    
+    // Set to store valid indices encountered
+    std::set<int> validIndices;
+    
+    // Vector to hold futures for asynchronous tasks
+    std::vector<std::future<void>> futures;
+    
+    // Create a ThreadPool with maxThreads
     ThreadPool pool(maxThreads);
 
+    // Iterate through each token in the input stream
+    std::string token;
     while (iss >> token) {
-		// Check if token consists of only zeros or is not 00
-		if (token != "00" && isAllZeros(token)) {
-			if (!invalidInput) {
-				invalidInput = true;
-				uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist.\033[1;0m");
-			}
-		}
-        
+        // Check if token consists of only zeros or is not 00
+        if (token != "00" && isAllZeros(token)) {
+            if (!invalidInput) {
+                invalidInput = true;
+                uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist.\033[1;0m");
+            }
+        }
+
+        // Check for presence of dash in token
         size_t dashPos = token.find('-');
         if (dashPos != std::string::npos) {
-            // Check if there is more than one hyphen in the token
+            // Check for multiple dashes
             if (token.find('-', dashPos + 1) != std::string::npos) {
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[1;0m");
                 continue;
             }
 
+            // Extract start and end indices from token
             int start, end;
-
             try {
                 start = std::stoi(token.substr(0, dashPos));
                 end = std::stoi(token.substr(dashPos + 1));
             } catch (const std::invalid_argument& e) {
-                // Handle the exception for invalid input
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[1;0m");
                 continue;
             } catch (const std::out_of_range& e) {
-                // Handle the exception for out-of-range input
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[1;0m");
                 continue;
             }
 
+            // Check validity of range indices
             if (start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) {
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[1;0m");
                 continue;
             }
-            
+
+            // Determine step for iteration
             int step = (start <= end) ? 1 : -1;
             for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
+                // Enqueue task for processing ISO file if index is valid and not processed before
                 if (static_cast<size_t>(i) <= isoFiles.size() && processedIndices.find(i) == processedIndices.end()) {
-					std::lock_guard<std::mutex> highLock(Mutex4High);
-                    // Use std::async to launch each task in a separate thread
-                    futures.emplace_back(pool.enqueue(handleIsoFile, isoFiles[i - 1], std::ref(mountedSet)));
-                    processedIndices.insert(i); // Mark as processed
-					validIndices.insert(i); // Store the valid index
+                    std::lock_guard<std::mutex> highLock(Mutex4High);
+                    futures.emplace_back(pool.enqueue(handleIsoFiles, std::vector<std::string>{isoFiles.begin() + i - 1, isoFiles.begin() + i}, std::ref(mountedSet)));
+                    processedIndices.insert(i);
+                    validIndices.insert(i);
                 } else if (static_cast<size_t>(i) > isoFiles.size()) {
                     invalidInput = true;
                     uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(i) + "' does not exist.\033[1;0m");
                 }
             }
         } else if (isNumeric(token)) {
+            // Handle single index token
             int num = std::stoi(token);
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && processedIndices.find(num) == processedIndices.end()) {
-				std::lock_guard<std::mutex> highLock(Mutex4High);
-                // Use std::async to launch each task in a separate thread
-                futures.emplace_back(pool.enqueue(handleIsoFile, isoFiles[num - 1], std::ref(mountedSet)));
-                processedIndices.insert(num); // Mark index as processed
-                validIndices.insert(num); // Store the valid index
+                std::lock_guard<std::mutex> highLock(Mutex4High);
+                futures.emplace_back(pool.enqueue(handleIsoFiles, std::vector<std::string>{isoFiles.begin() + num - 1, isoFiles.begin() + num}, std::ref(mountedSet)));
+                processedIndices.insert(num);
+                validIndices.insert(num);
             } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(num) + "' does not exist.\033[1;0m");
             }
         } else {
+            // Handle invalid token
             invalidInput = true;
             uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[1;0m");
         }
     }
 
-    // Wait for all tasks to complete
+    // Wait for all asynchronous tasks to complete
     for (auto& future : futures) {
         future.wait();
     }
-	
-	if (invalidInput && !validIndices.empty()) {
-		std::cout << " " << std::endl;
-		
-	}
-		
-    // Display errors at the end
+
+    // Print a separator if there is any invalid input and valid indices are present
+    if (invalidInput && !validIndices.empty()) {
+        std::cout << " " << std::endl;
+    }
+
+    // Print unique error messages for invalid inputs
     if (invalidInput) {
         for (const auto& errorMsg : uniqueErrorMessages) {
             std::cerr << "\033[1;93m" << errorMsg << "\033[1;0m" << std::endl;
         }
     }
 }
-
 
 void printAlreadyMountedMessage(const std::string& isoFile) {
     namespace fs = std::filesystem;
