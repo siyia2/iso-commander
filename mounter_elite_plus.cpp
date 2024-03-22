@@ -13,7 +13,6 @@ const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 std::mutex Mutex4High; // Mutex for high level functions
 std::mutex Mutex4Med; // Mutex for middle level functions
 std::mutex Mutex4Low; // Mutex for low level functions
-std::mutex Mutex4ISO; // Mutex for handleIsoFile
 
 bool gapPrinted = false; // for cache refresh for directory function
 bool gapPrintedtraverse = false; // for traverse function
@@ -1146,7 +1145,7 @@ bool isAlreadyMounted(const std::string& mountPoint) {
     return false;
 }
 
-
+// Function to pass isofile to mountIsoFile
 void mountIsoFileAsync(const std::string& isoFile, std::unordered_set<std::string>& mountedSet) {
 	// Create a ThreadPool with maxThreads
     ThreadPool pool(maxThreads);
@@ -1289,6 +1288,7 @@ bool isNumeric(const std::string& str) {
 }
 
 
+// Function to process and push user input from select_and_mount_files_by_number
 void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
     // Initialize input string stream with the provided input
     std::istringstream iss(input);
