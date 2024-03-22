@@ -105,12 +105,13 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
 
     bool printedEmptyLine = false;  // Flag to track if an empty line has been printed
     
+    // Mutex to ensure thread safety
+    std::mutex mutex4search;
+    
     // Start the timer
     auto start_time = std::chrono::high_resolution_clock::now();
 
     try {
-        // Mutex to ensure thread safety
-        static std::mutex mutex4search;
 
         // Counter to track the number of ongoing tasks
         unsigned int numOngoingTasks = 0;
@@ -157,6 +158,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
                                 if (numOngoingTasks < maxThreads) {
                                     // Increment the ongoing tasks counter
                                     ++numOngoingTasks;
+                                    std::lock_guard<std::mutex> lock(mutex4search);
                                     // Process the file asynchronously
                                     futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
                                 } else {
@@ -166,6 +168,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
                                     }
                                     // Increment the ongoing tasks counter
                                     ++numOngoingTasks;
+                                    std::lock_guard<std::mutex> lock(mutex4search);
                                     // Process the file asynchronously
                                     futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
                                 }
@@ -248,6 +251,8 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
     // Remove duplicates from fileNames by sorting and using unique erase idiom
     std::sort(fileNames.begin(), fileNames.end());
     fileNames.erase(std::unique(fileNames.begin(), fileNames.end()), fileNames.end());
+    
+    std::lock_guard<std::mutex> lock(mutex4search);
 
     // Update the cache by appending fileNames to binImgFilesCache
     binImgFilesCache.insert(binImgFilesCache.end(), fileNames.begin(), fileNames.end());
@@ -703,12 +708,13 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
 
     bool printedEmptyLine = false;  // Flag to track if an empty line has been printed
     
+    // Mutex to ensure thread safety
+    std::mutex mutex4search;
+    
     // Start the timer
     auto start_time = std::chrono::high_resolution_clock::now();
 
     try {
-        // Mutex to ensure thread safety
-        static std::mutex mutex4search;
 
         // Counter to track the number of ongoing tasks
         unsigned int numOngoingTasks = 0;
@@ -756,6 +762,7 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                                 if (numOngoingTasks < maxThreads) {
                                     // Increment the ongoing tasks counter
                                     ++numOngoingTasks;
+                                    std::lock_guard<std::mutex> lock(mutex4search);
                                     // Process the file asynchronously
                                     futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
                                 } else {
@@ -765,6 +772,7 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                                     }
                                     // Increment the ongoing tasks counter
                                     ++numOngoingTasks;
+                                    std::lock_guard<std::mutex> lock(mutex4search);
                                     // Process the file asynchronously
                                     futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
                                 }
@@ -846,6 +854,8 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
     // Remove duplicates from fileNames by sorting and using unique erase idiom
     std::sort(fileNames.begin(), fileNames.end());
     fileNames.erase(std::unique(fileNames.begin(), fileNames.end()), fileNames.end());
+    
+    std::lock_guard<std::mutex> lock(mutex4search);
 
     // Update the cache by appending fileNames to mdfMdsFilesCache
     mdfMdsFilesCache.insert(mdfMdsFilesCache.end(), fileNames.begin(), fileNames.end());
