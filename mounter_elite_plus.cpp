@@ -51,14 +51,12 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
 void handleIsoFiles(const std::vector<std::string>& isos, std::unordered_set<std::string>& mountedSet);
 
 // Mount functions
-void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>& mountedIsos);
+void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& mountedSet);
 void mountISOs(const std::vector<std::string>& isoFiles);
 void select_and_mount_files_by_number();
-void displayErrorMessage(const std::string& iso);
-void printAlreadyMountedMessage(const std::string& isoFile) ;
 void printIsoFileList(const std::vector<std::string>& isoFiles);
-void handleIsoFile(const std::string& iso, std::unordered_set<std::string>& mountedSet);
 void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
+void mountIsoFileAsync(const std::string& isoFile, std::unordered_set<std::string>& mountedSet);
 
 
 // Iso cache functions
@@ -95,7 +93,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
     
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.5.7");
+        printVersionNumber("2.5.8");
         return 0;
     }  
 
@@ -1055,7 +1053,7 @@ bool directoryExists(const std::string& path) {
 
 
 // Function to mount selected ISO files called from mountISOs
-void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>& mountedIsos) {
+void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& mountedSet) {
     namespace fs = std::filesystem;
 
     // Use the filesystem library to extract the ISO file name
@@ -1114,8 +1112,8 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
                 // Remove the ".iso" extension from the mountisoFilename
                 std::string mountisoFilenameWithoutExtension = isoFilename.substr(0, isoFilename.length() - 4);
 
-                // Store the mount point in the map
-                mountedIsos.emplace(isoFile, mountPoint);
+                // Insert the mount point into the set
+                mountedSet.insert(mountPoint);
                 std::cout << "\033[1mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;0m "
                           << "\033[1mmounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;0m\033[1m.\033[1;0m" << std::endl;
             } catch (const std::exception& e) {
@@ -1149,33 +1147,12 @@ bool isAlreadyMounted(const std::string& mountPoint) {
 }
 
 
-// Function to mount ISO files concurrently using asynchronous tasks
-void mountISOs(const std::vector<std::string>& isoFiles) {
-    // Map to store mounted ISOs with their corresponding paths
-    std::map<std::string, std::string> mountedIsos;
-
-    // Determine the number of threads to use (minimum of available threads and ISOs)
-    unsigned int numThreads = std::min(maxThreads, static_cast<unsigned int>(isoFiles.size()));
-    
-    // Vector to store futures for parallel mounting
-    std::vector<std::future<void>> futures;
-
-    // Iterate through the list of ISO files and spawn a future for each
-    for (unsigned int i = 0; i < numThreads; ++i) {
-         // Create a future for mounting the ISO file and pass the map by reference
-        futures.push_back(std::async(std::launch::async, [&isoFiles, &mountedIsos, i]() {
-            // Lock the mutex before accessing the shared map using Mutex4Med
-            std::lock_guard<std::mutex> medLock(Mutex4Med);
-
-            // Call the function that modifies the shared map
-            mountIsoFile(isoFiles[i], mountedIsos);
-        }));
-    }
-
-    // Wait for all asynchronous tasks to complete
-    for (auto& future : futures) {
-        future.get();
-    }
+void mountIsoFileAsync(const std::string& isoFile, std::unordered_set<std::string>& mountedSet) {
+	// Create a ThreadPool with maxThreads
+    ThreadPool pool(maxThreads);
+    pool.enqueue([&isoFile, &mountedSet]() {
+        mountIsoFile(isoFile, mountedSet);
+    });
 }
 
 
@@ -1248,37 +1225,21 @@ void select_and_mount_files_by_number() {
         }
 
         // Check if the user wants to mount all ISO files
-		if (std::strcmp(input, "00") == 0) {
-			std::vector<std::future<void>> futures;
+        if (std::strcmp(input, "00") == 0) {
+            // Create a ThreadPool with maxThreads
+            ThreadPool pool(maxThreads);
 
-			// Create a thread pool with the determined number of threads
-			ThreadPool pool(maxThreads);
-
-			auto isoIterator = isoFiles.begin();
-
-			// Iterate over ISO files and submit tasks to the thread pool
-			while (isoIterator != isoFiles.end()) {
-				// Determine the number of tasks to submit in this iteration
-				unsigned int tasksToSubmit = std::min(static_cast<unsigned int>(std::distance(isoIterator, isoFiles.end())), maxThreads);
-
-				// Submit tasks to the thread pool
-				for (unsigned int i = 0; i < tasksToSubmit; ++i) {
-					futures.emplace_back(pool.enqueue(handleIsoFiles, std::vector<std::string>{*isoIterator}, std::ref(mountedSet)));
-					++isoIterator;
-					}
-
-				// Wait for all launched tasks to complete
-				for (auto& future : futures) {
-					future.wait();
-				}
-
-				// Clear futures vector for next iteration
-				futures.clear();
-			}
-		} else {
-			// Process user input to select and mount specific ISO files
-			processInput(input, isoFiles, mountedSet);
-		}
+            // Process all ISO files asynchronously
+            for (const auto& isoFile : isoFiles) {
+                // Enqueue the mounting task to the thread pool
+                pool.enqueue([&isoFile, &mountedSet]() {
+                    mountIsoFile(isoFile, mountedSet);
+                });
+            }
+        } else {
+            // Process user input to select and mount specific ISO files
+            processInput(input, isoFiles, mountedSet);
+        }
 
         // Stop the timer after completing the mounting process
         auto end_time = std::chrono::high_resolution_clock::now();
@@ -1291,7 +1252,6 @@ void select_and_mount_files_by_number() {
         std::cout << " " << std::endl;
         std::cout << "\033[1;32mPress enter to continue...\033[1;0m";
         std::cin.get();
-
     }
 }
 
@@ -1320,43 +1280,6 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
 }
 
 
-// Function to handle mounting of a vector of ISO files asynchronously
-void handleIsoFiles(const std::vector<std::string>& isos, std::unordered_set<std::string>& mountedSet) {
-    try {
-        // Lock to ensure thread safety when accessing mountedSet
-        std::lock_guard<std::mutex> lock(Mutex4ISO);
-        
-        // Vector to store ISO files that need to be mounted
-        std::vector<std::string> isosToMount;
-        
-        // Iterate over each ISO file individually
-        for (const auto& iso : isos) {
-            // Try to insert the ISO file into the mounted set
-            auto insertResult = mountedSet.insert(iso);
-            
-            // If the insertion was successful, add the ISO file to the list of files to mount
-            if (insertResult.second) {
-                isosToMount.push_back(iso);
-            } else {
-                // If the ISO file is already mounted, print a message
-                printAlreadyMountedMessage(iso);
-            }
-        }
-        
-        // If there are ISO files to mount, call mountISOs asynchronously with the vector of paths
-        if (!isosToMount.empty()) {
-            // Store the std::future returned by std::async
-            std::future<void> asyncResult = std::async(std::launch::async, mountISOs, isosToMount);
-            // Wait for the completion of the asynchronous task
-            asyncResult.wait();
-        }
-    } catch (const std::exception& e) {
-        // Catch any exceptions and print an error message
-        std::cerr << "\033[1;91m" << e.what() << " \033[1;91m.\033[1;0m" << std::endl;
-    }
-}
-
-
 // Function to check if a string is numeric
 bool isNumeric(const std::string& str) {
     // Use parallel execution policy for parallelization
@@ -1366,7 +1289,6 @@ bool isNumeric(const std::string& str) {
 }
 
 
-// Function to process input tokens and handle ISO files
 void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
     // Initialize input string stream with the provided input
     std::istringstream iss(input);
@@ -1382,9 +1304,6 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
     
     // Set to store valid indices encountered
     std::set<int> validIndices;
-    
-    // Vector to hold futures for asynchronous tasks
-    std::vector<std::future<void>> futures;
     
     // Create a ThreadPool with maxThreads
     ThreadPool pool(maxThreads);
@@ -1435,10 +1354,9 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
             // Determine step for iteration
             int step = (start <= end) ? 1 : -1;
             for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
-                // Enqueue task for processing ISO file if index is valid and not processed before
+                // Enqueue task for mounting ISO file if index is valid and not processed before
                 if (static_cast<size_t>(i) <= isoFiles.size() && processedIndices.find(i) == processedIndices.end()) {
-                    std::lock_guard<std::mutex> highLock(Mutex4High);
-                    futures.emplace_back(pool.enqueue(handleIsoFiles, std::vector<std::string>{isoFiles.begin() + i - 1, isoFiles.begin() + i}, std::ref(mountedSet)));
+                    mountIsoFileAsync(isoFiles[i - 1], mountedSet);
                     processedIndices.insert(i);
                     validIndices.insert(i);
                 } else if (static_cast<size_t>(i) > isoFiles.size()) {
@@ -1450,8 +1368,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
             // Handle single index token
             int num = std::stoi(token);
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && processedIndices.find(num) == processedIndices.end()) {
-                std::lock_guard<std::mutex> highLock(Mutex4High);
-                futures.emplace_back(pool.enqueue(handleIsoFiles, std::vector<std::string>{isoFiles.begin() + num - 1, isoFiles.begin() + num}, std::ref(mountedSet)));
+                mountIsoFileAsync(isoFiles[num - 1], mountedSet);
                 processedIndices.insert(num);
                 validIndices.insert(num);
             } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
@@ -1465,11 +1382,6 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
         }
     }
 
-    // Wait for all asynchronous tasks to complete
-    for (auto& future : futures) {
-        future.wait();
-    }
-
     // Print a separator if there is any invalid input and valid indices are present
     if (invalidInput && !validIndices.empty()) {
         std::cout << " " << std::endl;
@@ -1481,38 +1393,6 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
             std::cerr << "\033[1;93m" << errorMsg << "\033[1;0m" << std::endl;
         }
     }
-}
-
-
-void printAlreadyMountedMessage(const std::string& isoFile) {
-    namespace fs = std::filesystem;
-    fs::path isoPath(isoFile);
-    std::string isoFileName = isoPath.stem().string();
-    std::string mountPoint = "/mnt/iso_" + isoFileName;
-    auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint);
-    auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
-    
-    // Remove the ".iso" extension from the mountisoFilename
-	std::string mountisoFilenameWithoutExtension = isoFilename.substr(0, isoFilename.length() - 4);
-
-    // Check if the mount point exists
-    if (fs::exists(mountPoint)) {
-        std::cout << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m is already mounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;93m.\033[1;0m" << std::endl;
-    } else {
-        // ISO file is not actually mounted at the specified mount point
-        std::cerr << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;0m\033[1;91m.\033[1;0m" << std::endl;
-    }
-}
-
-
-// Function to display an error message when the ISO file does not exist on disk
-void displayErrorMessage(const std::string& isoFile) {
-namespace fs = std::filesystem;
-    fs::path isoPath(isoFile);
-    std::string isoFileName = isoPath.stem().string();
-    auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
-    
-    std::cout << "\033[1;35mISO: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;35m does not exist on disk.\033[1;0m" << std::endl;
 }
 
 
