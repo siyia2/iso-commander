@@ -28,6 +28,7 @@ bool fileExists(const std::string& filename);
 // Mount functions
 bool directoryExists(const std::string& path);
 bool isNumeric(const std::string& str);
+bool isAlreadyMounted(const std::string& mountPoint);
 
 // Iso cache functions
 bool isValidDirectory(const std::string& path);
@@ -1097,6 +1098,13 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
         // Check if the mount point directory was created successfully
         if (std::filesystem::exists(mountPoint)) {
             try {
+                // Check if the mount point is already mounted
+                if (isAlreadyMounted(mountPoint)) {
+                    // If already mounted, print a message and return
+                    std::cout << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m is already mounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;93m.\033[1;0m" << std::endl;
+                    return;
+                }
+
                 // Construct the mount command and execute it
                 std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
                 if (std::system(mountCommand.c_str()) != 0) {
@@ -1124,6 +1132,20 @@ void mountIsoFile(const std::string& isoFile, std::map<std::string, std::string>
         std::cout << " " << std::endl;
         std::cerr << "\033[1;91mFailed to authenticate with sudo.\033[1;0m" << std::endl;
     }
+}
+
+
+// Function to check if a directory is already mounted
+bool isAlreadyMounted(const std::string& mountPoint) {
+    std::ifstream mountFile("/proc/mounts");
+    std::string line;
+    while (std::getline(mountFile, line)) {
+        std::istringstream iss(line);
+        std::vector<std::string> tokens{std::istream_iterator<std::string>{iss}, std::istream_iterator<std::string>{}};
+        if (tokens.size() >= 2 && tokens[1] == mountPoint)
+            return true;
+    }
+    return false;
 }
 
 
@@ -1321,9 +1343,12 @@ void handleIsoFiles(const std::vector<std::string>& isos, std::unordered_set<std
             }
         }
         
-        // If there are ISO files to mount, call mountISOs with the vector of paths
+        // If there are ISO files to mount, call mountISOs asynchronously with the vector of paths
         if (!isosToMount.empty()) {
-            mountISOs(isosToMount);
+            // Store the std::future returned by std::async
+            std::future<void> asyncResult = std::async(std::launch::async, mountISOs, isosToMount);
+            // Wait for the completion of the asynchronous task
+            asyncResult.wait();
         }
     } catch (const std::exception& e) {
         // Catch any exceptions and print an error message
@@ -1457,6 +1482,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
         }
     }
 }
+
 
 void printAlreadyMountedMessage(const std::string& isoFile) {
     namespace fs = std::filesystem;
