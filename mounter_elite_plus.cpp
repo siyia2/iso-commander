@@ -55,7 +55,7 @@ void mountISOs(const std::vector<std::string>& isoFiles);
 void select_and_mount_files_by_number();
 void printIsoFileList(const std::vector<std::string>& isoFiles);
 void processInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
-void mountIsoFileAsync(const std::string& isoFile, std::unordered_set<std::string>& mountedSet);
+void mountIsoFileAsync(const std::string& isoFile, std::unordered_set<std::string>& mountedSet, ThreadPool& pool);
 
 
 // Iso cache functions
@@ -1146,9 +1146,7 @@ bool isAlreadyMounted(const std::string& mountPoint) {
 }
 
 // Function to pass isofile to mountIsoFile
-void mountIsoFileAsync(const std::string& isoFile, std::unordered_set<std::string>& mountedSet) {
-	// Create a ThreadPool with maxThreads
-    ThreadPool pool(maxThreads);
+void mountIsoFileAsync(const std::string& isoFile, std::unordered_set<std::string>& mountedSet, ThreadPool& pool) {
     pool.enqueue([&isoFile, &mountedSet]() {
         mountIsoFile(isoFile, mountedSet);
     });
@@ -1356,7 +1354,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
             for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
                 // Enqueue task for mounting ISO file if index is valid and not processed before
                 if (static_cast<size_t>(i) <= isoFiles.size() && processedIndices.find(i) == processedIndices.end()) {
-                    mountIsoFileAsync(isoFiles[i - 1], mountedSet);
+                    mountIsoFileAsync(isoFiles[i - 1], mountedSet, pool);
                     processedIndices.insert(i);
                     validIndices.insert(i);
                 } else if (static_cast<size_t>(i) > isoFiles.size()) {
@@ -1368,7 +1366,7 @@ void processInput(const std::string& input, const std::vector<std::string>& isoF
             // Handle single index token
             int num = std::stoi(token);
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && processedIndices.find(num) == processedIndices.end()) {
-                mountIsoFileAsync(isoFiles[num - 1], mountedSet);
+                mountIsoFileAsync(isoFiles[num - 1], mountedSet, pool);
                 processedIndices.insert(num);
                 validIndices.insert(num);
             } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
