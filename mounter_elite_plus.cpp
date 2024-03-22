@@ -18,6 +18,9 @@ std::mutex Mutex4Low; // Mutex for low level functions
 bool gapPrinted = false; // for cache refresh for directory function
 bool gapPrintedtraverse = false; // for traverse function
 
+// Variable to track whether the clear has been performed
+bool clearScreenDone = false;
+
 // Vector to store ISO mount errors
 std::vector<std::string> errorMessages;
 
@@ -1071,8 +1074,6 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
 
     auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint);
     auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
-    // Static variable to track whether the clear has been performed
-    static bool clearScreenDone = false;
 
     // Construct the sudo command
     std::string sudoCommand = "sudo -v";
@@ -1460,7 +1461,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     }
 
     // Print unique error messages for invalid inputs
-    if (invalidInput) {
+    if (invalidInput && clearScreenDone) {
         for (const auto& errorMsg : uniqueErrorMessages) {
             std::cerr << "\033[1;93m" << errorMsg << "\033[1;0m" << std::endl;
         }
@@ -1526,8 +1527,6 @@ bool isDirectoryEmpty(const std::string& path) {
 
 // Function to unmount ISO files asynchronously
 void unmountISO(const std::string& isoDir) {
-    // Static variable to track whether the clear has been performed
-    static bool clearScreenDone = false;
 
     // Use std::async to unmount and remove the directory asynchronously
     auto unmountFuture = std::async(std::launch::async, [&isoDir]() {
@@ -1768,6 +1767,22 @@ void unmountISOs() {
 			}
 		}
 
+        // Lock access to error messages
+        std::lock_guard<std::mutex> errorMessagesLock(errorMessagesMutex);
+
+        // Print error messages
+        for (const auto& errorMessage : errorMessages) {
+            if (uniqueErrorMessages.find(errorMessage) == uniqueErrorMessages.end()) {
+                // If not found, store the error message and print it
+                uniqueErrorMessages.insert(errorMessage);
+                std::cerr << "\033[1;93m" << errorMessage << "\033[1;0m" << std::endl;
+            }
+        }
+        
+        if (invalidInput && !validIndices.empty()) {
+            std::cout << " " << std::endl;
+        }
+
         std::vector<std::thread> threads;
         // Create a thread pool with a limited number of threads
         ThreadPool pool(maxThreads);
@@ -1792,22 +1807,6 @@ void unmountISOs() {
 
         // Stop the timer after completing the unmounting process
         auto end_time = std::chrono::high_resolution_clock::now();
-
-        if (invalidInput && !validIndices.empty()) {
-            std::cout << " " << std::endl;
-        }
-
-        // Lock access to error messages
-        std::lock_guard<std::mutex> errorMessagesLock(errorMessagesMutex);
-
-        // Print error messages
-        for (const auto& errorMessage : errorMessages) {
-            if (uniqueErrorMessages.find(errorMessage) == uniqueErrorMessages.end()) {
-                // If not found, store the error message and print it
-                uniqueErrorMessages.insert(errorMessage);
-                std::cerr << "\033[1;93m" << errorMessage << "\033[1;0m" << std::endl;
-            }
-        }
 
         auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
         // Print the time taken for the entire process in bold with one decimal place
