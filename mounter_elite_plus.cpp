@@ -1710,14 +1710,18 @@ void unmountISOs() {
                     char delimiter;
                     rangeStream >> startRange >> delimiter >> endRange;
 
-                    if (delimiter == '-' && startRange >= 1 && startRange <= endRange && endRange <= static_cast<int>(isoDirs.size())) {
-                        for (int i = startRange; i <= endRange; ++i) {
-                            if (uniqueIndices.find(i) == uniqueIndices.end()) {
-                                uniqueIndices.insert(i);
-                                validIndices.insert(i);
-                                unmountIndices.push_back(i);
-                            }
-                        }
+                    if (delimiter == '-') {
+						int minRange = std::min(startRange, endRange);
+						int maxRange = std::max(startRange, endRange);
+						if (minRange >= 1 && maxRange <= static_cast<int>(isoDirs.size())) {
+							for (int i = minRange; i <= maxRange; ++i) {
+								if (uniqueIndices.find(i) == uniqueIndices.end()) {
+								uniqueIndices.insert(i);
+								validIndices.insert(i);
+								unmountIndices.push_back(i);
+								}
+							}
+						}
                     } else {
                         errorMessages.push_back("\033[1;91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[1;0m");
                         invalidInput = true;
