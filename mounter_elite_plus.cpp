@@ -93,7 +93,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
     
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.5.8");
+        printVersionNumber("2.5.9");
         return 0;
     }  
 
@@ -911,6 +911,8 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
             int start, end;
 
             try {
+				// Lock to ensure thread safety in a multi-threaded environment
+				std::lock_guard<std::mutex> highLock(Mutex4High);
                 start = std::stoi(token.substr(0, dashPos));
                 end = std::stoi(token.substr(dashPos + 1));
             } catch (const std::invalid_argument& e) {
@@ -925,8 +927,8 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
                 continue;
             }
             
-            // Lock to ensure thread safety in a multi-threaded environment
-			std::lock_guard<std::mutex> highLock(Mutex4High);
+			// Lock to ensure thread safety in a multi-threaded environment
+            std::lock_guard<std::mutex> medLock(Mutex4Med);
 
             // Check for validity of the specified range
             if ((start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) ||
@@ -1327,8 +1329,17 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     // Set to store valid indices encountered
     std::set<int> validIndices;
     
+    // Set to store processed ranges
+    std::set<std::pair<int, int>> processedRanges;
+
     // Create a ThreadPool with maxThreads
     ThreadPool pool(maxThreads);
+
+    // Mutexes for thread safety
+    std::mutex processedIndicesMutex;
+    std::mutex validIndicesMutex;
+    std::mutex processedRangesMutex;
+    std::mutex mountedSetMutex;
 
     // Iterate through each token in the input stream
     std::string token;
@@ -1374,30 +1385,55 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                 continue;
             }
 
-            // Determine step for iteration
-            int step = (start <= end) ? 1 : -1;
-            for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
-                // Enqueue task for mounting ISO file if index is valid and not processed before
-                if (static_cast<size_t>(i) <= isoFiles.size() && processedIndices.find(i) == processedIndices.end()) {
-                    pool.enqueue([&, i]() {
-                        mountIsoFile(isoFiles[i - 1], mountedSet);
-                    });
-                    processedIndices.insert(i);
-                    validIndices.insert(i);
-                } else if (static_cast<size_t>(i) > isoFiles.size()) {
-                    invalidInput = true;
-                    uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(i) + "' does not exist.\033[1;0m");
+            // Check if the range has been processed before
+            std::pair<int, int> range(start, end);
+            if (processedRanges.find(range) == processedRanges.end()) {
+                // Enqueue task for marking range as processed
+                pool.enqueue([&]() {
+                    std::lock_guard<std::mutex> guard(processedRangesMutex);
+                    processedRanges.insert(range);
+                });
+
+                // Determine step for iteration
+                int step = (start <= end) ? 1 : -1;
+                for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
+                    // Check if the index has been processed before
+                    if (processedIndices.find(i) == processedIndices.end()) {
+                        // Enqueue task for marking index as processed
+                        pool.enqueue([&]() {
+                            std::lock_guard<std::mutex> guard(processedIndicesMutex);
+                            processedIndices.insert(i);
+                        });
+
+                        // Enqueue mounting task
+                        pool.enqueue([&, i]() {
+                            std::lock_guard<std::mutex> guard(validIndicesMutex);
+                            if (validIndices.find(i) == validIndices.end()) { // Ensure not processed before
+                                validIndices.insert(i);
+                                mountIsoFile(isoFiles[i - 1], mountedSet);
+                            }
+                        });
+                    }
                 }
             }
         } else if (isNumeric(token)) {
             // Handle single index token
             int num = std::stoi(token);
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && processedIndices.find(num) == processedIndices.end()) {
-                pool.enqueue([&, num]() {
-                    mountIsoFile(isoFiles[num - 1], mountedSet);
+                // Enqueue task for marking index as processed
+                pool.enqueue([&]() {
+                    std::lock_guard<std::mutex> guard(processedIndicesMutex);
+                    processedIndices.insert(num);
                 });
-                processedIndices.insert(num);
-                validIndices.insert(num);
+
+                // Enqueue mounting task
+                pool.enqueue([&, num]() {
+                    std::lock_guard<std::mutex> guard(validIndicesMutex);
+                    if (validIndices.find(num) == validIndices.end()) { // Ensure not processed before
+                        validIndices.insert(num);
+                        mountIsoFile(isoFiles[num - 1], mountedSet);
+                    }
+                });
             } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(num) + "' does not exist.\033[1;0m");
@@ -1409,16 +1445,15 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
         }
     }
 
-    // Print a separator if there is any invalid input and valid indices are present
-    if (invalidInput && !validIndices.empty()) {
-        std::cout << " " << std::endl;
-    }
-
     // Print unique error messages for invalid inputs
     if (invalidInput) {
         for (const auto& errorMsg : uniqueErrorMessages) {
             std::cerr << "\033[1;93m" << errorMsg << "\033[1;0m" << std::endl;
         }
+        // Print a separator if there is any invalid input and valid indices are present
+    if (invalidInput && !validIndices.empty()) {
+        std::cout << " " << std::endl;
+    }
     }
 }
 
