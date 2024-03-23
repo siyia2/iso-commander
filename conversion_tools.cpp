@@ -1,5 +1,5 @@
-#include "sanitization_extraction_readline.h"
-#include "conversion_tools.h"
+#include "headers.h"
+
 
 static std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles here
 static std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
@@ -8,7 +8,6 @@ std::mutex fileCheckMutex;
 
 // GENERAL
 
-
 // Function to check if a file already exists
 bool fileExistsConversions(const std::string& fullPath) {
     std::lock_guard<std::mutex> lock(fileCheckMutex);
@@ -16,27 +15,7 @@ bool fileExistsConversions(const std::string& fullPath) {
 } 
 
 
-bool endsWith(const std::string& fullString, const std::string& ending) {
-    if (fullString.length() >= ending.length()) {
-        return (0 == fullString.compare(fullString.length() - ending.length(), ending.length(), ending));
-    } else {
-        return false;
-    }
-}
-
-
-// Function to convert a string to lowercase
-std::string toLower(const std::string& str) {
-    std::string result = str;
-    std::transform(result.begin(), result.end(), result.begin(),
-                   [](unsigned char c) { return std::tolower(c); });
-    return result;
-}
-
-
 // BIN/IMG CONVERSION FUNCTIONS
-
-
 
 bool blacklistBin(const std::filesystem::path& entry) {
     const std::string filenameLower = entry.filename().string();

@@ -1,5 +1,5 @@
-#include "sanitization_extraction_readline.h"
-#include "conversion_tools.h"
+#include "headers.h"
+
 
 // Get max available CPU cores for global use, fallback is 2 cores
 unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
@@ -20,73 +20,8 @@ bool gapPrintedtraverse = false; // for traverse function
 // Vector to store ISO mount errors
 std::vector<std::string> errorMessages;
 
-//	Function prototypes
 
-//	bools
-
-//Delete functions
-bool fileExists(const std::string& filename);
-
-// Mount functions
-bool isAlreadyMounted(const std::string& mountPoint);
-
-// Iso cache functions
-bool isValidDirectory(const std::string& path);
-bool ends_with_iso(const std::string& str);
-bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize);
-
-// Unmount functions
-bool isDirectoryEmpty(const std::string& path);
-bool isValidIndex(int index, size_t isoDirsSize);
-
-//	voids
-
-//General functions
-bool isAllZeros(const std::string& str);
-bool isNumeric(const std::string& str);
-
-
-//Delete functions
-void select_and_delete_files_by_number();
-void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
-void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
-void handleIsoFiles(const std::vector<std::string>& isos, std::unordered_set<std::string>& mountedSet);
-
-// Mount functions
-void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& mountedSet);
-void select_and_mount_files_by_number();
-void printIsoFileList(const std::vector<std::string>& isoFiles);
-void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
-
-// Iso cache functions
-void manualRefreshCache();
-void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& Mutex4Low);
-void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles);
-void removeNonExistentPathsFromCache();
-
-// Unmount functions
-void listMountedISOs();
-void unmountISOs();
-void unmountISO(const std::string& isoDir);
-
-// Art
-void printVersionNumber(const std::string& version);
-void printMenu();
-void submenu1();
-void submenu2();
-void print_ascii();
-
-//	stds
-
-
-// Cache functions
-std::vector<std::string> vec_concat(const std::vector<std::string>& v1, const std::vector<std::string>& v2);
-std::future<bool> iequals(std::string_view a, std::string_view b);
-std::future<bool> FileExists(const std::string& path);
-std::string getHomeDirectory();
-std::vector<std::string> loadCache();
-
-
+// Main function
 int main(int argc, char *argv[]) {
     bool exitProgram = false;
     std::string choice;
