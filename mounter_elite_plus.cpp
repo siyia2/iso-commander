@@ -30,7 +30,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
     
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.6.5");
+        printVersionNumber("2.6.6");
         return 0;
     }  
 
@@ -1421,7 +1421,11 @@ void listMountedISOs() {
     const std::string isoPath = "/mnt";
 
     // Vector to store names of mounted ISOs
+    static std::mutex mtx;
     std::vector<std::string> isoDirs;
+
+    // Lock mutex for accessing shared resource
+    std::lock_guard<std::mutex> lock(mtx);
 
     // Open the /mnt directory and find directories with names starting with "iso_"
     DIR* dir;
@@ -1441,6 +1445,7 @@ void listMountedISOs() {
     } else {
         // Print an error message if there is an issue opening the /mnt directory
         std::cerr << "\033[1;91mError opening the /mnt directory.\033[1;0m" << std::endl;
+        return;
     }
 
     // Display a list of mounted ISOs with ISO names in bold and magenta text
