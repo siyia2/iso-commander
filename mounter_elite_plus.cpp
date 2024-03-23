@@ -1522,6 +1522,7 @@ void unmountISO(const std::string& isoDir) {
             if (isDirectoryEmpty(isoDir) && result != 0) {
                     // Construct the remove directory command with sudo, rmdir, and suppressing logs
                     command = "sudo rmdir " + shell_escape(isoDir) + " 2>/dev/null";
+                    int removeDirResult __attribute__((unused)) = system(command.c_str());
                     std::cout << "\033[1;92mRemoved empty directory: \033[1;91m'" << isoDirectory << "/" << isoFilename << "'\033[1;92m.\033[1;0m" << std::endl; // Print success message
 				}
 				// Check if the unmounting was successful
@@ -1552,7 +1553,6 @@ void unmountISO(const std::string& isoDir) {
     // Wait for the asynchronous tasks to complete
    // unmountFuture.get();
 }
-
 
 // Function to check if a given index is within the valid range of available ISOs
 bool isValidIndex(int index, size_t isoDirsSize) {
