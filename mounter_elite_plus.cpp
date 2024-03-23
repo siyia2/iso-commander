@@ -18,8 +18,6 @@ std::mutex Mutex4Low; // Mutex for low level functions
 bool gapPrinted = false; // for cache refresh for directory function
 bool gapPrintedtraverse = false; // for traverse function
 
-// Variable to track whether the clear has been performed
-bool clearScreenDone = false;
 
 // Set to store unique error messages
 std::unordered_set<std::string> uniqueErrorMessages;
@@ -1077,6 +1075,10 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
 
     auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint);
     auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
+    static bool firstrun= true;
+    // Variable to track whether the clear has been performed
+	static bool clearScreenDone = false;
+    
 
     // Construct the sudo command
     std::string sudoCommand = "sudo -v";
@@ -1089,14 +1091,16 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
         if (!clearScreenDone) {
             std::system("clear");
             clearScreenDone = true;
-            // Print unique error messages for invalid inputs if the set is not empty
-			if (!uniqueErrorMessages.empty() && clearScreenDone) {
+        }
+        // Print unique error messages for invalid inputs if the set is not empty and is first run
+        if (!uniqueErrorMessages.empty() && firstrun) {
 				for (const auto& errorMsg : uniqueErrorMessages) {
 					std::cerr << "\033[1;93m" << errorMsg << "\033[1;0m" << std::endl;
 					}
+					uniqueErrorMessages.clear();
 					std::cout << " " << std::endl; // Print a separator
+					firstrun=false;
 				}
-        }
 
         // Asynchronously check and create the mount point directory
         auto future = std::async(std::launch::async, [&mountPoint]() {
@@ -1450,10 +1454,11 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     }
 
     // Print unique error messages for invalid inputs
-    if (invalidInput && !clearScreenDone) {
+    if (invalidInput) {
         for (const auto& errorMsg : uniqueErrorMessages) {
             std::cerr << "\033[1;93m" << errorMsg << "\033[1;0m" << std::endl;
         }
+        uniqueErrorMessages.clear();
         // Print a separator if there is any invalid input and valid indices are present
         if (invalidInput && !validIndices.empty()) {
             std::cout << " " << std::endl;
@@ -1514,7 +1519,10 @@ bool isDirectoryEmpty(const std::string& path) {
 
 // Function to unmount ISO files asynchronously
 void unmountISO(const std::string& isoDir) {
-
+	
+	static bool firstrun= true;
+    // Variable to track whether the clear has been performed
+	static bool clearScreenDone = false;
     // Use std::async to unmount and remove the directory asynchronously
     auto unmountFuture = std::async(std::launch::async, [&isoDir]() {
         // Construct the sudo command
@@ -1528,14 +1536,16 @@ void unmountISO(const std::string& isoDir) {
             if (!clearScreenDone) {
                 std::system("clear");
                 clearScreenDone = true;
-				// Print unique error messages for invalid inputs if the set is not empty
-				if (!uniqueErrorMessages.empty() && clearScreenDone) {
+				}
+				// Print unique error messages for invalid inputs if the set is not empty and is first run
+				if (!uniqueErrorMessages.empty() && firstrun) {
 					for (const auto& errorMsg : uniqueErrorMessages) {
 						std::cerr << "\033[1;93m" << errorMsg << "\033[1;0m" << std::endl;
 						}
+						uniqueErrorMessages.clear();
 						std::cout << " " << std::endl; // Print a separator
+						firstrun=false;
 					}
-				}
 
             // Construct the unmount command with sudo, umount, and suppressing logs
             std::string command = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1";
@@ -1596,6 +1606,8 @@ void unmountISOs() {
 
     // Flag to check for invalid input
     bool invalidInput = false;
+    // Variable to track whether the clear has been performed
+	static bool clearScreenDone = false;
     
     // Mutexes for synchronization
     std::mutex isoDirsMutex;
