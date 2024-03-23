@@ -1090,7 +1090,7 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
             std::system("clear");
             clearScreenDone = true;
             // Print unique error messages for invalid inputs if the set is not empty
-			if (!uniqueErrorMessages.empty()) {
+			if (!uniqueErrorMessages.empty() && clearScreenDone) {
 				for (const auto& errorMsg : uniqueErrorMessages) {
 					std::cerr << "\033[1;93m" << errorMsg << "\033[1;0m" << std::endl;
 					}
@@ -1450,7 +1450,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     }
 
     // Print unique error messages for invalid inputs
-    if (invalidInput && clearScreenDone) {
+    if (invalidInput && !clearScreenDone) {
         for (const auto& errorMsg : uniqueErrorMessages) {
             std::cerr << "\033[1;93m" << errorMsg << "\033[1;0m" << std::endl;
         }
@@ -1529,7 +1529,7 @@ void unmountISO(const std::string& isoDir) {
                 std::system("clear");
                 clearScreenDone = true;
 				// Print unique error messages for invalid inputs if the set is not empty
-				if (!uniqueErrorMessages.empty()) {
+				if (!uniqueErrorMessages.empty() && clearScreenDone) {
 					for (const auto& errorMsg : uniqueErrorMessages) {
 						std::cerr << "\033[1;93m" << errorMsg << "\033[1;0m" << std::endl;
 						}
@@ -1759,7 +1759,7 @@ void unmountISOs() {
 			invalidInput = true;
 			}
 		}
-		if (clearScreenDone) {
+		if (!clearScreenDone) {
 		// Lock access to error messages
 			std::lock_guard<std::mutex> errorMessagesLock(errorMessagesMutex);
 			// Print error messages
