@@ -1056,6 +1056,9 @@ bool directoryExists(const std::string& path) {
 // Function to mount selected ISO files called from mountISOs
 void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& mountedSet) {
 	
+	// Lock the global mutex for synchronization
+    std::lock_guard<std::mutex> medLock(Mutex4Med);
+	
     namespace fs = std::filesystem;
 
     // Use the filesystem library to extract the ISO file name
@@ -1085,6 +1088,7 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
 
         // Wait for the asynchronous operation to complete
         future.wait();
+        
 
         // Check if the mount point directory was created successfully
         if (std::filesystem::exists(mountPoint)) {
@@ -1135,12 +1139,18 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
 
 
 bool isAlreadyMounted(const std::string& mountPoint) {
-    struct statvfs buffer;
-    if (statvfs(mountPoint.c_str(), &buffer) == 0) {
-        // The statvfs call succeeded, indicating the directory is mounted
-        return true;
+    std::string command = "mount | grep '" + mountPoint + "'";
+    FILE* pipe = popen(command.c_str(), "r");
+    if (pipe) {
+        char buffer[128];
+        if (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+            // The mount point was found in the output of the mount command
+            pclose(pipe);
+            return true;
+        }
+        pclose(pipe);
     }
-    // The statvfs call failed, indicating the directory is not mounted
+    // The mount point was not found in the output of the mount command
     return false;
 }
 
@@ -1245,6 +1255,8 @@ void select_and_mount_files_by_number() {
 		for (const auto& errorMessage : errorMessages) {
 			std::cerr << errorMessage;
 		}
+		
+		errorMessages.clear();
 
         // Stop the timer after completing the mounting process
         auto end_time = std::chrono::high_resolution_clock::now();
