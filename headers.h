@@ -109,7 +109,6 @@ std::string readInputLine(const std::string& prompt);
 bool fileExists(const std::string& filename);
 
 // Mount functions
-bool isNumeric(const std::string& str);
 bool isAlreadyMounted(const std::string& mountPoint);
 
 // Iso cache functions
@@ -124,6 +123,7 @@ bool isValidIndex(int index, size_t isoDirsSize);
 
 //General functions
 bool isAllZeros(const std::string& str);
+bool isNumeric(const std::string& str);
 
 //Delete functions
 void select_and_delete_files_by_number();
