@@ -3,16 +3,12 @@
 
 #include <algorithm>
 #include <chrono>
-#include <cstdlib>
 #include <cstring>
-#include <cstdio>
-#include <cctype>
 #include <dirent.h>
 #include <execution>
 #include <filesystem>
 #include <fstream>
 #include <future>
-#include <iterator>
 #include <iostream>
 #include <memory>
 #include <mutex>
@@ -21,14 +17,7 @@
 #include <readline/history.h>
 #include <semaphore.h>
 #include <set>
-#include <string>
-#include <sstream>
-#include <stdexcept>
-#include <sys/mount.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <thread>
-#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
