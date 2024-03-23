@@ -11,7 +11,6 @@ const std::string cacheFileName = "iso_cache.txt";;
 const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
 std::mutex Mutex4High; // Mutex for high level functions
-std::mutex Mutex4Med; // Mutex for middle level functions
 std::mutex Mutex4Low; // Mutex for low level functions
 
 // For cache directory creation
@@ -484,7 +483,7 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
         gapPrinted = true; // Set the flag to true to indicate that the gap has been printed
     }
 	// Lock the mutex to protect the shared 'allIsoFiles' vector
-    std::lock_guard<std::mutex> lock(Mutex4Med);
+    std::lock_guard<std::mutex> highlock(Mutex4High);
     // Append the new entries to the shared vector
     allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
 
@@ -931,7 +930,7 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
             }
             
 			// Lock to ensure thread safety in a multi-threaded environment
-            std::lock_guard<std::mutex> medLock(Mutex4Med);
+            std::lock_guard<std::mutex> highLock(Mutex4High);
 
             // Check for validity of the specified range
             if ((start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) ||
@@ -1059,9 +1058,6 @@ bool directoryExists(const std::string& path) {
 
 // Function to mount selected ISO files called from mountISOs
 void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& mountedSet) {
-	
-	// Lock the global mutex for synchronization
-    std::lock_guard<std::mutex> medLock(Mutex4Med);
 	
     namespace fs = std::filesystem;
 
