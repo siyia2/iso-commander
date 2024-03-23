@@ -80,6 +80,7 @@ int main(int argc, char *argv[]) {
 
 // ... Function definitions ...
 
+// ART
 
 // Print the version number of the program
 void printVersionNumber(const std::string& version) {
@@ -88,6 +89,7 @@ void printVersionNumber(const std::string& version) {
 }
 
 
+// Function to print ascii
 void print_ascii() {
     // Display ASCII art
 
@@ -107,6 +109,7 @@ std::cout << Color << R"(   *         )               )                  (      
 }
 
 
+// Function to print submenu1
 void submenu1() {
 
     while (true) {
@@ -154,6 +157,7 @@ void submenu1() {
 }
 
 
+// Function to print submenu2
 void submenu2() {
 	while (true) {
 		std::system("clear");
@@ -192,7 +196,7 @@ void submenu2() {
 	
 }
 
-
+// Function to print menu
 void printMenu() {
     std::cout << "\033[1;32m+-------------------------+" << std::endl;
     std::cout << "\033[1;32m|       Menu Options       |" << std::endl;
@@ -208,9 +212,24 @@ void printMenu() {
     std::cout << std::endl;
 }
 
+// GENERAL STUFF
+
+// Function to check if a string consists only of zeros
+bool isAllZeros(const std::string& str) {
+    return str.find_first_not_of('0') == std::string::npos;
+}
+
+
+// Function to check if a string is numeric
+bool isNumeric(const std::string& str) {
+    // Use parallel execution policy for parallelization
+    return std::all_of(std::execution::par, str.begin(), str.end(), [](char c) {
+        return std::isdigit(c);
+    });
+}
+
 
 //	CACHE STUFF
-
 
 // Function to check if a file exists asynchronously
 std::future<std::vector<std::string>> FileExistsAsync(const std::vector<std::string>& paths) {
@@ -599,6 +618,16 @@ std::future<bool> iequals(std::string_view a, std::string_view b) {
 }
 
 
+// Function to check if a string ends with ".iso" (case-insensitive)
+bool ends_with_iso(const std::string& str) {
+    // Convert the string to lowercase
+    std::string lowercase = str;
+    std::transform(lowercase.begin(), lowercase.end(), lowercase.begin(), ::tolower);
+    // Check if the string ends with ".iso" by comparing the last 4 characters
+    return (lowercase.size() >= 4) && (lowercase.compare(lowercase.size() - 4, 4, ".iso") == 0);
+}
+
+
 // Function to parallel traverse a directory and find ISO files
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& Mutex4Low) {
     try {
@@ -792,12 +821,6 @@ void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFi
     } else {
         std::cout << "\033[1;93mFile not found in cache: \033[1;0m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m.\033[1;0m" << std::endl;
     }
-}
-
-
-// Function to check if a string consists only of zeros
-bool isAllZeros(const std::string& str) {
-    return str.find_first_not_of('0') == std::string::npos;
 }
 
 
@@ -1105,25 +1128,6 @@ bool isAlreadyMounted(const std::string& mountPoint) {
 }
 
 
-// Function to check if a file exists on disk
-bool fileExistsOnDisk(const std::string& filename) {
-    // Open the file for reading
-    std::ifstream file(filename);
-    // Check if the file stream is in a good state, indicating the file exists
-    return file.good();
-}
-
-
-// Function to check if a string ends with ".iso" (case-insensitive)
-bool ends_with_iso(const std::string& str) {
-    // Convert the string to lowercase
-    std::string lowercase = str;
-    std::transform(lowercase.begin(), lowercase.end(), lowercase.begin(), ::tolower);
-    // Check if the string ends with ".iso" by comparing the last 4 characters
-    return (lowercase.size() >= 4) && (lowercase.compare(lowercase.size() - 4, 4, ".iso") == 0);
-}
-
-
 // Function to select and mount ISO files by number
 void select_and_mount_files_by_number() {
     // Remove non-existent paths from the cache
@@ -1255,15 +1259,6 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
         // Print the filename part in magenta and bold
         std::cout << bold << "/" << magenta << filename << defaultColor << std::endl;
     }
-}
-
-
-// Function to check if a string is numeric
-bool isNumeric(const std::string& str) {
-    // Use parallel execution policy for parallelization
-    return std::all_of(std::execution::par, str.begin(), str.end(), [](char c) {
-        return std::isdigit(c);
-    });
 }
 
 
