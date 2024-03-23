@@ -113,7 +113,6 @@ bool isNumeric(const std::string& str);
 bool isAlreadyMounted(const std::string& mountPoint);
 
 // Iso cache functions
-bool isValidDirectory(const std::string& path);
 bool ends_with_iso(const std::string& str);
 bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize);
 
