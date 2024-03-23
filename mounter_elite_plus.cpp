@@ -1070,31 +1070,19 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
 }
 
 
-// Function to check if an ISO is already mounted
 bool isAlreadyMounted(const std::string& mountPoint) {
-    std::string command = "mount";
+    std::string command = "mount | grep '" + mountPoint + "'";
     FILE* pipe = popen(command.c_str(), "r");
     if (pipe) {
         char buffer[128];
-        while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
-            std::string line(buffer);
-            // Tokenize the line by spaces
-            std::vector<std::string> tokens;
-            size_t pos = 0;
-            std::string token;
-            while ((pos = line.find(' ')) != std::string::npos) {
-                token = line.substr(0, pos);
-                tokens.push_back(token);
-                line.erase(0, pos + 1);
-            }
-            // Check if the mount point is the second token
-            if (tokens.size() >= 2 && tokens[1] == mountPoint) {
-                pclose(pipe);
-                return true;
-            }
+        if (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+            // The mount point was found in the output of the mount command
+            pclose(pipe);
+            return true;
         }
         pclose(pipe);
     }
+    // The mount point was not found in the output of the mount command
     return false;
 }
 
