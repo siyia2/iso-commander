@@ -28,8 +28,6 @@ std::vector<std::string> errorMessages;
 bool fileExists(const std::string& filename);
 
 // Mount functions
-bool directoryExists(const std::string& path);
-bool isNumeric(const std::string& str);
 bool isAlreadyMounted(const std::string& mountPoint);
 
 // Iso cache functions
@@ -45,6 +43,8 @@ bool isValidIndex(int index, size_t isoDirsSize);
 
 //General functions
 bool isAllZeros(const std::string& str);
+bool isNumeric(const std::string& str);
+
 
 //Delete functions
 void select_and_delete_files_by_number();
@@ -92,7 +92,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
     
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.6.3");
+        printVersionNumber("2.6.4");
         return 0;
     }  
 
@@ -1049,12 +1049,6 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
 
 
 //	MOUNT STUFF
-
-// Function to check if a directory exists
-bool directoryExists(const std::string& path) {
-    return std::filesystem::is_directory(path);
-}
-
 
 // Function to mount selected ISO files called from mountISOs
 void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& mountedSet) {
