@@ -1534,6 +1534,7 @@ void unmountISO(const std::string& isoDir) {
             if (isDirectoryEmpty(isoDir) && result != 0) {
                     // Construct the remove directory command with sudo, rmdir, and suppressing logs
                     command = "sudo rmdir " + shell_escape(isoDir) + " 2>/dev/null";
+                    // Yes! it is used for real!
                     int removeDirResult __attribute__((unused)) = system(command.c_str());
                     std::cout << "\033[1;92mRemoved empty directory: \033[1;91m'" << isoDirectory << "/" << isoFilename << "'\033[1;92m.\033[1;0m" << std::endl; // Print success message
 				}
