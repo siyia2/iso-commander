@@ -1080,7 +1080,6 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
 
     if (sudoResult == 0) {
         
-
         // Asynchronously check and create the mount point directory
         auto future = std::async(std::launch::async, [&mountPoint]() {
             if (!std::filesystem::exists(mountPoint)) {
