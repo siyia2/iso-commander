@@ -23,6 +23,8 @@ std::vector<std::string> errorMessages;
 // Vector to store skipped ISO mounts
 std::vector<std::string> skippedMessages;
 
+std::unordered_set<std::string> uniqueErrorMessages;
+
 
 // Main function
 int main(int argc, char *argv[]) {
@@ -1200,7 +1202,6 @@ void select_and_mount_files_by_number() {
             processAndMountIsoFiles(input, isoFiles, mountedSet);
         }
         
-        // Print all the stored error messages
         if (!skippedMessages.empty()) {
 			std::cout << " " << std::endl;
 		}
@@ -1210,18 +1211,26 @@ void select_and_mount_files_by_number() {
 			std::cerr << skippedMessage;
 		}
         
-        // Print all the stored error messages
         if (!errorMessages.empty()) {
 			std::cout << " " << std::endl;
 		}
-			
+		// Print all the stored error messages
 		for (const auto& errorMessage : errorMessages) {
 			std::cerr << errorMessage;
 		}
 		
+		if (!uniqueErrorMessages.empty()) {
+			std::cout << " " << std::endl;
+		}
+		
+		for (const auto& errorMsg : uniqueErrorMessages) {
+            std::cerr << "\033[1;93m" << errorMsg << "\033[1;0m" << std::endl;
+        }
+		
 		// Clear the vectos after each iteration
 		skippedMessages.clear();
 		errorMessages.clear();
+		uniqueErrorMessages.clear();
 
         // Stop the timer after completing the mounting process
         auto end_time = std::chrono::high_resolution_clock::now();
@@ -1269,9 +1278,6 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     
     // Flag to track if any invalid input is encountered
     bool invalidInput = false;
-    
-    // Set to store unique error messages
-    std::unordered_set<std::string> uniqueErrorMessages;
     
     // Set to store indices of processed tokens
     std::set<int> processedIndices;
@@ -1397,17 +1403,6 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
             // Handle invalid token
             invalidInput = true;
             uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[1;0m");
-        }
-    }
-
-    // Print unique error messages for invalid inputs
-    if (invalidInput) {
-        for (const auto& errorMsg : uniqueErrorMessages) {
-            std::cerr << "\033[1;93m" << errorMsg << "\033[1;0m" << std::endl;
-        }
-        // Print a separator if there is any invalid input and valid indices are present
-        if (invalidInput && !validIndices.empty()) {
-            std::cout << " " << std::endl;
         }
     }
 }
@@ -1708,22 +1703,6 @@ void unmountISOs() {
 			}
 		}
 
-        // Lock access to error messages
-        std::lock_guard<std::mutex> errorMessagesLock(errorMessagesMutex);
-
-        // Print error messages
-        for (const auto& errorMessage : errorMessages) {
-            if (uniqueErrorMessages.find(errorMessage) == uniqueErrorMessages.end()) {
-                // If not found, store the error message and print it
-                uniqueErrorMessages.insert(errorMessage);
-                std::cerr << "\033[1;93m" << errorMessage << "\033[1;0m" << std::endl;
-            }
-        }
-        
-        if (invalidInput && !validIndices.empty()) {
-            std::cout << " " << std::endl;
-        }
-
         std::vector<std::thread> threads;
         // Create a thread pool with a limited number of threads
         ThreadPool pool(maxThreads);
@@ -1744,6 +1723,22 @@ void unmountISOs() {
 
         for (auto& future : futures) {
             future.wait();
+        }
+        
+        if (invalidInput && !validIndices.empty()) {
+            std::cout << " " << std::endl;
+        }
+        
+        // Lock access to error messages
+        std::lock_guard<std::mutex> errorMessagesLock(errorMessagesMutex);
+
+        // Print error messages
+        for (const auto& errorMessage : errorMessages) {
+            if (uniqueErrorMessages.find(errorMessage) == uniqueErrorMessages.end()) {
+                // If not found, store the error message and print it
+                uniqueErrorMessages.insert(errorMessage);
+                std::cerr << "\033[1;93m" << errorMessage << "\033[1;0m" << std::endl;
+            }
         }
 
         // Stop the timer after completing the unmounting process
