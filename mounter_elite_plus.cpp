@@ -93,7 +93,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
     
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.6.2");
+        printVersionNumber("2.6.3");
         return 0;
     }  
 
@@ -792,7 +792,6 @@ bool fileExists(const std::string& filename) {
 
 // Function to handle the deletion of an ISO file
 void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
-    std::lock_guard<std::mutex> lowLock(Mutex4Low);
     auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(iso);
 
     // Static variable to track whether the clear has been performed
@@ -817,7 +816,7 @@ void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFi
                 std::system("clear");
                 clearScreenDone = true;
             }
-
+			std::lock_guard<std::mutex> lowLock(Mutex4Low);
             // Check if the file exists before attempting to delete
             if (fileExists(iso)) {
 
@@ -1057,9 +1056,6 @@ bool directoryExists(const std::string& path) {
 // Function to mount selected ISO files called from mountISOs
 void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& mountedSet) {
 	
-	// Lock the global mutex for synchronization
-    std::lock_guard<std::mutex> medLock(Mutex4Med);
-	
     namespace fs = std::filesystem;
 
     // Use the filesystem library to extract the ISO file name
@@ -1089,7 +1085,6 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
 
         // Wait for the asynchronous operation to complete
         future.wait();
-        
 
         // Check if the mount point directory was created successfully
         if (std::filesystem::exists(mountPoint)) {
@@ -1139,23 +1134,16 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
 }
 
 
-// Function to check if a directory is already mounted
 bool isAlreadyMounted(const std::string& mountPoint) {
-    // Open the file '/proc/mounts' for reading
-    std::ifstream mountFile("/proc/mounts");
-    std::string line;
-    // Read each line from the '/proc/mounts' file
-    while (std::getline(mountFile, line)) {
-        // Tokenize the line using whitespace as delimiter
-        std::istringstream iss(line);
-        std::vector<std::string> tokens{std::istream_iterator<std::string>{iss}, std::istream_iterator<std::string>{}};
-        // Check if the token at index 1 (which represents the mount point) matches the provided mountPoint
-        if (tokens.size() >= 2 && tokens[1] == mountPoint)
-            return true; // If a match is found, return true indicating the directory is already mounted
+    struct statvfs buffer;
+    if (statvfs(mountPoint.c_str(), &buffer) == 0) {
+        // The statvfs call succeeded, indicating the directory is mounted
+        return true;
     }
-    // If no match is found, return false indicating the directory is not mounted
+    // The statvfs call failed, indicating the directory is not mounted
     return false;
 }
+
 
 
 // Function to check if a file exists on disk
