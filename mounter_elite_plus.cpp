@@ -1059,6 +1059,9 @@ bool directoryExists(const std::string& path) {
 // Function to mount selected ISO files called from mountISOs
 void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& mountedSet) {
 	
+	// Lock the global mutex for synchronization
+	std::lock_guard<std::mutex> lowLock(Mutex4Low);
+	
     namespace fs = std::filesystem;
 
     // Use the filesystem library to extract the ISO file name
@@ -1093,8 +1096,6 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
         // Check if the mount point directory was created successfully
         if (std::filesystem::exists(mountPoint)) {
             try {
-				// Lock the global mutex for synchronization
-				std::lock_guard<std::mutex> lowLock(Mutex4Low);
                 // Check if the mount point is already mounted
                 if (isAlreadyMounted(mountPoint)) {
                     // If already mounted, print a message and return
