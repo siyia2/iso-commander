@@ -1143,6 +1143,7 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
 }
 
 
+// Function to check if an ISO is already mounted
 bool isAlreadyMounted(const std::string& mountPoint) {
     std::string command = "mount";
     FILE* pipe = popen(command.c_str(), "r");
@@ -1169,7 +1170,6 @@ bool isAlreadyMounted(const std::string& mountPoint) {
     }
     return false;
 }
-
 
 
 // Function to check if a file exists on disk
