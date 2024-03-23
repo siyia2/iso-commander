@@ -11,12 +11,15 @@
 #include <future>
 #include <iostream>
 #include <memory>
+#include <mntent.h>
 #include <mutex>
 #include <queue>
 #include <readline/readline.h>
 #include <readline/history.h>
 #include <semaphore.h>
 #include <set>
+#include <string>
+#include <sys/mount.h>
 #include <thread>
 #include <unordered_set>
 #include <vector>
@@ -106,7 +109,6 @@ std::string readInputLine(const std::string& prompt);
 bool fileExists(const std::string& filename);
 
 // Mount functions
-bool directoryExists(const std::string& path);
 bool isNumeric(const std::string& str);
 bool isAlreadyMounted(const std::string& mountPoint);
 

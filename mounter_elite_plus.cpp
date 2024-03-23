@@ -1082,29 +1082,25 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
     }
 }
 
-
-// Function to check if na ISO is already mounted
+// Function to check if an ISO is already mounted
 bool isAlreadyMounted(const std::string& mountPoint) {
-    std::string command = "mount";
-    FILE* pipe = popen(command.c_str(), "r");
-    if (!pipe) {
-        // Error handling for failed popen
+    FILE* mountTable = setmntent("/proc/mounts", "r");
+    if (!mountTable) {
+        // Failed to open mount table
         return false;
     }
-    
-    char buffer[128];
-    bool isMounted = false;
-    while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
-        std::string line(buffer);
-        if (line.find(mountPoint) != std::string::npos) {
-            // Found the mount point in the line
-            isMounted = true;
-            break;
+
+    mntent* entry;
+    while ((entry = getmntent(mountTable)) != nullptr) {
+        if (std::strcmp(entry->mnt_dir, mountPoint.c_str()) == 0) {
+            // Found the mount point in the mount table
+            endmntent(mountTable);
+            return true;
         }
     }
-    
-    pclose(pipe);
-    return isMounted;
+
+    endmntent(mountTable);
+    return false;
 }
 
 
