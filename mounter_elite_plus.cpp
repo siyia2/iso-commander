@@ -210,7 +210,8 @@ void submenu1() {
             case '4':
                 // The user chose to go back to the main menu, so return from the function
                 return;
-        }	}
+			}
+        }
     }
 }
 
