@@ -19,10 +19,9 @@ bool gapPrintedtraverse = false; // for traverse function
 
 // Vector to store ISO mount errors
 std::vector<std::string> errorMessages;
-
 // Vector to store skipped ISO mounts
 std::vector<std::string> skippedMessages;
-
+// Vector to store ISO unique input errors
 std::unordered_set<std::string> uniqueErrorMessages;
 
 
