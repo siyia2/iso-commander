@@ -18,10 +18,6 @@ std::mutex Mutex4Low; // Mutex for low level functions
 bool gapPrinted = false; // for cache refresh for directory function
 bool gapPrintedtraverse = false; // for traverse function
 
-
-// Set to store unique error messages
-std::unordered_set<std::string> uniqueErrorMessages;
-
 // Vector to store ISO mount errors
 std::vector<std::string> errorMessages;
 
@@ -1075,10 +1071,6 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
 
     auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint);
     auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
-    static bool firstrun= true;
-    // Variable to track whether the clear has been performed
-	static bool clearScreenDone = false;
-    
 
     // Construct the sudo command
     std::string sudoCommand = "sudo -v";
@@ -1087,20 +1079,7 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
     int sudoResult = system(sudoCommand.c_str());
 
     if (sudoResult == 0) {
-        // Clear the screen only if it hasn't been done yet
-        if (!clearScreenDone) {
-            std::system("clear");
-            clearScreenDone = true;
-        }
-        // Print unique error messages for invalid inputs if the set is not empty and is first run
-        if (!uniqueErrorMessages.empty() && firstrun) {
-				for (const auto& errorMsg : uniqueErrorMessages) {
-					std::cerr << "\033[1;93m" << errorMsg << "\033[1;0m" << std::endl;
-					}
-					uniqueErrorMessages.clear();
-					std::cout << " " << std::endl; // Print a separator
-					firstrun=false;
-				}
+        
 
         // Asynchronously check and create the mount point directory
         auto future = std::async(std::launch::async, [&mountPoint]() {
@@ -1111,6 +1090,7 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
 
         // Wait for the asynchronous operation to complete
         future.wait();
+        
 
         // Check if the mount point directory was created successfully
         if (std::filesystem::exists(mountPoint)) {
@@ -1254,7 +1234,7 @@ void select_and_mount_files_by_number() {
         }
 
         // Check if the user wants to mount all ISO files
-        if (std::strcmp(input, "00") == 0 && std::strlen(input) == 2) {
+        if (std::strcmp(input, "00") == 0) {
             // Create a ThreadPool with maxThreads
 			ThreadPool pool(maxThreads);
 
@@ -1270,6 +1250,15 @@ void select_and_mount_files_by_number() {
             processAndMountIsoFiles(input, isoFiles, mountedSet);
         }
         
+        // Print all the stored error messages
+        if (!errorMessages.empty()) {
+			std::cout << " " << std::endl;
+		}
+			
+		for (const auto& errorMessage : errorMessages) {
+			std::cerr << errorMessage;
+		}
+
         // Stop the timer after completing the mounting process
         auto end_time = std::chrono::high_resolution_clock::now();
 
@@ -1325,6 +1314,9 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     
     // Flag to track if any invalid input is encountered
     bool invalidInput = false;
+    
+    // Set to store unique error messages
+    std::unordered_set<std::string> uniqueErrorMessages;
     
     // Set to store indices of processed tokens
     std::set<int> processedIndices;
@@ -1458,7 +1450,6 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
         for (const auto& errorMsg : uniqueErrorMessages) {
             std::cerr << "\033[1;93m" << errorMsg << "\033[1;0m" << std::endl;
         }
-        uniqueErrorMessages.clear();
         // Print a separator if there is any invalid input and valid indices are present
         if (invalidInput && !validIndices.empty()) {
             std::cout << " " << std::endl;
@@ -1466,6 +1457,8 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     }
 }
 
+
+// UMOUNT STUFF
 
 // Function to list mounted ISOs in the /mnt directory
 void listMountedISOs() {
@@ -1519,10 +1512,7 @@ bool isDirectoryEmpty(const std::string& path) {
 
 // Function to unmount ISO files asynchronously
 void unmountISO(const std::string& isoDir) {
-	
-	static bool firstrun= true;
-    // Variable to track whether the clear has been performed
-	static bool clearScreenDone = false;
+
     // Use std::async to unmount and remove the directory asynchronously
     auto unmountFuture = std::async(std::launch::async, [&isoDir]() {
         // Construct the sudo command
@@ -1532,20 +1522,6 @@ void unmountISO(const std::string& isoDir) {
         int sudoResult = system(sudoCommand.c_str());
 
         if (sudoResult == 0) {
-            // Clear the screen only if it hasn't been done yet
-            if (!clearScreenDone) {
-                std::system("clear");
-                clearScreenDone = true;
-				}
-				// Print unique error messages for invalid inputs if the set is not empty and is first run
-				if (!uniqueErrorMessages.empty() && firstrun) {
-					for (const auto& errorMsg : uniqueErrorMessages) {
-						std::cerr << "\033[1;93m" << errorMsg << "\033[1;0m" << std::endl;
-						}
-						uniqueErrorMessages.clear();
-						std::cout << " " << std::endl; // Print a separator
-						firstrun=false;
-					}
 
             // Construct the unmount command with sudo, umount, and suppressing logs
             std::string command = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1";
@@ -1600,14 +1576,13 @@ bool isValidIndex(int index, size_t isoDirsSize) {
 
 // Main function for unmounting ISOs
 void unmountISOs() {
-    
+    // Set to store unique error messages
+    std::set<std::string> uniqueErrorMessages;
     // Set to store valid indices selected for unmounting
     std::set<int> validIndices;
 
     // Flag to check for invalid input
     bool invalidInput = false;
-    // Variable to track whether the clear has been performed
-	static bool clearScreenDone = false;
     
     // Mutexes for synchronization
     std::mutex isoDirsMutex;
@@ -1771,22 +1746,22 @@ void unmountISOs() {
 			invalidInput = true;
 			}
 		}
-		if (!clearScreenDone) {
-		// Lock access to error messages
-			std::lock_guard<std::mutex> errorMessagesLock(errorMessagesMutex);
-			// Print error messages
-			for (const auto& errorMessage : errorMessages) {
-				if (uniqueErrorMessages.find(errorMessage) == uniqueErrorMessages.end()) {
-					// If not found, store the error message and print it
-					uniqueErrorMessages.insert(errorMessage);
-					std::cerr << "\033[1;93m" << errorMessage << "\033[1;0m" << std::endl;
-					}
-				}
+
+        // Lock access to error messages
+        std::lock_guard<std::mutex> errorMessagesLock(errorMessagesMutex);
+
+        // Print error messages
+        for (const auto& errorMessage : errorMessages) {
+            if (uniqueErrorMessages.find(errorMessage) == uniqueErrorMessages.end()) {
+                // If not found, store the error message and print it
+                uniqueErrorMessages.insert(errorMessage);
+                std::cerr << "\033[1;93m" << errorMessage << "\033[1;0m" << std::endl;
+            }
+        }
         
-			if (invalidInput && !validIndices.empty()) {
-				std::cout << " " << std::endl;
-			}
-		}
+        if (invalidInput && !validIndices.empty()) {
+            std::cout << " " << std::endl;
+        }
 
         std::vector<std::thread> threads;
         // Create a thread pool with a limited number of threads
@@ -1812,6 +1787,7 @@ void unmountISOs() {
 
         // Stop the timer after completing the unmounting process
         auto end_time = std::chrono::high_resolution_clock::now();
+
 
         auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
         // Print the time taken for the entire process in bold with one decimal place
