@@ -31,7 +31,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
     
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.6.8");
+        printVersionNumber("2.6.7");
         return 0;
     }  
 
@@ -1021,10 +1021,6 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
     // Use the filesystem library to extract the ISO file name
     fs::path isoPath(isoFile);
     std::string isoFileName = isoPath.stem().string(); // Remove the .iso extension
-    // Flag to check if it is the first execution of the function
-    static bool isFirstRun = true;
-    // Flag to check if it is the first successful mount of the function
-    static bool isFirstRunMount = true;
 
     // Use the modified ISO file name in the mount point with "iso_" prefix
     std::string mountPoint = "/mnt/iso_" + isoFileName;
@@ -1050,10 +1046,6 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
         // Wait for the asynchronous operation to complete
         future.wait();
         
-        if (isFirstRun) {
-			std::system("clear");
-			isFirstRun = false;
-		}
 
         // Check if the mount point directory was created successfully
         if (std::filesystem::exists(mountPoint)) {
@@ -1086,10 +1078,6 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
 
                 // Insert the mount point into the set
                 mountedSet.insert(mountPoint);
-                if (isFirstRunMount) {
-				std::cout << " " << std::endl;
-				isFirstRunMount = false;
-			}
                 std::cout << "\033[1mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;0m "
                           << "\033[1mmounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;0m\033[1m.\033[1;0m" << std::endl;
             } catch (const std::exception& e) {
@@ -1483,17 +1471,9 @@ void unmountISO(const std::string& isoDir) {
 
         // Execute sudo to prompt for password
         int sudoResult = system(sudoCommand.c_str());
-        // Flag to check if it is the first execution of the function
-        static bool isFirstRun = true;
 
         if (sudoResult == 0) {
-			
-			if (isFirstRun) {
-				std::system("clear");
-				std::cout << " " << std::endl;
-				isFirstRun = false;
-			}
-			
+
             // Construct the unmount command with sudo, umount, and suppressing logs
             std::string command = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1";
             int result = system(command.c_str());
