@@ -963,9 +963,6 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
         std::cout << "\033[1;94mDo you want to proceed with the \033[1;91mdeletion\033[1;94m of the above? (y/n):\033[1;0m ";
         std::getline(std::cin, confirmation);
 
-        // Ignore any additional characters in the input buffer, including newline
-       // std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-
         // Check if the entered character is not 'Y' or 'y'
         if (!(confirmation == "y" || confirmation == "Y")) {
             std::cout << " " << std::endl;
