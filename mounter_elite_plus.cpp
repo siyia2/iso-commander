@@ -31,7 +31,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
     
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.6.7");
+        printVersionNumber("2.6.8");
         return 0;
     }  
 
@@ -958,16 +958,16 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
         std::cout << "\033[1;91mNo valid selection(s) for deletion.\033[1;0m" << std::endl;
     } else {
         // Prompt for confirmation before proceeding
-        char confirmation;
+        std::string confirmation;
         std::cout << " " << std::endl;
         std::cout << "\033[1;94mDo you want to proceed with the \033[1;91mdeletion\033[1;94m of the above? (y/n):\033[1;0m ";
-        std::cin.get(confirmation);
+        std::getline(std::cin, confirmation);
 
         // Ignore any additional characters in the input buffer, including newline
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+       // std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
         // Check if the entered character is not 'Y' or 'y'
-        if (!(confirmation == 'y' || confirmation == 'Y')) {
+        if (!(confirmation == "y" || confirmation == "Y")) {
             std::cout << " " << std::endl;
             std::cout << "\033[1;93mDeletion aborted by user.\033[1;0m" << std::endl;
             return;
