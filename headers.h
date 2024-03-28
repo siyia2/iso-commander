@@ -177,9 +177,11 @@ bool fileExistsConversions(const std::string& fullPath);
 // BIN/IMG CONVERSION
 
 // bools
+
 bool blacklistBin(const std::filesystem::path& entry);
 
 // stds
+
 std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback);
 
 // voids
@@ -193,9 +195,11 @@ void printFileListBin(const std::vector<std::string>& fileList);
 // MDF/MDS CONVERSION
 
 // bools
+
 bool blacklistMDF(const std::filesystem::path& entry);
 
 // stds
+
 std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback);
 
 // voids
