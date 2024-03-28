@@ -177,7 +177,6 @@ bool fileExistsConversions(const std::string& fullPath);
 // BIN/IMG CONVERSION
 
 // bools
-
 bool blacklistBin(const std::filesystem::path& entry);
 
 // stds
