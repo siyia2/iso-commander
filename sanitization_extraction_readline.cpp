@@ -118,8 +118,8 @@ void saveHistory() {
             std::unordered_set<std::string> writtenLines;
             std::vector<std::string> uniqueLines;
 
-            // Collect unique lines, skipping the first entry
-            for (int i = 1; histList[i]; i++) {
+            // Iterate through all history entries
+            for (int i = 0; histList[i]; i++) {
                 std::string line(histList[i]->line);
                 if (!line.empty() && writtenLines.find(line) == writtenLines.end()) {
                     writtenLines.insert(line);
