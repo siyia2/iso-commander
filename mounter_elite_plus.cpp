@@ -418,7 +418,7 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
         }
     } else {
 		std::cout << " " << std::endl;
-        std::cerr << "\033[1;91mFailed to open ISO cache file: \033[1;93m'"<< (cachePath / cacheFileName).string() <<"'\033[1;91m. Check file permissions.\033[0m\033[1m" << std::endl;
+        std::cerr << "\033[1;91mFailed to open ISO cache file: \033[1;93m'"<< cacheDirectory + "/" + cacheFileName <<"'\033[1;91m. Check file permissions.\033[0m\033[1m" << std::endl;
         return false;  // Cache save failed
     }
 }
