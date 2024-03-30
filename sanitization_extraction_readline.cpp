@@ -111,37 +111,52 @@ void loadHistory() {
 
 
 //Maximum number of history entries at a time
-const int MAX_HISTORY_LINES = 12;
+const int MAX_HISTORY_LINES = 100;
 
 // Function to save history from readline
 void saveHistory() {
     std::ofstream historyFile(historyFilePath, std::ios::out | std::ios::trunc);
+
     if (historyFile.is_open()) {
         HIST_ENTRY **histList = history_list();
+
         if (histList) {
             std::unordered_set<std::string> writtenLines;
             std::vector<std::string> uniqueLines;
+            std::vector<std::string> recentLines; // To store recently entered lines
 
             // Iterate through all history entries
             for (int i = 0; histList[i]; i++) {
                 std::string line(histList[i]->line);
-                if (!line.empty() && writtenLines.find(line) == writtenLines.end()) {
-                    writtenLines.insert(line);
-                    uniqueLines.push_back(line);
+
+                if (!line.empty()) {
+                    if (writtenLines.find(line) == writtenLines.end()) {
+                        writtenLines.insert(line);
+                        uniqueLines.push_back(line);
+                    } else {
+                        // If the line is already in the cache, add it to recentLines
+                        recentLines.push_back(line);
+                    }
                 }
             }
 
             // Adjust the number of lines to keep within the limit
-            int excessLines = uniqueLines.size() - MAX_HISTORY_LINES;
+            int excessLines = uniqueLines.size() - MAX_HISTORY_LINES + recentLines.size();
+
             if (excessLines > 0) {
+                // Remove excess lines from the beginning of uniqueLines
                 uniqueLines.erase(uniqueLines.begin(), uniqueLines.begin() + excessLines);
             }
+
+            // Append recently entered lines to the end of uniqueLines
+            uniqueLines.insert(uniqueLines.end(), recentLines.begin(), recentLines.end());
 
             // Write all the lines to the file
             for (const auto& line : uniqueLines) {
                 historyFile << line << std::endl;
             }
         }
+
         historyFile.close();
     } else {
         std::cerr << "\n\033[1;91mFailed to open history cache file: \033[1;93m'" << historyFilePath << "'\033[1;91m. Check file permissions.\033[0m" << std::endl;
