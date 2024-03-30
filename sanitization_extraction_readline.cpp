@@ -96,15 +96,20 @@ const std::string historyFilePath = std::string(getenv("HOME")) + "/.cache/histo
 
 // Function to load history from readline
 void loadHistory() {
-    std::ifstream historyFile(historyFilePath);
-    if (historyFile.is_open()) {
-        std::string line;
-        while (std::getline(historyFile, line)) {
-            add_history(line.c_str());
+    // Only load history from file if it's not already populated in memory
+    if (history_length == 0) {
+        std::ifstream historyFile(historyFilePath);
+        if (historyFile.is_open()) {
+            std::string line;
+            while (std::getline(historyFile, line)) {
+                add_history(line.c_str());
+            }
+            historyFile.close();
         }
-        historyFile.close();
     }
 }
+
+
 
 //Maximum number of history at a time
 const int MAX_HISTORY_LINES = 100;
