@@ -111,7 +111,7 @@ void loadHistory() {
 
 
 //Maximum number of history entries at a time
-const int MAX_HISTORY_LINES = 10;
+const int MAX_HISTORY_LINES = 12;
 
 // Function to save history from readline
 void saveHistory() {
