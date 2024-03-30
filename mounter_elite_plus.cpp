@@ -1010,7 +1010,7 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
 
 //	MOUNT STUFF
 
-// Function to mount selected ISO files called from mountISOs
+// Function to mount selected ISO files called from process processAndMountIsoFiles
 void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& mountedSet) {
 	
 	// Lock the global mutex for synchronization
