@@ -31,9 +31,12 @@ int main(int argc, char *argv[]) {
     std::string choice;
     
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.6.8");
+        printVersionNumber("2.6.9");
         return 0;
-    }  
+    }
+    
+     // Load existing history from file
+		loadHistory();
 
     while (!exitProgram) {
         std::system("clear");
@@ -75,6 +78,7 @@ int main(int argc, char *argv[]) {
         }
     }
 }
+	
     return 0;
 }
 
@@ -454,9 +458,15 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 void manualRefreshCache() {
     std::system("clear");
     gapPrinted = false;
+    
+    // Load history from file
+    loadHistory();
 
     // Prompt the user to enter directory paths for manual cache refresh
     std::string inputLine = readInputLine("\033[1;94mEnter the directory path(s) from which to populate the \033[1m\033[1;92mISO Cache\033[94m (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1;94m), or press Enter to cancel:\n\033[0m");
+    
+    // Save history to file
+    saveHistory();
 
     // Check if the user canceled the cache refresh
     if (inputLine.empty()) {

@@ -136,7 +136,7 @@ void saveHistory() {
         }
         historyFile.close();
     } else {
-        std::cerr << "Failed to open history file: " << historyFilePath << std::endl;
+        std::cerr << "\033[1;91m/Failed to open history file: \033[1;93m" << historyFilePath << "\033[0m" << std::endl;
     }
 }
 
