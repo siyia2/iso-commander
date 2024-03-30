@@ -110,7 +110,6 @@ void loadHistory() {
 }
 
 
-
 //Maximum number of history at a time
 const int MAX_HISTORY_LINES = 100;
 
