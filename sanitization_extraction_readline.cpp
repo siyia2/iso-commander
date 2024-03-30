@@ -92,7 +92,7 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(const std::strin
 
 
 // Default readline history save path
-const std::string historyFilePath = std::string(getenv("HOME")) + "/.cache/history.txt";
+const std::string historyFilePath = std::string(getenv("HOME")) + "/.cache/mounter_elite_plus_history_cache.txt";
 
 // Function to load history from readline
 void loadHistory() {

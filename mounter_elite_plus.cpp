@@ -7,7 +7,7 @@ unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread:
 // Cache Variables
 
 const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.cache"; // Construct the full path to the cache directory
-const std::string cacheFileName = "iso_cache.txt";;
+const std::string cacheFileName = "mounter_elite_plus_iso_cache.txt";;
 const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
 std::mutex Mutex4High; // Mutex for high level functions
@@ -31,7 +31,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
     
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.7.0");
+        printVersionNumber("2.7.1");
         return 0;
     }
     
@@ -253,7 +253,7 @@ std::future<std::vector<std::string>> FileExistsAsync(const std::vector<std::str
 // Function to remove non-existent paths from cache asynchronously with basic thread control
 void removeNonExistentPathsFromCache() {
     // Define the path to the cache file
-    std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/iso_cache.txt";
+    std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/mounter_elite_plus_iso_cache.txt";
     std::vector<std::string> cache; // Vector to store paths read from the cache file
 
     // Attempt to open the cache file
@@ -345,7 +345,7 @@ std::string getHomeDirectory() {
 // Load cache
 std::vector<std::string> loadCache() {
     std::vector<std::string> isoFiles;
-    std::string cacheFilePath = getHomeDirectory() + "/.cache/iso_cache.txt";
+    std::string cacheFilePath = getHomeDirectory() + "/.cache/mounter_elite_plus_iso_cache.txt";
     std::ifstream cacheFile(cacheFilePath);
 
     if (cacheFile.is_open()) {
