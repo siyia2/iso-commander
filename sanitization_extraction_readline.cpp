@@ -106,9 +106,8 @@ void loadHistory() {
     }
 }
 
-
-// maximum number of history at a time
-const int MAX_HISTORY_LINES = 100;
+//Maximum number of history at a time
+const int MAX_HISTORY_LINES = 5;
 
 // Function to save history from readline
 void saveHistory() {
@@ -128,10 +127,15 @@ void saveHistory() {
                 }
             }
 
-            // Write the most recent MAX_HISTORY_LINES lines to the file
-            int start = std::max(0, static_cast<int>(uniqueLines.size()) - MAX_HISTORY_LINES);
-            for (int i = start; i < static_cast<int>(uniqueLines.size()); i++) {
-                historyFile << uniqueLines[i] << std::endl;
+            // Adjust the number of lines to keep within the limit
+            int excessLines = uniqueLines.size() - MAX_HISTORY_LINES;
+            if (excessLines > 0) {
+                uniqueLines.erase(uniqueLines.begin(), uniqueLines.begin() + excessLines);
+            }
+
+            // Write all the lines to the file
+            for (const auto& line : uniqueLines) {
+                historyFile << line << std::endl;
             }
         }
         historyFile.close();
