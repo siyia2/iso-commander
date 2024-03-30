@@ -121,35 +121,35 @@ void saveHistory() {
         HIST_ENTRY **histList = history_list();
 
         if (histList) {
-            std::unordered_set<std::string> writtenLines;
+            std::unordered_map<std::string, int> lineIndices; // To store the index of each line
             std::vector<std::string> uniqueLines;
-            std::vector<std::string> recentLines; // To store recently entered lines
 
             // Iterate through all history entries
             for (int i = 0; histList[i]; i++) {
                 std::string line(histList[i]->line);
 
                 if (!line.empty()) {
-                    if (writtenLines.find(line) == writtenLines.end()) {
-                        writtenLines.insert(line);
+                    auto it = lineIndices.find(line);
+                    if (it == lineIndices.end()) {
+                        // Line not found, insert it
+                        lineIndices[line] = uniqueLines.size();
                         uniqueLines.push_back(line);
                     } else {
-                        // If the line is already in the cache, add it to recentLines
-                        recentLines.push_back(line);
+                        // Line found, remove the old instance and add the new one
+                        uniqueLines.erase(uniqueLines.begin() + it->second);
+                        lineIndices[line] = uniqueLines.size();
+                        uniqueLines.push_back(line);
                     }
                 }
             }
 
             // Adjust the number of lines to keep within the limit
-            int excessLines = uniqueLines.size() - MAX_HISTORY_LINES + recentLines.size();
+            int excessLines = uniqueLines.size() - MAX_HISTORY_LINES;
 
             if (excessLines > 0) {
-                // Remove excess lines from the beginning of uniqueLines
+                // Remove excess lines from the beginning
                 uniqueLines.erase(uniqueLines.begin(), uniqueLines.begin() + excessLines);
             }
-
-            // Append recently entered lines to the end of uniqueLines
-            uniqueLines.insert(uniqueLines.end(), recentLines.begin(), recentLines.end());
 
             // Write all the lines to the file
             for (const auto& line : uniqueLines) {
