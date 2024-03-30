@@ -132,7 +132,7 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
 void handleIsoFiles(const std::vector<std::string>& isos, std::unordered_set<std::string>& mountedSet);
 
 // Mount functions
-void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
+void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& mountedSet);
 void select_and_mount_files_by_number();
 void printIsoFileList(const std::vector<std::string>& isoFiles);
 void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
@@ -181,7 +181,6 @@ bool fileExistsConversions(const std::string& fullPath);
 bool blacklistBin(const std::filesystem::path& entry);
 
 // stds
-
 std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback);
 
 // voids
@@ -195,11 +194,9 @@ void printFileListBin(const std::vector<std::string>& fileList);
 // MDF/MDS CONVERSION
 
 // bools
-
 bool blacklistMDF(const std::filesystem::path& entry);
 
 // stds
-
 std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback);
 
 // voids
