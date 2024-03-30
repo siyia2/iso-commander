@@ -45,12 +45,16 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(const std::strin
         // Extract the current component between slashes
         std::string component = path.substr(lastSlashPos, currentSlashPos - lastSlashPos);
 
-        // Limit each component to 10 characters or the first space gap
+        // Limit each component to 28 characters or the first space gap or the first hyphen
         std::size_t maxComponentSize = 28;
         std::size_t spacePos = component.find(' ');
+        std::size_t hyphenPos = component.find('-');
 
         if (spacePos != std::string::npos && spacePos <= maxComponentSize) {
             component = component.substr(0, spacePos);
+        } 
+        if (hyphenPos != std::string::npos && hyphenPos <= maxComponentSize) {
+            component = component.substr(0, hyphenPos);
         } else {
             component = component.substr(0, maxComponentSize);
         }
