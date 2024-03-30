@@ -91,6 +91,56 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(const std::strin
 }
 
 
+// Default readline history save path
+const std::string historyFilePath = std::string(getenv("HOME")) + "/.cache/history.txt";
+
+// Function to load history from readline
+void loadHistory() {
+    std::ifstream historyFile(historyFilePath);
+    if (historyFile.is_open()) {
+        std::string line;
+        while (std::getline(historyFile, line)) {
+            add_history(line.c_str());
+        }
+        historyFile.close();
+    }
+}
+
+
+// maximum number of history at a time
+const int MAX_HISTORY_LINES = 100;
+
+// Function to save history from readline
+void saveHistory() {
+    std::ofstream historyFile(historyFilePath, std::ios::out | std::ios::trunc);
+    if (historyFile.is_open()) {
+        HIST_ENTRY **histList = history_list();
+        if (histList) {
+            std::unordered_set<std::string> writtenLines;
+            std::vector<std::string> uniqueLines;
+
+            // Collect unique lines, skipping the first entry
+            for (int i = 1; histList[i]; i++) {
+                std::string line(histList[i]->line);
+                if (!line.empty() && writtenLines.find(line) == writtenLines.end()) {
+                    writtenLines.insert(line);
+                    uniqueLines.push_back(line);
+                }
+            }
+
+            // Write the most recent MAX_HISTORY_LINES lines to the file
+            int start = std::max(0, static_cast<int>(uniqueLines.size()) - MAX_HISTORY_LINES);
+            for (int i = start; i < static_cast<int>(uniqueLines.size()); i++) {
+                historyFile << uniqueLines[i] << std::endl;
+            }
+        }
+        historyFile.close();
+    } else {
+        std::cerr << "Failed to open history file: " << historyFilePath << std::endl;
+    }
+}
+
+
 // Function for tab completion and history creation
 std::string readInputLine(const std::string& prompt) {
     try {
