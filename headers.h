@@ -21,7 +21,6 @@
 #include <string>
 #include <sys/mount.h>
 #include <thread>
-#include <unistd.h>
 #include <unordered_set>
 #include <vector>
 
@@ -94,6 +93,8 @@ extern unsigned int maxThreads;
 
 
 // SANITIZATION&EXTRACTION&READLINE
+
+//voids
 
 void loadHistory();
 void saveHistory();
