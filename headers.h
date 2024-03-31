@@ -25,11 +25,11 @@
 #include <vector>
 
 
+// Global and shared classes and variables
+
 // Get max available CPU cores for global use, fallback is 2 cores
 extern unsigned int maxThreads;
 
-
-// Global and shared classes and variables
 
 // A simple global thread pool for async tasks
 class ThreadPool {
