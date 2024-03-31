@@ -31,7 +31,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
     
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.7.3");
+        printVersionNumber("2.7.4");
         return 0;
     }
     
@@ -1531,6 +1531,7 @@ void unmountISO(const std::string& isoDir) {
     // Wait for the asynchronous tasks to complete
    // unmountFuture.get();
 }
+
 
 // Function to check if a given index is within the valid range of available ISOs
 bool isValidIndex(int index, size_t isoDirsSize) {
