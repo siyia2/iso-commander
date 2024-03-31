@@ -163,7 +163,7 @@ void saveHistory() {
 
         historyFile.close();
     } else {
-        std::cerr << "\n\033[1;91mFailed to open history cache file: \033[1;93m'" << historyFilePath << "'\033[1;91m. Check file permissions.\033[0m" << std::endl;
+        std::cerr << "\n\033[1;91mFailed to open history cache file: \033[1;93m'" << historyFilePath << "'\033[1;91m. Check read/write permissions.\033[0m" << std::endl;
     }
 }
 
