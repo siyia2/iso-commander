@@ -32,7 +32,7 @@ int main(int argc, char *argv[]) {
     std::ofstream dev_null;
 
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        std::cout << "Version 2.7.6\n";
+        printVersionNumber("2.7.6");
         return 0;
     }
 
