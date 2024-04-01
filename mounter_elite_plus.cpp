@@ -27,12 +27,13 @@ std::unordered_set<std::string> uniqueErrorMessages;
 
 // Main function
 int main(int argc, char *argv[]) {
-	
     bool exitProgram = false;
     std::string choice;
-    
+    std::ofstream dev_null;
+    std::streambuf* cout_sbuf;
+
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.7.6");
+        std::cout << "Version 2.7.6\n";
         return 0;
     }
 
@@ -43,7 +44,7 @@ int main(int argc, char *argv[]) {
         printMenu();
         
         // Clear history
-		clear_history();
+        clear_history();
 
         // Prompt for the main menu choice
         char* input = readline("\033[1;94mChoose an option:\033[0m\033[1m ");
@@ -52,43 +53,38 @@ int main(int argc, char *argv[]) {
         }
 
         std::string choice(input);
-		if (choice == "1") {
-        submenu1();
-        
-		} else {
-			// Check if the input length is exactly 1
-			if (choice.length() == 1){
-            switch (choice[0]) {
-            case '2':
-                submenu2();
-                break;
-            case '3':
-                manualRefreshCache();
-                std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
-                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                std::system("clear");
-                break;
-            case '4':
-                exitProgram = true; // Exit the program
-                std::cout << " " << std::endl;
-                // Save the original buffer
-                std::system("clear");
-                break;
-            default:
-                break;
+        if (choice == "1") {
+            submenu1();
+        } else {
+            // Check if the input length is exactly 1
+            if (choice.length() == 1) {
+                switch (choice[0]) {
+                    case '2':
+                        submenu2();
+                        break;
+                    case '3':
+                        manualRefreshCache();
+                        std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
+                        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                        std::system("clear");
+                        break;
+                    case '4':
+                        exitProgram = true; // Exit the program
+                        std::cout << " " << std::endl;
+                        // Redirect cout to a null buffer
+                        dev_null.open("/dev/null");
+                        std::cout.rdbuf(dev_null.rdbuf());
+                        // Save the original buffer
+                        cout_sbuf = std::cout.rdbuf();
+                        std::system("clear");
+                        break;
+                    default:
+                        break;
+                }
             }
         }
     }
-}
-	std::streambuf* cout_sbuf = std::cout.rdbuf();  
 
-	// Redirect cout to a null buffer
-	std::ofstream dev_null("/dev/null");
-	std::cout.rdbuf(dev_null.rdbuf()); 
-
-	// Restore the original buffer
-    std::cout.rdbuf(cout_sbuf);
-	
     return 0;
 }
 
