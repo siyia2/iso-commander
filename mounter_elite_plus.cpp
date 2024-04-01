@@ -27,11 +27,12 @@ std::unordered_set<std::string> uniqueErrorMessages;
 
 // Main function
 int main(int argc, char *argv[]) {
+	
     bool exitProgram = false;
     std::string choice;
     
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.7.5");
+        printVersionNumber("2.7.6");
         return 0;
     }
 
@@ -70,6 +71,7 @@ int main(int argc, char *argv[]) {
             case '4':
                 exitProgram = true; // Exit the program
                 std::cout << " " << std::endl;
+                // Save the original buffer
                 std::system("clear");
                 break;
             default:
@@ -78,6 +80,14 @@ int main(int argc, char *argv[]) {
         }
     }
 }
+	std::streambuf* cout_sbuf = std::cout.rdbuf();  
+
+	// Redirect cout to a null buffer
+	std::ofstream dev_null("/dev/null");
+	std::cout.rdbuf(dev_null.rdbuf()); 
+
+	// Restore the original buffer
+    std::cout.rdbuf(cout_sbuf);
 	
     return 0;
 }
