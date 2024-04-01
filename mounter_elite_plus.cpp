@@ -150,7 +150,6 @@ void submenu1() {
             case '3':
 				std::system("clear");
                 select_and_delete_files_by_number();
-                
                 break;
 			}
         }
