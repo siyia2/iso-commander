@@ -34,9 +34,6 @@ int main(int argc, char *argv[]) {
         printVersionNumber("2.7.4");
         return 0;
     }
-    
-     // Load existing history from file
-		loadHistory();
 
     while (!exitProgram) {
         std::system("clear");
