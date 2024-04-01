@@ -31,7 +31,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
     
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.7.4");
+        printVersionNumber("2.7.5");
         return 0;
     }
 
@@ -111,6 +111,7 @@ std::cout << Color << R"(   *         )               )                  (      
 |_|  |_|  \___/   \___/  |_|\_|   |_|    |___| |_|_\    |___| |____| |___|    |_|    |___|                                                                            
 
 )" << resetColor;
+
 }
 
 
