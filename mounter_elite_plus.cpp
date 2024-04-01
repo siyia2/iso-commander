@@ -152,9 +152,6 @@ void submenu1() {
                 select_and_delete_files_by_number();
                 
                 break;
-            case '4':
-                // The user chose to go back to the main menu, so return from the function
-                return;
 			}
         }
     }
@@ -192,8 +189,6 @@ void submenu2() {
 				std::system("clear");
                 select_and_convert_files_to_iso_mdf();
                 break;
-             case '4':
-				return;
 			}
 		}
 	}
