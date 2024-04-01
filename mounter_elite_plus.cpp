@@ -30,7 +30,6 @@ int main(int argc, char *argv[]) {
     bool exitProgram = false;
     std::string choice;
     std::ofstream dev_null;
-    std::streambuf* cout_sbuf;
 
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
         std::cout << "Version 2.7.6\n";
@@ -74,8 +73,6 @@ int main(int argc, char *argv[]) {
                         // Redirect cout to a null buffer
                         dev_null.open("/dev/null");
                         std::cout.rdbuf(dev_null.rdbuf());
-                        // Save the original buffer
-                        cout_sbuf = std::cout.rdbuf();
                         std::system("clear");
                         break;
                     default:
