@@ -8,7 +8,7 @@ State of the art secure and blazing fast terminal `ISO` manager written in C++, 
 
 Features:
 * Cached ISO management for reduced disk thrashing.
-* Utilizes GNU/Linux utilities: rm,rmdir,mount,unmount,find.
+* Utilizes GNU/Linux utilities: rm,rmdir,mount,umount,find.
 * Tab completion and history support.
 * Sanitized shell commands for improved security.
 * Multithreaded asynchronous operations based on unique valid indices and max available system cores.
