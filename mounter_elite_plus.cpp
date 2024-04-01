@@ -29,7 +29,6 @@ std::unordered_set<std::string> uniqueErrorMessages;
 int main(int argc, char *argv[]) {
     bool exitProgram = false;
     std::string choice;
-    std::ofstream dev_null;
 
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
         printVersionNumber("2.7.6");
@@ -68,11 +67,7 @@ int main(int argc, char *argv[]) {
                         std::system("clear");
                         break;
                     case '4':
-                        exitProgram = true; // Exit the program
-                        std::cout << " " << std::endl;
-                        // Redirect cout to a null buffer
-                        dev_null.open("/dev/null");
-                        std::cout.rdbuf(dev_null.rdbuf());
+						exitProgram = true; // Exit the program
                         std::system("clear");
                         break;
                     default:
