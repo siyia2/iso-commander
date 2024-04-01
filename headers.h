@@ -2,12 +2,15 @@
 #define HEADERS_H
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstring>
 #include <dirent.h>
 #include <execution>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <future>
 #include <iostream>
 #include <memory>
@@ -26,6 +29,7 @@
 
 
 // Global and shared classes and variables
+
 
 // Get max available CPU cores for global use, fallback is 2 cores
 extern unsigned int maxThreads;
