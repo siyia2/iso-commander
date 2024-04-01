@@ -40,6 +40,9 @@ int main(int argc, char *argv[]) {
         print_ascii();
         // Display the main menu options
         printMenu();
+        
+        // Clear history
+		clear_history();
 
         // Prompt for the main menu choice
         char* input = readline("\033[1;94mChoose an option:\033[0m\033[1m ");
