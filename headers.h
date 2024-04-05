@@ -19,7 +19,6 @@
 #include <queue>
 #include <readline/readline.h>
 #include <readline/history.h>
-#include <semaphore.h>
 #include <set>
 #include <string>
 #include <sys/mount.h>
@@ -221,7 +220,6 @@ void print_ascii();
 //	stds
 
 // Cache functions
-std::vector<std::string> vec_concat(const std::vector<std::string>& v1, const std::vector<std::string>& v2);
 std::future<bool> iequals(std::string_view a, std::string_view b);
 std::future<bool> FileExists(const std::string& path);
 std::string getHomeDirectory();
