@@ -194,6 +194,7 @@ void submenu2() {
 	
 }
 
+
 // Function to print menu
 void printMenu() {
     std::cout << "\033[1;32m+-------------------------+" << std::endl;
@@ -209,6 +210,7 @@ void printMenu() {
     std::cout << "\033[1;32m+-------------------------+" << std::endl;
     std::cout << std::endl;
 }
+
 
 // GENERAL STUFF
 
@@ -241,6 +243,7 @@ std::future<std::vector<std::string>> FileExistsAsync(const std::vector<std::str
         return result;
     });
 }
+
 
 // Function to remove non-existent paths from cache asynchronously with basic thread control
 void removeNonExistentPathsFromCache() {
