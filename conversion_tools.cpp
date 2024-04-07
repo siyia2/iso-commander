@@ -757,8 +757,10 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                                 } else {
                                     // Wait for one of the ongoing tasks to complete before adding a new task
                                     for (auto& future : futures) {
-                                        future.get();
-                                    }
+                                           if (future.valid()) {
+                                               future.get();
+                                           }
+                                       }
                                     // Increment the ongoing tasks counter
                                     ++numOngoingTasks;
                                     std::lock_guard<std::mutex> lock(mutex4search);
@@ -773,11 +775,11 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
                 // Wait for remaining asynchronous tasks to complete
                 for (auto& future : futures) {
                     // Check if the future is valid
-                    if (future.valid()) {
-                        // Block until the future is ready
-                        future.get();
-                    }
-                }
+                   if (future.valid()) {
+                       // Block until the future is ready
+                       future.get();
+                   }
+               }
 
                 // Add the processed path to the set
                 processedPaths.insert(path);
