@@ -91,12 +91,22 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
     auto start_time = std::chrono::high_resolution_clock::now();
 
     try {
+		
+		// Preallocate enough space for the futures vector
+        size_t totalFiles = 0;
+        for (const auto& path : paths) {
+            for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
+                if (entry.is_regular_file()) {
+                    totalFiles++;
+                }
+            }
+        }
+        
+        std::vector<std::future<void>> futures;
+        futures.reserve(totalFiles);
 
         // Counter to track the number of ongoing tasks
         unsigned int numOngoingTasks = 0;
-
-        // Use a vector to store futures for ongoing tasks
-        std::vector<std::future<void>> futures;
 
         // Iterate through input paths
         for (const auto& path : paths) {
@@ -708,12 +718,22 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
     auto start_time = std::chrono::high_resolution_clock::now();
 
     try {
+		
+		// Preallocate enough space for the futures vector
+        size_t totalFiles = 0;
+        for (const auto& path : paths) {
+            for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
+                if (entry.is_regular_file()) {
+                    totalFiles++;
+                }
+            }
+        }
+        
+        std::vector<std::future<void>> futures;
+        futures.reserve(totalFiles);
 
         // Counter to track the number of ongoing tasks
         unsigned int numOngoingTasks = 0;
-
-        // Use a vector to store futures for ongoing tasks
-        std::vector<std::future<void>> futures;
 
         // Iterate through input paths
         for (const auto& path : paths) {
