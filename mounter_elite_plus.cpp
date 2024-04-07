@@ -447,7 +447,7 @@ void manualRefreshCache() {
     loadHistory();
 
     // Prompt the user to enter directory paths for manual cache refresh
-    std::string inputLine = readInputLine("\033[1;94mEnter the directory path(s) from which to populate the \033[1m\033[1;92mISO Cache\033[94m (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1;94m), or press Enter to cancel:\n\033[0m");
+    std::string inputLine = readInputLine("\033[1;94mEnter the directory path(s) from which to populate the \033[1m\033[1;92mISO Cache\033[94m (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1;94m), or press Enter to cancel:\n\033[0m\033[1m");
     
     if (!inputLine.empty()) {
 		// Save history to file
