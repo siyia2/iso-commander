@@ -31,7 +31,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
 
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.7.8");
+        printVersionNumber("2.7.9");
         return 0;
     }
 
@@ -718,7 +718,7 @@ void select_and_delete_files_by_number() {
         std::cout << " " << std::endl;
 
         // Prompt user for input
-        char* input = readline("\033[1;94mChoose ISO(s) for \033[1;91mdeletion\033[1;94m (e.g., '1-3', '1 2', or press Enter to return):\033[0m\033[1m ");
+        char* input = readline("\033[1;94mChoose ISO(s) for \033[1;91mdeletion\033[1;94m (e.g., '1-3', '1 5', or press Enter to return):\033[0m\033[1m ");
         std::system("clear");
 
         // Check if the user wants to return
@@ -1165,7 +1165,7 @@ void select_and_mount_files_by_number() {
         std::cout << " " << std::endl;
 
         // Prompt user for input
-        char* input = readline("\033[1;94mChoose ISO(s) for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 2', '00' mounts all, or press Enter to return):\033[0m\033[1m ");
+        char* input = readline("\033[1;94mChoose ISO(s) for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5', '00' mounts all, or press Enter to return):\033[0m\033[1m ");
         std::system("clear");
 
         // Start the timer
@@ -1578,7 +1578,7 @@ void unmountISOs() {
         }
 
         // Prompt user to choose ISOs for unmounting
-        char* input = readline("\033[1;94mChoose ISO(s) for \033[1;92munmount\033[1;94m (e.g., '1-3', '1 2', '00' unmounts all, or press Enter to return):\033[0m\033[1m ");
+        char* input = readline("\033[1;94mChoose ISO(s) for \033[1;92munmount\033[1;94m (e.g., '1-3', '1 5', '00' unmounts all, or press Enter to return):\033[0m\033[1m ");
         std::system("clear");
 
         auto start_time = std::chrono::high_resolution_clock::now();
