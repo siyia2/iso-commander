@@ -1008,7 +1008,7 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
 				std::cout << " " << std::endl;
 			}
 		
-			// Print all mounted files
+			// Print all deleted files
 			for (const auto& deletedIso : deletedIsos) {
 				std::cout << deletedIso << std::endl;
 			}
