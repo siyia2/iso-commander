@@ -1072,7 +1072,7 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
                 if (isAlreadyMounted(mountPoint)) {
                     // If already mounted, print a message and return
                     std::stringstream skippedMessage;
-                    skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m is already mounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;93m.\033[0m\033[1m" << std::endl;
+                    skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m already mounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;93m.\033[0m\033[1m" << std::endl;
                     
                     // Create the unordered set after populating skippedMessages
                     std::unordered_set<std::string> skippedSet(skippedMessages.begin(), skippedMessages.end());
