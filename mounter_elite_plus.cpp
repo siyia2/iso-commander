@@ -1099,7 +1099,7 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
 
                 // Store the mounted file information in the vector
                 std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m\033[1m"
-                                              + "\033[1mmounted at: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename + "'\033[0m\033[1m\033[1m.\033[0m\033[1m";
+                                              + "\033[1m mounted at: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename + "'\033[0m\033[1m\033[1m.\033[0m\033[1m";
                 mountedFiles.push_back(mountedFileInfo);
 
             } catch (const std::exception& e) {
