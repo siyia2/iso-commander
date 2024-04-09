@@ -30,7 +30,7 @@
 // Global and shared classes and variables
 
 
-// Get max available CPU cores for global use, fallback is 2 cores
+// Get max available CPU cores for global use
 extern unsigned int maxThreads;
 
 
