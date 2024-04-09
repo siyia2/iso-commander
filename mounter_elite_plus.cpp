@@ -32,6 +32,9 @@ std::vector<std::string> unmountedFiles;
 // Vector to store deleted empty folders
 std::vector<std::string> deletedFolders;
 
+// Vector to store deleted ISOs
+std::vector<std::string> deletedIsos;
+
 
 // Main function
 int main(int argc, char *argv[]) {
@@ -810,7 +813,9 @@ void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFi
                     // Add the ISO file to the set of deleted files
                     deletedSet.insert(iso);
 
-                    std::cout << "\033[1;92mDeleted: \033[1;91m'" << isoDirectory << "/" << isoFilename << "'\033[1;92m.\033[0m\033[1m" << std::endl;
+                    std::string deletedIsoInfo = "\033[1;92mDeleted: \033[1;91m'" + isoDirectory + "/" + isoFilename + "'\033[1;92m.\033[0m\033[1m";
+                    deletedIsos.push_back(deletedIsoInfo);
+                    
                 } else {
                     // Print error message in magenta and bold when rm command fails
                     std::cout << "\033[1;91mError deleting: \033[0m\033[1m'" << isoDirectory << "/" << isoFilename << "'\033[1;95m.\033[0m\033[1m" << std::endl;
@@ -998,6 +1003,18 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
             for (auto& future : futures) {
                 future.wait();
             }
+            
+            if (!deletedIsos.empty()) {
+				std::cout << " " << std::endl;
+			}
+		
+			// Print all mounted files
+			for (const auto& deletedIso : deletedIsos) {
+				std::cout << deletedIso << std::endl;
+			}
+			
+			// Clear the vector after each iteration
+			deletedIsos.clear();
 
             // Stop the timer after completing all deletion tasks
             auto end_time = std::chrono::high_resolution_clock::now();
@@ -1237,7 +1254,7 @@ void select_and_mount_files_by_number() {
             std::cerr << "\033[1;93m" << errorMsg << "\033[0m\033[1m" << std::endl;
         }
 		
-		// Clear the vectos after each iteration
+		// Clear the vectors after each iteration
 		mountedFiles.clear();
 		skippedMessages.clear();
 		errorMessages.clear();
