@@ -1207,6 +1207,7 @@ void select_and_mount_files_by_number() {
 			std::cout << " " << std::endl;
 		}
 		
+		// Print all mounted files
 		for (const auto& mountedFile : mountedFiles) {
 			std::cout << mountedFile << std::endl;
 		}
@@ -1637,7 +1638,7 @@ void unmountISOs() {
 			if (!unmountedFiles.empty()) {
 				std::cout << " " << std::endl; // Print a blank line before unmounted files
 			}
-
+			// Print all unmounted files
 			for (const auto& unmountedFile : unmountedFiles) {
 				std::cout << unmountedFile << std::endl;
 			}
@@ -1645,11 +1646,11 @@ void unmountISOs() {
 			if (!deletedFolders.empty()) {
 				std::cout << " " << std::endl; // Print a blank line before deleted folders
 			}
-
+			// Print all deleted empty folders in iso_ format
 			for (const auto& deletedFolder : deletedFolders) {
 				std::cout << deletedFolder << std::endl;
 			}
-
+			// Clear vectors
 			unmountedFiles.clear();
 			deletedFolders.clear();
 
@@ -1765,7 +1766,7 @@ void unmountISOs() {
         if (!unmountedFiles.empty()) {
 			std::cout << " " << std::endl; // Print a blank line before unmounted files
 		}
-
+		// Print all unmounted files
 		for (const auto& unmountedFile : unmountedFiles) {
 			std::cout << unmountedFile << std::endl;
 		}
@@ -1773,11 +1774,11 @@ void unmountISOs() {
 		if (!deletedFolders.empty()) {
 			std::cout << " " << std::endl; // Print a blank line before deleted folders
 		}
-
+		// Print all deleted empty folders in iso_ format
 		for (const auto& deletedFolder : deletedFolders) {
 			std::cout << deletedFolder << std::endl;
 		}
-
+		// Clear vectors
 		unmountedFiles.clear();
 		deletedFolders.clear();
 		
