@@ -1762,10 +1762,6 @@ void unmountISOs() {
             future.wait();
         }
         
-        if (invalidInput && !validIndices.empty()) {
-            std::cout << " " << std::endl;
-        }
-        
         if (!unmountedFiles.empty()) {
 			std::cout << " " << std::endl; // Print a blank line before unmounted files
 		}
@@ -1787,6 +1783,10 @@ void unmountISOs() {
 		
         // Lock access to error messages
         std::lock_guard<std::mutex> errorMessagesLock(errorMessagesMutex);
+        
+        if (invalidInput) {
+            std::cout << " " << std::endl;
+        }
 
         // Print error messages
         for (const auto& errorMessage : errorMessages) {
