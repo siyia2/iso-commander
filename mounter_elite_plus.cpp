@@ -1,6 +1,6 @@
 #include "headers.h"
 
-
+ 
 // Get max available CPU cores for global use, fallback is 2 cores
 unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
@@ -1295,7 +1295,7 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
         useRedColor = !useRedColor; // Toggle between red and green
 
         // Print sequence number with the determined color
-        std::cout << sequenceColor << std::right << std::setw(2) << sequenceNumber << defaultColor <<". ";
+        std::cout << sequenceColor << std::right << std::setw(2) << sequenceNumber <<". ";
 
         // Extract directory and filename
         auto [directory, filename] = extractDirectoryAndFilename(isoFiles[i]);
