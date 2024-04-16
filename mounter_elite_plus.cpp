@@ -1481,12 +1481,23 @@ void listMountedISOs() {
         return;
     }
 
-    // Display a list of mounted ISOs with ISO names in bold and magenta text
+    // Display a list of mounted ISOs with ISO names in bold and alternating colors
     if (!isoDirs.empty()) {
         std::cout << "\033[1mList of mounted ISO(s):\033[0m\033[1m" << std::endl; // White and bold
         std::cout << " " << std::endl;
+
+        bool useRedColor = true; // Start with red color for sequence numbers
+
         for (size_t i = 0; i < isoDirs.size(); ++i) {
-            std::cout << i + 1 << ". \033[1m/mnt/iso_\033[1m\033[1;95m" << isoDirs[i] << "\033[0m\033[1m" << std::endl; // Bold and magenta
+            // Determine color based on alternating pattern
+            std::string sequenceColor = (useRedColor) ? "\033[31m" : "\033[32m";
+            useRedColor = !useRedColor; // Toggle between red and green
+
+            // Print sequence number with the determined color
+            std::cout << sequenceColor << std::setw(2) << i + 1 << ". ";
+
+            // Print ISO directory path in bold and magenta
+            std::cout << "\033[0m\033[1m/mnt/iso_\033[1m\033[95m" << isoDirs[i] << "\033[0m\033[1m" << std::endl;
         }
     } else {
         // Print a message if no ISOs are mounted
