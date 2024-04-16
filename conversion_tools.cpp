@@ -367,7 +367,7 @@ void printFileListBin(const std::vector<std::string>& fileList) {
     const std::string reset = "\033[0m";
     const std::string red = "\033[31m";   // Red color
     const std::string green = "\033[32m"; // Green color
-    const std::string defaultColor = "\033[0m";
+    const std::string orangeBold = "\033[1;38;5;208m";
 
     // Toggle between red and green for sequence number coloring
     bool useRedColor = true;
@@ -395,8 +395,8 @@ void printFileListBin(const std::vector<std::string>& fileList) {
                 useRedColor = !useRedColor; // Toggle between red and green
 
                 // Print sequence number in the determined color and the rest in default color
-                std::cout << sequenceColor << std::setw(2) << std::right << lineNumber << defaultColor << ". " << reset;
-                std::cout << bold << directory << bold << "/" << fileNameOnly << reset << std::endl;
+                std::cout << sequenceColor << std::setw(2) << std::right << lineNumber << reset << ". " << reset;
+                std::cout << bold << directory << bold << "/" << orangeBold << fileNameOnly << reset << std::endl;
             } else {
                 // Print entire path and filename with the default color
                 std::cout << std::setw(2) << std::right << lineNumber << ". " << bold << filename << reset << std::endl;
@@ -1001,8 +1001,8 @@ void printFileListMdf(const std::vector<std::string>& fileList) {
     const std::string reset = "\033[0m";
     const std::string red = "\033[31m";   // Red color
     const std::string green = "\033[32m"; // Green color
-    const std::string defaultColor = "\033[0m";
-
+	const std::string orangeBold = "\033[1;38;5;208m";
+	
     // Toggle between red and green for sequence number coloring
     bool useRedColor = true;
 
@@ -1033,8 +1033,8 @@ void printFileListMdf(const std::vector<std::string>& fileList) {
                 useRedColor = !useRedColor; // Toggle between red and green
 
                 // Print sequence number in the determined color and the rest in default color
-                std::cout << sequenceColor << std::setw(2) << std::right << lineNumber << defaultColor << ". " << reset;
-                std::cout << bold << directory << bold << "/" << reset << fileNameOnly << reset << std::endl;
+                std::cout << sequenceColor << std::setw(2) << std::right << lineNumber << reset << ". " << reset;
+                std::cout << bold << directory << bold << "/" << orangeBold << fileNameOnly << reset << std::endl;
             } else {
                 // Print entire path and filename with the default color
                 std::cout << std::setw(2) << std::right << lineNumber << ". " << bold << filename << reset << std::endl;
