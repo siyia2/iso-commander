@@ -360,12 +360,17 @@ void select_and_convert_files_to_iso() {
 }
 
 
-// Function to print found BIN/IMG files
+// Function to print found BIN/IMG files with alternating colored sequence numbers
 void printFileListBin(const std::vector<std::string>& fileList) {
     // ANSI escape codes for text formatting
     const std::string bold = "\033[1m";
     const std::string reset = "\033[0m";
-    const std::string greenBold = "\033[1;38;5;208m";
+    const std::string red = "\033[31m";   // Red color
+    const std::string green = "\033[32m"; // Green color
+    const std::string defaultColor = "\033[0m";
+
+    // Toggle between red and green for sequence number coloring
+    bool useRedColor = true;
 
     // Print header for file selection
     std::cout << bold << "Select file(s) to convert to " << bold << "\033[1;92mISO(s)\033[0m\033[1m:\n";
@@ -373,9 +378,6 @@ void printFileListBin(const std::vector<std::string>& fileList) {
 
     // Counter for line numbering
     int lineNumber = 1;
-
-    // Apply formatting once before the loop
-    std::cout << std::right << std::setw(2);
 
     for (const auto& filename : fileList) {
         // Extract directory and filename
@@ -388,14 +390,19 @@ void printFileListBin(const std::vector<std::string>& fileList) {
             std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
 
             if (extension == ".img" || extension == ".bin") {
-                // Print path in white and filename in green and bold
-                std::cout << std::setw(2) << std::right  << lineNumber << ". " << bold << directory << bold << "/" << greenBold << fileNameOnly << reset << std::endl;
+                // Determine color for sequence number based on toggle
+                std::string sequenceColor = (useRedColor) ? red : green;
+                useRedColor = !useRedColor; // Toggle between red and green
+
+                // Print sequence number in the determined color and the rest in default color
+                std::cout << sequenceColor << std::setw(2) << std::right << lineNumber << defaultColor << ". " << reset;
+                std::cout << bold << directory << bold << "/" << fileNameOnly << reset << std::endl;
             } else {
-                // Print entire path and filename in white
+                // Print entire path and filename with the default color
                 std::cout << std::setw(2) << std::right << lineNumber << ". " << bold << filename << reset << std::endl;
             }
         } else {
-            // No extension found, print entire path and filename in white
+            // No extension found, print entire path and filename with the default color
             std::cout << std::setw(2) << std::right << lineNumber << ". " << bold << filename << reset << std::endl;
         }
 
@@ -986,12 +993,18 @@ void select_and_convert_files_to_iso_mdf() {
 	}
 }
 
-// Function to print found MDF files
+
+// Function to print found MDF files with alternating colored sequence numbers
 void printFileListMdf(const std::vector<std::string>& fileList) {
     // ANSI escape codes for text formatting
     const std::string bold = "\033[1m";
     const std::string reset = "\033[0m";
-    const std::string orangeBold = "\033[1;38;5;208m";
+    const std::string red = "\033[31m";   // Red color
+    const std::string green = "\033[32m"; // Green color
+    const std::string defaultColor = "\033[0m";
+
+    // Toggle between red and green for sequence number coloring
+    bool useRedColor = true;
 
     // Print header for file selection
     std::cout << bold << "Select file(s) to convert to " << bold << "\033[1;92mISO(s)\033[0m\033[1m:\n";
@@ -1003,9 +1016,7 @@ void printFileListMdf(const std::vector<std::string>& fileList) {
     // Apply formatting once before the loop
     std::cout << std::right << std::setw(2);
 
-    for (std::size_t i = 0; i < fileList.size(); ++i) {
-        const std::string& filename = fileList[i];
-
+    for (const auto& filename : fileList) {
         // Extract directory and filename
         auto [directory, fileNameOnly] = extractDirectoryAndFilename(filename);
 
@@ -1017,14 +1028,19 @@ void printFileListMdf(const std::vector<std::string>& fileList) {
             std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
 
             if (extension == ".mdf") {
-                // Print path in white and filename in orange and bold
-                std::cout << std::setw(2) << std::right << lineNumber << ". " << bold << directory << bold << "/" << orangeBold << fileNameOnly << reset << std::endl;
+                // Determine color for sequence number based on toggle
+                std::string sequenceColor = (useRedColor) ? red : green;
+                useRedColor = !useRedColor; // Toggle between red and green
+
+                // Print sequence number in the determined color and the rest in default color
+                std::cout << sequenceColor << std::setw(2) << std::right << lineNumber << defaultColor << ". " << reset;
+                std::cout << bold << directory << bold << "/" << reset << fileNameOnly << reset << std::endl;
             } else {
-                // Print entire path and filename in white
+                // Print entire path and filename with the default color
                 std::cout << std::setw(2) << std::right << lineNumber << ". " << bold << filename << reset << std::endl;
             }
         } else {
-            // No extension found, print entire path and filename in white
+            // No extension found, print entire path and filename with the default color
             std::cout << std::setw(2) << std::right << lineNumber << ". " << bold << filename << reset << std::endl;
         }
 

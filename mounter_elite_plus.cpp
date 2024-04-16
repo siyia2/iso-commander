@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
 
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.8.0");
+        printVersionNumber("2.8.1");
         return 0;
     }
 
@@ -1275,26 +1275,35 @@ void select_and_mount_files_by_number() {
 }
 
 
-// Function to print ISO files
+// Function to print ISO files with alternating colors for sequence numbers
 void printIsoFileList(const std::vector<std::string>& isoFiles) {
-    // Apply formatting once before the loop
-    std::cout << std::right << std::setw(2);
-
     // ANSI escape codes for text formatting
     const std::string defaultColor = "\033[0m";
     const std::string bold = "\033[1m";
+    const std::string red = "\033[31m";   // Red color
+    const std::string green = "\033[32m"; // Green color
     const std::string magenta = "\033[95m";
 
-    for (const auto& isoFile : isoFiles) {
-        std::cout << std::setw(2) << &isoFile - &isoFiles[0] + 1 << ". ";
+    bool useRedColor = true; // Start with red color
+
+    for (size_t i = 0; i < isoFiles.size(); ++i) {
+        // Determine sequence number
+        int sequenceNumber = i + 1;
+
+        // Determine color based on alternating pattern
+        std::string sequenceColor = (useRedColor) ? red : green;
+        useRedColor = !useRedColor; // Toggle between red and green
+
+        // Print sequence number with the determined color
+        std::cout << sequenceColor << std::right << std::setw(2) << sequenceNumber << defaultColor <<". ";
 
         // Extract directory and filename
-        auto [directory, filename] = extractDirectoryAndFilename(isoFile);
+        auto [directory, filename] = extractDirectoryAndFilename(isoFiles[i]);
 
         // Print the directory part in the default color
-        std::cout << bold << directory << defaultColor;
+        std::cout << defaultColor << bold << directory << defaultColor;
 
-        // Print the filename part in magenta and bold
+        // Print the filename part in bold
         std::cout << bold << "/" << magenta << filename << defaultColor << std::endl;
     }
 }
