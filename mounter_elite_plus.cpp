@@ -767,10 +767,11 @@ bool fileExists(const std::string& filename) {
 
 // Function to handle the deletion of an ISO file
 void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
-	
-	// Lock the global mutex for synchronization
-	std::lock_guard<std::mutex> lowLock(Mutex4Low);
-	
+    // Lock the global mutex for synchronization
+    std::lock_guard<std::mutex> lowLock(Mutex4Low);
+    
+    static std::vector<std::string> isoFilesToDelete;
+
     auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(iso);
 
     // Static variable to track whether the clear has been performed
@@ -778,16 +779,17 @@ void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFi
 
     // Check if the ISO file is in the cache
     auto it = std::find(isoFiles.begin(), isoFiles.end(), iso);
+
     if (it != isoFiles.end()) {
         // Escape the ISO file name for the shell command using shell_escape
         std::string escapedIso = shell_escape(iso);
-        
+
         // Construct the sudo command
         std::string sudoCommand = "sudo -v";
 
         // Execute sudo to prompt for password
         int sudoResult = system(sudoCommand.c_str());
-		
+
         // Clear the screen only if it hasn't been done yet
         if (sudoResult == 0) {
             // Clear the screen only if it hasn't been done yet
@@ -795,30 +797,43 @@ void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFi
                 std::system("clear");
                 clearScreenDone = true;
             }
-			
+
             // Check if the file exists before attempting to delete
             if (fileExists(iso)) {
+                // Get the index of the found ISO file (starting from 1)
+                int index = std::distance(isoFiles.begin(), it) + 1;
 
-                // Delete the ISO file from the filesystem
-                std::string command = "sudo rm -f " + escapedIso + " > /dev/null 2>&1";
-                int result = std::system(command.c_str());
+                // Remove the deleted ISO file from the cache using the index
+                isoFiles.erase(isoFiles.begin() + index - 1);
 
-                if (result == 0) {
-                    // Get the index of the found ISO file (starting from 1)
-                    int index = std::distance(isoFiles.begin(), it) + 1;
+                // Add the ISO file to the vector
+                isoFilesToDelete.push_back(iso);
 
-                    // Remove the deleted ISO file from the cache using the index
-                    isoFiles.erase(isoFiles.begin() + index - 1);
+                // If there are 5 ISO files or no more ISO files to delete, delete them together
+                if (isoFilesToDelete.size() == 5 || (isoFilesToDelete.size() > 0 && isoFilesToDelete.size() < 5)) {
+                    std::string deleteCommand = "sudo rm -f ";
+                    for (size_t i = 0; i < isoFilesToDelete.size(); ++i) {
+                        deleteCommand += shell_escape(isoFilesToDelete[i]) + " ";
+                    }
+                    deleteCommand += "> /dev/null 2>&1";
 
-                    // Add the ISO file to the set of deleted files
-                    deletedSet.insert(iso);
+                    int result = std::system(deleteCommand.c_str());
 
-                    std::string deletedIsoInfo = "\033[1;92mDeleted: \033[1;91m'" + isoDirectory + "/" + isoFilename + "'\033[1;92m.\033[0m\033[1m";
-                    deletedIsos.push_back(deletedIsoInfo);
-                    
-                } else {
-                    // Print error message in magenta and bold when rm command fails
-                    std::cout << "\033[1;91mError deleting: \033[0m\033[1m'" << isoDirectory << "/" << isoFilename << "'\033[1;95m.\033[0m\033[1m" << std::endl;
+                    if (result == 0) {
+                        for (const auto& deletedIso : isoFilesToDelete) {
+                            deletedSet.insert(deletedIso);
+                            std::string deletedIsoInfo = "\033[1;92mDeleted: \033[1;91m'" + isoDirectory + "/" + isoFilename + "'\033[1;92m.\033[0m\033[1m";
+                            deletedIsos.push_back(deletedIsoInfo);
+                        }
+                    } else {
+                        for (const auto& deletedIso : isoFilesToDelete) {
+                            auto [isoDir, isoFile] = extractDirectoryAndFilename(deletedIso);
+                            std::cout << "\033[1;91mError deleting: \033[0m\033[1m'" << isoDir << "/" << isoFile << "'\033[1;95m.\033[0m\033[1m" << std::endl;
+                        }
+                    }
+
+                    // Clear the vector
+                    isoFilesToDelete.clear();
                 }
             } else {
                 std::cout << "\033[1;35mFile not found: \033[0m\033[1m'" << isoDirectory << "/" << isoFilename << "'\033[1;95m.\033[0m\033[1m" << std::endl;
