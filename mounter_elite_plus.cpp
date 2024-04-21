@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
 
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.8.2");
+        printVersionNumber("2.8.3");
         return 0;
     }
 
@@ -1035,6 +1035,10 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
 void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& mountedSet) {
     // Lock the global mutex for synchronization
     std::lock_guard<std::mutex> lowLock(Mutex4Low);
+    
+    static std::vector<std::string> mountedIsoFiles;
+	static std::vector<std::string> mountPoints;
+	static std::unordered_set<std::string> mountedIsoSet;
 
     namespace fs = std::filesystem;
 
@@ -1085,10 +1089,26 @@ void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& m
                     return;
                 }
 
-                // Construct the mount command and execute it
-                std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
-                if (std::system(mountCommand.c_str()) != 0) {
-                    throw std::runtime_error("Mount command failed");
+                // Add the ISO file and mount point to the respective vectors
+                mountedIsoFiles.push_back(isoFile);
+                mountPoints.push_back(mountPoint);
+                mountedIsoSet.insert(isoFile);
+
+                // If there are 5 ISO files or no more ISO files to mount, mount them together
+                if (mountedIsoFiles.size() == 5 || (mountedIsoFiles.size() > 0 && mountedIsoFiles.size() < 5)) {
+                    std::string mountCommand = "sudo mount -o loop ";
+                    for (size_t i = 0; i < mountedIsoFiles.size(); ++i) {
+                        mountCommand += "-o loop,offset=$((0x" + std::to_string(i * 0x08000000) + ")) " + shell_escape(mountedIsoFiles[i]) + " " + shell_escape(mountPoints[i]) + " ";
+                    }
+                    mountCommand += "> /dev/null 2>&1";
+                    if (std::system(mountCommand.c_str()) != 0) {
+                        throw std::runtime_error("Mount command failed");
+                    }
+
+                    // Clear the vectors and set
+                    mountedIsoFiles.clear();
+                    mountPoints.clear();
+                    mountedIsoSet.clear();
                 }
 
                 // Remove the ".iso" extension from the isoFilename
