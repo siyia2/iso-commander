@@ -1604,9 +1604,6 @@ void unmountISO(const std::string& isoDir) {
 				std::cerr << "\033[1;91mFailed to authenticate with sudo.\033[0m\033[1m" << std::endl;
 			}
 		});
-
-    // Wait for the asynchronous tasks to complete
-   // unmountFuture.get();
 }
 
 
