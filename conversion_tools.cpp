@@ -365,8 +365,8 @@ void printFileListBin(const std::vector<std::string>& fileList) {
     // ANSI escape codes for text formatting
     const std::string bold = "\033[1m";
     const std::string reset = "\033[0m";
-    const std::string red = "\033[31m";   // Red color
-    const std::string green = "\033[32m"; // Green color
+    const std::string red = "\033[31;1m";   // Red color
+    const std::string green = "\033[32;1m"; // Green color
     const std::string orangeBold = "\033[1;38;5;208m";
 
     // Toggle between red and green for sequence number coloring
@@ -999,8 +999,8 @@ void printFileListMdf(const std::vector<std::string>& fileList) {
     // ANSI escape codes for text formatting
     const std::string bold = "\033[1m";
     const std::string reset = "\033[0m";
-    const std::string red = "\033[31m";   // Red color
-    const std::string green = "\033[32m"; // Green color
+    const std::string red = "\033[31;1m";   // Red color
+    const std::string green = "\033[32;1m"; // Green color
 	const std::string orangeBold = "\033[1;38;5;208m";
 	
     // Toggle between red and green for sequence number coloring

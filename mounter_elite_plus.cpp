@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
 
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.8.1");
+        printVersionNumber("2.8.3");
         return 0;
     }
 
@@ -110,15 +110,15 @@ void print_ascii() {
     const char* Color = "\x1B[1;38;5;214m";
     const char* resetColor = "\x1B[0m"; // Reset color to default
 	                                                                                                                           
-std::cout << Color << R"(   *         )               )                  (              (      (                                      
- (  `     ( /(            ( /(    *   )         )\ )           )\ )   )\ )    *   )                          
- )\))(    )\())      (    )\()) ` )  /(   (    (()/(     (    (()/(  (()/(  ` )  /(   (                      
-((_)()\  ((_)\       )\  ((_)\   ( )(_))  )\    /(_))    )\    /(_))  /(_))  ( )(_))  )\        _       _    
-(_()((_)   ((_)   _ ((_)  _((_) (_(_())  ((_)  (_))     ((_)  (_))   (_))   (_(_())  ((_)     _| |_   _| |_  
-|  \/  |  / _ \  | | | | | \| | |_   _|  | __| | _ \    | __| | |    |_ _|  |_   _|  | __|   |_   _| |_   _| 
-| |\/| | | (_) | | |_| | | .` |   | |    | _|  |   /    | _|  | |__   | |     | |    | _|      |_|     |_|   
-|_|  |_|  \___/   \___/  |_|\_|   |_|    |___| |_|_\    |___| |____| |___|    |_|    |___|                                                                            
-
+std::cout << Color << R"(   *                                                                  
+ (  `                     )               (       )                   
+ )\))(        (        ( /(  (  (     (   )\(  ( /(  (                
+((_)()\  (   ))\  (    )\())))\ )(    )\ ((_)\ )\())))\     _     _   
+(_()((_) )\ /((_) )\ )(_))//((_(()\  ((_) _((_(_))//((_)  _| |_ _| |_ 
+|  \/  |((_(_))( _(_/(| |_(_))  ((_) | __| |(_| |_(_))   |_   _|_   _|
+| |\/| / _ | || | ' \)|  _/ -_)| '_| | _|| || |  _/ -_)    |_|   |_|  
+|_|  |_\___/\_,_|_||_| \__\___||_|   |___|_||_|\__\___|               
+        
 )" << resetColor;
 
 }
@@ -1280,8 +1280,8 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
     // ANSI escape codes for text formatting
     const std::string defaultColor = "\033[0m";
     const std::string bold = "\033[1m";
-    const std::string red = "\033[31m";   // Red color
-    const std::string green = "\033[32m"; // Green color
+    const std::string red = "\033[31;1m";   // Red color
+    const std::string green = "\033[32;1m"; // Green color
     const std::string magenta = "\033[95m";
 
     bool useRedColor = true; // Start with red color
@@ -1490,7 +1490,7 @@ void listMountedISOs() {
 
         for (size_t i = 0; i < isoDirs.size(); ++i) {
             // Determine color based on alternating pattern
-            std::string sequenceColor = (useRedColor) ? "\033[31m" : "\033[32m";
+            std::string sequenceColor = (useRedColor) ? "\033[31;1m" : "\033[32;1m";
             useRedColor = !useRedColor; // Toggle between red and green
 
             // Print sequence number with the determined color
