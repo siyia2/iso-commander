@@ -71,8 +71,6 @@ int main(int argc, char *argv[]) {
                         break;
                     case '3':
                         manualRefreshCache();
-                        std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
-                        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                         std::system("clear");
                         break;
                     case '4':
@@ -465,8 +463,6 @@ void manualRefreshCache() {
 
     // Check if the user canceled the cache refresh
     if (inputLine.empty()) {
-        std::cout << "\033[1;93mCache refresh canceled by user.\033[0m" << std::endl;
-        std::cout << " " << std::endl;
         return;
     }
 
@@ -597,6 +593,8 @@ void manualRefreshCache() {
         std::cout << "\033[1;91mCache refresh failed.\033[0m" << std::endl;
         std::cout << " " << std::endl;
     }
+    std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
+    std::cin.get();
 }
 
 
