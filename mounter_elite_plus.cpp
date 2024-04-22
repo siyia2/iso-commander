@@ -782,7 +782,10 @@ void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<s
     std::lock_guard<std::mutex> lowLock(Mutex4Low);
     
     // Determine batch size based on the number of isoFiles
-    size_t batchSize = 5; // Default batch size
+    size_t batchSize = 2; // Default batch size
+    if (isoFiles.size() > 50) {
+        batchSize = 5;
+    }
     if (isoFiles.size() > 100) {
         batchSize = 10;
     }
@@ -1395,7 +1398,10 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
     std::lock_guard<std::mutex> lowLock(Mutex4Low);
     
     // Determine batch size based on the number of FilesToMount
-    size_t batchSize = 5; // Maximum ISO files per mount command
+    size_t batchSize = 2; // Maximum ISO files per mount command
+    if (isoFilesToMount.size() > 50) {
+        batchSize = 5;
+    }
     if (isoFilesToMount.size() > 100) {
         batchSize = 10;
     }
@@ -1606,7 +1612,10 @@ bool isDirectoryEmpty(const std::string& path) {
 // Function to unmount ISO files asynchronously
 void unmountISO(const std::vector<std::string>& isoDirs) {
     // Determine batch size based on the number of isoDirs
-    size_t batchSize = 5;
+    size_t batchSize = 2;
+    if (isoDirs.size() > 50) {
+        batchSize = 5;
+    }
     if (isoDirs.size() > 100) {
         batchSize = 10;
     }
@@ -1643,7 +1652,7 @@ void unmountISO(const std::vector<std::string>& isoDirs) {
                 } else {
                     // Handle non-empty directory error
                     std::stringstream errorMessage;
-                    errorMessage << "\033[1;93mAre you sure \033[1;91m'" << isoDir << "'\033[1;93m is a mountpoint? Directory not empty, cannot be removed.\033[0m\033[1m" << std::endl;
+                    errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDir << "'\033[1;91m ...Please check it out manually.\033[0m\033[1m" << std::endl;
 
                     if (std::find(unmountedErrors.begin(), unmountedErrors.end(), errorMessage.str()) == unmountedErrors.end()) {
                         unmountedErrors.push_back(errorMessage.str());
