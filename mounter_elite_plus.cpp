@@ -1689,6 +1689,9 @@ void unmountISOs() {
     std::set<int> validIndices;
      // Define a vector to store futures
 	std::vector<std::future<void>> futures;
+	
+	// Create a thread pool with a limited number of threads
+        ThreadPool pool(4);
 
 
     // Flag to check for invalid input
@@ -1751,8 +1754,6 @@ void unmountISOs() {
         // Unmount all ISOs if '00' is entered
         if (std::strcmp(input, "00") == 0) {
             std::vector<std::thread> threads;
-            // Create a thread pool with a limited number of threads
-            ThreadPool pool(maxThreads);
 
             std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
 
@@ -1885,8 +1886,6 @@ void unmountISOs() {
 		}
 
         std::vector<std::thread> threads;
-        // Create a thread pool with a limited number of threads
-        ThreadPool pool(maxThreads);
         std::vector<std::future<void>> futures;
 
         std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
