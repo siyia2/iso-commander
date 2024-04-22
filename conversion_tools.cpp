@@ -266,7 +266,7 @@ void select_and_convert_files_to_iso() {
     loadHistory();
     
     // Read input for directory paths (allow multiple paths separated by semicolons)
-    std::string inputPaths = readInputLine("\033[1;94mEnter the directory path(s) (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1m\033[1;94m) to search for \033[1m\033[1;92m.bin \033[1;94mand \033[1m\033[1;92m.img\033[1;94m files, or press Enter to return:\n\033[0m\033[1m");
+    std::string inputPaths = readInputLine("\033[1;94mDirectory path(s) ↵ (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1m\033[1;94m) to search for \033[1m\033[1;92m.bin \033[1;94mand \033[1m\033[1;92m.img\033[1;94m files, or press ↵ to return:\n\033[0m\033[1m");
     
      if (!inputPaths.empty()) {
 		// Save history to file
@@ -342,7 +342,7 @@ void select_and_convert_files_to_iso() {
 			clear_history();
         
             // Prompt user to choose a file or exit
-            char* input = readline("\033[1;94mChoose BIN/IMG file(s) for \033[1;92mconversion\033[1;94m (e.g., '1-3', '1 5', or press Enter to return):\033[0m\033[1m ");
+            char* input = readline("\033[1;94mBIN/IMG file(s) ↵ for \033[1;92mconversion\033[1;94m (e.g., '1-3', '1 5', or press ↵ to return):\033[0m\033[1m ");
         
             // Break the loop if the user presses Enter
             if (input[0] == '\0') {
@@ -902,7 +902,7 @@ void select_and_convert_files_to_iso_mdf() {
     loadHistory();
 	
     // Read input for directory paths (allow multiple paths separated by semicolons)
-    std::string inputPaths = readInputLine("\033[1;94mEnter the directory path(s) (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1m\033[1;94m) to search for \033[1m\033[1;92m.mdf\033[1;94m files, or press Enter to return:\n\033[0m\033[1m");
+    std::string inputPaths = readInputLine("\033[1;94mDirectory path(s) ↵ (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1m\033[1;94m) to search for \033[1m\033[1;92m.mdf\033[1;94m files, or press ↵ to return:\n\033[0m\033[1m");
     
      if (!inputPaths.empty()) {
 		// Save history to file
@@ -978,7 +978,7 @@ void select_and_convert_files_to_iso_mdf() {
 		clear_history();
         
         // Prompt the user to enter file numbers or 'exit'
-        char* input = readline("\033[1;94mChoose MDF file(s) for \033[1;92mconversion\033[1;94m (e.g., '1-3', '1 5', or press Enter to return):\033[0m\033[1m ");
+        char* input = readline("\033[1;94mMDF file(s) ↵ for \033[1;92mconversion\033[1;94m (e.g., '1-3', '1 5', or press ↵ to return):\033[0m\033[1m ");
 
         if (input[0] == '\0') {
             std::system("clear");
