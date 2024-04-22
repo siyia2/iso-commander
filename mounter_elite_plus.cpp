@@ -1693,7 +1693,6 @@ void unmountISOs() {
             std::vector<std::thread> threads;
             // Create a thread pool with a limited number of threads
             ThreadPool pool(maxThreads);
-            std::vector<std::future<void>> futures;
 
             std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
 
@@ -1701,13 +1700,17 @@ void unmountISOs() {
 		// Enqueue unmounting tasks for all mounted ISOs
 		for (const std::string& isoDir : isoDirs) {
 			futures.emplace_back(std::async(std::launch::async, [isoDir]() {
-				// Lock the mutex if necessary (Mutex4High is assumed to be a mutex)
-				std::lock_guard<std::mutex> highLock(Mutex4High);
-        
-				// Call unmountISO with the current isoDir
-				unmountISO({isoDir}); // Pass isoDir as a single-element vector
-			}));
+					// Lock the mutex if necessary (Mutex4High is assumed to be a mutex)
+					std::lock_guard<std::mutex> highLock(Mutex4High);
+            
+					// Call unmountISO with the current isoDir
+					unmountISO({isoDir}); // Pass isoDir as a single-element vector
+				}));
 		}
+		
+		for (auto& future : futures) {
+            future.wait();
+        }
 
             if (invalidInput && !validIndices.empty()) {
 				std::cout << " " << std::endl;
