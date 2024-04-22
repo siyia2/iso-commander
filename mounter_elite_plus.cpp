@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
 
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.8.3");
+        printVersionNumber("2.8.4");
         return 0;
     }
 
@@ -782,7 +782,10 @@ void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<s
     std::lock_guard<std::mutex> lowLock(Mutex4Low);
     
     // Determine batch size based on the number of isoFiles
-    size_t batchSize = 5; // Default batch size
+    size_t batchSize = 2; // Default batch size
+    if (isoFiles.size() > 50) {
+        batchSize = 5;
+    }
     if (isoFiles.size() > 100) {
         batchSize = 10;
     }
@@ -1395,7 +1398,10 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
     std::lock_guard<std::mutex> lowLock(Mutex4Low);
     
     // Determine batch size based on the number of FilesToMount
-    size_t batchSize = 5; // Maximum ISO files per mount command
+    size_t batchSize = 2; // Default batch size
+    if (isoFilesToMount.size() > 50) {
+        batchSize = 5;
+    }
     if (isoFilesToMount.size() > 100) {
         batchSize = 10;
     }
@@ -1606,7 +1612,10 @@ bool isDirectoryEmpty(const std::string& path) {
 // Function to unmount ISO files asynchronously
 void unmountISO(const std::vector<std::string>& isoDirs) {
     // Determine batch size based on the number of isoDirs
-    size_t batchSize = 5;
+    size_t batchSize = 2; // Default batch size
+    if (isoDirs.size() > 50) {
+        batchSize = 5;
+    }
     if (isoDirs.size() > 100) {
         batchSize = 10;
     }
