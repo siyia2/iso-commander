@@ -1687,12 +1687,6 @@ void unmountISOs() {
     std::set<std::string> uniqueErrorMessages;
     // Set to store valid indices selected for unmounting
     std::set<int> validIndices;
-     // Define a vector to store futures
-	std::vector<std::future<void>> futures;
-	
-	// Create a thread pool with a limited number of threads
-        ThreadPool pool(4);
-
 
     // Flag to check for invalid input
     bool invalidInput = false;
@@ -1741,7 +1735,7 @@ void unmountISOs() {
         }
 
         // Prompt user to choose ISOs for unmounting
-        char* input = readline("\033[1;94mISO(s) ↵ for \033[1;92munmount\033[1;94m (e.g., '1-3', '1 5', '00' for all, or press ↵ to return):\033[0m\033[1m ");
+        char* input = readline("\033[1;94mChoose ISO(s) for \033[1;92munmount\033[1;94m (e.g., '1-3', '1 5', '00' unmounts all, or press Enter to return):\033[0m\033[1m ");
         std::system("clear");
 
         auto start_time = std::chrono::high_resolution_clock::now();
@@ -1754,25 +1748,25 @@ void unmountISOs() {
         // Unmount all ISOs if '00' is entered
         if (std::strcmp(input, "00") == 0) {
             std::vector<std::thread> threads;
+            // Create a thread pool with a limited number of threads
+            ThreadPool pool(maxThreads);
+            std::vector<std::future<void>> futures;
 
             std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
 
-           
-		// Enqueue unmounting tasks for all mounted ISOs
-		for (const std::string& isoDir : isoDirs) {
-			futures.emplace_back(std::async(std::launch::async, [isoDir]() {
-					// Lock the mutex if necessary (Mutex4High is assumed to be a mutex)
-					std::lock_guard<std::mutex> highLock(Mutex4High);
-            
-					// Call unmountISO with the current isoDir
-					unmountISO({isoDir}); // Pass isoDir as a single-element vector
+            // Enqueue unmounting tasks for all mounted ISOs
+            for (const std::string& isoDir : isoDirs) {
+                futures.emplace_back(pool.enqueue([isoDir]() {
+				std::lock_guard<std::mutex> highLock(Mutex4High);
+				unmountISO(std::vector<std::string>{isoDir}); // Pass a vector containing isoDir
 				}));
-		}
-		
-		for (auto& future : futures) {
-            future.wait();
-        }
+            }
 
+            // Wait for all tasks to finish
+            for (auto& future : futures) {
+                future.wait();
+            }
+            
             if (invalidInput && !validIndices.empty()) {
 				std::cout << " " << std::endl;
 			}
@@ -1784,19 +1778,17 @@ void unmountISOs() {
 			for (const auto& unmountedFile : unmountedFiles) {
 				std::cout << unmountedFile << std::endl;
 			}
-			
-			if (!unmountedErrors.empty()) {
-				std::cout << " " << std::endl; // Print a blank line before unmounted files
-			}
-			
-			// Print all unmounted files
-			for (const auto& unmountedError : unmountedErrors) {
-				std::cout << unmountedError << std::endl;
-			}
 
+			if (!unmountedErrors.empty()) {
+				std::cout << " " << std::endl; // Print a blank line before deleted folders
+			}
+			// Print all unmounted files
+		for (const auto& unmountedError : unmountedErrors) {
+			std::cout << unmountedError << std::endl;
+		}
 			// Clear vectors
-			unmountedErrors.clear();
 			unmountedFiles.clear();
+			unmountedErrors.clear();
 
             auto end_time = std::chrono::high_resolution_clock::now();
 
@@ -1886,23 +1878,22 @@ void unmountISOs() {
 		}
 
         std::vector<std::thread> threads;
+        // Create a thread pool with a limited number of threads
+        ThreadPool pool(maxThreads);
         std::vector<std::future<void>> futures;
 
         std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
-		// Enqueue unmounting tasks for all mounted ISOs based on indices
-		for (int index : unmountIndices) {
-			if (isValidIndex(index, isoDirs.size())) {
-				const std::string& isoDir = isoDirs[index - 1];
+		// Enqueue unmounting tasks for all mounted ISOs
+        for (int index : unmountIndices) {
+            if (isValidIndex(index, isoDirs.size())) {
+                const std::string& isoDir = isoDirs[index - 1];
 
-				futures.emplace_back(std::async(std::launch::async, [isoDir]() {
-					// Lock the mutex if necessary (Mutex4High is assumed to be a mutex)
-					std::lock_guard<std::mutex> highLock(Mutex4High);
-            
-					// Call unmountISO with the current isoDir
-					unmountISO({isoDir}); // Pass isoDir as a single-element vector
+                futures.emplace_back(pool.enqueue([isoDir]() {
+				std::lock_guard<std::mutex> highLock(Mutex4High);
+				unmountISO(std::vector<std::string>{isoDir}); // Pass a vector containing isoDir
 				}));
-			}
-		}
+            }
+        }
 
         for (auto& future : futures) {
             future.wait();
@@ -1915,18 +1906,20 @@ void unmountISOs() {
 		for (const auto& unmountedFile : unmountedFiles) {
 			std::cout << unmountedFile << std::endl;
 		}
+
 		if (!unmountedErrors.empty()) {
-			std::cout << " " << std::endl; // Print a blank line before unmounted files
+			std::cout << " " << std::endl; // Print a blank line before deleted folders
 		}
-			
 		// Print all unmounted files
 		for (const auto& unmountedError : unmountedErrors) {
 			std::cout << unmountedError << std::endl;
 		}
 
 		// Clear vectors
-		unmountedErrors.clear();
+		
+		// Clear vectors
 		unmountedFiles.clear();
+		unmountedErrors.clear();
 		
         // Lock access to error messages
         std::lock_guard<std::mutex> errorMessagesLock(errorMessagesMutex);
