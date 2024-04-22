@@ -221,6 +221,12 @@ void printMenu() {
 
 // GENERAL STUFF
 
+void clearScrollBuffer() {
+    std::cout << "\033[3J\033[H"; // ANSI escape codes for clearing scroll buffer
+    std::cout.flush(); // Ensure the output is flushed
+}
+
+
 // Function to check if a string consists only of zeros
 bool isAllZeros(const std::string& str) {
     return str.find_first_not_of('0') == std::string::npos;
@@ -678,10 +684,6 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
 
 // DELETION STUFF
 
-void clearScrollBuffer() {
-    std::cout << "\033[3J\033[H"; // ANSI escape codes for clearing scroll buffer
-    std::cout.flush(); // Ensure the output is flushed
-}
 
 // Function to select and delete ISO files by number
 void select_and_delete_files_by_number() {
@@ -693,6 +695,7 @@ void select_and_delete_files_by_number() {
 
     // Check if the cache is empty
     if (isoFiles.empty()) {
+		clearScrollBuffer();
         std::system("clear");
         std::cout << "\033[1;93mNo ISO(s) available for deletion.\033[0m\033[1m" << std::endl;
         std::cout << " " << std::endl;
@@ -711,6 +714,7 @@ void select_and_delete_files_by_number() {
 
     // Main loop for selecting and deleting ISO files
     while (true) {
+		clearScrollBuffer();
         std::system("clear");
         std::cout << "\033[1;93m ! ISO DELETION IS IRREVERSIBLE PROCEED WITH CAUTION !\n\033[0m\033[1m" << std::endl;
 
@@ -1080,6 +1084,7 @@ void select_and_mount_files_by_number() {
 
     // Check if the cache is empty
     if (isoFiles.empty()) {
+		clearScrollBuffer();
         std::system("clear");
         std::cout << "\033[1;93mISO Cache is empty. Please refresh it from the main Menu Options.\033[0m\033[1m" << std::endl;
         std::cout << " " << std::endl;
@@ -1099,6 +1104,7 @@ void select_and_mount_files_by_number() {
 
     // Main loop for selecting and mounting ISO files
     while (true) {
+		clearScrollBuffer();
         std::system("clear");
         std::cout << "\033[1;93m ! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\n\033[0m\033[1m" << std::endl;
 
@@ -1136,12 +1142,15 @@ void select_and_mount_files_by_number() {
 				pool.enqueue([i, &isoFiles, &mountedSet]() {
 				// Create a vector containing the single ISO file to mount
 				std::vector<std::string> isoFilesToMount = { isoFiles[i] }; // Assuming isoFiles is 1-based indexed
-
+				clearScrollBuffer();
+				std::system("clear");
 				// Call mountIsoFile with the vector of ISO files to mount and the mounted set
 				mountIsoFile(isoFilesToMount, mountedSet);
 				});
 			}
         } else {
+			clearScrollBuffer();
+			std::system("clear");
             // Process user input to select and mount specific ISO files
             processAndMountIsoFiles(input, isoFiles, mountedSet);
         }
