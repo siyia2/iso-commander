@@ -332,6 +332,7 @@ void select_and_convert_files_to_iso() {
         
     } else {
         while (true) {
+			clearScrollBuffer();
             std::system("clear");
             // Print the list of BIN/IMG files
             printFileListBin(binImgFiles);
@@ -969,6 +970,7 @@ void select_and_convert_files_to_iso_mdf() {
 
     // Continue selecting and converting files until the user decides to exit
     while (true) {
+		clearScrollBuffer();
         std::system("clear");
         printFileListMdf(mdfMdsFiles);
 
