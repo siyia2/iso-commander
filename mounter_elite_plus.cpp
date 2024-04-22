@@ -1368,20 +1368,20 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
     auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
 
         // Check if the mount point is already mounted
-                if (isAlreadyMounted(mountPoint)) {
-                    // If already mounted, print a message and return
-                    std::stringstream skippedMessage;
-                    skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m already mounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;93m.\033[0m\033[1m" << std::endl;
+         if (isAlreadyMounted(mountPoint)) {
+			// If already mounted, print a message and return
+            std::stringstream skippedMessage;
+            skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m already mounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;93m.\033[0m\033[1m" << std::endl;
                     
-                    // Create the unordered set after populating skippedMessages
-                    std::unordered_set<std::string> skippedSet(skippedMessages.begin(), skippedMessages.end());
+            // Create the unordered set after populating skippedMessages
+            std::unordered_set<std::string> skippedSet(skippedMessages.begin(), skippedMessages.end());
 
-                    // Check for duplicates
-                    if (skippedSet.find(skippedMessage.str()) == skippedSet.end()) {
-                        // Error message not found, add it to the vector
-                        skippedMessages.push_back(skippedMessage.str());
-                    }
-            continue; // Skip mounting this ISO file
+               // Check for duplicates
+               if (skippedSet.find(skippedMessage.str()) == skippedSet.end()) {
+					// Error message not found, add it to the vector
+                    skippedMessages.push_back(skippedMessage.str());
+				}
+			continue; // Skip mounting this ISO file
         }
 
         // Construct the sudo command and execute it
