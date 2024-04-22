@@ -12,7 +12,7 @@ Features:
 * Tab completion and history support.
 * Sanitized shell commands for improved security.
 * Multithreaded asynchronous operations based on unique valid indices and max available system cores.
-* Scales well with as low as 20 ISO files to up to 100k ISO files.
+* Highly scalable handling anywhere from 10 ISO files to a staggering 100,000 ISO files .
 * Includes a high precision timer for performance measurements.
 * Support for BIN/IMG conversion to ISO by utilizing ccd2iso.
 * Support for MDF conversion to ISO by utilizing mdf2iso.
