@@ -29,6 +29,8 @@ std::unordered_set<std::string> uniqueErrorMessages;
 
 // Vector to store ISO unmounts
 std::vector<std::string> unmountedFiles;
+// Vector to store ISO unmount errors
+std::vector<std::string> unmountedErrors;
 
 // Vector to store deleted ISOs
 std::vector<std::string> deletedIsos;
@@ -1494,7 +1496,6 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
 }
 
 
-
 // Function to check if an ISO is already mounted
 bool isAlreadyMounted(const std::string& mountPoint) {
     FILE* mountTable = setmntent("/proc/mounts", "r");
@@ -1518,6 +1519,7 @@ bool isAlreadyMounted(const std::string& mountPoint) {
 
 
 // UMOUNT STUFF
+
 
 // Function to list mounted ISOs in the /mnt directory
 void listMountedISOs() {
@@ -1615,8 +1617,19 @@ void unmountISO(const std::vector<std::string>& isoDirs) {
                     // Check if the directory is empty
                     if (isDirectoryEmpty(isoDir)) {
                         emptyDirs.push_back(isoDir);
-                    }
+                    } else {
+						std::stringstream errorMessage;
+						errorMessage << "\033[1;93mAre you sure \033[1;91m'" << isoDir << "'\033[1;93m is a mountpoint?...directory not empty, cannot be removed.\033[0m\033[1m" << std::endl;
+
+						// Check if the error message is already in the vector
+						if (std::find(unmountedErrors.begin(), unmountedErrors.end(), errorMessage.str()) == unmountedErrors.end()) {
+							// Error message not found, add it to the vector
+							unmountedErrors.push_back(errorMessage.str());
+						}
+					}
                 }
+                
+             
 
                 // Remove empty directories in batches of up to 5
                 while (!emptyDirs.empty()) {
@@ -1638,8 +1651,15 @@ void unmountISO(const std::vector<std::string>& isoDirs) {
                     } else {
                         for (size_t i = 0; i < emptyDirs.size() && i < 5; ++i) {
                             auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(emptyDirs[i]);
-                            std::cerr << "\033[1;91mFailed to remove directory: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;91m ...Please check it out manually.\033[0m\033[1m" << std::endl;
-                            emptyDirs.erase(emptyDirs.begin());
+                            std::stringstream errorMessage;
+							errorMessage << "\033[1;91mFailed to remove directory: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;91m ...Please check it out manually.\033[0m\033[1m" << std::endl;
+
+							// Check if the error message is already in the vector
+							if (std::find(unmountedErrors.begin(), unmountedErrors.end(), errorMessage.str()) == unmountedErrors.end()) {
+							// Error message not found, add it to the vector
+							unmountedErrors.push_back(errorMessage.str());
+							}
+							emptyDirs.erase(emptyDirs.begin());
                         }
                     }
                 }
@@ -1761,8 +1781,18 @@ void unmountISOs() {
 			for (const auto& unmountedFile : unmountedFiles) {
 				std::cout << unmountedFile << std::endl;
 			}
+			
+			if (!unmountedErrors.empty()) {
+				std::cout << " " << std::endl; // Print a blank line before unmounted files
+			}
+			
+			// Print all unmounted files
+			for (const auto& unmountedError : unmountedErrors) {
+				std::cout << unmountedError << std::endl;
+			}
 
 			// Clear vectors
+			unmountedErrors.clear();
 			unmountedFiles.clear();
 
             auto end_time = std::chrono::high_resolution_clock::now();
@@ -1884,8 +1914,17 @@ void unmountISOs() {
 		for (const auto& unmountedFile : unmountedFiles) {
 			std::cout << unmountedFile << std::endl;
 		}
+		if (!unmountedErrors.empty()) {
+			std::cout << " " << std::endl; // Print a blank line before unmounted files
+		}
+			
+		// Print all unmounted files
+		for (const auto& unmountedError : unmountedErrors) {
+			std::cout << unmountedError << std::endl;
+		}
 
 		// Clear vectors
+		unmountedErrors.clear();
 		unmountedFiles.clear();
 		
         // Lock access to error messages
