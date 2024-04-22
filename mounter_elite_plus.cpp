@@ -1564,10 +1564,9 @@ void unmountISO(const std::vector<std::string>& isoDirs) {
                 unmountCommand += shell_escape(isoDir) + " ";
             }
             unmountCommand += "> /dev/null 2>&1";
+			// Yes! it is used for real!
+            int removeDirResult __attribute__((unused)) = system(unmountCommand.c_str());
 
-            int result = system(unmountCommand.c_str());
-
-            if (result == 0 || result !=0) {
                 std::vector<std::string> emptyDirs;
                 for (const auto& isoDir : isoDirs) {
                     auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoDir);
@@ -1606,12 +1605,6 @@ void unmountISO(const std::vector<std::string>& isoDirs) {
                         }
                     }
                 }
-            } else {
-                for (const auto& isoDir : isoDirs) {
-                    auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoDir);
-                    std::cerr << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;91m ...Probably not an ISO mountpoint, check it out manually.\033[0m\033[1m" << std::endl;
-                }
-            }
         } else {
             // Print failure message
             std::cout << " " << std::endl;
