@@ -2,7 +2,7 @@
 Port of bash shell program mounter_elite to C++ 
 https://github.com/siyia2/mounter_elite
 
-![2024-04-21-092101_grim](https://github.com/siyia2/mounter-elite-plus/assets/46220960/1ecb1ed7-ae65-4b9f-b533-dbf82372772f)
+![2024-04-22-135512_grim](https://github.com/siyia2/mounter-elite-plus/assets/46220960/d642aae7-b21d-4178-b90a-727922517c1d)
 
 State of the art secure and blazing fast terminal `ISO` manager written in C++, it manages `ISOs` and/or converts `BIN&IMG&MDF` files to `ISO`. All paths are mounted under `/mnt/iso_*` format and the conversion results are stored in their respective source directories. `ROOT` access is required to `mount&unmount&delete ISOs`. 
 
