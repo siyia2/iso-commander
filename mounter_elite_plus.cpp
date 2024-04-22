@@ -774,25 +774,24 @@ bool fileExists(const std::string& filename) {
 }
 
 
-// Function to handle the deletion of an ISO file
 // Function to handle the deletion of ISO files in batches
 void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::unordered_set<std::string>& deletedSet) {
     // Lock the global mutex for synchronization
     std::lock_guard<std::mutex> lowLock(Mutex4Low);
     
     // Determine batch size based on the number of isoFiles
-    size_t batch_size = 5; // Default batch size
+    size_t batchSize = 5; // Default batch size
     if (isoFiles.size() > 100) {
-        batch_size = 10;
+        batchSize = 10;
     }
     if (isoFiles.size() > 1000) {
-        batch_size = 25;
+        batchSize = 25;
     }
     if (isoFiles.size() > 10000) {
-        batch_size = 50;
+        batchSize = 50;
     }
     if (isoFiles.size() > 100000) {
-        batch_size = 100;
+        batchSize = 100;
     }
     
     // Track ISO files to delete in the current batch
@@ -812,7 +811,7 @@ void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<s
                 isoFilesToDelete.push_back(iso);
 
                 // If the deletion batch reaches the batch size, or no more ISO files to process
-                if (isoFilesToDelete.size() == batch_size || &iso == &isoFiles.back()) {
+                if (isoFilesToDelete.size() == batchSize || &iso == &isoFiles.back()) {
                     // Construct the delete command for the entire batch
                     std::string deleteCommand = "sudo rm -f ";
                     for (const auto& deleteIso : isoFilesToDelete) {
@@ -848,7 +847,6 @@ void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<s
         }
     }
 }
-
 
 
 // Function to process user input for selecting and deleting specific ISO files
@@ -1385,19 +1383,19 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
     // Lock the global mutex for synchronization
     std::lock_guard<std::mutex> lowLock(Mutex4Low);
     
-    // Determine batch size based on the number of isoDirs
-    size_t MAX_ISO_PER_MOUNT = 5; // Maximum ISO files per mount command
+    // Determine batch size based on the number of FilesToMount
+    size_t batchSize = 5; // Maximum ISO files per mount command
     if (isoFilesToMount.size() > 100) {
-        MAX_ISO_PER_MOUNT = 10;
+        batchSize = 10;
     }
     if (isoFilesToMount.size() > 1000) {
-        MAX_ISO_PER_MOUNT = 25;
+        batchSize = 25;
     }
     if (isoFilesToMount.size() > 10000) {
-        MAX_ISO_PER_MOUNT = 50;
+        batchSize = 50;
     }
     if (isoFilesToMount.size() > 100000) {
-        MAX_ISO_PER_MOUNT = 100;
+        batchSize = 100;
     }
 
     namespace fs = std::filesystem;
@@ -1437,7 +1435,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
         batchIsoFiles.push_back(isoFile);
 
         // If batch is full or reached end of isoFilesToMount, mount the batch
-        if (batchIsoFiles.size() == MAX_ISO_PER_MOUNT || &isoFile == &isoFilesToMount.back()) {
+        if (batchIsoFiles.size() == batchSize || &isoFile == &isoFilesToMount.back()) {
             std::stringstream isoPaths;
             for (const auto& path : batchIsoFiles) {
                 isoPaths << shell_escape(path) << " ";
