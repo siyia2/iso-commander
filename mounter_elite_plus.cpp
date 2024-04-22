@@ -29,8 +29,6 @@ std::unordered_set<std::string> uniqueErrorMessages;
 
 // Vector to store ISO unmounts
 std::vector<std::string> unmountedFiles;
-// Vector to store deleted empty folders
-std::vector<std::string> deletedFolders;
 
 // Vector to store deleted ISOs
 std::vector<std::string> deletedIsos;
@@ -1550,10 +1548,9 @@ bool isDirectoryEmpty(const std::string& path) {
 
 
 // Function to unmount ISO files asynchronously
-void unmountISO(const std::string& isoDir) {
-
-    // Use std::async to unmount and remove the directory asynchronously
-    auto unmountFuture = std::async(std::launch::async, [&isoDir]() {
+void unmountISO(const std::vector<std::string>& isoDirs) {
+    // Use std::async to unmount and remove the directories asynchronously
+    auto unmountFuture = std::async(std::launch::async, [&isoDirs]() {
         // Construct the sudo command
         std::string sudoCommand = "sudo -v";
 
@@ -1561,49 +1558,66 @@ void unmountISO(const std::string& isoDir) {
         int sudoResult = system(sudoCommand.c_str());
 
         if (sudoResult == 0) {
-
             // Construct the unmount command with sudo, umount, and suppressing logs
-            std::string command = "sudo umount -l " + shell_escape(isoDir) + " > /dev/null 2>&1";
-            int result = system(command.c_str());
-            
-            auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoDir);
-            // Remove the ".iso" extension from the mountisoFilename
-			std::string isoFilenameWithoutExtension = isoFilename.substr(0, isoFilename.length() - 4);
-            
-            
-            if (isDirectoryEmpty(isoDir) && result != 0) {
-                    // Construct the remove directory command with sudo, rmdir, and suppressing logs
-                    command = "sudo rmdir " + shell_escape(isoDir) + " 2>/dev/null";
-                    // Yes! it is used for real!
-                    int removeDirResult __attribute__((unused)) = system(command.c_str());
-                    std::string deletedFolderInfo= "\033[1;92mRemoved empty directory: \033[1;91m'" + isoDirectory + "/" + isoFilename + "'\033[1;92m.\033[0m\033[1m"; // Print success message
-                    deletedFolders.push_back(deletedFolderInfo);
-				}
-				// Check if the unmounting was successful
-				else if (result == 0) {
-                std::string unmountedFileInfo = "\033[1mUnmounted: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m\033[1m."; // Print success message
-                unmountedFiles.push_back(unmountedFileInfo);
+            std::string unmountCommand = "sudo umount ";
+            for (const auto& isoDir : isoDirs) {
+                unmountCommand += shell_escape(isoDir) + " ";
+            }
+            unmountCommand += "> /dev/null 2>&1";
 
-					// Check if the directory is empty before removing it
-					if (isDirectoryEmpty(isoDir)) {
-						// Construct the remove directory command with sudo, rmdir, and suppressing logs
-						command = "sudo rmdir " + shell_escape(isoDir) + " 2>/dev/null";
-						int removeDirResult = system(command.c_str());
+            int result = system(unmountCommand.c_str());
 
-						if (removeDirResult != 0) {
-							std::cerr << "\033[1;91mFailed to remove directory: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;91m ...Please check it out manually.\033[0m\033[1m" << std::endl;
-						}
-					}
-				} else {
-					// Print failure message
-					std::cerr << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;91m ...Probably not an ISO mountpoint, check it out manually.\033[0m\033[1m" << std::endl;
-				}
-			} else {
-				// Print failure message
-				std::cout << " " << std::endl;
-				std::cerr << "\033[1;91mFailed to authenticate with sudo.\033[0m\033[1m" << std::endl;
-			}
-		});
+            if (result == 0 || result !=0) {
+                std::vector<std::string> emptyDirs;
+                for (const auto& isoDir : isoDirs) {
+                    auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoDir);
+
+                    // Remove the ".iso" extension from the mountisoFilename
+                    std::string isoFilenameWithoutExtension = isoFilename.substr(0, isoFilename.length() - 4);
+
+                    // Check if the directory is empty
+                    if (isDirectoryEmpty(isoDir)) {
+                        emptyDirs.push_back(isoDir);
+                    }
+                }
+
+                // Remove empty directories in batches of up to 5
+                while (!emptyDirs.empty()) {
+                    std::string removeDirCommand = "sudo rmdir ";
+                    for (size_t i = 0; i < emptyDirs.size() && i < 5; ++i) {
+                        removeDirCommand += shell_escape(emptyDirs[i]) + " ";
+                    }
+                    removeDirCommand += "2>/dev/null";
+
+                    int removeDirResult = system(removeDirCommand.c_str());
+
+                    if (removeDirResult == 0) {
+                        for (size_t i = 0; i < emptyDirs.size() && i < 5; ++i) {
+                            auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(emptyDirs[i]);
+                            std::string unmountedFileInfo = "\033[1mUnmounted: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m\033[1m.";
+							unmountedFiles.push_back(unmountedFileInfo);
+                            emptyDirs.erase(emptyDirs.begin());
+                        }
+                    } else {
+                        for (size_t i = 0; i < emptyDirs.size() && i < 5; ++i) {
+                            auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(emptyDirs[i]);
+                            std::cerr << "\033[1;91mFailed to remove directory: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;91m ...Please check it out manually.\033[0m\033[1m" << std::endl;
+                            emptyDirs.erase(emptyDirs.begin());
+                        }
+                    }
+                }
+            } else {
+                for (const auto& isoDir : isoDirs) {
+                    auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoDir);
+                    std::cerr << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;91m ...Probably not an ISO mountpoint, check it out manually.\033[0m\033[1m" << std::endl;
+                }
+            }
+        } else {
+            // Print failure message
+            std::cout << " " << std::endl;
+            std::cerr << "\033[1;91mFailed to authenticate with sudo.\033[0m\033[1m" << std::endl;
+        }
+    });
 }
 
 
@@ -1620,6 +1634,9 @@ void unmountISOs() {
     std::set<std::string> uniqueErrorMessages;
     // Set to store valid indices selected for unmounting
     std::set<int> validIndices;
+     // Define a vector to store futures
+	std::vector<std::future<void>> futures;
+
 
     // Flag to check for invalid input
     bool invalidInput = false;
@@ -1687,19 +1704,18 @@ void unmountISOs() {
 
             std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
 
-            // Enqueue unmounting tasks for all mounted ISOs
-            for (const std::string& isoDir : isoDirs) {
-                futures.emplace_back(pool.enqueue([isoDir]() {
-                    std::lock_guard<std::mutex> highLock(Mutex4High);
-                    unmountISO(isoDir);
-                }));
-            }
+           
+		// Enqueue unmounting tasks for all mounted ISOs
+		for (const std::string& isoDir : isoDirs) {
+			futures.emplace_back(std::async(std::launch::async, [isoDir]() {
+				// Lock the mutex if necessary (Mutex4High is assumed to be a mutex)
+				std::lock_guard<std::mutex> highLock(Mutex4High);
+        
+				// Call unmountISO with the current isoDir
+				unmountISO({isoDir}); // Pass isoDir as a single-element vector
+			}));
+		}
 
-            // Wait for all tasks to finish
-            for (auto& future : futures) {
-                future.wait();
-            }
-            
             if (invalidInput && !validIndices.empty()) {
 				std::cout << " " << std::endl;
 			}
@@ -1712,16 +1728,8 @@ void unmountISOs() {
 				std::cout << unmountedFile << std::endl;
 			}
 
-			if (!deletedFolders.empty()) {
-				std::cout << " " << std::endl; // Print a blank line before deleted folders
-			}
-			// Print all deleted empty folders in iso_ format
-			for (const auto& deletedFolder : deletedFolders) {
-				std::cout << deletedFolder << std::endl;
-			}
 			// Clear vectors
 			unmountedFiles.clear();
-			deletedFolders.clear();
 
             auto end_time = std::chrono::high_resolution_clock::now();
 
@@ -1816,17 +1824,20 @@ void unmountISOs() {
         std::vector<std::future<void>> futures;
 
         std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
-		// Enqueue unmounting tasks for all mounted ISOs
-        for (int index : unmountIndices) {
-            if (isValidIndex(index, isoDirs.size())) {
-                const std::string& isoDir = isoDirs[index - 1];
+		// Enqueue unmounting tasks for all mounted ISOs based on indices
+		for (int index : unmountIndices) {
+			if (isValidIndex(index, isoDirs.size())) {
+				const std::string& isoDir = isoDirs[index - 1];
 
-                futures.emplace_back(pool.enqueue([isoDir]() {
-                    std::lock_guard<std::mutex> highLock(Mutex4High);
-                    unmountISO(isoDir);
-                }));
-            }
-        }
+				futures.emplace_back(std::async(std::launch::async, [isoDir]() {
+					// Lock the mutex if necessary (Mutex4High is assumed to be a mutex)
+					std::lock_guard<std::mutex> highLock(Mutex4High);
+            
+					// Call unmountISO with the current isoDir
+					unmountISO({isoDir}); // Pass isoDir as a single-element vector
+				}));
+			}
+		}
 
         for (auto& future : futures) {
             future.wait();
@@ -1840,16 +1851,8 @@ void unmountISOs() {
 			std::cout << unmountedFile << std::endl;
 		}
 
-		if (!deletedFolders.empty()) {
-			std::cout << " " << std::endl; // Print a blank line before deleted folders
-		}
-		// Print all deleted empty folders in iso_ format
-		for (const auto& deletedFolder : deletedFolders) {
-			std::cout << deletedFolder << std::endl;
-		}
 		// Clear vectors
 		unmountedFiles.clear();
-		deletedFolders.clear();
 		
         // Lock access to error messages
         std::lock_guard<std::mutex> errorMessagesLock(errorMessagesMutex);
