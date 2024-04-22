@@ -1358,25 +1358,29 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
 
     for (const auto& isoFile : isoFilesToMount) {
         // Use the filesystem library to extract the ISO file name
-        fs::path isoPath(isoFile);
-        std::string isoFileName = isoPath.stem().string(); // Remove the .iso extension
+    fs::path isoPath(isoFile);
+    std::string isoFileName = isoPath.stem().string(); // Remove the .iso extension
 
         // Use the modified ISO file name in the mount point with "iso_" prefix
-        std::string mountPoint = "/mnt/iso_" + isoFileName;
+    std::string mountPoint = "/mnt/iso_" + isoFileName;
+
+    auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint);
+    auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
 
         // Check if the mount point is already mounted
-        if (isAlreadyMounted(mountPoint)) {
-            std::stringstream skippedMessage;
-            skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoPath << "'\033[1;93m already mounted at: \033[1;94m'" << mountPoint << "'\033[1;93m.\033[0m\033[1m" << std::endl;
-            
-            // Create the unordered set after populating skippedMessages
-            std::unordered_set<std::string> skippedSet(skippedMessages.begin(), skippedMessages.end());
+                if (isAlreadyMounted(mountPoint)) {
+                    // If already mounted, print a message and return
+                    std::stringstream skippedMessage;
+                    skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m already mounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;93m.\033[0m\033[1m" << std::endl;
+                    
+                    // Create the unordered set after populating skippedMessages
+                    std::unordered_set<std::string> skippedSet(skippedMessages.begin(), skippedMessages.end());
 
-            // Check for duplicates
-            if (skippedSet.find(skippedMessage.str()) == skippedSet.end()) {
-                // Error message not found, add it to the vector
-                skippedMessages.push_back(skippedMessage.str());
-            }
+                    // Check for duplicates
+                    if (skippedSet.find(skippedMessage.str()) == skippedSet.end()) {
+                        // Error message not found, add it to the vector
+                        skippedMessages.push_back(skippedMessage.str());
+                    }
             continue; // Skip mounting this ISO file
         }
 
@@ -1404,24 +1408,24 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
                         throw std::runtime_error("Mount command failed");
                     }
 
-                    // Insert the mount point into the set
-                    mountedSet.insert(mountPoint);
+						// Insert the mount point into the set
+						mountedSet.insert(mountPoint);
 
-                    // Store the mounted file information in the vector
-                    std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoFile + "'\033[0m\033[1m mounted at: \033[1;94m'" + mountPoint + "'\033[0m\033[1m.\033[0m\033[1m";
-                    // Assuming `mountedFiles` is a global vector to store mounted file info
-                    mountedFiles.push_back(mountedFileInfo);
+					// Store the mounted file information in the vector
+					std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m\033[1m"
+                                              + "\033[1m mounted at: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename + "'\033[0m\033[1m\033[1m.\033[0m\033[1m";
+					mountedFiles.push_back(mountedFileInfo);
 
                 } catch (const std::exception& e) {
                     // Handle exceptions and cleanup
-                    std::stringstream errorMessage;
-                    errorMessage << "\033[1;91mFailed to mount: \033[1;93m'" << isoFile << "'\033[0m\033[1m\033[1;91m.\033[0m\033[1m" << std::endl;
-                    fs::remove(mountPoint);
+					std::stringstream errorMessage;
+					errorMessage << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[0m\033[1m\033[1;91m.\033[0m\033[1m" << std::endl;
+					fs::remove(mountPoint);
 
-                    std::unordered_set<std::string> errorSet(errorMessages.begin(), errorMessages.end());
-                    if (errorSet.find(errorMessage.str()) == errorSet.end()) {
-                        // Error message not found, add it to the vector
-                        errorMessages.push_back(errorMessage.str());
+					std::unordered_set<std::string> errorSet(errorMessages.begin(), errorMessages.end());
+					if (errorSet.find(errorMessage.str()) == errorSet.end()) {
+						// Error message not found, add it to the vector
+						errorMessages.push_back(errorMessage.str());
                     }
                 }
             } else {
