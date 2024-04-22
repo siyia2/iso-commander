@@ -775,15 +775,30 @@ bool fileExists(const std::string& filename) {
 
 
 // Function to handle the deletion of an ISO file
+// Function to handle the deletion of ISO files in batches
 void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::unordered_set<std::string>& deletedSet) {
     // Lock the global mutex for synchronization
     std::lock_guard<std::mutex> lowLock(Mutex4Low);
     
-    static std::vector<std::string> isoFilesToDelete;
+    // Determine batch size based on the number of isoFiles
+    size_t batch_size = 5; // Default batch size
+    if (isoFiles.size() > 100) {
+        batch_size = 10;
+    }
+    if (isoFiles.size() > 1000) {
+        batch_size = 25;
+    }
+    if (isoFiles.size() > 10000) {
+        batch_size = 50;
+    }
+    if (isoFiles.size() > 100000) {
+        batch_size = 100;
+    }
+    
+    // Track ISO files to delete in the current batch
+    std::vector<std::string> isoFilesToDelete;
 
-    // Static variable to track whether the clear has been performed
-    static bool clearScreenDone = false;
-
+    // Process each ISO file
     for (const auto& iso : isoFiles) {
         auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(iso);
 
@@ -791,67 +806,42 @@ void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<s
         auto it = std::find(isoFilesCopy.begin(), isoFilesCopy.end(), iso);
 
         if (it != isoFilesCopy.end()) {
-            // Escape the ISO file name for the shell command using shell_escape
-            std::string escapedIso = shell_escape(iso);
+            // Check if the file exists before attempting to delete
+            if (fileExists(iso)) {
+                // Add the ISO file to the deletion batch
+                isoFilesToDelete.push_back(iso);
 
-            // Construct the sudo command
-            std::string sudoCommand = "sudo -v";
-
-            // Execute sudo to prompt for password
-            int sudoResult = system(sudoCommand.c_str());
-
-            // Clear the screen only if it hasn't been done yet
-            if (sudoResult == 0) {
-                // Clear the screen only if it hasn't been done yet
-                if (!clearScreenDone) {
-                    std::system("clear");
-                    clearScreenDone = true;
-                }
-
-                // Check if the file exists before attempting to delete
-                if (fileExists(iso)) {
-                    // Get the index of the found ISO file (starting from 1)
-                    int index = std::distance(isoFilesCopy.begin(), it) + 1;
-
-                    // Remove the deleted ISO file from the cache using the index
-                    isoFilesCopy.erase(isoFilesCopy.begin() + index - 1);
-
-                    // Add the ISO file to the vector
-                    isoFilesToDelete.push_back(iso);
-
-                    // If there are 5 ISO files or no more ISO files to delete, delete them together
-                    if (isoFilesToDelete.size() == 5 || (isoFilesToDelete.size() > 0 && isoFilesToDelete.size() < 5)) {
-                        std::string deleteCommand = "sudo rm -f ";
-                        for (size_t i = 0; i < isoFilesToDelete.size(); ++i) {
-                            deleteCommand += shell_escape(isoFilesToDelete[i]) + " ";
-                        }
-                        deleteCommand += "> /dev/null 2>&1";
-
-                        int result = std::system(deleteCommand.c_str());
-
-                        if (result == 0) {
-                            for (const auto& deletedIso : isoFilesToDelete) {
-                                deletedSet.insert(deletedIso);
-                                std::string deletedIsoInfo = "\033[1;92mDeleted: \033[1;91m'" + isoDirectory + "/" + isoFilename + "'\033[1;92m.\033[0m\033[1m";
-                                deletedIsos.push_back(deletedIsoInfo);
-                            }
-                        } else {
-                            for (const auto& deletedIso : isoFilesToDelete) {
-                                auto [isoDir, isoFile] = extractDirectoryAndFilename(deletedIso);
-                                std::cout << "\033[1;91mError deleting: \033[0m\033[1m'" << isoDir << "/" << isoFile << "'\033[1;95m.\033[0m\033[1m" << std::endl;
-                            }
-                        }
-
-                        // Clear the vector
-                        isoFilesToDelete.clear();
+                // If the deletion batch reaches the batch size, or no more ISO files to process
+                if (isoFilesToDelete.size() == batch_size || &iso == &isoFiles.back()) {
+                    // Construct the delete command for the entire batch
+                    std::string deleteCommand = "sudo rm -f ";
+                    for (const auto& deleteIso : isoFilesToDelete) {
+                        deleteCommand += shell_escape(deleteIso) + " ";
                     }
-                } else {
-                    std::cout << "\033[1;35mFile not found: \033[0m\033[1m'" << isoDirectory << "/" << isoFilename << "'\033[1;95m.\033[0m\033[1m" << std::endl;
+                    deleteCommand += "> /dev/null 2>&1";
+
+                    // Execute the delete command
+                    int result = std::system(deleteCommand.c_str());
+
+                    // Process deletion results
+                    if (result == 0) {
+                        for (const auto& deletedIso : isoFilesToDelete) {
+                            deletedSet.insert(deletedIso);
+                            std::string deletedIsoInfo = "\033[1;92mDeleted: \033[1;91m'" + isoDirectory + "/" + isoFilename + "'\033[1;92m.\033[0m\033[1m";
+                            deletedIsos.push_back(deletedIsoInfo);
+                        }
+                    } else {
+                        for (const auto& deletedIso : isoFilesToDelete) {
+                            auto [isoDir, isoFile] = extractDirectoryAndFilename(deletedIso);
+                            std::cout << "\033[1;91mError deleting: \033[0m\033[1m'" << isoDir << "/" << isoFile << "'\033[1;95m.\033[0m\033[1m" << std::endl;
+                        }
+                    }
+
+                    // Clear the deletion batch for the next set
+                    isoFilesToDelete.clear();
                 }
             } else {
-                // Handle the case when sudo authentication fails
-                std::cout << " " << std::endl;
-                std::cout << "\033[1;91mFailed to authenticate with sudo.\033[0m\033[1m" << std::endl;
+                std::cout << "\033[1;35mFile not found: \033[0m\033[1m'" << isoDirectory << "/" << isoFilename << "'\033[1;95m.\033[0m\033[1m" << std::endl;
             }
         } else {
             std::cout << "\033[1;93mFile not found in cache: \033[0m\033[1m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m.\033[0m\033[1m" << std::endl;
@@ -1047,6 +1037,9 @@ void processDeleteInput(const std::string& input, std::vector<std::string>& isoF
             for (auto& future : futures) {
                 future.wait();
             }
+            
+            clearScrollBuffer();
+            std::system("clear");
             
             if (!deletedIsos.empty()) {
                 std::cout << " " << std::endl;
@@ -1391,10 +1384,24 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
 void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordered_set<std::string>& mountedSet) {
     // Lock the global mutex for synchronization
     std::lock_guard<std::mutex> lowLock(Mutex4Low);
+    
+    // Determine batch size based on the number of isoDirs
+    size_t MAX_ISO_PER_MOUNT = 5; // Maximum ISO files per mount command
+    if (isoFilesToMount.size() > 100) {
+        MAX_ISO_PER_MOUNT = 10;
+    }
+    if (isoFilesToMount.size() > 1000) {
+        MAX_ISO_PER_MOUNT = 25;
+    }
+    if (isoFilesToMount.size() > 10000) {
+        MAX_ISO_PER_MOUNT = 50;
+    }
+    if (isoFilesToMount.size() > 100000) {
+        MAX_ISO_PER_MOUNT = 100;
+    }
 
     namespace fs = std::filesystem;
 
-    constexpr int MAX_ISO_PER_MOUNT = 5; // Maximum ISO files per mount command
     std::vector<std::string> batchIsoFiles;
 
     for (const auto& isoFile : isoFilesToMount) {
@@ -1589,83 +1596,80 @@ bool isDirectoryEmpty(const std::string& path) {
 
 // Function to unmount ISO files asynchronously
 void unmountISO(const std::vector<std::string>& isoDirs) {
+    // Determine batch size based on the number of isoDirs
+    size_t batchSize = 5;
+    if (isoDirs.size() > 100) {
+        batchSize = 10;
+    }
+    if (isoDirs.size() > 1000) {
+        batchSize = 25;
+    }
+    if (isoDirs.size() > 10000) {
+        batchSize = 50;
+    }
+    if (isoDirs.size() > 100000) {
+        batchSize = 100;
+    }
+
     // Use std::async to unmount and remove the directories asynchronously
-    auto unmountFuture = std::async(std::launch::async, [&isoDirs]() {
+    auto unmountFuture = std::async(std::launch::async, [&isoDirs, batchSize]() {
         // Construct the sudo command
         std::string sudoCommand = "sudo -v";
-
-        // Execute sudo to prompt for password
         int sudoResult = system(sudoCommand.c_str());
 
         if (sudoResult == 0) {
-            // Construct the unmount command with sudo, umount, and suppressing logs
+            // Construct the unmount command with sudo
             std::string unmountCommand = "sudo umount ";
             for (const auto& isoDir : isoDirs) {
                 unmountCommand += shell_escape(isoDir) + " ";
             }
             unmountCommand += "> /dev/null 2>&1";
-			// Yes! it is used for real!
             int removeDirResult __attribute__((unused)) = system(unmountCommand.c_str());
 
-                std::vector<std::string> emptyDirs;
-                for (const auto& isoDir : isoDirs) {
-                    auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoDir);
+            // Check and remove empty directories
+            std::vector<std::string> emptyDirs;
+            for (const auto& isoDir : isoDirs) {
+                if (isDirectoryEmpty(isoDir)) {
+                    emptyDirs.push_back(isoDir);
+                } else {
+                    // Handle non-empty directory error
+                    std::stringstream errorMessage;
+                    errorMessage << "\033[1;93mAre you sure \033[1;91m'" << isoDir << "'\033[1;93m is a mountpoint? Directory not empty, cannot be removed.\033[0m\033[1m" << std::endl;
 
-                    // Remove the ".iso" extension from the mountisoFilename
-                    std::string isoFilenameWithoutExtension = isoFilename.substr(0, isoFilename.length() - 4);
-
-                    // Check if the directory is empty
-                    if (isDirectoryEmpty(isoDir)) {
-                        emptyDirs.push_back(isoDir);
-                    } else {
-						std::stringstream errorMessage;
-						errorMessage << "\033[1;93mAre you sure \033[1;91m'" << isoDir << "'\033[1;93m is a mountpoint?...directory not empty, cannot be removed.\033[0m\033[1m" << std::endl;
-
-						// Check if the error message is already in the vector
-						if (std::find(unmountedErrors.begin(), unmountedErrors.end(), errorMessage.str()) == unmountedErrors.end()) {
-							// Error message not found, add it to the vector
-							unmountedErrors.push_back(errorMessage.str());
-						}
-					}
-                }
-                
-             
-
-                // Remove empty directories in batches of up to 5
-                while (!emptyDirs.empty()) {
-                    std::string removeDirCommand = "sudo rmdir ";
-                    for (size_t i = 0; i < emptyDirs.size() && i < 5; ++i) {
-                        removeDirCommand += shell_escape(emptyDirs[i]) + " ";
+                    if (std::find(unmountedErrors.begin(), unmountedErrors.end(), errorMessage.str()) == unmountedErrors.end()) {
+                        unmountedErrors.push_back(errorMessage.str());
                     }
-                    removeDirCommand += "2>/dev/null";
+                }
+            }
 
-                    int removeDirResult = system(removeDirCommand.c_str());
+            // Remove empty directories in batches
+            while (!emptyDirs.empty()) {
+                std::string removeDirCommand = "sudo rmdir ";
+                for (size_t i = 0; i < std::min(batchSize, emptyDirs.size()); ++i) {
+                    removeDirCommand += shell_escape(emptyDirs[i]) + " ";
+                }
+                removeDirCommand += "2>/dev/null";
 
+                int removeDirResult = system(removeDirCommand.c_str());
+
+                for (size_t i = 0; i < std::min(batchSize, emptyDirs.size()); ++i) {
                     if (removeDirResult == 0) {
-                        for (size_t i = 0; i < emptyDirs.size() && i < 5; ++i) {
-                            auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(emptyDirs[i]);
-                            std::string unmountedFileInfo = "\033[1mUnmounted: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m\033[1m.";
-							unmountedFiles.push_back(unmountedFileInfo);
-                            emptyDirs.erase(emptyDirs.begin());
-                        }
+                        auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(emptyDirs[i]);
+                        std::string unmountedFileInfo = "\033[1mUnmounted: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m\033[1m.";
+                        unmountedFiles.push_back(unmountedFileInfo);
                     } else {
-                        for (size_t i = 0; i < emptyDirs.size() && i < 5; ++i) {
-                            auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(emptyDirs[i]);
-                            std::stringstream errorMessage;
-							errorMessage << "\033[1;91mFailed to remove directory: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;91m ...Please check it out manually.\033[0m\033[1m" << std::endl;
+                        auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(emptyDirs[i]);
+                        std::stringstream errorMessage;
+                        errorMessage << "\033[1;91mFailed to remove directory: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;91m ...Please check it out manually.\033[0m\033[1m" << std::endl;
 
-							// Check if the error message is already in the vector
-							if (std::find(unmountedErrors.begin(), unmountedErrors.end(), errorMessage.str()) == unmountedErrors.end()) {
-							// Error message not found, add it to the vector
-							unmountedErrors.push_back(errorMessage.str());
-							}
-							emptyDirs.erase(emptyDirs.begin());
+                        if (std::find(unmountedErrors.begin(), unmountedErrors.end(), errorMessage.str()) == unmountedErrors.end()) {
+                            unmountedErrors.push_back(errorMessage.str());
                         }
                     }
                 }
+                emptyDirs.erase(emptyDirs.begin(), emptyDirs.begin() + std::min(batchSize, emptyDirs.size()));
+            }
         } else {
-            // Print failure message
-            std::cout << " " << std::endl;
             std::cerr << "\033[1;91mFailed to authenticate with sudo.\033[0m\033[1m" << std::endl;
         }
     });
