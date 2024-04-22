@@ -1735,7 +1735,7 @@ void unmountISOs() {
         }
 
         // Prompt user to choose ISOs for unmounting
-        char* input = readline("\033[1;94mChoose ISO(s) for \033[1;92munmount\033[1;94m (e.g., '1-3', '1 5', '00' unmounts all, or press Enter to return):\033[0m\033[1m ");
+        char* input = readline("\033[1;94mISO(s) ↵ for \033[1;92munmount\033[1;94m (e.g., '1-3', '1 5', '00' for all, or press ↵ to return):\033[0m\033[1m ");
         std::system("clear");
 
         auto start_time = std::chrono::high_resolution_clock::now();
