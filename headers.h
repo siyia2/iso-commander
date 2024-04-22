@@ -208,7 +208,7 @@ void removeNonExistentPathsFromCache();
 // Unmount functions
 void listMountedISOs();
 void unmountISOs();
-void unmountISO(const std::string& isoDir);
+void unmountISO(const std::vector<std::string>& isoDirs);
 
 // Art
 void printVersionNumber(const std::string& version);
