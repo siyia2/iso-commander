@@ -762,88 +762,89 @@ bool fileExists(const std::string& filename) {
 
 
 // Function to handle the deletion of an ISO file
-void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
+void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::unordered_set<std::string>& deletedSet) {
     // Lock the global mutex for synchronization
     std::lock_guard<std::mutex> lowLock(Mutex4Low);
     
     static std::vector<std::string> isoFilesToDelete;
 
-    auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(iso);
-
     // Static variable to track whether the clear has been performed
     static bool clearScreenDone = false;
 
-    // Check if the ISO file is in the cache
-    auto it = std::find(isoFiles.begin(), isoFiles.end(), iso);
+    for (const auto& iso : isoFiles) {
+        auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(iso);
 
-    if (it != isoFiles.end()) {
-        // Escape the ISO file name for the shell command using shell_escape
-        std::string escapedIso = shell_escape(iso);
+        // Check if the ISO file is in the cache
+        auto it = std::find(isoFilesCopy.begin(), isoFilesCopy.end(), iso);
 
-        // Construct the sudo command
-        std::string sudoCommand = "sudo -v";
+        if (it != isoFilesCopy.end()) {
+            // Escape the ISO file name for the shell command using shell_escape
+            std::string escapedIso = shell_escape(iso);
 
-        // Execute sudo to prompt for password
-        int sudoResult = system(sudoCommand.c_str());
+            // Construct the sudo command
+            std::string sudoCommand = "sudo -v";
 
-        // Clear the screen only if it hasn't been done yet
-        if (sudoResult == 0) {
+            // Execute sudo to prompt for password
+            int sudoResult = system(sudoCommand.c_str());
+
             // Clear the screen only if it hasn't been done yet
-            if (!clearScreenDone) {
-                std::system("clear");
-                clearScreenDone = true;
-            }
+            if (sudoResult == 0) {
+                // Clear the screen only if it hasn't been done yet
+                if (!clearScreenDone) {
+                    std::system("clear");
+                    clearScreenDone = true;
+                }
 
-            // Check if the file exists before attempting to delete
-            if (fileExists(iso)) {
-                // Get the index of the found ISO file (starting from 1)
-                int index = std::distance(isoFiles.begin(), it) + 1;
+                // Check if the file exists before attempting to delete
+                if (fileExists(iso)) {
+                    // Get the index of the found ISO file (starting from 1)
+                    int index = std::distance(isoFilesCopy.begin(), it) + 1;
 
-                // Remove the deleted ISO file from the cache using the index
-                isoFiles.erase(isoFiles.begin() + index - 1);
+                    // Remove the deleted ISO file from the cache using the index
+                    isoFilesCopy.erase(isoFilesCopy.begin() + index - 1);
 
-                // Add the ISO file to the vector
-                isoFilesToDelete.push_back(iso);
+                    // Add the ISO file to the vector
+                    isoFilesToDelete.push_back(iso);
 
-                // If there are 5 ISO files or no more ISO files to delete, delete them together
-                if (isoFilesToDelete.size() == 5 || (isoFilesToDelete.size() > 0 && isoFilesToDelete.size() < 5)) {
-                    std::string deleteCommand = "sudo rm -f ";
-                    for (size_t i = 0; i < isoFilesToDelete.size(); ++i) {
-                        deleteCommand += shell_escape(isoFilesToDelete[i]) + " ";
-                    }
-                    deleteCommand += "> /dev/null 2>&1";
-
-                    int result = std::system(deleteCommand.c_str());
-
-                    if (result == 0) {
-                        for (const auto& deletedIso : isoFilesToDelete) {
-                            deletedSet.insert(deletedIso);
-                            std::string deletedIsoInfo = "\033[1;92mDeleted: \033[1;91m'" + isoDirectory + "/" + isoFilename + "'\033[1;92m.\033[0m\033[1m";
-                            deletedIsos.push_back(deletedIsoInfo);
+                    // If there are 5 ISO files or no more ISO files to delete, delete them together
+                    if (isoFilesToDelete.size() == 5 || (isoFilesToDelete.size() > 0 && isoFilesToDelete.size() < 5)) {
+                        std::string deleteCommand = "sudo rm -f ";
+                        for (size_t i = 0; i < isoFilesToDelete.size(); ++i) {
+                            deleteCommand += shell_escape(isoFilesToDelete[i]) + " ";
                         }
-                    } else {
-                        for (const auto& deletedIso : isoFilesToDelete) {
-                            auto [isoDir, isoFile] = extractDirectoryAndFilename(deletedIso);
-                            std::cout << "\033[1;91mError deleting: \033[0m\033[1m'" << isoDir << "/" << isoFile << "'\033[1;95m.\033[0m\033[1m" << std::endl;
-                        }
-                    }
+                        deleteCommand += "> /dev/null 2>&1";
 
-                    // Clear the vector
-                    isoFilesToDelete.clear();
+                        int result = std::system(deleteCommand.c_str());
+
+                        if (result == 0) {
+                            for (const auto& deletedIso : isoFilesToDelete) {
+                                deletedSet.insert(deletedIso);
+                                std::string deletedIsoInfo = "\033[1;92mDeleted: \033[1;91m'" + isoDirectory + "/" + isoFilename + "'\033[1;92m.\033[0m\033[1m";
+                                deletedIsos.push_back(deletedIsoInfo);
+                            }
+                        } else {
+                            for (const auto& deletedIso : isoFilesToDelete) {
+                                auto [isoDir, isoFile] = extractDirectoryAndFilename(deletedIso);
+                                std::cout << "\033[1;91mError deleting: \033[0m\033[1m'" << isoDir << "/" << isoFile << "'\033[1;95m.\033[0m\033[1m" << std::endl;
+                            }
+                        }
+
+                        // Clear the vector
+                        isoFilesToDelete.clear();
+                    }
+                } else {
+                    std::cout << "\033[1;35mFile not found: \033[0m\033[1m'" << isoDirectory << "/" << isoFilename << "'\033[1;95m.\033[0m\033[1m" << std::endl;
                 }
             } else {
-                std::cout << "\033[1;35mFile not found: \033[0m\033[1m'" << isoDirectory << "/" << isoFilename << "'\033[1;95m.\033[0m\033[1m" << std::endl;
+                // Handle the case when sudo authentication fails
+                std::cout << " " << std::endl;
+                std::cout << "\033[1;91mFailed to authenticate with sudo.\033[0m\033[1m" << std::endl;
             }
         } else {
-            // Handle the case when sudo authentication fails
-            std::cout << " " << std::endl;
-            std::cout << "\033[1;91mFailed to authenticate with sudo.\033[0m\033[1m" << std::endl;
+            std::cout << "\033[1;93mFile not found in cache: \033[0m\033[1m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m.\033[0m\033[1m" << std::endl;
         }
-    } else {
-        std::cout << "\033[1;93mFile not found in cache: \033[0m\033[1m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m.\033[0m\033[1m" << std::endl;
-	}
+    }
 }
-
 
 // Function to process user input for selecting and deleting specific ISO files
 void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
@@ -859,6 +860,7 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
     std::unordered_set<std::string> uniqueErrorMessages; // Set to store unique error messages
     std::vector<int> processedIndices; // Vector to keep track of processed indices
     std::vector<int> validIndices;     // Vector to keep track of valid indices
+    std::vector<std::vector<int>> batchedIndices; // Vector to store batches of indices
 
     std::string token;
     std::vector<std::thread> threads; // Vector to store std::future objects for each task
@@ -962,18 +964,34 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
         std::cout << " " << std::endl;
     }
 
+    // Batch the valid indices into groups of up to 5
+    std::vector<int> batch;
+    for (const auto& index : validIndices) {
+        batch.push_back(index);
+        if (batch.size() == 5) {
+            batchedIndices.push_back(batch);
+            batch.clear();
+        }
+    }
+    if (!batch.empty()) {
+        batchedIndices.push_back(batch);
+    }
+
     // Display selected deletions
-    if (!processedIndices.empty()) {
+    if (!batchedIndices.empty()) {
         std::cout << "\033[1;94mThe following ISO(s) will be \033[1;91m*PERMANENTLY DELETED*\033[1;94m:\033[0m\033[1m" << std::endl;
         std::cout << " " << std::endl;
-        for (const auto& index : processedIndices) {
-            auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFiles[index - 1]);
-            std::cout << "\033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[0m\033[1m" << std::endl;
+        for (const auto& batch : batchedIndices) {
+            for (const auto& index : batch) {
+                auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFiles[index - 1]);
+                std::cout << "\033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[0m\033[1m" << std::endl;
+            }
+            std::cout << " " << std::endl;
         }
     }
 
     // Display a message if there are no valid selections for deletion
-    if (!uniqueErrorMessages.empty() && processedIndices.empty()) {
+    if (!uniqueErrorMessages.empty() && batchedIndices.empty()) {
         std::cout << " " << std::endl;
         std::cout << "\033[1;91mNo valid selection(s) for deletion.\033[0m\033[1m" << std::endl;
     } else {
@@ -993,21 +1011,22 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
             auto start_time = std::chrono::high_resolution_clock::now();
 
             std::system("clear");
-			// Create a thread pool with a limited number of threads
-			ThreadPool pool(maxThreads);
+            // Create a thread pool with a limited number of threads
+            ThreadPool pool(maxThreads);
             // Use std::async to launch asynchronous tasks
             std::vector<std::future<void>> futures;
             futures.reserve(numThreads);
             
+            // Lock to ensure thread safety in a multi-threaded environment
+            std::lock_guard<std::mutex> highLock(Mutex4High);
             
-			// Lock to ensure thread safety in a multi-threaded environment
-			std::lock_guard<std::mutex> highLock(Mutex4High);
-			
-            // Launch deletion tasks for each selected index
-            for (const auto& index : processedIndices) {
-                if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
-                futures.emplace_back(pool.enqueue(handleDeleteIsoFile, isoFiles[index - 1], std::ref(isoFiles), std::ref(deletedSet)));
+            // Launch deletion tasks for each batch of selected indices
+            for (const auto& batch : batchedIndices) {
+                std::vector<std::string> isoFilesInBatch;
+                for (const auto& index : batch) {
+                    isoFilesInBatch.push_back(isoFiles[index - 1]);
                 }
+                futures.emplace_back(pool.enqueue(handleDeleteIsoFile, isoFilesInBatch, std::ref(isoFiles), std::ref(deletedSet)));
             }
 
             // Wait for all asynchronous tasks to complete
@@ -1016,16 +1035,16 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
             }
             
             if (!deletedIsos.empty()) {
-				std::cout << " " << std::endl;
-			}
-		
-			// Print all deleted files
-			for (const auto& deletedIso : deletedIsos) {
-				std::cout << deletedIso << std::endl;
-			}
-			
-			// Clear the vector after each iteration
-			deletedIsos.clear();
+                std::cout << " " << std::endl;
+            }
+        
+            // Print all deleted files
+            for (const auto& deletedIso : deletedIsos) {
+                std::cout << deletedIso << std::endl;
+            }
+            
+            // Clear the vector after each iteration
+            deletedIsos.clear();
 
             // Stop the timer after completing all deletion tasks
             auto end_time = std::chrono::high_resolution_clock::now();

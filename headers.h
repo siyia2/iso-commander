@@ -189,12 +189,11 @@ bool isNumeric(const std::string& str);
 
 //Delete functions
 void select_and_delete_files_by_number();
-void handleDeleteIsoFile(const std::string& iso, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
+void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::unordered_set<std::string>& deletedSet);
 void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
-void handleIsoFiles(const std::vector<std::string>& isos, std::unordered_set<std::string>& mountedSet);
 
 // Mount functions
-void mountIsoFile(const std::string& isoFile, std::unordered_set<std::string>& mountedSet);
+void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordered_set<std::string>& mountedSet);
 void select_and_mount_files_by_number();
 void printIsoFileList(const std::vector<std::string>& isoFiles);
 void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
