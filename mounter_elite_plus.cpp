@@ -986,7 +986,6 @@ void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, s
                 auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFiles[index - 1]);
                 std::cout << "\033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[0m\033[1m" << std::endl;
             }
-            std::cout << " " << std::endl;
         }
     }
 
