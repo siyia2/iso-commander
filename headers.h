@@ -188,9 +188,10 @@ bool isAllZeros(const std::string& str);
 bool isNumeric(const std::string& str);
 
 //Delete functions
+void clearScrollBuffer();
 void select_and_delete_files_by_number();
 void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::unordered_set<std::string>& deletedSet);
-void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
+void processDeleteInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
 
 // Mount functions
 void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordered_set<std::string>& mountedSet);

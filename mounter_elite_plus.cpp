@@ -678,6 +678,11 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
 
 // DELETION STUFF
 
+void clearScrollBuffer() {
+    std::cout << "\033[3J\033[H"; // ANSI escape codes for clearing scroll buffer
+    std::cout.flush(); // Ensure the output is flushed
+}
+
 // Function to select and delete ISO files by number
 void select_and_delete_files_by_number() {
     // Remove non-existent paths from the cache
@@ -733,6 +738,8 @@ void select_and_delete_files_by_number() {
             std::cout << "Press Enter to Return" << std::endl;
             break;
         } else {
+			clearScrollBuffer();
+			std::system("clear");
             // Process user input to select and delete specific ISO files
             processDeleteInput(input, isoFiles, deletedSet);
         }
@@ -846,8 +853,10 @@ void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<s
     }
 }
 
+
+
 // Function to process user input for selecting and deleting specific ISO files
-void processDeleteInput(const char* input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
+void processDeleteInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
     
     // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism; fallback is 2 threads
 	unsigned int numThreads = std::min(static_cast<unsigned int>(isoFiles.size()), static_cast<unsigned int>(maxThreads));
