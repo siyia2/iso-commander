@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
 
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.8.4");
+        printVersionNumber("2.8.5");
         return 0;
     }
 
@@ -781,8 +781,11 @@ void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<s
     // Lock the global mutex for synchronization
     std::lock_guard<std::mutex> lowLock(Mutex4Low);
     
-    // Determine batch size based on the number of isoFiles
-    size_t batchSize = 2; // Default batch size
+    // Determine batch size based on the number of isoDirs
+    size_t batchSize = 1;
+    if (isoFiles.size() > maxThreads) {
+        batchSize = 2;
+    }
     if (isoFiles.size() > 50) {
         batchSize = 5;
     }
@@ -857,10 +860,7 @@ void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<s
 
 // Function to process user input for selecting and deleting specific ISO files
 void processDeleteInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
-    
-    // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism
-    unsigned int numThreads = std::min(static_cast<int>(isoFiles.size()), static_cast<int>(maxThreads));
-    
+        
     // Create an input string stream to tokenize the user input
     std::istringstream iss(input);
 
@@ -974,7 +974,7 @@ void processDeleteInput(const std::string& input, std::vector<std::string>& isoF
 
     // Batch the valid indices into chunks based on numThreads
     std::vector<std::vector<int>> indexChunks;
-    const size_t chunkSize = (validIndices.size() + numThreads - 1) / numThreads;
+    const size_t chunkSize = (validIndices.size() + maxThreads - 1) / maxThreads;
     for (size_t i = 0; i < validIndices.size(); i += chunkSize) {
         indexChunks.emplace_back(validIndices.begin() + i, std::min(validIndices.begin() + i + chunkSize, validIndices.end()));
     }
@@ -1013,10 +1013,10 @@ void processDeleteInput(const std::string& input, std::vector<std::string>& isoF
 
         std::system("clear");
         // Create a thread pool with a limited number of threads
-        ThreadPool pool(numThreads);
+        ThreadPool pool(maxThreads);
         // Use std::async to launch asynchronous tasks
         std::vector<std::future<void>> futures;
-        futures.reserve(numThreads);
+        futures.reserve(maxThreads);
         
         // Lock to ensure thread safety in a multi-threaded environment
         std::lock_guard<std::mutex> highLock(Mutex4High);
@@ -1275,7 +1275,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     // Define mutexes for synchronization
     std::mutex MutexForProcessedIndices;
     std::mutex MutexForValidIndices;
-    std::mutex Mutex4High;
+    std::mutex MutexForMountedSet;
 
     // Vector to store chosen ISO files
     std::vector<std::string> chosenIsoFiles;
@@ -1414,7 +1414,23 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     for (const auto& chunk : chunks) {
         if (!chunk.empty()) {
             pool.enqueue([&, chunk]() {
-                mountIsoFile(chunk, mountedSet);
+                // Lock the mutex for the mountedSet
+                std::lock_guard<std::mutex> mountedLock(MutexForMountedSet);
+
+                // Create a vector to store unmounted ISO files
+                std::vector<std::string> unmountedIsoFiles;
+
+                // Filter out already mounted ISO files
+                for (const auto& isoFile : chunk) {
+                    if (mountedSet.find(isoFile) == mountedSet.end()) {
+                        unmountedIsoFiles.push_back(isoFile);
+                    }
+                }
+
+                // Mount the remaining unmounted ISO files
+                if (!unmountedIsoFiles.empty()) {
+                    mountIsoFile(unmountedIsoFiles, mountedSet);
+                }
             });
         }
     }
@@ -1426,8 +1442,11 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
     // Lock the global mutex for synchronization
     std::lock_guard<std::mutex> lowLock(Mutex4Low);
     
-    // Determine batch size based on the number of FilesToMount
-    size_t batchSize = 2; // Maximum ISO files per mount command
+    // Determine batch size based on the number of isoDirs
+    size_t batchSize = 1;
+    if (isoFilesToMount.size() > maxThreads) {
+        batchSize = 2;
+    }
     if (isoFilesToMount.size() > 50) {
         batchSize = 5;
     }
@@ -1641,7 +1660,10 @@ bool isDirectoryEmpty(const std::string& path) {
 // Function to unmount ISO files asynchronously
 void unmountISO(const std::vector<std::string>& isoDirs) {
     // Determine batch size based on the number of isoDirs
-    size_t batchSize = 2;
+    size_t batchSize = 1;
+    if (isoDirs.size() > maxThreads) {
+        batchSize = 2;
+    }
     if (isoDirs.size() > 50) {
         batchSize = 5;
     }
@@ -1937,11 +1959,8 @@ void unmountISOs() {
 			}
 		}
 
-        // Calculate effective thread pool size based on ISO files count
-    int effectiveThreadPoolSize = std::min(static_cast<int>(validIndices.size()), static_cast<int>(maxThreads));
-
     // Create a ThreadPool with optimized size
-    ThreadPool pool(effectiveThreadPoolSize);
+    ThreadPool pool(maxThreads);
     std::vector<std::future<void>> futures;
 
     std::vector<std::string> selectedIsoDirs;
