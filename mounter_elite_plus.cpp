@@ -1588,11 +1588,7 @@ bool isDirectoryEmpty(const std::string& path) {
 // Function to unmount ISO files asynchronously
 void unmountISO(const std::vector<std::string>& isoDirs) {
     // Determine batch size based on the number of isoDirs
-    size_t batchSize = 1;
-    if (isoDirs.size() > maxThreads) {
-    batchSize = 2;
-    
-	}
+    size_t batchSize = 2;
     if (isoDirs.size() > 50) {
         batchSize = 5;
     }
@@ -1609,20 +1605,25 @@ void unmountISO(const std::vector<std::string>& isoDirs) {
         batchSize = 100;
     }
 
-    // Use std::async to unmount and remove the directories asynchronously
+        // Use std::async to unmount and remove the directories asynchronously
     auto unmountFuture = std::async(std::launch::async, [&isoDirs, batchSize]() {
         // Construct the sudo command
         std::string sudoCommand = "sudo -v";
         int sudoResult = system(sudoCommand.c_str());
 
         if (sudoResult == 0) {
-            // Construct the unmount command with sudo
-            std::string unmountCommand = "sudo umount ";
-            for (const auto& isoDir : isoDirs) {
-                unmountCommand += shell_escape(isoDir) + " ";
+            // Unmount directories in batches
+            for (size_t i = 0; i < isoDirs.size(); i += batchSize) {
+                std::string unmountBatchCommand = "sudo umount -l";
+                size_t batchEnd = std::min(i + batchSize, isoDirs.size());
+
+                for (size_t j = i; j < batchEnd; ++j) {
+                    unmountBatchCommand += " " + shell_escape(isoDirs[j]);
+                }
+
+                unmountBatchCommand += " > /dev/null 2>&1";
+                int unmountResult __attribute__((unused)) = system(unmountBatchCommand.c_str());
             }
-            unmountCommand += "> /dev/null 2>&1";
-            int removeDirResult __attribute__((unused)) = system(unmountCommand.c_str());
 
             // Check and remove empty directories
             std::vector<std::string> emptyDirs;
