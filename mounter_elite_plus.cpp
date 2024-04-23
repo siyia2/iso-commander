@@ -1261,7 +1261,6 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
 
 
 // Function to process input and mount ISO files asynchronously
-// Function to process input and mount ISO files asynchronously
 void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
     // Initialize input string stream with the provided input
     std::istringstream iss(input);
