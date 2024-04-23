@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
 
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.8.4");
+        printVersionNumber("2.8.5");
         return 0;
     }
 
@@ -858,8 +858,8 @@ void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<s
 // Function to process user input for selecting and deleting specific ISO files
 void processDeleteInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
     
-    // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism; fallback is 2 threads
-	unsigned int numThreads = std::min(static_cast<unsigned int>(isoFiles.size()), static_cast<unsigned int>(maxThreads));
+    // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism
+	unsigned int numThreads = std::min(static_cast<int>(isoFiles.size()), static_cast<int>(maxThreads));
 	
     // Create an input string stream to tokenize the user input
     std::istringstream iss(input);
@@ -1020,7 +1020,7 @@ void processDeleteInput(const std::string& input, std::vector<std::string>& isoF
 
             std::system("clear");
             // Create a thread pool with a limited number of threads
-            ThreadPool pool(maxThreads);
+            ThreadPool pool(2);
             // Use std::async to launch asynchronous tasks
             std::vector<std::future<void>> futures;
             futures.reserve(numThreads);
@@ -1268,8 +1268,11 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     // Set to store processed ranges
     std::set<std::pair<int, int>> processedRanges;
 
-    // Create a ThreadPool with maxThreads
-    ThreadPool pool(maxThreads);
+   // Calculate effective thread pool size based on ISO files count
+   int effectiveThreadPoolSize = std::min(static_cast<int>(isoFiles.size()), static_cast<int>(maxThreads));
+
+    // Create a ThreadPool with optimized size
+    ThreadPool pool(effectiveThreadPoolSize);
     
     // Define mutexes for synchronization
     std::mutex MutexForProcessedIndices;
@@ -1897,9 +1900,11 @@ void unmountISOs() {
 			}
 		}
 
-        std::vector<std::thread> threads;
-        // Create a thread pool with a limited number of threads
-        ThreadPool pool(maxThreads);
+        // Calculate effective thread pool size based on ISO files count
+		int effectiveThreadPoolSize = std::min(static_cast<int>(validIndices.size()), static_cast<int>(maxThreads));
+
+		// Create a ThreadPool with optimized size
+		ThreadPool pool(effectiveThreadPoolSize);
         std::vector<std::future<void>> futures;
 
         std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
