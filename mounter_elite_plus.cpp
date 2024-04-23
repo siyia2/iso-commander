@@ -859,8 +859,8 @@ void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<s
 void processDeleteInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
     
     // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism
-	unsigned int numThreads = std::min(static_cast<int>(isoFiles.size()), static_cast<int>(maxThreads));
-	
+    unsigned int numThreads = std::min(static_cast<int>(isoFiles.size()), static_cast<int>(maxThreads));
+    
     // Create an input string stream to tokenize the user input
     std::istringstream iss(input);
 
@@ -869,7 +869,6 @@ void processDeleteInput(const std::string& input, std::vector<std::string>& isoF
     std::unordered_set<std::string> uniqueErrorMessages; // Set to store unique error messages
     std::vector<int> processedIndices; // Vector to keep track of processed indices
     std::vector<int> validIndices;     // Vector to keep track of valid indices
-    std::vector<std::vector<int>> batchedIndices; // Vector to store batches of indices
 
     std::string token;
     std::vector<std::thread> threads; // Vector to store std::future objects for each task
@@ -877,8 +876,8 @@ void processDeleteInput(const std::string& input, std::vector<std::string>& isoF
 
     // Tokenize the input string
     while (iss >> token) {
-		
-		// Check if the token consists only of zeros and treat it as a non-existent index
+        
+        // Check if the token consists only of zeros and treat it as a non-existent index
         if (isAllZeros(token)) {
             if (!invalidInput) {
                 invalidInput = true;
@@ -893,7 +892,7 @@ void processDeleteInput(const std::string& input, std::vector<std::string>& isoF
                 uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist.\033[0m\033[1m");
             }
         }
-		
+        
         // Check if there is more than one hyphen in the token
         if (std::count(token.begin(), token.end(), '-') > 1) {
             invalidInput = true;
@@ -907,8 +906,8 @@ void processDeleteInput(const std::string& input, std::vector<std::string>& isoF
             int start, end;
 
             try {
-				// Lock to ensure thread safety in a multi-threaded environment
-				std::lock_guard<std::mutex> highLock(Mutex4High);
+                // Lock to ensure thread safety in a multi-threaded environment
+                std::lock_guard<std::mutex> highLock(Mutex4High);
                 start = std::stoi(token.substr(0, dashPos));
                 end = std::stoi(token.substr(dashPos + 1));
             } catch (const std::invalid_argument& e) {
@@ -923,7 +922,7 @@ void processDeleteInput(const std::string& input, std::vector<std::string>& isoF
                 continue;
             }
             
-			// Lock to ensure thread safety in a multi-threaded environment
+            // Lock to ensure thread safety in a multi-threaded environment
             std::lock_guard<std::mutex> highLock(Mutex4High);
 
             // Check for validity of the specified range
@@ -973,33 +972,27 @@ void processDeleteInput(const std::string& input, std::vector<std::string>& isoF
         std::cout << " " << std::endl;
     }
 
-    // Batch the valid indices into groups of up to 5
-    std::vector<int> batch;
-    for (const auto& index : validIndices) {
-        batch.push_back(index);
-        if (batch.size() == 5) {
-            batchedIndices.push_back(batch);
-            batch.clear();
-        }
-    }
-    if (!batch.empty()) {
-        batchedIndices.push_back(batch);
+    // Batch the valid indices into chunks based on numThreads
+    std::vector<std::vector<int>> indexChunks;
+    const size_t chunkSize = (validIndices.size() + numThreads - 1) / numThreads;
+    for (size_t i = 0; i < validIndices.size(); i += chunkSize) {
+        indexChunks.emplace_back(validIndices.begin() + i, std::min(validIndices.begin() + i + chunkSize, validIndices.end()));
     }
 
-    // Display selected deletions
-    if (!batchedIndices.empty()) {
+     // Display selected deletions
+    if (!indexChunks.empty()) {
         std::cout << "\033[1;94mThe following ISO(s) will be \033[1;91m*PERMANENTLY DELETED*\033[1;94m:\033[0m\033[1m" << std::endl;
         std::cout << " " << std::endl;
-        for (const auto& batch : batchedIndices) {
-            for (const auto& index : batch) {
+        for (const auto& chunk : indexChunks) {
+            for (const auto& index : chunk) {
                 auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFiles[index - 1]);
                 std::cout << "\033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[0m\033[1m" << std::endl;
             }
         }
     }
 
-    // Display a message if there are no valid selections for deletion
-    if (!uniqueErrorMessages.empty() && batchedIndices.empty()) {
+     // Display a message if there are no valid selections for deletion
+    if (!uniqueErrorMessages.empty() && indexChunks.empty()) {
         std::cout << " " << std::endl;
         std::cout << "\033[1;91mNo valid selection(s) for deletion.\033[0m\033[1m" << std::endl;
     } else {
@@ -1010,73 +1003,72 @@ void processDeleteInput(const std::string& input, std::vector<std::string>& isoF
         std::getline(std::cin, confirmation);
 
         // Check if the entered character is not 'Y' or 'y'
-        if (!(confirmation == "y" || confirmation == "Y")) {
-            std::cout << " " << std::endl;
-            std::cout << "\033[1;93mDeletion aborted by user.\033[0m\033[1m" << std::endl;
-            return;
-        } else {
-            // Start the timer after user confirmation
-            auto start_time = std::chrono::high_resolution_clock::now();
+    if (!(confirmation == "y" || confirmation == "Y")) {
+        std::cout << " " << std::endl;
+        std::cout << "\033[1;93mDeletion aborted by user.\033[0m\033[1m" << std::endl;
+        return;
+    } else {
+        // Start the timer after user confirmation
+        auto start_time = std::chrono::high_resolution_clock::now();
 
-            std::system("clear");
-            // Create a thread pool with a limited number of threads
-            ThreadPool pool(numThreads);
-            // Use std::async to launch asynchronous tasks
-            std::vector<std::future<void>> futures;
-            futures.reserve(numThreads);
-            
-            // Lock to ensure thread safety in a multi-threaded environment
-            std::lock_guard<std::mutex> highLock(Mutex4High);
-            
-            // Launch deletion tasks for each batch of selected indices
-            for (const auto& batch : batchedIndices) {
-                std::vector<std::string> isoFilesInBatch;
-                for (const auto& index : batch) {
-                    isoFilesInBatch.push_back(isoFiles[index - 1]);
-                }
-                futures.emplace_back(pool.enqueue(handleDeleteIsoFile, isoFilesInBatch, std::ref(isoFiles), std::ref(deletedSet)));
-            }
-
-            // Wait for all asynchronous tasks to complete
-            for (auto& future : futures) {
-                future.wait();
-            }
-            
-            clearScrollBuffer();
-            std::system("clear");
-            
-            if (!deletedIsos.empty()) {
-                std::cout << " " << std::endl;
-            }
+        std::system("clear");
+        // Create a thread pool with a limited number of threads
+        ThreadPool pool(numThreads);
+        // Use std::async to launch asynchronous tasks
+        std::vector<std::future<void>> futures;
+        futures.reserve(numThreads);
         
-            // Print all deleted files
-            for (const auto& deletedIso : deletedIsos) {
-                std::cout << deletedIso << std::endl;
+        // Lock to ensure thread safety in a multi-threaded environment
+        std::lock_guard<std::mutex> highLock(Mutex4High);
+        
+        // Launch deletion tasks for each chunk of selected indices
+        for (const auto& chunk : indexChunks) {
+            std::vector<std::string> isoFilesInChunk;
+            for (const auto& index : chunk) {
+                isoFilesInChunk.push_back(isoFiles[index - 1]);
             }
-            
-            if (!deletedErrors.empty()) {
-                std::cout << " " << std::endl;
-            }
-            
-            for (const auto& deletedError : deletedErrors) {
-				std::cout << deletedError << std::endl;
-			}
-            
-            // Clear the vector after each iteration
-            deletedIsos.clear();
-
-            // Stop the timer after completing all deletion tasks
-            auto end_time = std::chrono::high_resolution_clock::now();
-
-            // Calculate and print the elapsed time
-            std::cout << " " << std::endl;
-            auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-            // Print the time taken for the entire process in bold with one decimal place
-            std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
+            futures.emplace_back(pool.enqueue(handleDeleteIsoFile, isoFilesInChunk, std::ref(isoFiles), std::ref(deletedSet)));
         }
-    }
-}
 
+        // Wait for all asynchronous tasks to complete
+        for (auto& future : futures) {
+            future.wait();
+        }
+        
+        clearScrollBuffer();
+        std::system("clear");
+        
+        if (!deletedIsos.empty()) {
+            std::cout << " " << std::endl;
+        }
+    
+        // Print all deleted files
+        for (const auto& deletedIso : deletedIsos) {
+            std::cout << deletedIso << std::endl;
+        }
+        
+        if (!deletedErrors.empty()) {
+            std::cout << " " << std::endl;
+        }
+        
+        for (const auto& deletedError : deletedErrors) {
+            std::cout << deletedError << std::endl;
+        }
+        
+        // Clear the vector after each iteration
+        deletedIsos.clear();
+
+        // Stop the timer after completing all deletion tasks
+        auto end_time = std::chrono::high_resolution_clock::now();
+
+        // Calculate and print the elapsed time
+        std::cout << " " << std::endl;
+        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+        // Print the time taken for the entire process in bold with one decimal place
+        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
+		}
+	}
+}
 
 
 //	MOUNT STUFF
