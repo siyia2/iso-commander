@@ -1754,8 +1754,6 @@ void unmountISOs() {
                 }
             }
         }
-        
-        unsigned int numThreads = std::min(static_cast<int>(isoDirs.size()), static_cast<int>(maxThreads));
 
         // If no ISOs are mounted, prompt user to continue
         if (isoDirs.empty()) {
@@ -1782,24 +1780,28 @@ void unmountISOs() {
         }
 
         // Unmount all ISOs if '00' is entered
-		if (std::strcmp(input, "00") == 0) {
-			// Create a thread pool with a limited number of threads
-			ThreadPool pool(numThreads);
-			std::vector<std::future<void>> futures;
+    if (std::strcmp(input, "00") == 0) {
+        std::vector<std::thread> threads;
+        // Create a thread pool with a limited number of threads
+        ThreadPool pool(maxThreads);
+        std::vector<std::future<void>> futures;
 
-			std::vector<std::string> isoDirsToUnmount; // Vector to hold all ISO directories
+        std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
 
-			{
-				std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
-				isoDirsToUnmount = isoDirs; // Copy all ISO directories for unmounting
-			}
+        // Divide isoDirs into batches based on maxThreads
+        size_t batchSize = (isoDirs.size() + maxThreads - 1) / maxThreads;
+        std::vector<std::vector<std::string>> batches;
+        for (size_t i = 0; i < isoDirs.size(); i += batchSize) {
+            batches.emplace_back(isoDirs.begin() + i, std::min(isoDirs.begin() + i + batchSize, isoDirs.end()));
+        }
 
-			// Enqueue unmounting task
-			futures.emplace_back(pool.enqueue([isoDirsToUnmount]() {
-				std::lock_guard<std::mutex> highLock(Mutex4High);
-				unmountISO(isoDirsToUnmount); // Pass all ISO directories together
-			}));
-
+        // Enqueue unmounting tasks for all batches
+        for (const auto& batch : batches) {
+            futures.emplace_back(pool.enqueue([batch]() {
+                std::lock_guard<std::mutex> highLock(Mutex4High);
+                unmountISO(batch);
+            }));
+        }
 
             // Wait for all tasks to finish
             for (auto& future : futures) {
@@ -1916,23 +1918,34 @@ void unmountISOs() {
 			}
 		}
 
-        std::vector<std::thread> threads;
-        // Create a thread pool with a limited number of threads
-        ThreadPool pool(numThreads);
-        std::vector<std::future<void>> futures;
+        // Calculate effective thread pool size based on ISO files count
+    int effectiveThreadPoolSize = std::min(static_cast<int>(validIndices.size()), static_cast<int>(maxThreads));
 
-        std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
-		// Enqueue unmounting tasks for all mounted ISOs
-        for (int index : unmountIndices) {
-            if (isValidIndex(index, isoDirs.size())) {
-                const std::string& isoDir = isoDirs[index - 1];
+    // Create a ThreadPool with optimized size
+    ThreadPool pool(effectiveThreadPoolSize);
+    std::vector<std::future<void>> futures;
 
-                futures.emplace_back(pool.enqueue([isoDir]() {
-				std::lock_guard<std::mutex> highLock(Mutex4High);
-				unmountISO(std::vector<std::string>{isoDir}); // Pass a vector containing isoDir
-				}));
-            }
+    std::vector<std::string> selectedIsoDirs;
+    for (int index : unmountIndices) {
+        if (isValidIndex(index, isoDirs.size())) {
+            selectedIsoDirs.push_back(isoDirs[index - 1]);
         }
+    }
+
+    // Divide selectedIsoDirs into batches based on maxThreads
+    size_t batchSize = (selectedIsoDirs.size() + maxThreads - 1) / maxThreads;
+    std::vector<std::vector<std::string>> batches;
+    for (size_t i = 0; i < selectedIsoDirs.size(); i += batchSize) {
+        batches.emplace_back(selectedIsoDirs.begin() + i, std::min(selectedIsoDirs.begin() + i + batchSize, selectedIsoDirs.end()));
+    }
+
+    // Enqueue unmounting tasks for all batches
+    for (const auto& batch : batches) {
+        futures.emplace_back(pool.enqueue([batch]() {
+            std::lock_guard<std::mutex> highLock(Mutex4High);
+            unmountISO(batch);
+        }));
+    }
 
         for (auto& future : futures) {
             future.wait();
