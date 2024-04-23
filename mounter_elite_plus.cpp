@@ -1781,7 +1781,6 @@ void unmountISOs() {
 
         // Unmount all ISOs if '00' is entered
     if (std::strcmp(input, "00") == 0) {
-        std::vector<std::thread> threads;
         // Create a thread pool with a limited number of threads
         ThreadPool pool(maxThreads);
         std::vector<std::future<void>> futures;
