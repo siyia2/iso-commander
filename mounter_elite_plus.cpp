@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
 
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.8.5");
+        printVersionNumber("2.8.4");
         return 0;
     }
 
@@ -1020,7 +1020,7 @@ void processDeleteInput(const std::string& input, std::vector<std::string>& isoF
 
             std::system("clear");
             // Create a thread pool with a limited number of threads
-            ThreadPool pool(2);
+            ThreadPool pool(numThreads);
             // Use std::async to launch asynchronous tasks
             std::vector<std::future<void>> futures;
             futures.reserve(numThreads);
@@ -1076,6 +1076,7 @@ void processDeleteInput(const std::string& input, std::vector<std::string>& isoF
         }
     }
 }
+
 
 
 //	MOUNT STUFF
@@ -1251,121 +1252,145 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
 }
 
 
-// Function to process input and mount ISO files asynchronously with chunking
+// Function to process input and mount ISO files asynchronously
 void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
+    // Initialize input string stream with the provided input
     std::istringstream iss(input);
+    
+    // Flag to track if any invalid input is encountered
     bool invalidInput = false;
+    
+    // Set to store indices of processed tokens
     std::set<int> processedIndices;
+    
+    // Set to store valid indices encountered
     std::set<int> validIndices;
+    
+    // Set to store processed ranges
+    std::set<std::pair<int, int>> processedRanges;
 
-    int maxThreads = std::thread::hardware_concurrency(); // Get the number of available hardware threads
-    int effectiveThreadPoolSize = std::min(maxThreads, static_cast<int>(isoFiles.size())); // Use min of available threads and number of ISO files
-    ThreadPool pool(effectiveThreadPoolSize);
-
+    // Create a ThreadPool with maxThreads
+    ThreadPool pool(maxThreads);
+    
+    // Define mutexes for synchronization
     std::mutex MutexForProcessedIndices;
     std::mutex MutexForValidIndices;
 
+    // Iterate through each token in the input stream
     std::string token;
     while (iss >> token) {
         // Check if token consists of only zeros or is not 00
         if (token != "00" && isAllZeros(token)) {
             if (!invalidInput) {
                 invalidInput = true;
-                std::cerr << "\033[1;91mFile index '0' does not exist.\033[0m\033[1m" << std::endl;
+                uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist.\033[0m\033[1m");
             }
             continue;
         }
 
+        // Check for presence of dash in token
         size_t dashPos = token.find('-');
         if (dashPos != std::string::npos) {
+            // Check for multiple dashes
+            if (token.find('-', dashPos + 1) != std::string::npos || 
+                (dashPos == 0 || dashPos == token.size() - 1 || !std::isdigit(token[dashPos - 1]) || !std::isdigit(token[dashPos + 1]))) {
+                invalidInput = true;
+                uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0m\033[1m");
+                continue;
+            }
+
+            // Extract start and end indices from token
             int start, end;
             try {
                 start = std::stoi(token.substr(0, dashPos));
                 end = std::stoi(token.substr(dashPos + 1));
             } catch (const std::invalid_argument& e) {
                 invalidInput = true;
-                std::cerr << "\033[1;91mInvalid input: '" << token << "'.\033[0m\033[1m" << std::endl;
+                uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0m\033[1m");
                 continue;
             } catch (const std::out_of_range& e) {
                 invalidInput = true;
-                std::cerr << "\033[1;91mInvalid range: '" << token << "'. Ensure that numbers align with the list.\033[0m\033[1m" << std::endl;
+                uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0m\033[1m");
                 continue;
             }
 
-            // Validate range indices
-            if (start < 1 || start > static_cast<int>(isoFiles.size()) || end < 1 || end > static_cast<int>(isoFiles.size())) {
+            // Check validity of range indices
+            if (start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) {
                 invalidInput = true;
-                std::cerr << "\033[1;91mInvalid range: '" << token << "'. Ensure that numbers align with the list.\033[0m\033[1m" << std::endl;
+                uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m\033[1m");
                 continue;
             }
-
-            // Determine chunking direction and step
-            int step = (start <= end) ? 1 : -1;
-            // Compute chunk size based on valid indices count and maxThreads
-            int validIndicesCount = std::count_if(validIndices.begin(), validIndices.end(),
-                                                  [&](int idx) { return idx >= start && idx <= end; });
-            int chunkSize = std::max(1, validIndicesCount / effectiveThreadPoolSize); // Calculate chunk size
-
-
-            // Process the range in chunks
-            for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step * chunkSize) {
-                int chunkStart = i;
-                int chunkEnd = i + step * (chunkSize - 1);
-                if ((start <= end && chunkEnd > end) || (start > end && chunkEnd < end)) {
-                    chunkEnd = end;
-                }
-
-                // Enqueue task for processing the chunk in the thread pool
-                pool.enqueue([&, chunkStart, chunkEnd]() {
-                    for (int j = chunkStart; (start <= end) ? (j <= chunkEnd) : (j >= chunkEnd); j += step) {
-                        std::lock_guard<std::mutex> processedLock(MutexForProcessedIndices);
-                        if (processedIndices.find(j) == processedIndices.end()) {
-                            processedIndices.insert(j);
-
-                            std::lock_guard<std::mutex> validLock(MutexForValidIndices);
-                            if (validIndices.find(j) == validIndices.end()) {
-                                validIndices.insert(j);
-
-                                // Mount ISO file corresponding to the index (1-based)
-                                std::vector<std::string> isoFilesToMount = { isoFiles[j - 1] };
-                                mountIsoFile(isoFilesToMount, mountedSet);
-                            }
-                        }
-                    }
+            
+            // Lock the global mutex for synchronization
+            std::lock_guard<std::mutex> highLock(Mutex4High);
+            // Check if the range has been processed before
+            std::pair<int, int> range(start, end);
+            if (processedRanges.find(range) == processedRanges.end()) {
+                // Enqueue task for marking range as processed
+                pool.enqueue([&]() {
+                    processedRanges.insert(range);
                 });
+
+                // Determine step for iteration
+                int step = (start <= end) ? 1 : -1;
+                for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
+                    // Check if the index has been processed before
+                    if (processedIndices.find(i) == processedIndices.end()) {
+                        // Enqueue task for marking index as processed
+                        pool.enqueue([&]() {
+                            std::lock_guard<std::mutex> processedLock(MutexForProcessedIndices);
+                            processedIndices.insert(i);
+                        });
+
+                        // Enqueue mounting task
+                        pool.enqueue([&, i]() {
+                            std::lock_guard<std::mutex> validLock(MutexForValidIndices);
+                            if (validIndices.find(i) == validIndices.end()) { // Ensure not processed before
+								validIndices.insert(i);
+								std::vector<std::string> isoFilesToMount;
+								isoFilesToMount.push_back(isoFiles[i - 1]); // Assuming isoFiles is 1-based indexed
+								mountIsoFile(isoFilesToMount, mountedSet);
+							}
+                        });
+                    }
+                }
             }
         } else if (isNumeric(token)) {
-            // Token is a single index
+            // Lock the global mutex for synchronization
+            std::lock_guard<std::mutex> highLock(Mutex4High);
+
+            // Handle single index token
             int num = std::stoi(token);
-            if (num >= 1 && num <= static_cast<int>(isoFiles.size())) {
-                // Enqueue task for processing the single index in the thread pool
-                pool.enqueue([&, num]() {
+            if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && processedIndices.find(num) == processedIndices.end()) {
+                // Enqueue task for marking index as processed
+                pool.enqueue([&]() {
+                    // Lock the mutex for processedIndices
                     std::lock_guard<std::mutex> processedLock(MutexForProcessedIndices);
-                    if (processedIndices.find(num) == processedIndices.end()) {
-                        processedIndices.insert(num);
-
-                        std::lock_guard<std::mutex> validLock(MutexForValidIndices);
-                        if (validIndices.find(num) == validIndices.end()) {
-                            validIndices.insert(num);
-
-                            // Mount ISO file corresponding to the index (1-based)
-                            std::vector<std::string> isoFilesToMount = { isoFiles[num - 1] };
-                            mountIsoFile(isoFilesToMount, mountedSet);
-                        }
-                    }
+                    processedIndices.insert(num);
                 });
-            } else {
-                std::cerr << "\033[1;91mFile index '" << num << "' does not exist.\033[0m\033[1m" << std::endl;
+
+                // Enqueue mounting task
+                pool.enqueue([&, num]() {
+                    // Lock the mutex for validIndices
+                    std::lock_guard<std::mutex> validLock(MutexForValidIndices);
+                    if (validIndices.find(num) == validIndices.end()) { // Ensure not processed before
+						validIndices.insert(num);
+						std::vector<std::string> isoFilesToMount;
+						isoFilesToMount.push_back(isoFiles[num - 1]); // Assuming isoFiles is 0-based indexed
+						mountIsoFile(isoFilesToMount, mountedSet);
+					}
+                });
+            } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
                 invalidInput = true;
+                uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(num) + "' does not exist.\033[0m\033[1m");
             }
         } else {
-            std::cerr << "\033[1;91mInvalid input: '" << token << "'.\033[0m\033[1m" << std::endl;
+            // Handle invalid token
             invalidInput = true;
+            uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0m\033[1m");
         }
     }
 }
-
-
 
 
 // Function to mount selected ISO files called from processAndMountIsoFiles
@@ -1721,6 +1746,8 @@ void unmountISOs() {
                 }
             }
         }
+        
+        unsigned int numThreads = std::min(static_cast<int>(isoDirs.size()), static_cast<int>(maxThreads));
 
         // If no ISOs are mounted, prompt user to continue
         if (isoDirs.empty()) {
@@ -1747,28 +1774,20 @@ void unmountISOs() {
         }
 
         // Unmount all ISOs if '00' is entered
-    if (std::strcmp(input, "00") == 0) {
-        std::vector<std::thread> threads;
-        // Create a thread pool with a limited number of threads
-        ThreadPool pool(maxThreads);
-        std::vector<std::future<void>> futures;
+        if (std::strcmp(input, "00") == 0) {
+            // Create a thread pool with a limited number of threads
+            ThreadPool pool(numThreads);
+            std::vector<std::future<void>> futures;
 
-        std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
+            std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
 
-        // Divide isoDirs into batches based on maxThreads
-        size_t batchSize = (isoDirs.size() + maxThreads - 1) / maxThreads;
-        std::vector<std::vector<std::string>> batches;
-        for (size_t i = 0; i < isoDirs.size(); i += batchSize) {
-            batches.emplace_back(isoDirs.begin() + i, std::min(isoDirs.begin() + i + batchSize, isoDirs.end()));
-        }
-
-        // Enqueue unmounting tasks for all batches
-        for (const auto& batch : batches) {
-            futures.emplace_back(pool.enqueue([batch]() {
-                std::lock_guard<std::mutex> highLock(Mutex4High);
-                unmountISO(batch);
-            }));
-        }
+            // Enqueue unmounting tasks for all mounted ISOs
+            for (const std::string& isoDir : isoDirs) {
+                futures.emplace_back(pool.enqueue([isoDir]() {
+				std::lock_guard<std::mutex> highLock(Mutex4High);
+				unmountISO(std::vector<std::string>{isoDir}); // Pass a vector containing isoDir
+				}));
+            }
 
             // Wait for all tasks to finish
             for (auto& future : futures) {
@@ -1885,34 +1904,23 @@ void unmountISOs() {
 			}
 		}
 
-        // Calculate effective thread pool size based on ISO files count
-    int effectiveThreadPoolSize = std::min(static_cast<int>(validIndices.size()), static_cast<int>(maxThreads));
+        std::vector<std::thread> threads;
+        // Create a thread pool with a limited number of threads
+        ThreadPool pool(numThreads);
+        std::vector<std::future<void>> futures;
 
-    // Create a ThreadPool with optimized size
-    ThreadPool pool(effectiveThreadPoolSize);
-    std::vector<std::future<void>> futures;
+        std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
+		// Enqueue unmounting tasks for all mounted ISOs
+        for (int index : unmountIndices) {
+            if (isValidIndex(index, isoDirs.size())) {
+                const std::string& isoDir = isoDirs[index - 1];
 
-    std::vector<std::string> selectedIsoDirs;
-    for (int index : unmountIndices) {
-        if (isValidIndex(index, isoDirs.size())) {
-            selectedIsoDirs.push_back(isoDirs[index - 1]);
+                futures.emplace_back(pool.enqueue([isoDir]() {
+				std::lock_guard<std::mutex> highLock(Mutex4High);
+				unmountISO(std::vector<std::string>{isoDir}); // Pass a vector containing isoDir
+				}));
+            }
         }
-    }
-
-    // Divide selectedIsoDirs into batches based on maxThreads
-    size_t batchSize = (selectedIsoDirs.size() + maxThreads - 1) / maxThreads;
-    std::vector<std::vector<std::string>> batches;
-    for (size_t i = 0; i < selectedIsoDirs.size(); i += batchSize) {
-        batches.emplace_back(selectedIsoDirs.begin() + i, std::min(selectedIsoDirs.begin() + i + batchSize, selectedIsoDirs.end()));
-    }
-
-    // Enqueue unmounting tasks for all batches
-    for (const auto& batch : batches) {
-        futures.emplace_back(pool.enqueue([batch]() {
-            std::lock_guard<std::mutex> highLock(Mutex4High);
-            unmountISO(batch);
-        }));
-    }
 
         for (auto& future : futures) {
             future.wait();
