@@ -1140,22 +1140,30 @@ void select_and_mount_files_by_number() {
         }
 
         // Check if the user wants to mount all ISO files
-        if (std::strcmp(input, "00") == 0) {
-            // Create a ThreadPool with maxThreads
-			ThreadPool pool(maxThreads);
+		if (std::strcmp(input, "00") == 0) {
+		// Create a ThreadPool with maxThreads
+		ThreadPool pool(maxThreads);
 
-			// Process all ISO files asynchronously
-			for (size_t i = 0; i < isoFiles.size(); ++i) {
-				// Enqueue the mounting task to the thread pool with associated index
-				pool.enqueue([i, &isoFiles, &mountedSet]() {
-				// Create a vector containing the single ISO file to mount
-				std::vector<std::string> isoFilesToMount = { isoFiles[i] }; // Assuming isoFiles is 1-based indexed
-				clearScrollBuffer();
-				std::system("clear");
-				// Call mountIsoFile with the vector of ISO files to mount and the mounted set
-				mountIsoFile(isoFilesToMount, mountedSet);
-				});
-			}
+		// Create a vector to hold all ISO files to mount
+		std::vector<std::string> isoFilesToMount;
+
+		// Populate the vector with all ISO file paths
+		{
+        std::lock_guard<std::mutex> high(Mutex4High);
+        isoFilesToMount = isoFiles; // Copy all ISO files for mounting
+		}
+
+		// Process all ISO files asynchronously
+		for (const auto& isoFile : isoFilesToMount) {
+			// Enqueue the mounting task to the thread pool
+			pool.enqueue([isoFile, &mountedSet]() {
+            clearScrollBuffer();
+            std::system("clear");
+            // Call mountIsoFile with the single ISO file to mount and the mounted set
+            mountIsoFile(std::vector<std::string>{isoFile}, mountedSet);
+			});
+		}
+
         } else {
 			clearScrollBuffer();
 			std::system("clear");
@@ -1774,20 +1782,24 @@ void unmountISOs() {
         }
 
         // Unmount all ISOs if '00' is entered
-        if (std::strcmp(input, "00") == 0) {
-            // Create a thread pool with a limited number of threads
-            ThreadPool pool(numThreads);
-            std::vector<std::future<void>> futures;
+		if (std::strcmp(input, "00") == 0) {
+			// Create a thread pool with a limited number of threads
+			ThreadPool pool(numThreads);
+			std::vector<std::future<void>> futures;
 
-            std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
+			std::vector<std::string> isoDirsToUnmount; // Vector to hold all ISO directories
 
-            // Enqueue unmounting tasks for all mounted ISOs
-            for (const std::string& isoDir : isoDirs) {
-                futures.emplace_back(pool.enqueue([isoDir]() {
+			{
+				std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
+				isoDirsToUnmount = isoDirs; // Copy all ISO directories for unmounting
+			}
+
+			// Enqueue unmounting task
+			futures.emplace_back(pool.enqueue([isoDirsToUnmount]() {
 				std::lock_guard<std::mutex> highLock(Mutex4High);
-				unmountISO(std::vector<std::string>{isoDir}); // Pass a vector containing isoDir
-				}));
-            }
+				unmountISO(isoDirsToUnmount); // Pass all ISO directories together
+			}));
+
 
             // Wait for all tasks to finish
             for (auto& future : futures) {
