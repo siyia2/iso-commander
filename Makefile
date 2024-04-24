@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -O2
+CXXFLAGS = -O2 -Wall -Werror
 LIBS = -lreadline
 
 # Use the number of available processors from nproc
@@ -8,7 +8,7 @@ NUM_PROCESSORS := $(shell nproc 2>/dev/null)
 # Set the default number of jobs to the number of available processors
 MAKEFLAGS = -j$(NUM_PROCESSORS)
 
-SRC_FILES = mounter_elite_plus.cpp conversion_tools.cpp sanitization_readline.cpp
+SRC_FILES = mounter_elite_plus.cpp conversion_tools.cpp sanitization_extraction_readline.cpp pocket.cpp
 OBJ_FILES = $(SRC_FILES:.cpp=.o)
 EXECUTABLE = mounter_elite_plus
 
