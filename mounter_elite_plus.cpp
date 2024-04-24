@@ -971,7 +971,7 @@ void processDeleteInput(const std::string& input, std::vector<std::string>& isoF
     if (invalidInput && !validIndices.empty()) {
         std::cout << " " << std::endl;
     }
-	// Detect and use the minimum of available threads and ISOs to ensure efficient parallelism
+	// Detect and use the minimum of available threads and validIndices to ensure efficient parallelism
 	unsigned int numThreads = std::min(static_cast<int>(validIndices.size()), static_cast<int>(maxThreads));
 
     // Batch the valid indices into chunks based on numThreads
@@ -1014,7 +1014,7 @@ void processDeleteInput(const std::string& input, std::vector<std::string>& isoF
         auto start_time = std::chrono::high_resolution_clock::now();
 
         std::system("clear");
-        // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism
+        // Detect and use the minimum of available threads and indexChunks to ensure efficient parallelism
 		unsigned int numThreads = std::min(static_cast<int>(indexChunks.size()), static_cast<int>(maxThreads));
         // Create a thread pool with a limited number of threads
         ThreadPool pool(numThreads);
@@ -1742,7 +1742,7 @@ void unmountISOs() {
         // Unmount all ISOs if '00' is entered
     if (std::strcmp(input, "00") == 0) {
         // Create a thread pool with a limited number of threads
-        // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism
+        // Detect and use the minimum of available threads and isoDirs to ensure efficient parallelism
 		unsigned int numThreads = std::min(static_cast<int>(isoDirs.size()), static_cast<int>(maxThreads));
         ThreadPool pool(numThreads);
         std::vector<std::future<void>> futures;
@@ -1892,7 +1892,7 @@ void unmountISOs() {
         }
     }
     // Create a ThreadPool with optimized size
-    // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism
+    // Detect and use the minimum of available threads and selectedIsoDirs to ensure efficient parallelism
 	unsigned int numThreads = std::min(static_cast<int>(selectedIsoDirs.size()), static_cast<int>(maxThreads));
     ThreadPool pool(numThreads);
     std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
