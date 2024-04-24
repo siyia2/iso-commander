@@ -1776,9 +1776,9 @@ void unmountISOs() {
 				std::cout << " " << std::endl; // Print a blank line before deleted folders
 			}
 			// Print all unmounted files
-		for (const auto& unmountedError : unmountedErrors) {
+			for (const auto& unmountedError : unmountedErrors) {
 			std::cout << unmountedError << std::endl;
-		}
+			}
 			// Clear vectors
 			unmountedFiles.clear();
 			unmountedErrors.clear();
@@ -1945,7 +1945,6 @@ void unmountISOs() {
 
         // Stop the timer after completing the unmounting process
         auto end_time = std::chrono::high_resolution_clock::now();
-
 
         auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
         // Print the time taken for the entire process in bold with one decimal place
