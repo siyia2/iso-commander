@@ -1134,8 +1134,11 @@ void select_and_mount_files_by_number() {
         // Check if the user wants to mount all ISO files
         if (std::strcmp(input, "00") == 0) {
 			
+			 // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism
+			unsigned int numThreads = std::min(static_cast<int>(isoFiles.size()), static_cast<int>(maxThreads));
+			
             // Create a ThreadPool with maxThreads
-			ThreadPool pool(maxThreads);
+			ThreadPool pool(numThreads);
 
 			// Process all ISO files asynchronously
 			for (size_t i = 0; i < isoFiles.size(); ++i) {
@@ -1246,6 +1249,9 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     // Initialize input string stream with the provided input
     std::istringstream iss(input);
     
+     // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism
+	unsigned int numThreads = std::min(static_cast<int>(isoFiles.size()), static_cast<int>(maxThreads));
+    
     // Flag to track if any invalid input is encountered
     bool invalidInput = false;
     
@@ -1259,7 +1265,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     std::set<std::pair<int, int>> processedRanges;
 
     // Create a ThreadPool with maxThreads
-    ThreadPool pool(maxThreads);
+    ThreadPool pool(numThreads);
     
     // Define mutexes for synchronization
     std::mutex MutexForProcessedIndices;
