@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
 
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.8.5");
+        printVersionNumber("2.8.6");
         return 0;
     }
 
@@ -243,6 +243,40 @@ bool isNumeric(const std::string& str) {
     return std::all_of(std::execution::par, str.begin(), str.end(), [](char c) {
         return std::isdigit(c);
     });
+}
+
+
+// Function to print ISO files with alternating colors for sequence numbers
+void printIsoFileList(const std::vector<std::string>& isoFiles) {
+    // ANSI escape codes for text formatting
+    const std::string defaultColor = "\033[0m";
+    const std::string bold = "\033[1m";
+    const std::string red = "\033[31;1m";   // Red color
+    const std::string green = "\033[32;1m"; // Green color
+    const std::string magenta = "\033[95m";
+
+    bool useRedColor = true; // Start with red color
+
+    for (size_t i = 0; i < isoFiles.size(); ++i) {
+        // Determine sequence number
+        int sequenceNumber = i + 1;
+
+        // Determine color based on alternating pattern
+        std::string sequenceColor = (useRedColor) ? red : green;
+        useRedColor = !useRedColor; // Toggle between red and green
+
+        // Print sequence number with the determined color
+        std::cout << sequenceColor << std::right << std::setw(2) << sequenceNumber <<". ";
+
+        // Extract directory and filename
+        auto [directory, filename] = extractDirectoryAndFilename(isoFiles[i]);
+
+        // Print the directory part in the default color
+        std::cout << defaultColor << bold << directory << defaultColor;
+
+        // Print the filename part in bold
+        std::cout << bold << "/" << magenta << filename << defaultColor << std::endl;
+    }
 }
 
 
@@ -871,8 +905,6 @@ void processDeleteInput(const std::string& input, std::vector<std::string>& isoF
     std::vector<int> validIndices;     // Vector to keep track of valid indices
 
     std::string token;
-    std::vector<std::thread> threads; // Vector to store std::future objects for each task
-    threads.reserve(maxThreads);      // Reserve space for maxThreads threads
 
     // Tokenize the input string
     while (iss >> token) {
@@ -1016,7 +1048,7 @@ void processDeleteInput(const std::string& input, std::vector<std::string>& isoF
         std::system("clear");
         // Detect and use the minimum of available threads and indexChunks to ensure efficient parallelism
 		unsigned int numThreads = std::min(static_cast<int>(indexChunks.size()), static_cast<int>(maxThreads));
-        // Create a thread pool with a limited number of threads
+        // Create a thread pool with a optimal number of threads
         ThreadPool pool(numThreads);
         // Use std::async to launch asynchronous tasks
         std::vector<std::future<void>> futures;
@@ -1214,36 +1246,94 @@ void select_and_mount_files_by_number() {
 }
 
 
-// Function to print ISO files with alternating colors for sequence numbers
-void printIsoFileList(const std::vector<std::string>& isoFiles) {
-    // ANSI escape codes for text formatting
-    const std::string defaultColor = "\033[0m";
-    const std::string bold = "\033[1m";
-    const std::string red = "\033[31;1m";   // Red color
-    const std::string green = "\033[32;1m"; // Green color
-    const std::string magenta = "\033[95m";
+// Function to mount selected ISO files called from processAndMountIsoFiles
+void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordered_set<std::string>& mountedSet) {
+    // Lock the global mutex for synchronization
+    std::lock_guard<std::mutex> lowLock(Mutex4Low);
 
-    bool useRedColor = true; // Start with red color
+    namespace fs = std::filesystem;
 
-    for (size_t i = 0; i < isoFiles.size(); ++i) {
-        // Determine sequence number
-        int sequenceNumber = i + 1;
+    for (const auto& isoFile : isoFilesToMount) {
+        // Use the filesystem library to extract the ISO file name
+        fs::path isoPath(isoFile);
+        std::string isoFileName = isoPath.stem().string(); // Remove the .iso extension
 
-        // Determine color based on alternating pattern
-        std::string sequenceColor = (useRedColor) ? red : green;
-        useRedColor = !useRedColor; // Toggle between red and green
+        // Use the modified ISO file name in the mount point with "iso_" prefix
+        std::string mountPoint = "/mnt/iso_" + isoFileName;
 
-        // Print sequence number with the determined color
-        std::cout << sequenceColor << std::right << std::setw(2) << sequenceNumber <<". ";
+        auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint);
+        auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
 
-        // Extract directory and filename
-        auto [directory, filename] = extractDirectoryAndFilename(isoFiles[i]);
+        // Construct the sudo command and execute it
+        std::string sudoCommand = "sudo -v";
+        int sudoResult = system(sudoCommand.c_str());
 
-        // Print the directory part in the default color
-        std::cout << defaultColor << bold << directory << defaultColor;
+        if (sudoResult == 0) {
+            // Asynchronously check and create the mount point directory
+            auto future = std::async(std::launch::async, [&mountPoint]() {
+                if (!fs::exists(mountPoint)) {
+                    fs::create_directory(mountPoint);
+                }
+            });
 
-        // Print the filename part in bold
-        std::cout << bold << "/" << magenta << filename << defaultColor << std::endl;
+            // Wait for the asynchronous operation to complete
+            future.wait();
+            
+            // Check if the mount point is already mounted
+        if (isAlreadyMounted(mountPoint)) {
+            // If already mounted, print a message and continue
+            std::stringstream skippedMessage;
+            skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m already mounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;93m.\033[0m\033[1m" << std::endl;
+
+            // Create the unordered set after populating skippedMessages
+            std::unordered_set<std::string> skippedSet(skippedMessages.begin(), skippedMessages.end());
+
+            // Check for duplicates
+            if (skippedSet.find(skippedMessage.str()) == skippedSet.end()) {
+                // Error message not found, add it to the vector
+                skippedMessages.push_back(skippedMessage.str());
+            }
+
+            continue; // Skip mounting this ISO file
+        }
+
+            // Check if the mount point directory was created successfully
+            if (fs::exists(mountPoint)) {
+                try {
+                    // Construct the mount command and execute it
+                    std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
+                    if (std::system(mountCommand.c_str()) != 0) {
+                        throw std::runtime_error("Mount command failed");
+                    }
+
+                    // Insert the mount point into the set
+                    mountedSet.insert(mountPoint);
+
+                    // Store the mounted file information in the vector
+                    std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m\033[1m"
+                                                  + "\033[1m mounted at: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename + "'\033[0m\033[1m\033[1m.\033[0m\033[1m";
+                    mountedFiles.push_back(mountedFileInfo);
+
+                } catch (const std::exception& e) {
+                    // Handle exceptions and cleanup
+                    std::stringstream errorMessage;
+                    errorMessage << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[0m\033[1m\033[1;91m.\033[0m\033[1m" << std::endl;
+                    fs::remove(mountPoint);
+
+                    std::unordered_set<std::string> errorSet(errorMessages.begin(), errorMessages.end());
+                    if (errorSet.find(errorMessage.str()) == errorSet.end()) {
+                        // Error message not found, add it to the vector
+                        errorMessages.push_back(errorMessage.str());
+                    }
+                }
+            } else {
+                // Handle failure to create the mount point directory
+                std::cerr << "\033[1;91mFailed to create mount point directory: \033[1;93m" << mountPoint << "\033[0m\033[1m" << std::endl;
+            }
+        } else {
+            // Handle sudo command failure or user didn't provide the password
+            std::cerr << "\033[1;91mFailed to authenticate with sudo.\033[0m\033[1m" << std::endl;
+        }
     }
 }
 
@@ -1387,98 +1477,6 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
             // Handle invalid token
             invalidInput = true;
             uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0m\033[1m");
-        }
-    }
-}
-
-
-// Function to mount selected ISO files called from processAndMountIsoFiles
-void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordered_set<std::string>& mountedSet) {
-    // Lock the global mutex for synchronization
-    std::lock_guard<std::mutex> lowLock(Mutex4Low);
-
-    namespace fs = std::filesystem;
-
-    for (const auto& isoFile : isoFilesToMount) {
-        // Use the filesystem library to extract the ISO file name
-        fs::path isoPath(isoFile);
-        std::string isoFileName = isoPath.stem().string(); // Remove the .iso extension
-
-        // Use the modified ISO file name in the mount point with "iso_" prefix
-        std::string mountPoint = "/mnt/iso_" + isoFileName;
-
-        auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint);
-        auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
-
-        // Construct the sudo command and execute it
-        std::string sudoCommand = "sudo -v";
-        int sudoResult = system(sudoCommand.c_str());
-
-        if (sudoResult == 0) {
-            // Asynchronously check and create the mount point directory
-            auto future = std::async(std::launch::async, [&mountPoint]() {
-                if (!fs::exists(mountPoint)) {
-                    fs::create_directory(mountPoint);
-                }
-            });
-
-            // Wait for the asynchronous operation to complete
-            future.wait();
-            
-            // Check if the mount point is already mounted
-        if (isAlreadyMounted(mountPoint)) {
-            // If already mounted, print a message and continue
-            std::stringstream skippedMessage;
-            skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m already mounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;93m.\033[0m\033[1m" << std::endl;
-
-            // Create the unordered set after populating skippedMessages
-            std::unordered_set<std::string> skippedSet(skippedMessages.begin(), skippedMessages.end());
-
-            // Check for duplicates
-            if (skippedSet.find(skippedMessage.str()) == skippedSet.end()) {
-                // Error message not found, add it to the vector
-                skippedMessages.push_back(skippedMessage.str());
-            }
-
-            continue; // Skip mounting this ISO file
-        }
-
-            // Check if the mount point directory was created successfully
-            if (fs::exists(mountPoint)) {
-                try {
-                    // Construct the mount command and execute it
-                    std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
-                    if (std::system(mountCommand.c_str()) != 0) {
-                        throw std::runtime_error("Mount command failed");
-                    }
-
-                    // Insert the mount point into the set
-                    mountedSet.insert(mountPoint);
-
-                    // Store the mounted file information in the vector
-                    std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m\033[1m"
-                                                  + "\033[1m mounted at: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename + "'\033[0m\033[1m\033[1m.\033[0m\033[1m";
-                    mountedFiles.push_back(mountedFileInfo);
-
-                } catch (const std::exception& e) {
-                    // Handle exceptions and cleanup
-                    std::stringstream errorMessage;
-                    errorMessage << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[0m\033[1m\033[1;91m.\033[0m\033[1m" << std::endl;
-                    fs::remove(mountPoint);
-
-                    std::unordered_set<std::string> errorSet(errorMessages.begin(), errorMessages.end());
-                    if (errorSet.find(errorMessage.str()) == errorSet.end()) {
-                        // Error message not found, add it to the vector
-                        errorMessages.push_back(errorMessage.str());
-                    }
-                }
-            } else {
-                // Handle failure to create the mount point directory
-                std::cerr << "\033[1;91mFailed to create mount point directory: \033[1;93m" << mountPoint << "\033[0m\033[1m" << std::endl;
-            }
-        } else {
-            // Handle sudo command failure or user didn't provide the password
-            std::cerr << "\033[1;91mFailed to authenticate with sudo.\033[0m\033[1m" << std::endl;
         }
     }
 }
@@ -1741,9 +1739,9 @@ void unmountISOs() {
 
         // Unmount all ISOs if '00' is entered
     if (std::strcmp(input, "00") == 0) {
-        // Create a thread pool with a limited number of threads
         // Detect and use the minimum of available threads and isoDirs to ensure efficient parallelism
 		unsigned int numThreads = std::min(static_cast<int>(isoDirs.size()), static_cast<int>(maxThreads));
+		// Create a thread pool with a limited number of threads
         ThreadPool pool(numThreads);
         std::vector<std::future<void>> futures;
 
@@ -1891,9 +1889,9 @@ void unmountISOs() {
             selectedIsoDirs.push_back(isoDirs[index - 1]);
         }
     }
-    // Create a ThreadPool with optimized size
     // Detect and use the minimum of available threads and selectedIsoDirs to ensure efficient parallelism
 	unsigned int numThreads = std::min(static_cast<int>(selectedIsoDirs.size()), static_cast<int>(maxThreads));
+	// Create a ThreadPool with optimized size
     ThreadPool pool(numThreads);
     std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
 
