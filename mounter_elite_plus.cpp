@@ -1400,7 +1400,22 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
         auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint);
         auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
 
-        // Check if the mount point is already mounted
+        // Construct the sudo command and execute it
+        std::string sudoCommand = "sudo -v";
+        int sudoResult = system(sudoCommand.c_str());
+
+        if (sudoResult == 0) {
+            // Asynchronously check and create the mount point directory
+            auto future = std::async(std::launch::async, [&mountPoint]() {
+                if (!fs::exists(mountPoint)) {
+                    fs::create_directory(mountPoint);
+                }
+            });
+
+            // Wait for the asynchronous operation to complete
+            future.wait();
+            
+            // Check if the mount point is already mounted
         if (isAlreadyMounted(mountPoint)) {
             // If already mounted, print a message and continue
             std::stringstream skippedMessage;
@@ -1417,21 +1432,6 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
 
             continue; // Skip mounting this ISO file
         }
-
-        // Construct the sudo command and execute it
-        std::string sudoCommand = "sudo -v";
-        int sudoResult = system(sudoCommand.c_str());
-
-        if (sudoResult == 0) {
-            // Asynchronously check and create the mount point directory
-            auto future = std::async(std::launch::async, [&mountPoint]() {
-                if (!fs::exists(mountPoint)) {
-                    fs::create_directory(mountPoint);
-                }
-            });
-
-            // Wait for the asynchronous operation to complete
-            future.wait();
 
             // Check if the mount point directory was created successfully
             if (fs::exists(mountPoint)) {
