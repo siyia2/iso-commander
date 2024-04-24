@@ -1133,6 +1133,7 @@ void select_and_mount_files_by_number() {
 
         // Check if the user wants to mount all ISO files
         if (std::strcmp(input, "00") == 0) {
+			
             // Create a ThreadPool with maxThreads
 			ThreadPool pool(maxThreads);
 
@@ -1142,15 +1143,11 @@ void select_and_mount_files_by_number() {
 				pool.enqueue([i, &isoFiles, &mountedSet]() {
 				// Create a vector containing the single ISO file to mount
 				std::vector<std::string> isoFilesToMount = { isoFiles[i] }; // Assuming isoFiles is 1-based indexed
-				clearScrollBuffer();
-				std::system("clear");
 				// Call mountIsoFile with the vector of ISO files to mount and the mounted set
 				mountIsoFile(isoFilesToMount, mountedSet);
 				});
 			}
         } else {
-			clearScrollBuffer();
-			std::system("clear");
             // Process user input to select and mount specific ISO files
             processAndMountIsoFiles(input, isoFiles, mountedSet);
         }
