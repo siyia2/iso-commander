@@ -1760,6 +1760,9 @@ void unmountISOs() {
                 future.wait();
             }
             
+            clearScrollBuffer();
+			std::system("clear");
+			
             if (invalidInput && !validIndices.empty()) {
 				std::cout << " " << std::endl;
 			}
@@ -1880,6 +1883,8 @@ void unmountISOs() {
             selectedIsoDirs.push_back(isoDirs[index - 1]);
         }
     }
+    
+    std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
 
     // Divide selectedIsoDirs into batches based on maxThreads
     size_t batchSize = (selectedIsoDirs.size() + maxThreads - 1) / maxThreads;
@@ -1899,6 +1904,9 @@ void unmountISOs() {
         for (auto& future : futures) {
             future.wait();
         }
+        
+        clearScrollBuffer();
+		std::system("clear");
         
         if (!unmountedFiles.empty()) {
 			std::cout << " " << std::endl; // Print a blank line before unmounted files
