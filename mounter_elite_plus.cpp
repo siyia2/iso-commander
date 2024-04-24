@@ -817,24 +817,19 @@ void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<s
     
     // Determine batch size based on the number of isoDirs
     size_t batchSize = 1;
-    if (isoFiles.size() > maxThreads) {
-        batchSize = 2;
-    }
-    if (isoFiles.size() > 50) {
-        batchSize = 5;
-    }
-    if (isoFiles.size() > 100) {
-        batchSize = 10;
-    }
-    if (isoFiles.size() > 1000) {
-        batchSize = 25;
-    }
-    if (isoFiles.size() > 10000) {
-        batchSize = 50;
-    }
-    if (isoFiles.size() > 100000) {
-        batchSize = 100;
-    }
+    if (isoFiles.size() > 100000 && isoFiles.size() > maxThreads) {
+		batchSize = 100;
+	} else if (isoFiles.size() > 10000 && isoFiles.size() > maxThreads) {
+		batchSize = 50;
+	} else if (isoFiles.size() > 1000 && isoFiles.size() > maxThreads) {
+		batchSize = 25;
+	} else if (isoFiles.size() > 100 && isoFiles.size() > maxThreads) {
+    batchSize = 10;
+	} else if (isoFiles.size() > 50 && isoFiles.size() > maxThreads) {
+		batchSize = 5;
+	} else if (isoFiles.size() > maxThreads) {
+    batchSize = 2;
+	}
     
     // Track ISO files to delete in the current batch
     std::vector<std::string> isoFilesToDelete;
@@ -1577,24 +1572,20 @@ bool isDirectoryEmpty(const std::string& path) {
 void unmountISO(const std::vector<std::string>& isoDirs) {
     // Determine batch size based on the number of isoDirs
     size_t batchSize = 1;
-    if (isoDirs.size() > maxThreads) {
-        batchSize = 2;
-    }
-    if (isoDirs.size() > 50) {
-        batchSize = 5;
-    }
-    if (isoDirs.size() > 100) {
-        batchSize = 10;
-    }
-    if (isoDirs.size() > 1000) {
-        batchSize = 25;
-    }
-    if (isoDirs.size() > 10000) {
-        batchSize = 50;
-    }
-    if (isoDirs.size() > 100000) {
-        batchSize = 100;
-    }
+
+	if (isoDirs.size() > 100000 && isoDirs.size() > maxThreads) {
+		batchSize = 100;
+	} else if (isoDirs.size() > 10000 && isoDirs.size() > maxThreads) {
+		batchSize = 50;
+	} else if (isoDirs.size() > 1000 && isoDirs.size() > maxThreads) {
+		batchSize = 25;
+	} else if (isoDirs.size() > 100 && isoDirs.size() > maxThreads) {
+		batchSize = 10;
+	} else if (isoDirs.size() > 50 && isoDirs.size() > maxThreads) {
+		batchSize = 5;
+	} else if (isoDirs.size() > maxThreads) {
+		batchSize = 2;
+	}
 
         // Use std::async to unmount and remove the directories asynchronously
     auto unmountFuture = std::async(std::launch::async, [&isoDirs, batchSize]() {
