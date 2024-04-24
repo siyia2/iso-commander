@@ -738,7 +738,7 @@ void select_and_delete_files_by_number() {
         std::cout << " " << std::endl;
 
         // Prompt user for input
-        char* input = readline("\033[1;94mISO(s) ↵ for \033[1;91mdeletion\033[1;94m (e.g., '1-3', '1 5'), or press ↵ to return:\033[0m\033[1m ");
+        char* input = readline("\033[1;94mISO(s) ↵ for \033[1;91mrm\033[1;94m (e.g., '1-3', '1 5'), or press ↵ to return:\033[0m\033[1m ");
         std::system("clear");
 
         // Check if the user wants to return
@@ -1722,7 +1722,7 @@ void unmountISOs() {
         }
 
         // Prompt user to choose ISOs for unmounting
-        char* input = readline("\033[1;94mISO(s) ↵ for \033[1;92munmount\033[1;94m (e.g., '1-3', '1 5', '00' for all), or press ↵ to return:\033[0m\033[1m ");
+        char* input = readline("\033[1;94mISO(s) ↵ for \033[1;93mumount\033[1;94m (e.g., '1-3', '1 5', '00' for all), or press ↵ to return:\033[0m\033[1m ");
         std::system("clear");
 
         auto start_time = std::chrono::high_resolution_clock::now();
