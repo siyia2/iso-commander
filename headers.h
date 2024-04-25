@@ -25,6 +25,8 @@
 #include <thread>
 #include <unordered_set>
 #include <vector>
+#include <sys/stat.h>
+#include <unistd.h>
 
 
 // Global and shared classes and variables
@@ -33,6 +35,11 @@
 // Get max available CPU cores for global use
 extern unsigned int maxThreads;
 
+// Mutexes for global use
+extern std::mutex Mutex4Low;
+extern std::mutex Mutex4High;
+
+extern bool promptFlag;
 
 // A simple global thread pool for async tasks
 class ThreadPool {
@@ -162,6 +169,13 @@ std::string shell_escape(const std::string& s);
 std::pair<std::string, std::string> extractDirectoryAndFilename(const std::string& path);
 std::string readInputLine(const std::string& prompt);
 
+void select_and_move_files_by_number();
+void handleMoveIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, const std::string& userDestDir);
+void processMoveInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
+
+void select_and_copy_files_by_number();
+void handleCopyIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, const std::string& userDestDir);
+void processCopyInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& movededSet);
 
 //	MOUNTER ELITE
 
@@ -200,7 +214,7 @@ void printIsoFileList(const std::vector<std::string>& isoFiles);
 void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
 
 // Iso cache functions
-void manualRefreshCache();
+void manualRefreshCache(const std::string& initialDir = "");
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& Mutex4Low);
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles);
 void removeNonExistentPathsFromCache();
