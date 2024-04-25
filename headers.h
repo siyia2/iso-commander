@@ -182,20 +182,19 @@ bool isValidLinuxPathFormat(const std::string& path);
 bool fileExists(const std::string& filename);
 
 //	voids
+
+// General
 void select_and_operate_files_by_number(const std::string& operation);
 
 // RM functions
-void select_and_delete_files_by_number();
 void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::unordered_set<std::string>& deletedSet);
 void processDeleteInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
 
 // MV functions
-void select_and_move_files_by_number();
 void handleMoveIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, const std::string& userDestDir);
 void processMoveInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
 
 // CP functions
-void select_and_copy_files_by_number();
 void handleCopyIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, const std::string& userDestDir);
 void processCopyInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& movededSet);
 
