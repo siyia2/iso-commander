@@ -982,40 +982,14 @@ void processCopyInput(const std::string& input, std::vector<std::string>& isoFil
 	
 std::string userDestDir;
 
+// Vector to store selected ISOs for display
+std::vector<std::string> selectedIsos;
+
 // Clear the userDestDir variable
 userDestDir.clear();
 
 // Load history from file
-loadHistory();
-
-// Ask the user for the destination directory
-std::string inputLine = readInputLine("\033[1;94mEnter the destination directory for the selected ISO files or press ↵ to cancel:\n\033[0m\033[1m");
-
-
-// Store the user input in userDestDir
-userDestDir = inputLine; // Here, you had a typo 'inputD' instead of 'inputLine'
-
-// Check if the entered path is valid
-while (true) {
-    std::filesystem::path destPath(userDestDir);
-    if (std::filesystem::exists(destPath)) {
-		// Save history to file
-		saveHistory();
-        break; // Valid path, exit the loop
-    } else {
-        std::cout << "\n\033[1;91mInvalid path. The destination directory does not exist.\033[0m\033[1m" << std::endl;
-        std::cout << "\n\033[1;32mPress Enter to try again...\033[0m\033[1m";
-        std::cin.get();
-        std::system("clear");
-        std::string inputLine = readInputLine("\033[1;94mEnter the destination directory for the selected ISO files or press ↵ to cancel:\n\033[0m\033[1m");
-		 // Check if the user canceled the cache refresh
-        if (inputLine.empty()) {
-            return;
-        }
-        // Store the new user input in userDestDir
-        userDestDir = inputLine;
-    }
-}
+loadHistory();     
            
     // Create an input string stream to tokenize the user input
     std::istringstream iss(input);
@@ -1134,11 +1108,18 @@ while (true) {
     for (size_t i = 0; i < validIndices.size(); i += chunkSize) {
         indexChunks.emplace_back(validIndices.begin() + i, std::min(validIndices.begin() + i + chunkSize, validIndices.end()));
     }
+    
+    // Collect selected ISOs based on valid indices
+    for (const auto& index : validIndices) {
+        if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
+            selectedIsos.push_back(isoFiles[index - 1]);
+        }
+    }
 
      // Display selected moves
     if (!indexChunks.empty()) {
 		std::system("clear");
-        std::cout << "\033[1;94mThe following ISO(s) will be \033[1;91m*MOVED* \033[1;94mto \033[1;93m" << userDestDir << "\033[1;94m:\033[0m\033[1m" << std::endl;
+        std::cout << "\033[1;94mThe following ISO(s) will be \033[1;91m*COPIED* \033[1;94mto ?\033[1;93m" << userDestDir << "\033[1;94m:\033[0m\033[1m" << std::endl;
         std::cout << " " << std::endl;
         for (const auto& chunk : indexChunks) {
             for (const auto& index : chunk) {
@@ -1147,23 +1128,56 @@ while (true) {
             }
         }
     }
+    
+    
+
+    // Collect selected ISOs based on valid indices
+    for (const auto& index : validIndices) {
+        if (index >= 1 && static_cast<size_t>(index) <= isoFiles.size()) {
+            selectedIsos.push_back(isoFiles[index - 1]);
+        }
+    }
+    
+    // Ask the user for the destination directory
+std::string inputLine = readInputLine("\n\033[1;94mEnter the destination directory for the selected ISO files or press ↵ to cancel:\n\033[0m\033[1m");
+
+// Check if the user canceled the cache refresh
+        if (inputLine.empty()) {
+            return;
+        }
+
+
+// Store the user input in userDestDir
+userDestDir = inputLine;
+
+// Check if the entered path is valid
+while (true) {
+std::filesystem::path destPath(userDestDir);
+    if (std::filesystem::exists(destPath)) {
+		// Save history to file
+		saveHistory();
+        break; // Valid path, exit the loop
+    } else {
+        std::cout << "\n\033[1;91mInvalid path. The destination directory does not exist.\033[0m\033[1m" << std::endl;
+        std::cout << "\n\033[1;32mPress Enter to try again...\033[0m\033[1m";
+        std::cin.get();
+        std::system("clear");
+        std::string inputLine = readInputLine("\033[1;94mEnter the destination directory for the selected ISO files or press ↵ to cancel:\n\033[0m\033[1m");
+		
+		// Check if the user canceled the cache refresh
+        if (inputLine.empty()) {
+            return;
+        }
+		
+        // Store the new user input in userDestDir
+        userDestDir = inputLine;
+    }
+}
 
      // Display a message if there are no valid selections for deletion
     if (!uniqueErrorMessages.empty() && indexChunks.empty()) {
         std::cout << " " << std::endl;
         std::cout << "\033[1;91mNo valid selection(s) for move.\033[0m\033[1m" << std::endl;
-    } else {
-        // Prompt for confirmation before proceeding
-        std::string confirmation;
-        std::cout << " " << std::endl;
-        std::cout << "\033[1;94mDo you want to proceed with the \033[1;91mmove\033[1;94m of the above? (y/n):\033[0m\033[1m ";
-        std::getline(std::cin, confirmation);
-
-        // Check if the entered character is not 'Y' or 'y'
-    if (!(confirmation == "y" || confirmation == "Y")) {
-        std::cout << " " << std::endl;
-        std::cout << "\033[1;93mMove aborted by user.\033[0m\033[1m" << std::endl;
-        return;
     } else {
         // Start the timer after user confirmation
         auto start_time = std::chrono::high_resolution_clock::now();
@@ -1237,6 +1251,5 @@ while (true) {
         std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
         std::cin.get();
         
-		}
 	}
 }
