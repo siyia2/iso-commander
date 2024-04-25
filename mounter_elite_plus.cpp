@@ -516,13 +516,13 @@ void manualRefreshCache(const std::string& initialDir) {
         inputLine = readInputLine("\033[1;94mDirectory path(s) ↵ from which to populate the \033[1m\033[1;92mISO Cache\033[94m (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1;94m), or press ↵ to return:\n\033[0m\033[1m");
     }
 
-    if (!inputLine.empty() || std::any_of(inputLine.begin(), inputLine.end(), [](unsigned char c) { return !std::isspace(c); })) {
-		// Save history to file
-		saveHistory();
+    if (!inputLine.empty()) {
+        // Save history to file
+        saveHistory();
     }
 
     // Check if the user canceled the cache refresh
-       if (inputLine.empty() || std::all_of(inputLine.begin(), inputLine.end(), [](unsigned char c) { return std::isspace(c); })) {
+    if (inputLine.empty()) {
         return;
     }
 

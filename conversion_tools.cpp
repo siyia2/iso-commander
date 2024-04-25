@@ -268,7 +268,7 @@ void select_and_convert_files_to_iso() {
     // Read input for directory paths (allow multiple paths separated by semicolons)
     std::string inputPaths = readInputLine("\033[1;94mDirectory path(s) ↵ (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1m\033[1;94m) to search for \033[1m\033[1;92m.bin \033[1;94mand \033[1m\033[1;92m.img\033[1;94m files, or press ↵ to return:\n\033[0m\033[1m");
     
-    if (!inputPaths.empty() || std::any_of(inputPaths.begin(), inputPaths.end(), [](unsigned char c) { return !std::isspace(c); })) {
+     if (!inputPaths.empty()) {
 		// Save history to file
 		saveHistory();
 	}
@@ -905,7 +905,7 @@ void select_and_convert_files_to_iso_mdf() {
     // Read input for directory paths (allow multiple paths separated by semicolons)
     std::string inputPaths = readInputLine("\033[1;94mDirectory path(s) ↵ (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1m\033[1;94m) to search for \033[1m\033[1;92m.mdf\033[1;94m files, or press ↵ to return:\n\033[0m\033[1m");
     
-	if (!inputPaths.empty() || std::any_of(inputPaths.begin(), inputPaths.end(), [](unsigned char c) { return !std::isspace(c); })) {
+     if (!inputPaths.empty()) {
 		// Save history to file
 		saveHistory();
 	}
