@@ -1077,12 +1077,12 @@ void processCopyInput(const std::string& input, std::vector<std::string>& isoFil
         std::lock_guard<std::mutex> highLock(Mutex4High);
         
         for (const auto& chunk : indexChunks) {
-    std::vector<std::string> isoFilesInChunk;
-    for (const auto& index : chunk) {
+		std::vector<std::string> isoFilesInChunk;
+		for (const auto& index : chunk) {
         isoFilesInChunk.push_back(isoFiles[index - 1]);
-    }
-    futures.emplace_back(pool.enqueue(handleCopyIsoFile, isoFilesInChunk, std::ref(isoFiles), userDestDir));
-}
+		}
+		futures.emplace_back(pool.enqueue(handleCopyIsoFile, isoFilesInChunk, std::ref(isoFiles), userDestDir));
+	}
 
         // Wait for all asynchronous tasks to complete
         for (auto& future : futures) {

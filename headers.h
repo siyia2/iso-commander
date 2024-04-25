@@ -275,7 +275,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
 
 void convertBINToISO(const std::string& inputPath);
 void select_and_convert_files_to_iso();
-void processInputBin(const std::string& input, const std::vector<std::string>& fileList);
+void processInputBin(const std::string& input, const std::vector<std::string>& fileList, const std::string& inputPaths);
 bool isCcd2IsoInstalled();
 void printFileListBin(const std::vector<std::string>& fileList);
 
@@ -289,7 +289,7 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
 
 // voids
 
-void processInputMDF(const std::string& input, const std::vector<std::string>& fileList);
+void processInputMDF(const std::string& input, const std::vector<std::string>& fileList, const std::string& inputPaths);
 void convertMDFToISO(const std::string& inputPath);
 void select_and_convert_files_to_iso_mdf();
 bool isMdf2IsoInstalled();

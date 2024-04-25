@@ -267,6 +267,7 @@ void select_and_convert_files_to_iso() {
     
     // Read input for directory paths (allow multiple paths separated by semicolons)
     std::string inputPaths = readInputLine("\033[1;94mDirectory path(s) ↵ (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1m\033[1;94m) to search for \033[1m\033[1;92m.bin \033[1;94mand \033[1m\033[1;92m.img\033[1;94m files, or press ↵ to return:\n\033[0m\033[1m");
+    std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
     
      if (!inputPaths.empty()) {
 		// Save history to file
@@ -352,8 +353,10 @@ void select_and_convert_files_to_iso() {
             }
 
             std::system("clear");
+            std::cout << "\033[1mPlease wait...\n\033[1m" << std::endl;
             // Process user input
-            processInputBin(input, binImgFiles);
+            processInputBin(input, binImgFiles, inputPaths);
+            std::cout << " " << std::endl;	
             std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
             std::cin.ignore();
         }
@@ -414,7 +417,7 @@ void printFileListBin(const std::vector<std::string>& fileList) {
 
 
 // Function to process user input and convert selected BIN files to ISO format
-void processInputBin(const std::string& input, const std::vector<std::string>& fileList) {
+void processInputBin(const std::string& input, const std::vector<std::string>& fileList, const std::string& inputPaths) {
 
     // Mutexes to protect the critical sections
     std::mutex indicesMutex;
@@ -587,15 +590,18 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
     for (const auto& errorMessage : errorMessages) {
         std::cout << errorMessage << std::endl;
     }
-    std::cout << " " << std::endl;
+    
+    promptFlag = false;
+    
+    manualRefreshCache(inputPaths);
     
     // Stop the timer after completing the mounting process
     auto end_time = std::chrono::high_resolution_clock::now();
     // Calculate and print the elapsed time
-        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-        // Print the time taken for the entire process in bold with one decimal place
-        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
-        std::cout << " " << std::endl;
+    auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+    std::cout << " " << std::endl;
+    // Print the time taken for the entire process in bold with one decimal place
+    std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
         
 }
 
@@ -904,6 +910,7 @@ void select_and_convert_files_to_iso_mdf() {
 	
     // Read input for directory paths (allow multiple paths separated by semicolons)
     std::string inputPaths = readInputLine("\033[1;94mDirectory path(s) ↵ (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1m\033[1;94m) to search for \033[1m\033[1;92m.mdf\033[1;94m files, or press ↵ to return:\n\033[0m\033[1m");
+    std::cout << "\n\033[1mPlease wait...\033[1m" << std::endl;
     
 	 if (!inputPaths.empty()) {
 		// Save history to file
@@ -988,10 +995,13 @@ void select_and_convert_files_to_iso_mdf() {
         }
 
         std::system("clear");
-            // Process user input
-            processInputMDF(input, mdfMdsFiles);
-            std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
-            std::cin.ignore();
+        std::cout << "\033[1mPlease wait...\n\033[1m" << std::endl;
+        // Process user input
+        processInputMDF(input, mdfMdsFiles, inputPaths);
+        
+        std::cout << " " << std::endl;        
+		std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
+		std::cin.ignore();
 	}
 }
 
@@ -1053,7 +1063,7 @@ void printFileListMdf(const std::vector<std::string>& fileList) {
 
 
 // Function to process user input and convert selected MDF files to ISO format
-void processInputMDF(const std::string& input, const std::vector<std::string>& fileList) {
+void processInputMDF(const std::string& input, const std::vector<std::string>& fileList, const std::string& inputPaths) {
 
     // Mutexes to protect the critical sections
     std::mutex indicesMutex;
@@ -1229,15 +1239,18 @@ void processInputMDF(const std::string& input, const std::vector<std::string>& f
     for (const auto& errorMessage : errorMessages) {
         std::cout << errorMessage << std::endl;
     }
-    std::cout << " " << std::endl;
+    
+    promptFlag = false;
+    
+    manualRefreshCache(inputPaths);
     
     // Stop the timer after completing the mounting process
     auto end_time = std::chrono::high_resolution_clock::now();
     // Calculate and print the elapsed time
-        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-        // Print the time taken for the entire process in bold with one decimal place
-        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
-        std::cout << " " << std::endl;
+    auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+    std::cout << " " << std::endl;
+    // Print the time taken for the entire process in bold with one decimal place
+    std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
 }
 
 

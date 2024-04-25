@@ -504,9 +504,10 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 
 // Function for manual cache refresh
 void manualRefreshCache(const std::string& initialDir) {
+    if (promptFlag){
     std::system("clear");
     gapPrinted = false;
-
+	}
     // Load history from file
     loadHistory();
 
@@ -567,7 +568,7 @@ void manualRefreshCache(const std::string& initialDir) {
     }
 
     // Check if any invalid paths were encountered and add a gap
-    if (!invalidPaths.empty() || !validPaths.empty()) {
+    if ((!invalidPaths.empty() || !validPaths.empty()) && promptFlag) {
         std::cout << " " << std::endl;
     }
 
@@ -576,7 +577,7 @@ void manualRefreshCache(const std::string& initialDir) {
         std::cout << invalidPath << std::endl;
     }
 
-    if (!invalidPaths.empty() && !validPaths.empty()) {
+    if (!invalidPaths.empty() && !validPaths.empty() && promptFlag) {
         std::cout << " " << std::endl;
     }
 
