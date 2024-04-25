@@ -691,7 +691,7 @@ loadHistory();
         if (isValidLinuxPathFormat(inputLine)) {
             // Valid path, save history and exit the loop
             userDestDir = inputLine;
-            if (!inputLine.empty() && std::all_of(inputLine.begin(), inputLine.end(), [](char c) { return !std::isspace(static_cast<unsigned char>(c)); })) {
+            if (!inputLine.empty()) {
             saveHistory();
 		}
             break;
@@ -827,9 +827,9 @@ void handleCopyIsoFile(const std::vector<std::string>& isoFiles, std::vector<std
                 // If the move batch reaches the batch size, or no more ISO files to process
                 if (isoFilesToCopy.size() == batchSize || &iso == &isoFiles.back()) {
                     // Construct the move command for the entire batch
-                    std::string copyCommand = "mkdir -p " + userDestDir + " && cp -f ";
+                    std::string copyCommand = "mkdir -p " + shell_escape(userDestDir) + " && cp -f ";
                     for (const auto& copyIso : isoFilesToCopy) {
-                        copyCommand += shell_escape(copyIso) + " " + userDestDir + " ";
+                        copyCommand += shell_escape(copyIso) + " " + shell_escape(userDestDir) + " ";
                     }
                     copyCommand += "> /dev/null 2>&1";
 
@@ -1041,7 +1041,7 @@ loadHistory();
         if (isValidLinuxPathFormat(inputLine)) {
             // Valid path, save history and exit the loop
             userDestDir = inputLine;
-            if (!inputLine.empty() && std::all_of(inputLine.begin(), inputLine.end(), [](char c) { return !std::isspace(static_cast<unsigned char>(c)); })) {
+            if (!inputLine.empty()) {
             saveHistory();
 		}
             break;
