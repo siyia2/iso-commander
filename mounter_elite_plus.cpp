@@ -516,7 +516,7 @@ void manualRefreshCache(const std::string& initialDir) {
         inputLine = readInputLine("\033[1;94mDirectory path(s) ↵ from which to populate the \033[1m\033[1;92mISO Cache\033[94m (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1;94m), or press ↵ to return:\n\033[0m\033[1m");
     }
 
-    if (!inputLine.empty()) {
+    if (!inputLine.empty() && std::all_of(inputLine.begin(), inputLine.end(), [](char c) { return !std::isspace(static_cast<unsigned char>(c)); })) {
         // Save history to file
         saveHistory();
     }

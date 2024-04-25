@@ -715,7 +715,9 @@ loadHistory();
         if (std::filesystem::exists(destPath)) {
             // Valid path, save history and exit the loop
             userDestDir = inputLine;
+            if (!inputLine.empty() && std::all_of(inputLine.begin(), inputLine.end(), [](char c) { return !std::isspace(static_cast<unsigned char>(c)); })) {
             saveHistory();
+		}
             break;
         } else {
             // Invalid path, prompt user to try again
@@ -1142,7 +1144,9 @@ loadHistory();
         if (std::filesystem::exists(destPath)) {
             // Valid path, save history and exit the loop
             userDestDir = inputLine;
+            if (!inputLine.empty() && std::all_of(inputLine.begin(), inputLine.end(), [](char c) { return !std::isspace(static_cast<unsigned char>(c)); })) {
             saveHistory();
+		}
             break;
         } else {
             // Invalid path, prompt user to try again
