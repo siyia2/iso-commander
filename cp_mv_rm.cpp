@@ -88,7 +88,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
         std::system("clear");
 
         // Display header message
-        std::cout << operationColor << " ! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\033[0m\033[1m" << std::endl;
+        std::cout << "\033[1;93m! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\033[0m\033[1m" << std::endl;
         std::cout << "\033[1;92m         	CHANGES TO CACHED ISOS ARE REFLECTED AUTOMATICALLY\n\033[0m\033[1m" << std::endl;
 
         // Reload ISO files (in case cache was updated)
@@ -514,7 +514,7 @@ void handleMoveIsoFile(const std::vector<std::string>& isoFiles, std::vector<std
 					} else {
 					for (const auto& iso : isoFilesToMove) {
 						auto [isoDir, isoFilename] = extractDirectoryAndFilename(iso);
-						std::string errorMessageInfo = "\033[1;91mError moving: \033[0m\033[1m'" + isoDir + "/" + isoFilename + "'\033[1;91m to \033[1;94m'" + userDestDir + "'\033[0m\033[1m";
+						std::string errorMessageInfo = "\033[1;91mError moving: \033[1;93m'" + isoDir + "/" + isoFilename + "'\033[1;91m to \033[1;94m'" + userDestDir + "'\033[0m\033[1m";
 						moveErrors.push_back(errorMessageInfo);
 					}
 				}
@@ -827,14 +827,14 @@ void handleCopyIsoFile(const std::vector<std::string>& isoFiles, std::vector<std
                 // If the move batch reaches the batch size, or no more ISO files to process
                 if (isoFilesToCopy.size() == batchSize || &iso == &isoFiles.back()) {
                     // Construct the move command for the entire batch
-                    std::string moveCommand = "mkdir -p " + userDestDir + " && cp ";
+                    std::string copyCommand = "mkdir -p " + userDestDir + " && cp -f ";
                     for (const auto& copyIso : isoFilesToCopy) {
-                        moveCommand += shell_escape(copyIso) + " " + userDestDir + " ";
+                        copyCommand += shell_escape(copyIso) + " " + userDestDir + " ";
                     }
-                    moveCommand += "> /dev/null 2>&1";
+                    copyCommand += "> /dev/null 2>&1";
 
                     // Execute the move command
-                    int result = std::system(moveCommand.c_str());
+                    int result = std::system(copyCommand.c_str());
 
                     // Process move results
                     if (result == 0) {
@@ -846,7 +846,7 @@ void handleCopyIsoFile(const std::vector<std::string>& isoFiles, std::vector<std
 					} else {
 						for (const auto& iso : isoFilesToCopy) {
 							auto [isoDir, isoFilename] = extractDirectoryAndFilename(iso);
-							std::string errorMessageInfo = "\033[1;91mError copyin: \033[0m\033[1m'" + isoDir + "/" + isoFilename + "'\033[1;91m to '" + userDestDir + "'\033[0m\033[1m";
+							std::string errorMessageInfo = "\033[1;91mError copying: \033[1;93m'" + isoDir + "/" + isoFilename + "'\033[1;91m to '" + userDestDir + "'\033[0m\033[1m";
 							copyErrors.push_back(errorMessageInfo);
 						}
 					}
