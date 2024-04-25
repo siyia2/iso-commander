@@ -703,7 +703,7 @@ loadHistory();
         }
 
         // Ask for the destination directory
-        std::string inputLine = readInputLine("\n\033[1;94mEnter the destination directory for selected ISO file(s) or press ↵ to cancel:\n\033[0m\033[1m");
+        std::string inputLine = readInputLine("\n\033[1;94mDestination directory ↵ for selected ISO file(s) or press ↵ to cancel:\n\033[0m\033[1m");
 
         // Check if the user canceled
         if (inputLine.empty()) {
@@ -1132,7 +1132,7 @@ loadHistory();
         }
 
         // Ask for the destination directory
-        std::string inputLine = readInputLine("\n\033[1;94mEnter the destination directory for selected ISO file(s) or press ↵ to cancel:\n\033[0m\033[1m");
+        std::string inputLine = readInputLine("\n\033[1;94mDestination directory ↵ for selected ISO file(s) or press ↵ to cancel:\n\033[0m\033[1m");
 
         // Check if the user canceled
         if (inputLine.empty()) {
