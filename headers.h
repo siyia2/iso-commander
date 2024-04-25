@@ -34,18 +34,10 @@
 
 // Get max available CPU cores for global use
 extern unsigned int maxThreads;
+
+// Mutexes for global use
 extern std::mutex Mutex4Low;
 extern std::mutex Mutex4High;
-
-// Vector to store moved ISOs
-extern std::vector<std::string> movedIsos;
-// Vector to store errors for moved ISOs
-extern std::vector<std::string> moveErrors;
-
-// Vector to store copied ISOs
-extern std::vector<std::string> copiedIsos;
-// Vector to store errors for copied ISOs
-extern std::vector<std::string> copyErrors;
 
 extern bool promptFlag;
 
