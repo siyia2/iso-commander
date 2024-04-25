@@ -176,12 +176,13 @@ bool isValidLinuxPathFormat(const std::string& path);
 //	bools
 
 // General
-bool isValidLinuxPathFormat(const std::string& path)
+bool isValidLinuxPathFormat(const std::string& path);
 
 // RM functions
 bool fileExists(const std::string& filename);
 
 //	voids
+void select_and_operate_files_by_number(const std::string& operation);
 
 // RM functions
 void select_and_delete_files_by_number();
