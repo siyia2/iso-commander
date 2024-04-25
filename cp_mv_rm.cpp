@@ -1103,21 +1103,6 @@ loadHistory();
         }
     }
 
-     // Display selected moves
-    if (!indexChunks.empty()) {
-		std::system("clear");
-        std::cout << "\033[1;94mThe following ISO(s) will be \033[1;91m*COPIED* \033[1;94mto ?\033[1;93m" << userDestDir << "\033[1;94m:\033[0m\033[1m" << std::endl;
-        std::cout << " " << std::endl;
-        for (const auto& chunk : indexChunks) {
-            for (const auto& index : chunk) {
-                auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFiles[index - 1]);
-                std::cout << "\033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[0m\033[1m" << std::endl;
-            }
-        }
-    }
-    
-    
-
     while (true) {
         std::system("clear");
 
