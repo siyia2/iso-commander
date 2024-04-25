@@ -171,10 +171,8 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(const std::strin
 std::string readInputLine(const std::string& prompt);
 
 void select_and_move_files_by_number();
-void handleMoveIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy);
+void handleMoveIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, const std::string& userDestDir);
 void processMoveInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
-std::string getDestDir();
-bool isDirectory(const std::string& path);
 
 //	MOUNTER ELITE
 

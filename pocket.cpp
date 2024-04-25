@@ -1,53 +1,5 @@
 #include "headers.h"
 
-bool isDirectory(const std::string& path) {
-    struct stat info;
-    if (stat(path.c_str(), &info) != 0) {
-        return false; // Failed to get file status
-    }
-    return (info.st_mode & S_IFDIR); // Check if it's a directory
-}
-
-std::string getDestDir() {
-    std::string destDir = "~/PocketISO1";
-    std::string configDir = "~/.config/mounter-elite-plus/config";
-    std::string configPath;
-
-    // Replace '~' with the user's home directory
-    const char* homeDir = getenv("HOME");
-    if (homeDir != nullptr) {
-        configPath = std::string(homeDir) + configDir.substr(1);
-    } else {
-        std::cerr << "Failed to get home directory." << std::endl;
-        return destDir;
-    }
-
-    // Check if the config file exists
-    if (fileExists(configPath)) {
-        // Read the stored path from the file
-        std::ifstream file(configPath);
-        std::getline(file, destDir);
-        file.close();
-    } else {
-        // Prompt the user to enter a directory
-        std::cout << "The default directory '~/PocketISO' doesn't exist. Please enter a directory path to move the ISOs (e.g., /path/to/directory): ";
-        std::getline(std::cin, destDir);
-
-        // Create the config directory if it doesn't exist
-        std::string configDirPath = destDir.substr(0, destDir.find_last_of('/'));
-        if (!isDirectory(configDirPath)) {
-            std::string createDirCommand = "mkdir -p " + configDirPath;
-            std::system(createDirCommand.c_str());
-        }
-
-        // Store the chosen path in the config file
-        std::ofstream file(configPath, std::ios::out);
-        file << destDir;
-        file.close();
-    }
-
-    return destDir;
-}
 
 // Function to select and delete ISO files by number
 void select_and_move_files_by_number() {
@@ -98,8 +50,10 @@ void select_and_move_files_by_number() {
         std::cout << " " << std::endl;
 
         // Prompt user for input
-        char* input = readline("\033[1;94mISO(s) ↵ for \033[1;91mmv\033[1;94m (e.g., '1-3', '1 5'), or press ↵ to return:\033[0m\033[1m ");
-        std::system("clear");
+char* input = readline("\033[1;94mISO(s) ↵ for \033[1;91mmv\033[1;94m (e.g., '1-3', '1 5'), or press ↵ to return:\033[0m\033[1m ");
+
+
+std::system("clear");
 
         // Check if the user wants to return
         if (input[0] == '\0') {
@@ -121,16 +75,12 @@ void select_and_move_files_by_number() {
             std::cin.get();
             break;
         }
-
-        std::cout << " " << std::endl;
-        std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
-        std::cin.get();
     }
 }
 
 
 // Function to handle the deletion of ISO files in batches
-void handleMoveIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy) {
+void handleMoveIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, const std::string& userDestDir) {
     // Lock the global mutex for synchronization
     std::lock_guard<std::mutex> lowLock(Mutex4Low);
     
@@ -152,8 +102,6 @@ void handleMoveIsoFile(const std::vector<std::string>& isoFiles, std::vector<std
 	// Declare the isoFilesToMove vector
     std::vector<std::string> isoFilesToMove;
     
-        std::string destDir = getDestDir();
-    
 // Process each ISO file
     for (const auto& iso : isoFiles) {
         auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(iso);
@@ -170,9 +118,9 @@ void handleMoveIsoFile(const std::vector<std::string>& isoFiles, std::vector<std
                 // If the move batch reaches the batch size, or no more ISO files to process
                 if (isoFilesToMove.size() == batchSize || &iso == &isoFiles.back()) {
                     // Construct the move command for the entire batch
-                    std::string moveCommand = "mkdir -p " + destDir + " && mv ";
+                    std::string moveCommand = "mkdir -p " + userDestDir + " && mv ";
                     for (const auto& moveIso : isoFilesToMove) {
-                        moveCommand += shell_escape(moveIso) + " " + destDir + " ";
+                        moveCommand += shell_escape(moveIso) + " " + userDestDir + " ";
                     }
                     moveCommand += "> /dev/null 2>&1";
 
@@ -183,13 +131,13 @@ void handleMoveIsoFile(const std::vector<std::string>& isoFiles, std::vector<std
                     if (result == 0) {
                            for (const auto& iso : isoFilesToMove) {
         auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(iso);
-        std::string movedIsoInfo = "\033[1;92mMoved: \033[1;91m'" + isoDirectory + "/" + isoFilename + "'\033[1;92m to \033[1;91m'" + destDir + "'\033[0m\033[1m";
+        std::string movedIsoInfo = "\033[1;92mMoved: \033[1;91m'" + isoDirectory + "/" + isoFilename + "'\033[1;92m to \033[1;91m'" + userDestDir + "'\033[0m\033[1m";
         movedIsos.push_back(movedIsoInfo);
     }
 } else {
     for (const auto& iso : isoFilesToMove) {
         auto [isoDir, isoFilename] = extractDirectoryAndFilename(iso);
-        std::string errorMessageInfo = "\033[1;91mError moving: \033[0m\033[1m'" + isoDir + "/" + isoFilename + "'\033[1;95m to \033[1;91m'" + destDir + "'\033[0m\033[1m";
+        std::string errorMessageInfo = "\033[1;91mError moving: \033[0m\033[1m'" + isoDir + "/" + isoFilename + "'\033[1;95m to \033[1;91m'" + userDestDir + "'\033[0m\033[1m";
         movedErrors.push_back(errorMessageInfo);
     }
 }
@@ -208,8 +156,60 @@ void handleMoveIsoFile(const std::vector<std::string>& isoFiles, std::vector<std
 
 
 // Function to process user input for selecting and deleting specific ISO files
-void processMoveInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
-        
+void processMoveInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& movededSet) {
+	
+std::string userDestDir;
+
+// Clear the userDestDir variable
+userDestDir.clear();
+
+// Load history from file
+loadHistory();
+
+// Ask the user for the destination directory
+std::string inputLine = readInputLine("\033[1;94mEnter the destination directory for the selected ISO files or press ↵ to cancel:\n\033[0m\033[1m");
+
+if (!inputLine.empty()) {
+    // Save history to file
+    saveHistory();
+}
+
+// Check if the user canceled the cache refresh
+if (inputLine.empty()) {
+	// Clear history
+    clear_history();
+    return;
+}
+
+// Store the user input in userDestDir
+userDestDir = inputLine; // Here, you had a typo 'inputD' instead of 'inputLine'
+
+// Check if the entered path is valid
+while (true) {
+    std::filesystem::path destPath(userDestDir);
+    if (std::filesystem::exists(destPath)) {
+        break; // Valid path, exit the loop
+    } else {
+        std::cout << "\n\033[1;91mInvalid path. The destination directory does not exist.\033[0m\033[1m" << std::endl;
+        std::cout << "\n\033[1;32mPress Enter to try again...\033[0m\033[1m";
+        std::cin.get();
+        std::system("clear");
+        std::string inputLine = readInputLine("\033[1;94mEnter the destination directory for the selected ISO files or press ↵ to cancel:\n\033[0m\033[1m");
+
+        // Check if the user canceled the cache refresh
+        if (inputLine.empty()) {
+			// Clear history
+			clear_history();
+            return;
+        }
+
+        // Store the new user input in userDestDir
+        userDestDir = inputLine;
+    }
+}
+     // Clear history
+       clear_history();
+           
     // Create an input string stream to tokenize the user input
     std::istringstream iss(input);
 
@@ -330,7 +330,8 @@ void processMoveInput(const std::string& input, std::vector<std::string>& isoFil
 
      // Display selected moves
     if (!indexChunks.empty()) {
-        std::cout << "\033[1;94mThe following ISO(s) will be \033[1;91m*MOVED*\033[1;94m:\033[0m\033[1m" << std::endl;
+		std::system("clear");
+        std::cout << "\033[1;94mThe following ISO(s) will be \033[1;91m*MOVED* \033[1;94mto \033[1;93m" << userDestDir << "\033[1;94m:\033[0m\033[1m" << std::endl;
         std::cout << " " << std::endl;
         for (const auto& chunk : indexChunks) {
             for (const auto& index : chunk) {
@@ -377,7 +378,7 @@ void processMoveInput(const std::string& input, std::vector<std::string>& isoFil
     for (const auto& index : chunk) {
         isoFilesInChunk.push_back(isoFiles[index - 1]);
     }
-    futures.emplace_back(pool.enqueue(handleMoveIsoFile, isoFilesInChunk, std::ref(isoFiles)));
+    futures.emplace_back(pool.enqueue(handleMoveIsoFile, isoFilesInChunk, std::ref(isoFiles), userDestDir));
 }
 
         // Wait for all asynchronous tasks to complete
@@ -416,6 +417,11 @@ void processMoveInput(const std::string& input, std::vector<std::string>& isoFil
         auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
         // Print the time taken for the entire process in bold with one decimal place
         std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
+        
+        std::cout << " " << std::endl;
+        std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
+        std::cin.get();
+        
 		}
 	}
 }
