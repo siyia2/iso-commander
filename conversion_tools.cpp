@@ -267,7 +267,7 @@ void select_and_convert_files_to_iso() {
     
     // Read input for directory paths (allow multiple paths separated by semicolons)
     std::string inputPaths = readInputLine("\033[1;94mDirectory path(s) ↵ (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1m\033[1;94m) to search for \033[1m\033[1;92m.bin \033[1;94mand \033[1m\033[1;92m.img\033[1;94m files, or press ↵ to return:\n\033[0m\033[1m");
-    std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
+    std::cout << "\n\033[1mPlease wait...\033[1m" << std::endl;
     
      if (!inputPaths.empty()) {
 		// Save history to file
