@@ -490,7 +490,7 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
     parallelTraverse(path, newIsoFiles, Mutex4Low);
 
     // Check if the gap has been printed, if not, print it
-    if (!gapPrinted) {
+    if (!gapPrinted && promptFlag) {
         std::cout << " " << std::endl;
         gapPrinted = true; // Set the flag to true to indicate that the gap has been printed
     }
