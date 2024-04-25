@@ -4,7 +4,7 @@ https://github.com/siyia2/mounter_elite
 
 ![2024-04-22-135512_grim](https://github.com/siyia2/mounter-elite-plus/assets/46220960/d642aae7-b21d-4178-b90a-727922517c1d)
 
-State of the art secure and blazing fast terminal `ISO` manager written in C++. All paths are mounted under `/mnt/iso_*` format and conversion results are stored in their respective source directories. `ROOT` access is required to `mount&unmount ISOs`. For best experience use with an SUID:  `sudo chown root:root /usr/bin/mounter_elite_plus;sudo chmod u+s /usr/bin/mounter_elite_plus`
+State of the art secure and blazing fast terminal `ISO` manager written in C++. All paths are mounted under `/mnt/iso_*` format and conversion results are stored in their respective source directories. `ROOT` access is required to `mount&unmount ISOs`. For best experience i recommend setting an SUID:  `sudo chown root:root /usr/bin/mounter_elite_plus;sudo chmod u+s /usr/bin/mounter_elite_plus`
 
 Features:
 * Cached ISO management for reduced disk thrashing.
