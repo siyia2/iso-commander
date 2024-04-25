@@ -493,13 +493,13 @@ void handleMoveIsoFile(const std::vector<std::string>& isoFiles, std::vector<std
                 isoFilesToMove.push_back(iso);
 
                 // If the move batch reaches the batch size, or no more ISO files to process
-                if (isoFilesToMove.size() == batchSize || &iso == &isoFiles.back()) {
-                    // Construct the move command for the entire batch
-                    std::string moveCommand = "mkdir -p " + userDestDir + " && mv ";
+                if (isoFilesToMove.size() == batchSize || &iso == &isoFiles.back()) {                    
+                    // Construct the copy command for the entire batch
+                    std::string moveCommand = "mkdir -p '" + userDestDir + "' && mv ";
                     for (const auto& moveIso : isoFilesToMove) {
-                        moveCommand += shell_escape(moveIso) + " " + userDestDir + " ";
+                        moveCommand += "" + moveIso + "' ";
                     }
-                    moveCommand += "> /dev/null 2>&1";
+                    moveCommand += "'" + userDestDir + "' > /dev/null 2>&1";
 
                     // Execute the move command
                     int result = std::system(moveCommand.c_str());
@@ -826,13 +826,12 @@ void handleCopyIsoFile(const std::vector<std::string>& isoFiles, std::vector<std
 
                 // If the move batch reaches the batch size, or no more ISO files to process
                 if (isoFilesToCopy.size() == batchSize || &iso == &isoFiles.back()) {
-                    // Construct the move command for the entire batch
-                    std::string copyCommand = "mkdir -p " + shell_escape(userDestDir) + " && cp -f ";
+                    // Construct the copy command for the entire batch
+                    std::string copyCommand = "mkdir -p '" + userDestDir + "' && cp -f ";
                     for (const auto& copyIso : isoFilesToCopy) {
-                        copyCommand += shell_escape(copyIso) + " " + shell_escape(userDestDir) + " ";
+                        copyCommand += "" + copyIso + "' ";
                     }
-                    copyCommand += "> /dev/null 2>&1";
-
+                    copyCommand += "'" + userDestDir + "' > /dev/null 2>&1";
                     // Execute the move command
                     int result = std::system(copyCommand.c_str());
 
