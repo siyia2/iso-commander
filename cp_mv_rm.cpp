@@ -89,7 +89,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
         // Display header message
         std::cout << operationColor << " ! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\033[0m\033[1m" << std::endl;
-        std::cout << "\033[1;92m         CHANGES TO CACHED ISOS ARE REFLECTED AUTOMATICALLY\n\033[0m\033[1m" << std::endl;
+        std::cout << "\033[1;92m         	CHANGES TO CACHED ISOS ARE REFLECTED AUTOMATICALLY\n\033[0m\033[1m" << std::endl;
 
         // Reload ISO files (in case cache was updated)
         removeNonExistentPathsFromCache();
@@ -508,7 +508,7 @@ void handleMoveIsoFile(const std::vector<std::string>& isoFiles, std::vector<std
                     if (result == 0) {
                            for (const auto& iso : isoFilesToMove) {
 								auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(iso);
-								std::string movedIsoInfo = "\033[1mMoved: \033[1;93m'" + isoDirectory + "/" + isoFilename + "'\033[1m\033[1m to \033[1;94m'" + userDestDir + "'\033[0m\033[1m";
+								std::string movedIsoInfo = "\033[1mMoved: \033[1;93m'" + isoDirectory + "/" + isoFilename + "'\033[0m\033[1m to \033[1;94m'" + userDestDir + "'\033[0m\033[1m";
 								movedIsos.push_back(movedIsoInfo);
 							}
 					} else {
@@ -839,13 +839,13 @@ void handleCopyIsoFile(const std::vector<std::string>& isoFiles, std::vector<std
                     if (result == 0) {
                            for (const auto& iso : isoFilesToCopy) {
 								auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(iso);
-								std::string movedIsoInfo = "\033[1mMoved: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m\033[1m to \033[1;94m'" + userDestDir + "'\033[0m\033[1m";
+								std::string movedIsoInfo = "\033[1mCopied: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m\033[1m to \033[1;94m'" + userDestDir + "'\033[0m\033[1m";
 								copiedIsos.push_back(movedIsoInfo);
 								}
 					} else {
 						for (const auto& iso : isoFilesToCopy) {
 							auto [isoDir, isoFilename] = extractDirectoryAndFilename(iso);
-							std::string errorMessageInfo = "\033[1;91mError moving: \033[0m\033[1m'" + isoDir + "/" + isoFilename + "'\033[1;91m to '" + userDestDir + "'\033[0m\033[1m";
+							std::string errorMessageInfo = "\033[1;91mError copyin: \033[0m\033[1m'" + isoDir + "/" + isoFilename + "'\033[1;91m to '" + userDestDir + "'\033[0m\033[1m";
 							copyErrors.push_back(errorMessageInfo);
 						}
 					}
