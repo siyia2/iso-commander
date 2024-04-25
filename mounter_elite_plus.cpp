@@ -166,7 +166,7 @@ void submenu1() {
                 break;
             case '4':
 				std::system("clear");
-                select_and_copy_files_by_number();
+                select_and_move_files_by_number();
                 break;
             case '5':
 				std::system("clear");
