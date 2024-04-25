@@ -433,7 +433,8 @@ void select_and_move_files_by_number() {
     while (true) {
 		clearScrollBuffer();
         std::system("clear");
-        std::cout << "\033[1;93m ! ANY CHANGES ARE REFLECTED AUTOMATICALLY !\n\033[0m\033[1m" << std::endl;
+        std::cout << "\033[1;93m ! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\033[0m\033[1m" << std::endl;
+        std::cout << "\033[1;92m 		CHANGES TO CACHED ISOS ARE REFLECTED AUTOMATICALLY\n\033[0m\033[1m" << std::endl;
 
         // Remove non-existent paths from the cache
         removeNonExistentPathsFromCache();
@@ -839,7 +840,8 @@ void select_and_copy_files_by_number() {
     while (true) {
 		clearScrollBuffer();
         std::system("clear");
-        std::cout << "\033[1;93m ! ANY CHANGES ARE REFLECTED AUTOMATICALLY !\n\033[0m\033[1m" << std::endl;
+        std::cout << "\033[1;93m ! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\033[0m\033[1m" << std::endl;
+        std::cout << "\033[1;92m 		CHANGES TO CACHED ISOS ARE REFLECTED AUTOMATICALLY\n\033[0m\033[1m" << std::endl;
 
         // Remove non-existent paths from the cache
         removeNonExistentPathsFromCache();
