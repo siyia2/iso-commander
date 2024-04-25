@@ -48,10 +48,15 @@ bool isValidLinuxPathFormat(const std::string& path) {
     return true; // Path format is valid
 }
 
+// Main function to select and operate on files by number
 void select_and_operate_files_by_number(const std::string& operation) {
+    // Remove nonexistent paths from cache
     removeNonExistentPathsFromCache();
+    
+    // Load ISO files from cache
     std::vector<std::string> isoFiles = loadCache();
 
+    // If no ISO files are available, display a message and return
     if (isoFiles.empty()) {
         clearScrollBuffer();
         std::system("clear");
@@ -62,56 +67,71 @@ void select_and_operate_files_by_number(const std::string& operation) {
         return;
     }
 
+    // Filter ISO files to keep only those that end with ".iso"
     isoFiles.erase(std::remove_if(isoFiles.begin(), isoFiles.end(), [](const std::string& iso) {
         return !ends_with_iso(iso);
     }), isoFiles.end());
+    
+    // Color code based on the operation
+    std::string operationColor;
+    if (operation == "rm") {
+        operationColor = "\033[1;91m"; // Red for 'rm'
+    } else if (operation == "cp") {
+        operationColor = "\033[1;92m"; // Green for 'cp'
+    } else {
+        operationColor = "\033[1;93m"; // Yellow for other operations
+    }
 
-    std::unordered_set<std::string> operatedSet;
-
+    // Main loop for interacting with ISO files
     while (true) {
         clearScrollBuffer();
         std::system("clear");
 
-        std::string operationColor = (operation == "rm") ? "\033[1;91m" : "\033[1;93m";
-        std::string operationColor = (operation == "cp") ? "\033[1;92m" : "\033[1;93m";
-        std::string operationColor = (operation == "mv") ? "\033[1;93m" : "\033[1;93m";
+        // Display header message
         std::cout << operationColor << " ! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\033[0m\033[1m" << std::endl;
         std::cout << "\033[1;92m         CHANGES TO CACHED ISOS ARE REFLECTED AUTOMATICALLY\n\033[0m\033[1m" << std::endl;
 
+        // Reload ISO files (in case cache was updated)
         removeNonExistentPathsFromCache();
         isoFiles = loadCache();
-
         isoFiles.erase(std::remove_if(isoFiles.begin(), isoFiles.end(), [](const std::string& iso) {
             return !ends_with_iso(iso);
         }), isoFiles.end());
 
+        // Print the list of ISO files
         printIsoFileList(isoFiles);
 
         std::cout << " " << std::endl;
 
+        // Get user input for ISO file selection
         char* input = readline(("\033[1;94mISO(s) ↵ for " + operationColor + operation + "\033[1;94m (e.g., '1-3', '1 5'), or press ↵ to return:\033[0m\033[1m ").c_str());
         std::system("clear");
 
+        // Check if input is empty or whitespace (to return to main menu)
         if (std::isspace(input[0]) || input[0] == '\0') {
             std::cout << "Press Enter to Return" << std::endl;
             break;
         } else if (operation == "rm") {
+            // Process delete operation
             clearScrollBuffer();
             std::system("clear");
             std::unordered_set<std::string> deletedSet;
             processDeleteInput(input, isoFiles, deletedSet);
         } else if (operation == "mv") {
+            // Process move operation
             clearScrollBuffer();
             std::system("clear");
             std::unordered_set<std::string> movedSet;
             processMoveInput(input, isoFiles, movedSet);
         } else if (operation == "cp") {
+            // Process copy operation
             clearScrollBuffer();
             std::system("clear");
             std::unordered_set<std::string> copiedSet;
             processCopyInput(input, isoFiles, copiedSet);
         }
 
+        // If ISO files become empty after operation, display a message and return
         if (isoFiles.empty()) {
             std::cout << " " << std::endl;
             std::cout << "\033[1;93mNo ISO(s) available for " << operation << ".\033[0m\033[1m" << std::endl;
@@ -121,11 +141,15 @@ void select_and_operate_files_by_number(const std::string& operation) {
             break;
         }
 
-        std::cout << " " << std::endl;
-        std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
-        std::cin.get();
+        // Additional message for delete operation to continue
+        if (operation == "rm") {
+            std::cout << " " << std::endl;
+            std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
+            std::cin.get();
+        }
     }
 }
+
 
 
 // RM
@@ -484,7 +508,7 @@ void handleMoveIsoFile(const std::vector<std::string>& isoFiles, std::vector<std
                     if (result == 0) {
                            for (const auto& iso : isoFilesToMove) {
 								auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(iso);
-								std::string movedIsoInfo = "\033[1mMoved: \033[1;93m'" + isoDirectory + "/" + isoFilename + "'\033[1m to \033[1;94m'" + userDestDir + "'\033[0m\033[1m";
+								std::string movedIsoInfo = "\033[1mMoved: \033[1;93m'" + isoDirectory + "/" + isoFilename + "'\033[1m\033[1m to \033[1;94m'" + userDestDir + "'\033[0m\033[1m";
 								movedIsos.push_back(movedIsoInfo);
 							}
 					} else {
@@ -815,7 +839,7 @@ void handleCopyIsoFile(const std::vector<std::string>& isoFiles, std::vector<std
                     if (result == 0) {
                            for (const auto& iso : isoFilesToCopy) {
 								auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(iso);
-								std::string movedIsoInfo = "\033[1mMoved: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[1m to \033[1;94m'" + userDestDir + "'\033[0m\033[1m";
+								std::string movedIsoInfo = "\033[1mMoved: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m\033[1m to \033[1;94m'" + userDestDir + "'\033[0m\033[1m";
 								copiedIsos.push_back(movedIsoInfo);
 								}
 					} else {
