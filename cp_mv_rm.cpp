@@ -298,6 +298,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 			std::cout << "\033[1;91mNo valid selections to be " << operationDescription << ".\033[1;91m" << std::endl;
 			std::cout << "\n\033[1;32mPress Enter to continue...\033[0m\033[1m";
             std::cin.get();
+            clear_history();
             return;
 			}
 				
