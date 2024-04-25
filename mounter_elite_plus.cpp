@@ -516,13 +516,13 @@ void manualRefreshCache(const std::string& initialDir) {
         inputLine = readInputLine("\033[1;94mDirectory path(s) ↵ from which to populate the \033[1m\033[1;92mISO Cache\033[94m (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1;94m), or press ↵ to return:\n\033[0m\033[1m");
     }
 
-    if (!inputLine.empty()) {
-        // Save history to file
-        saveHistory();
+    if (!inputLine.empty() || std::any_of(inputLine.begin(), inputLine.end(), [](unsigned char c) { return !std::isspace(c); })) {
+		// Save history to file
+		saveHistory();
     }
 
     // Check if the user canceled the cache refresh
-    if (inputLine.empty()) {
+       if (inputLine.empty() || std::all_of(inputLine.begin(), inputLine.end(), [](unsigned char c) { return std::isspace(c); })) {
         return;
     }
 
@@ -795,7 +795,7 @@ void select_and_mount_files_by_number() {
         auto start_time = std::chrono::high_resolution_clock::now();
 
         // Check if the user wants to return
-        if (input[0] == '\0') {
+        if (std::isspace(input[0]) || input[0] == '\0') {
             std::cout << "Press Enter to Return" << std::endl;
             break;
         }
@@ -1361,7 +1361,7 @@ void unmountISOs() {
         auto start_time = std::chrono::high_resolution_clock::now();
 
         // Break loop if user presses Enter
-        if (input[0] == '\0') {
+        if (std::isspace(input[0]) || input[0] == '\0') {
             break;
         }
 

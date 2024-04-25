@@ -73,7 +73,7 @@ void select_and_delete_files_by_number() {
         std::system("clear");
 
         // Check if the user wants to return
-        if (input[0] == '\0') {
+        if (std::isspace(input[0]) || input[0] == '\0') {
             std::cout << "Press Enter to Return" << std::endl;
             break;
         } else {
@@ -456,7 +456,7 @@ void select_and_move_files_by_number() {
 		std::system("clear");
 
         // Check if the user wants to return
-        if (input[0] == '\0') {
+        if (std::isspace(input[0]) || input[0] == '\0') {
             std::cout << "Press Enter to Return" << std::endl;
             break;
         } else {
@@ -715,7 +715,9 @@ loadHistory();
         if (std::filesystem::exists(destPath)) {
             // Valid path, save history and exit the loop
             userDestDir = inputLine;
+            if (!inputLine.empty() || std::any_of(inputLine.begin(), inputLine.end(), [](unsigned char c) { return !std::isspace(c); })) {
             saveHistory();
+		}
             break;
         } else {
             // Invalid path, prompt user to try again
@@ -863,7 +865,7 @@ void select_and_copy_files_by_number() {
 		std::system("clear");
 
         // Check if the user wants to return
-        if (input[0] == '\0') {
+        if (std::isspace(input[0]) || input[0] == '\0') {
             std::cout << "Press Enter to Return" << std::endl;
             break;
         } else {
@@ -1142,7 +1144,9 @@ loadHistory();
         if (std::filesystem::exists(destPath)) {
             // Valid path, save history and exit the loop
             userDestDir = inputLine;
+            if (!inputLine.empty() || std::any_of(inputLine.begin(), inputLine.end(), [](unsigned char c) { return !std::isspace(c); })) {
             saveHistory();
+		}
             break;
         } else {
             // Invalid path, prompt user to try again
