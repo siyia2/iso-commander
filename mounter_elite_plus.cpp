@@ -794,7 +794,7 @@ void select_and_mount_files_by_number() {
         // Prompt user for input
         char* input = readline("\033[1;94mISO(s) ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5', '00' for all), or press ↵ to return:\033[0m\033[1m ");
         std::system("clear");
-
+		std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
         // Start the timer
         auto start_time = std::chrono::high_resolution_clock::now();
 
@@ -805,8 +805,7 @@ void select_and_mount_files_by_number() {
         }
 
         // Check if the user wants to mount all ISO files
-        if (std::strcmp(input, "00") == 0) {
-			
+        if (std::strcmp(input, "00") == 0) {			
 			 // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism
 			unsigned int numThreads = std::min(static_cast<int>(isoFiles.size()), static_cast<int>(maxThreads));
 			
@@ -827,6 +826,7 @@ void select_and_mount_files_by_number() {
             // Process user input to select and mount specific ISO files
             processAndMountIsoFiles(input, isoFiles, mountedSet);
         }
+        
         
         if (!mountedFiles.empty()) {
 			std::cout << " " << std::endl;
@@ -1361,6 +1361,7 @@ void unmountISOs() {
         // Prompt user to choose ISOs for unmounting
         char* input = readline("\033[1;94mISO(s) ↵ for \033[1;93mumount\033[1;94m (e.g., '1-3', '1 5', '00' for all), or press ↵ to return:\033[0m\033[1m ");
         std::system("clear");
+        std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
         auto start_time = std::chrono::high_resolution_clock::now();
 

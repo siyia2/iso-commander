@@ -393,6 +393,7 @@ void processDeleteInput(const std::string& input, std::vector<std::string>& isoF
         auto start_time = std::chrono::high_resolution_clock::now();
 
         std::system("clear");
+        std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
         // Detect and use the minimum of available threads and indexChunks to ensure efficient parallelism
 		unsigned int numThreads = std::min(static_cast<int>(indexChunks.size()), static_cast<int>(maxThreads));
         // Create a thread pool with a optimal number of threads
@@ -534,17 +535,17 @@ void handleMoveIsoFile(const std::vector<std::string>& isoFiles, std::vector<std
 
 // Function to process user input for selecting and moving specific ISO files
 void processMoveInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& movededSet) {
-	
-std::string userDestDir;
+	// variable for user specified destination
+	std::string userDestDir;
 
-// Vector to store selected ISOs for display
-std::vector<std::string> selectedIsos;
+	// Vector to store selected ISOs for display
+	std::vector<std::string> selectedIsos;
 
-// Clear the userDestDir variable
-userDestDir.clear();
+	// Clear the userDestDir variable
+	userDestDir.clear();
 
-// Load history from file
-loadHistory();
+	// Load history from file
+	loadHistory();
 
            
     // Create an input string stream to tokenize the user input
@@ -712,6 +713,7 @@ loadHistory();
         auto start_time = std::chrono::high_resolution_clock::now();
 
         std::system("clear");
+        std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
         // Detect and use the minimum of available threads and indexChunks to ensure efficient parallelism
 		unsigned int numThreads = std::min(static_cast<int>(indexChunks.size()), static_cast<int>(maxThreads));
         // Create a thread pool with a optimal number of threads
@@ -866,16 +868,17 @@ void handleCopyIsoFile(const std::vector<std::string>& isoFiles, std::vector<std
 // Function to process user input for selecting and deleting specific ISO files
 void processCopyInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& movededSet) {
 	
-std::string userDestDir;
+	// variable for user specified destination
+	std::string userDestDir;
 
-// Vector to store selected ISOs for display
-std::vector<std::string> selectedIsos;
+	// Vector to store selected ISOs for display
+	std::vector<std::string> selectedIsos;
 
-// Clear the userDestDir variable
-userDestDir.clear();
+	// Clear the userDestDir variable
+	userDestDir.clear();
 
-// Load history from file
-loadHistory();     
+	// Load history from file
+	loadHistory();     
            
     // Create an input string stream to tokenize the user input
     std::istringstream iss(input);
@@ -1061,6 +1064,7 @@ loadHistory();
         auto start_time = std::chrono::high_resolution_clock::now();
 
         std::system("clear");
+        std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
         // Detect and use the minimum of available threads and indexChunks to ensure efficient parallelism
 		unsigned int numThreads = std::min(static_cast<int>(indexChunks.size()), static_cast<int>(maxThreads));
         // Create a thread pool with a optimal number of threads
