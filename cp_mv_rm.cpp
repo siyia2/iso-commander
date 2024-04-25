@@ -162,6 +162,8 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
 	// Load history from file
 	loadHistory();
+	
+	bool isCopy;
      
     // Create an input string stream to tokenize the user input
     std::istringstream iss(input);
@@ -340,6 +342,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         auto start_time = std::chrono::high_resolution_clock::now();
 
         std::system("clear");
+        std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
         // Detect and use the minimum of available threads and indexChunks to ensure efficient parallelism
         unsigned int numThreads = std::min(static_cast<int>(indexChunks.size()), static_cast<int>(maxThreads));
         // Create a thread pool with a optimal number of threads
@@ -357,9 +360,11 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
                 isoFilesInChunk.push_back(isoFiles[index - 1]);
             }
             if (isMove) {
-                futures.emplace_back(pool.enqueue(handleMoveIsoFile, isoFilesInChunk, std::ref(isoFiles), userDestDir));
+				isCopy = false;
+                futures.emplace_back(pool.enqueue(handleIsoFileOperation, isoFilesInChunk, std::ref(isoFiles), userDestDir, isCopy));
             } else {
-                futures.emplace_back(pool.enqueue(handleCopyIsoFile, isoFilesInChunk, std::ref(isoFiles), userDestDir));
+				isCopy = true;
+                futures.emplace_back(pool.enqueue(handleIsoFileOperation, isoFilesInChunk, std::ref(isoFiles), userDestDir, isCopy));
             }
         }
 
@@ -369,9 +374,9 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         }
 
 
-    // Print all operated files and errors
-    clearScrollBuffer();
-    std::system("clear");
+		// Print all operated files and errors
+		clearScrollBuffer();
+		std::system("clear");
         
         if (!operationIsos.empty()) {
             std::cout << " " << std::endl;
@@ -718,108 +723,30 @@ void processDeleteInput(const std::string& input, std::vector<std::string>& isoF
 // MV
 
 // Function to handle the deletion of ISO files in batches
-void handleMoveIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, const std::string& userDestDir) {
+void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, const std::string& userDestDir, bool isCopy) {
     // Lock the global mutex for synchronization
     std::lock_guard<std::mutex> lowLock(Mutex4Low);
     
     // Determine batch size based on the number of isoDirs
     size_t batchSize = 1;
     if (isoFiles.size() > 100000 && isoFiles.size() > maxThreads) {
-		batchSize = 100;
-	} else if (isoFiles.size() > 10000 && isoFiles.size() > maxThreads) {
-		batchSize = 50;
-	} else if (isoFiles.size() > 1000 && isoFiles.size() > maxThreads) {
-		batchSize = 25;
-	} else if (isoFiles.size() > 100 && isoFiles.size() > maxThreads) {
-    batchSize = 10;
-	} else if (isoFiles.size() > 50 && isoFiles.size() > maxThreads) {
-		batchSize = 5;
-	} else if (isoFiles.size() > maxThreads) {
-    batchSize = 2;
-	}
-	// Declare the isoFilesToMove vector
-    std::vector<std::string> isoFilesToMove;
-    
-// Process each ISO file
-    for (const auto& iso : isoFiles) {
-        auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(iso);
-
-        // Check if the ISO file is in the cache
-        auto it = std::find(isoFilesCopy.begin(), isoFilesCopy.end(), iso);
-
-        if (it != isoFilesCopy.end()) {
-            // Check if the file exists before attempting to move
-            if (fileExists(iso)) {
-                // Add the ISO file to the move batch
-                isoFilesToMove.push_back(iso);
-
-                // If the move batch reaches the batch size, or no more ISO files to process
-                if (isoFilesToMove.size() == batchSize || &iso == &isoFiles.back()) {
-                    // Construct the move command for the entire batch
-                    std::string moveCommand = "mkdir -p " + shell_escape(userDestDir) + " && mv ";
-                    for (const auto& moveIso : isoFilesToMove) {
-                        moveCommand += shell_escape(moveIso) + " " + shell_escape(userDestDir) + " ";
-                    }
-                    moveCommand += "> /dev/null 2>&1";
-                    
-                    // Execute the move command
-                    int result = std::system(moveCommand.c_str());
-
-                    // Process move results
-                    if (result == 0) {
-                           for (const auto& iso : isoFilesToMove) {
-								auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(iso);
-								std::string movedIsoInfo = "\033[1mMoved: \033[1;93m'" + isoDirectory + "/" + isoFilename + "'\033[0m\033[1m to \033[1;94m'" + userDestDir + "'\033[0m\033[1m";
-								operationIsos.push_back(movedIsoInfo);
-							}
-					} else {
-					for (const auto& iso : isoFilesToMove) {
-						auto [isoDir, isoFilename] = extractDirectoryAndFilename(iso);
-						std::string errorMessageInfo = "\033[1;91mError moving: \033[1;93m'" + isoDir + "/" + isoFilename + "'\033[1;91m to \033[1;94m'" + userDestDir + "'\033[0m\033[1m";
-						operationErrors.push_back(errorMessageInfo);
-					}
-				}
-
-                    // Clear the move batch for the next set
-                    isoFilesToMove.clear();
-                }
-            } else {
-                std::cout << "\033[1;35mFile not found: \033[0m\033[1m'" << isoDirectory << "/" << isoFilename << "'\033[1;95m.\033[0m\033[1m" << std::endl;
-            }
-        } else {
-            std::cout << "\033[1;93mFile not found in cache: \033[0m\033[1m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m.\033[0m\033[1m" << std::endl;
-        }
+        batchSize = 100;
+    } else if (isoFiles.size() > 10000 && isoFiles.size() > maxThreads) {
+        batchSize = 50;
+    } else if (isoFiles.size() > 1000 && isoFiles.size() > maxThreads) {
+        batchSize = 25;
+    } else if (isoFiles.size() > 100 && isoFiles.size() > maxThreads) {
+        batchSize = 10;
+    } else if (isoFiles.size() > 50 && isoFiles.size() > maxThreads) {
+        batchSize = 5;
+    } else if (isoFiles.size() > maxThreads) {
+        batchSize = 2;
     }
-}
 
-
-// CP
-
-
-// Function to handle the copy of ISO files in batches
-void handleCopyIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, const std::string& userDestDir) {
-    // Lock the global mutex for synchronization
-    std::lock_guard<std::mutex> lowLock(Mutex4Low);
+    // Declare the isoFilesToOperate vector
+    std::vector<std::string> isoFilesToOperate;
     
-    // Determine batch size based on the number of isoDirs
-    size_t batchSize = 1;
-    if (isoFiles.size() > 100000 && isoFiles.size() > maxThreads) {
-		batchSize = 100;
-	} else if (isoFiles.size() > 10000 && isoFiles.size() > maxThreads) {
-		batchSize = 50;
-	} else if (isoFiles.size() > 1000 && isoFiles.size() > maxThreads) {
-		batchSize = 25;
-	} else if (isoFiles.size() > 100 && isoFiles.size() > maxThreads) {
-    batchSize = 10;
-	} else if (isoFiles.size() > 50 && isoFiles.size() > maxThreads) {
-		batchSize = 5;
-	} else if (isoFiles.size() > maxThreads) {
-    batchSize = 2;
-	}
-	// Declare the isoFilesToMove vector
-    std::vector<std::string> isoFilesToCopy;
-    
-	// Process each ISO file
+    // Process each ISO file
     for (const auto& iso : isoFiles) {
         auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(iso);
 
@@ -827,39 +754,48 @@ void handleCopyIsoFile(const std::vector<std::string>& isoFiles, std::vector<std
         auto it = std::find(isoFilesCopy.begin(), isoFilesCopy.end(), iso);
 
         if (it != isoFilesCopy.end()) {
-            // Check if the file exists before attempting to move
+            // Check if the file exists before attempting the operation
             if (fileExists(iso)) {
-                // Add the ISO file to the move batch
-                isoFilesToCopy.push_back(iso);
+                // Add the ISO file to the operation batch
+                isoFilesToOperate.push_back(iso);
 
-                // If the copy batch reaches the batch size, or no more ISO files to process
-                if (isoFilesToCopy.size() == batchSize || &iso == &isoFiles.back()) {
-                    // Construct the copy command for the entire batch
-                    std::string copyCommand = "mkdir -p " + shell_escape(userDestDir) + " && cp -f ";
-                    for (const auto& copyIso : isoFilesToCopy) {
-                        copyCommand += shell_escape(copyIso) + " " + shell_escape(userDestDir) + " ";
+                // If the operation batch reaches the batch size, or no more ISO files to process
+                if (isoFilesToOperate.size() == batchSize || &iso == &isoFiles.back()) {
+                    // Construct the operation command for the entire batch
+                    std::string operationCommand = "mkdir -p " + shell_escape(userDestDir) + " && ";
+                    operationCommand += (isCopy ? "cp -f " : "mv ");
+                    for (const auto& operateIso : isoFilesToOperate) {
+                        operationCommand += shell_escape(operateIso) + " " + shell_escape(userDestDir) + " ";
                     }
-                    copyCommand += "> /dev/null 2>&1";
-                    // Execute the move command
-                    int result = std::system(copyCommand.c_str());
+                    operationCommand += "> /dev/null 2>&1";
+                    
+                    // Execute the operation command
+                    int result = std::system(operationCommand.c_str());
+                    
+                    std::ostringstream oss;
+					std::string errorMessageInfo;
 
-                    // Process move results
+                    // Process operation results
                     if (result == 0) {
-                           for (const auto& iso : isoFilesToCopy) {
-								auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(iso);
-								std::string movedIsoInfo = "\033[1mCopied: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m\033[1m to \033[1;94m'" + userDestDir + "'\033[0m\033[1m";
-								operationIsos.push_back(movedIsoInfo);
-								}
-					} else {
-						for (const auto& iso : isoFilesToCopy) {
+                        for (const auto& iso : isoFilesToOperate) {
+							auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(iso);
+							oss.str("");
+							oss << "\033[1m" << (isCopy ? "Copied" : "Moved") << ": \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[0m\033[1m to \033[1;94m'" << userDestDir << "'\033[0m\033[1m";
+							std::string operationInfo = oss.str();
+							operationIsos.push_back(operationInfo);
+						}
+                    } else {
+                        for (const auto& iso : isoFilesToOperate) {
 							auto [isoDir, isoFilename] = extractDirectoryAndFilename(iso);
-							std::string errorMessageInfo = "\033[1;91mError copying: \033[1;93m'" + isoDir + "/" + isoFilename + "'\033[1;91m to '" + userDestDir + "'\033[0m\033[1m";
+							oss.str("");
+							oss << "\033[1;91mError " << (isCopy ? "copying" : "moving") << ": \033[1;93m'" << isoDir << "/" << isoFilename << "'\033[1;91m to '" << userDestDir << "'\033[0m\033[1m";
+							errorMessageInfo = oss.str();
 							operationErrors.push_back(errorMessageInfo);
 						}
-					}
+                    }
 
-                    // Clear the move batch for the next set
-                    isoFilesToCopy.clear();
+                    // Clear the operation batch for the next set
+                    isoFilesToOperate.clear();
                 }
             } else {
                 std::cout << "\033[1;35mFile not found: \033[0m\033[1m'" << isoDirectory << "/" << isoFilename << "'\033[1;95m.\033[0m\033[1m" << std::endl;
