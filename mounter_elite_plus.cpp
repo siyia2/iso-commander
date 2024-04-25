@@ -176,8 +176,8 @@ void submenu1() {
             operation = "cp";
             select_and_operate_files_by_number(operation);
             break;
-    }
-}
+			}
+		}
     }
 }
 
