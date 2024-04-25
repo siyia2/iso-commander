@@ -17,7 +17,11 @@ std::vector<std::string> copiedIsos;
 std::vector<std::string> copyErrors;
 
 
-void select_and_operate_files_by_number(const std::string& operation) {
+// RM
+
+
+// Function to select and delete ISO files by number
+void select_and_delete_files_by_number() {
     // Remove non-existent paths from the cache
     removeNonExistentPathsFromCache();
 
@@ -26,9 +30,9 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
     // Check if the cache is empty
     if (isoFiles.empty()) {
-        clearScrollBuffer();
+		clearScrollBuffer();
         std::system("clear");
-        std::cout << "\033[1;93mNo ISO(s) available for " << operation << ".\033[0m\033[1m" << std::endl;
+        std::cout << "\033[1;93mNo ISO(s) available for deletion.\033[0m\033[1m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
         std::cin.get();
@@ -40,15 +44,14 @@ void select_and_operate_files_by_number(const std::string& operation) {
         return !ends_with_iso(iso);
     }), isoFiles.end());
 
-    // Set to track operated ISO files
-    std::unordered_set<std::string> operatedSet;
+    // Set to track deleted ISO files
+    std::unordered_set<std::string> deletedSet;
 
-    // Main loop for selecting and operating on ISO files
+    // Main loop for selecting and deleting ISO files
     while (true) {
-        clearScrollBuffer();
+		clearScrollBuffer();
         std::system("clear");
-        std::cout << "\033[1;93m ! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\033[0m\033[1m" << std::endl;
-        std::cout << "\033[1;92m         CHANGES TO CACHED ISOS ARE REFLECTED AUTOMATICALLY\n\033[0m\033[1m" << std::endl;
+        std::cout << "\033[1;93m ! ISO DELETION IS IRREVERSIBLE PROCEED WITH CAUTION !\n\033[0m\033[1m" << std::endl;
 
         // Remove non-existent paths from the cache
         removeNonExistentPathsFromCache();
@@ -66,41 +69,24 @@ void select_and_operate_files_by_number(const std::string& operation) {
         std::cout << " " << std::endl;
 
         // Prompt user for input
-        char* input = readline(("\033[1;94mISO(s) ↵ for \033[1;93m" + operation + "\033[1;94m (e.g., '1-3', '1 5'), or press ↵ to return:\033[0m\033[1m ").c_str());
+        char* input = readline("\033[1;94mISO(s) ↵ for \033[1;91mrm\033[1;94m (e.g., '1-3', '1 5'), or press ↵ to return:\033[0m\033[1m ");
         std::system("clear");
 
         // Check if the user wants to return
         if (std::isspace(input[0]) || input[0] == '\0') {
             std::cout << "Press Enter to Return" << std::endl;
             break;
-        } else if (operation == "rm") {
-            clearScrollBuffer();
-            std::system("clear");
-            // Set to track deleted ISO files
-			std::unordered_set<std::string> deletedSet;
-            // Process user input to select and operate on specific ISO files
+        } else {
+			clearScrollBuffer();
+			std::system("clear");
+            // Process user input to select and delete specific ISO files
             processDeleteInput(input, isoFiles, deletedSet);
-        } else if (operation == "mv") {
-            clearScrollBuffer();
-            std::system("clear");
-            // Set to track deleted ISO files
-			std::unordered_set<std::string> movedSet;
-            // Process user input to select and operate on specific ISO files
-            processMoveInput(input, isoFiles, movedSet);
-        } 
-        else if (operation == "cp") {
-            clearScrollBuffer();
-            std::system("clear");
-            // Set to track deleted ISO files
-			std::unordered_set<std::string> copiedSet;
-            // Process user input to select and operate on specific ISO files
-            processCopyInput(input, isoFiles, copiedSet);
-        } 
+        }
 
         // Check if the ISO file list is empty
         if (isoFiles.empty()) {
             std::cout << " " << std::endl;
-            std::cout << "\033[1;93mNo ISO(s) available for " << operation << ".\033[0m\033[1m" << std::endl;
+            std::cout << "\033[1;93mNo ISO(s) available for deletion.\033[0m\033[1m" << std::endl;
             std::cout << " " << std::endl;
             std::cout << "Press Enter to continue..." << std::endl;
             std::cin.get();
@@ -112,8 +98,6 @@ void select_and_operate_files_by_number(const std::string& operation) {
         std::cin.get();
     }
 }
-
-// RM
 
 
 // Function to check if a file exists
@@ -418,6 +402,83 @@ void processDeleteInput(const std::string& input, std::vector<std::string>& isoF
 // MV
 
 
+// Function to select and move ISO files by number
+void select_and_move_files_by_number() {
+    // Remove non-existent paths from the cache
+    removeNonExistentPathsFromCache();
+
+    // Load ISO files from cache
+    std::vector<std::string> isoFiles = loadCache();
+
+    // Check if the cache is empty
+    if (isoFiles.empty()) {
+		clearScrollBuffer();
+        std::system("clear");
+        std::cout << "\033[1;93mNo ISO(s) available for move.\033[0m\033[1m" << std::endl;
+        std::cout << " " << std::endl;
+        std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
+        std::cin.get();
+        return;
+    }
+
+    // Filter isoFiles to include only entries with ".iso" or ".ISO" extensions
+    isoFiles.erase(std::remove_if(isoFiles.begin(), isoFiles.end(), [](const std::string& iso) {
+        return !ends_with_iso(iso);
+    }), isoFiles.end());
+
+    // Set to track deleted ISO files
+    std::unordered_set<std::string> movedSet;
+
+    // Main loop for selecting and deleting ISO files
+    while (true) {
+		clearScrollBuffer();
+        std::system("clear");
+        std::cout << "\033[1;93m ! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\033[0m\033[1m" << std::endl;
+        std::cout << "\033[1;92m 		CHANGES TO CACHED ISOS ARE REFLECTED AUTOMATICALLY\n\033[0m\033[1m" << std::endl;
+
+        // Remove non-existent paths from the cache
+        removeNonExistentPathsFromCache();
+
+        // Load ISO files from cache
+        isoFiles = loadCache();
+
+        // Filter isoFiles to include only entries with ".iso" or ".ISO" extensions
+        isoFiles.erase(std::remove_if(isoFiles.begin(), isoFiles.end(), [](const std::string& iso) {
+            return !ends_with_iso(iso);
+        }), isoFiles.end());
+
+        printIsoFileList(isoFiles);
+
+        std::cout << " " << std::endl;
+
+        // Prompt user for input
+		char* input = readline("\033[1;94mISO(s) ↵ for \033[1;93mmv\033[1;94m (e.g., '1-3', '1 5'), or press ↵ to return:\033[0m\033[1m ");
+		std::system("clear");
+
+        // Check if the user wants to return
+        if (std::isspace(input[0]) || input[0] == '\0') {
+            std::cout << "Press Enter to Return" << std::endl;
+            break;
+        } else {
+			clearScrollBuffer();
+			std::system("clear");
+            // Process user input to select and delete specific ISO files
+            processMoveInput(input, isoFiles, movedSet);
+        }
+
+        // Check if the ISO file list is empty
+        if (isoFiles.empty()) {
+            std::cout << " " << std::endl;
+            std::cout << "\033[1;93mNo ISO(s) available for deletion.\033[0m\033[1m" << std::endl;
+            std::cout << " " << std::endl;
+            std::cout << "Press Enter to continue..." << std::endl;
+            std::cin.get();
+            break;
+        }
+    }
+}
+
+
 // Function to handle the deletion of ISO files in batches
 void handleMoveIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, const std::string& userDestDir) {
     // Lock the global mutex for synchronization
@@ -699,14 +760,22 @@ loadHistory();
             future.wait();
         }
         
-        clearScrollBuffer();
+        promptFlag=false;
+        
+        // Refresh ISO cache for userDestDir
+		manualRefreshCache(userDestDir);
+		
+		// Clear history
+		clear_history();
+		
+		clearScrollBuffer();
         std::system("clear");
         
         if (!movedIsos.empty()) {
             std::cout << " " << std::endl;
         }
     
-        // Print all deleted files
+        // Print all moved files
         for (const auto& movedIso : movedIsos) {
             std::cout << movedIso << std::endl;
         }
@@ -721,14 +790,6 @@ loadHistory();
         
         // Clear the vector after each iteration
         movedIsos.clear();
-        
-        promptFlag=false;
-        
-        // Refresh ISO cache for userDestDir
-		manualRefreshCache(userDestDir);
-		
-		// Clear history
-		clear_history();
 
         // Stop the timer after completing all deletion tasks
         auto end_time = std::chrono::high_resolution_clock::now();
@@ -748,6 +809,83 @@ loadHistory();
 
 
 // CP
+
+
+// Function to select and copy ISO files by number
+void select_and_copy_files_by_number() {
+    // Remove non-existent paths from the cache
+    removeNonExistentPathsFromCache();
+
+    // Load ISO files from cache
+    std::vector<std::string> isoFiles = loadCache();
+
+    // Check if the cache is empty
+    if (isoFiles.empty()) {
+		clearScrollBuffer();
+        std::system("clear");
+        std::cout << "\033[1;93mNo ISO(s) available for move.\033[0m\033[1m" << std::endl;
+        std::cout << " " << std::endl;
+        std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
+        std::cin.get();
+        return;
+    }
+
+    // Filter isoFiles to include only entries with ".iso" or ".ISO" extensions
+    isoFiles.erase(std::remove_if(isoFiles.begin(), isoFiles.end(), [](const std::string& iso) {
+        return !ends_with_iso(iso);
+    }), isoFiles.end());
+
+    // Set to track deleted ISO files
+    std::unordered_set<std::string> movedSet;
+
+    // Main loop for selecting and deleting ISO files
+    while (true) {
+		clearScrollBuffer();
+        std::system("clear");
+        std::cout << "\033[1;93m ! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\033[0m\033[1m" << std::endl;
+        std::cout << "\033[1;92m 		CHANGES TO CACHED ISOS ARE REFLECTED AUTOMATICALLY\n\033[0m\033[1m" << std::endl;
+
+        // Remove non-existent paths from the cache
+        removeNonExistentPathsFromCache();
+
+        // Load ISO files from cache
+        isoFiles = loadCache();
+
+        // Filter isoFiles to include only entries with ".iso" or ".ISO" extensions
+        isoFiles.erase(std::remove_if(isoFiles.begin(), isoFiles.end(), [](const std::string& iso) {
+            return !ends_with_iso(iso);
+        }), isoFiles.end());
+
+        printIsoFileList(isoFiles);
+
+        std::cout << " " << std::endl;
+
+        // Prompt user for input
+		char* input = readline("\033[1;94mISO(s) ↵ for \033[1;92mcp\033[1;94m (e.g., '1-3', '1 5'), or press ↵ to return:\033[0m\033[1m ");
+		std::system("clear");
+
+        // Check if the user wants to return
+        if (std::isspace(input[0]) || input[0] == '\0') {
+            std::cout << "Press Enter to Return" << std::endl;
+            break;
+        } else {
+			clearScrollBuffer();
+			std::system("clear");
+            // Process user input to select and delete specific ISO files
+            processCopyInput(input, isoFiles, movedSet);
+        }
+
+        // Check if the ISO file list is empty
+        if (isoFiles.empty()) {
+            std::cout << " " << std::endl;
+            std::cout << "\033[1;93mNo ISO(s) available for deletion.\033[0m\033[1m" << std::endl;
+            std::cout << " " << std::endl;
+            std::cout << "Press Enter to continue..." << std::endl;
+            std::cin.get();
+            break;
+        }
+    }
+}
 
 
 // Function to handle the copy of ISO files in batches
@@ -965,6 +1103,21 @@ loadHistory();
         }
     }
 
+     // Display selected moves
+    if (!indexChunks.empty()) {
+		std::system("clear");
+        std::cout << "\033[1;94mThe following ISO(s) will be \033[1;91m*COPIED* \033[1;94mto ?\033[1;93m" << userDestDir << "\033[1;94m:\033[0m\033[1m" << std::endl;
+        std::cout << " " << std::endl;
+        for (const auto& chunk : indexChunks) {
+            for (const auto& index : chunk) {
+                auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFiles[index - 1]);
+                std::cout << "\033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[0m\033[1m" << std::endl;
+            }
+        }
+    }
+    
+    
+
     while (true) {
         std::system("clear");
 
@@ -1036,7 +1189,15 @@ loadHistory();
             future.wait();
         }
         
-        clearScrollBuffer();
+        promptFlag=false;
+        
+        // Refresh ISO cache for userDestDir
+		manualRefreshCache(userDestDir);
+		
+		// Clear history
+		clear_history();
+		
+		clearScrollBuffer();
         std::system("clear");
         
         if (!movedIsos.empty()) {
@@ -1058,14 +1219,6 @@ loadHistory();
         
         // Clear the vector after each iteration
         copiedIsos.clear();
-        
-        promptFlag=false;
-        
-        // Refresh ISO cache for userDestDir
-		manualRefreshCache(userDestDir);
-		
-		// Clear history
-		clear_history();
 
         // Stop the timer after completing all deletion tasks
         auto end_time = std::chrono::high_resolution_clock::now();

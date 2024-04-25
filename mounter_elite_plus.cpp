@@ -477,9 +477,9 @@ bool isValidDirectory(const std::string& path) {
 
 // Function to refresh the cache for a single directory
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles) {
-    
+    if (promptFlag) {
     std::cout << "\033[1;93mProcessing directory path: '" << path << "'.\033[0m" << std::endl;
-
+	}
     std::vector<std::string> newIsoFiles;
 
     // Perform the cache refresh for the directory (e.g., using parallelTraverse)
@@ -493,10 +493,10 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
     std::lock_guard<std::mutex> MedLock(Mutex4Med);
     // Append the new entries to the shared vector
     allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
-
+	if (promptFlag) {
     std::cout << "\033[1;92mProcessed directory path(s): '" << path << "'.\033[0m" << std::endl;
+	}
 }
-
 
 // Function for manual cache refresh
 void manualRefreshCache(const std::string& initialDir) {
