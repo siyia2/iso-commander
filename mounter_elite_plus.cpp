@@ -150,30 +150,34 @@ void submenu1() {
 					
           std::string submenu_choice(submenu_input);
          // Check if the input length is exactly 1
-        if (submenu_choice.empty() || submenu_choice.length() == 1){
-        switch (submenu_choice[0]) {
-            case '1':
-				std::system("clear");
-                select_and_mount_files_by_number();
-                break;
-            case '2':
-				std::system("clear");
-                unmountISOs();
-                break;
-            case '3':
-				std::system("clear");
-                select_and_delete_files_by_number();
-                break;
-            case '4':
-				std::system("clear");
-                select_and_move_files_by_number();
-                break;
-            case '5':
-				std::system("clear");
-                select_and_copy_files_by_number();
-                break;
-			}
-        }
+        if (submenu_choice.empty() || submenu_choice.length() == 1) {
+    std::string operation;
+    switch (submenu_choice[0]) {
+        case '1':
+            std::system("clear");
+            select_and_mount_files_by_number();
+            break;
+        case '2':
+            std::system("clear");
+            unmountISOs();
+            break;
+        case '3':
+            std::system("clear");
+            operation = "rm";
+            select_and_operate_files_by_number(operation);
+            break;
+        case '4':
+            std::system("clear");
+            operation = "mv";
+            select_and_operate_files_by_number(operation);
+            break;
+        case '5':
+            std::system("clear");
+            operation = "cp";
+            select_and_operate_files_by_number(operation);
+            break;
+    }
+}
     }
 }
 

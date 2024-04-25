@@ -73,6 +73,8 @@ void select_and_operate_files_by_number(const std::string& operation) {
         std::system("clear");
 
         std::string operationColor = (operation == "rm") ? "\033[1;91m" : "\033[1;93m";
+        std::string operationColor = (operation == "cp") ? "\033[1;92m" : "\033[1;93m";
+        std::string operationColor = (operation == "mv") ? "\033[1;93m" : "\033[1;93m";
         std::cout << operationColor << " ! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\033[0m\033[1m" << std::endl;
         std::cout << "\033[1;92m         CHANGES TO CACHED ISOS ARE REFLECTED AUTOMATICALLY\n\033[0m\033[1m" << std::endl;
 
