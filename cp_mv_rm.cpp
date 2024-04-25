@@ -17,6 +17,38 @@ std::vector<std::string> copiedIsos;
 std::vector<std::string> copyErrors;
 
 
+// General
+
+// Function to check if a linux path is valid
+bool isValidLinuxPathFormat(const std::string& path) {
+    // Check if the path is empty or does not start with '/'
+    if (path.empty() || path[0] != '/') {
+        return false; // Linux paths must start with '/'
+    }
+
+    bool previousWasSlash = false;
+
+    // Iterate through each character in the path
+    for (char c : path) {
+        if (c == '/') {
+            if (previousWasSlash) {
+                return false; // Consecutive slashes are not allowed
+            }
+            previousWasSlash = true;
+        } else {
+            previousWasSlash = false;
+
+            // Check for invalid characters: '\0', '\n', '\r', '\t'
+            if (c == '\0' || c == '\n' || c == '\r' || c == '\t') {
+                return false; // Invalid characters in Linux path
+            }
+        }
+    }
+
+    return true; // Path format is valid
+}
+
+
 // RM
 
 
@@ -552,35 +584,6 @@ void handleMoveIsoFile(const std::vector<std::string>& isoFiles, std::vector<std
             std::cout << "\033[1;93mFile not found in cache: \033[0m\033[1m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m.\033[0m\033[1m" << std::endl;
         }
     }
-}
-
-
-bool isValidLinuxPathFormat(const std::string& path) {
-    // Check if the path is empty or does not start with '/'
-    if (path.empty() || path[0] != '/') {
-        return false; // Linux paths must start with '/'
-    }
-
-    bool previousWasSlash = false;
-
-    // Iterate through each character in the path
-    for (char c : path) {
-        if (c == '/') {
-            if (previousWasSlash) {
-                return false; // Consecutive slashes are not allowed
-            }
-            previousWasSlash = true;
-        } else {
-            previousWasSlash = false;
-
-            // Check for invalid characters: '\0', '\n', '\r', '\t'
-            if (c == '\0' || c == '\n' || c == '\r' || c == '\t') {
-                return false; // Invalid characters in Linux path
-            }
-        }
-    }
-
-    return true; // Path format is valid
 }
 
 
@@ -1144,8 +1147,6 @@ loadHistory();
         }
     }
     
-    
-
     while (true) {
         std::system("clear");
 

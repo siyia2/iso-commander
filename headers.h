@@ -169,10 +169,31 @@ std::string shell_escape(const std::string& s);
 std::pair<std::string, std::string> extractDirectoryAndFilename(const std::string& path);
 std::string readInputLine(const std::string& prompt);
 
+bool isValidLinuxPathFormat(const std::string& path);
+
+//	CP&MV&RM
+
+//	bools
+
+// General
+bool isValidLinuxPathFormat(const std::string& path)
+
+// RM functions
+bool fileExists(const std::string& filename);
+
+//	voids
+
+// RM functions
+void select_and_delete_files_by_number();
+void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::unordered_set<std::string>& deletedSet);
+void processDeleteInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
+
+// MV functions
 void select_and_move_files_by_number();
 void handleMoveIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, const std::string& userDestDir);
 void processMoveInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
 
+// CP functions
 void select_and_copy_files_by_number();
 void handleCopyIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, const std::string& userDestDir);
 void processCopyInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& movededSet);
@@ -180,9 +201,6 @@ void processCopyInput(const std::string& input, std::vector<std::string>& isoFil
 //	MOUNTER ELITE
 
 //	bools
-
-//Delete functions
-bool fileExists(const std::string& filename);
 
 // Mount functions
 bool isAlreadyMounted(const std::string& mountPoint);
@@ -201,11 +219,6 @@ bool isValidIndex(int index, size_t isoDirsSize);
 void clearScrollBuffer();
 bool isAllZeros(const std::string& str);
 bool isNumeric(const std::string& str);
-
-//Delete functions
-void select_and_delete_files_by_number();
-void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::unordered_set<std::string>& deletedSet);
-void processDeleteInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
 
 // Mount functions
 void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordered_set<std::string>& mountedSet);
