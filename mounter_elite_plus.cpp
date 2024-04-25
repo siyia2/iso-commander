@@ -151,8 +151,8 @@ void submenu1() {
           std::string submenu_choice(submenu_input);
          // Check if the input length is exactly 1
         if (submenu_choice.empty() || submenu_choice.length() == 1) {
-    std::string operation;
-    switch (submenu_choice[0]) {
+		std::string operation;
+		switch (submenu_choice[0]) {
         case '1':
             std::system("clear");
             select_and_mount_files_by_number();
