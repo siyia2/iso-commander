@@ -1100,7 +1100,7 @@ void processCopyInput(const std::string& input, std::vector<std::string>& isoFil
 		clearScrollBuffer();
         std::system("clear");
         
-        if (!movedIsos.empty()) {
+        if (!copiedIsos.empty()) {
             std::cout << " " << std::endl;
         }
     
