@@ -320,6 +320,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
             // Check if the user canceled
             if (inputLine.empty()) {
+				clear_history();
                 return;
             }
 
