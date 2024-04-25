@@ -766,6 +766,7 @@ loadHistory();
         
         // Clear the vector after each iteration
         movedIsos.clear();
+        moveErrors.clear();
 
         // Stop the timer after completing all deletion tasks
         auto end_time = std::chrono::high_resolution_clock::now();
@@ -1115,6 +1116,7 @@ loadHistory();
         
         // Clear the vector after each iteration
         copiedIsos.clear();
+        copyErrors.clear();
 
         // Stop the timer after completing all deletion tasks
         auto end_time = std::chrono::high_resolution_clock::now();
