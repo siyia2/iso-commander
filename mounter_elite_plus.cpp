@@ -39,11 +39,15 @@ std::vector<std::string> deletedIsos;
 // Vector to store errors for deleted ISOs
 std::vector<std::string> deletedErrors;
 
-// Vector to store deleted ISOs
+// Vector to store moved ISOs
 std::vector<std::string> movedIsos;
-// Vector to store errors for deleted ISOs
-std::vector<std::string> movedErrors;
+// Vector to store errors for moved ISOs
+std::vector<std::string> moveErrors;
 
+// Vector to store copied ISOs
+std::vector<std::string> copiedIsos;
+// Vector to store errors for copied ISOs
+std::vector<std::string> copyErrors;
 
 // Main function
 int main(int argc, char *argv[]) {

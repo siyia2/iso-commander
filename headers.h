@@ -37,10 +37,15 @@ extern unsigned int maxThreads;
 extern std::mutex Mutex4Low;
 extern std::mutex Mutex4High;
 
-// Vector to store deleted ISOs
+// Vector to store moved ISOs
 extern std::vector<std::string> movedIsos;
-// Vector to store errors for deleted ISOs
-extern std::vector<std::string> movedErrors;
+// Vector to store errors for moved ISOs
+extern std::vector<std::string> moveErrors;
+
+// Vector to store copied ISOs
+extern std::vector<std::string> copiedIsos;
+// Vector to store errors for copied ISOs
+extern std::vector<std::string> copyErrors;
 
 extern bool promptFlag;
 
@@ -175,6 +180,10 @@ std::string readInputLine(const std::string& prompt);
 void select_and_move_files_by_number();
 void handleMoveIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, const std::string& userDestDir);
 void processMoveInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
+
+void select_and_copy_files_by_number();
+void handleCopyIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, const std::string& userDestDir);
+void processCopyInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& movededSet);
 
 //	MOUNTER ELITE
 
