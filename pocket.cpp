@@ -32,7 +32,7 @@ void select_and_move_files_by_number() {
     while (true) {
 		clearScrollBuffer();
         std::system("clear");
-        //std::cout << "\033[1;93m ! ISO DELETION IS IRREVERSIBLE PROCEED WITH CAUTION !\n\033[0m\033[1m" << std::endl;
+        //std::cout << "\033[1;93m ! REFRESH ISO CACHE FROM MAIN MENU TO REFLECT ANY CHANGES !\n\033[0m\033[1m" << std::endl;
 
         // Remove non-existent paths from the cache
         removeNonExistentPathsFromCache();
@@ -408,6 +408,11 @@ while (true) {
         
         // Clear the vector after each iteration
         movedIsos.clear();
+        
+        promptFlag=false;
+        
+        // Refresh ISO cache for userDestDir
+		manualRefreshCache(userDestDir);
 
         // Stop the timer after completing all deletion tasks
         auto end_time = std::chrono::high_resolution_clock::now();

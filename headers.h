@@ -42,6 +42,8 @@ extern std::vector<std::string> movedIsos;
 // Vector to store errors for deleted ISOs
 extern std::vector<std::string> movedErrors;
 
+extern bool promptFlag;
+
 // A simple global thread pool for async tasks
 class ThreadPool {
 public:
@@ -211,7 +213,7 @@ void printIsoFileList(const std::vector<std::string>& isoFiles);
 void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
 
 // Iso cache functions
-void manualRefreshCache();
+void manualRefreshCache(const std::string& initialDir = "");
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& Mutex4Low);
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles);
 void removeNonExistentPathsFromCache();

@@ -11,10 +11,12 @@ const std::string cacheFileName = "mounter_elite_plus_iso_cache.txt";;
 const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
 std::mutex Mutex4High; // Mutex for high level functions
+std::mutex Mutex4Med; // Mutex for lmid level functions
 std::mutex Mutex4Low; // Mutex for low level functions
 
 // For cache directory creation
 bool gapPrinted = false; // for cache refresh for directory function
+bool promptFlag = true; // for cache refresh for directory function
 bool gapPrintedtraverse = false; // for traverse function
 
 // Vector to store ISO mounts
@@ -49,7 +51,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
 
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.8.6");
+        printVersionNumber("2.8.7");
         return 0;
     }
 
@@ -488,8 +490,7 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
         std::cout << " " << std::endl;
         gapPrinted = true; // Set the flag to true to indicate that the gap has been printed
     }
-	// Lock the mutex to protect the shared 'allIsoFiles' vector
-    std::lock_guard<std::mutex> highlock(Mutex4High);
+    std::lock_guard<std::mutex> MedLock(Mutex4Med);
     // Append the new entries to the shared vector
     allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
 
@@ -498,20 +499,27 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 
 
 // Function for manual cache refresh
-void manualRefreshCache() {
+void manualRefreshCache(const std::string& initialDir) {
     std::system("clear");
     gapPrinted = false;
-    
+
     // Load history from file
     loadHistory();
 
-    // Prompt the user to enter directory paths for manual cache refresh
-    std::string inputLine = readInputLine("\033[1;94mDirectory path(s) ↵ from which to populate the \033[1m\033[1;92mISO Cache\033[94m (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1;94m), or press ↵ to return:\n\033[0m\033[1m");
-    
+    std::string inputLine;
+
+    // Append the initial directory if provided
+    if (!initialDir.empty()) {
+        inputLine = initialDir;
+    } else {
+        // Prompt the user to enter directory paths for manual cache refresh
+        inputLine = readInputLine("\033[1;94mDirectory path(s) ↵ from which to populate the \033[1m\033[1;92mISO Cache\033[94m (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1;94m), or press ↵ to return:\n\033[0m\033[1m");
+    }
+
     if (!inputLine.empty()) {
-		// Save history to file
-		saveHistory();
-	}
+        // Save history to file
+        saveHistory();
+    }
 
     // Check if the user canceled the cache refresh
     if (inputLine.empty()) {
@@ -616,6 +624,8 @@ void manualRefreshCache() {
 
     // Stop the timer after completing the cache refresh and removal of non-existent paths
     auto end_time = std::chrono::high_resolution_clock::now();
+    
+    if (promptFlag) {
 
     // Calculate and print the elapsed time
     std::cout << " " << std::endl;
@@ -647,7 +657,10 @@ void manualRefreshCache() {
     }
     std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
     std::cin.get();
+	}
+	promptFlag = true;
 }
+
 
 
 // Function to perform case-insensitive string comparison using std::string_view asynchronously
