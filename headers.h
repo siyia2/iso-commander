@@ -216,6 +216,8 @@ bool isValidIndex(int index, size_t isoDirsSize);
 //General functions
 bool isAllZeros(const std::string& str);
 bool isNumeric(const std::string& str);
+void unmountZerozero(const std::vector<std::string>& isoDirs);
+void mountZerozero(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
 
 // Mount functions
 void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordered_set<std::string>& mountedSet);

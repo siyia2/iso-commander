@@ -745,6 +745,56 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
 
 //	MOUNT STUFF
 
+void mountZerozero(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
+    // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism
+    unsigned int numThreads = std::min(static_cast<int>(isoFiles.size()), static_cast<int>(maxThreads));
+    
+    // Create a ThreadPool with maxThreads
+    ThreadPool pool(numThreads);
+    
+    // Process all ISO files asynchronously
+    for (size_t i = 0; i < isoFiles.size(); ++i) {
+        // Enqueue the mounting task to the thread pool with associated index
+        pool.enqueue([i, &isoFiles, &mountedSet]() {
+            // Create a vector containing the single ISO file to mount
+            std::vector<std::string> isoFilesToMount = { isoFiles[i] }; // Assuming isoFiles is 1-based indexed
+            // Call mountIsoFile with the vector of ISO files to mount and the mounted set
+            mountIsoFile(isoFilesToMount, mountedSet);
+        });
+    }
+}
+
+
+void unmountZerozero(const std::vector<std::string>& isoDirs) {
+    // Check if isoDirs is empty
+    if (isoDirs.empty()) {
+        std::cout << "\033[1;93mNo ISOs are currently mounted.\033[0m\033[1m" << std::endl;
+        return;
+    }
+
+    // Determine the number of batches based on the maximum number of threads
+    unsigned int numThreads = std::min(static_cast<unsigned int>(isoDirs.size()), maxThreads);
+
+    // Calculate the batch size
+    size_t batchSize = (isoDirs.size() + numThreads - 1) / numThreads;
+
+    // Create a ThreadPool with the determined number of threads
+    ThreadPool pool(numThreads);
+
+    // Divide isoDirs into batches
+    for (size_t i = 0; i < isoDirs.size(); i += batchSize) {
+        auto batchBegin = isoDirs.begin() + i;
+        auto batchEnd = std::min(isoDirs.begin() + i + batchSize, isoDirs.end());
+        std::vector<std::string> batch(batchBegin, batchEnd);
+
+        // Enqueue unmounting tasks for each batch
+        pool.enqueue([batch]() {
+            unmountISO(batch);
+        });
+    }
+}
+
+
 void select_iso_files_by_number(const std::string& action) {
     // Path where ISOs are mounted
     const std::string isoPath = "/mnt";
@@ -795,7 +845,7 @@ void select_iso_files_by_number(const std::string& action) {
             }
 
             // If no ISOs are mounted, prompt user to continue
-            if (isoDirs.empty()) {
+            if (isoDirs.empty() && action == "umount") {
                 std::cout << " " << std::endl;
                 std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
                 std::cin.get();
@@ -807,8 +857,15 @@ void select_iso_files_by_number(const std::string& action) {
                 std::cout << " " << std::endl;
             }
         }
+        std::string operationColor;
+        if (action == "umount") {
+			operationColor = "\033[1;93m";
+		} else {
+			operationColor = "\033[1;92m";
+		}
+        
         // Prompt user to choose ISOs for unmounting or press Enter to return
-        std::string prompt = "\033[1;94mISO(s) ↵ for \033[1;92m" + action + "\033[1;94m (e.g., '1-3', '1 5', '00' for all), or press ↵ to return:\033[0m\033[1m ";
+        std::string prompt = "\033[1;94mISO(s) ↵ for \033[1;92m" + operationColor + action + "\033[1;94m (e.g., '1-3', '1 5', '00' for all), or press ↵ to return:\033[0m\033[1m ";
 		char* input = readline(prompt.c_str());
 
         std::system("clear");
@@ -832,58 +889,18 @@ void select_iso_files_by_number(const std::string& action) {
         // Check if the user wants to mount/unmount all ISO files
         if (std::strcmp(input, "00") == 0) {
             if (action == "mount") {
-                // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism
-                unsigned int numThreads = std::min(static_cast<int>(isoFiles.size()), static_cast<int>(maxThreads));
-                // Create a ThreadPool with maxThreads
-                ThreadPool pool(numThreads);
-                // Process all ISO files asynchronously
-                for (size_t i = 0; i < isoFiles.size(); ++i) {
-                    // Enqueue the mounting task to the thread pool with associated index
-                    pool.enqueue([i, &isoFiles, &mountedSet]() {
-                        // Create a vector containing the single ISO file to mount
-                        std::vector<std::string> isoFilesToMount = { isoFiles[i] }; // Assuming isoFiles is 1-based indexed
-                        // Call mountIsoFile with the vector of ISO files to mount and the mounted set
-                        mountIsoFile(isoFilesToMount, mountedSet);
-                    });
-                }
+                   mountZerozero(isoFiles, mountedSet);
             } else if (action == "umount") {
-                 // Check if isoDirs is empty
-    if (isoDirs.empty()) {
-        std::cout << "\033[1;93mNo ISOs are currently mounted.\033[0m\033[1m" << std::endl;
-        return;
-    }
-
-    // Determine the number of batches based on the maximum number of threads
-    unsigned int numThreads = std::min(static_cast<int>(isoDirs.size()), static_cast<int>(maxThreads));
-    
-    // Calculate the batch size
-    size_t batchSize = (isoDirs.size() + numThreads - 1) / numThreads;
-
-    // Create a ThreadPool with the determined number of threads
-    ThreadPool pool(numThreads);
-
-    // Divide isoDirs into batches
-    for (size_t i = 0; i < isoDirs.size(); i += batchSize) {
-        auto batchBegin = isoDirs.begin() + i;
-        auto batchEnd = std::min(isoDirs.begin() + i + batchSize, isoDirs.end());
-        std::vector<std::string> batch(batchBegin, batchEnd);
-
-        // Enqueue unmounting tasks for each batch
-        pool.enqueue([batch]() {
-            unmountISO(batch);
-			});
-        }
-
-        }
+                 unmountZerozero(isoDirs);
+			 }
             
-        } else if (action == "mount"){
+        } if (action == "mount"){
             // Process user input to select and mount/unmount specific ISO files
             processIsoFiles(input, isoFiles, mountedSet, isoDirs, action);
         } else if (action == "umount"){
 			processIsoFiles(input, isoFiles, mountedSet, isoDirs, action);
 			// Iterate through the ISO path to find mounted ISOs
-            
-			
+            	
 		}
 		
 
@@ -898,7 +915,8 @@ void select_iso_files_by_number(const std::string& action) {
         std::cout << " " << std::endl;
         std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
         std::cin.get();
-    }
+		
+	}
 }
 
 
