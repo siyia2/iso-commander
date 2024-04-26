@@ -117,9 +117,8 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     while (true) {
         clearScrollBuffer();
         std::system("clear");
-        
-			printFileList(files);
-		
+      
+		printFileList(files);
 
         std::cout << " " << std::endl;
         clear_history();
