@@ -828,6 +828,7 @@ void select_and_mount_files_by_number() {
             processAndMountIsoFiles(input, isoFiles, mountedSet);
         }
         
+        std::system("clear");
         
         if (!mountedFiles.empty()) {
 			std::cout << " " << std::endl;
