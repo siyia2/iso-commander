@@ -117,19 +117,15 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     while (true) {
         clearScrollBuffer();
         std::system("clear");
-
-       if (fileType == "bin" || fileType == "img") {
-    printFileList(files, ".bin");
-    printFileList(files, ".img");
-} else if (fileType == "mdf") {
-    printFileList(files, ".mdf");
-}
+        
+			printFileList(files);
+		
 
         std::cout << " " << std::endl;
         clear_history();
 
         std::string prompt = "\033[1;94m" + fileTypeName + " file(s) ↵ for conversion (e.g., '1-3', '1 5'), or press ↵ to return:\033[0m\033[1m ";
-char* input = readline(prompt.c_str());
+		char* input = readline(prompt.c_str());
 
         if (std::isspace(input[0]) || input[0] == '\0') {
             std::system("clear");
@@ -390,7 +386,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
 
 
 // Function to print found BIN/IMG files with alternating colored sequence numbers
-void printFileList(const std::vector<std::string>& fileList, const std::string& extensionToHighlight) {
+void printFileList(const std::vector<std::string>& fileList) {
     // ANSI escape codes for text formatting
     const std::string bold = "\033[1m";
     const std::string reset = "\033[0m";
@@ -416,13 +412,14 @@ void printFileList(const std::vector<std::string>& fileList, const std::string& 
         auto [directory, fileNameOnly] = extractDirectoryAndFilename(filename);
 
         const std::size_t dotPos = fileNameOnly.find_last_of('.');
+        std::string extension;
 
-        // Check if the file has the specified extension (case-insensitive)
+        // Check if the file has a .bin, .img, or .mdf extension (case-insensitive)
         if (dotPos != std::string::npos) {
-            std::string extension = fileNameOnly.substr(dotPos);
+            extension = fileNameOnly.substr(dotPos);
             std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
 
-            if (extension == extensionToHighlight) {
+            if (extension == ".bin" || extension == ".img" || extension == ".mdf") {
                 // Determine color for sequence number based on toggle
                 std::string sequenceColor = (useRedColor) ? red : green;
                 useRedColor = !useRedColor; // Toggle between red and green
