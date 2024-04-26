@@ -476,7 +476,10 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     static std::vector<std::string> mdfMdsFilesCache;
     
     // Set to store processed paths
-    static std::set<std::string> processedPaths;
+    static std::set<std::string> processedPathsMdf;
+    
+    // Set to store processed paths
+    static std::set<std::string> processedPathsBin;
 
     // Vector to store file names that match the criteria
     std::vector<std::string> fileNames;
@@ -510,11 +513,18 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         unsigned int numOngoingTasks = 0;
 
         // Iterate through input paths
-        for (const auto& path : paths) {
-            // Check if the path has already been processed
-            if (processedPaths.find(path) != processedPaths.end()) {
-                continue; // Skip already processed paths
-            }
+		for (const auto& path : paths) {
+			if (mode == "bin") {
+				// Check if the path has already been processed in "bin" mode
+				if (processedPathsBin.find(path) != processedPathsBin.end()) {
+					continue; // Skip already processed paths
+				} else {
+                // Check if the path has been processed in "mdf" mode
+					if (processedPathsMdf.find(path) != processedPathsMdf.end()) {
+						continue; // Skip already processed paths
+					}
+				}
+			}
 
             try {
                 // Use a lambda function to process files asynchronously
@@ -567,7 +577,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                                     }
                                 }
                             }
-                            processedPaths.insert(path);
+                            processedPathsBin.insert(path);
                         }
                     }
                 } else {
@@ -616,7 +626,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                     }
                     
                     // Add the processed path to the set
-                    processedPaths.insert(path);
+                    processedPathsMdf.insert(path);
                 }
             } catch (const std::filesystem::filesystem_error& e) {
                 std::lock_guard<std::mutex> lock(mutex4search);
