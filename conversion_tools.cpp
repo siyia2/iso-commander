@@ -404,7 +404,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         
         std::vector<std::future<void>> futures;
         futures.reserve(totalFiles);
-
+		
         // Counter to track the number of ongoing tasks
         unsigned int numOngoingTasks = 0;
 
@@ -414,11 +414,11 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
 				// Check if the path has already been processed in "bin" mode
 				if (processedPathsBin.find(path) != processedPathsBin.end()) {
 					continue; // Skip already processed paths
-				} else {
-                // Check if the path has been processed in "mdf" mode
-					if (processedPathsMdf.find(path) != processedPathsMdf.end()) {
-						continue; // Skip already processed paths
-					}
+				}
+			} else if (mode == "mdf") {
+				// Check if the path has already been processed in "mdf" mode
+				if (processedPathsMdf.find(path) != processedPathsMdf.end()) {
+					continue; // Skip already processed paths
 				}
 			}
 
@@ -474,12 +474,10 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                                     }
                                 }
                             }
-                            processedPathsBin.insert(path);
                         }
+                        processedPathsBin.insert(path);
                     }
-                } else {
-                    // Use a vector to store futures for ongoing tasks
-                    std::vector<std::future<void>> futures;
+                } else {                    
                     blacklistMdf = true;
                     
                     // Iterate through files in the given directory and its subdirectories
@@ -609,6 +607,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     return std::vector<std::string>();
 }
 
+
 // Blacklist function for MDF BIN IMG
 bool blacklist(const std::filesystem::path& entry, bool blacklistMdf) {
     const std::string filenameLower = entry.filename().string();
@@ -638,14 +637,16 @@ bool blacklist(const std::filesystem::path& entry, bool blacklistMdf) {
 
     // Use a set for blacklisted keywords
     std::unordered_set<std::string> blacklistKeywords = {
-        "block", "list", "sdcard", "index", "data", "shader", "navmesh"
+        "block", "list", "sdcard", "index", "data", "shader", "navmesh",
+        "obj", "terrain", "script", "history", "system", "vendor", "flora",
+        "cache", "dictionary", "initramfs", "map", "setup", "encrypt"
     };
 
     // Add blacklisted keywords for .mdf extension
     if (extLower == ".mdf") {
         blacklistKeywords.insert({
-            "flora", "terrain", "script", "history", "system", "vendor",
-            "cache", "dictionary", "initramfs", "map", "setup", "encrypt"
+           // "flora", "terrain", "script", "history", "system", "vendor",
+           // "cache", "dictionary", "initramfs", "map", "setup", "encrypt"
         });
     }
 
