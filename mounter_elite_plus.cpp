@@ -1152,6 +1152,7 @@ void processIsoFiles(const std::string& input, const std::vector<std::string>& i
             if (processedRanges.find(range) == processedRanges.end()) {
                 // Enqueue task for marking range as processed
                 pool.enqueue([&]() {
+					std::lock_guard<std::mutex> processedLock(MutexForProcessedIndices);
                     processedRanges.insert(range);
                 });
 
