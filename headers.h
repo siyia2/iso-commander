@@ -40,6 +40,7 @@ extern unsigned int maxThreads;
 extern std::mutex Mutex4Low;
 extern std::mutex Mutex4High;
 
+// For making cache refresh headless
 extern bool promptFlag;
 
 // A simple global thread pool for async tasks
