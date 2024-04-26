@@ -397,6 +397,7 @@ void printFileList(const std::vector<std::string>& fileList) {
     bool useRedColor = true;
 
     // Print header for file selection
+    std::cout << "\033[94;1mSUCCESSFUL CONVERSIONS ARE AUTOMATICALLY ADDED INTO ISO CACHE\n\033[0m\033[1m\033[0m\033[1m" << std::endl;
     std::cout << bold << "Select file(s) to convert to " << bold << "\033[1;92mISO(s)\033[0m\033[1m:\n";
     std::cout << " " << std::endl;
 
