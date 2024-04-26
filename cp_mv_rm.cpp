@@ -452,16 +452,38 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
             if (fileExists(iso)) {
                 // Add the ISO file to the operation batch
                 isoFilesToOperate.push_back(iso);
+                
+                // Get the current user's username
+				char* current_user = getlogin();
+				if (current_user == nullptr) {
+					std::cerr << "Error getting current user: " << strerror(errno) << std::endl;
+					return;
+				}
+    
+				// Get the effective group ID
+				gid_t current_group = getegid();
+				if (current_group == static_cast
+
+				<unsigned int>(-1)) {
+				std::cerr << "\033[1;91mError getting current group:\033[0m\033[1m " << strerror(errno) << std::endl;
+				return;
+				}
+
+				// Convert user and group IDs to strings
+				std::string user_str(current_user);
+				std::string group_str = std::to_string(static_cast<unsigned int>(current_group));
+
 
                 // If the operation batch reaches the batch size, or no more ISO files to process
                 if (isoFilesToOperate.size() == batchSize || &iso == &isoFiles.back()) {
+					
                     // Construct the operation command for the entire batch
                     std::string operationCommand = "sudo mkdir -p " + shell_escape(userDestDir) + " && ";
                     operationCommand += (isCopy ? "sudo cp -f " : "sudo mv ");
                     for (const auto& operateIso : isoFilesToOperate) {
                         operationCommand += shell_escape(operateIso) + " " + shell_escape(userDestDir) + " ";
                     }
-                    operationCommand += " && sudo chmod -R 755 " + shell_escape(userDestDir);
+                    operationCommand += " && sudo chown -R " + user_str + ":" + group_str + " " + shell_escape(userDestDir);
                     operationCommand += "> /dev/null 2>&1";
                     
                     // Execute the operation command
