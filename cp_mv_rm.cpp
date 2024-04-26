@@ -283,7 +283,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         indexChunks.emplace_back(validIndices.begin() + i, std::min(validIndices.begin() + i + chunkSize, validIndices.end()));
     }
 	
-    if (process == "mv" || process == "cp") {
         bool isMove = (process == "mv");
         std::string operationDescription = (isMove) ? "MOVED" : "COPIED";
 
@@ -332,7 +331,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
                 }
                 break;
             } else {
-                std::cout << "\n\033[1;91mInvalid paths or multiple paths are not supported.\033[0m\033[1m" << std::endl;
+                std::cout << "\n\033[1;91mInvalid paths and/or multiple paths are excluded from \033[1;92mcp\033[1;91m and \033[1;93mmv\033[1;91m operations.\033[0m\033[1m" << std::endl;
                 std::cout << "\n\033[1;32mPress Enter to try again...\033[0m\033[1m";
                 std::cin.get();
             }
@@ -343,8 +342,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
         std::system("clear");
         std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
-        // Detect and use the minimum of available threads and indexChunks to ensure efficient parallelism
-        unsigned int numThreads = std::min(static_cast<int>(indexChunks.size()), static_cast<int>(maxThreads));
         // Create a thread pool with a optimal number of threads
         ThreadPool pool(numThreads);
         // Use std::async to launch asynchronous tasks
@@ -417,7 +414,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
         std::cin.get();
         
-	}
 }
 
 // Function to handle the deletion of ISO files in batches
