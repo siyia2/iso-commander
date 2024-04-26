@@ -188,7 +188,7 @@ bool fileExists(const std::string& filename);
 // General
 void select_and_operate_files_by_number(const std::string& operation);
 void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& operationSet, const std::string& process);
-void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, const std::string& userDestDir, bool isCopy);
+void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete);
 
 // RM functions
 void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::unordered_set<std::string>& deletedSet);
