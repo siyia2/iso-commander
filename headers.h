@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <condition_variable>
 #include <cstring>
@@ -39,6 +40,7 @@ extern unsigned int maxThreads;
 extern std::mutex Mutex4Low;
 extern std::mutex Mutex4High;
 
+// For making cache refresh headless
 extern bool promptFlag;
 
 // A simple global thread pool for async tasks
@@ -169,20 +171,34 @@ std::string shell_escape(const std::string& s);
 std::pair<std::string, std::string> extractDirectoryAndFilename(const std::string& path);
 std::string readInputLine(const std::string& prompt);
 
-void select_and_move_files_by_number();
-void handleMoveIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, const std::string& userDestDir);
-void processMoveInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
+bool isValidLinuxPathFormat(const std::string& path);
 
-void select_and_copy_files_by_number();
-void handleCopyIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, const std::string& userDestDir);
-void processCopyInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& movededSet);
+//	CP&MV&RM
+
+//	bools
+
+// General
+bool isValidLinuxPathFormat(const std::string& path);
+
+// RM functions
+
+//	bools
+bool fileExists(const std::string& filename);
+
+//	voids
+
+// General
+void select_and_operate_files_by_number(const std::string& operation);
+void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& operationSet, const std::string& process);
+void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete);
+
+// RM functions
+void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::unordered_set<std::string>& deletedSet);
+
 
 //	MOUNTER ELITE
 
 //	bools
-
-//Delete functions
-bool fileExists(const std::string& filename);
 
 // Mount functions
 bool isAlreadyMounted(const std::string& mountPoint);
@@ -202,16 +218,11 @@ void clearScrollBuffer();
 bool isAllZeros(const std::string& str);
 bool isNumeric(const std::string& str);
 
-//Delete functions
-void select_and_delete_files_by_number();
-void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::unordered_set<std::string>& deletedSet);
-void processDeleteInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
-
 // Mount functions
 void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordered_set<std::string>& mountedSet);
-void select_and_mount_files_by_number();
+void select_and_mount_files_by_number(const std::string& action);
 void printIsoFileList(const std::vector<std::string>& isoFiles);
-void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
+void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet, const std::string& action);
 
 // Iso cache functions
 void manualRefreshCache(const std::string& initialDir = "");
@@ -245,41 +256,37 @@ std::vector<std::string> loadCache();
 // General
 
 // bools
+bool blacklist(const std::filesystem::path& entry, bool blacklistMdf);
 
+// stds
+std::vector<std::string> findFiles(const std::vector<std::string>& paths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback);
+
+// voids
+void select_and_convert_files_to_iso(const std::string& fileTypeChoice);
+void processInput(const std::string& input, const std::vector<std::string>& fileList, const std::string& inputPaths, bool flag);
+void printFileList(const std::vector<std::string>& fileList);
+
+// bools
 bool fileExistsConversions(const std::string& fullPath);
 
 
 // BIN/IMG CONVERSION
 
 // bools
+bool isCcd2IsoInstalled();
 
-bool blacklistBin(const std::filesystem::path& entry);
-
-// stds
-std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback);
 
 // voids
-
 void convertBINToISO(const std::string& inputPath);
-void select_and_convert_files_to_iso();
-void processInputBin(const std::string& input, const std::vector<std::string>& fileList);
-bool isCcd2IsoInstalled();
-void printFileListBin(const std::vector<std::string>& fileList);
+
 
 // MDF/MDS CONVERSION
 
 // bools
-bool blacklistMDF(const std::filesystem::path& entry);
+bool isMdf2IsoInstalled();
 
-// stds
-std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback);
 
 // voids
-
-void processInputMDF(const std::string& input, const std::vector<std::string>& fileList);
 void convertMDFToISO(const std::string& inputPath);
-void select_and_convert_files_to_iso_mdf();
-bool isMdf2IsoInstalled();
-void printFileListMdf(const std::vector<std::string>& fileList);
 
 #endif // HEADERS_H
