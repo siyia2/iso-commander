@@ -21,9 +21,6 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     std::vector<std::string> files;
     std::vector<std::string> directoryPaths;
 	bool flag;
-	
-    // Load history from file
-    loadHistory();
 
     // Read input for directory paths (allow multiple paths separated by semicolons)
     std::string fileExtension;
@@ -42,6 +39,8 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         std::cout << "Invalid file type choice. Supported types: BIN/IMG, MDF/MDS" << std::endl;
         return;
     }
+    // Load history from file
+    loadHistory();
 
     std::string inputPaths = readInputLine("\033[1;94mDirectory path(s) ↵ (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1m\033[1;94m) to search for \033[1m\033[1;92m" + fileExtension + " \033[1;94mfiles, or press ↵ to return:\n\033[0m\033[1m");
     std::cout << "\n\033[1mPlease wait...\033[1m" << std::endl;
@@ -55,6 +54,9 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         // Save history to file
         saveHistory();
     }
+    
+    // Load history from file
+    clear_history();
 
     // Start the timer
     auto start_time = std::chrono::high_resolution_clock::now();
