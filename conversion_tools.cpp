@@ -414,6 +414,7 @@ void printFileList(const std::vector<std::string>& fileList) {
 
 // BIN/IMG CONVERSION FUNCTIONS
 
+
 bool blacklistBin(const std::filesystem::path& entry) {
     const std::string filenameLower = entry.filename().string();
     const std::string ext = entry.extension().string();
