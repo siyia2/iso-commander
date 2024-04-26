@@ -905,6 +905,14 @@ void select_iso_files_by_number(const std::string& action) {
 		
 		 std::system("clear");
 		 
+		 if (!unmountedErrors.empty()) {
+			std::cout << " " << std::endl;
+		}
+		// Print all unmounted erros
+		for (const auto& unmountedError : unmountedErrors) {
+			std::cout << unmountedError << std::endl;
+		}		
+		 
 		 if (!mountedFiles.empty()) {
 			std::cout << " " << std::endl;
 		}
@@ -939,18 +947,6 @@ void select_iso_files_by_number(const std::string& action) {
 		// Print all unmounted files
 		for (const auto& unmountedFile : unmountedFiles) {
 			std::cout << unmountedFile << std::endl;
-		}
-			
-		if (!unmountedErrors.empty()) {
-			std::cout << " " << std::endl; // Print a blank line before deleted folders
-		}
-		// Print all unmounted erros
-		for (const auto& unmountedError : unmountedErrors) {
-			std::cout << unmountedError << std::endl;
-		}		
-		
-		if (!uniqueErrorMessages.empty()) {
-			std::cout << " " << std::endl;
 		}
 		
 		for (const auto& errorMsg : uniqueErrorMessages) {
