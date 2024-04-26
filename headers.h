@@ -255,6 +255,8 @@ std::vector<std::string> loadCache();
 
 // General
 
+// bools
+bool blacklist(const std::filesystem::path& entry, bool blacklistMdf);
 
 // stds
 std::vector<std::string> findFiles(const std::vector<std::string>& paths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback);
@@ -271,7 +273,6 @@ bool fileExistsConversions(const std::string& fullPath);
 // BIN/IMG CONVERSION
 
 // bools
-bool blacklistBin(const std::filesystem::path& entry);
 bool isCcd2IsoInstalled();
 
 
@@ -282,7 +283,6 @@ void convertBINToISO(const std::string& inputPath);
 // MDF/MDS CONVERSION
 
 // bools
-bool blacklistMDF(const std::filesystem::path& entry);
 bool isMdf2IsoInstalled();
 
 

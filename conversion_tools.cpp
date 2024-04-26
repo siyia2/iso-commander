@@ -355,112 +355,6 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 }
 
 
-// Function to print found BIN/IMG files with alternating colored sequence numbers
-void printFileList(const std::vector<std::string>& fileList) {
-    // ANSI escape codes for text formatting
-    const std::string bold = "\033[1m";
-    const std::string reset = "\033[0m";
-    const std::string red = "\033[31;1m"; // Red color
-    const std::string green = "\033[32;1m"; // Green color
-    const std::string orangeBold = "\033[1;38;5;208m";
-
-    // Toggle between red and green for sequence number coloring
-    bool useRedColor = true;
-
-    // Print header for file selection
-    std::cout << "\033[94;1mSUCCESSFUL CONVERSIONS ARE AUTOMATICALLY ADDED INTO ISO CACHE\n\033[0m\033[1m\033[0m\033[1m" << std::endl;
-    std::cout << bold << "Select file(s) to convert to " << bold << "\033[1;92mISO(s)\033[0m\033[1m:\n";
-    std::cout << " " << std::endl;
-
-    // Counter for line numbering
-    int lineNumber = 1;
-
-    // Apply formatting once before the loop
-    std::cout << std::right << std::setw(2);
-
-    for (const auto& filename : fileList) {
-        // Extract directory and filename
-        auto [directory, fileNameOnly] = extractDirectoryAndFilename(filename);
-
-        const std::size_t dotPos = fileNameOnly.find_last_of('.');
-        std::string extension;
-
-        // Check if the file has a .bin, .img, or .mdf extension (case-insensitive)
-        if (dotPos != std::string::npos) {
-            extension = fileNameOnly.substr(dotPos);
-            std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
-
-            if (extension == ".bin" || extension == ".img" || extension == ".mdf") {
-                // Determine color for sequence number based on toggle
-                std::string sequenceColor = (useRedColor) ? red : green;
-                useRedColor = !useRedColor; // Toggle between red and green
-
-                // Print sequence number in the determined color and the rest in default color
-                std::cout << sequenceColor << std::setw(2) << std::right << lineNumber << ". " << reset;
-                std::cout << bold << directory << bold << "/" << orangeBold << fileNameOnly << reset << std::endl;
-            } else {
-                // Print entire path and filename with the default color
-                std::cout << std::setw(2) << std::right << lineNumber << ". " << bold << filename << reset << std::endl;
-            }
-        } else {
-            // No extension found, print entire path and filename with the default color
-            std::cout << std::setw(2) << std::right << lineNumber << ". " << bold << filename << reset << std::endl;
-        }
-
-        // Increment line number
-        lineNumber++;
-    }
-}
-
-
-// BIN/IMG CONVERSION FUNCTIONS
-
-
-bool blacklistBin(const std::filesystem::path& entry) {
-    const std::string filenameLower = entry.filename().string();
-    const std::string ext = entry.extension().string();
-
-    // Convert the extension to lowercase for case-insensitive comparison
-    std::string extLower = ext;
-    std::transform(extLower.begin(), extLower.end(), extLower.begin(), [](char c) {
-        return std::tolower(c);
-    });
-
-    // Combine extension check
-    if (!(extLower == ".bin" || extLower == ".img")) {
-        return false;
-    }
-
-    // Check file size
-    if (std::filesystem::file_size(entry) <= 5'000'000) {
-        return false;
-    }
-
-    // Convert the filename to lowercase for additional case-insensitive comparisons
-    std::string filenameLowerNoExt = filenameLower;
-    filenameLowerNoExt.erase(filenameLowerNoExt.size() - ext.size()); // Remove extension
-    std::transform(filenameLowerNoExt.begin(), filenameLowerNoExt.end(), filenameLowerNoExt.begin(), [](char c) {
-        return std::tolower(c);
-    });
-
-    // Use a set for blacklisted keywords
-    static const std::unordered_set<std::string> blacklistKeywords = {
-        "block", "list", "sdcard", "index", "data", "shader", "navmesh",
-        "obj", "terrain", "script", "history", "system", "vendor",
-        "cache", "dictionary", "initramfs", "map", "setup", "encrypt"
-    };
-
-    // Check if any blacklisted word is present in the filename
-    for (const auto& keyword : blacklistKeywords) {
-        if (filenameLowerNoExt.find(keyword) != std::string::npos) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-
 // Function to search for .bin and .img files over 5MB
 std::vector<std::string> findFiles(const std::vector<std::string>& paths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback) {
     // Vector to store cached invalid paths
@@ -480,6 +374,8 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     
     // Set to store processed paths
     static std::set<std::string> processedPathsBin;
+    
+    bool blacklistMdf =false;
 
     // Vector to store file names that match the criteria
     std::vector<std::string> fileNames;
@@ -548,10 +444,11 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                 // Use async to process files concurrently
                 // Iterate through files in the given directory and its subdirectories
                 if (mode == "bin") {
+					blacklistMdf = false;
                     for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
                         if (entry.is_regular_file()) {
                             // Checks .bin .img blacklist
-                            if (blacklistBin(entry)) {
+                            if (blacklist(entry, blacklistMdf)) {
                                 // Check if the file is already present in the cache to avoid duplicates
                                 std::string fileName = entry.path().string();
                                 if (std::find(binImgFilesCache.begin(), binImgFilesCache.end(), fileName) == binImgFilesCache.end()) {
@@ -583,11 +480,12 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                 } else {
                     // Use a vector to store futures for ongoing tasks
                     std::vector<std::future<void>> futures;
+                    blacklistMdf = true;
                     
                     // Iterate through files in the given directory and its subdirectories
                     for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
                         if (entry.is_regular_file()) { 
-                            if (blacklistMDF(entry)) {
+                            if (blacklist(entry, blacklistMdf)) {
                                 // Check if the file is already present in the cache to avoid duplicates
                                 std::string fileName = entry.path().string();
                                 if (std::find(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end(), fileName) == mdfMdsFilesCache.end()) {
@@ -711,6 +609,125 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     return std::vector<std::string>();
 }
 
+// Blacklist function for MDF BIN IMG
+bool blacklist(const std::filesystem::path& entry, bool blacklistMdf) {
+    const std::string filenameLower = entry.filename().string();
+    const std::string ext = entry.extension().string();
+
+    // Convert the extension to lowercase for case-insensitive comparison
+    std::string extLower = ext;
+    std::transform(extLower.begin(), extLower.end(), extLower.begin(), [](char c) {
+        return std::tolower(c);
+    });
+
+    // Combine extension checks
+    if (!blacklistMdf) {
+		if (!((extLower == ".bin" || extLower == ".img"))) {
+			return false;
+		}
+	} else {
+		if (!((extLower == ".mdf"))) {
+			return false;
+		}
+	}
+
+    // Check file size
+    if (std::filesystem::file_size(entry) <= 5'000'000) {
+        return false;
+    }
+
+    // Use a set for blacklisted keywords
+    std::unordered_set<std::string> blacklistKeywords = {
+        "block", "list", "sdcard", "index", "data", "shader", "navmesh"
+    };
+
+    // Add blacklisted keywords for .mdf extension
+    if (extLower == ".mdf") {
+        blacklistKeywords.insert({
+            "flora", "terrain", "script", "history", "system", "vendor",
+            "cache", "dictionary", "initramfs", "map", "setup", "encrypt"
+        });
+    }
+
+    // Convert the filename to lowercase for additional case-insensitive comparisons
+    std::string filenameLowerNoExt = filenameLower;
+    filenameLowerNoExt.erase(filenameLowerNoExt.size() - ext.size()); // Remove extension
+    std::transform(filenameLowerNoExt.begin(), filenameLowerNoExt.end(), filenameLowerNoExt.begin(), [](char c) {
+        return std::tolower(c);
+    });
+
+    // Check if any blacklisted word is present in the filename
+    for (const auto& keyword : blacklistKeywords) {
+        if (filenameLowerNoExt.find(keyword) != std::string::npos) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+
+
+// Function to print found BIN/IMG files with alternating colored sequence numbers
+void printFileList(const std::vector<std::string>& fileList) {
+    // ANSI escape codes for text formatting
+    const std::string bold = "\033[1m";
+    const std::string reset = "\033[0m";
+    const std::string red = "\033[31;1m"; // Red color
+    const std::string green = "\033[32;1m"; // Green color
+    const std::string orangeBold = "\033[1;38;5;208m";
+
+    // Toggle between red and green for sequence number coloring
+    bool useRedColor = true;
+
+    // Print header for file selection
+    std::cout << "\033[94;1mSUCCESSFUL CONVERSIONS ARE AUTOMATICALLY ADDED INTO ISO CACHE\n\033[0m\033[1m\033[0m\033[1m" << std::endl;
+    std::cout << bold << "Select file(s) to convert to " << bold << "\033[1;92mISO(s)\033[0m\033[1m:\n";
+    std::cout << " " << std::endl;
+
+    // Counter for line numbering
+    int lineNumber = 1;
+
+    // Apply formatting once before the loop
+    std::cout << std::right << std::setw(2);
+
+    for (const auto& filename : fileList) {
+        // Extract directory and filename
+        auto [directory, fileNameOnly] = extractDirectoryAndFilename(filename);
+
+        const std::size_t dotPos = fileNameOnly.find_last_of('.');
+        std::string extension;
+
+        // Check if the file has a .bin, .img, or .mdf extension (case-insensitive)
+        if (dotPos != std::string::npos) {
+            extension = fileNameOnly.substr(dotPos);
+            std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+
+            if (extension == ".bin" || extension == ".img" || extension == ".mdf") {
+                // Determine color for sequence number based on toggle
+                std::string sequenceColor = (useRedColor) ? red : green;
+                useRedColor = !useRedColor; // Toggle between red and green
+
+                // Print sequence number in the determined color and the rest in default color
+                std::cout << sequenceColor << std::setw(2) << std::right << lineNumber << ". " << reset;
+                std::cout << bold << directory << bold << "/" << orangeBold << fileNameOnly << reset << std::endl;
+            } else {
+                // Print entire path and filename with the default color
+                std::cout << std::setw(2) << std::right << lineNumber << ". " << bold << filename << reset << std::endl;
+            }
+        } else {
+            // No extension found, print entire path and filename with the default color
+            std::cout << std::setw(2) << std::right << lineNumber << ". " << bold << filename << reset << std::endl;
+        }
+
+        // Increment line number
+        lineNumber++;
+    }
+}
+
+
+// BIN/IMG CONVERSION FUNCTIONS
+
 
 // Function to convert a BIN file to ISO format
 void convertBINToISO(const std::string& inputPath) {
@@ -762,51 +779,6 @@ bool isCcd2IsoInstalled() {
 
 
 // MDF CONVERSION FUNCTIONS
-
-
-bool blacklistMDF(const std::filesystem::path& entry) {
-    const std::string filenameLower = entry.filename().string();
-    const std::string ext = entry.extension().string();
-
-    // Convert the extension to lowercase for case-insensitive comparison
-    std::string extLower = ext;
-    std::transform(extLower.begin(), extLower.end(), extLower.begin(), [](char c) {
-        return std::tolower(c);
-    });
-
-    // Combine extension check
-    if (!(extLower == ".mdf")) {
-        return false;
-    }
-
-    // Check file size
-    if (std::filesystem::file_size(entry) <= 5'000'000) {
-        return false;
-    }
-
-    // Convert the filename to lowercase for additional case-insensitive comparisons
-    //std::string filenameLowerNoExt = filenameLower;
-    //filenameLowerNoExt.erase(filenameLowerNoExt.size() - ext.size()); // Remove extension
-    //std::transform(filenameLowerNoExt.begin(), filenameLowerNoExt.end(), filenameLowerNoExt.begin(), [](char c) {
-      //  return std::tolower(c);
-    //});
-
-    // Use a set for blacklisted keywords
-    //static const std::unordered_set<std::string> blacklistKeywords = {
-      //  "block", "list", "sdcard", "index", "data", "shader", "navmesh",
-      //  "obj", "flora", "terrain", "script", "history", "system", "vendor",
-      //  "cache", "dictionary", "initramfs", "map", "setup", "encrypt"
-   // };
-
-    // Check if any blacklisted word is present in the filename
-   // for (const auto& keyword : blacklistKeywords) {
-      //  if (filenameLowerNoExt.find(keyword) != std::string::npos) {
-         //   return false;
-       // }
-   // }
-
-    return true;
-}
 
 
 // Function to convert an MDF file to ISO format using mdf2iso
