@@ -903,6 +903,57 @@ void select_iso_files_by_number(const std::string& action) {
             	
 		}
 		
+		        std::system("clear");
+        
+        if (!mountedFiles.empty()) {
+			std::cout << " " << std::endl;
+		}
+		
+		if (!isoDirs.empty()) {
+			std::cout << " " << std::endl;
+		}
+		if (action == "mount") {
+		// Print all mounted files
+			for (const auto& mountedFile : mountedFiles) {
+				std::cout << mountedFile << std::endl;
+			}
+		} else {
+			// Print all unmounted files
+			for (const auto& unmountedFile : unmountedFiles) {
+				std::cout << unmountedFile << std::endl;
+			}
+		}
+		
+		if (!skippedMessages.empty()) {
+			std::cout << " " << std::endl;
+		}
+			
+		// Print all the stored skipped messages
+		for (const auto& skippedMessage : skippedMessages) {
+			std::cerr << skippedMessage;
+		}
+        
+        if (!errorMessages.empty()) {
+			std::cout << " " << std::endl;
+		}
+		// Print all the stored error messages
+		for (const auto& errorMessage : errorMessages) {
+			std::cerr << errorMessage;
+		}
+		
+		if (!uniqueErrorMessages.empty()) {
+			std::cout << " " << std::endl;
+		}
+		
+		for (const auto& errorMsg : uniqueErrorMessages) {
+            std::cerr << "\033[1;93m" << errorMsg << "\033[0m\033[1m" << std::endl;
+        }
+		
+		// Clear the vectors after each iteration
+		mountedFiles.clear();
+		skippedMessages.clear();
+		errorMessages.clear();
+		uniqueErrorMessages.clear();
 
         // Stop the timer after completing the mounting/unmounting process
         auto end_time = std::chrono::high_resolution_clock::now();
