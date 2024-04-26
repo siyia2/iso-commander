@@ -456,11 +456,12 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                 // If the operation batch reaches the batch size, or no more ISO files to process
                 if (isoFilesToOperate.size() == batchSize || &iso == &isoFiles.back()) {
                     // Construct the operation command for the entire batch
-                    std::string operationCommand = "mkdir -p " + shell_escape(userDestDir) + " && ";
-                    operationCommand += (isCopy ? "cp -f " : "mv ");
+                    std::string operationCommand = "sudo mkdir -p " + shell_escape(userDestDir) + " && ";
+                    operationCommand += (isCopy ? "sudo cp -f " : "sudo mv ");
                     for (const auto& operateIso : isoFilesToOperate) {
                         operationCommand += shell_escape(operateIso) + " " + shell_escape(userDestDir) + " ";
                     }
+                    operationCommand += " && sudo chmod -R 755 " + shell_escape(userDestDir);
                     operationCommand += "> /dev/null 2>&1";
                     
                     // Execute the operation command
