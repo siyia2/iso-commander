@@ -17,7 +17,7 @@ std::vector<std::string> operationErrors;
 // Function to check if a linux path is valid
 bool isValidLinuxPathFormat(const std::string& path) {
     // Check if the path is empty or does not start with '/'
-    if (path.empty() || path[0] != '/') {
+    if (path[0] != '/') {
         return false; // Linux paths must start with '/'
     }
 
