@@ -400,6 +400,8 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         operationIsos.clear();
         operationErrors.clear();
         clear_history();
+        manualRefreshCache(userDestDir);
+
 
         // Stop the timer after completing all deletion tasks
         auto end_time = std::chrono::high_resolution_clock::now();
