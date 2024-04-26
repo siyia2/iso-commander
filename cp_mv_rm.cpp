@@ -113,8 +113,8 @@ void select_and_operate_files_by_number(const std::string& operation) {
             // Process delete operation
             clearScrollBuffer();
             std::system("clear");
-            std::unordered_set<std::string> deletedSet;
-            processDeleteInput(input, isoFiles, deletedSet);
+            process = "rm";
+            processOperationInput(input, isoFiles, operationSet, process);
         } else if (operation == "mv") {
             // Process move operation
             clearScrollBuffer();
@@ -138,33 +138,22 @@ void select_and_operate_files_by_number(const std::string& operation) {
             std::cin.get();
             break;
         }
-
-        // Additional message for delete operation to continue
-        if (operation == "rm") {
-            std::cout << " " << std::endl;
-            std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
-            std::cin.get();
-        }
     }
 }
 
 
 // Function to process either mv or cp indices
 void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& operationSet, const std::string& process) {
+	
 	// variable for user specified destination
 	std::string userDestDir;
 
 	// Vector to store selected ISOs for display
 	std::vector<std::string> selectedIsos;
 
-	// Clear the userDestDir variable
-	userDestDir.clear();
-
 	// Load history from file
 	loadHistory();
-	
-	bool isCopy;
-     
+	     
     // Create an input string stream to tokenize the user input
     std::istringstream iss(input);
 
@@ -173,6 +162,11 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     std::unordered_set<std::string> uniqueErrorMessages; // Set to store unique error messages
     std::vector<int> processedIndices; // Vector to keep track of processed indices
     std::vector<int> validIndices;     // Vector to keep track of valid indices
+    
+    bool isDelete = (process == "rm");
+    bool isMove = (process == "mv");
+    bool isCopy = (process == "cp");
+    std::string operationDescription = isDelete ? "PERMANENTLY DELETED" : (isMove ? "MOVED" : "COPIED");
 
     std::string token;
 
@@ -269,23 +263,26 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         }
     }
 
-    // Display additional information if there are invalid inputs and some valid indices
     if (invalidInput && !validIndices.empty()) {
         std::cout << " " << std::endl;
     }
-	// Detect and use the minimum of available threads and validIndices to ensure efficient parallelism
-	unsigned int numThreads = std::min(static_cast<int>(validIndices.size()), static_cast<int>(maxThreads));
 
-    // Batch the valid indices into chunks based on numThreads
+    if (validIndices.empty()) {
+        std::cout << "\033[1;91mNo valid selections to be " << operationDescription << ".\033[1;91m" << std::endl;
+        std::cout << "\n\033[1;32mPress Enter to continue...\033[0m\033[1m";
+        std::cin.get();
+        clear_history();
+        return;
+    }
+
+    unsigned int numThreads = std::min(static_cast<int>(validIndices.size()), static_cast<int>(maxThreads));
     std::vector<std::vector<int>> indexChunks;
     const size_t chunkSize = (validIndices.size() + numThreads - 1) / numThreads;
     for (size_t i = 0; i < validIndices.size(); i += chunkSize) {
         indexChunks.emplace_back(validIndices.begin() + i, std::min(validIndices.begin() + i + chunkSize, validIndices.end()));
     }
-	
-        bool isMove = (process == "mv");
-        std::string operationDescription = (isMove) ? "MOVED" : "COPIED";
 
+    if (!isDelete) {
         while (true) {
             std::system("clear");
             
@@ -326,9 +323,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             // Check if the entered path is valid
             if (isValidLinuxPathFormat(inputLine)) {
                 userDestDir = inputLine;
-                if (!inputLine.empty()) {
                     saveHistory();
-                }
                 break;
             } else {
                 std::cout << "\n\033[1;91mInvalid paths and/or multiple paths are excluded from \033[1;92mcp\033[1;91m and \033[1;93mmv\033[1;91m operations.\033[0m\033[1m" << std::endl;
@@ -336,42 +331,69 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
                 std::cin.get();
             }
         }
-
-        // Start the timer after user confirmation
-        auto start_time = std::chrono::high_resolution_clock::now();
-
-        std::system("clear");
-        std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
-        // Create a thread pool with a optimal number of threads
-        ThreadPool pool(numThreads);
-        // Use std::async to launch asynchronous tasks
-        std::vector<std::future<void>> futures;
-        futures.reserve(numThreads);
-
-        // Lock to ensure thread safety in a multi-threaded environment
-        std::lock_guard<std::mutex> highLock(Mutex4High);
-
+    } else {
+        std::cout << "\033[1;94mThe following ISO(s) will be \033[1;91m*" << operationDescription << "*\033[1;94m:\033[0m\033[1m" << std::endl;
+        std::cout << " " << std::endl;
         for (const auto& chunk : indexChunks) {
-            std::vector<std::string> isoFilesInChunk;
             for (const auto& index : chunk) {
-                isoFilesInChunk.push_back(isoFiles[index - 1]);
-            }
-            if (isMove) {
-				isCopy = false;
-                futures.emplace_back(pool.enqueue(handleIsoFileOperation, isoFilesInChunk, std::ref(isoFiles), userDestDir, isCopy));
-            } else {
-				isCopy = true;
-                futures.emplace_back(pool.enqueue(handleIsoFileOperation, isoFilesInChunk, std::ref(isoFiles), userDestDir, isCopy));
+                auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFiles[index - 1]);
+                std::cout << "\033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[0m\033[1m" << std::endl;
             }
         }
 
-        // Wait for all asynchronous tasks to complete
-        for (auto& future : futures) {
-            future.wait();
+        if (!uniqueErrorMessages.empty() && indexChunks.empty()) {
+            std::cout << " " << std::endl;
+            std::cout << "\033[1;91mNo valid selection(s) for deletion.\033[0m\033[1m" << std::endl;
+        } else {
+            std::string confirmation;
+            std::cout << " " << std::endl;
+            std::cout << "\033[1;94mDo you want to proceed with the \033[1;91m" << operationDescription << "\033[1;94m of the above? (y/n):\033[0m\033[1m ";
+            std::getline(std::cin, confirmation);
+
+            if (!(confirmation == "y" || confirmation == "Y")) {
+                std::cout << " " << std::endl;
+                std::cout << "\033[1;93m" << operationDescription << " aborted by user.\033[0m\033[1m" << std::endl;
+                return;
+            }
         }
+    }
 
+    auto start_time = std::chrono::high_resolution_clock::now();
 
-		// Print all operated files and errors
+    std::system("clear");
+    std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
+
+    ThreadPool pool(numThreads);
+    std::vector<std::future<void>> futures;
+    futures.reserve(numThreads);
+
+    std::lock_guard<std::mutex> highLock(Mutex4High);
+
+    for (const auto& chunk : indexChunks) {
+        std::vector<std::string> isoFilesInChunk;
+        for (const auto& index : chunk) {
+            isoFilesInChunk.push_back(isoFiles[index - 1]);
+        }
+        if (isDelete) {
+            futures.emplace_back(pool.enqueue(handleDeleteIsoFile, isoFilesInChunk, std::ref(isoFiles), std::ref(operationSet)));
+        } else if (isMove) {
+            isCopy = false;
+             futures.emplace_back(pool.enqueue(handleIsoFileOperation, isoFilesInChunk, std::ref(isoFiles), userDestDir, isCopy));
+        } else {
+            isCopy = true;
+             futures.emplace_back(pool.enqueue(handleIsoFileOperation, isoFilesInChunk, std::ref(isoFiles), userDestDir, isCopy));
+        }
+    }
+
+    for (auto& future : futures) {
+        future.wait();
+    }
+    
+		if (!isDelete) {
+			promptFlag = false;        
+			manualRefreshCache(userDestDir);
+		}
+
 		clearScrollBuffer();
 		std::system("clear");
         
@@ -395,9 +417,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         // Clear the vector after each iteration
         operationIsos.clear();
         operationErrors.clear();
-        
-		promptFlag = false;        
-        manualRefreshCache(userDestDir);
+        userDestDir.clear();
         
         clear_history();
 
@@ -409,7 +429,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
         // Print the time taken for the entire process in bold with one decimal place
         std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
-        
         std::cout << " " << std::endl;
         std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
         std::cin.get();
@@ -524,6 +543,8 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 }
 
 
+
+
 // RM
 
 
@@ -608,220 +629,4 @@ void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<s
             std::cout << "\033[1;93mFile not found in cache: \033[0m\033[1m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m.\033[0m\033[1m" << std::endl;
         }
     }
-}
-
-
-// Function to process user input for selecting and deleting specific ISO files
-void processDeleteInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet) {
-        
-    // Create an input string stream to tokenize the user input
-    std::istringstream iss(input);
-
-    // Variables for tracking errors, processed indices, and valid indices
-    bool invalidInput = false;
-    std::unordered_set<std::string> uniqueErrorMessages; // Set to store unique error messages
-    std::vector<int> processedIndices; // Vector to keep track of processed indices
-    std::vector<int> validIndices;     // Vector to keep track of valid indices
-
-    std::string token;
-
-    // Tokenize the input string
-    while (iss >> token) {
-        
-        // Check if the token consists only of zeros and treat it as a non-existent index
-        if (isAllZeros(token)) {
-            if (!invalidInput) {
-                invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist.\033[0m\033[1m");
-            }
-        }
-
-        // Check if the token is '0' and treat it as a non-existent index
-        if (token == "0") {
-            if (!invalidInput) {
-                invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist.\033[0m\033[1m");
-            }
-        }
-        
-        // Check if there is more than one hyphen in the token
-        if (std::count(token.begin(), token.end(), '-') > 1) {
-            invalidInput = true;
-            uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0m\033[1m");
-            continue;
-        }
-
-        // Process ranges specified with hyphens
-        size_t dashPos = token.find('-');
-        if (dashPos != std::string::npos) {
-            int start, end;
-
-            try {
-                // Lock to ensure thread safety in a multi-threaded environment
-                std::lock_guard<std::mutex> highLock(Mutex4High);
-                start = std::stoi(token.substr(0, dashPos));
-                end = std::stoi(token.substr(dashPos + 1));
-            } catch (const std::invalid_argument& e) {
-                // Handle the exception for invalid input
-                invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0m\033[1m");
-                continue;
-            } catch (const std::out_of_range& e) {
-                // Handle the exception for out-of-range input
-                invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0m\033[1m");
-                continue;
-            }
-            
-            // Lock to ensure thread safety in a multi-threaded environment
-            std::lock_guard<std::mutex> highLock(Mutex4High);
-
-            // Check for validity of the specified range
-            if ((start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) ||
-                (start == 0 || end == 0)) {
-                invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m\033[1m");
-                continue;
-            }
-
-            // Mark indices within the specified range as valid
-            int step = (start <= end) ? 1 : -1;
-            for (int i = start; ((start <= end) && (i <= end)) || ((start > end) && (i >= end)); i += step) {
-                if ((i >= 1) && (i <= static_cast<int>(isoFiles.size())) && std::find(processedIndices.begin(), processedIndices.end(), i) == processedIndices.end()) {
-                    processedIndices.push_back(i); // Mark as processed
-                    validIndices.push_back(i);
-                } else if ((i < 1) || (i > static_cast<int>(isoFiles.size()))) {
-                    invalidInput = true;
-                    uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(i) + "' does not exist.\033[0m\033[1m");
-                }
-            }
-        } else if (isNumeric(token)) {
-            // Process single numeric indices
-            int num = std::stoi(token);
-            if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && std::find(processedIndices.begin(), processedIndices.end(), num) == processedIndices.end()) {
-                processedIndices.push_back(num); // Mark index as processed
-                validIndices.push_back(num);
-            } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
-                invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(num) + "' does not exist.\033[0m\033[1m");
-            }
-        } else {
-            invalidInput = true;
-            uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0m\033[1m");
-        }
-    }
-
-    // Display unique errors at the end
-    if (invalidInput) {
-        for (const auto& errorMsg : uniqueErrorMessages) {
-            std::cerr << "\033[1;93m" << errorMsg << "\033[0m\033[1m" << std::endl;
-        }
-    }
-
-    // Display additional information if there are invalid inputs and some valid indices
-    if (invalidInput && !validIndices.empty()) {
-        std::cout << " " << std::endl;
-    }
-	// Detect and use the minimum of available threads and validIndices to ensure efficient parallelism
-	unsigned int numThreads = std::min(static_cast<int>(validIndices.size()), static_cast<int>(maxThreads));
-
-    // Batch the valid indices into chunks based on numThreads
-    std::vector<std::vector<int>> indexChunks;
-    const size_t chunkSize = (validIndices.size() + numThreads - 1) / numThreads;
-    for (size_t i = 0; i < validIndices.size(); i += chunkSize) {
-        indexChunks.emplace_back(validIndices.begin() + i, std::min(validIndices.begin() + i + chunkSize, validIndices.end()));
-    }
-
-     // Display selected deletions
-    if (!indexChunks.empty()) {
-        std::cout << "\033[1;94mThe following ISO(s) will be \033[1;91m*PERMANENTLY DELETED*\033[1;94m:\033[0m\033[1m" << std::endl;
-        std::cout << " " << std::endl;
-        for (const auto& chunk : indexChunks) {
-            for (const auto& index : chunk) {
-                auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFiles[index - 1]);
-                std::cout << "\033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[0m\033[1m" << std::endl;
-            }
-        }
-    }
-
-     // Display a message if there are no valid selections for deletion
-    if (!uniqueErrorMessages.empty() && indexChunks.empty()) {
-        std::cout << " " << std::endl;
-        std::cout << "\033[1;91mNo valid selection(s) for deletion.\033[0m\033[1m" << std::endl;
-    } else {
-        // Prompt for confirmation before proceeding
-        std::string confirmation;
-        std::cout << " " << std::endl;
-        std::cout << "\033[1;94mDo you want to proceed with the \033[1;91mdeletion\033[1;94m of the above? (y/n):\033[0m\033[1m ";
-        std::getline(std::cin, confirmation);
-
-        // Check if the entered character is not 'Y' or 'y'
-    if (!(confirmation == "y" || confirmation == "Y")) {
-        std::cout << " " << std::endl;
-        std::cout << "\033[1;93mDeletion aborted by user.\033[0m\033[1m" << std::endl;
-        return;
-    } else {
-        // Start the timer after user confirmation
-        auto start_time = std::chrono::high_resolution_clock::now();
-
-        std::system("clear");
-        std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
-        // Detect and use the minimum of available threads and indexChunks to ensure efficient parallelism
-		unsigned int numThreads = std::min(static_cast<int>(indexChunks.size()), static_cast<int>(maxThreads));
-        // Create a thread pool with a optimal number of threads
-        ThreadPool pool(numThreads);
-        // Use std::async to launch asynchronous tasks
-        std::vector<std::future<void>> futures;
-        futures.reserve(numThreads);
-        
-        // Lock to ensure thread safety in a multi-threaded environment
-        std::lock_guard<std::mutex> highLock(Mutex4High);
-        
-        // Launch deletion tasks for each chunk of selected indices
-        for (const auto& chunk : indexChunks) {
-            std::vector<std::string> isoFilesInChunk;
-            for (const auto& index : chunk) {
-                isoFilesInChunk.push_back(isoFiles[index - 1]);
-            }
-            futures.emplace_back(pool.enqueue(handleDeleteIsoFile, isoFilesInChunk, std::ref(isoFiles), std::ref(deletedSet)));
-        }
-
-        // Wait for all asynchronous tasks to complete
-        for (auto& future : futures) {
-            future.wait();
-        }
-        
-        clearScrollBuffer();
-        std::system("clear");
-        
-        if (!deletedIsos.empty()) {
-            std::cout << " " << std::endl;
-        }
-    
-        // Print all deleted files
-        for (const auto& deletedIso : deletedIsos) {
-            std::cout << deletedIso << std::endl;
-        }
-        
-        if (!deletedErrors.empty()) {
-            std::cout << " " << std::endl;
-        }
-        
-        for (const auto& deletedError : deletedErrors) {
-            std::cout << deletedError << std::endl;
-        }
-        
-        // Clear the vector after each iteration
-        deletedIsos.clear();
-
-        // Stop the timer after completing all deletion tasks
-        auto end_time = std::chrono::high_resolution_clock::now();
-
-        // Calculate and print the elapsed time
-        std::cout << " " << std::endl;
-        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-        // Print the time taken for the entire process in bold with one decimal place
-        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
-		}
-	}
 }

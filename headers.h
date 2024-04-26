@@ -192,7 +192,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 
 // RM functions
 void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::unordered_set<std::string>& deletedSet);
-void processDeleteInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& deletedSet);
 
 
 //	MOUNTER ELITE
