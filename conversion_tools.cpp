@@ -80,15 +80,14 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
     // Flag to check if new files are found
     bool newFilesFound = false;
-
     // Call the appropriate function to populate the cache based on file type
     if (fileType == "bin" || fileType == "img") {
-        files = findBinImgFiles(directoryPaths, [&files, &newFilesFound, &flag](const std::string& fileName, const std::string& filePath) {
+        files = findFiles(directoryPaths, "bin", [&](const std::string& fileName, const std::string& filePath) {
 			flag = false;
             newFilesFound = true;
         });
     } else if (fileType == "mdf" || fileType == "mds") {
-        files = findMdsMdfFiles(directoryPaths, [&files, &newFilesFound, &flag](const std::string& fileName, const std::string& filePath) {
+        files = findFiles(directoryPaths, "mdf", [&](const std::string& fileName, const std::string& filePath) {
 			flag = true;
             newFilesFound = true;
         });
@@ -98,7 +97,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     if (!newFilesFound && !files.empty()) {
         std::cout << " " << std::endl;
         auto end_time = std::chrono::high_resolution_clock::now();
-        std::cout << "\033[1;91mNo new " << fileExtension << " file(s) over 5MB found. \033[1;92m" << files.size() << " file(s) cached in RAM from previous searches.\033[0m\033[1m" << std::endl;
+        std::cout << "\033[1;91mNo new " << fileExtension << " file(s) over 5MB found. \033[1;92m" << files.size() << " mixed file(s) are cached in RAM from previous searches.\033[0m\033[1m" << std::endl;
         std::cout << " " << std::endl;
         auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
         std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
@@ -463,7 +462,7 @@ bool blacklistBin(const std::filesystem::path& entry) {
 
 
 // Function to search for .bin and .img files over 5MB
-std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback) {
+std::vector<std::string> findFiles(const std::vector<std::string>& paths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback) {
     // Vector to store cached invalid paths
     static std::vector<std::string> cachedInvalidPaths;
     
@@ -472,6 +471,9 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
 
     // Static variables to cache results for reuse
     static std::vector<std::string> binImgFilesCache;
+    
+    // Static variables to cache results for reuse
+    static std::vector<std::string> mdfMdsFilesCache;
     
     // Set to store processed paths
     static std::set<std::string> processedPaths;
@@ -491,8 +493,7 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
     auto start_time = std::chrono::high_resolution_clock::now();
 
     try {
-		
-		// Preallocate enough space for the futures vector
+        // Preallocate enough space for the futures vector
         size_t totalFiles = 0;
         for (const auto& path : paths) {
             for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
@@ -536,66 +537,103 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
 
                 // Use async to process files concurrently
                 // Iterate through files in the given directory and its subdirectories
-                for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
-                    if (entry.is_regular_file()) {
-							// Checks .bin .img blacklist
-							if (blacklistBin(entry)) {
-                            // Check if the file is already present in the cache to avoid duplicates
-                            std::string fileName = entry.path().string();
-                            if (std::find(binImgFilesCache.begin(), binImgFilesCache.end(), fileName) == binImgFilesCache.end()) {
-                                // Process the file asynchronously
-                                if (numOngoingTasks < maxThreads) {
-                                    // Increment the ongoing tasks counter
-                                    ++numOngoingTasks;
-                                    std::lock_guard<std::mutex> lock(mutex4search);
+                if (mode == "bin") {
+                    for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
+                        if (entry.is_regular_file()) {
+                            // Checks .bin .img blacklist
+                            if (blacklistBin(entry)) {
+                                // Check if the file is already present in the cache to avoid duplicates
+                                std::string fileName = entry.path().string();
+                                if (std::find(binImgFilesCache.begin(), binImgFilesCache.end(), fileName) == binImgFilesCache.end()) {
                                     // Process the file asynchronously
-                                    futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
-                                } else {
-                                    // Wait for one of the ongoing tasks to complete before adding a new task
-                                       for (auto& future : futures) {
-                                           if (future.valid()) {
-                                               future.get();
-                                           }
-                                       }
-                                    // Increment the ongoing tasks counter
-                                    ++numOngoingTasks;
-                                    std::lock_guard<std::mutex> lock(mutex4search);
+                                    if (numOngoingTasks < maxThreads) {
+                                        // Increment the ongoing tasks counter
+                                        ++numOngoingTasks;
+                                        std::lock_guard<std::mutex> lock(mutex4search);
+                                        // Process the file asynchronously
+                                        futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
+                                    } else {
+                                        // Wait for one of the ongoing tasks to complete before adding a new task
+                                        for (auto& future : futures) {
+                                            if (future.valid()) {
+                                                future.get();
+                                            }
+                                        }
+                                        // Increment the ongoing tasks counter
+                                        ++numOngoingTasks;
+                                        std::lock_guard<std::mutex> lock(mutex4search);
+                                        // Process the file asynchronously
+                                        futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
+                                    }
+                                }
+                            }
+                            processedPaths.insert(path);
+                        }
+                    }
+                } else {
+                    // Use a vector to store futures for ongoing tasks
+                    std::vector<std::future<void>> futures;
+                    
+                    // Iterate through files in the given directory and its subdirectories
+                    for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
+                        if (entry.is_regular_file()) { 
+                            if (blacklistMDF(entry)) {
+                                // Check if the file is already present in the cache to avoid duplicates
+                                std::string fileName = entry.path().string();
+                                if (std::find(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end(), fileName) == mdfMdsFilesCache.end()) {
                                     // Process the file asynchronously
-                                    futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
+                                    if (numOngoingTasks < maxThreads) {
+                                        // Increment the ongoing tasks counter
+                                        ++numOngoingTasks;
+                                        std::lock_guard<std::mutex> lock(mutex4search);
+                                        // Process the file asynchronously
+                                        futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
+                                    } else {
+                                        // Wait for one of the ongoing tasks to complete before adding a new task
+                                        for (auto& future : futures) {
+                                            if (future.valid()) {
+                                                future.get();
+                                            }
+                                        }
+                                        // Increment the ongoing tasks counter
+                                        ++numOngoingTasks;
+                                        std::lock_guard<std::mutex> lock(mutex4search);
+                                        // Process the file asynchronously
+                                        futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
+                                    }
                                 }
                             }
                         }
                     }
+
+                    // Wait for remaining asynchronous tasks to complete
+                    for (auto& future : futures) {
+                        // Check if the future is valid
+                        if (future.valid()) {
+                            // Block until the future is ready
+                            future.get();
+                        }
+                    }
+                    
+                    // Add the processed path to the set
+                    processedPaths.insert(path);
                 }
-
-                // Wait for remaining asynchronous tasks to complete
-                for (auto& future : futures) {
-                    // Check if the future is valid
-                   if (future.valid()) {
-                       // Block until the future is ready
-                       future.get();
-                   }
-               }
-               
-                // Add the processed path to the set
-                processedPaths.insert(path);
-
             } catch (const std::filesystem::filesystem_error& e) {
                 std::lock_guard<std::mutex> lock(mutex4search);
 
                 // Check if the exception is related to a permission error
-				const std::error_code& ec = e.code();
-				if (ec == std::errc::permission_denied) {
-					// Check if the path is unique
-					if (uniqueInvalidPaths.insert(path).second) {
-						// If it's a new path, print an empty line before printing the error (only once)
-						if (!printedEmptyLine) {
-							std::cout << " " << std::endl;
-							printedEmptyLine = true;
-						}
-							// Handle permission error differently, you can choose to skip or print a specific message
-							std::cerr << "\033[1;91mInsufficient permissions for directory path: \033[1;93m'" << path << "'\033[1;91m.\033[0m\033[1m" << std::endl;
-					}
+                const std::error_code& ec = e.code();
+                if (ec == std::errc::permission_denied) {
+                    // Check if the path is unique
+                    if (uniqueInvalidPaths.insert(path).second) {
+                        // If it's a new path, print an empty line before printing the error (only once)
+                        if (!printedEmptyLine) {
+                            std::cout << " " << std::endl;
+                            printedEmptyLine = true;
+                        }
+                        // Handle permission error differently, you can choose to skip or print a specific message
+                        std::cerr << "\033[1;91mInsufficient permissions for directory path: \033[1;93m'" << path << "'\033[1;91m.\033[0m\033[1m" << std::endl;
+                    }
                 } else if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
                     if (!printedEmptyLine) {
                         // Print an empty line before starting to print invalid paths (only once)
@@ -620,12 +658,11 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
         }
         // Handle filesystem errors for the overall operation
         std::cerr << "\033[1;91m" << e.what() << ".\033[0m\033[1m" << std::endl;
-        std::cin.ignore();
     }
 
     // Print success message if files were found
     if (!fileNames.empty()) {
-		// Stop the timer after completing the mounting process
+        // Stop the timer after completing the mounting process
         auto end_time = std::chrono::high_resolution_clock::now();
         std::cout << " " << std::endl;
         std::cout << "\033[1;92mFound " << fileNames.size() << " matching file(s)\033[0m\033[1m" << ".\033[1;93m " << binImgFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0m\033[1m" << std::endl;
@@ -644,12 +681,24 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
     fileNames.erase(std::unique(fileNames.begin(), fileNames.end()), fileNames.end());
     
     std::lock_guard<std::mutex> lock(mutex4search);
+    if (mode == "bin") {
+        // Update the cache by appending fileNames to binImgFilesCache
+        binImgFilesCache.insert(binImgFilesCache.end(), fileNames.begin(), fileNames.end());
 
-    // Update the cache by appending fileNames to binImgFilesCache
-    binImgFilesCache.insert(binImgFilesCache.end(), fileNames.begin(), fileNames.end());
+        // Return the combined results
+        return binImgFilesCache;
+    }
+    
+    if (mode == "mdf") {
+        // Update the cache by appending fileNames to mdfMdsFilesCache
+        mdfMdsFilesCache.insert(mdfMdsFilesCache.end(), fileNames.begin(), fileNames.end());
+        
+        // Return the combined results
+        return mdfMdsFilesCache;
+    }
 
-    // Return the combined results
-    return binImgFilesCache;
+    // Return an empty vector if mode is neither "bin" nor "mdf"
+    return std::vector<std::string>();
 }
 
 
@@ -748,199 +797,6 @@ bool blacklistMDF(const std::filesystem::path& entry) {
 
     return true;
 }
-
-
-// Function to search for .mdf and .mds files over 5MB
-std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback) {
-    // Vector to store cached invalid paths
-    static std::vector<std::string> cachedInvalidPaths;
-    
-    // Vector to store permission errors
-    std::set<std::string> uniqueInvalidPaths;
-
-    // Static variables to cache results for reuse
-    static std::vector<std::string> mdfMdsFilesCache;
-
-    // Set to store processed paths
-    static std::set<std::string> processedPaths;
-
-    // Vector to store file names that match the criteria
-    std::vector<std::string> fileNames;
-
-    // Clear the cachedInvalidPaths before processing a new set of paths
-    cachedInvalidPaths.clear();
-
-    bool printedEmptyLine = false;  // Flag to track if an empty line has been printed
-    
-    // Mutex to ensure thread safety
-    std::mutex mutex4search;
-    
-    // Start the timer
-    auto start_time = std::chrono::high_resolution_clock::now();
-
-    try {
-		
-		// Preallocate enough space for the futures vector
-        size_t totalFiles = 0;
-        for (const auto& path : paths) {
-            for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
-                if (entry.is_regular_file()) {
-                    totalFiles++;
-                }
-            }
-        }
-        
-        std::vector<std::future<void>> futures;
-        futures.reserve(totalFiles);
-
-        // Counter to track the number of ongoing tasks
-        unsigned int numOngoingTasks = 0;
-
-        // Iterate through input paths
-        for (const auto& path : paths) {
-            // Check if the path has already been processed
-            if (processedPaths.find(path) != processedPaths.end()) {
-                continue; // Skip already processed paths
-            }
-
-            try {
-                // Use a lambda function to process files asynchronously
-                auto processFileAsync = [&](const std::filesystem::directory_entry& entry) {
-                    std::string fileName = entry.path().string();
-                    std::string filePath = entry.path().parent_path().string();  // Get the path of the directory
-
-                    // Call the callback function to inform about the found file
-                    callback(fileName, filePath);
-
-                    // Lock the mutex to ensure safe access to shared data (fileNames and numOngoingTasks)
-                    std::lock_guard<std::mutex> lock(mutex4search);
-
-                    // Add the file name to the shared data
-                    fileNames.push_back(fileName);
-
-                    // Decrement the ongoing tasks counter
-                    --numOngoingTasks;
-                };
-
-                // Use a vector to store futures for ongoing tasks
-                std::vector<std::future<void>> futures;
-
-                // Iterate through files in the given directory and its subdirectories
-                for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
-                    if (entry.is_regular_file()) { 
-                        if (blacklistMDF(entry)) {
-                            // Check if the file is already present in the cache to avoid duplicates
-                            std::string fileName = entry.path().string();
-                            if (std::find(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end(), fileName) == mdfMdsFilesCache.end()) {
-                                // Process the file asynchronously
-                                if (numOngoingTasks < maxThreads) {
-                                    // Increment the ongoing tasks counter
-                                    ++numOngoingTasks;
-                                    std::lock_guard<std::mutex> lock(mutex4search);
-                                    // Process the file asynchronously
-                                    futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
-                                } else {
-                                    // Wait for one of the ongoing tasks to complete before adding a new task
-                                    for (auto& future : futures) {
-                                           if (future.valid()) {
-                                               future.get();
-                                           }
-                                       }
-                                    // Increment the ongoing tasks counter
-                                    ++numOngoingTasks;
-                                    std::lock_guard<std::mutex> lock(mutex4search);
-                                    // Process the file asynchronously
-                                    futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Wait for remaining asynchronous tasks to complete
-                for (auto& future : futures) {
-                    // Check if the future is valid
-                   if (future.valid()) {
-                       // Block until the future is ready
-                       future.get();
-                   }
-               }
-
-                // Add the processed path to the set
-                processedPaths.insert(path);
-
-            } catch (const std::filesystem::filesystem_error& e) {
-                std::lock_guard<std::mutex> lock(mutex4search);
-
-                // Check if the exception is related to a permission error
-				const std::error_code& ec = e.code();
-				if (ec == std::errc::permission_denied) {
-				// Check if the path is unique
-					if (uniqueInvalidPaths.insert(path).second) {
-					// If it's a new path, print an empty line before printing the error (only once)
-						if (!printedEmptyLine) {
-							std::cout << " " << std::endl;
-							printedEmptyLine = true;
-						}
-							// Handle permission error differently, you can choose to skip or print a specific message
-					}		std::cerr << "\033[1;91mInsufficient permissions for directory path: \033[1;93m'" << path << "'\033[1;91m.\033[0m\033[1m" << std::endl;
-                } else if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
-                    if (!printedEmptyLine) {
-                        // Print an empty line before starting to print invalid paths (only once)
-                        std::cout << " " << std::endl;
-                        printedEmptyLine = true;
-                    }
-
-                    // Print the specific error details for non-permission errors
-                    std::cerr << "\033[1;91m" << e.what() << ".\033[0m\033[1m" << std::endl;
-
-                    // Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
-                    cachedInvalidPaths.push_back(path);
-                }
-            }
-        }
-
-    } catch (const std::filesystem::filesystem_error& e) {
-        if (!printedEmptyLine) {
-            // Print an empty line before starting to print invalid paths (only once)
-            std::cout << " " << std::endl;
-            printedEmptyLine = true;
-        }
-        // Handle filesystem errors for the overall operation
-        std::cerr << "\033[1;91m" << e.what() << "\033[0m\033[1m" << std::endl;
-        std::cin.ignore();
-    }
-
-    // Print success message if files were found
-    if (!fileNames.empty()) {
-		// Stop the timer after completing the mounting process
-        auto end_time = std::chrono::high_resolution_clock::now();
-        std::cout << " " << std::endl;
-        std::cout << "\033[1;92mFound " << fileNames.size() << " matching file(s)\033[0m\033[1m" << ".\033[1;93m " << mdfMdsFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0m\033[1m" << std::endl;
-        // Calculate and print the elapsed time
-        std::cout << " " << std::endl;
-        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-        // Print the time taken for the entire process in bold with one decimal place
-        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
-        std::cout << " " << std::endl;
-        std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
-        std::cin.ignore();
-    }
-
-    // Remove duplicates from fileNames by sorting and using unique erase idiom
-    std::sort(fileNames.begin(), fileNames.end());
-    fileNames.erase(std::unique(fileNames.begin(), fileNames.end()), fileNames.end());
-    
-    std::lock_guard<std::mutex> lock(mutex4search);
-
-    // Update the cache by appending fileNames to mdfMdsFilesCache
-    mdfMdsFilesCache.insert(mdfMdsFilesCache.end(), fileNames.begin(), fileNames.end());
-    
-
-    // Return the combined results
-    return mdfMdsFilesCache;
-}
-
 
 
 // Function to convert an MDF file to ISO format using mdf2iso

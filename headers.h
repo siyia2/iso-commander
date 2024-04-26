@@ -255,6 +255,10 @@ std::vector<std::string> loadCache();
 
 // General
 
+
+// stds
+std::vector<std::string> findFiles(const std::vector<std::string>& paths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback);
+
 // voids
 void select_and_convert_files_to_iso(const std::string& fileTypeChoice);
 void processInput(const std::string& input, const std::vector<std::string>& fileList, const std::string& inputPaths, bool flag);
@@ -270,8 +274,6 @@ bool fileExistsConversions(const std::string& fullPath);
 bool blacklistBin(const std::filesystem::path& entry);
 bool isCcd2IsoInstalled();
 
-// stds
-std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback);
 
 // voids
 void convertBINToISO(const std::string& inputPath);
@@ -283,8 +285,6 @@ void convertBINToISO(const std::string& inputPath);
 bool blacklistMDF(const std::filesystem::path& entry);
 bool isMdf2IsoInstalled();
 
-// stds
-std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback);
 
 // voids
 void convertMDFToISO(const std::string& inputPath);
