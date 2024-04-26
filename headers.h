@@ -220,9 +220,9 @@ bool isNumeric(const std::string& str);
 
 // Mount functions
 void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordered_set<std::string>& mountedSet);
-void select_and_mount_files_by_number();
+void select_iso_files_by_number(const std::string& action);
 void printIsoFileList(const std::vector<std::string>& isoFiles);
-void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
+void processIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet, const std::string& action);
 
 // Iso cache functions
 void manualRefreshCache(const std::string& initialDir = "");

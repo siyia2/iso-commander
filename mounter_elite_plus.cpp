@@ -157,12 +157,12 @@ void submenu1() {
         case '1':
             std::system("clear");
             action = "mount";
-            select_and_mount_files_by_number(action);
+            select_iso_files_by_number(action);
             break;
         case '2':
             std::system("clear");
             action = "umount";
-            select_and_mount_files_by_number(action);
+            select_iso_files_by_number(action);
             break;
         case '3':
             std::system("clear");
@@ -751,7 +751,7 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
 //	MOUNT STUFF
 
 
-void select_and_mount_files_by_number(const std::string& action) {
+void select_iso_files_by_number(const std::string& action) {
     // Path where ISOs are mounted
     const std::string isoPath = "/mnt";
     std::vector<std::string> isoDirs;
@@ -878,8 +878,9 @@ void select_and_mount_files_by_number(const std::string& action) {
             
         } else if (action == "mount"){
             // Process user input to select and mount/unmount specific ISO files
-            processAndMountIsoFiles(input, isoFiles, mountedSet, action);
-        } else {
+            processIsoFiles(input, isoFiles, mountedSet, action);
+        } else if (action == "umount"){
+			processIsoFiles(input, isoFiles, mountedSet, action);
 			
 		}
 
@@ -991,7 +992,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
 
 
 // Function to process input and mount ISO files asynchronously
-void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet, const std::string& action) {
+void processIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet, const std::string& action) {
     // Initialize input string stream with the provided input
     std::istringstream iss(input);
     
