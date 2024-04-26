@@ -19,12 +19,12 @@ bool gapPrinted = false; // for cache refresh for directory function
 bool promptFlag = true; // for cache refresh for directory function
 bool gapPrintedtraverse = false; // for traverse function
 
-// Vector to store ISO mounts
 std::vector<std::string> mountedFiles;
 // Vector to store skipped ISO mounts
 std::vector<std::string> skippedMessages;
 // Vector to store ISO mount errors
 std::vector<std::string> errorMessages;
+
 // Vector to store ISO unique input errors
 std::unordered_set<std::string> uniqueErrorMessages;
 
@@ -903,27 +903,17 @@ void select_iso_files_by_number(const std::string& action) {
             	
 		}
 		
-		        std::system("clear");
-        
-        if (!mountedFiles.empty()) {
+		 std::system("clear");
+		 
+		 if (!mountedFiles.empty()) {
 			std::cout << " " << std::endl;
 		}
 		
-		if (!isoDirs.empty()) {
-			std::cout << " " << std::endl;
-		}
-		if (action == "mount") {
 		// Print all mounted files
-			for (const auto& mountedFile : mountedFiles) {
+		for (const auto& mountedFile : mountedFiles) {
 				std::cout << mountedFile << std::endl;
-			}
-		} else {
-			// Print all unmounted files
-			for (const auto& unmountedFile : unmountedFiles) {
-				std::cout << unmountedFile << std::endl;
-			}
 		}
-		
+				
 		if (!skippedMessages.empty()) {
 			std::cout << " " << std::endl;
 		}
@@ -932,14 +922,32 @@ void select_iso_files_by_number(const std::string& action) {
 		for (const auto& skippedMessage : skippedMessages) {
 			std::cerr << skippedMessage;
 		}
-        
-        if (!errorMessages.empty()) {
+		
+		if (!errorMessages.empty()) {
 			std::cout << " " << std::endl;
 		}
+		
 		// Print all the stored error messages
 		for (const auto& errorMessage : errorMessages) {
 			std::cerr << errorMessage;
 		}
+		
+		if (!isoDirs.empty()) {
+			std::cout << " " << std::endl;
+		}
+		
+		// Print all unmounted files
+		for (const auto& unmountedFile : unmountedFiles) {
+			std::cout << unmountedFile << std::endl;
+		}
+			
+		if (!unmountedErrors.empty()) {
+			std::cout << " " << std::endl; // Print a blank line before deleted folders
+		}
+		// Print all unmounted erros
+		for (const auto& unmountedError : unmountedErrors) {
+			std::cout << unmountedError << std::endl;
+		}		
 		
 		if (!uniqueErrorMessages.empty()) {
 			std::cout << " " << std::endl;
@@ -948,12 +956,17 @@ void select_iso_files_by_number(const std::string& action) {
 		for (const auto& errorMsg : uniqueErrorMessages) {
             std::cerr << "\033[1;93m" << errorMsg << "\033[0m\033[1m" << std::endl;
         }
+        
+        
 		
 		// Clear the vectors after each iteration
+		unmountedFiles.clear();
+		unmountedErrors.clear();
 		mountedFiles.clear();
 		skippedMessages.clear();
 		errorMessages.clear();
 		uniqueErrorMessages.clear();
+		
 
         // Stop the timer after completing the mounting/unmounting process
         auto end_time = std::chrono::high_resolution_clock::now();
