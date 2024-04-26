@@ -181,6 +181,8 @@ bool isValidLinuxPathFormat(const std::string& path);
 bool isValidLinuxPathFormat(const std::string& path);
 
 // RM functions
+
+//	bools
 bool fileExists(const std::string& filename);
 
 //	voids
