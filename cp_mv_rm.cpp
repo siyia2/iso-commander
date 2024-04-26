@@ -119,7 +119,6 @@ void select_and_operate_files_by_number(const std::string& operation) {
             // Process move operation
             clearScrollBuffer();
             std::system("clear");
-            std::unordered_set<std::string> operationSet;
             process = "mv";
             processOperationInput(input, isoFiles, operationSet, process);
         } else if (operation == "cp") {
@@ -150,6 +149,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 }
 
 
+// Function to process either mv or cp indices
 void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& operationSet, const std::string& process) {
 	// variable for user specified destination
 	std::string userDestDir;
