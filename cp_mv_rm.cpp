@@ -507,7 +507,13 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         for (const auto& iso : isoFilesToOperate) {
                             auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(iso);
                             oss.str("");
-                            oss << "\033[1m" << (isCopy ? "Copied" : (isMove ? "Moved" : "Deleted")) << ": \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[0m\033[1m to \033[1;94m'" << userDestDir << "'\033[0m\033[1m";
+                            if (!isDelete) {
+								oss << "\033[1m" << (isCopy ? "Copied" : (isMove ? "Moved" : "Deleted")) << ": \033[1;92m'"
+								<< isoDirectory << "/" << isoFilename << "'\033[0m\033[1m to \033[1;94m'" << userDestDir << "'\033[0m\033[1m";
+							} else {
+								oss << "\033[1m" << (isCopy ? "Copied" : (isMove ? "Moved" : "Deleted")) << ": \033[1;92m'"
+								<< isoDirectory << "/" << isoFilename << "'\033[0m\033[1m";
+							}
                             std::string operationInfo = oss.str();
                             operationIsos.push_back(operationInfo);
                         }
@@ -515,7 +521,13 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         for (const auto& iso : isoFilesToOperate) {
                             auto [isoDir, isoFilename] = extractDirectoryAndFilename(iso);
                             oss.str("");
-                            oss << "\033[1;91mError " << (isCopy ? "copying" : (isMove ? "moving" : "deleting")) << ": \033[1;93m'" << isoDir << "/" << isoFilename << "'\033[1;91m to '" << userDestDir << "'\033[0m\033[1m";
+                            if (!isDelete) {
+								oss << "\033[1;91mError " << (isCopy ? "copying" : (isMove ? "moving" : "deleting")) << ": \033[1;93m'"
+								<< isoDir << "/" << isoFilename << "'\033[1;91m to '" << userDestDir << "'\033[0m\033[1m";
+							} else {
+								oss << "\033[1;91mError " << (isCopy ? "copying" : (isMove ? "moving" : "deleting")) << ": \033[1;93m'"
+								<< isoDir << "/" << isoFilename << "'\033[0m\033[1m";
+							}
                             errorMessageInfo = oss.str();
                             operationErrors.push_back(errorMessageInfo);
                         }
@@ -533,11 +545,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 }
 
 
-
-
-
 // RM
-
 
 // Function to check if a file exists
 bool fileExists(const std::string& filename) {
