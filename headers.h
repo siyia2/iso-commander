@@ -214,7 +214,6 @@ bool isValidIndex(int index, size_t isoDirsSize);
 //	voids
 
 //General functions
-void clearScrollBuffer();
 bool isAllZeros(const std::string& str);
 bool isNumeric(const std::string& str);
 

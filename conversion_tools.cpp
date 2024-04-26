@@ -121,7 +121,6 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
     // Continue selecting and converting files until the user decides to exit
     while (true) {
-        clearScrollBuffer();
         std::system("clear");
       
 		printFileList(files);

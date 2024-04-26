@@ -48,7 +48,6 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
     // If no ISO files are available, display a message and return
     if (isoFiles.empty()) {
-        clearScrollBuffer();
         std::system("clear");
         std::cout << "\033[1;93mNo ISO(s) available for " << operation << ".\033[0m\033[1m" << std::endl;
         std::cout << " " << std::endl;
@@ -77,7 +76,6 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
     // Main loop for interacting with ISO files
     while (true) {
-        clearScrollBuffer();
         std::system("clear");
 
         // Display header message
@@ -106,19 +104,16 @@ void select_and_operate_files_by_number(const std::string& operation) {
             break;
         } else if (operation == "rm") {
             // Process delete operation
-            clearScrollBuffer();
             std::system("clear");
             process = "rm";
             processOperationInput(input, isoFiles, operationSet, process);
         } else if (operation == "mv") {
             // Process move operation
-            clearScrollBuffer();
             std::system("clear");
             process = "mv";
             processOperationInput(input, isoFiles, operationSet, process);
         } else if (operation == "cp") {
             // Process copy operation
-            clearScrollBuffer();
             std::system("clear");
             process = "cp";
             processOperationInput(input, isoFiles, operationSet, process);
@@ -389,7 +384,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 			manualRefreshCache(userDestDir);
 		}
 
-		clearScrollBuffer();
+		
 		std::system("clear");
         
         if (!operationIsos.empty()) {

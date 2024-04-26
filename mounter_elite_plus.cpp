@@ -242,11 +242,6 @@ void printMenu() {
 
 // GENERAL STUFF
 
-void clearScrollBuffer() {
-    std::cout << "\033[3J\033[H"; // ANSI escape codes for clearing scroll buffer
-    std::cout.flush(); // Ensure the output is flushed
-}
-
 
 // Function to check if a string consists only of zeros
 bool isAllZeros(const std::string& str) {
@@ -757,7 +752,7 @@ void select_iso_files_by_number(const std::string& action) {
     std::vector<std::string> isoDirs;
       // Set to track mounted ISO files
     std::unordered_set<std::string> mountedSet;
-
+	
     // Remove non-existent paths from the cache
     removeNonExistentPathsFromCache();
 
@@ -766,7 +761,6 @@ void select_iso_files_by_number(const std::string& action) {
 
     // Check if the cache is empty
     if (isoFiles.empty()) {
-        clearScrollBuffer();
         std::system("clear");
         std::cout << "\033[1;93mISO Cache is empty. Please refresh it from the main Menu Options.\033[0m\033[1m" << std::endl;
         std::cout << " " << std::endl;
@@ -777,7 +771,6 @@ void select_iso_files_by_number(const std::string& action) {
 
     // Main loop for selecting and mounting/unmounting ISO files
     while (true) {
-        clearScrollBuffer();
         std::system("clear");
 
         if (action == "mount") {
@@ -871,10 +864,10 @@ void select_iso_files_by_number(const std::string& action) {
         // Enqueue unmounting tasks for each batch
         pool.enqueue([batch]() {
             unmountISO(batch);
-        });
+			});
         }
 
-                }
+        }
             
         } else if (action == "mount"){
             // Process user input to select and mount/unmount specific ISO files
@@ -1416,7 +1409,6 @@ void unmountISOs() {
                 future.wait();
             }
             
-            clearScrollBuffer();
 			std::system("clear");
 			
             if (invalidInput && !validIndices.empty()) {
@@ -1563,7 +1555,6 @@ void unmountISOs() {
             future.wait();
         }
         
-        clearScrollBuffer();
 		std::system("clear");
         
         if (!unmountedFiles.empty()) {
