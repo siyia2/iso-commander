@@ -97,7 +97,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     if (!newFilesFound && !files.empty()) {
         std::cout << " " << std::endl;
         auto end_time = std::chrono::high_resolution_clock::now();
-        std::cout << "\033[1;91mNo new " << fileExtension << " file(s) over 5MB found. \033[1;92m" << files.size() << " mixed file(s) are cached in RAM from previous searches.\033[0m\033[1m" << std::endl;
+        std::cout << "\033[1;91mNo new " << fileExtension << " file(s) over 5MB found. \033[1;92m" << files.size() << " file(s) are cached in RAM from previous searches.\033[0m\033[1m" << std::endl;
         std::cout << " " << std::endl;
         auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
         std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
@@ -571,7 +571,11 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         // Stop the timer after completing the mounting process
         auto end_time = std::chrono::high_resolution_clock::now();
         std::cout << " " << std::endl;
-        std::cout << "\033[1;92mFound " << fileNames.size() << " matching file(s)\033[0m\033[1m" << ".\033[1;93m " << binImgFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0m\033[1m" << std::endl;
+        if (mode == "bin") {
+			std::cout << "\033[1;92mFound " << fileNames.size() << " matching file(s)\033[0m\033[1m" << ".\033[1;93m " << binImgFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0m\033[1m" << std::endl;
+		} else {
+			std::cout << "\033[1;92mFound " << fileNames.size() << " matching file(s)\033[0m\033[1m" << ".\033[1;93m " << mdfMdsFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0m\033[1m" << std::endl;
+		}
         // Calculate and print the elapsed time
         std::cout << " " << std::endl;
         auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
