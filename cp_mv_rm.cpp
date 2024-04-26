@@ -34,7 +34,7 @@ bool isValidLinuxPathFormat(const std::string& path) {
             previousWasSlash = false;
 
             // Check for invalid characters: '\0', '\n', '\r', '\t'
-            if (c == '\0' || c == '\n' || c == '\r' || c == '\t') {
+            if (c == '\0' || c == '\n' || c == '\r' || c == '\t' || c == ';') {
                 return false; // Invalid characters in Linux path
             }
         }
@@ -332,10 +332,9 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
                 }
                 break;
             } else {
-                std::cout << "\n\033[1;91mInvalid path. The destination directory does not exist.\033[0m\033[1m" << std::endl;
+                std::cout << "\n\033[1;91mInvalid paths or multiple paths are not supported.\033[0m\033[1m" << std::endl;
                 std::cout << "\n\033[1;32mPress Enter to try again...\033[0m\033[1m";
                 std::cin.get();
-                return;
             }
         }
 
@@ -399,9 +398,11 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         // Clear the vector after each iteration
         operationIsos.clear();
         operationErrors.clear();
-        clear_history();
+        
+		promptFlag = false;        
         manualRefreshCache(userDestDir);
-
+        
+        clear_history();
 
         // Stop the timer after completing all deletion tasks
         auto end_time = std::chrono::high_resolution_clock::now();
