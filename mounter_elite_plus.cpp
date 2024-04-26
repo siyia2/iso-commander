@@ -207,11 +207,11 @@ void submenu2() {
          switch (submenu_choice[0]) {		
              case '1':
 				std::system("clear");
-                select_and_convert_files_to_iso();
+                select_and_convert_files_to_iso("bin");
                 break;
              case '2':
 				std::system("clear");
-                select_and_convert_files_to_iso_mdf();
+                select_and_convert_files_to_iso("mdf");
                 break;
 			}
 		}

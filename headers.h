@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <condition_variable>
 #include <cstring>
@@ -252,42 +253,38 @@ std::vector<std::string> loadCache();
 
 // General
 
-// bools
+// voids
+void select_and_convert_files_to_iso(const std::string& fileTypeChoice);
+void processInput(const std::string& input, const std::vector<std::string>& fileList, const std::string& inputPaths, bool flag);
+void printFileList(const std::vector<std::string>& fileList, const std::string& extensionToHighlight);
 
+// bools
 bool fileExistsConversions(const std::string& fullPath);
 
 
 // BIN/IMG CONVERSION
 
 // bools
-
 bool blacklistBin(const std::filesystem::path& entry);
+bool isCcd2IsoInstalled();
 
 // stds
 std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback);
 
 // voids
-
 void convertBINToISO(const std::string& inputPath);
-void select_and_convert_files_to_iso();
-void processInputBin(const std::string& input, const std::vector<std::string>& fileList, const std::string& inputPaths);
-bool isCcd2IsoInstalled();
-void printFileListBin(const std::vector<std::string>& fileList);
+
 
 // MDF/MDS CONVERSION
 
 // bools
 bool blacklistMDF(const std::filesystem::path& entry);
+bool isMdf2IsoInstalled();
 
 // stds
 std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, const std::function<void(const std::string&, const std::string&)>& callback);
 
 // voids
-
-void processInputMDF(const std::string& input, const std::vector<std::string>& fileList, const std::string& inputPaths);
 void convertMDFToISO(const std::string& inputPath);
-void select_and_convert_files_to_iso_mdf();
-bool isMdf2IsoInstalled();
-void printFileListMdf(const std::vector<std::string>& fileList);
 
 #endif // HEADERS_H

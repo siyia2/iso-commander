@@ -12,7 +12,142 @@ std::mutex fileCheckMutex;
 bool fileExistsConversions(const std::string& fullPath) {
     std::lock_guard<std::mutex> lock(fileCheckMutex);
         return std::filesystem::exists(fullPath);
-} 
+}
+
+
+// Function to select and convert files based on user's choice of file type
+void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
+    // Initialize vectors to store files and directory paths
+    std::vector<std::string> files;
+    std::vector<std::string> directoryPaths;
+	bool flag;
+	
+    // Load history from file
+    loadHistory();
+
+    // Read input for directory paths (allow multiple paths separated by semicolons)
+    std::string fileExtension;
+    std::string fileTypeName;
+
+    // Determine file type based on user's choice
+    std::string fileType = std::string(1, std::tolower(fileTypeChoice[0])) + fileTypeChoice.substr(1);
+
+    if (fileType == "bin" || fileType == "img") {
+        fileExtension = ".bin;.img";
+        fileTypeName = "BIN/IMG";
+    } else if (fileType == "mdf" || fileType == "mds") {
+        fileExtension = ".mdf";
+        fileTypeName = "MDF/MDS";
+    } else {
+        std::cout << "Invalid file type choice. Supported types: BIN/IMG, MDF/MDS" << std::endl;
+        return;
+    }
+
+    std::string inputPaths = readInputLine("\033[1;94mDirectory path(s) ↵ (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1m\033[1;94m) to search for \033[1m\033[1;92m" + fileExtension + " \033[1;94mfiles, or press ↵ to return:\n\033[0m\033[1m");
+    std::cout << "\n\033[1mPlease wait...\033[1m" << std::endl;
+
+    if (!inputPaths.empty()) {
+        // Save history to file
+        saveHistory();
+    }
+
+    // Start the timer
+    auto start_time = std::chrono::high_resolution_clock::now();
+
+    // Use semicolon as a separator to split paths
+    std::istringstream iss(inputPaths);
+    std::string path;
+    while (std::getline(iss, path, ';')) {
+        // Trim leading and trailing whitespaces from each path
+        size_t start = path.find_first_not_of(" \t");
+        size_t end = path.find_last_not_of(" \t");
+        if (start != std::string::npos && end != std::string::npos) {
+            directoryPaths.push_back(path.substr(start, end - start + 1));
+        }
+    }
+
+    // Check if directoryPaths is empty
+    if (directoryPaths.empty()) {
+        return;
+    }
+
+    // Flag to check if new files are found
+    bool newFilesFound = false;
+
+    // Call the appropriate function to populate the cache based on file type
+    if (fileType == "bin" || fileType == "img") {
+        files = findBinImgFiles(directoryPaths, [&files, &newFilesFound, &flag](const std::string& fileName, const std::string& filePath) {
+			flag = false;
+            newFilesFound = true;
+        });
+    } else if (fileType == "mdf" || fileType == "mds") {
+        files = findMdsMdfFiles(directoryPaths, [&files, &newFilesFound, &flag](const std::string& fileName, const std::string& filePath) {
+			flag = true;
+            newFilesFound = true;
+        });
+    }
+
+    // Print a message based on whether new files are found
+    if (!newFilesFound && !files.empty()) {
+        std::cout << " " << std::endl;
+        auto end_time = std::chrono::high_resolution_clock::now();
+        std::cout << "\033[1;91mNo new " << fileExtension << " file(s) over 5MB found. \033[1;92m" << files.size() << " file(s) cached in RAM from previous searches.\033[0m\033[1m" << std::endl;
+        std::cout << " " << std::endl;
+        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
+        std::cout << " " << std::endl;
+        std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
+        std::cin.ignore();
+    }
+
+    if (files.empty()) {
+        std::cout << " " << std::endl;
+        auto end_time = std::chrono::high_resolution_clock::now();
+        std::cout << "\033[1;91mNo " << fileExtension << " file(s) over 5MB found in the specified path(s) or cached in RAM.\n\033[0m\033[1m";
+        std::cout << " " << std::endl;
+        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
+        std::cout << " " << std::endl;
+        std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
+        std::cin.ignore();
+        return;
+    }
+
+    // Continue selecting and converting files until the user decides to exit
+    while (true) {
+        clearScrollBuffer();
+        std::system("clear");
+
+       if (fileType == "bin" || fileType == "img") {
+    printFileList(files, ".bin");
+    printFileList(files, ".img");
+} else if (fileType == "mdf") {
+    printFileList(files, ".mdf");
+}
+
+        std::cout << " " << std::endl;
+        clear_history();
+
+        std::string prompt = "\033[1;94m" + fileTypeName + " file(s) ↵ for conversion (e.g., '1-3', '1 5'), or press ↵ to return:\033[0m\033[1m ";
+char* input = readline(prompt.c_str());
+
+        if (std::isspace(input[0]) || input[0] == '\0') {
+            std::system("clear");
+            break;
+        }
+
+        std::system("clear");
+        std::cout << "\033[1mPlease wait...\n\033[1m" << std::endl;
+
+        // Process user input based on file type
+        processInput(input, files, inputPaths, flag);
+
+        std::cout << " " << std::endl;
+        std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
+        std::cin.ignore();
+    }
+}
+
 
 
 // BIN/IMG CONVERSION FUNCTIONS
@@ -253,123 +388,13 @@ std::vector<std::string> findBinImgFiles(std::vector<std::string>& paths, const 
 }
 
 
-// Main function to select directories and convert BIN/IMG files to ISO format
-void select_and_convert_files_to_iso() {
-    // Initialize vectors to store BIN/IMG files and directory paths
-    std::vector<std::string> binImgFiles;
-    std::vector<std::string> directoryPaths;
-
-    // Declare previousPaths as a static variable
-    static std::vector<std::string> previousPaths;
-	
-	// Load history from file
-    loadHistory();
-    
-    // Read input for directory paths (allow multiple paths separated by semicolons)
-    std::string inputPaths = readInputLine("\033[1;94mDirectory path(s) ↵ (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1m\033[1;94m) to search for \033[1m\033[1;92m.bin \033[1;94mand \033[1m\033[1;92m.img\033[1;94m files, or press ↵ to return:\n\033[0m\033[1m");
-    std::cout << "\n\033[1mPlease wait...\033[1m" << std::endl;
-    
-     if (!inputPaths.empty()) {
-		// Save history to file
-		saveHistory();
-	}
-	
-	// Start the timer
-    auto start_time = std::chrono::high_resolution_clock::now();
-	
-    // Use semicolon as a separator to split paths
-    std::istringstream iss(inputPaths);
-    std::string path;
-    while (std::getline(iss, path, ';')) {
-        // Trim leading and trailing whitespaces from each path
-        size_t start = path.find_first_not_of(" \t");
-        size_t end = path.find_last_not_of(" \t");
-        if (start != std::string::npos && end != std::string::npos) {
-            directoryPaths.push_back(path.substr(start, end - start + 1));
-        }
-    }
-	
-    // Check if directoryPaths is empty
-    if (directoryPaths.empty()) {
-        return;
-    }
-    // Flag to check if new files are found
-	bool newFilesFound = false;
-
-	// Call the findBinImgFiles function to populate the cache
-	binImgFiles = findBinImgFiles(directoryPaths, [&binImgFiles, &newFilesFound](const std::string& fileName, const std::string& filePath) {
-    // Your callback logic here, if needed
-    newFilesFound = true;
-	});
-
-	// Print a message only if no new files are found
-	if (!newFilesFound && !binImgFiles.empty()) {
-		std::cout << " " << std::endl;
-		// Stop the timer after completing the mounting process
-        auto end_time = std::chrono::high_resolution_clock::now();
-		std::cout << "\033[1;91mNo new .bin .img file(s) over 5MB found. \033[1;92m" << binImgFiles.size() << " matching file(s) cached in RAM from previous searches.\033[0m\033[1m" << std::endl;
-		std::cout << " " << std::endl;
-        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-        // Print the time taken for the entire process in bold with one decimal place
-        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
-        std::cout << " " << std::endl;
-        std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
-        std::cin.ignore();
-	}
-
-    if (binImgFiles.empty()) {
-		std::cout << " " << std::endl;
-		// Stop the timer after completing the mounting process
-        auto end_time = std::chrono::high_resolution_clock::now();
-        std::cout << "\033[1;91mNo .bin or .img file(s) over 5MB found in the specified path(s) or cached in RAM.\n\033[0m\033[1m";
-        std::cout << " " << std::endl;
-        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-        // Print the time taken for the entire process in bold with one decimal place
-        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
-        std::cout << " " << std::endl;
-        std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
-        std::cin.ignore();
-        return;
-        
-    } else {
-        while (true) {
-			clearScrollBuffer();
-            std::system("clear");
-            // Print the list of BIN/IMG files
-            printFileListBin(binImgFiles);
-            
-            std::cout << " " << std::endl;
-            
-            // Clear history
-			clear_history();
-        
-            // Prompt user to choose a file or exit
-            char* input = readline("\033[1;94mBIN/IMG file(s) ↵ for \033[1;92mccd2iso\033[1;94m (e.g., '1-3', '1 5'), or press ↵ to return:\033[0m\033[1m ");
-        
-            // Break the loop if the user presses Enter
-            if (std::isspace(input[0]) || input[0] == '\0') {
-                std::system("clear");
-                break;
-            }
-
-            std::system("clear");
-            std::cout << "\033[1mPlease wait...\n\033[1m" << std::endl;
-            // Process user input
-            processInputBin(input, binImgFiles, inputPaths);
-            std::cout << " " << std::endl;	
-            std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
-            std::cin.ignore();
-        }
-    }
-}
-
 
 // Function to print found BIN/IMG files with alternating colored sequence numbers
-void printFileListBin(const std::vector<std::string>& fileList) {
+void printFileList(const std::vector<std::string>& fileList, const std::string& extensionToHighlight) {
     // ANSI escape codes for text formatting
     const std::string bold = "\033[1m";
     const std::string reset = "\033[0m";
-    const std::string red = "\033[31;1m";   // Red color
+    const std::string red = "\033[31;1m"; // Red color
     const std::string green = "\033[32;1m"; // Green color
     const std::string orangeBold = "\033[1;38;5;208m";
 
@@ -383,17 +408,21 @@ void printFileListBin(const std::vector<std::string>& fileList) {
     // Counter for line numbering
     int lineNumber = 1;
 
+    // Apply formatting once before the loop
+    std::cout << std::right << std::setw(2);
+
     for (const auto& filename : fileList) {
         // Extract directory and filename
         auto [directory, fileNameOnly] = extractDirectoryAndFilename(filename);
 
         const std::size_t dotPos = fileNameOnly.find_last_of('.');
-        
+
+        // Check if the file has the specified extension (case-insensitive)
         if (dotPos != std::string::npos) {
             std::string extension = fileNameOnly.substr(dotPos);
             std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
 
-            if (extension == ".img" || extension == ".bin") {
+            if (extension == extensionToHighlight) {
                 // Determine color for sequence number based on toggle
                 std::string sequenceColor = (useRedColor) ? red : green;
                 useRedColor = !useRedColor; // Toggle between red and green
@@ -417,7 +446,7 @@ void printFileListBin(const std::vector<std::string>& fileList) {
 
 
 // Function to process user input and convert selected BIN files to ISO format
-void processInputBin(const std::string& input, const std::vector<std::string>& fileList, const std::string& inputPaths) {
+void processInput(const std::string& input, const std::vector<std::string>& fileList, const std::string& inputPaths, bool flag) {
 
     // Mutexes to protect the critical sections
     std::mutex indicesMutex;
@@ -450,7 +479,12 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
     // Function to execute asynchronously
     auto asyncConvertBINToISO = [&](const std::string& selectedFile) {
         convertBINToISO(selectedFile);
-    };
+		};
+		// Function to execute asynchronously
+		auto asyncConvertMDFToISO = [&](const std::string& selectedFile) {
+        convertMDFToISO(selectedFile);
+		};
+	
 	// Start the timer
     auto start_time = std::chrono::high_resolution_clock::now();
     // Iterate through the tokens in the input string
@@ -486,11 +520,16 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                                 selectedIndex = i - 1;
                                 if (selectedIndex >= 0 && static_cast<std::vector<std::string>::size_type>(selectedIndex) < fileList.size()) {
                                     if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-                                        // Convert BIN to ISO asynchronously and store the future in the vector
                                         std::string selectedFile = fileList[selectedIndex];
                                         uniqueValidIndices.insert(selectedIndex);
-                                        futures.push_back(pool.enqueue(asyncConvertBINToISO, selectedFile));
-                                        processedIndices.insert(selectedIndex);
+                                        if (!flag) {
+											futures.push_back(pool.enqueue(asyncConvertBINToISO, selectedFile));
+										} else {
+											futures.push_back(pool.enqueue(asyncConvertMDFToISO, selectedFile));
+										}
+										processedIndices.insert(selectedIndex);
+    
+										
                                     }
                                 } else {
                                     // Add an error message for an invalid range
@@ -542,8 +581,13 @@ void processInputBin(const std::string& input, const std::vector<std::string>& f
                         // Convert BIN to ISO asynchronously and store the future in the vector
                         std::string selectedFile = fileList[selectedIndex];
                         uniqueValidIndices.insert(selectedIndex);
-                        futures.push_back(pool.enqueue(asyncConvertBINToISO, selectedFile));
-                        processedIndices.insert(selectedIndex); 
+						if (!flag) {
+							futures.push_back(pool.enqueue(asyncConvertBINToISO, selectedFile));
+						} else {
+						futures.push_back(pool.enqueue(asyncConvertMDFToISO, selectedFile));
+					}
+						processedIndices.insert(selectedIndex);
+							
                     } else {
                         // Add an error message for an invalid file index
                         std::string errorMessage = "\033[1;91mFile index '" + std::to_string(start) + "' does not exist.\033[0m\033[1m";
@@ -894,364 +938,6 @@ std::vector<std::string> findMdsMdfFiles(const std::vector<std::string>& paths, 
     return mdfMdsFilesCache;
 }
 
-
-// Function to interactively select and convert MDF files to ISO
-void select_and_convert_files_to_iso_mdf() {
-	
-	// Initialize vectors to store MDF/MDS files and directory paths
-    std::vector<std::string> mdfMdsFiles;
-    std::vector<std::string> directoryPaths;
-    
-    // Declare previousPaths as a static variable
-    static std::vector<std::string> previousPaths;
-
-	// Load history from file
-    loadHistory();
-	
-    // Read input for directory paths (allow multiple paths separated by semicolons)
-    std::string inputPaths = readInputLine("\033[1;94mDirectory path(s) ↵ (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1m\033[1;94m) to search for \033[1m\033[1;92m.mdf\033[1;94m files, or press ↵ to return:\n\033[0m\033[1m");
-    std::cout << "\n\033[1mPlease wait...\033[1m" << std::endl;
-    
-	 if (!inputPaths.empty()) {
-		// Save history to file
-		saveHistory();
-	}
-    
-    // Start the timer
-    auto start_time = std::chrono::high_resolution_clock::now();
-    
-    // Use semicolon as a separator to split paths
-    std::istringstream iss(inputPaths);
-    std::string path;
-    while (std::getline(iss, path, ';')) {
-        // Trim leading and trailing whitespaces from each path
-        size_t start = path.find_first_not_of(" \t");
-        size_t end = path.find_last_not_of(" \t");
-        if (start != std::string::npos && end != std::string::npos) {
-            directoryPaths.push_back(path.substr(start, end - start + 1));
-        }
-    }
-
-    // Check if directoryPaths is empty
-    if (directoryPaths.empty()) {
-        return;
-    }
-
-    // Flag to check if new .mdf files are found
-    bool newMdfFilesFound = false;
-
-    // Call the findMdsMdfFiles function to populate the cache
-    mdfMdsFiles = findMdsMdfFiles(directoryPaths, [&mdfMdsFiles, &newMdfFilesFound](const std::string& fileName, const std::string& filePath) {
-        newMdfFilesFound = true;
-    });
-
-    // Print a message only if no new .mdf files are found
-    if (!newMdfFilesFound && !mdfMdsFiles.empty()) {
-        std::cout << " " << std::endl;
-        // Stop the timer after completing the mounting process
-        auto end_time = std::chrono::high_resolution_clock::now();
-        std::cout << "\033[1;91mNo new .mdf file(s) over 5MB found. \033[1;92m" << mdfMdsFiles.size() << " file(s) cached in RAM from previous searches.\033[0m\033[1m" << std::endl;
-        std::cout << " " << std::endl;
-        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-        // Print the time taken for the entire process in bold with one decimal place
-        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
-        std::cout << " " << std::endl;
-        std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
-        std::cin.ignore();
-    }
-
-    if (mdfMdsFiles.empty()) {
-        std::cout << " " << std::endl;
-        // Stop the timer after completing the mounting process
-        auto end_time = std::chrono::high_resolution_clock::now();
-        std::cout << "\033[1;91mNo .mdf file(s) over 5MB found in the specified path(s) or cached in RAM.\n\033[0m\033[1m";
-        std::cout << " " << std::endl;
-        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-        // Print the time taken for the entire process in bold with one decimal place
-        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
-        std::cout << " " << std::endl;
-        std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
-        std::cin.ignore();
-        return;
-    }
-
-    // Continue selecting and converting files until the user decides to exit
-    while (true) {
-		clearScrollBuffer();
-        std::system("clear");
-        printFileListMdf(mdfMdsFiles);
-
-        std::cout << " " << std::endl;
-        
-        // Clear history
-		clear_history();
-        
-        // Prompt the user to enter file numbers or 'exit'
-        char* input = readline("\033[1;94mMDF file(s) ↵ for \033[1;92mmdf2iso\033[1;94m (e.g., '1-3', '1 5'), or press ↵ to return:\033[0m\033[1m ");
-
-        if (std::isspace(input[0]) || input[0] == '\0') {
-            std::system("clear");
-            break;
-        }
-
-        std::system("clear");
-        std::cout << "\033[1mPlease wait...\n\033[1m" << std::endl;
-        // Process user input
-        processInputMDF(input, mdfMdsFiles, inputPaths);
-        
-        std::cout << " " << std::endl;        
-		std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
-		std::cin.ignore();
-	}
-}
-
-
-// Function to print found MDF files with alternating colored sequence numbers
-void printFileListMdf(const std::vector<std::string>& fileList) {
-    // ANSI escape codes for text formatting
-    const std::string bold = "\033[1m";
-    const std::string reset = "\033[0m";
-    const std::string red = "\033[31;1m";   // Red color
-    const std::string green = "\033[32;1m"; // Green color
-	const std::string orangeBold = "\033[1;38;5;208m";
-	
-    // Toggle between red and green for sequence number coloring
-    bool useRedColor = true;
-
-    // Print header for file selection
-    std::cout << bold << "Select file(s) to convert to " << bold << "\033[1;92mISO(s)\033[0m\033[1m:\n";
-    std::cout << " " << std::endl;
-
-    // Counter for line numbering
-    int lineNumber = 1;
-
-    // Apply formatting once before the loop
-    std::cout << std::right << std::setw(2);
-
-    for (const auto& filename : fileList) {
-        // Extract directory and filename
-        auto [directory, fileNameOnly] = extractDirectoryAndFilename(filename);
-
-        const std::size_t dotPos = fileNameOnly.find_last_of('.');
-
-        // Check if the file has a ".mdf" extension (case-insensitive)
-        if (dotPos != std::string::npos) {
-            std::string extension = fileNameOnly.substr(dotPos);
-            std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
-
-            if (extension == ".mdf") {
-                // Determine color for sequence number based on toggle
-                std::string sequenceColor = (useRedColor) ? red : green;
-                useRedColor = !useRedColor; // Toggle between red and green
-
-                // Print sequence number in the determined color and the rest in default color
-                std::cout << sequenceColor << std::setw(2) << std::right << lineNumber << ". " << reset;
-                std::cout << bold << directory << bold << "/" << orangeBold << fileNameOnly << reset << std::endl;
-            } else {
-                // Print entire path and filename with the default color
-                std::cout << std::setw(2) << std::right << lineNumber << ". " << bold << filename << reset << std::endl;
-            }
-        } else {
-            // No extension found, print entire path and filename with the default color
-            std::cout << std::setw(2) << std::right << lineNumber << ". " << bold << filename << reset << std::endl;
-        }
-
-        // Increment line number
-        lineNumber++;
-    }
-}
-
-
-// Function to process user input and convert selected MDF files to ISO format
-void processInputMDF(const std::string& input, const std::vector<std::string>& fileList, const std::string& inputPaths) {
-
-    // Mutexes to protect the critical sections
-    std::mutex indicesMutex;
-    std::mutex errorsMutex;
-    
-    // Create a string stream to tokenize the input
-    std::istringstream iss(input);
-    std::string token;
-
-    // Set to track processed indices to avoid duplicates
-    std::set<int> processedIndices;
-
-    // Set to track processed error messages to avoid duplicate error reporting
-    std::set<std::string> processedErrors;
-
-    // Define and populate uniqueValidIndices before this line
-    std::set<int> uniqueValidIndices;
-
-    // Vector to store asynchronous tasks for file conversion
-    std::vector<std::future<void>> futures;
-
-    // Vector to store error messages
-    std::vector<std::string> errorMessages;
-
-    // Protect the critical section with a lock
-    std::lock_guard<std::mutex> lock(indicesMutex);
-    
-    ThreadPool pool(maxThreads);
-
-    // Function to execute asynchronously
-    auto asyncConvertMDFToISO = [&](const std::string& selectedFile) {
-        convertMDFToISO(selectedFile);
-    };
-	// Start the timer
-    auto start_time = std::chrono::high_resolution_clock::now();
-    // Iterate through the tokens in the input string
-    while (iss >> token) {
-        // Create a string stream to further process the token
-        std::istringstream tokenStream(token);
-        int start, end;
-        char dash;
-
-        // Check if the token can be converted to an integer (starting index)
-        if (tokenStream >> start) {
-            // Check for the presence of a dash, indicating a range
-            if (tokenStream >> dash) {
-                if (dash == '-') {
-                    // Parse the end of the range
-                    if (tokenStream >> end) {
-                        // Check for additional hyphens in the range
-                        if (tokenStream >> dash) {
-                            // Add an error message for ranges with more than one hyphen
-                            std::string errorMessage = "\033[1;91mInvalid input: '" + token + "'.\033[0m\033[1m";
-                            if (processedErrors.find(errorMessage) == processedErrors.end()) {
-                                // Protect the critical section with a lock
-                                std::lock_guard<std::mutex> lock(errorsMutex);
-                                errorMessages.push_back(errorMessage);
-                                processedErrors.insert(errorMessage);
-                            }
-                        } else if (static_cast<std::vector<std::string>::size_type>(start) > 0 &&
-								   static_cast<std::vector<std::string>::size_type>(end) > 0 &&
-								   static_cast<std::vector<std::string>::size_type>(start) <= fileList.size() &&
-								   static_cast<std::vector<std::string>::size_type>(end) <= fileList.size()) {  // Check if the range is valid
-                            // Handle a valid range
-                            int step = (start <= end) ? 1 : -1; // Determine the step based on the range direction
-                            int selectedIndex;  // Declare selectedIndex outside of the loop
-
-                            for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
-                                selectedIndex = i - 1;
-                                if (selectedIndex >= 0 && static_cast<std::vector<std::string>::size_type>(selectedIndex) < fileList.size()) {
-                                    if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-                                        // Convert MDF to ISO asynchronously and store the future in the vector
-                                        std::string selectedFile = fileList[selectedIndex];
-                                        uniqueValidIndices.insert(selectedIndex);
-                                        futures.push_back(pool.enqueue(asyncConvertMDFToISO, selectedFile));
-                                        processedIndices.insert(selectedIndex);         
-                                    }
-                                } else {
-                                    // Add an error message for an invalid range
-                                    std::string errorMessage = "\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m\033[1m";
-                                    if (processedErrors.find(errorMessage) == processedErrors.end()) {
-                                        // Protect the critical section with a lock
-                                        std::lock_guard<std::mutex> lock(errorsMutex);
-                                        errorMessages.push_back(errorMessage);
-                                        processedErrors.insert(errorMessage);
-                                    }
-                                    break; // Exit the loop to avoid further errors
-                                }
-                            }
-                        } else {
-                            // Add an error message for an invalid range
-                            std::string errorMessage = "\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0m\033[1m";
-                            if (processedErrors.find(errorMessage) == processedErrors.end()) {
-                                // Protect the critical section with a lock
-                                std::lock_guard<std::mutex> lock(errorsMutex);
-                                errorMessages.push_back(errorMessage);
-                                processedErrors.insert(errorMessage);
-                            }
-                        }
-                    } else {
-                        // Add an error message for an invalid range format
-                        std::string errorMessage = "\033[1;91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0m\033[1m";
-                        if (processedErrors.find(errorMessage) == processedErrors.end()) {
-                            // Protect the critical section with a lock
-                            std::lock_guard<std::mutex> lock(errorsMutex);
-                            errorMessages.push_back(errorMessage);
-                            processedErrors.insert(errorMessage);
-                        }
-                    }
-                } else {
-                    // Add an error message for an invalid character after the dash
-                    std::string errorMessage = "\033[1;91mInvalid character after dash in range: '" + token + "'.\033[0m\033[1m";
-                    if (processedErrors.find(errorMessage) == processedErrors.end()) {
-                        // Protect the critical section with a lock
-                        std::lock_guard<std::mutex> lock(errorsMutex);
-                        errorMessages.push_back(errorMessage);
-                        processedErrors.insert(errorMessage);
-                    }
-                }
-            } else if (static_cast<std::vector<std::string>::size_type>(start) >= 1 && static_cast<std::vector<std::string>::size_type>(start) <= fileList.size()) {
-                // Process a single index
-                int selectedIndex = start - 1;
-                if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-                    if (selectedIndex >= 0 && static_cast<std::vector<std::string>::size_type>(selectedIndex) < fileList.size()) {
-                        // Convert MDF to ISO asynchronously and store the future in the vector
-                        std::string selectedFile = fileList[selectedIndex];
-                        uniqueValidIndices.insert(selectedIndex);  
-                        futures.push_back(pool.enqueue(asyncConvertMDFToISO, selectedFile));
-                        processedIndices.insert(selectedIndex);
-                    } else {
-                        // Add an error message for an invalid file index
-                        std::string errorMessage = "\033[1;91mFile index '" + std::to_string(start) + "' does not exist.\033[0m\033[1m";
-                        if (processedErrors.find(errorMessage) == processedErrors.end()) {
-                            // Protect the critical section with a lock
-                            std::lock_guard<std::mutex> lock(errorsMutex);
-                            errorMessages.push_back(errorMessage);
-                            processedErrors.insert(errorMessage);
-                        }
-                    }
-                }
-            } else {
-                // Add an error message for an invalid file index
-                std::string errorMessage = "\033[1;91mFile index '" + std::to_string(start) + "' does not exist.\033[0m\033[1m";
-                if (processedErrors.find(errorMessage) == processedErrors.end()) {
-                    // Protect the critical section with a lock
-                    std::lock_guard<std::mutex> lock(errorsMutex);
-                    errorMessages.push_back(errorMessage);
-                    processedErrors.insert(errorMessage);
-                }
-            }
-        } else {
-            // Add an error message for an invalid input
-            std::string errorMessage = "\033[1;91mInvalid input: '" + token + "'.\033[0m\033[1m";
-            if (processedErrors.find(errorMessage) == processedErrors.end()) {
-                // Protect the critical section with a lock
-                std::lock_guard<std::mutex> lock(errorsMutex);
-                errorMessages.push_back(errorMessage);
-                processedErrors.insert(errorMessage);
-            }
-        }
-    }
-
-    // Wait for all futures to finish
-    for (auto& future : futures) {
-        future.wait();
-    }
-	
-	if (!errorMessages.empty() && !uniqueValidIndices.empty()) {
-		std::cout << " " << std::endl;	
-	}
-	
-    // Print error messages
-    for (const auto& errorMessage : errorMessages) {
-        std::cout << errorMessage << std::endl;
-    }
-    
-    promptFlag = false;
-    
-    manualRefreshCache(inputPaths);
-    
-    // Stop the timer after completing the mounting process
-    auto end_time = std::chrono::high_resolution_clock::now();
-    // Calculate and print the elapsed time
-    auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-    std::cout << " " << std::endl;
-    // Print the time taken for the entire process in bold with one decimal place
-    std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
-}
 
 
 // Function to convert an MDF file to ISO format using mdf2iso
