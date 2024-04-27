@@ -97,7 +97,7 @@ int main(int argc, char *argv[]) {
 // Print the version number of the program
 void printVersionNumber(const std::string& version) {
     
-    std::cout << "\x1B[32mMounter-elite-plus v" << version << "\x1B[0m\n" << std::endl; // Output the version number in green color
+    std::cout << "\x1B[32mIso Commander v" << version << "\x1B[0m\n" << std::endl; // Output the version number in green color
 }
 
 
