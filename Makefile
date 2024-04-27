@@ -8,30 +8,27 @@ NUM_PROCESSORS := $(shell nproc 2>/dev/null)
 # Set the default number of jobs to the number of available processors
 MAKEFLAGS = -j$(NUM_PROCESSORS)
 
-SRC_FILES = mounter_elite_plus.cpp conversion_tools.cpp sanitization_extraction_readline.cpp cp_mv_rm.cpp
-OBJ_FILES = $(SRC_FILES:.cpp=.o)
-EXECUTABLE = mounter_elite_plus
+SRC_DIR = $(CURDIR)/src
+OBJ_DIR = $(CURDIR)/obj
+SRC_FILES = iso_commander.cpp conversion_tools.cpp sanitization_extraction_readline.cpp cp_mv_rm.cpp
+OBJ_FILES = $(patsubst %.cpp,$(OBJ_DIR)/%.o,$(SRC_FILES))
 
-INSTALL_DIR = /usr/bin
+all: isocmd
 
-.PHONY: all clean install
+isocmd: $(OBJ_FILES)
+	$(CXX) $(LDFLAGS) $^ -o $@ $(LIBS)
 
-all: $(EXECUTABLE)
-
-$(EXECUTABLE): $(OBJ_FILES)
-	$(CXX) $(CXXFLAGS) $^ -o $@ $(LIBS)
-
-%.o: %.cpp
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
+	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(OBJ_FILES) $(EXECUTABLE)
+	rm -rf $(OBJ_DIR) isocmd
 
-run: $(EXECUTABLE)
-	./$(EXECUTABLE)
+.PHONY: clean
 
-install: $(EXECUTABLE)
-	install -m 755 $(EXECUTABLE) $(INSTALL_DIR)
+install: isocmd
+	install -m 755 isocmd $(INSTALL_DIR)
 
 uninstall:
-	rm -f $(INSTALL_DIR)/$(EXECUTABLE)
+	rm -f $(INSTALL_DIR)/isocmd
