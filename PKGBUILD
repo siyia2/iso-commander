@@ -9,7 +9,7 @@ license=('GPL3')
 makedepends=('readline')
 depends=('bash' 'util-linux' 'sudo')
 optdepends=('ccd2iso: BIN/IMG conversion support' 'mdf2iso: MDF/MDS conversion support')
-md5sums=('ea95fe14aeb1955579aa54b0f15076bb')
+md5sums=('6cfb9e87f6920deae84ca447f7db1bda')
 
 source=("https://github.com/siyia2/iso-commander/archive/v${pkgver}.tar.gz")
 
@@ -22,9 +22,6 @@ package() {
   
   cd "${srcdir}/$pkgname-${pkgver}"
   
-  install -Dm755 mounter_elite_plus "$pkgdir/usr/bin/mounter_elite_plus"
+  install -Dm755 mounter_elite_plus "$pkgdir/usr/bin/isocmd"
   
 }
-
-
-
