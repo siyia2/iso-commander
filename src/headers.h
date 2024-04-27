@@ -196,7 +196,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::unordered_set<std::string>& deletedSet);
 
 
-//	MOUNTER ELITE
+//	ISO COMMANDER
 
 //	bools
 
