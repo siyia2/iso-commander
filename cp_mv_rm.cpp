@@ -276,6 +276,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
     if (!isDelete) {
         while (true) {
+			clearScrollBuffer();
             std::system("clear");
             
             for (const auto& uniqueErrorMessage : uniqueErrorMessages) {
@@ -353,7 +354,8 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     }
 
     auto start_time = std::chrono::high_resolution_clock::now();
-
+	
+	clearScrollBuffer();
     std::system("clear");
     std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
