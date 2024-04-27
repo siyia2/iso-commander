@@ -17,7 +17,7 @@ Features:
 * Capable of effortlessly handling anywhere from 1 to an astonishing 100,000 ISO files.
 * Includes a high precision timer for performance measurements.
 * Support for BIN/IMG/MDF conversion to ISO by utilizing ccd2iso and mdf2iso.
-* Clean code base in case someone decides to contribute in the future.
+* Clean codebase in case someone decides to contribute in the future.
   
 Ways to Install:
 1) Download the binary executable from latest release.
