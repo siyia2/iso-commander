@@ -23,4 +23,4 @@ Features:
 Ways to Install:
 1) Download the binary executable from latest release.
 2) Download and compile from source with `make`.
-3) If on arch or on an archbased distro, install with `yay -S mounter-elite-plus`.
+3) If on arch or on an archbased distro, install with `yay -S iso-commander`.
