@@ -121,7 +121,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
     // Continue selecting and converting files until the user decides to exit
     while (true) {
-        clearScrollBuffer();
+		clearScrollBuffer();
         std::system("clear");
       
 		printFileList(files);
@@ -136,7 +136,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
             std::system("clear");
             break;
         }
-
+		clearScrollBuffer();
         std::system("clear");
         std::cout << "\033[1mPlease wait...\n\033[1m" << std::endl;
 

@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
 
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.8.9");
+        printVersionNumber("2.9.0");
         return 0;
     }
 
@@ -152,29 +152,33 @@ void submenu1() {
          // Check if the input length is exactly 1
         if (submenu_choice.empty() || submenu_choice.length() == 1) {
 		std::string operation;
-		std::string action;
 		switch (submenu_choice[0]) {
         case '1':
+			clearScrollBuffer();
             std::system("clear");
-            action = "mount";
-            select_and_mount_files_by_number(action);
+            operation = "mount";
+            select_iso_files_by_number(operation);
             break;
         case '2':
+			clearScrollBuffer();
             std::system("clear");
-            action = "umount";
-            select_and_mount_files_by_number(action);
+            operation = "umount";
+            select_iso_files_by_number(operation);
             break;
         case '3':
+			clearScrollBuffer();
             std::system("clear");
             operation = "rm";
             select_and_operate_files_by_number(operation);
             break;
         case '4':
+			clearScrollBuffer();
             std::system("clear");
             operation = "mv";
             select_and_operate_files_by_number(operation);
             break;
         case '5':
+			clearScrollBuffer();
             std::system("clear");
             operation = "cp";
             select_and_operate_files_by_number(operation);
@@ -209,10 +213,12 @@ void submenu2() {
 		 if (submenu_choice.empty() || submenu_choice.length() == 1){
          switch (submenu_choice[0]) {		
              case '1':
+				clearScrollBuffer();
 				std::system("clear");
                 select_and_convert_files_to_iso("bin");
                 break;
              case '2':
+				clearScrollBuffer();
 				std::system("clear");
                 select_and_convert_files_to_iso("mdf");
                 break;
@@ -704,6 +710,9 @@ bool ends_with_iso(const std::string& str) {
 }
 
 
+
+
+
 // Function to parallel traverse a directory and find ISO files
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& Mutex4Low) {
     try {
@@ -751,13 +760,61 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
 //	MOUNT STUFF
 
 
-void select_and_mount_files_by_number(const std::string& action) {
+void mountZerozero(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
+    // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism
+    unsigned int numThreads = std::min(static_cast<int>(isoFiles.size()), static_cast<int>(maxThreads));
+    
+    // Create a ThreadPool with maxThreads
+    ThreadPool pool(numThreads);
+    
+    // Process all ISO files asynchronously
+    for (size_t i = 0; i < isoFiles.size(); ++i) {
+        // Enqueue the mounting task to the thread pool with associated index
+        pool.enqueue([i, &isoFiles, &mountedSet]() {
+            // Create a vector containing the single ISO file to mount
+            std::vector<std::string> isoFilesToMount = { isoFiles[i] }; // Assuming isoFiles is 1-based indexed
+            // Call mountIsoFile with the vector of ISO files to mount and the mounted set
+            mountIsoFile(isoFilesToMount, mountedSet);
+        });
+    }
+}
+
+void unmountZerozero(const std::vector<std::string>& isoDirs) {
+    // Check if isoDirs is empty
+    if (isoDirs.empty()) {
+        std::cout << "\033[1;93mNo ISOs are currently mounted.\033[0m\033[1m" << std::endl;
+        return;
+    }
+
+    // Detect and use the minimum of available threads and isoDirs to ensure efficient parallelism
+		unsigned int numThreads = std::min(static_cast<int>(isoDirs.size()), static_cast<int>(maxThreads));
+		// Create a thread pool with a limited number of threads
+        ThreadPool pool(numThreads);
+
+    // Calculate the batch size
+    size_t batchSize = (isoDirs.size() + numThreads - 1) / numThreads;
+
+    // Divide isoDirs into batches
+    for (size_t i = 0; i < isoDirs.size(); i += batchSize) {
+        auto batchBegin = isoDirs.begin() + i;
+        auto batchEnd = std::min(isoDirs.begin() + i + batchSize, isoDirs.end());
+        std::vector<std::string> batch(batchBegin, batchEnd);
+
+        // Enqueue unmounting tasks for each batch
+        pool.enqueue([batch]() {
+            unmountISO(batch);
+        });
+    }
+}
+
+
+void select_iso_files_by_number(const std::string& action) {
     // Path where ISOs are mounted
     const std::string isoPath = "/mnt";
     std::vector<std::string> isoDirs;
       // Set to track mounted ISO files
     std::unordered_set<std::string> mountedSet;
-
+	
     // Remove non-existent paths from the cache
     removeNonExistentPathsFromCache();
 
@@ -766,7 +823,6 @@ void select_and_mount_files_by_number(const std::string& action) {
 
     // Check if the cache is empty
     if (isoFiles.empty()) {
-        clearScrollBuffer();
         std::system("clear");
         std::cout << "\033[1;93mISO Cache is empty. Please refresh it from the main Menu Options.\033[0m\033[1m" << std::endl;
         std::cout << " " << std::endl;
@@ -777,7 +833,6 @@ void select_and_mount_files_by_number(const std::string& action) {
 
     // Main loop for selecting and mounting/unmounting ISO files
     while (true) {
-        clearScrollBuffer();
         std::system("clear");
 
         if (action == "mount") {
@@ -803,7 +858,7 @@ void select_and_mount_files_by_number(const std::string& action) {
             }
 
             // If no ISOs are mounted, prompt user to continue
-            if (isoDirs.empty()) {
+            if (isoDirs.empty() && action == "umount") {
                 std::cout << " " << std::endl;
                 std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
                 std::cin.get();
@@ -815,8 +870,15 @@ void select_and_mount_files_by_number(const std::string& action) {
                 std::cout << " " << std::endl;
             }
         }
+        std::string operationColor;
+        if (action == "umount") {
+			operationColor = "\033[1;93m";
+		} else {
+			operationColor = "\033[1;92m";
+		}
+        
         // Prompt user to choose ISOs for unmounting or press Enter to return
-        std::string prompt = "\033[1;94mISO(s) ↵ for \033[1;92m" + action + "\033[1;94m (e.g., '1-3', '1 5', '00' for all), or press ↵ to return:\033[0m\033[1m ";
+        std::string prompt = "\033[1;94mISO(s) ↵ for \033[1;92m" + operationColor + action + "\033[1;94m (e.g., '1-3', '1 5', '00' for all), or press ↵ to return:\033[0m\033[1m ";
 		char* input = readline(prompt.c_str());
 
         std::system("clear");
@@ -828,48 +890,92 @@ void select_and_mount_files_by_number(const std::string& action) {
         if (std::isspace(input[0]) || input[0] == '\0') {
             break;
         }
+        
+        // Update the list of mounted ISOs after processing user input
+        isoDirs.clear();
+        for (const auto& entry : std::filesystem::directory_iterator(isoPath)) {
+            if (entry.is_directory() && entry.path().filename().string().find("iso_") == 0) {
+                isoDirs.push_back(entry.path().string());
+            }
+		}
 
         // Check if the user wants to mount/unmount all ISO files
         if (std::strcmp(input, "00") == 0) {
             if (action == "mount") {
-                // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism
-                unsigned int numThreads = std::min(static_cast<int>(isoFiles.size()), static_cast<int>(maxThreads));
-                // Create a ThreadPool with maxThreads
-                ThreadPool pool(numThreads);
-                // Process all ISO files asynchronously
-                for (size_t i = 0; i < isoFiles.size(); ++i) {
-                    // Enqueue the mounting task to the thread pool with associated index
-                    pool.enqueue([i, &isoFiles, &mountedSet]() {
-                        // Create a vector containing the single ISO file to mount
-                        std::vector<std::string> isoFilesToMount = { isoFiles[i] }; // Assuming isoFiles is 1-based indexed
-                        // Call mountIsoFile with the vector of ISO files to mount and the mounted set
-                        mountIsoFile(isoFilesToMount, mountedSet);
-                    });
-                }
+                   mountZerozero(isoFiles, mountedSet);
             } else if (action == "umount") {
-                // Detect and use the minimum of available threads and isoDirs to ensure efficient parallelism
-                unsigned int numThreads = std::min(static_cast<int>(isoDirs.size()), static_cast<int>(maxThreads));
-                // Create a thread pool with a limited number of threads
-                ThreadPool pool(numThreads);
-                std::vector<std::future<void>> futures;
-                // Divide isoDirs into batches based on maxThreads
-                size_t batchSize = (isoDirs.size() + numThreads - 1) / numThreads;
-                std::vector<std::vector<std::string>> batches;
-                for (size_t i = 0; i < isoDirs.size(); i += batchSize) {
-                    batches.emplace_back(isoDirs.begin() + i, std::min(isoDirs.begin() + i + batchSize, isoDirs.end()));
-                }
-                // Enqueue unmounting tasks for all batches
-                for (const auto& batch : batches) {
-                    futures.emplace_back(pool.enqueue([batch]() {
-                        std::lock_guard<std::mutex> highLock(Mutex4High);
-                        unmountISO(batch);
-                    }));
-                }
-            }
-        } else {
+                 unmountZerozero(isoDirs);
+			 }
+            
+        } if (action == "mount"){
             // Process user input to select and mount/unmount specific ISO files
-            processAndMountIsoFiles(input, isoFiles, mountedSet, action);
+            processIsoFiles(input, isoFiles, mountedSet, isoDirs, action);
+        } else if (action == "umount"){
+			processIsoFiles(input, isoFiles, mountedSet, isoDirs, action);
+			// Iterate through the ISO path to find mounted ISOs
+            	
+		}
+		
+		 std::system("clear");
+		 
+		 if (!unmountedErrors.empty()) {
+			std::cout << " " << std::endl;
+		}
+		// Print all unmounted erros
+		for (const auto& unmountedError : unmountedErrors) {
+			std::cout << unmountedError << std::endl;
+		}		
+		 
+		 if (!mountedFiles.empty()) {
+			std::cout << " " << std::endl;
+		}
+		
+		// Print all mounted files
+		for (const auto& mountedFile : mountedFiles) {
+				std::cout << mountedFile << std::endl;
+		}
+				
+		if (!skippedMessages.empty()) {
+			std::cout << " " << std::endl;
+		}
+			
+		// Print all the stored skipped messages
+		for (const auto& skippedMessage : skippedMessages) {
+			std::cerr << skippedMessage;
+		}
+		
+		if (!errorMessages.empty()) {
+			std::cout << " " << std::endl;
+		}
+		
+		// Print all the stored error messages
+		for (const auto& errorMessage : errorMessages) {
+			std::cerr << errorMessage;
+		}
+		
+		if (!isoDirs.empty()) {
+			std::cout << " " << std::endl;
+		}
+		
+		// Print all unmounted files
+		for (const auto& unmountedFile : unmountedFiles) {
+			std::cout << unmountedFile << std::endl;
+		}
+		
+		for (const auto& errorMsg : uniqueErrorMessages) {
+            std::cerr << "\033[1;93m" << errorMsg << "\033[0m\033[1m" << std::endl;
         }
+        
+        
+		
+		// Clear the vectors after each iteration
+		unmountedFiles.clear();
+		unmountedErrors.clear();
+		mountedFiles.clear();
+		skippedMessages.clear();
+		errorMessages.clear();
+		uniqueErrorMessages.clear();
+		
 
         // Stop the timer after completing the mounting/unmounting process
         auto end_time = std::chrono::high_resolution_clock::now();
@@ -882,7 +988,8 @@ void select_and_mount_files_by_number(const std::string& action) {
         std::cout << " " << std::endl;
         std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
         std::cin.get();
-    }
+		
+	}
 }
 
 
@@ -978,8 +1085,8 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
 }
 
 
-// Function to process input and mount ISO files asynchronously
-void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet, const std::string& action) {
+// Function to process input and mount/unmount ISO files asynchronously
+void processIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet, const std::vector<std::string>& isoDirs, const std::string& action) {
     // Initialize input string stream with the provided input
     std::istringstream iss(input);
     
@@ -1002,6 +1109,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     ThreadPool pool(numThreads);
     
     // Define mutexes for synchronization
+    std::mutex isoDirsMutex;
     std::mutex MutexForProcessedIndices;
     std::mutex MutexForValidIndices;
 
@@ -1057,30 +1165,71 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
             if (processedRanges.find(range) == processedRanges.end()) {
                 // Enqueue task for marking range as processed
                 pool.enqueue([&]() {
+					std::lock_guard<std::mutex> processedLock(MutexForProcessedIndices);
                     processedRanges.insert(range);
                 });
 
                 // Determine step for iteration
                 int step = (start <= end) ? 1 : -1;
-                for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
-                    // Check if the index has been processed before
-                    if (processedIndices.find(i) == processedIndices.end()) {
-                        // Enqueue task for marking index as processed
-                        pool.enqueue([&]() {
-                            std::lock_guard<std::mutex> processedLock(MutexForProcessedIndices);
-                            processedIndices.insert(i);
-                        });
+                if (action == "mount") {
+                    for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
+                        // Check if the index has been processed before
+                        if (processedIndices.find(i) == processedIndices.end()) {
+                            // Enqueue task for marking index as processed
+                            pool.enqueue([&]() {
+                                std::lock_guard<std::mutex> processedLock(MutexForProcessedIndices);
+                                processedIndices.insert(i);
+                            });
 
-                        // Enqueue mounting task
-                        pool.enqueue([&, i]() {
-                            std::lock_guard<std::mutex> validLock(MutexForValidIndices);
-                            if (validIndices.find(i) == validIndices.end()) { // Ensure not processed before
-								validIndices.insert(i);
-								std::vector<std::string> isoFilesToMount;
-								isoFilesToMount.push_back(isoFiles[i - 1]); // Assuming isoFiles is 1-based indexed
-								mountIsoFile(isoFilesToMount, mountedSet);
-							}
-                        });
+                            // Enqueue mounting task
+                            pool.enqueue([&, i]() {
+                                std::lock_guard<std::mutex> validLock(MutexForValidIndices);
+                                if (validIndices.find(i) == validIndices.end()) { // Ensure not processed before
+                                    validIndices.insert(i);
+                                    std::vector<std::string> isoFilesToMount;
+                                    isoFilesToMount.push_back(isoFiles[i - 1]); // Assuming isoFiles is 1-based indexed
+                                    mountIsoFile(isoFilesToMount, mountedSet);
+                                }
+                            });
+                        }
+                    }
+                } else if (action == "umount") {
+                    std::vector<std::future<void>> futures;
+                    std::vector<std::string> selectedIsoDirs;
+
+                    for (int index = start; (start <= end) ? (index <= end) : (index >= end); index += step) {
+                        if (isValidIndex(index, isoDirs.size())) {
+                            selectedIsoDirs.push_back(isoDirs[index - 1]);
+                        }
+                    }
+
+                    // Detect and use the minimum of available threads and selectedIsoDirs to ensure efficient parallelism
+                    unsigned int numThreads = std::min(static_cast<int>(selectedIsoDirs.size()), static_cast<int>(maxThreads));
+
+                    // Create a ThreadPool with optimized size
+                    ThreadPool pool(numThreads);
+
+                    std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
+
+                    // Divide selectedIsoDirs into batches based on maxThreads
+                    size_t batchSize = (selectedIsoDirs.size() + maxThreads - 1) / maxThreads;
+
+                    std::vector<std::vector<std::string>> batches;
+
+                    for (size_t i = 0; i < selectedIsoDirs.size(); i += batchSize) {
+                        batches.emplace_back(selectedIsoDirs.begin() + i, std::min(selectedIsoDirs.begin() + i + batchSize, selectedIsoDirs.end()));
+                    }
+
+                    // Enqueue unmounting tasks for all batches
+                    for (const auto& batch : batches) {
+                        futures.emplace_back(pool.enqueue([batch]() {
+                            std::lock_guard<std::mutex> medLock(Mutex4Med);
+                            unmountISO(batch);
+                        }));
+                    }
+
+                    for (auto& future : futures) {
+                        future.wait();
                     }
                 }
             }
@@ -1091,35 +1240,58 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
             // Handle single index token
             int num = std::stoi(token);
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && processedIndices.find(num) == processedIndices.end()) {
-                // Enqueue task for marking index as processed
-                pool.enqueue([&]() {
-                    // Lock the mutex for processedIndices
-                    std::lock_guard<std::mutex> processedLock(MutexForProcessedIndices);
-                    processedIndices.insert(num);
-                });
+				// Enqueue task for marking index as processed
+				pool.enqueue([&]() {
+			
+				// Lock the mutex for processedIndices
+				std::lock_guard<std::mutex> lockGuardName(MutexForProcessedIndices);
+				processedIndices.insert(num);
+			});
 
+                 if (action == "mount") {
                 // Enqueue mounting task
                 pool.enqueue([&, num]() {
                     // Lock the mutex for validIndices
                     std::lock_guard<std::mutex> validLock(MutexForValidIndices);
                     if (validIndices.find(num) == validIndices.end()) { // Ensure not processed before
-						validIndices.insert(num);
-						std::vector<std::string> isoFilesToMount;
-						isoFilesToMount.push_back(isoFiles[num - 1]); // Assuming isoFiles is 0-based indexed
-						mountIsoFile(isoFilesToMount, mountedSet);
-					}
+                        validIndices.insert(num);
+                        std::vector<std::string> isoFilesToMount;
+                        isoFilesToMount.push_back(isoFiles[num - 1]); // Assuming isoFiles is 0-based indexed
+                        mountIsoFile(isoFilesToMount, mountedSet);
+                    }
                 });
-            } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
-                invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(num) + "' does not exist.\033[0m\033[1m");
+            } else if (action == "umount") {
+                std::vector<std::future<void>> futures;
+                std::vector<std::string> selectedIsoDirs;
+
+                if (isValidIndex(num, isoDirs.size())) {
+                    selectedIsoDirs.push_back(isoDirs[num - 1]);
+                }
+
+                std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
+
+                // Enqueue unmounting tasks
+                futures.emplace_back(pool.enqueue([selectedIsoDirs]() {
+                    std::lock_guard<std::mutex> medLock(Mutex4Med);
+                    unmountISO(selectedIsoDirs);
+                }));
+
+                for (auto& future : futures) {
+                    future.wait();
+                }
             }
-        } else {
-            // Handle invalid token
+        } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
             invalidInput = true;
-            uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0m\033[1m");
+            uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(num) + "' does not exist.\033[0m\033[1m");
         }
-    }
+    } else {
+        // Handle invalid token
+        invalidInput = true;
+        uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0m\033[1m");
+		}
+	}
 }
+
 
 
 // Function to check if an ISO is already mounted
@@ -1403,7 +1575,6 @@ void unmountISOs() {
                 future.wait();
             }
             
-            clearScrollBuffer();
 			std::system("clear");
 			
             if (invalidInput && !validIndices.empty()) {
@@ -1550,7 +1721,6 @@ void unmountISOs() {
             future.wait();
         }
         
-        clearScrollBuffer();
 		std::system("clear");
         
         if (!unmountedFiles.empty()) {

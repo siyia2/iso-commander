@@ -48,7 +48,6 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
     // If no ISO files are available, display a message and return
     if (isoFiles.empty()) {
-        clearScrollBuffer();
         std::system("clear");
         std::cout << "\033[1;93mNo ISO(s) available for " << operation << ".\033[0m\033[1m" << std::endl;
         std::cout << " " << std::endl;
@@ -77,7 +76,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
     // Main loop for interacting with ISO files
     while (true) {
-        clearScrollBuffer();
+		clearScrollBuffer();
         std::system("clear");
 
         // Display header message
@@ -98,6 +97,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
         // Get user input for ISO file selection
         char* input = readline(("\033[1;94mISO(s) ↵ for " + operationColor + operation + "\033[1;94m (e.g., '1-3', '1 5'), or press ↵ to return:\033[0m\033[1m ").c_str());
+        clearScrollBuffer();
         std::system("clear");
 
         // Check if input is empty or whitespace (to return to main menu)
@@ -106,19 +106,16 @@ void select_and_operate_files_by_number(const std::string& operation) {
             break;
         } else if (operation == "rm") {
             // Process delete operation
-            clearScrollBuffer();
             std::system("clear");
             process = "rm";
             processOperationInput(input, isoFiles, operationSet, process);
         } else if (operation == "mv") {
             // Process move operation
-            clearScrollBuffer();
             std::system("clear");
             process = "mv";
             processOperationInput(input, isoFiles, operationSet, process);
         } else if (operation == "cp") {
             // Process copy operation
-            clearScrollBuffer();
             std::system("clear");
             process = "cp";
             processOperationInput(input, isoFiles, operationSet, process);
@@ -279,6 +276,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
     if (!isDelete) {
         while (true) {
+			clearScrollBuffer();
             std::system("clear");
             
             for (const auto& uniqueErrorMessage : uniqueErrorMessages) {
@@ -356,7 +354,8 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     }
 
     auto start_time = std::chrono::high_resolution_clock::now();
-
+	
+	clearScrollBuffer();
     std::system("clear");
     std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
@@ -389,7 +388,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 			manualRefreshCache(userDestDir);
 		}
 
-		clearScrollBuffer();
 		std::system("clear");
         
         if (!operationIsos.empty()) {
