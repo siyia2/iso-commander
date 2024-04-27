@@ -214,16 +214,15 @@ bool isValidIndex(int index, size_t isoDirsSize);
 //	voids
 
 //General functions
+void clearScrollBuffer();
 bool isAllZeros(const std::string& str);
 bool isNumeric(const std::string& str);
-void unmountZerozero(const std::vector<std::string>& isoDirs);
-void mountZerozero(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
 
 // Mount functions
 void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordered_set<std::string>& mountedSet);
-void select_iso_files_by_number(const std::string& action);
+void select_and_mount_files_by_number();
 void printIsoFileList(const std::vector<std::string>& isoFiles);
-void processIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet, const std::vector<std::string>& isoDirs, const std::string& action);
+void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
 
 // Iso cache functions
 void manualRefreshCache(const std::string& initialDir = "");
