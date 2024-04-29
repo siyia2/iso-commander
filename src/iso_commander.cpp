@@ -535,7 +535,6 @@ void manualRefreshCache(const std::string& initialDir) {
 
     // Check if the user canceled the cache refresh
     if (inputLine.empty()) {
-		clear_history();
         return;
     }
 
@@ -924,37 +923,32 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
 
             // Wait for the asynchronous operation to complete
             future.wait();
-
+            
             // Check if the mount point is already mounted
-            if (isAlreadyMounted(mountPoint)) {
-                // If already mounted, print a message and continue
-                std::stringstream skippedMessage;
-                skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m already mounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;93m.\033[0m\033[1m" << std::endl;
+        if (isAlreadyMounted(mountPoint)) {
+            // If already mounted, print a message and continue
+            std::stringstream skippedMessage;
+            skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m already mounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;93m.\033[0m\033[1m" << std::endl;
 
-                // Create the unordered set after populating skippedMessages
-                std::unordered_set<std::string> skippedSet(skippedMessages.begin(), skippedMessages.end());
+            // Create the unordered set after populating skippedMessages
+            std::unordered_set<std::string> skippedSet(skippedMessages.begin(), skippedMessages.end());
 
-                // Check for duplicates
-                if (skippedSet.find(skippedMessage.str()) == skippedSet.end()) {
-                    // Error message not found, add it to the vector
-                    skippedMessages.push_back(skippedMessage.str());
-                }
-
-                continue; // Skip mounting this ISO file
+            // Check for duplicates
+            if (skippedSet.find(skippedMessage.str()) == skippedSet.end()) {
+                // Error message not found, add it to the vector
+                skippedMessages.push_back(skippedMessage.str());
             }
+
+            continue; // Skip mounting this ISO file
+        }
 
             // Check if the mount point directory was created successfully
             if (fs::exists(mountPoint)) {
                 try {
-                    // Create loop device
-                    std::string loopDevice = "/dev/loop0"; // Change if needed
-                    if (system(("sudo losetup -fP --show " + shell_escape(isoFile)).c_str()) != 0) {
-                        throw std::runtime_error("Failed to create loop device");
-                    }
-
                     // Construct the mount command and execute it
-                    if (mount(loopDevice.c_str(), mountPoint.c_str(), "iso9660", MS_RDONLY | MS_NOSUID | MS_NODEV, "") != 0) {
-                        throw std::runtime_error("Mount command failed: " + std::string(strerror(errno)));
+                    std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
+                    if (std::system(mountCommand.c_str()) != 0) {
+                        throw std::runtime_error("Mount command failed");
                     }
 
                     // Insert the mount point into the set
@@ -968,7 +962,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
                 } catch (const std::exception& e) {
                     // Handle exceptions and cleanup
                     std::stringstream errorMessage;
-                    errorMessage << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[0m\033[1m\033[1;91m. Error: " << e.what() << "\033[0m\033[1m" << std::endl;
+                    errorMessage << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[0m\033[1m\033[1;91m.\033[0m\033[1m" << std::endl;
                     fs::remove(mountPoint);
 
                     std::unordered_set<std::string> errorSet(errorMessages.begin(), errorMessages.end());
@@ -1218,22 +1212,9 @@ void listMountedISOs() {
 
 //function to check if directory is empty for unmountISO
 bool isDirectoryEmpty(const std::string& path) {
-    namespace fs = std::filesystem;
-    
-    // Check if the directory exists
-    if (!fs::exists(path) || !fs::is_directory(path)) {
-        // Directory doesn't exist or is not a directory
-        return true; // Treat as empty
-    }
-
-    // Iterate over the directory
-    for ([[maybe_unused]] const auto& entry : fs::directory_iterator(fs::path(path))) {
-        // If there is any entry in the directory, it's not empty
-        return false;
-    }
-
-    // If no entries found, directory is empty
-    return true;
+    std::string checkEmptyCommand = "sudo find " + shell_escape(path) + " -mindepth 1 -maxdepth 1 -print -quit | grep -q .";
+    int result = system(checkEmptyCommand.c_str());
+    return result != 0; // If result is 0, directory is empty; otherwise, it's not empty
 }
 
 
@@ -1241,22 +1222,21 @@ bool isDirectoryEmpty(const std::string& path) {
 void unmountISO(const std::vector<std::string>& isoDirs) {
     // Determine batch size based on the number of isoDirs
     size_t batchSize = 1;
-    // Adjust batch size according to the size of isoDirs
-    if (isoDirs.size() > 100000) {
-        batchSize = 100;
-    } else if (isoDirs.size() > 10000) {
-        batchSize = 50;
-    } else if (isoDirs.size() > 1000) {
-        batchSize = 25;
-    } else if (isoDirs.size() > 100) {
-        batchSize = 10;
-    } else if (isoDirs.size() > 50) {
-        batchSize = 5;
-    } else if (isoDirs.size() > 1) {
-        batchSize = 2;
-    }
+	if (isoDirs.size() > 100000 && isoDirs.size() > maxThreads) {
+		batchSize = 100;
+	} else if (isoDirs.size() > 10000 && isoDirs.size() > maxThreads) {
+		batchSize = 50;
+	} else if (isoDirs.size() > 1000 && isoDirs.size() > maxThreads) {
+		batchSize = 25;
+	} else if (isoDirs.size() > 100 && isoDirs.size() > maxThreads) {
+		batchSize = 10;
+	} else if (isoDirs.size() > 50 && isoDirs.size() > maxThreads) {
+		batchSize = 5;
+	} else if (isoDirs.size() > maxThreads) {
+		batchSize = 2;
+	}
 
-    // Use std::async to unmount and remove the directories asynchronously
+        // Use std::async to unmount and remove the directories asynchronously
     auto unmountFuture = std::async(std::launch::async, [&isoDirs, batchSize]() {
         // Construct the sudo command
         std::string sudoCommand = "sudo -v";
@@ -1265,29 +1245,59 @@ void unmountISO(const std::vector<std::string>& isoDirs) {
         if (sudoResult == 0) {
             // Unmount directories in batches
             for (size_t i = 0; i < isoDirs.size(); i += batchSize) {
+                std::string unmountBatchCommand = "sudo umount -l";
                 size_t batchEnd = std::min(i + batchSize, isoDirs.size());
 
                 for (size_t j = i; j < batchEnd; ++j) {
-                    // Unmount directory
-                    if (umount2(isoDirs[j].c_str(), MNT_DETACH) == -1) {
-                         std::stringstream errorMessage;
-                        errorMessage << "\033[1;91mFailed to remove directory: \033[1;93m'" << isoDirs[j] << "'\033[1;91m ...Please check it out manually.\033[0m\033[1m";
+                    unmountBatchCommand += " " + shell_escape(isoDirs[j]);
+                }
 
-                        if (std::find(unmountedErrors.begin(), unmountedErrors.end(), errorMessage.str()) == unmountedErrors.end()) {
-                            unmountedErrors.push_back(errorMessage.str());
-                        }
-                    } else {
-                         std::string unmountedFileInfo = "\033[1mUnmounted: \033[1;92m'" + isoDirs[j] + "'\033[0m\033[1m.";
-                        unmountedFiles.push_back(unmountedFileInfo);
+                unmountBatchCommand += " > /dev/null 2>&1";
+                int unmountResult __attribute__((unused)) = system(unmountBatchCommand.c_str());
+            }
+
+            // Check and remove empty directories
+            std::vector<std::string> emptyDirs;
+            for (const auto& isoDir : isoDirs) {
+                if (isDirectoryEmpty(isoDir)) {
+                    emptyDirs.push_back(isoDir);
+                } else {
+                    // Handle non-empty directory error
+                    std::stringstream errorMessage;
+                    errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDir << "'\033[1;91m ...Please check it out manually.\033[0m\033[1m";
+
+                    if (std::find(unmountedErrors.begin(), unmountedErrors.end(), errorMessage.str()) == unmountedErrors.end()) {
+                        unmountedErrors.push_back(errorMessage.str());
                     }
                 }
             }
 
-            // Remove empty directories
-            for (const auto& isoDir : isoDirs) {
-                if (isDirectoryEmpty(isoDir)) {
-                    rmdir(isoDir.c_str());
+            // Remove empty directories in batches
+            while (!emptyDirs.empty()) {
+                std::string removeDirCommand = "sudo rmdir ";
+                for (size_t i = 0; i < std::min(batchSize, emptyDirs.size()); ++i) {
+                    removeDirCommand += shell_escape(emptyDirs[i]) + " ";
                 }
+                removeDirCommand += "2>/dev/null";
+
+                int removeDirResult = system(removeDirCommand.c_str());
+
+                for (size_t i = 0; i < std::min(batchSize, emptyDirs.size()); ++i) {
+                    if (removeDirResult == 0) {
+                        auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(emptyDirs[i]);
+                        std::string unmountedFileInfo = "\033[1mUnmounted: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m\033[1m.";
+                        unmountedFiles.push_back(unmountedFileInfo);
+                    } else {
+                        auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(emptyDirs[i]);
+                        std::stringstream errorMessage;
+                        errorMessage << "\033[1;91mFailed to remove directory: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;91m ...Please check it out manually.\033[0m\033[1m";
+
+                        if (std::find(unmountedErrors.begin(), unmountedErrors.end(), errorMessage.str()) == unmountedErrors.end()) {
+                            unmountedErrors.push_back(errorMessage.str());
+                        }
+                    }
+                }
+                emptyDirs.erase(emptyDirs.begin(), emptyDirs.begin() + std::min(batchSize, emptyDirs.size()));
             }
         } else {
             std::cerr << "\033[1;91mFailed to authenticate with sudo.\033[0m\033[1m" << std::endl;
@@ -1415,7 +1425,7 @@ void unmountISOs() {
 			if (!unmountedErrors.empty()) {
 				std::cout << " " << std::endl; // Print a blank line before deleted folders
 			}
-			// Print all unmounted files erros
+			// Print all unmounted files
 			for (const auto& unmountedError : unmountedErrors) {
 			std::cout << unmountedError << std::endl;
 			}
@@ -1557,7 +1567,7 @@ void unmountISOs() {
 		if (!unmountedErrors.empty()) {
 			std::cout << " " << std::endl; // Print a blank line before deleted folders
 		}
-		// Print all unmounted files errors
+		// Print all unmounted files
 		for (const auto& unmountedError : unmountedErrors) {
 			std::cout << unmountedError << std::endl;
 		}
