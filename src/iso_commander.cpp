@@ -535,6 +535,7 @@ void manualRefreshCache(const std::string& initialDir) {
 
     // Check if the user canceled the cache refresh
     if (inputLine.empty()) {
+		clear_history();
         return;
     }
 
@@ -923,32 +924,37 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
 
             // Wait for the asynchronous operation to complete
             future.wait();
-            
+
             // Check if the mount point is already mounted
-        if (isAlreadyMounted(mountPoint)) {
-            // If already mounted, print a message and continue
-            std::stringstream skippedMessage;
-            skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m already mounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;93m.\033[0m\033[1m" << std::endl;
+            if (isAlreadyMounted(mountPoint)) {
+                // If already mounted, print a message and continue
+                std::stringstream skippedMessage;
+                skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m already mounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;93m.\033[0m\033[1m" << std::endl;
 
-            // Create the unordered set after populating skippedMessages
-            std::unordered_set<std::string> skippedSet(skippedMessages.begin(), skippedMessages.end());
+                // Create the unordered set after populating skippedMessages
+                std::unordered_set<std::string> skippedSet(skippedMessages.begin(), skippedMessages.end());
 
-            // Check for duplicates
-            if (skippedSet.find(skippedMessage.str()) == skippedSet.end()) {
-                // Error message not found, add it to the vector
-                skippedMessages.push_back(skippedMessage.str());
+                // Check for duplicates
+                if (skippedSet.find(skippedMessage.str()) == skippedSet.end()) {
+                    // Error message not found, add it to the vector
+                    skippedMessages.push_back(skippedMessage.str());
+                }
+
+                continue; // Skip mounting this ISO file
             }
-
-            continue; // Skip mounting this ISO file
-        }
 
             // Check if the mount point directory was created successfully
             if (fs::exists(mountPoint)) {
                 try {
+                    // Create loop device
+                    std::string loopDevice = "/dev/loop0"; // Change if needed
+                    if (system(("sudo losetup -fP --show " + isoFile).c_str()) != 0) {
+                        throw std::runtime_error("Failed to create loop device");
+                    }
+
                     // Construct the mount command and execute it
-                    std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
-                    if (std::system(mountCommand.c_str()) != 0) {
-                        throw std::runtime_error("Mount command failed");
+                    if (mount(loopDevice.c_str(), mountPoint.c_str(), "iso9660", MS_RDONLY | MS_NOSUID | MS_NODEV, "") != 0) {
+                        throw std::runtime_error("Mount command failed: " + std::string(strerror(errno)));
                     }
 
                     // Insert the mount point into the set
@@ -962,7 +968,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
                 } catch (const std::exception& e) {
                     // Handle exceptions and cleanup
                     std::stringstream errorMessage;
-                    errorMessage << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[0m\033[1m\033[1;91m.\033[0m\033[1m" << std::endl;
+                    errorMessage << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[0m\033[1m\033[1;91m. Error: " << e.what() << "\033[0m\033[1m" << std::endl;
                     fs::remove(mountPoint);
 
                     std::unordered_set<std::string> errorSet(errorMessages.begin(), errorMessages.end());
