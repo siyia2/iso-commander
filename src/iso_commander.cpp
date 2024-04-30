@@ -923,58 +923,59 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
 
             // Wait for the asynchronous operation to complete
             future.wait();
-            
+
             // Check if the mount point is already mounted
-        if (isAlreadyMounted(mountPoint)) {
-            // If already mounted, print a message and continue
-            std::stringstream skippedMessage;
-            skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m already mounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;93m.\033[0m\033[1m" << std::endl;
+            if (isAlreadyMounted(mountPoint)) {
+                // If already mounted, print a message and continue
+                std::stringstream skippedMessage;
+                skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m already mounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;93m.\033[0m\033[1m" << std::endl;
 
-            // Create the unordered set after populating skippedMessages
-            std::unordered_set<std::string> skippedSet(skippedMessages.begin(), skippedMessages.end());
+                // Create the unordered set after populating skippedMessages
+                std::unordered_set<std::string> skippedSet(skippedMessages.begin(), skippedMessages.end());
 
-            // Check for duplicates
-            if (skippedSet.find(skippedMessage.str()) == skippedSet.end()) {
-                // Error message not found, add it to the vector
-                skippedMessages.push_back(skippedMessage.str());
-            }
-
-            continue; // Skip mounting this ISO file
-        }
-
-            // Check if the mount point directory was created successfully
-            if (fs::exists(mountPoint)) {
-                try {
-                    // Construct the mount command and execute it
-                    std::string mountCommand = "sudo mount -o loop " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
-                    if (std::system(mountCommand.c_str()) != 0) {
-                        throw std::runtime_error("Mount command failed");
-                    }
-
-                    // Insert the mount point into the set
-                    mountedSet.insert(mountPoint);
-
-                    // Store the mounted file information in the vector
-                    std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m\033[1m"
-                                                  + "\033[1m mounted at: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename + "'\033[0m\033[1m\033[1m.\033[0m\033[1m";
-                    mountedFiles.push_back(mountedFileInfo);
-
-                } catch (const std::exception& e) {
-                    // Handle exceptions and cleanup
-                    std::stringstream errorMessage;
-                    errorMessage << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[0m\033[1m\033[1;91m.\033[0m\033[1m" << std::endl;
-                    fs::remove(mountPoint);
-
-                    std::unordered_set<std::string> errorSet(errorMessages.begin(), errorMessages.end());
-                    if (errorSet.find(errorMessage.str()) == errorSet.end()) {
-                        // Error message not found, add it to the vector
-                        errorMessages.push_back(errorMessage.str());
-                    }
+                // Check for duplicates
+                if (skippedSet.find(skippedMessage.str()) == skippedSet.end()) {
+                    // Error message not found, add it to the vector
+                    skippedMessages.push_back(skippedMessage.str());
                 }
-            } else {
-                // Handle failure to create the mount point directory
-                std::cerr << "\033[1;91mFailed to create mount point directory: \033[1;93m" << mountPoint << "\033[0m\033[1m" << std::endl;
+
+                continue; // Skip mounting this ISO file
             }
+
+            // Initialize libmount context
+            struct libmnt_context *cxt = mnt_new_context();
+
+            // Initialize the source and target paths
+            struct libmnt_cache *cache = mnt_new_cache();
+            struct libmnt_fs *fs = mnt_new_fs();
+            mnt_fs_set_source(fs, isoFile.c_str());
+            mnt_fs_set_target(fs, mountPoint.c_str());
+
+            // Set the mount options
+            mnt_fs_set_fstype(fs, "iso9660");
+            mnt_fs_set_options(fs, "loop");
+
+            // Associate the libmnt_fs object with the libmnt_context
+            mnt_context_set_fs(cxt, fs);
+
+            // Mount the ISO file
+            int ret = mnt_context_mount(cxt);
+            if (ret != 0) {
+                // Handle mount error
+                std::cerr << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[0m\033[1m\033[1;91m.\033[0m\033[1m" << std::endl;
+                fs::remove(mountPoint);
+            } else {
+                // Mount successful
+                mountedSet.insert(mountPoint);
+                std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m\033[1m"
+                                              + "\033[1m mounted at: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename + "'\033[0m\033[1m\033[1m.\033[0m\033[1m";
+                mountedFiles.push_back(mountedFileInfo);
+            }
+
+            // Clean up libmount resources
+            mnt_free_fs(fs);
+            mnt_free_cache(cache);
+            mnt_free_context(cxt);
         } else {
             // Handle sudo command failure or user didn't provide the password
             std::cerr << "\033[1;91mFailed to authenticate with sudo.\033[0m\033[1m" << std::endl;
