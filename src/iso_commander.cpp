@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
 
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.9.2");
+        printVersionNumber("2.9.3");
         return 0;
     }
 
@@ -1269,7 +1269,7 @@ void unmountISO(const std::vector<std::string>& isoDirs) {
 
                 // Unmount directory
                 int ret = mnt_context_umount(cxt);
-                if (ret != 0) {
+                if (ret != 0 && !isDirectoryEmpty(isoDirs[j])) {
                     std::stringstream errorMessage;
                     errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDirs[j] << "'\033[1;91m ...Please check it out manually.\033[0m\033[1m";
                     if (std::find(unmountedErrors.begin(), unmountedErrors.end(), errorMessage.str()) == unmountedErrors.end()) {
