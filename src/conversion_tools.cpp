@@ -180,6 +180,20 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     std::lock_guard<std::mutex> lock(indicesMutex);
     
     ThreadPool pool(maxThreads);
+    
+    // Get current user and group
+    char* current_user = getlogin();
+    if (current_user == nullptr) {
+		std::cerr << "Error getting current user: " << strerror(errno) << std::endl;
+		return;
+    }
+    gid_t current_group = getegid();
+    if (current_group == static_cast<unsigned int>(-1)) {
+		std::cerr << "\033[1;91mError getting current group:\033[0m\033[1m " << strerror(errno) << std::endl;
+		return;
+    }
+    std::string user_str(current_user);
+    std::string group_str = std::to_string(static_cast<unsigned int>(current_group));
 
     // Function to execute asynchronously
     auto asyncConvertBINToISO = [&](const std::string& selectedFile) {
@@ -736,6 +750,7 @@ void printFileList(const std::vector<std::string>& fileList) {
 
 // Function to convert a BIN file to ISO format
 void convertBINToISO(const std::string& inputPath) {
+	
 	auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath);
     // Check if the input file exists
     if (!std::ifstream(inputPath)) {
