@@ -1229,72 +1229,86 @@ bool isDirectoryEmpty(const std::string& path) {
 void unmountISO(const std::vector<std::string>& isoDirs) {
     // Determine batch size based on the number of isoDirs
     size_t batchSize = 1;
+	if (isoDirs.size() > 100000 && isoDirs.size() > maxThreads) {
+		batchSize = 100;
+	} else if (isoDirs.size() > 10000 && isoDirs.size() > maxThreads) {
+		batchSize = 50;
+	} else if (isoDirs.size() > 1000 && isoDirs.size() > maxThreads) {
+		batchSize = 25;
+	} else if (isoDirs.size() > 100 && isoDirs.size() > maxThreads) {
+		batchSize = 10;
+	} else if (isoDirs.size() > 50 && isoDirs.size() > maxThreads) {
+		batchSize = 5;
+	} else if (isoDirs.size() > maxThreads) {
+		batchSize = 2;
+	}
 
-    // Adjust batch size according to the size of isoDirs
-    if (isoDirs.size() > 100000) {
-        batchSize = 100;
-    } else if (isoDirs.size() > 10000) {
-        batchSize = 50;
-    } else if (isoDirs.size() > 1000) {
-        batchSize = 25;
-    } else if (isoDirs.size() > 100) {
-        batchSize = 10;
-    } else if (isoDirs.size() > 50) {
-        batchSize = 5;
-    } else if (isoDirs.size() > 1) {
-        batchSize = 2;
-    }
-
+        // Use std::async to unmount and remove the directories asynchronously
     auto unmountFuture = std::async(std::launch::async, [&isoDirs, batchSize]() {
-        // Initialize libmount context
-        struct libmnt_context *cxt = mnt_new_context();
-        struct libmnt_cache *cache = mnt_new_cache();
+        // Construct the sudo command
+        std::string sudoCommand = "sudo -v";
+        int sudoResult = system(sudoCommand.c_str());
 
-        // Set cache options
-        mnt_context_set_cache(cxt, cache);
+        if (sudoResult == 0) {
+            // Unmount directories in batches
+            for (size_t i = 0; i < isoDirs.size(); i += batchSize) {
+                std::string unmountBatchCommand = "sudo umount -l";
+                size_t batchEnd = std::min(i + batchSize, isoDirs.size());
 
-        // Unmount directories in batches
-        for (size_t i = 0; i < isoDirs.size(); i += batchSize) {
-            size_t batchEnd = std::min(i + batchSize, isoDirs.size());
+                for (size_t j = i; j < batchEnd; ++j) {
+                    unmountBatchCommand += " " + shell_escape(isoDirs[j]);
+                }
 
-            for (size_t j = i; j < batchEnd; ++j) {
-                // Create a new filesystem object
-                struct libmnt_fs *fs = mnt_new_fs();
+                unmountBatchCommand += " > /dev/null 2>&1";
+                int unmountResult __attribute__((unused)) = system(unmountBatchCommand.c_str());
+            }
 
-                // Set the target for the filesystem
-                mnt_fs_set_target(fs, isoDirs[j].c_str());
-
-                // Set the filesystem for the context
-                mnt_context_set_fs(cxt, fs);
-
-                // Unmount directory
-                int ret = mnt_context_umount(cxt);
-                if (ret != 0 && !isDirectoryEmpty(isoDirs[j])) {
+            // Check and remove empty directories
+            std::vector<std::string> emptyDirs;
+            for (const auto& isoDir : isoDirs) {
+                if (isDirectoryEmpty(isoDir)) {
+                    emptyDirs.push_back(isoDir);
+                } else {
+                    // Handle non-empty directory error
                     std::stringstream errorMessage;
-                    errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDirs[j] << "'\033[1;91m ...Please check it out manually.\033[0m\033[1m";
+                    errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDir << "'\033[1;91m ...Please check it out manually.\033[0m\033[1m";
+
                     if (std::find(unmountedErrors.begin(), unmountedErrors.end(), errorMessage.str()) == unmountedErrors.end()) {
                         unmountedErrors.push_back(errorMessage.str());
                     }
-                } else {
-                    std::string unmountedFileInfo = "\033[1mUnmounted: \033[1;92m'" + isoDirs[j] + "'\033[0m\033[1m.";
-                    unmountedFiles.push_back(unmountedFileInfo);
-
-                    // Remove the directory after unmounting
-                    Mutex4Low.lock();
-                    if (rmdir(isoDirs[j].c_str()) != 0) {
-                        std::cerr << "Failed to remove directory: " << isoDirs[j] << std::endl;
-                    }
-                    Mutex4Low.unlock();
                 }
-
-                // Free the filesystem object
-                mnt_free_fs(fs);
             }
-        }
 
-        // Clean up libmount resources
-        mnt_free_cache(cache);
-        mnt_free_context(cxt);
+            // Remove empty directories in batches
+            while (!emptyDirs.empty()) {
+                std::string removeDirCommand = "sudo rmdir ";
+                for (size_t i = 0; i < std::min(batchSize, emptyDirs.size()); ++i) {
+                    removeDirCommand += shell_escape(emptyDirs[i]) + " ";
+                }
+                removeDirCommand += "2>/dev/null";
+
+                int removeDirResult = system(removeDirCommand.c_str());
+
+                for (size_t i = 0; i < std::min(batchSize, emptyDirs.size()); ++i) {
+                    if (removeDirResult == 0) {
+                        auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(emptyDirs[i]);
+                        std::string unmountedFileInfo = "\033[1mUnmounted: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m\033[1m.";
+                        unmountedFiles.push_back(unmountedFileInfo);
+                    } else {
+                        auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(emptyDirs[i]);
+                        std::stringstream errorMessage;
+                        errorMessage << "\033[1;91mFailed to remove directory: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;91m ...Please check it out manually.\033[0m\033[1m";
+
+                        if (std::find(unmountedErrors.begin(), unmountedErrors.end(), errorMessage.str()) == unmountedErrors.end()) {
+                            unmountedErrors.push_back(errorMessage.str());
+                        }
+                    }
+                }
+                emptyDirs.erase(emptyDirs.begin(), emptyDirs.begin() + std::min(batchSize, emptyDirs.size()));
+            }
+        } else {
+            std::cerr << "\033[1;91mFailed to authenticate with sudo.\033[0m\033[1m" << std::endl;
+        }
     });
 }
 
@@ -1388,17 +1402,18 @@ void unmountISOs() {
             batches.emplace_back(isoDirs.begin() + i, std::min(isoDirs.begin() + i + batchSize, isoDirs.end()));
         }
 
-       // Enqueue unmounting tasks for all batches
-		for (const auto& batch : batches) {
-			futures.emplace_back(pool.enqueue([batch]() {
-				std::lock_guard<std::mutex> highLock(Mutex4High);
-				unmountISO(batch);
-			}));
-		}
+        // Enqueue unmounting tasks for all batches
+        for (const auto& batch : batches) {
+            futures.emplace_back(pool.enqueue([batch]() {
+                std::lock_guard<std::mutex> highLock(Mutex4High);
+                unmountISO(batch);
+            }));
+        }
 
-			for (auto& future : futures) {
-				future.wait();
-			}
+            // Wait for all tasks to finish
+            for (auto& future : futures) {
+                future.wait();
+            }
             
 			std::system("clear");
 			
