@@ -1,6 +1,7 @@
 CXX = g++
 CXXFLAGS = -O2 -Wall -Werror
 LIBS = -lreadline
+LDFLAGS = -lreadline -lmount
 
 # Use the number of available processors from nproc
 NUM_PROCESSORS := $(shell nproc 2>/dev/null)
