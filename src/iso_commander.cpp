@@ -73,6 +73,7 @@ int main(int argc, char *argv[]) {
                         break;
                     case '3':
                         manualRefreshCache();
+                        clearScrollBuffer();
                         std::system("clear");
                         break;
                     case '4':
@@ -157,29 +158,39 @@ void submenu1() {
 			clearScrollBuffer();
             std::system("clear");
             select_and_mount_files_by_number();
+            std::system("clear");
+            clearScrollBuffer();
             break;
         case '2':
 			clearScrollBuffer();
             std::system("clear");
             unmountISOs();
+            std::system("clear");
+            clearScrollBuffer();
             break;
         case '3':
 			clearScrollBuffer();
             std::system("clear");
             operation = "rm";
             select_and_operate_files_by_number(operation);
+            std::system("clear");
+            clearScrollBuffer();
             break;
         case '4':
 			clearScrollBuffer();
             std::system("clear");
             operation = "mv";
             select_and_operate_files_by_number(operation);
+            std::system("clear");
+            clearScrollBuffer();
             break;
         case '5':
 			clearScrollBuffer();
             std::system("clear");
             operation = "cp";
             select_and_operate_files_by_number(operation);
+            std::system("clear");
+            clearScrollBuffer();
             break;
 			}
 		}
@@ -214,11 +225,15 @@ void submenu2() {
 				clearScrollBuffer();
 				std::system("clear");
                 select_and_convert_files_to_iso("bin");
+                std::system("clear");
+                clearScrollBuffer();
                 break;
              case '2':
 				clearScrollBuffer();
 				std::system("clear");
                 select_and_convert_files_to_iso("mdf");
+                std::system("clear");
+                clearScrollBuffer();
                 break;
 			}
 		}
