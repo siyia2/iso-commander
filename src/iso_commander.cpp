@@ -1227,89 +1227,127 @@ bool isDirectoryEmpty(const std::string& path) {
 
 // Function to unmount ISO files asynchronously
 void unmountISO(const std::vector<std::string>& isoDirs) {
-    // Determine batch size based on the number of isoDirs
-    size_t batchSize = 1;
-	if (isoDirs.size() > 100000 && isoDirs.size() > maxThreads) {
-		batchSize = 100;
-	} else if (isoDirs.size() > 10000 && isoDirs.size() > maxThreads) {
-		batchSize = 50;
-	} else if (isoDirs.size() > 1000 && isoDirs.size() > maxThreads) {
-		batchSize = 25;
-	} else if (isoDirs.size() > 100 && isoDirs.size() > maxThreads) {
-		batchSize = 10;
-	} else if (isoDirs.size() > 50 && isoDirs.size() > maxThreads) {
-		batchSize = 5;
-	} else if (isoDirs.size() > maxThreads) {
-		batchSize = 2;
-	}
+   // Determine batch size based on the number of isoDirs
+   size_t batchSize = 1;
+   if (isoDirs.size() > 100000 && isoDirs.size() > maxThreads) {
+       batchSize = 100;
+   } else if (isoDirs.size() > 10000 && isoDirs.size() > maxThreads) {
+       batchSize = 50;
+   } else if (isoDirs.size() > 1000 && isoDirs.size() > maxThreads) {
+       batchSize = 25;
+   } else if (isoDirs.size() > 100 && isoDirs.size() > maxThreads) {
+       batchSize = 10;
+   } else if (isoDirs.size() > 50 && isoDirs.size() > maxThreads) {
+       batchSize = 5;
+   } else if (isoDirs.size() > maxThreads) {
+       batchSize = 2;
+   }
 
-        // Use std::async to unmount and remove the directories asynchronously
-    auto unmountFuture = std::async(std::launch::async, [&isoDirs, batchSize]() {
-        // Construct the sudo command
-        std::string sudoCommand = "sudo -v";
-        int sudoResult = system(sudoCommand.c_str());
+   // Use std::async to unmount and remove the directories asynchronously
+   auto unmountFuture = std::async(std::launch::async, [&isoDirs, batchSize]() {
+       // Construct the sudo command
+       std::string sudoCommand = "sudo -v";
+       std::future<int> sudoFuture = std::async(std::launch::async, [&sudoCommand]() {
+           std::array<char, 128> buffer;
+           std::string result;
+           auto pclose_deleter = [](FILE* fp) { return pclose(fp); };
+		   std::unique_ptr<FILE, decltype(pclose_deleter)> pipe(popen(sudoCommand.c_str(), "r"), pclose_deleter);
+           if (!pipe) {
+               throw std::runtime_error("popen() failed!");
+           }
+           while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+               result += buffer.data();
+           }
+           return 0; // Return value doesn't matter for sudo
+       });
 
-        if (sudoResult == 0) {
-            // Unmount directories in batches
-            for (size_t i = 0; i < isoDirs.size(); i += batchSize) {
-                std::string unmountBatchCommand = "sudo umount -l";
-                size_t batchEnd = std::min(i + batchSize, isoDirs.size());
+       if (sudoFuture.get() == 0) {
+           // Unmount directories in batches
+           for (size_t i = 0; i < isoDirs.size(); i += batchSize) {
+               std::string unmountBatchCommand = "sudo umount -l";
+               size_t batchEnd = std::min(i + batchSize, isoDirs.size());
 
-                for (size_t j = i; j < batchEnd; ++j) {
-                    unmountBatchCommand += " " + shell_escape(isoDirs[j]);
-                }
+               for (size_t j = i; j < batchEnd; ++j) {
+                   unmountBatchCommand += " " + shell_escape(isoDirs[j]);
+               }
 
-                unmountBatchCommand += " > /dev/null 2>&1";
-                int unmountResult __attribute__((unused)) = system(unmountBatchCommand.c_str());
-            }
+               std::future<int> unmountFuture = std::async(std::launch::async, [&unmountBatchCommand]() {
+                   std::array<char, 128> buffer;
+                   std::string result;
+                   auto pclose_deleter = [](FILE* fp) { return pclose(fp); };
+				   std::unique_ptr<FILE, decltype(pclose_deleter)> pipe(popen(unmountBatchCommand.c_str(), "r"), pclose_deleter);
+                   if (!pipe) {
+                       throw std::runtime_error("popen() failed!");
+                   }
+                   while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+                       result += buffer.data();
+                   }
+                   return 0; // Return value doesn't matter for umount
+               });
 
-            // Check and remove empty directories
-            std::vector<std::string> emptyDirs;
-            for (const auto& isoDir : isoDirs) {
-                if (isDirectoryEmpty(isoDir)) {
-                    emptyDirs.push_back(isoDir);
-                } else {
-                    // Handle non-empty directory error
-                    std::stringstream errorMessage;
-                    errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDir << "'\033[1;91m ...Please check it out manually.\033[0m\033[1m";
+               unmountFuture.get();
+           }
 
-                    if (std::find(unmountedErrors.begin(), unmountedErrors.end(), errorMessage.str()) == unmountedErrors.end()) {
-                        unmountedErrors.push_back(errorMessage.str());
-                    }
-                }
-            }
+           // Check and remove empty directories
+           std::vector<std::string> emptyDirs;
+           for (const auto& isoDir : isoDirs) {
+               if (isDirectoryEmpty(isoDir)) {
+                   emptyDirs.push_back(isoDir);
+               } else {
+                   // Handle non-empty directory error
+                   std::stringstream errorMessage;
+                   errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDir << "'\033[1;91m ...Please check it out manually.\033[0m\033[1m";
 
-            // Remove empty directories in batches
-            while (!emptyDirs.empty()) {
-                std::string removeDirCommand = "sudo rmdir ";
-                for (size_t i = 0; i < std::min(batchSize, emptyDirs.size()); ++i) {
-                    removeDirCommand += shell_escape(emptyDirs[i]) + " ";
-                }
-                removeDirCommand += "2>/dev/null";
+                   if (std::find(unmountedErrors.begin(), unmountedErrors.end(), errorMessage.str()) == unmountedErrors.end()) {
+                       unmountedErrors.push_back(errorMessage.str());
+                   }
+               }
+           }
 
-                int removeDirResult = system(removeDirCommand.c_str());
+           // Remove empty directories in batches
+           while (!emptyDirs.empty()) {
+               std::string removeDirCommand = "sudo rmdir ";
+               for (size_t i = 0; i < std::min(batchSize, emptyDirs.size()); ++i) {
+                   removeDirCommand += shell_escape(emptyDirs[i]) + " ";
+               }
 
-                for (size_t i = 0; i < std::min(batchSize, emptyDirs.size()); ++i) {
-                    if (removeDirResult == 0) {
-                        auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(emptyDirs[i]);
-                        std::string unmountedFileInfo = "\033[1mUnmounted: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m\033[1m.";
-                        unmountedFiles.push_back(unmountedFileInfo);
-                    } else {
-                        auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(emptyDirs[i]);
-                        std::stringstream errorMessage;
-                        errorMessage << "\033[1;91mFailed to remove directory: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;91m ...Please check it out manually.\033[0m\033[1m";
+               std::future<int> removeDirFuture = std::async(std::launch::async, [&removeDirCommand]() {
+                   std::array<char, 128> buffer;
+                   std::string result;
+                   auto pclose_deleter = [](FILE* fp) { return pclose(fp); };
+				   std::unique_ptr<FILE, decltype(pclose_deleter)> pipe(popen(removeDirCommand.c_str(), "r"), pclose_deleter);
+                   if (!pipe) {
+                       throw std::runtime_error("popen() failed!");
+                   }
+                   while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+                       result += buffer.data();
+                   }
+                   return pipe.get() ? 0 : -1;
+               });
 
-                        if (std::find(unmountedErrors.begin(), unmountedErrors.end(), errorMessage.str()) == unmountedErrors.end()) {
-                            unmountedErrors.push_back(errorMessage.str());
-                        }
-                    }
-                }
-                emptyDirs.erase(emptyDirs.begin(), emptyDirs.begin() + std::min(batchSize, emptyDirs.size()));
-            }
-        } else {
-            std::cerr << "\033[1;91mFailed to authenticate with sudo.\033[0m\033[1m" << std::endl;
-        }
-    });
+               int removeDirResult = removeDirFuture.get();
+
+               for (size_t i = 0; i < std::min(batchSize, emptyDirs.size()); ++i) {
+                   if (removeDirResult == 0) {
+                       auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(emptyDirs[i]);
+                       std::string unmountedFileInfo = "\033[1mUnmounted: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m\033[1m.";
+                       unmountedFiles.push_back(unmountedFileInfo);
+                   } else {
+                       auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(emptyDirs[i]);
+                       std::stringstream errorMessage;
+                       errorMessage << "\033[1;91mFailed to remove directory: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;91m ...Please check it out manually.\033[0m\033[1m";
+
+                       if (std::find(unmountedErrors.begin(), unmountedErrors.end(), errorMessage.str()) == unmountedErrors.end()) {
+                           unmountedErrors.push_back(errorMessage.str());
+                       }
+                   }
+               }
+               emptyDirs.erase(emptyDirs.begin(), emptyDirs.begin() + std::min(batchSize, emptyDirs.size()));
+           }
+       } else {
+           std::cerr << "\033[1;91mFailed to authenticate with sudo.\033[0m\033[1m" << std::endl;
+       }
+   });
 }
 
 
