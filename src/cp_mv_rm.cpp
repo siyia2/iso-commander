@@ -452,6 +452,8 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
     // Vector to store ISO files to operate on
     std::vector<std::string> isoFilesToOperate;
 
+    auto pclose_deleter = [](FILE* fp) { return pclose(fp); };
+
     // Iterate over each ISO file
     for (const auto& iso : isoFiles) {
         // Extract directory and filename from the ISO file path
@@ -509,11 +511,21 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         operationCommand += shell_escape(userDestDir) + " && sudo chown -R " + user_str + ":" + group_str + " " + shell_escape(userDestDir);
                     }
 
-                    // Redirect output to /dev/null to suppress output
-                    operationCommand += "> /dev/null 2>&1";
+                    // Execute the operation command asynchronously
+                    std::future<int> operationFuture = std::async(std::launch::async, [&operationCommand, &pclose_deleter]() {
+                        std::array<char, 128> buffer;
+                        std::string result;
+                        std::unique_ptr<FILE, decltype(pclose_deleter)> pipe(popen(operationCommand.c_str(), "r"), pclose_deleter);
+                        if (!pipe) {
+                            throw std::runtime_error("popen() failed!");
+                        }
+                        while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+                            result += buffer.data();
+                        }
+                        return pipe.get() ? 0 : -1;
+                    });
 
-                    // Execute the operation command
-                    int result = std::system(operationCommand.c_str());
+                    int result = operationFuture.get();
 
                     // Handle operation result
                     if (result == 0) {
@@ -523,10 +535,10 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                             oss.str("");
                             if (!isDelete) {
                                 oss << "\033[1m" << (isCopy ? "Copied" : (isMove ? "Moved" : "Deleted")) << ": \033[1;92m'"
-                                << isoDirectory << "/" << isoFilename << "'\033[0m\033[1m to \033[1;94m'" << userDestDir << "'\033[0m\033[1m";
+                                    << isoDirectory << "/" << isoFilename << "'\033[0m\033[1m to \033[1;94m'" << userDestDir << "'\033[0m\033[1m";
                             } else {
                                 oss << "\033[1m" << (isCopy ? "Copied" : (isMove ? "Moved" : "Deleted")) << ": \033[1;92m'"
-                                << isoDirectory << "/" << isoFilename << "'\033[0m\033[1m";
+                                    << isoDirectory << "/" << isoFilename << "'\033[0m\033[1m";
                             }
                             std::string operationInfo = oss.str();
                             operationIsos.push_back(operationInfo);
@@ -538,10 +550,10 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                             oss.str("");
                             if (!isDelete) {
                                 oss << "\033[1;91mError " << (isCopy ? "copying" : (isMove ? "moving" : "deleting")) << ": \033[1;93m'"
-                                << isoDir << "/" << isoFilename << "'\033[1;91m to '" << userDestDir << "'\033[0m\033[1m";
+                                    << isoDir << "/" << isoFilename << "'\033[1;91m to '" << userDestDir << "'\033[0m\033[1m";
                             } else {
                                 oss << "\033[1;91mError " << (isCopy ? "copying" : (isMove ? "moving" : "deleting")) << ": \033[1;93m'"
-                                << isoDir << "/" << isoFilename << "'\033[0m\033[1m";
+                                    << isoDir << "/" << isoFilename << "'\033[0m\033[1m";
                             }
                             errorMessageInfo = oss.str();
                             operationErrors.push_back(errorMessageInfo);
