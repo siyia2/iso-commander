@@ -784,6 +784,7 @@ void select_and_mount_files_by_number() {
 
     // Main loop for selecting and mounting ISO files
     while (true) {
+		clearScrollBuffer();
         std::system("clear");
         std::cout << "\033[1;93m ! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\n\033[0m\033[1m" << std::endl;
 
