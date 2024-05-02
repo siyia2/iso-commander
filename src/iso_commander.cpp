@@ -520,7 +520,7 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
     // Append the new entries to the shared vector
     allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
 	if (promptFlag) {
-    std::cout << "\033[1;92mProcessed directory path(s): '" << path << "'.\033[0m" << std::endl;
+    std::cout << "\033[1;92mProcessed directory path: '" << path << "'.\033[0m" << std::endl;
 	}
 }
 
