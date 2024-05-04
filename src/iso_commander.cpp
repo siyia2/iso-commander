@@ -11,7 +11,7 @@ const std::string cacheFileName = "mounter_elite_plus_iso_cache.txt";;
 const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
 std::mutex Mutex4High; // Mutex for high level functions
-std::mutex Mutex4Med; // Mutex for lmid level functions
+std::mutex Mutex4Med; // Mutex for mid level functions
 std::mutex Mutex4Low; // Mutex for low level functions
 
 // For cache directory creation
