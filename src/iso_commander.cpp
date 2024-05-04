@@ -925,11 +925,6 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
         auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint);
         auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
 
-        // Construct the sudo command and execute it
-        std::string sudoCommand = "sudo -v";
-        int sudoResult = system(sudoCommand.c_str());
-
-        if (sudoResult == 0) {
             // Asynchronously check and create the mount point directory
             auto future = std::async(std::launch::async, [&mountPoint]() {
                 if (!fs::exists(mountPoint)) {
@@ -998,10 +993,6 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
             mnt_free_fs(fs);
             mnt_free_cache(cache);
             mnt_free_context(cxt);
-        } else {
-            // Handle sudo command failure or user didn't provide the password
-            std::cerr << "\033[1;91mFailed to authenticate with sudo.\033[0m\033[1m" << std::endl;
-        }
     }
 }
 
