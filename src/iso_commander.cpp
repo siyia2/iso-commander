@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
 
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.9.5");
+        printVersionNumber("2.9.6");
         return 0;
     }
 
@@ -801,7 +801,8 @@ void select_and_mount_files_by_number() {
     while (true) {
 		clearScrollBuffer();
         std::system("clear");
-        std::cout << "\033[1;93m ! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\n\033[0m\033[1m" << std::endl;
+        std::cout << "\033[1;93m ! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\033[0m\033[1m" << std::endl;
+        std::cout << "\033[1;93m 		! ROOT ACCESS IS ESSENTIAL FOR SUCCESSFUL MOUNTS !\n\033[0m\033[1m" << std::endl;
 
         // Remove non-existent paths from the cache after selection
         removeNonExistentPathsFromCache();
