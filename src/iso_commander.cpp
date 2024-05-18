@@ -571,7 +571,7 @@ void manualRefreshCache(const std::string& initialDir) {
         inputLine = initialDir;
     } else {
         // Prompt the user to enter directory paths for manual cache refresh
-        inputLine = readInputLine("\033[1;94mDirectory path(s) ↵ from which to populate the \033[1m\033[1;92mISO Cache\033[94m (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1;94m), or press ↵ to return:\n\033[0m\033[1m");
+        inputLine = readInputLine("\033[1;94mDirectory path(s) ↵ from which to populate the \033[1m\033[1;92mISO Cache\033[94m (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1;94m), or ↵ to return:\n\033[0m\033[1m");
     }
 
     if (!inputLine.empty()) {
@@ -713,7 +713,7 @@ void manualRefreshCache(const std::string& initialDir) {
         std::cout << "\033[1;91mCache refresh failed.\033[0m" << std::endl;
         std::cout << " " << std::endl;
     }
-    std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
+    std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
     std::cin.get();
 	}
 	promptFlag = true;
@@ -814,7 +814,7 @@ void select_and_mount_files_by_number() {
         std::system("clear");
         std::cout << "\033[1;93mISO Cache is empty. Please refresh it from the main Menu Options.\033[0m\033[1m" << std::endl;
         std::cout << " " << std::endl;
-        std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
+        std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
         std::cin.get();
         return;
     }
@@ -846,7 +846,7 @@ void select_and_mount_files_by_number() {
         printIsoFileList(isoFiles);
 
         // Prompt user for input
-        char* input = readline("\n\033[1;94mISO(s) ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5', '00' for all), press / to filter or ↵ to return:\033[0m\033[1m ");
+        char* input = readline("\n\033[1;94mISO(s) ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5', '00' for all), / ↵ to filter or ↵ to return:\033[0m\033[1m ");
         clearScrollBuffer();
         std::system("clear");
         std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
@@ -868,7 +868,7 @@ void select_and_mount_files_by_number() {
 			printIsoFileList(isoFiles);
 
 			// User pressed '/', start the filtering process
-			std::cout << "\n\033[1;94mEnter a \033[1;92msearch\033[1;94m query or press ↵ to return: \033[0m\033[1m";
+			std::cout << "\n\033[1;92mSearchQuery\033[1;94m ↵ or ↵ to return: \033[0m\033[1m";
 			std::getline(std::cin, searchQuery);
 
 			// Store the original isoFiles vector
@@ -882,7 +882,7 @@ void select_and_mount_files_by_number() {
 					clearScrollBuffer();
 					std::system("clear");
 					std::cout << "\033[1;93mNo files match the search query.\033[0m\033[1m\n";
-					std::cout << "\n\033[1;32mPress enter to continue...\033[0m\033[1m";
+					std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
 					std::cin.get();
 				} else {
 					clearScrollBuffer();
@@ -891,7 +891,7 @@ void select_and_mount_files_by_number() {
 					printIsoFileList(filteredIsoFiles); // Print the filtered list of ISO files
 
 					// Prompt user for input again with the filtered list
-					char* input = readline("\n\033[1;94mISO(s) ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5', '00' for all), press ↵ to return:\033[0m\033[1m ");
+					char* input = readline("\n\033[1;94mISO(s) ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5', '00' for all), ↵ to return:\033[0m\033[1m ");
 					
 					display_time= false;
 					// Check if the user provided input
@@ -986,7 +986,7 @@ void select_and_mount_files_by_number() {
         // Print the time taken for the entire process in bold with one decimal place
         std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
         std::cout << " " << std::endl;
-        std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
+        std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
         std::cin.get();
 	}
     }
@@ -1499,7 +1499,7 @@ void unmountISOs() {
         // If no ISOs are mounted, prompt user to continue
         if (isoDirs.empty()) {
             std::cout << " " << std::endl;
-            std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
+            std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
             std::cin.get();
             return;
         }
@@ -1510,7 +1510,7 @@ void unmountISOs() {
         }
 
         // Prompt user to choose ISOs for unmounting
-        char* input = readline("\033[1;94mISO(s) ↵ for \033[1;93mumount\033[1;94m (e.g., '1-3', '1 5', '00' for all), or press ↵ to return:\033[0m\033[1m ");
+        char* input = readline("\033[1;94mISO(s) ↵ for \033[1;93mumount\033[1;94m (e.g., '1-3', '1 5', '00' for all), or ↵ to return:\033[0m\033[1m ");
         std::system("clear");
         std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
@@ -1583,7 +1583,7 @@ void unmountISOs() {
             std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
 
             std::cout << " " << std::endl;
-            std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
+            std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
             std::cin.get();
             std::system("clear");
 
@@ -1746,7 +1746,7 @@ void unmountISOs() {
         std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
 
         std::cout << " " << std::endl;
-        std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
+        std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
         std::cin.get();
         std::system("clear");
     }

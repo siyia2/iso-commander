@@ -51,7 +51,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
         std::system("clear");
         std::cout << "\033[1;93mNo ISO(s) available for " << operation << ".\033[0m\033[1m" << std::endl;
         std::cout << " " << std::endl;
-        std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
+        std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
         std::cin.get();
         return;
     }
@@ -95,7 +95,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
         printIsoFileList(isoFiles);
 
         // Prompt user for input or filter
-        char* input = readline(("\n\033[1;94mISO(s) ↵ for " + operationColor + operation + "\033[1;94m (e.g., '1-3', '1 5'), press / to filter, or ↵ to return:\033[0m\033[1m ").c_str());
+        char* input = readline(("\n\033[1;94mISO(s) ↵ for " + operationColor + operation + "\033[1;94m (e.g., '1-3', '1 5'), / ↵ to filter, or ↵ to return:\033[0m\033[1m ").c_str());
         clearScrollBuffer();
         std::system("clear");
 
@@ -114,7 +114,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
             printIsoFileList(isoFiles);
 
             // User pressed '/', start the filtering process
-            std::cout << "\n\033[1;94mEnter a \033[1;92msearch\033[1;94m query or press ↵ to return: \033[0m\033[1m";
+            std::cout << "\n\033[1;92mSearchQuery\033[1;94m ↵ or ↵ to return: \033[0m\033[1m";
             std::getline(std::cin, searchQuery);
 
             // Store the original isoFiles vector
@@ -127,7 +127,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 					clearScrollBuffer();
 					std::system("clear");
                     std::cout << "\033[1;93mNo files match the search query.\033[0m\033[1m\n";
-					std::cout << "\n\033[1;32mPress enter to continue...\033[0m\033[1m";
+					std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
 					std::cin.get();
                 } else {
                     clearScrollBuffer();
@@ -136,7 +136,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
                     printIsoFileList(filteredIsoFiles); // Print the filtered list of ISO files
 
                     // Prompt user for input again with the filtered list
-                    char* input = readline(("\n\033[1;94mISO(s) ↵ for " + operationColor + operation + "\033[1;94m (e.g., '1-3', '1 5'), or press ↵ to return:\033[0m\033[1m ").c_str());
+                    char* input = readline(("\n\033[1;94mISO(s) ↵ for " + operationColor + operation + "\033[1;94m (e.g., '1-3', '1 5'), or ↵ to return:\033[0m\033[1m ").c_str());
 
                     // Check if the user provided input
                     if (input[0] != '\0' && (strcmp(input, "/") != 0)) {
@@ -178,7 +178,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
             std::cout << " " << std::endl;
             std::cout << "\033[1;93mNo ISO(s) available for " << operation << ".\033[0m\033[1m" << std::endl;
             std::cout << " " << std::endl;
-            std::cout << "Press Enter to continue..." << std::endl;
+            std::cout << "↵ to continue..." << std::endl;
             std::cin.get();
             break;
         }
@@ -313,7 +313,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
     if (validIndices.empty()) {
         std::cout << "\033[1;91mNo valid selections to be " << operationDescription << ".\033[1;91m" << std::endl;
-        std::cout << "\n\033[1;32mPress Enter to continue...\033[0m\033[1m";
+        std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
         std::cin.get();
         clear_history();
         return;
@@ -339,7 +339,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 			}
 			if (validIndices.empty()) {
 			std::cout << "\033[1;91mNo valid selections to be " << operationDescription << ".\033[1;91m" << std::endl;
-			std::cout << "\n\033[1;32mPress Enter to continue...\033[0m\033[1m";
+			std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
             std::cin.get();
             clear_history();
             return;
@@ -357,7 +357,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             }
 
             // Ask for the destination directory
-            std::string inputLine = readInputLine("\n\033[1;94mDestination directory ↵ for selected ISO file(s), or press ↵ to cancel:\n\033[0m\033[1m");
+            std::string inputLine = readInputLine("\n\033[1;94mDestination directory ↵ for selected ISO file(s), or ↵ to cancel:\n\033[0m\033[1m");
 
             // Check if the user canceled
             if (inputLine.empty()) {
@@ -398,7 +398,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             if (!(confirmation == "y" || confirmation == "Y")) {
                 std::cout << " " << std::endl;
                 std::cout << "\033[1;93mDelete operation aborted by user.\033[0m\033[1m" << std::endl;
-				std::cout << "\n\033[1;32mPress Enter to continue...\033[0m\033[1m";
+				std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
 				std::cin.get();
                 return;
             }
@@ -475,7 +475,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         // Print the time taken for the entire process in bold with one decimal place
         std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
         std::cout << " " << std::endl;
-        std::cout << "\033[1;32mPress enter to continue...\033[0m\033[1m";
+        std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
         std::cin.get();
         
 }
