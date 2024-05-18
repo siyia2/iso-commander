@@ -261,18 +261,28 @@ void printMenu() {
 
 // GENERAL STUFF
 
+// Helper function for filterIsoFiles
 std::string toLower(const std::string& str) {
     std::string lowerStr = str;
     std::transform(lowerStr.begin(), lowerStr.end(), lowerStr.begin(), ::tolower);
     return lowerStr;
 }
 
+
+// Function to filter ISO in a case insensitive manner
 std::vector<std::string> filterIsoFiles(const std::vector<std::string>& isoFiles, const std::string& searchQuery) {
     std::vector<std::string> filteredFiles;
     std::string lowerSearchQuery = toLower(searchQuery);
     
     for (const auto& isoFile : isoFiles) {
-        if (toLower(isoFile).find(lowerSearchQuery) != std::string::npos) {
+        // Find the position of the last '/'
+        size_t lastSlashPos = isoFile.find_last_of('/');
+        
+        // Extract the part after the last '/'
+        std::string fileName = (lastSlashPos != std::string::npos) ? isoFile.substr(lastSlashPos + 1) : isoFile;
+        
+        // Perform case-insensitive search
+        if (toLower(fileName).find(lowerSearchQuery) != std::string::npos) {
             filteredFiles.push_back(isoFile);
         }
     }
@@ -280,6 +290,8 @@ std::vector<std::string> filterIsoFiles(const std::vector<std::string>& isoFiles
     return filteredFiles;
 }
 
+
+// Function to clear scrollbuffer
 void clearScrollBuffer() {
     std::cout << "\033[3J\033[H"; // ANSI escape codes for clearing scroll buffer
     std::cout.flush(); // Ensure the output is flushed
