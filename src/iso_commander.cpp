@@ -261,13 +261,22 @@ void printMenu() {
 
 // GENERAL STUFF
 
+std::string toLower(const std::string& str) {
+    std::string lowerStr = str;
+    std::transform(lowerStr.begin(), lowerStr.end(), lowerStr.begin(), ::tolower);
+    return lowerStr;
+}
+
 std::vector<std::string> filterIsoFiles(const std::vector<std::string>& isoFiles, const std::string& searchQuery) {
     std::vector<std::string> filteredFiles;
+    std::string lowerSearchQuery = toLower(searchQuery);
+    
     for (const auto& isoFile : isoFiles) {
-        if (isoFile.find(searchQuery) != std::string::npos) {
+        if (toLower(isoFile).find(lowerSearchQuery) != std::string::npos) {
             filteredFiles.push_back(isoFile);
         }
     }
+    
     return filteredFiles;
 }
 
@@ -857,7 +866,12 @@ void select_and_mount_files_by_number() {
 				filteredIsoFiles = filterIsoFiles(isoFiles, searchQuery);
 
 				if (filteredIsoFiles.empty()) {
-					std::cout << "\033[1;93mNo files match the search query.\033[0m\033[1m" << std::endl;
+					display_time= false;
+					clearScrollBuffer();
+					std::system("clear");
+					std::cout << "\033[1;93mNo files match the search query.\033[0m\033[1m\n";
+					std::cout << "\n\033[1;32mPress enter to continue...\033[0m\033[1m";
+					std::cin.get();
 				} else {
 					clearScrollBuffer();
 					std::system("clear");
@@ -1087,6 +1101,10 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     // Iterate through each token in the input stream
     std::string token;
     while (iss >> token) {
+		
+		if (token == "/") {
+			break;
+		}
 		
         // Check if token consists of only zeros or is not 00
         if (token != "00" && isAllZeros(token)) {

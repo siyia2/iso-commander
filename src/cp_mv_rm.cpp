@@ -124,7 +124,11 @@ void select_and_operate_files_by_number(const std::string& operation) {
                 filteredIsoFiles = filterIsoFiles(isoFiles, searchQuery);
 
                 if (filteredIsoFiles.empty()) {
-                    std::cout << "\033[1;93mNo files match the search query.\033[0m\033[1m" << std::endl;
+					clearScrollBuffer();
+					std::system("clear");
+                    std::cout << "\033[1;93mNo files match the search query.\033[0m\033[1m\n";
+					std::cout << "\n\033[1;32mPress enter to continue...\033[0m\033[1m";
+					std::cin.get();
                 } else {
                     clearScrollBuffer();
                     std::system("clear");
