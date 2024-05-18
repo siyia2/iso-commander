@@ -888,6 +888,7 @@ void select_and_mount_files_by_number() {
 					std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
 					std::cin.get();
 				} else {
+					display_time= false;
 					clearScrollBuffer();
 					std::system("clear");
 					std::cout << " " << std::endl;
@@ -1563,10 +1564,10 @@ void unmountISOs() {
 				if (!(filterPattern[0] == '\0')) {
 					if (filterPattern.length() < 5) {
 						std::system("clear");
-						std::cout << "\n\033[1;91mFilterPattern must be longer than 4 characters.\033[0m\033[1m" << std::endl;
+						std::cout << "\033[1;91mFilterPattern must be longer than 4 characters.\033[0m\033[1m" << std::endl;
 					} else {
 						std::system("clear");
-						std::cout << "\n\033[1;93mNo mountpoints match the filter pattern.\033[0m\033[1m" << std::endl;
+						std::cout << "\033[1;93mNo mountpoints match the filter pattern.\033[0m\033[1m" << std::endl;
 					}
                 std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
                 std::cin.get();
