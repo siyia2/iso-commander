@@ -1532,7 +1532,7 @@ void unmountISOs() {
             clearScrollBuffer();
 			std::system("clear");
 			listMountedISOs();
-            std::cout << "\n\033[1;94mFilter pattern ↵ for \033[1;93mumount\033[1;94m or ↵ to return (case-insensitive):\033[0m\033[1m ";
+            std::cout << "\n\033[1;92mFilterPattern\033[1;94m ↵ for \033[1;93mumount\033[1;94m or ↵ to return (case-insensitive):\033[0m\033[1m ";
             std::string filterPattern;
             std::getline(std::cin, filterPattern);
             if (!std::isspace(filterPattern[0]) && filterPattern[0] != '\0' && filterPattern[0] != '/') {
