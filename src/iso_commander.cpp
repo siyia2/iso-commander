@@ -1465,7 +1465,7 @@ void unmountISOs() {
 
     // Flag to check for invalid input
     bool invalidInput = false;
-    
+
     // Flag to check if filtering is enabled
     bool isFiltering = false;
 
@@ -1535,7 +1535,7 @@ void unmountISOs() {
             std::cout << "\n\033[1;92mFilterPattern\033[1;94m ↵ for \033[1;93mumount\033[1;94m or ↵ to return (case-insensitive, length > 4):\033[0m\033[1m ";
             std::string filterPattern;
             std::getline(std::cin, filterPattern);
-            if (!std::isspace(filterPattern[0]) && !filterPattern[0] == '\0' && filterPattern.size() > 4 && filterPattern.substr(0, 4) != "/**/" && filterPattern[4] != '/') {
+            if (!std::isspace(filterPattern[0]) && filterPattern.size() > 4 && filterPattern.substr(0, 4) != "/**/" && filterPattern[4] != '/') {
 			// Convert filterPattern to lowercase (or uppercase) outside the loop for efficiency
 			std::string filterPatternLower;
 			std::transform(filterPattern.begin(), filterPattern.end(), std::back_inserter(filterPatternLower), ::tolower);
@@ -1552,20 +1552,17 @@ void unmountISOs() {
 			}
 		}
             // If no ISOs match the filter pattern, print a message and continue
-            if (filteredIsoDirs.empty() && !filterPattern[0] == '\0' && !std::isspace(filterPattern[0])) {
+            if (filteredIsoDirs.empty()) {
+				if (!(filterPattern[0] == '\0')) {
                 std::cout << "\n\033[1;91mNo ISO(s) match the filter pattern.\033[0m\033[1m" << std::endl;
                 std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
                 std::cin.get();
                 clearScrollBuffer();
+				}
                 std::system("clear");
                 isFiltering = false;
                 continue;
             }
-            else {
-			clearScrollBuffer();
-			std::system("clear");
-			continue;
-		}
         }
 
         // Unmount all ISOs if '00' is entered
