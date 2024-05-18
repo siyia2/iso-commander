@@ -81,7 +81,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
         // Display header message
         std::cout << "\033[1;93m! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\033[0m\033[1m" << std::endl;
-        std::cout << "\033[94;1m CHANGES TO CACHED ISOS ARE REFLECTED AUTOMATICALLY\n\033[0m\033[1m" << std::endl;
+        std::cout << "\033[94;1m 		CHANGES TO CACHED ISOS ARE REFLECTED AUTOMATICALLY\n\033[0m\033[1m" << std::endl;
 
         // Reload ISO files (in case the cache was updated)
         removeNonExistentPathsFromCache();

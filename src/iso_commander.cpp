@@ -813,7 +813,7 @@ void select_and_mount_files_by_number() {
         clearScrollBuffer();
         std::system("clear");
         std::cout << "\033[1;93m ! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\033[0m\033[1m" << std::endl;
-        std::cout << "\033[1;93m         ! ROOT ACCESS IS ESSENTIAL FOR SUCCESSFUL MOUNTS !\n\033[0m\033[1m" << std::endl;
+        std::cout << "\033[1;93m         	! ROOT ACCESS IS PARAMOUNT FOR SUCCESSFUL MOUNTS !\n\033[0m\033[1m" << std::endl;
 
         // Remove non-existent paths from the cache after selection
         removeNonExistentPathsFromCache();
