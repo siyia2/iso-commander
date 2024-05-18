@@ -1554,7 +1554,11 @@ void unmountISOs() {
             // If no ISOs match the filter pattern, print a message and continue
             if (filteredIsoDirs.empty()) {
 				if (!(filterPattern[0] == '\0')) {
-                std::cout << "\n\033[1;91mNo ISO(s) match the filter pattern.\033[0m\033[1m" << std::endl;
+					if (filterPattern.length() < 4) {
+						std::cout << "\n\033[1;91mFilterPattern length with more than 4 characters is required.\033[0m\033[1m" << std::endl;
+					} else {
+						std::cout << "\n\033[1;91mNo ISO(s) match the filter pattern.\033[0m\033[1m" << std::endl;
+					}
                 std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
                 std::cin.get();
                 clearScrollBuffer();
