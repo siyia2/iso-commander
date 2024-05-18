@@ -870,6 +870,9 @@ void select_and_mount_files_by_number() {
 			// User pressed '/', start the filtering process
 			std::cout << "\n\033[1;92mSearchQuery\033[1;94m ↵ or ↵ to return (case-insensitive): \033[0m\033[1m";
 			std::getline(std::cin, searchQuery);
+			clearScrollBuffer();
+			std::system("clear");
+			std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
 			// Store the original isoFiles vector
 			std::vector<std::string> originalIsoFiles = isoFiles;
@@ -1518,7 +1521,7 @@ void unmountISOs() {
         clearScrollBuffer();
         std::system("clear");
         std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
-
+		
         auto start_time = std::chrono::high_resolution_clock::now();
 
         // Break loop if user presses Enter
@@ -1533,10 +1536,15 @@ void unmountISOs() {
 			std::system("clear");
 			listMountedISOs();
             std::cout << "\n\033[1;92mFilterPattern\033[1;94m ↵ for \033[1;93mumount\033[1;94m or ↵ to return (case-insensitive, length > 4):\033[0m\033[1m ";
+            
             std::string filterPattern;
             std::getline(std::cin, filterPattern);
-            if (!std::isspace(filterPattern[0]) && filterPattern.size() > 4 && filterPattern.substr(0, 4) != "/**/" && filterPattern[4] != '/') {
-			// Convert filterPattern to lowercase (or uppercase) outside the loop for efficiency
+            clearScrollBuffer();
+			std::system("clear");
+			std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
+            if (!std::isspace(filterPattern[0]) && filterPattern[0] != '\0' && filterPattern[0] != '/') {
+			
+            // Convert filterPattern to lowercase (or uppercase) outside the loop for efficiency
 			std::string filterPatternLower;
 			std::transform(filterPattern.begin(), filterPattern.end(), std::back_inserter(filterPatternLower), ::tolower);
 
@@ -1545,8 +1553,7 @@ void unmountISOs() {
 				std::string dirLower;
 				std::transform(dir.begin(), dir.end(), std::back_inserter(dirLower), ::tolower);
 
-				// Exclude the first four characters from dirLower for comparison
-				if (dirLower.substr(4).find(filterPatternLower.substr(4)) != std::string::npos) {
+				if (dirLower.find(filterPatternLower) != std::string::npos && !(filterPattern.length() < 5)) {
 					filteredIsoDirs.push_back(dir);
 				}
 			}
@@ -1554,9 +1561,11 @@ void unmountISOs() {
             // If no ISOs match the filter pattern, print a message and continue
             if (filteredIsoDirs.empty()) {
 				if (!(filterPattern[0] == '\0')) {
-					if (filterPattern.length() < 4) {
+					if (filterPattern.length() < 5) {
+						std::system("clear");
 						std::cout << "\n\033[1;91mFilterPattern must be longer than 4 characters.\033[0m\033[1m" << std::endl;
 					} else {
+						std::system("clear");
 						std::cout << "\n\033[1;91mNo ISO(s) match the filter pattern.\033[0m\033[1m" << std::endl;
 					}
                 std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
