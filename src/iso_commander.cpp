@@ -847,7 +847,7 @@ void select_and_mount_files_by_number() {
 			printIsoFileList(isoFiles);
 
 			// User pressed '/', start the filtering process
-			std::cout << "\n\033[1;94mEnter a search query or press ↵ to return: \033[0m\033[1m";
+			std::cout << "\n\033[1;94mEnter a \033[1;92msearch\033[1;94m query or press ↵ to return: \033[0m\033[1m";
 			std::getline(std::cin, searchQuery);
 
 			// Store the original isoFiles vector
