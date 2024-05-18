@@ -408,7 +408,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         }
     }
 
-    auto start_time = std::chrono::high_resolution_clock::now();
+   // auto start_time = std::chrono::high_resolution_clock::now();
 	
 	clearScrollBuffer();
     std::system("clear");
@@ -470,13 +470,13 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         clear_history();
 
         // Stop the timer after completing all deletion tasks
-        auto end_time = std::chrono::high_resolution_clock::now();
+    //    auto end_time = std::chrono::high_resolution_clock::now();
 
         // Calculate and print the elapsed time
-        std::cout << " " << std::endl;
-        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+    //    std::cout << " " << std::endl;
+     //   auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
         // Print the time taken for the entire process in bold with one decimal place
-        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
+    //    std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
         std::cin.get();

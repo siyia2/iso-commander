@@ -43,7 +43,9 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     loadHistory();
 
     std::string inputPaths = readInputLine("\033[1;94mDirectory path(s) ↵ (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1m\033[1;94m) to search for \033[1m\033[1;92m" + fileExtension + " \033[1;94mfiles, or ↵ to return:\n\033[0m\033[1m");
-    std::cout << "\n\033[1mPlease wait...\033[1m" << std::endl;
+    clearScrollBuffer();
+    std::system("clear");
+    std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 	
     if (!inputPaths.empty()) {
         // Save history to file
@@ -95,6 +97,8 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
     // Print a message based on whether new files are found
     if (!newFilesFound && !files.empty()) {
+		clearScrollBuffer();
+        std::system("clear");
         std::cout << " " << std::endl;
         auto end_time = std::chrono::high_resolution_clock::now();
         std::cout << "\033[1;91mNo new " << fileExtension << " file(s) over 5MB found. \033[1;92m" << files.size() << " file(s) are cached in RAM from previous searches.\033[0m\033[1m" << std::endl;
@@ -107,6 +111,8 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     }
 
     if (files.empty()) {
+		clearScrollBuffer();
+        std::system("clear");
         std::cout << " " << std::endl;
         auto end_time = std::chrono::high_resolution_clock::now();
         std::cout << "\033[1;91mNo " << fileExtension << " file(s) over 5MB found in the specified path(s) or cached in RAM.\n\033[0m\033[1m";
@@ -205,7 +211,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 		};
 	
 	// Start the timer
-    auto start_time = std::chrono::high_resolution_clock::now();
+  //  auto start_time = std::chrono::high_resolution_clock::now();
     // Iterate through the tokens in the input string
     while (iss >> token) {
         // Create a string stream to further process the token
@@ -359,12 +365,12 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     manualRefreshCache(inputPaths);
     
     // Stop the timer after completing the mounting process
-    auto end_time = std::chrono::high_resolution_clock::now();
+  //  auto end_time = std::chrono::high_resolution_clock::now();
     // Calculate and print the elapsed time
-    auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-    std::cout << " " << std::endl;
+  //  auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+ //   std::cout << " " << std::endl;
     // Print the time taken for the entire process in bold with one decimal place
-    std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
+  //  std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
         
 }
 
@@ -403,7 +409,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     std::mutex mutex4search;
     
     // Start the timer
-    auto start_time = std::chrono::high_resolution_clock::now();
+//    auto start_time = std::chrono::high_resolution_clock::now();
 
     try {
         // Preallocate enough space for the futures vector
@@ -583,18 +589,22 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     // Print success message if files were found
     if (!fileNames.empty()) {
         // Stop the timer after completing the mounting process
-        auto end_time = std::chrono::high_resolution_clock::now();
+    //    auto end_time = std::chrono::high_resolution_clock::now();
         std::cout << " " << std::endl;
         if (mode == "bin") {
+			clearScrollBuffer();
+        std::system("clear");
 			std::cout << "\033[1;92mFound " << fileNames.size() << " matching file(s)\033[0m\033[1m" << ".\033[1;93m " << binImgFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0m\033[1m" << std::endl;
 		} else {
+			clearScrollBuffer();
+			std::system("clear");
 			std::cout << "\033[1;92mFound " << fileNames.size() << " matching file(s)\033[0m\033[1m" << ".\033[1;93m " << mdfMdsFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0m\033[1m" << std::endl;
 		}
         // Calculate and print the elapsed time
-        std::cout << " " << std::endl;
-        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+   //     std::cout << " " << std::endl;
+   //     auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
         // Print the time taken for the entire process in bold with one decimal place
-        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
+    //    std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
         std::cin.ignore();

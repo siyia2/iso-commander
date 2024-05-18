@@ -830,7 +830,7 @@ void select_and_mount_files_by_number() {
 
     // Main loop for selecting and mounting ISO files
     while (true) {
-		bool display_time = true;
+	//	bool display_time = true;
         clearScrollBuffer();
         std::system("clear");
         std::cout << "\033[1;93m ! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\033[0m\033[1m" << std::endl;
@@ -851,7 +851,7 @@ void select_and_mount_files_by_number() {
         std::system("clear");
         std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
         // Start the timer
-        auto start_time = std::chrono::high_resolution_clock::now();
+     //   auto start_time = std::chrono::high_resolution_clock::now();
 
         // Check if the user wants to return
         if (std::isspace(input[0]) || input[0] == '\0') {
@@ -881,7 +881,7 @@ void select_and_mount_files_by_number() {
 				filteredIsoFiles = filterIsoFiles(isoFiles, searchQuery);
 
 				if (filteredIsoFiles.empty()) {
-					display_time= false;
+				//	display_time= false;
 					clearScrollBuffer();
 					std::system("clear");
 					std::cout << "\033[1;93mNo files match the search query.\033[0m\033[1m\n";
@@ -896,10 +896,10 @@ void select_and_mount_files_by_number() {
 					// Prompt user for input again with the filtered list
 					char* input = readline("\n\033[1;94mISO(s) ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5', '00' for all), ↵ to return:\033[0m\033[1m ");
 					
-					display_time= false;
+				//	display_time= false;
 					// Check if the user provided input
 					if (input[0] != '\0' && (strcmp(input, "/") != 0)) {
-						display_time= true;
+				//		display_time= true;
 						clearScrollBuffer();
 						std::system("clear");
 						std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
@@ -909,7 +909,7 @@ void select_and_mount_files_by_number() {
 					}
 				}
 			} else {
-				display_time= false;
+			//	display_time= false;
 				isoFiles = originalIsoFiles; // Revert to the original cache list
 			}
 		}
@@ -979,19 +979,19 @@ void select_and_mount_files_by_number() {
 		skippedMessages.clear();
 		errorMessages.clear();
 		uniqueErrorMessages.clear();
-		if (display_time) {
+		//if (display_time) {
         // Stop the timer after completing the mounting process
-        auto end_time = std::chrono::high_resolution_clock::now();
+       // auto end_time = std::chrono::high_resolution_clock::now();
 
         // Calculate and print the elapsed time
-        std::cout << " " << std::endl;
-        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+      //  std::cout << " " << std::endl;
+        //auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
         // Print the time taken for the entire process in bold with one decimal place
-        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
+      //  std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
         std::cin.get();
-	}
+	//}
     }
 }
 
@@ -1522,7 +1522,7 @@ void unmountISOs() {
         std::system("clear");
         std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 		
-        auto start_time = std::chrono::high_resolution_clock::now();
+      //  auto start_time = std::chrono::high_resolution_clock::now();
 
         // Break loop if user presses Enter
         if (std::isspace(input[0]) || input[0] == '\0') {
@@ -1633,11 +1633,11 @@ void unmountISOs() {
             unmountedFiles.clear();
             unmountedErrors.clear();
             
-            auto end_time = std::chrono::high_resolution_clock::now();
+         //   auto end_time = std::chrono::high_resolution_clock::now();
 
-            auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-            std::cout << " " << std::endl;
-            std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
+          //  auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+         //   std::cout << " " << std::endl;
+        //    std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
 
             std::cout << " " << std::endl;
             std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
@@ -1804,12 +1804,12 @@ void unmountISOs() {
        }
 
        // Stop the timer after completing the unmounting process
-       auto end_time = std::chrono::high_resolution_clock::now();
+    //   auto end_time = std::chrono::high_resolution_clock::now();
 
-       auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+   //    auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
        // Print the time taken for the entire process in bold with one decimal place
-       std::cout << " " << std::endl;
-       std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
+ //      std::cout << " " << std::endl;
+  //     std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
 
        std::cout << " " << std::endl;
        std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
