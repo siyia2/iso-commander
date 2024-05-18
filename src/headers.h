@@ -193,6 +193,7 @@ void select_and_operate_files_by_number(const std::string& operation);
 void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& operationSet, const std::string& process);
 void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete);
 
+
 // RM functions
 void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::unordered_set<std::string>& deletedSet);
 
@@ -215,6 +216,7 @@ bool isValidIndex(int index, size_t isoDirsSize);
 //	voids
 
 //General functions
+std::vector<std::string> filterIsoFiles(const std::vector<std::string>& isoFiles, const std::string& searchQuery);
 void clearScrollBuffer();
 bool isAllZeros(const std::string& str);
 bool isNumeric(const std::string& str);
