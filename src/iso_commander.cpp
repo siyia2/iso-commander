@@ -1087,9 +1087,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     // Iterate through each token in the input stream
     std::string token;
     while (iss >> token) {
-		if (token == "/") {
-			break;
-		}
+		
         // Check if token consists of only zeros or is not 00
         if (token != "00" && isAllZeros(token)) {
             if (!invalidInput) {
