@@ -830,7 +830,7 @@ void select_and_mount_files_by_number() {
 
     // Main loop for selecting and mounting ISO files
     while (true) {
-	//	bool display_time = true;
+		bool display_time = true;
         clearScrollBuffer();
         std::system("clear");
         std::cout << "\033[1;93m ! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\033[0m\033[1m" << std::endl;
@@ -881,7 +881,7 @@ void select_and_mount_files_by_number() {
 				filteredIsoFiles = filterIsoFiles(isoFiles, searchQuery);
 
 				if (filteredIsoFiles.empty()) {
-				//	display_time= false;
+					display_time= false;
 					clearScrollBuffer();
 					std::system("clear");
 					std::cout << "\033[1;93mNo files match the search query.\033[0m\033[1m\n";
@@ -899,7 +899,7 @@ void select_and_mount_files_by_number() {
 				//	display_time= false;
 					// Check if the user provided input
 					if (input[0] != '\0' && (strcmp(input, "/") != 0)) {
-				//		display_time= true;
+						display_time= true;
 						clearScrollBuffer();
 						std::system("clear");
 						std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
@@ -909,7 +909,7 @@ void select_and_mount_files_by_number() {
 					}
 				}
 			} else {
-			//	display_time= false;
+				display_time= false;
 				isoFiles = originalIsoFiles; // Revert to the original cache list
 			}
 		}
@@ -979,7 +979,7 @@ void select_and_mount_files_by_number() {
 		skippedMessages.clear();
 		errorMessages.clear();
 		uniqueErrorMessages.clear();
-		//if (display_time) {
+		if (display_time) {
         // Stop the timer after completing the mounting process
        // auto end_time = std::chrono::high_resolution_clock::now();
 
@@ -991,7 +991,7 @@ void select_and_mount_files_by_number() {
         std::cout << " " << std::endl;
         std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
         std::cin.get();
-	//}
+		}
     }
 }
 
@@ -1566,7 +1566,7 @@ void unmountISOs() {
 						std::cout << "\n\033[1;91mFilterPattern must be longer than 4 characters.\033[0m\033[1m" << std::endl;
 					} else {
 						std::system("clear");
-						std::cout << "\n\033[1;91mNo ISO(s) match the filter pattern.\033[0m\033[1m" << std::endl;
+						std::cout << "\n\033[1;93mNo mountpoints match the filter pattern.\033[0m\033[1m" << std::endl;
 					}
                 std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
                 std::cin.get();
