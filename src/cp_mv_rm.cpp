@@ -40,10 +40,10 @@ bool isValidLinuxPathFormat(const std::string& path) {
 
 // Main function to select and operate on files by number
 void select_and_operate_files_by_number(const std::string& operation) {
-    // Remove nonexistent paths from cache
+    // Remove non-existent paths from the cache
     removeNonExistentPathsFromCache();
-    
-    // Load ISO files from cache
+
+    // Load ISO files from the cache
     std::vector<std::string> isoFiles = loadCache();
 
     // If no ISO files are available, display a message and return
@@ -60,7 +60,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
     isoFiles.erase(std::remove_if(isoFiles.begin(), isoFiles.end(), [](const std::string& iso) {
         return !ends_with_iso(iso);
     }), isoFiles.end());
-    
+
     // Color code based on the operation
     std::string operationColor;
     if (operation == "rm") {
@@ -70,55 +70,103 @@ void select_and_operate_files_by_number(const std::string& operation) {
     } else {
         operationColor = "\033[1;93m"; // Yellow for other operations
     }
-    
+
     std::unordered_set<std::string> operationSet;
     std::string process;
 
     // Main loop for interacting with ISO files
     while (true) {
-		clearScrollBuffer();
+        clearScrollBuffer();
         std::system("clear");
 
         // Display header message
         std::cout << "\033[1;93m! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\033[0m\033[1m" << std::endl;
-        std::cout << "\033[94;1m         	CHANGES TO CACHED ISOS ARE REFLECTED AUTOMATICALLY\n\033[0m\033[1m" << std::endl;
+        std::cout << "\033[94;1m CHANGES TO CACHED ISOS ARE REFLECTED AUTOMATICALLY\n\033[0m\033[1m" << std::endl;
 
-        // Reload ISO files (in case cache was updated)
+        // Reload ISO files (in case the cache was updated)
         removeNonExistentPathsFromCache();
         isoFiles = loadCache();
         isoFiles.erase(std::remove_if(isoFiles.begin(), isoFiles.end(), [](const std::string& iso) {
             return !ends_with_iso(iso);
         }), isoFiles.end());
 
-        // Print the list of ISO files
+        std::string searchQuery;
+        std::vector<std::string> filteredIsoFiles = isoFiles;
         printIsoFileList(isoFiles);
 
-        std::cout << " " << std::endl;
-
-        // Get user input for ISO file selection
-        char* input = readline(("\033[1;94mISO(s) ↵ for " + operationColor + operation + "\033[1;94m (e.g., '1-3', '1 5'), or press ↵ to return:\033[0m\033[1m ").c_str());
+        // Prompt user for input or filter
+        char* input = readline(("\n\033[1;94mISO(s) ↵ for " + operationColor + operation + "\033[1;94m (e.g., '1-3', '1 5'), press / to filter, or ↵ to return:\033[0m\033[1m ").c_str());
         clearScrollBuffer();
         std::system("clear");
 
-        // Check if input is empty or whitespace (to return to main menu)
+        // Check if the user wants to return
         if (std::isspace(input[0]) || input[0] == '\0') {
             std::cout << "Press Enter to Return" << std::endl;
             break;
-        } else if (operation == "rm") {
-            // Process delete operation
+        }
+
+        if (strcmp(input, "/") == 0) {
+            clearScrollBuffer();
             std::system("clear");
-            process = "rm";
-            processOperationInput(input, isoFiles, operationSet, process);
-        } else if (operation == "mv") {
-            // Process move operation
-            std::system("clear");
-            process = "mv";
-            processOperationInput(input, isoFiles, operationSet, process);
-        } else if (operation == "cp") {
-            // Process copy operation
-            std::system("clear");
-            process = "cp";
-            processOperationInput(input, isoFiles, operationSet, process);
+
+            std::cout << " " << std::endl;
+
+            printIsoFileList(isoFiles);
+
+            // User pressed '/', start the filtering process
+            std::cout << "\n\033[1;94mEnter a search query or press ↵ to return: \033[0m\033[1m";
+            std::getline(std::cin, searchQuery);
+
+            // Store the original isoFiles vector
+            std::vector<std::string> originalIsoFiles = isoFiles;
+
+            if (!searchQuery.empty()) {
+                filteredIsoFiles = filterIsoFiles(isoFiles, searchQuery);
+
+                if (filteredIsoFiles.empty()) {
+                    std::cout << "\033[1;93mNo files match the search query.\033[0m\033[1m" << std::endl;
+                } else {
+                    clearScrollBuffer();
+                    std::system("clear");
+                    std::cout << " " << std::endl;
+                    printIsoFileList(filteredIsoFiles); // Print the filtered list of ISO files
+
+                    // Prompt user for input again with the filtered list
+                    char* input = readline(("\n\033[1;94mISO(s) ↵ for " + operationColor + operation + "\033[1;94m (e.g., '1-3', '1 5'), or press ↵ to return:\033[0m\033[1m ").c_str());
+
+                    // Check if the user provided input
+                    if (input[0] != '\0' && (strcmp(input, "/") != 0)) {
+                        clearScrollBuffer();
+                        std::system("clear");
+
+                        // Process the user input with the filtered list
+                        if (operation == "rm") {
+                            process = "rm";
+                            processOperationInput(input, filteredIsoFiles, operationSet, process);
+                        } else if (operation == "mv") {
+                            process = "mv";
+                            processOperationInput(input, filteredIsoFiles, operationSet, process);
+                        } else if (operation == "cp") {
+                            process = "cp";
+                            processOperationInput(input, filteredIsoFiles, operationSet, process);
+                        }
+                    }
+                }
+            } else {
+                isoFiles = originalIsoFiles; // Revert to the original cache list
+            }
+        } else {
+            // Process the user input with the original list
+            if (operation == "rm") {
+                process = "rm";
+                processOperationInput(input, isoFiles, operationSet, process);
+            } else if (operation == "mv") {
+                process = "mv";
+                processOperationInput(input, isoFiles, operationSet, process);
+            } else if (operation == "cp") {
+                process = "cp";
+                processOperationInput(input, isoFiles, operationSet, process);
+            }
         }
 
         // If ISO files become empty after operation, display a message and return
