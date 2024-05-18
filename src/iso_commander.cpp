@@ -1531,10 +1531,11 @@ void unmountISOs() {
             isFiltering = true;
             clearScrollBuffer();
 			std::system("clear");
-            std::cout << "\n\033[1;94mPattern ↵ for \033[1;93mumount\033[1;94m or ↵ to return (case-insensitive):\033[0m\033[1m ";
+			listMountedISOs();
+            std::cout << "\n\033[1;94mFilter pattern ↵ for \033[1;93mumount\033[1;94m or ↵ to return (case-insensitive):\033[0m\033[1m ";
             std::string filterPattern;
             std::getline(std::cin, filterPattern);
-            if (!(std::isspace(filterPattern[0]) || filterPattern[0] == '\0')) {
+            if (!std::isspace(filterPattern[0]) && filterPattern[0] != '\0' && filterPattern[0] != '/') {
 			
             // Convert filterPattern to lowercase (or uppercase) outside the loop for efficiency
 			std::string filterPatternLower;
