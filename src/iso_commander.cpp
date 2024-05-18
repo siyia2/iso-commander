@@ -866,9 +866,10 @@ void select_and_mount_files_by_number() {
 
 					// Prompt user for input again with the filtered list
 					char* input = readline("\n\033[1;94mISO(s) ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5', '00' for all), press ↵ to return:\033[0m\033[1m ");
+					
 					display_time= false;
 					// Check if the user provided input
-					if (input[0] != '\0') {
+					if (input[0] != '\0' && (strcmp(input, "/") != 0)) {
 						display_time= true;
 						clearScrollBuffer();
 						std::system("clear");
