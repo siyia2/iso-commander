@@ -901,7 +901,7 @@ void select_and_mount_files_by_number() {
 					filtered=true;
 					clearScrollBuffer();
 					std::system("clear");
-					std::cout << "\033[1;91m'00' not available for filtered.\033[0m\033[1m\n";
+					std::cout << "\033[1;91m'00' is not available for filtered results.\033[0m\033[1m\n";
 					std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
 					std::cin.get();
 				}
