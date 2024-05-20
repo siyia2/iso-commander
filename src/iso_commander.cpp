@@ -856,7 +856,6 @@ void select_and_mount_files_by_number() {
 
         // Check if the user wants to return
         if (std::isspace(input[0]) || input[0] == '\0') {
-            std::cout << "Press Enter to Return" << std::endl;
             break;
         }
 
@@ -869,16 +868,17 @@ void select_and_mount_files_by_number() {
 			printIsoFileList(isoFiles);
 
 			// User pressed '/', start the filtering process
-			std::cout << "\n\033[1;92mSearchQuery\033[1;94m ↵ or ↵ to return (case-insensitive): \033[0m\033[1m";
-			std::getline(std::cin, searchQuery);
-			clearScrollBuffer();
+			char* searchQuery = readline("\n\033[1;92mSearchQuery\033[1;94m ↵ or ↵ to return (case-insensitive): \033[0m\033[1m");
 			std::system("clear");
 			std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
 			// Store the original isoFiles vector
 			std::vector<std::string> originalIsoFiles = isoFiles;
+			// Check if the user wants to return
+        if (!(std::isspace(searchQuery[0]) || searchQuery[0] == '\0')) {
+        
 
-			if (!searchQuery.empty()) {
+			if (searchQuery != nullptr) {
 				filteredIsoFiles = filterIsoFiles(isoFiles, searchQuery);
 
 				if (filteredIsoFiles.empty()) {
@@ -920,9 +920,10 @@ void select_and_mount_files_by_number() {
 					}
 				}
 				
-			} else {
-				display_time= false;
-				isoFiles = originalIsoFiles; // Revert to the original cache list
+			} 
+				}else {
+					display_time= false;
+					isoFiles = originalIsoFiles; // Revert to the original cache list
 			}
 		}
 
@@ -1497,103 +1498,101 @@ void unmountISOs() {
     // Path where ISOs are mounted
     const std::string isoPath = "/mnt";
 
-    while (true) {
-        std::vector<std::string> filteredIsoDirs;
-        listMountedISOs();
+while (true) {
+    std::vector<std::string> filteredIsoDirs;
+    listMountedISOs();
 
-        // Vectors to store ISO directories and error messages
-        std::vector<std::string> isoDirs;
-        std::vector<std::string> errorMessages;
+    // Vectors to store ISO directories and error messages
+    std::vector<std::string> isoDirs;
+    std::vector<std::string> errorMessages;
 
-        // Reset flags and clear containers
-        invalidInput = false;
-        uniqueErrorMessages.clear();
+    // Reset flags and clear containers
+    invalidInput = false;
+    uniqueErrorMessages.clear();
 
-        {
-            std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
+    {
+        std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
 
-            // Iterate through the ISO path to find mounted ISOs
-            for (const auto& entry : std::filesystem::directory_iterator(isoPath)) {
-                if (entry.is_directory() && entry.path().filename().string().find("iso_") == 0) {
-                    isoDirs.push_back(entry.path().string());
-                }
+        // Iterate through the ISO path to find mounted ISOs
+        for (const auto& entry : std::filesystem::directory_iterator(isoPath)) {
+            if (entry.is_directory() && entry.path().filename().string().find("iso_") == 0) {
+                isoDirs.push_back(entry.path().string());
             }
         }
+    }
 
-        // If no ISOs are mounted, prompt user to continue
-        if (isoDirs.empty()) {
-            std::cout << " " << std::endl;
-            std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
-            std::cin.get();
-            return;
-        }
+    // If no ISOs are mounted, prompt user to continue
+    if (isoDirs.empty()) {
+        std::cout << " " << std::endl;
+        std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
+        std::cin.get();
+        return;
+    }
 
-        // Display separator if ISOs are mounted
-        if (!isoDirs.empty()) {
-            std::cout << " " << std::endl;
-        }
+    // Display separator if ISOs are mounted
+    if (!isoDirs.empty()) {
+        std::cout << " " << std::endl;
+    }
 
-        // Prompt user to choose ISOs for unmounting
-        char* input = readline("\033[1;94mISO(s) ↵ for \033[1;93mumount\033[1;94m (e.g., '1-3', '1 5', '00' for all), / ↵ to filter\033[1;94m or ↵ to return:\033[0m\033[1m ");
+    // Prompt user to choose ISOs for unmounting
+    char* input = readline("\033[1;94mISO(s) ↵ for \033[1;93mumount\033[1;94m (e.g., '1-3', '1 5', '00' for all), / ↵ to filter\033[1;94m or ↵ to return:\033[0m\033[1m ");
+    clearScrollBuffer();
+    std::system("clear");
+    std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
+
+    // Break loop if user presses Enter
+    if (std::isspace(input[0]) || input[0] == '\0') {
+        break;
+    }
+
+    // Check if the user wants to filter the ISOs
+    if (input[0] == '/') {
+        isFiltering = true;
+        clearScrollBuffer();
+        std::system("clear");
+        listMountedISOs();
+        char* filterPattern = readline("\n\033[1;92mFilterPattern\033[1;94m ↵ for \033[1;93mumount\033[1;94m or ↵ to return (case-insensitive, length > 4):\033[0m\033[1m ");
+
+        // Convert filterPattern to std::string
+        std::string filterPatternStr(filterPattern);
         clearScrollBuffer();
         std::system("clear");
         std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
-		
-      //  auto start_time = std::chrono::high_resolution_clock::now();
 
-        // Break loop if user presses Enter
-        if (std::isspace(input[0]) || input[0] == '\0') {
-            break;
-        }
+        if (!std::isspace(filterPattern[0]) && filterPattern[0] != '\0' && filterPattern[0] != '/') {
+            // Convert to lowercase
+            std::string filterPatternLower;
+            std::transform(filterPatternStr.begin(), filterPatternStr.end(), std::back_inserter(filterPatternLower), ::tolower);
 
-        // Check if the user wants to filter the ISOs
-        if (input[0] == '/') {
-            isFiltering = true;
-            clearScrollBuffer();
-			std::system("clear");
-			listMountedISOs();
-            std::cout << "\n\033[1;92mFilterPattern\033[1;94m ↵ for \033[1;93mumount\033[1;94m or ↵ to return (case-insensitive, length > 4):\033[0m\033[1m ";
-            
-            std::string filterPattern;
-            std::getline(std::cin, filterPattern);
-            clearScrollBuffer();
-			std::system("clear");
-			std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
-            if (!std::isspace(filterPattern[0]) && filterPattern[0] != '\0' && filterPattern[0] != '/') {
-			
-            // Convert filterPattern to lowercase (or uppercase) outside the loop for efficiency
-			std::string filterPatternLower;
-			std::transform(filterPattern.begin(), filterPattern.end(), std::back_inserter(filterPatternLower), ::tolower);
+            for (const auto& dir : isoDirs) {
+                std::string dirLower;
+                std::transform(dir.begin(), dir.end(), std::back_inserter(dirLower), ::tolower);
 
-			for (const auto& dir : isoDirs) {
-				// Convert dir to lowercase (or uppercase) for case-insensitive comparison
-				std::string dirLower;
-				std::transform(dir.begin(), dir.end(), std::back_inserter(dirLower), ::tolower);
+                if (dirLower.find(filterPatternLower) != std::string::npos && filterPatternStr.length() >= 5) {
+                    filteredIsoDirs.push_back(dir);
+                }
+            }
 
-				if (dirLower.find(filterPatternLower) != std::string::npos && !(filterPattern.length() < 5)) {
-					filteredIsoDirs.push_back(dir);
-				}
-			}
-		}
             // If no ISOs match the filter pattern, print a message and continue
             if (filteredIsoDirs.empty()) {
-				if (!(filterPattern[0] == '\0')) {
-					if (filterPattern.length() < 5) {
-						std::system("clear");
-						std::cout << "\033[1;91mFilterPattern must be longer than 4 characters.\033[0m\033[1m" << std::endl;
-					} else {
-						std::system("clear");
-						std::cout << "\033[1;93mNo mountpoints match the filter pattern.\033[0m\033[1m" << std::endl;
-					}
-                std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
-                std::cin.get();
-                clearScrollBuffer();
-				}
+                if (filterPattern[0] != '\0') {
+                    if (filterPatternStr.length() < 5) {
+                        std::system("clear");
+                        std::cout << "\033[1;91mFilterPattern must be longer than 4 characters.\033[0m\033[1m" << std::endl;
+                    } else {
+                        std::system("clear");
+                        std::cout << "\033[1;93mNo mountpoints match the filter pattern.\033[0m\033[1m" << std::endl;
+                    }
+                    std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
+                    std::cin.get();
+                    clearScrollBuffer();
+                }
                 std::system("clear");
                 isFiltering = false;
                 continue;
             }
         }
+    }
 
         // Unmount all ISOs if '00' is entered
         if (std::strcmp(input, "00") == 0) {

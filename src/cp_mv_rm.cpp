@@ -101,7 +101,6 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
         // Check if the user wants to return
         if (std::isspace(input[0]) || input[0] == '\0') {
-            std::cout << "Press Enter to Return" << std::endl;
             break;
         }
 
@@ -114,16 +113,17 @@ void select_and_operate_files_by_number(const std::string& operation) {
             printIsoFileList(isoFiles);
 
             // User pressed '/', start the filtering process
-            std::cout << "\n\033[1;92mSearchQuery\033[1;94m ↵ or ↵ to return (case-insensitive): \033[0m\033[1m";
-            std::getline(std::cin, searchQuery);
+            char* searchQuery = readline("\n\033[1;92mSearchQuery\033[1;94m ↵ or ↵ to return (case-insensitive): \033[0m\033[1m");
             clearScrollBuffer();
 			std::system("clear");
 			std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
             // Store the original isoFiles vector
             std::vector<std::string> originalIsoFiles = isoFiles;
+            
+            if (!(std::isspace(searchQuery[0]) || searchQuery[0] == '\0')) {
 
-            if (!searchQuery.empty()) {
+            if (searchQuery != nullptr) {
                 filteredIsoFiles = filterIsoFiles(isoFiles, searchQuery);
 
                 if (filteredIsoFiles.empty()) {
@@ -159,9 +159,10 @@ void select_and_operate_files_by_number(const std::string& operation) {
                         }
                     }
                 }
-            } else {
-                isoFiles = originalIsoFiles; // Revert to the original cache list
-            }
+            } 
+			} else {
+					isoFiles = originalIsoFiles; // Revert to the original cache list
+			}
         } else {
             // Process the user input with the original list
             if (operation == "rm") {
