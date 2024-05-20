@@ -135,7 +135,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
                 } else {
                     clearScrollBuffer();
                     std::system("clear");
-                    std::cout << " " << std::endl;
+                    std::cout << "\033[1mFiltered results:\n\033[0m\033[1m" << std::endl;
                     printIsoFileList(filteredIsoFiles); // Print the filtered list of ISO files
 
                     // Prompt user for input again with the filtered list

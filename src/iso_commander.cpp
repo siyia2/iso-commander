@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
 
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("2.9.9");
+        printVersionNumber("3.0.0");
         return 0;
     }
 
@@ -830,6 +830,7 @@ void select_and_mount_files_by_number() {
 
     // Main loop for selecting and mounting ISO files
     while (true) {
+		bool filtered= false;
 		bool display_time = true;
         clearScrollBuffer();
         std::system("clear");
@@ -860,6 +861,7 @@ void select_and_mount_files_by_number() {
         }
 
 		if (strcmp(input, "/") == 0) {
+			filtered=true;
 			clearScrollBuffer();
 			std::system("clear");
     
@@ -891,12 +893,19 @@ void select_and_mount_files_by_number() {
 					display_time= false;
 					clearScrollBuffer();
 					std::system("clear");
-					std::cout << " " << std::endl;
+					std::cout << "\033[1mFiltered results:\n\033[0m\033[1m" << std::endl;
 					printIsoFileList(filteredIsoFiles); // Print the filtered list of ISO files
-
-					// Prompt user for input again with the filtered list
-					char* input = readline("\n\033[1;94mISO(s) ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5', '00' for all), ↵ to return:\033[0m\033[1m ");
 					
+					// Prompt user for input again with the filtered list
+					char* input = readline("\n\033[1;94mISO(s) ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5'), ↵ to return:\033[0m\033[1m ");
+					if (std::strcmp(input, "00") == 0) {
+					clearScrollBuffer();
+					std::system("clear");
+					std::cout << "\033[1;91m'00' not available for filtered.\033[0m\033[1m\n";
+					std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
+					std::cin.get();
+				}
+						
 				//	display_time= false;
 					// Check if the user provided input
 					if (input[0] != '\0' && (strcmp(input, "/") != 0)) {
@@ -980,6 +989,7 @@ void select_and_mount_files_by_number() {
 		skippedMessages.clear();
 		errorMessages.clear();
 		uniqueErrorMessages.clear();
+		
 		if (display_time) {
         // Stop the timer after completing the mounting process
        // auto end_time = std::chrono::high_resolution_clock::now();
@@ -989,9 +999,13 @@ void select_and_mount_files_by_number() {
         //auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
         // Print the time taken for the entire process in bold with one decimal place
       //  std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
-        std::cout << " " << std::endl;
-        std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
-        std::cin.get();
+		if (!filtered) {
+					
+			std::cout << " " << std::endl;
+			std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
+			std::cin.get();
+			}
+		filtered=false;
 		}
     }
 }
