@@ -214,26 +214,19 @@ bool isDirectoryEmpty(const std::string& path);
 bool isValidIndex(int index, size_t isoDirsSize);
 
 // General functions
-
-//	bools
-
 bool isAllZeros(const std::string& str);
 bool isNumeric(const std::string& str);
 
-//	stds
-
-std::string toLower(const std::string& str);
-std::vector<std::string> filterIsoFiles(const std::vector<std::string>& isoFiles, const std::string& searchQuery);
-
 //	voids
 
+// General functions
 void clearScrollBuffer();
 
 // Mount functions
 void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordered_set<std::string>& mountedSet);
 void select_and_mount_files_by_number();
 void printIsoFileList(const std::vector<std::string>& isoFiles);
-void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet, bool filtered);
+void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
 
 // Iso cache functions
 void manualRefreshCache(const std::string& initialDir = "");
@@ -254,6 +247,10 @@ void submenu2();
 void print_ascii();
 
 //	stds
+
+// General functions
+std::string toLower(const std::string& str);
+std::vector<std::string> filterIsoFiles(const std::vector<std::string>& isoFiles, const std::string& searchQuery);
 
 // Cache functions
 std::future<bool> iequals(std::string_view a, std::string_view b);

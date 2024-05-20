@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
 
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("3.0.1");
+        printVersionNumber("3.0.2");
         return 0;
     }
 
@@ -830,7 +830,7 @@ void select_and_mount_files_by_number() {
 
     // Main loop for selecting and mounting ISO files
     while (true) {
-		bool filtered = false;
+		bool filtered= false;
 		bool display_time = true;
         clearScrollBuffer();
         std::system("clear");
@@ -916,7 +916,7 @@ void select_and_mount_files_by_number() {
 						std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
 						// Process the user input with the filtered list
-						processAndMountIsoFiles(input, filteredIsoFiles, mountedSet, filtered);
+						processAndMountIsoFiles(input, filteredIsoFiles, mountedSet);
 					}
 				}
 				
@@ -946,7 +946,7 @@ void select_and_mount_files_by_number() {
             }
         } else {
             // Process user input to select and mount specific ISO files
-            processAndMountIsoFiles(input, isoFiles, mountedSet, filtered);
+            processAndMountIsoFiles(input, isoFiles, mountedSet);
         }
 
         std::system("clear");
@@ -1104,7 +1104,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
 
 
 // Function to process input and mount ISO files asynchronously
-void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet, bool filtered) {
+void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
     // Initialize input string stream with the provided input
     std::istringstream iss(input);
     
@@ -1134,7 +1134,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     std::string token;
     while (iss >> token) {
 		
-		if (token == "/" && filtered) {
+		if (token == "/") {
 			break;
 		}
 		
