@@ -213,20 +213,27 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
 bool isDirectoryEmpty(const std::string& path);
 bool isValidIndex(int index, size_t isoDirsSize);
 
-//	voids
+// General functions
 
-//General functions
-std::string toLower(const std::string& str);
-std::vector<std::string> filterIsoFiles(const std::vector<std::string>& isoFiles, const std::string& searchQuery);
-void clearScrollBuffer();
+//	bools
+
 bool isAllZeros(const std::string& str);
 bool isNumeric(const std::string& str);
+
+//	stds
+
+std::string toLower(const std::string& str);
+std::vector<std::string> filterIsoFiles(const std::vector<std::string>& isoFiles, const std::string& searchQuery);
+
+//	voids
+
+void clearScrollBuffer();
 
 // Mount functions
 void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordered_set<std::string>& mountedSet);
 void select_and_mount_files_by_number();
 void printIsoFileList(const std::vector<std::string>& isoFiles);
-void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
+void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet, bool filtered);
 
 // Iso cache functions
 void manualRefreshCache(const std::string& initialDir = "");
