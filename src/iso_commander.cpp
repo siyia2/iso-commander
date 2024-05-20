@@ -861,7 +861,6 @@ void select_and_mount_files_by_number() {
         }
 
 		if (strcmp(input, "/") == 0) {
-			filtered=true;
 			clearScrollBuffer();
 			std::system("clear");
     
@@ -899,12 +898,14 @@ void select_and_mount_files_by_number() {
 					// Prompt user for input again with the filtered list
 					char* input = readline("\n\033[1;94mISO(s) ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5'), ↵ to return:\033[0m\033[1m ");
 					if (std::strcmp(input, "00") == 0) {
+					filtered=true;
 					clearScrollBuffer();
 					std::system("clear");
 					std::cout << "\033[1;91m'00' not available for filtered.\033[0m\033[1m\n";
 					std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
 					std::cin.get();
 				}
+				
 						
 				//	display_time= false;
 					// Check if the user provided input
@@ -918,6 +919,7 @@ void select_and_mount_files_by_number() {
 						processAndMountIsoFiles(input, filteredIsoFiles, mountedSet);
 					}
 				}
+				
 			} else {
 				display_time= false;
 				isoFiles = originalIsoFiles; // Revert to the original cache list
