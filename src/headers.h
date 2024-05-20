@@ -216,6 +216,7 @@ bool isValidIndex(int index, size_t isoDirsSize);
 //	voids
 
 //General functions
+std::string toLower(const std::string& str);
 std::vector<std::string> filterIsoFiles(const std::vector<std::string>& isoFiles, const std::string& searchQuery);
 void clearScrollBuffer();
 bool isAllZeros(const std::string& str);
