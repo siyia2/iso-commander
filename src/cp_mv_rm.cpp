@@ -105,6 +105,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
         }
 
         if (strcmp(input, "/") == 0) {
+			while (true) {
             clearScrollBuffer();
             std::system("clear");
 
@@ -156,13 +157,16 @@ void select_and_operate_files_by_number(const std::string& operation) {
                         } else if (operation == "cp") {
                             process = "cp";
                             processOperationInput(input, filteredIsoFiles, operationSet, process);
-                        }
-                    }
-                }
-            } 
+							}
+						}
+					}
+				} 
 			} else {
 					isoFiles = originalIsoFiles; // Revert to the original cache list
+					break;
+				}
 			}
+			
         } else {
             // Process the user input with the original list
             if (operation == "rm") {

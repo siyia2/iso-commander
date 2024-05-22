@@ -860,6 +860,7 @@ void select_and_mount_files_by_number() {
         }
 
 		if (strcmp(input, "/") == 0) {
+			while (true) {
 			clearScrollBuffer();
 			std::system("clear");
     
@@ -924,8 +925,10 @@ void select_and_mount_files_by_number() {
 				}else {
 					display_time= false;
 					isoFiles = originalIsoFiles; // Revert to the original cache list
+					break;
 			}
 		}
+	}
 
         // Check if the user wants to mount all ISO files
         if (std::strcmp(input, "00") == 0) {
