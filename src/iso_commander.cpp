@@ -824,7 +824,7 @@ void select_and_mount_files_by_number() {
 
     // Main loop for selecting and mounting ISO files
     while (true) {
-		bool display_time = true;
+		bool display_time = false;
         clearScrollBuffer();
         std::system("clear");
         std::cout << "\033[1;93m ! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\033[0m\033[1m" << std::endl;
@@ -876,14 +876,12 @@ void select_and_mount_files_by_number() {
 				filteredIsoFiles = filterIsoFiles(isoFiles, searchQuery);
 
 				if (filteredIsoFiles.empty()) {
-					display_time= false;
 					clearScrollBuffer();
 					std::system("clear");
 					std::cout << "\033[1;93mNo ISO(s) match the search query.\033[0m\033[1m\n";
 					std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
 					std::cin.get();
 				} else {
-					display_time= false;
 					clearScrollBuffer();
 					std::system("clear");
 					std::cout << "\033[1mFiltered results:\n\033[0m\033[1m" << std::endl;
@@ -903,7 +901,6 @@ void select_and_mount_files_by_number() {
 				//	display_time= false;
 					// Check if the user provided input
 					if (input[0] != '\0' && (strcmp(input, "/") != 0)) {
-						display_time= true;
 						clearScrollBuffer();
 						std::system("clear");
 						std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
@@ -911,6 +908,7 @@ void select_and_mount_files_by_number() {
 						// Process the user input with the filtered list
 						processAndMountIsoFiles(input, filteredIsoFiles, mountedSet);
 						
+						clearScrollBuffer();
 						std::system("clear");
 
 						verbose(mountedFiles, skippedMessages, errorMessages, uniqueErrorMessages);
@@ -921,7 +919,6 @@ void select_and_mount_files_by_number() {
 				
 			} 
 				} else {
-					display_time= false;
 					isoFiles = originalIsoFiles; // Revert to the original cache list
 					break;
 			}
@@ -930,6 +927,7 @@ void select_and_mount_files_by_number() {
 
         // Check if the user wants to mount all ISO files
         if (std::strcmp(input, "00") == 0) {
+			display_time= true;
             // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism
             unsigned int numThreads = std::min(static_cast<int>(isoFiles.size()), static_cast<int>(maxThreads));
 
@@ -949,16 +947,21 @@ void select_and_mount_files_by_number() {
         } else {
             // Process user input to select and mount specific ISO files
             processAndMountIsoFiles(input, isoFiles, mountedSet);
+            clearScrollBuffer();
+			std::system("clear");
+            verbose(mountedFiles, skippedMessages, errorMessages, uniqueErrorMessages);
+
         }
 
         std::system("clear");
-
-		verbose(mountedFiles, skippedMessages, errorMessages, uniqueErrorMessages);
 		
 		if (display_time) {
+			
         // Stop the timer after completing the mounting process
        // auto end_time = std::chrono::high_resolution_clock::now();
-
+		clearScrollBuffer();
+		std::system("clear");
+        verbose(mountedFiles, skippedMessages, errorMessages, uniqueErrorMessages);
         // Calculate and print the elapsed time
       //  std::cout << " " << std::endl;
         //auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
