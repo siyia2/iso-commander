@@ -824,6 +824,7 @@ void select_and_mount_files_by_number() {
 
     // Main loop for selecting and mounting ISO files
     while (true) {
+		bool wasFiltered = false;
 		bool display_time = false;
         clearScrollBuffer();
         std::system("clear");
@@ -853,14 +854,11 @@ void select_and_mount_files_by_number() {
         }
 
 		if (strcmp(input, "/") == 0) {
+			wasFiltered = true;
 			while (true) {
 			clearScrollBuffer();
 			std::system("clear");
-    
-			std::cout << " " << std::endl;
-    
-			printIsoFileList(isoFiles);
-
+        
 			// User pressed '/', start the filtering process
 			char* searchQuery = readline("\n\033[1;92mSearchQuery\033[1;94m ↵ or ↵ to return (case-insensitive): \033[0m\033[1m");
 			std::system("clear");
@@ -919,6 +917,7 @@ void select_and_mount_files_by_number() {
 				
 			} 
 				} else {
+					wasFiltered = true;
 					isoFiles = originalIsoFiles; // Revert to the original cache list
 					break;
 			}
@@ -944,7 +943,7 @@ void select_and_mount_files_by_number() {
                     mountIsoFile(isoFilesToMount, mountedSet);
                 });
             }
-        } else {
+        } else if (!wasFiltered) {
             // Process user input to select and mount specific ISO files
             processAndMountIsoFiles(input, isoFiles, mountedSet);
             clearScrollBuffer();

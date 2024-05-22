@@ -109,10 +109,6 @@ void select_and_operate_files_by_number(const std::string& operation) {
             clearScrollBuffer();
             std::system("clear");
 
-            std::cout << " " << std::endl;
-
-            printIsoFileList(isoFiles);
-
             // User pressed '/', start the filtering process
             char* searchQuery = readline("\n\033[1;92mSearchQuery\033[1;94m ↵ or ↵ to return (case-insensitive): \033[0m\033[1m");
             clearScrollBuffer();
