@@ -142,7 +142,7 @@ void submenu1() {
         std::cout << "\033[1;32m|5. Copy                  |" << std::endl;
         std::cout << "\033[1;32m+-------------------------+" << std::endl;
         std::cout << " " << std::endl;
-        char* submenu_input = readline("\033[1;94mChoose a function, or press Enter to return:\033[0m\033[1m ");
+        char* submenu_input = readline("\033[1;94mChoose a function, or ↵ to return:\033[0m\033[1m ");
 
         if (!submenu_input || std::strlen(submenu_input) == 0) {
 			delete[] submenu_input;
@@ -210,7 +210,7 @@ void submenu2() {
         std::cout << "\033[1;32m|2. MDF2ISO               |" << std::endl;
         std::cout << "\033[1;32m+-------------------------+" << std::endl;
         std::cout << " " << std::endl;
-        char* submenu_input = readline("\033[1;94mChoose a function, or press Enter to return:\033[0m\033[1m ");
+        char* submenu_input = readline("\033[1;94mChoose a function, or ↵ to return:\033[0m\033[1m ");
 
         if (!submenu_input || std::strlen(submenu_input) == 0) {
 			delete[] submenu_input;
