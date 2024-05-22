@@ -912,11 +912,57 @@ void select_and_mount_files_by_number() {
 
 						// Process the user input with the filtered list
 						processAndMountIsoFiles(input, filteredIsoFiles, mountedSet);
+						
+						std::system("clear");
+
+					if (!mountedFiles.empty()) {
+						std::cout << " " << std::endl;
+					}
+
+					// Print all mounted files
+					for (const auto& mountedFile : mountedFiles) {
+						std::cout << mountedFile << std::endl;
+					}
+
+					if (!skippedMessages.empty()) {
+						std::cout << " " << std::endl;
+					}
+
+					// Print all the stored skipped messages
+					for (const auto& skippedMessage : skippedMessages) {
+						std::cerr << skippedMessage;
+					}
+
+					if (!errorMessages.empty()) {
+						std::cout << " " << std::endl;
+					}
+
+					// Print all the stored error messages
+					for (const auto& errorMessage : errorMessages) {
+						std::cerr << errorMessage;
+					}
+
+					if (!uniqueErrorMessages.empty()) {
+						std::cout << " " << std::endl;
+					}
+
+					for (const auto& errorMsg : uniqueErrorMessages) {
+						std::cerr << "\033[1;93m" << errorMsg << "\033[0m\033[1m" << std::endl;
+					}
+		
+					// Clear the vectors after each iteration
+					mountedFiles.clear();
+					skippedMessages.clear();
+					errorMessages.clear();
+					uniqueErrorMessages.clear();
+					std::cout << " " << std::endl;
+					std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
+					std::cin.get();
 					}
 				}
 				
 			} 
-				}else {
+				} else {
 					display_time= false;
 					isoFiles = originalIsoFiles; // Revert to the original cache list
 					break;
