@@ -1491,6 +1491,7 @@ void unmountISOs() {
     bool invalidInput = false;
 
     // Flag to check if filtering is enabled
+    bool skipEnter = false;
     bool isFiltering = false;
 
     // Mutexes for synchronization
@@ -1594,7 +1595,9 @@ while (true) {
                 isFiltering = false;
                 continue;
             }
-        }
+        } else {
+			skipEnter = true;
+		}
     }
 
         // Unmount all ISOs if '00' is entered
@@ -1829,14 +1832,16 @@ while (true) {
        // Print the time taken for the entire process in bold with one decimal place
  //      std::cout << " " << std::endl;
   //     std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
-
+	if (!skipEnter) {
        std::cout << " " << std::endl;
        std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
        std::cin.get();
+       }
        std::system("clear");
        
        // Clear the filteredIsoDirs vector and reset the isFiltering flag
        filteredIsoDirs.clear();
        isFiltering = false;
+       skipEnter = false;
    }
 }
