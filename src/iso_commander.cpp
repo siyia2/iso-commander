@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
 
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("3.0.2");
+        printVersionNumber("3.0.3");
         return 0;
     }
 
@@ -819,12 +819,6 @@ void select_and_mount_files_by_number() {
         return;
     }
 
-    // Check if there are any ISO files to mount
-    if (isoFiles.empty()) {
-        std::cout << "\033[1;93mNo .iso files in the cache. Please refresh the cache from the main menu.\033[0m\033[1m" << std::endl;
-        return;
-    }
-
     // Set to track mounted ISO files
     std::unordered_set<std::string> mountedSet;
 
@@ -886,7 +880,7 @@ void select_and_mount_files_by_number() {
 					display_time= false;
 					clearScrollBuffer();
 					std::system("clear");
-					std::cout << "\033[1;93mNo files match the search query.\033[0m\033[1m\n";
+					std::cout << "\033[1;93mNo ISO(s) match the search query.\033[0m\033[1m\n";
 					std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
 					std::cin.get();
 				} else {
@@ -1334,7 +1328,7 @@ void listMountedISOs() {
         }
     } else {
         // Print a message if no ISOs are mounted
-        std::cerr << "\033[1;91mNo mounted ISO(s) found.\033[0m\033[1m" << std::endl;
+        std::cerr << "\033[1;93mNo mounted ISO(s) found.\033[0m\033[1m" << std::endl;
     }
 }
 
@@ -1585,7 +1579,7 @@ while (true) {
                         std::cout << "\033[1;91mFilterPattern must be longer than 4 characters.\033[0m\033[1m" << std::endl;
                     } else {
                         std::system("clear");
-                        std::cout << "\033[1;93mNo mountpoints match the filter pattern.\033[0m\033[1m" << std::endl;
+                        std::cout << "\033[1;93mNo ISO mountpoints match the filter pattern.\033[0m\033[1m" << std::endl;
                     }
                     std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
                     std::cin.get();

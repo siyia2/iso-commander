@@ -49,7 +49,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
     // If no ISO files are available, display a message and return
     if (isoFiles.empty()) {
         std::system("clear");
-        std::cout << "\033[1;93mNo ISO(s) available for " << operation << ".\033[0m\033[1m" << std::endl;
+        std::cout << "\033[1;93mISO Cache is empty. Please refresh it from the main Menu Options.\033[0m\033[1m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
         std::cin.get();
@@ -130,7 +130,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
                 if (filteredIsoFiles.empty()) {
 					clearScrollBuffer();
 					std::system("clear");
-                    std::cout << "\033[1;93mNo files match the search query.\033[0m\033[1m\n";
+                    std::cout << "\033[1;93mNo ISO(s) match the search query.\033[0m\033[1m\n";
 					std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
 					std::cin.get();
                 } else {
