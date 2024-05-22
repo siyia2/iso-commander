@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
 
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("3.0.3");
+        printVersionNumber("3.0.4");
         return 0;
     }
 
@@ -824,7 +824,6 @@ void select_and_mount_files_by_number() {
 
     // Main loop for selecting and mounting ISO files
     while (true) {
-		bool filtered= false;
 		bool display_time = true;
         clearScrollBuffer();
         std::system("clear");
@@ -893,7 +892,6 @@ void select_and_mount_files_by_number() {
 					// Prompt user for input again with the filtered list
 					char* input = readline("\n\033[1;94mISO(s) ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5'), ↵ to return:\033[0m\033[1m ");
 					if (std::strcmp(input, "00") == 0) {
-					filtered=true;
 					clearScrollBuffer();
 					std::system("clear");
 					std::cout << "\033[1;91m'00' is not available for filtered results.\033[0m\033[1m\n";
@@ -915,49 +913,9 @@ void select_and_mount_files_by_number() {
 						
 						std::system("clear");
 
-					if (!mountedFiles.empty()) {
-						std::cout << " " << std::endl;
-					}
-
-					// Print all mounted files
-					for (const auto& mountedFile : mountedFiles) {
-						std::cout << mountedFile << std::endl;
-					}
-
-					if (!skippedMessages.empty()) {
-						std::cout << " " << std::endl;
-					}
-
-					// Print all the stored skipped messages
-					for (const auto& skippedMessage : skippedMessages) {
-						std::cerr << skippedMessage;
-					}
-
-					if (!errorMessages.empty()) {
-						std::cout << " " << std::endl;
-					}
-
-					// Print all the stored error messages
-					for (const auto& errorMessage : errorMessages) {
-						std::cerr << errorMessage;
-					}
-
-					if (!uniqueErrorMessages.empty()) {
-						std::cout << " " << std::endl;
-					}
-
-					for (const auto& errorMsg : uniqueErrorMessages) {
-						std::cerr << "\033[1;93m" << errorMsg << "\033[0m\033[1m" << std::endl;
-					}
-		
-					// Clear the vectors after each iteration
-					mountedFiles.clear();
-					skippedMessages.clear();
-					errorMessages.clear();
-					uniqueErrorMessages.clear();
-					std::cout << " " << std::endl;
-					std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
-					std::cin.get();
+						verbose(mountedFiles, skippedMessages, errorMessages, uniqueErrorMessages);
+					
+					
 					}
 				}
 				
@@ -995,46 +953,7 @@ void select_and_mount_files_by_number() {
 
         std::system("clear");
 
-        if (!mountedFiles.empty()) {
-            std::cout << " " << std::endl;
-        }
-
-        // Print all mounted files
-        for (const auto& mountedFile : mountedFiles) {
-            std::cout << mountedFile << std::endl;
-        }
-
-        if (!skippedMessages.empty()) {
-            std::cout << " " << std::endl;
-        }
-
-        // Print all the stored skipped messages
-        for (const auto& skippedMessage : skippedMessages) {
-            std::cerr << skippedMessage;
-        }
-
-        if (!errorMessages.empty()) {
-            std::cout << " " << std::endl;
-        }
-
-        // Print all the stored error messages
-        for (const auto& errorMessage : errorMessages) {
-            std::cerr << errorMessage;
-        }
-
-        if (!uniqueErrorMessages.empty()) {
-            std::cout << " " << std::endl;
-        }
-
-        for (const auto& errorMsg : uniqueErrorMessages) {
-            std::cerr << "\033[1;93m" << errorMsg << "\033[0m\033[1m" << std::endl;
-        }
-		
-		// Clear the vectors after each iteration
-		mountedFiles.clear();
-		skippedMessages.clear();
-		errorMessages.clear();
-		uniqueErrorMessages.clear();
+		verbose(mountedFiles, skippedMessages, errorMessages, uniqueErrorMessages);
 		
 		if (display_time) {
         // Stop the timer after completing the mounting process
@@ -1045,15 +964,56 @@ void select_and_mount_files_by_number() {
         //auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
         // Print the time taken for the entire process in bold with one decimal place
       //  std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
-		if (!filtered) {
-					
-			std::cout << " " << std::endl;
-			std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
-			std::cin.get();
-			}
-		filtered=false;
 		}
     }
+}
+
+
+void verbose(std::vector<std::string>& mountedFiles,std::vector<std::string>& skippedMessages,std::vector<std::string>& errorMessages,std::unordered_set<std::string>& uniqueErrorMessages) {
+    if (!mountedFiles.empty()) {
+        std::cout << " " << std::endl;
+    }
+
+    // Print all mounted files
+    for (const auto& mountedFile : mountedFiles) {
+        std::cout << mountedFile << std::endl;
+    }
+
+    if (!skippedMessages.empty()) {
+        std::cout << " " << std::endl;
+    }
+
+    // Print all the stored skipped messages
+    for (const auto& skippedMessage : skippedMessages) {
+        std::cerr << skippedMessage;
+    }
+
+    if (!errorMessages.empty()) {
+        std::cout << " " << std::endl;
+    }
+
+    // Print all the stored error messages
+    for (const auto& errorMessage : errorMessages) {
+        std::cerr << errorMessage;
+    }
+
+    if (!uniqueErrorMessages.empty()) {
+        std::cout << " " << std::endl;
+    }
+
+    for (const auto& errorMsg : uniqueErrorMessages) {
+        std::cerr << "\033[1;93m" << errorMsg << "\033[0m\033[1m" << std::endl;
+    }
+
+    // Clear the vectors after each iteration
+    mountedFiles.clear();
+    skippedMessages.clear();
+    errorMessages.clear();
+    uniqueErrorMessages.clear();
+    
+    std::cout << " " << std::endl;
+	std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
+	std::cin.get();
 }
 
 
