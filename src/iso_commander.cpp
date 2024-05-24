@@ -336,18 +336,23 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
 
 //	CACHE STUFF
 
-// Function to asynchronously check if files exist
+// Function to asynchronously check if files exist in the given paths
 std::vector<std::string> FileExistsAsync(const std::vector<std::string>& paths) {
+    // Vector to store paths of existing files
     std::vector<std::string> existingPaths;
+    // Reserve space for efficiency
     existingPaths.reserve(paths.size());
 
+    // Iterate through each path
     for (const std::string& path : paths) {
-        std::ifstream file(path);
-        if (file) {
+        // Check if file exists at the current path
+        if (std::filesystem::exists(path)) {
+            // If file exists, add the path to the vector
             existingPaths.push_back(path);
         }
     }
 
+    // Return vector containing paths of existing files
     return existingPaths;
 }
 
