@@ -47,7 +47,7 @@ int main(int argc, char *argv[]) {
     }
 
     while (!exitProgram) {
-        std::system("clear");
+        clearScrollBuffer();
         print_ascii();
         // Display the main menu options
         printMenu();
@@ -74,11 +74,10 @@ int main(int argc, char *argv[]) {
                     case '3':
                         manualRefreshCache();
                         clearScrollBuffer();
-                        std::system("clear");
                         break;
                     case '4':
 						exitProgram = true; // Exit the program
-                        std::system("clear");
+                        clearScrollBuffer();
                         break;
                     default:
                         break;
@@ -127,7 +126,7 @@ std::cout << Color << R"( (   (       )            )    *      *              ) 
 void submenu1() {
 
     while (true) {
-        std::system("clear");
+        clearScrollBuffer();
         std::cout << "\033[1;32m+-------------------------+" << std::endl;
         std::cout << "\033[1;32m|↵ Manage ISO              |" << std::endl;
         std::cout << "\033[1;32m+-------------------------+" << std::endl;
@@ -156,40 +155,30 @@ void submenu1() {
 		switch (submenu_choice[0]) {
         case '1':
 			clearScrollBuffer();
-            std::system("clear");
             select_and_mount_files_by_number();
-            std::system("clear");
             clearScrollBuffer();
             break;
         case '2':
 			clearScrollBuffer();
-            std::system("clear");
             unmountISOs();
-            std::system("clear");
             clearScrollBuffer();
             break;
         case '3':
 			clearScrollBuffer();
-            std::system("clear");
             operation = "rm";
             select_and_operate_files_by_number(operation);
-            std::system("clear");
             clearScrollBuffer();
             break;
         case '4':
 			clearScrollBuffer();
-            std::system("clear");
             operation = "mv";
             select_and_operate_files_by_number(operation);
-            std::system("clear");
             clearScrollBuffer();
             break;
         case '5':
 			clearScrollBuffer();
-            std::system("clear");
             operation = "cp";
             select_and_operate_files_by_number(operation);
-            std::system("clear");
             clearScrollBuffer();
             break;
 			}
@@ -201,7 +190,7 @@ void submenu1() {
 // Function to print submenu2
 void submenu2() {
 	while (true) {
-		std::system("clear");
+		clearScrollBuffer();
 		std::cout << "\033[1;32m+-------------------------+" << std::endl;
 		std::cout << "\033[1;32m|↵ Convert2ISO             |" << std::endl;
 		std::cout << "\033[1;32m+-------------------------+" << std::endl;
@@ -223,16 +212,12 @@ void submenu2() {
          switch (submenu_choice[0]) {		
              case '1':
 				clearScrollBuffer();
-				std::system("clear");
                 select_and_convert_files_to_iso("bin");
-                std::system("clear");
                 clearScrollBuffer();
                 break;
              case '2':
 				clearScrollBuffer();
-				std::system("clear");
                 select_and_convert_files_to_iso("mdf");
-                std::system("clear");
                 clearScrollBuffer();
                 break;
 			}
@@ -293,8 +278,10 @@ std::vector<std::string> filterIsoFiles(const std::vector<std::string>& isoFiles
 
 // Function to clear scrollbuffer
 void clearScrollBuffer() {
-    std::cout << "\033[3J\033[H"; // ANSI escape codes for clearing scroll buffer
-    std::cout.flush(); // Ensure the output is flushed
+    std::cout << "\033[3J";  // Clear the scrollback buffer
+    std::cout << "\033[2J";  // Clear the screen
+    std::cout << "\033[H";   // Move the cursor to the top-left corner
+    std::cout.flush();       // Ensure the output is flushed
 }
 
 
@@ -414,7 +401,6 @@ void removeNonExistentPathsFromCache() {
         }
     }
 }
-
 
 
 // Set default cache dir
@@ -541,7 +527,7 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 // Function for manual cache refresh
 void manualRefreshCache(const std::string& initialDir) {
     if (promptFlag){
-    std::system("clear");
+    clearScrollBuffer();
     gapPrinted = false;
 	}
     // Load history from file
@@ -794,7 +780,7 @@ void select_and_mount_files_by_number() {
 
     // Check if the cache is empty
     if (isoFiles.empty()) {
-        std::system("clear");
+        clearScrollBuffer();
         std::cout << "\033[1;93mISO Cache is empty. Please refresh it from the main Menu Options.\033[0m\033[1m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
@@ -810,7 +796,6 @@ void select_and_mount_files_by_number() {
 		bool wasFiltered = false;
 		bool display_time = false;
         clearScrollBuffer();
-        std::system("clear");
         std::cout << "\033[1;93m ! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\033[0m\033[1m" << std::endl;
         std::cout << "\033[1;93m         	! ROOT ACCESS IS PARAMOUNT FOR SUCCESSFUL MOUNTS !\n\033[0m\033[1m" << std::endl;
 
@@ -826,7 +811,6 @@ void select_and_mount_files_by_number() {
         // Prompt user for input
         char* input = readline("\n\033[1;94mISO(s) ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5', '00' for all), / ↵ to filter or ↵ to return:\033[0m\033[1m ");
         clearScrollBuffer();
-        std::system("clear");
         std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
         // Start the timer
      //   auto start_time = std::chrono::high_resolution_clock::now();
@@ -840,11 +824,10 @@ void select_and_mount_files_by_number() {
 			wasFiltered = true;
 			while (true) {
 			clearScrollBuffer();
-			std::system("clear");
         
 			// User pressed '/', start the filtering process
 			char* searchQuery = readline("\n\033[1;92mSearchQuery\033[1;94m ↵ or ↵ to return (case-insensitive): \033[0m\033[1m");
-			std::system("clear");
+			clearScrollBuffer();
 			std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
 			// Store the original isoFiles vector
@@ -858,13 +841,11 @@ void select_and_mount_files_by_number() {
 
 				if (filteredIsoFiles.empty()) {
 					clearScrollBuffer();
-					std::system("clear");
 					std::cout << "\033[1;93mNo ISO(s) match the search query.\033[0m\033[1m\n";
 					std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
 					std::cin.get();
 				} else {
 					clearScrollBuffer();
-					std::system("clear");
 					std::cout << "\033[1mFiltered results:\n\033[0m\033[1m" << std::endl;
 					printIsoFileList(filteredIsoFiles); // Print the filtered list of ISO files
 					
@@ -872,7 +853,6 @@ void select_and_mount_files_by_number() {
 					char* input = readline("\n\033[1;94mISO(s) ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5'), ↵ to return:\033[0m\033[1m ");
 					if (std::strcmp(input, "00") == 0) {
 					clearScrollBuffer();
-					std::system("clear");
 					std::cout << "\033[1;91m'00' is not available for filtered results.\033[0m\033[1m\n";
 					std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
 					std::cin.get();
@@ -883,14 +863,12 @@ void select_and_mount_files_by_number() {
 					// Check if the user provided input
 					if (input[0] != '\0' && (strcmp(input, "/") != 0)) {
 						clearScrollBuffer();
-						std::system("clear");
 						std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
 						// Process the user input with the filtered list
 						processAndMountIsoFiles(input, filteredIsoFiles, mountedSet);
 						
 						clearScrollBuffer();
-						std::system("clear");
 
 						verbose(mountedFiles, skippedMessages, errorMessages, uniqueErrorMessages);
 					
@@ -930,19 +908,17 @@ void select_and_mount_files_by_number() {
             // Process user input to select and mount specific ISO files
             processAndMountIsoFiles(input, isoFiles, mountedSet);
             clearScrollBuffer();
-			std::system("clear");
             verbose(mountedFiles, skippedMessages, errorMessages, uniqueErrorMessages);
 
         }
 
-        std::system("clear");
+        clearScrollBuffer();
 		
 		if (display_time) {
 			
         // Stop the timer after completing the mounting process
        // auto end_time = std::chrono::high_resolution_clock::now();
 		clearScrollBuffer();
-		std::system("clear");
         verbose(mountedFiles, skippedMessages, errorMessages, uniqueErrorMessages);
         // Calculate and print the elapsed time
       //  std::cout << " " << std::endl;
@@ -1526,7 +1502,6 @@ while (true) {
     // Prompt user to choose ISOs for unmounting
     char* input = readline("\033[1;94mISO(s) ↵ for \033[1;93mumount\033[1;94m (e.g., '1-3', '1 5', '00' for all), / ↵ to filter\033[1;94m or ↵ to return:\033[0m\033[1m ");
     clearScrollBuffer();
-    std::system("clear");
     std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
     // Break loop if user presses Enter
@@ -1538,14 +1513,12 @@ while (true) {
     if (input[0] == '/') {
         isFiltering = true;
         clearScrollBuffer();
-        std::system("clear");
         listMountedISOs();
         char* filterPattern = readline("\n\033[1;92mFilterPattern\033[1;94m ↵ for \033[1;93mumount\033[1;94m or ↵ to return (case-insensitive, length > 4):\033[0m\033[1m ");
 
         // Convert filterPattern to std::string
         std::string filterPatternStr(filterPattern);
         clearScrollBuffer();
-        std::system("clear");
         std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
         if (!std::isspace(filterPattern[0]) && filterPattern[0] != '\0' && filterPattern[0] != '/') {
@@ -1566,17 +1539,17 @@ while (true) {
             if (filteredIsoDirs.empty()) {
                 if (filterPattern[0] != '\0') {
                     if (filterPatternStr.length() < 5) {
-                        std::system("clear");
+                        clearScrollBuffer();
                         std::cout << "\033[1;91mFilterPattern must be longer than 4 characters.\033[0m\033[1m" << std::endl;
                     } else {
-                        std::system("clear");
+                        clearScrollBuffer();
                         std::cout << "\033[1;93mNo ISO mountpoints match the filter pattern.\033[0m\033[1m" << std::endl;
                     }
                     std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
                     std::cin.get();
                     clearScrollBuffer();
                 }
-                std::system("clear");
+                clearScrollBuffer();
                 isFiltering = false;
                 continue;
             }
@@ -1615,7 +1588,7 @@ while (true) {
                 future.wait();
             }
 
-            std::system("clear");
+            clearScrollBuffer();
 
             if (invalidInput && !validIndices.empty()) {
                 std::cout << " " << std::endl;
@@ -1649,7 +1622,7 @@ while (true) {
             std::cout << " " << std::endl;
             std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
             std::cin.get();
-            std::system("clear");
+            clearScrollBuffer();
 
             continue;
         }
@@ -1772,7 +1745,7 @@ while (true) {
            future.wait();
        }
 
-       std::system("clear");
+       clearScrollBuffer();
 
        if (!unmountedFiles.empty()) {
            std::cout << " " << std::endl; // Print a blank line before unmounted files
@@ -1822,7 +1795,7 @@ while (true) {
        std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
        std::cin.get();
        }
-       std::system("clear");
+       clearScrollBuffer();
        
        // Clear the filteredIsoDirs vector and reset the isFiltering flag
        filteredIsoDirs.clear();

@@ -44,7 +44,6 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
     std::string inputPaths = readInputLine("\033[1;94mDirectory path(s) ↵ (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1m\033[1;94m) to search for \033[1m\033[1;92m" + fileExtension + " \033[1;94mfiles, or ↵ to return:\n\033[0m\033[1m");
     clearScrollBuffer();
-    std::system("clear");
     std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 	
     if (!inputPaths.empty()) {
@@ -98,7 +97,6 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     // Print a message based on whether new files are found
     if (!newFilesFound && !files.empty()) {
 		clearScrollBuffer();
-        std::system("clear");
         std::cout << " " << std::endl;
         auto end_time = std::chrono::high_resolution_clock::now();
         std::cout << "\033[1;91mNo new " << fileExtension << " file(s) over 5MB found. \033[1;92m" << files.size() << " file(s) are cached in RAM from previous searches.\033[0m\033[1m" << std::endl;
@@ -112,7 +110,6 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
     if (files.empty()) {
 		clearScrollBuffer();
-        std::system("clear");
         std::cout << " " << std::endl;
         auto end_time = std::chrono::high_resolution_clock::now();
         std::cout << "\033[1;91mNo " << fileExtension << " file(s) over 5MB found in the specified path(s) or cached in RAM.\n\033[0m\033[1m";
@@ -128,7 +125,6 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     // Continue selecting and converting files until the user decides to exit
     while (true) {
 		clearScrollBuffer();
-        std::system("clear");
       
 		printFileList(files);
 
@@ -139,11 +135,10 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 		char* input = readline(prompt.c_str());
 
         if (std::isspace(input[0]) || input[0] == '\0') {
-            std::system("clear");
+            clearScrollBuffer();
             break;
         }
 		clearScrollBuffer();
-        std::system("clear");
         std::cout << "\033[1mPlease wait...\n\033[1m" << std::endl;
 
         // Process user input based on file type
@@ -593,11 +588,9 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         std::cout << " " << std::endl;
         if (mode == "bin") {
 			clearScrollBuffer();
-        std::system("clear");
 			std::cout << "\033[1;92mFound " << fileNames.size() << " matching file(s)\033[0m\033[1m" << ".\033[1;93m " << binImgFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0m\033[1m" << std::endl;
 		} else {
 			clearScrollBuffer();
-			std::system("clear");
 			std::cout << "\033[1;92mFound " << fileNames.size() << " matching file(s)\033[0m\033[1m" << ".\033[1;93m " << mdfMdsFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0m\033[1m" << std::endl;
 		}
         // Calculate and print the elapsed time

@@ -48,7 +48,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
     // If no ISO files are available, display a message and return
     if (isoFiles.empty()) {
-        std::system("clear");
+        clearScrollBuffer();
         std::cout << "\033[1;93mISO Cache is empty. Please refresh it from the main Menu Options.\033[0m\033[1m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
@@ -77,7 +77,6 @@ void select_and_operate_files_by_number(const std::string& operation) {
     // Main loop for interacting with ISO files
     while (true) {
         clearScrollBuffer();
-        std::system("clear");
 
         // Display header message
         std::cout << "\033[1;93m! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\033[0m\033[1m" << std::endl;
@@ -97,7 +96,6 @@ void select_and_operate_files_by_number(const std::string& operation) {
         // Prompt user for input or filter
         char* input = readline(("\n\033[1;94mISO(s) ↵ for " + operationColor + operation + "\033[1;94m (e.g., '1-3', '1 5'), / ↵ to filter, or ↵ to return:\033[0m\033[1m ").c_str());
         clearScrollBuffer();
-        std::system("clear");
 
         // Check if the user wants to return
         if (std::isspace(input[0]) || input[0] == '\0') {
@@ -107,12 +105,10 @@ void select_and_operate_files_by_number(const std::string& operation) {
         if (strcmp(input, "/") == 0) {
 			while (true) {
             clearScrollBuffer();
-            std::system("clear");
 
             // User pressed '/', start the filtering process
             char* searchQuery = readline("\n\033[1;92mSearchQuery\033[1;94m ↵ or ↵ to return (case-insensitive): \033[0m\033[1m");
             clearScrollBuffer();
-			std::system("clear");
 			std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
             // Store the original isoFiles vector
@@ -125,13 +121,11 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
                 if (filteredIsoFiles.empty()) {
 					clearScrollBuffer();
-					std::system("clear");
                     std::cout << "\033[1;93mNo ISO(s) match the search query.\033[0m\033[1m\n";
 					std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
 					std::cin.get();
                 } else {
                     clearScrollBuffer();
-                    std::system("clear");
                     std::cout << "\033[1mFiltered results:\n\033[0m\033[1m" << std::endl;
                     printIsoFileList(filteredIsoFiles); // Print the filtered list of ISO files
 
@@ -141,7 +135,6 @@ void select_and_operate_files_by_number(const std::string& operation) {
                     // Check if the user provided input
                     if (input[0] != '\0' && (strcmp(input, "/") != 0)) {
                         clearScrollBuffer();
-                        std::system("clear");
 
                         // Process the user input with the filtered list
                         if (operation == "rm") {
@@ -333,7 +326,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     if (!isDelete) {
         while (true) {
 			clearScrollBuffer();
-            std::system("clear");
             
             for (const auto& uniqueErrorMessage : uniqueErrorMessages) {
             std::cout << uniqueErrorMessage << std::endl;
@@ -412,7 +404,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
    // auto start_time = std::chrono::high_resolution_clock::now();
 	
 	clearScrollBuffer();
-    std::system("clear");
     std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
     ThreadPool pool(numThreads);
@@ -444,7 +435,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 			manualRefreshCache(userDestDir);
 		}
 
-		std::system("clear");
+		clearScrollBuffer();
         
         if (!operationIsos.empty()) {
             std::cout << " " << std::endl;
