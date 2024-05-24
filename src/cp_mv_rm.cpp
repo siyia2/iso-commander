@@ -495,6 +495,20 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
     } else if (isoFiles.size() > maxThreads) {
         batchSize = 2;
     }
+    
+    // Get current user and group
+    char* current_user = getlogin();
+    if (current_user == nullptr) {
+        std::cerr << "Error getting current user: " << strerror(errno) << std::endl;
+        return;
+    }
+    gid_t current_group = getegid();
+    if (current_group == static_cast<unsigned int>(-1)) {
+        std::cerr << "\033[1;91mError getting current group:\033[0m\033[1m " << strerror(errno) << std::endl;
+        return;
+    }
+    std::string user_str(current_user);
+    std::string group_str = std::to_string(static_cast<unsigned int>(current_group));
 
     // Vector to store ISO files to operate on
     std::vector<std::string> isoFilesToOperate;
@@ -514,20 +528,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                 // Add ISO file to the list of files to operate on
                 isoFilesToOperate.push_back(iso);
 
-                // Get current user and group
-                char* current_user = getlogin();
-                if (current_user == nullptr) {
-                    std::cerr << "Error getting current user: " << strerror(errno) << std::endl;
-                    return;
-                }
-                gid_t current_group = getegid();
-                if (current_group == static_cast<unsigned int>(-1)) {
-                    std::cerr << "\033[1;91mError getting current group:\033[0m\033[1m " << strerror(errno) << std::endl;
-                    return;
-                }
-                std::string user_str(current_user);
-                std::string group_str = std::to_string(static_cast<unsigned int>(current_group));
-
                 // Execute operations in batches
                 if (isoFilesToOperate.size() == batchSize || &iso == &isoFiles.back()) {
                     std::string operationCommand;
@@ -535,11 +535,14 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     std::string errorMessageInfo;
 
                     // Construct operation command based on operation type
-                    if (isMove) {
+                    if (isMove || isCopy) {
                         operationCommand = "sudo mkdir -p " + shell_escape(userDestDir) + " && ";
+                        operationCommand += "sudo chown " + user_str + ":" + group_str + " " + shell_escape(userDestDir) + " && ";
+                    }
+
+                    if (isMove) {
                         operationCommand += "sudo mv ";
                     } else if (isCopy) {
-                        operationCommand = "sudo mkdir -p " + shell_escape(userDestDir) + " && ";
                         operationCommand += "sudo cp -f ";
                     } else if (isDelete) {
                         operationCommand = "sudo rm -f ";
@@ -553,9 +556,9 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         operationCommand += shell_escape(operateIso) + " ";
                     }
 
-                    // If not deleting, change ownership of destination directory
+                    // If not deleting, append destination directory
                     if (!isDelete) {
-                        operationCommand += shell_escape(userDestDir) + " && sudo chown -R " + user_str + ":" + group_str + " " + shell_escape(userDestDir);
+                        operationCommand += shell_escape(userDestDir);
                     }
 
                     // Execute the operation command asynchronously
@@ -579,16 +582,23 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         // Store operation success info
                         for (const auto& iso : isoFilesToOperate) {
                             auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(iso);
+                            std::string destPath = userDestDir + "/" + isoFilename;
                             oss.str("");
                             if (!isDelete) {
-                                oss << "\033[1m" << (isCopy ? "Copied" : (isMove ? "Moved" : "Deleted")) << ": \033[1;92m'"
-                                    << isoDirectory << "/" << isoFilename << "'\033[0m\033[1m to \033[1;94m'" << userDestDir << "'\033[0m\033[1m";
+                                oss << "\033[1m" << (isCopy ? "Copied" : "Moved") << ": \033[1;92m'"
+                                    << isoDirectory << "/" << isoFilename << "'\033[0m\033[1m to \033[1;94m'" << destPath << "'\033[0m\033[1m";
                             } else {
-                                oss << "\033[1m" << (isCopy ? "Copied" : (isMove ? "Moved" : "Deleted")) << ": \033[1;92m'"
+                                oss << "\033[1m" << "Deleted" << ": \033[1;92m'"
                                     << isoDirectory << "/" << isoFilename << "'\033[0m\033[1m";
                             }
                             std::string operationInfo = oss.str();
                             operationIsos.push_back(operationInfo);
+
+                            // Change ownership of the copied/moved file
+                            if (!isDelete) {
+                                std::string chownCommand = "sudo chown " + user_str + ":" + group_str + " " + shell_escape(destPath);
+                                system(chownCommand.c_str());
+                            }
                         }
                     } else {
                         // Store operation error info
@@ -596,10 +606,10 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                             auto [isoDir, isoFilename] = extractDirectoryAndFilename(iso);
                             oss.str("");
                             if (!isDelete) {
-                                oss << "\033[1;91mError " << (isCopy ? "copying" : (isMove ? "moving" : "deleting")) << ": \033[1;93m'"
+                                oss << "\033[1;91mError " << (isCopy ? "copying" : "moving") << ": \033[1;93m'"
                                     << isoDir << "/" << isoFilename << "'\033[1;91m to '" << userDestDir << "'\033[0m\033[1m";
                             } else {
-                                oss << "\033[1;91mError " << (isCopy ? "copying" : (isMove ? "moving" : "deleting")) << ": \033[1;93m'"
+                                oss << "\033[1;91mError " << "deleting" << ": \033[1;93m'"
                                     << isoDir << "/" << isoFilename << "'\033[0m\033[1m";
                             }
                             errorMessageInfo = oss.str();
