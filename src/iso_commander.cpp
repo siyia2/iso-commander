@@ -336,18 +336,19 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
 
 //	CACHE STUFF
 
-// Function to check if a file exists asynchronously
-std::future<std::vector<std::string>> FileExistsAsync(std::vector<std::string> paths) {
-    return std::async(std::launch::async, [paths = std::move(paths)]() {
-        std::vector<std::string> result;
-        result.reserve(paths.size());  // Reserve space to avoid multiple reallocations
-        for (const auto& path : paths) {
-            if (std::filesystem::exists(path)) {
-                result.push_back(path);
-            }
+// Function to asynchronously check if files exist
+std::vector<std::string> FileExistsAsync(const std::vector<std::string>& paths) {
+    std::vector<std::string> existingPaths;
+    existingPaths.reserve(paths.size());
+
+    for (const std::string& path : paths) {
+        std::ifstream file(path);
+        if (file) {
+            existingPaths.push_back(path);
         }
-        return result;
-    });
+    }
+
+    return existingPaths;
 }
 
 
@@ -356,19 +357,26 @@ void removeNonExistentPathsFromCache() {
     const std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/mounter_elite_plus_iso_cache.txt";
 
     // Read paths from the cache file
-    std::vector<std::string> cache;
+    std::string cacheContent;
     {
         std::ifstream cacheFile(cacheFilePath);
-        if (cacheFile.is_open()) {
-            std::string line;
-            while (std::getline(cacheFile, line)) {
-                cache.push_back(std::move(line));
-            }
+        if (cacheFile) {
+            // Use buffered I/O for efficiency
+            cacheContent = std::string((std::istreambuf_iterator<char>(cacheFile)),
+                                       std::istreambuf_iterator<char>());
         }
     }
 
-    if (cache.empty()) {
+    if (cacheContent.empty()) {
         return;
+    }
+
+    // Split the content into lines
+    std::vector<std::string> cache;
+    std::istringstream iss(cacheContent);
+    std::string line;
+    while (std::getline(iss, line)) {
+        cache.push_back(std::move(line));
     }
 
     // Calculate dynamic batch size based on the number of available processor cores
@@ -382,7 +390,7 @@ void removeNonExistentPathsFromCache() {
         auto begin = cache.begin() + i;
         auto end = std::min(begin + batchSize, cache.end());
         std::vector<std::string> batch(begin, end);
-        futures.push_back(FileExistsAsync(std::move(batch)));
+        futures.push_back(std::async(std::launch::async, FileExistsAsync, std::move(batch)));
     }
 
     std::vector<std::string> retainedPaths;
@@ -395,7 +403,7 @@ void removeNonExistentPathsFromCache() {
 
     // Write the retained paths to the updated cache file
     std::ofstream updatedCacheFile(cacheFilePath);
-    if (updatedCacheFile.is_open()) {
+    if (updatedCacheFile) {
         for (const std::string& path : retainedPaths) {
             updatedCacheFile << path << '\n';
         }
