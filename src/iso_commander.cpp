@@ -350,9 +350,10 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
 //	CACHE STUFF
 
 // Function to check if a file exists asynchronously
-std::future<std::vector<std::string>> FileExistsAsync(const std::vector<std::string>& paths) {
-    return std::async(std::launch::async, [paths]() {
+std::future<std::vector<std::string>> FileExistsAsync(std::vector<std::string> paths) {
+    return std::async(std::launch::async, [paths = std::move(paths)]() {
         std::vector<std::string> result;
+        result.reserve(paths.size());  // Reserve space to avoid multiple reallocations
         for (const auto& path : paths) {
             if (std::filesystem::exists(path)) {
                 result.push_back(path);
@@ -365,73 +366,55 @@ std::future<std::vector<std::string>> FileExistsAsync(const std::vector<std::str
 
 // Function to remove non-existent paths from cache asynchronously with basic thread control
 void removeNonExistentPathsFromCache() {
-    // Define the path to the cache file
     const std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/mounter_elite_plus_iso_cache.txt";
 
-    // Open the cache file for reading
-    std::ifstream cacheFile(cacheFilePath);
-    if (!cacheFile.is_open()) {
-     //   std::cerr << "Error: Unable to open cache file.\n";
-        return;
-    }
-
-    // RAII: Use a vector to hold paths read from the cache file
+    // Read paths from the cache file
     std::vector<std::string> cache;
     {
-        // Read paths from the cache file into the cache vector
-        for (std::string line; std::getline(cacheFile, line);) {
-            cache.push_back(std::move(line));
+        std::ifstream cacheFile(cacheFilePath);
+        if (cacheFile.is_open()) {
+            std::string line;
+            while (std::getline(cacheFile, line)) {
+                cache.push_back(std::move(line));
+            }
         }
-    } // Cache vector goes out of scope here, ensuring file is closed
+    }
+
+    if (cache.empty()) {
+        return;
+    }
 
     // Calculate dynamic batch size based on the number of available processor cores
     const std::size_t maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
     const size_t batchSize = std::max(cache.size() / maxThreads + 1, static_cast<std::size_t>(2));
 
-    // Create a vector to hold futures for asynchronous tasks
     std::vector<std::future<std::vector<std::string>>> futures;
-    futures.reserve(cache.size() / batchSize + 1); // Reserve memory for futures
+    futures.reserve(cache.size() / batchSize + 1);
 
-    // Process paths in dynamic batches
     for (size_t i = 0; i < cache.size(); i += batchSize) {
         auto begin = cache.begin() + i;
         auto end = std::min(begin + batchSize, cache.end());
-
-        futures.push_back(std::async(std::launch::async, [begin, end]() {
-            // Process batch
-            std::future<std::vector<std::string>> futureResult = FileExistsAsync({begin, end});
-            return futureResult.get();
-        }));
+        std::vector<std::string> batch(begin, end);
+        futures.push_back(FileExistsAsync(std::move(batch)));
     }
 
-    // Wait for all asynchronous tasks to complete and collect the results
     std::vector<std::string> retainedPaths;
-    retainedPaths.reserve(cache.size()); // Reserve memory for retained paths
+    retainedPaths.reserve(cache.size());
 
     for (auto& future : futures) {
         auto result = future.get();
-
-        // Protect the critical section with a mutex
-        {
-            std::lock_guard<std::mutex> highLock(Mutex4High);
-            retainedPaths.insert(retainedPaths.end(), std::make_move_iterator(result.begin()), std::make_move_iterator(result.end()));
-        }
-    }
-
-    // Open the cache file for writing
-    std::ofstream updatedCacheFile(cacheFilePath);
-    if (!updatedCacheFile.is_open()) {
-      //  std::cerr << "Error: Unable to open cache file for writing.\n";
-        return;
+        retainedPaths.insert(retainedPaths.end(), result.begin(), result.end());
     }
 
     // Write the retained paths to the updated cache file
-    for (const std::string& path : retainedPaths) {
-        updatedCacheFile << path << '\n';
+    std::ofstream updatedCacheFile(cacheFilePath);
+    if (updatedCacheFile.is_open()) {
+        for (const std::string& path : retainedPaths) {
+            updatedCacheFile << path << '\n';
+        }
     }
+}
 
-    // RAII: Close the updated cache file automatically when it goes out of scope
-} // updatedCacheFile goes out of scope here, ensuring file is closed
 
 
 // Set default cache dir
