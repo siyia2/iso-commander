@@ -179,6 +179,7 @@ bool isValidLinuxPathFormat(const std::string& path);
 //	bools
 
 // General
+bool directoryExists(const std::string& path);
 bool isValidLinuxPathFormat(const std::string& path);
 
 // RM functions
