@@ -406,9 +406,9 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 	clearScrollBuffer();
     std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
-    ThreadPool pool(numThreads);
+    ThreadPool pool(chunkSize);
     std::vector<std::future<void>> futures;
-    futures.reserve(numThreads);
+    futures.reserve(chunkSize);
 
     std::lock_guard<std::mutex> highLock(Mutex4High);
 
