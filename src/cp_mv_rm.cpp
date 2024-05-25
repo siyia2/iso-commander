@@ -475,6 +475,16 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         
 }
 
+// Function to check if directory exists
+bool directoryExists(const std::string& path) {
+    struct stat info;
+    if (stat(path.c_str(), &info) != 0) {
+        return false;
+    }
+    return info.st_mode & S_IFDIR; // Check if it's a directory
+}
+
+
 // Function to handle the deletion of ISO files in batches
 void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete) {
     // Lock the low-level mutex to ensure thread safety
@@ -519,7 +529,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
     for (const auto& iso : isoFiles) {
         // Extract directory and filename from the ISO file path
         auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(iso);
-        
+
         // Check if ISO file is present in the copy list
         auto it = std::find(isoFilesCopy.begin(), isoFilesCopy.end(), iso);
         if (it != isoFilesCopy.end()) {
@@ -536,8 +546,11 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 
                     // Construct operation command based on operation type
                     if (isMove || isCopy) {
-                        operationCommand = "sudo mkdir -p " + shell_escape(userDestDir) + " && ";
-                        operationCommand += "sudo chown " + user_str + ":" + group_str + " " + shell_escape(userDestDir) + " && ";
+                        bool dirExists = directoryExists(userDestDir);
+                        if (!dirExists) {
+                            operationCommand = "sudo mkdir -p " + shell_escape(userDestDir) + " && ";
+                            operationCommand += "sudo chown " + user_str + ":" + group_str + " " + shell_escape(userDestDir) + " && ";
+                        }
                     }
 
                     if (isMove) {
