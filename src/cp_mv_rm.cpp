@@ -214,7 +214,17 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     bool isDelete = (process == "rm");
     bool isMove = (process == "mv");
     bool isCopy = (process == "cp");
-    std::string operationDescription = isDelete ? "PERMANENTLY DELETED" : (isMove ? "MOVED" : "COPIED");
+    std::string operationDescription = isDelete ? "*PERMANENTLY DELETED*" : (isMove ? "*MOVED*" : "*COPIED*");
+    
+    // Color code based on the operation
+    std::string operationColor;
+    if (process == "rm") {
+        operationColor = "\033[1;91m"; // Red for 'rm'
+    } else if (process == "cp") {
+        operationColor = "\033[1;92m"; // Green for 'cp'
+    } else {
+        operationColor = "\033[1;93m"; // Yellow for other operations
+    }
 
     std::string token;
 
@@ -350,12 +360,12 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 				
 
             // Display selected operations
-            std::cout << "\033[1;94mThe following ISO(s) will be \033[1;91m*" << operationDescription << "* \033[1;94mto ?\033[1;93m" << userDestDir << "\033[1;94m:\033[0m\033[1m" << std::endl;
+            std::cout << "\033[1;94mThe following ISO(s) will be " << operationColor + operationDescription << " \033[1;94mto ?\033[1;93m" << userDestDir << "\033[1;94m:\033[0m\033[1m" << std::endl;
             std::cout << " " << std::endl;
             for (const auto& chunk : indexChunks) {
                 for (const auto& index : chunk) {
                     auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFiles[index - 1]);
-                    std::cout << "\033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[0m\033[1m" << std::endl;
+                    std::cout << "\033[1m" << isoDirectory << "/\033[1;95m" << isoFilename << "\033[0m\033[1m" << std::endl;
                 }
             }
 
@@ -380,7 +390,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             }
         }
     } else {
-        std::cout << "\033[1;94mThe following ISO(s) will be \033[1;91m*" << operationDescription << "*\033[1;94m:\033[0m\033[1m" << std::endl;
+        std::cout << "\033[1;94mThe following ISO(s) will be "<< operationColor + operationDescription << "\033[1;94m:\033[0m\033[1m" << std::endl;
         std::cout << " " << std::endl;
         for (const auto& chunk : indexChunks) {
             for (const auto& index : chunk) {
