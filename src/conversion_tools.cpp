@@ -15,18 +15,31 @@ bool fileExistsConversions(const std::string& fullPath) {
 }
 
 
+// Function to filter files based on search query (case-insensitive)
+std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query) {
+    std::vector<std::string> filteredFiles;
+    std::string lowerQuery = query;
+    std::transform(lowerQuery.begin(), lowerQuery.end(), lowerQuery.begin(), ::tolower);
+
+    for (const std::string& file : files) {
+        std::string lowerFile = file;
+        std::transform(lowerFile.begin(), lowerFile.end(), lowerFile.begin(), ::tolower);
+        if (lowerFile.find(lowerQuery) != std::string::npos) {
+            filteredFiles.push_back(file);
+        }
+    }
+    return filteredFiles;
+}
+
+
 // Function to select and convert files based on user's choice of file type
 void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
-    // Initialize vectors to store files and directory paths
     std::vector<std::string> files;
     std::vector<std::string> directoryPaths;
-	bool flag;
+    bool flag = false;
 
-    // Read input for directory paths (allow multiple paths separated by semicolons)
     std::string fileExtension;
     std::string fileTypeName;
-
-    // Determine file type based on user's choice
     std::string fileType = std::string(1, std::tolower(fileTypeChoice[0])) + fileTypeChoice.substr(1);
 
     if (fileType == "bin" || fileType == "img") {
@@ -39,34 +52,23 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         std::cout << "Invalid file type choice. Supported types: BIN/IMG, MDF/MDS" << std::endl;
         return;
     }
-    // Load history from file
-    loadHistory();
 
+    loadHistory();
     std::string inputPaths = readInputLine("\033[1;94mDirectory path(s) ↵ (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1m\033[1;94m) to search for \033[1m\033[1;92m" + fileExtension + " \033[1;94mfiles, or ↵ to return:\n\033[0m\033[1m");
     clearScrollBuffer();
     std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
-	
+
     if (!inputPaths.empty()) {
-        // Save history to file
         saveHistory();
     }
-    
-    if (!inputPaths.empty()) {
-        // Save history to file
-        saveHistory();
-    }
-    
-    // Load history from file
+
     clear_history();
 
-    // Start the timer
     auto start_time = std::chrono::high_resolution_clock::now();
 
-    // Use semicolon as a separator to split paths
     std::istringstream iss(inputPaths);
     std::string path;
     while (std::getline(iss, path, ';')) {
-        // Trim leading and trailing whitespaces from each path
         size_t start = path.find_first_not_of(" \t");
         size_t end = path.find_last_not_of(" \t");
         if (start != std::string::npos && end != std::string::npos) {
@@ -74,29 +76,25 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         }
     }
 
-    // Check if directoryPaths is empty
     if (directoryPaths.empty()) {
         return;
     }
 
-    // Flag to check if new files are found
     bool newFilesFound = false;
-    // Call the appropriate function to populate the cache based on file type
     if (fileType == "bin" || fileType == "img") {
         files = findFiles(directoryPaths, "bin", [&](const std::string& fileName, const std::string& filePath) {
-			flag = false;
+            flag = false;
             newFilesFound = true;
         });
     } else if (fileType == "mdf" || fileType == "mds") {
         files = findFiles(directoryPaths, "mdf", [&](const std::string& fileName, const std::string& filePath) {
-			flag = true;
+            flag = true;
             newFilesFound = true;
         });
     }
 
-    // Print a message based on whether new files are found
     if (!newFilesFound && !files.empty()) {
-		clearScrollBuffer();
+        clearScrollBuffer();
         std::cout << " " << std::endl;
         auto end_time = std::chrono::high_resolution_clock::now();
         std::cout << "\033[1;91mNo new " << fileExtension << " file(s) over 5MB found. \033[1;92m" << files.size() << " file(s) are cached in RAM from previous searches.\033[0m\033[1m" << std::endl;
@@ -109,7 +107,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     }
 
     if (files.empty()) {
-		clearScrollBuffer();
+        clearScrollBuffer();
         std::cout << " " << std::endl;
         auto end_time = std::chrono::high_resolution_clock::now();
         std::cout << "\033[1;91mNo " << fileExtension << " file(s) over 5MB found in the specified path(s) or cached in RAM.\n\033[0m\033[1m";
@@ -122,33 +120,73 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         return;
     }
 
-    // Continue selecting and converting files until the user decides to exit
     while (true) {
-		clearScrollBuffer();
-      
-		printFileList(files);
+        clearScrollBuffer();
+        std::cout << "\033[94;1mSUCCESSFUL CONVERSIONS ARE AUTOMATICALLY ADDED INTO ISO CACHE\n\033[0m\033[1m\033[0m\033[1m" << std::endl;
+        printFileList(files);
 
         std::cout << " " << std::endl;
         clear_history();
 
-        std::string prompt = "\033[1;94m" + fileTypeName + " file(s) ↵ for conversion (e.g., '1-3', '1 5'), or ↵ to return:\033[0m\033[1m ";
-		char* input = readline(prompt.c_str());
+        std::string prompt = "\033[1;94m" + fileTypeName + " file(s) ↵ for conversion (e.g., '1-3', '1 5'), / ↵ to filter or ↵ to return:\033[0m\033[1m ";
+        char* input = readline(prompt.c_str());
 
         if (std::isspace(input[0]) || input[0] == '\0') {
             clearScrollBuffer();
             break;
         }
-		clearScrollBuffer();
-        std::cout << "\033[1mPlease wait...\n\033[1m" << std::endl;
+        
+        if (strcmp(input, "/") == 0) {
+            while (true) {
+                clearScrollBuffer();
+                char* searchQuery = readline("\n\033[1;92mSearchQuery\033[1;94m ↵ or ↵ to return (case-insensitive): \033[0m\033[1m");
+                clearScrollBuffer();
+                std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
-        // Process user input based on file type
-        processInput(input, files, inputPaths, flag);
+                if (std::isspace(searchQuery[0]) || searchQuery[0] == '\0') {
+                    break;
+                }
 
-        std::cout << " " << std::endl;
-        std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
-        std::cin.ignore();
+                std::vector<std::string> filteredFiles = filterFiles(files, searchQuery);
+
+                if (filteredFiles.empty()) {
+                    clearScrollBuffer();
+                    std::cout << "\033[1;93mNo file(s) match the search query.\033[0m\033[1m\n";
+                    std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
+                    std::cin.get();
+                } else {
+                    clearScrollBuffer();
+                    std::cout << "\033[1mFiltered results:\n\033[0m\033[1m" << std::endl;
+                    printFileList(filteredFiles);
+
+                    std::string filterPrompt = "\n\033[1;94mFiltered file(s) ↵ for conversion (e.g., '1-3', '1 5'), or ↵ to return:\033[0m\033[1m ";
+                    char* filterInput = readline(filterPrompt.c_str());
+
+                    if (std::isspace(filterInput[0]) || filterInput[0] == '\0') {
+                        break;
+                    }
+
+                    clearScrollBuffer();
+                    std::cout << "\033[1mPlease wait...\n\033[1m" << std::endl;
+                    processInput(filterInput, filteredFiles, inputPaths, flag);
+
+                    std::cout << " " << std::endl;
+                    std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
+                    std::cin.ignore();
+                }
+            }
+        } else {
+            clearScrollBuffer();
+            std::cout << "\033[1mPlease wait...\n\033[1m" << std::endl;
+            processInput(input, files, inputPaths, flag);
+
+            std::cout << " " << std::endl;
+            std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
+            std::cin.ignore();
+        }
     }
 }
+
 
 
 // Function to process user input and convert selected BIN files to ISO format
@@ -703,7 +741,6 @@ void printFileList(const std::vector<std::string>& fileList) {
     bool useRedColor = true;
 
     // Print header for file selection
-    std::cout << "\033[94;1mSUCCESSFUL CONVERSIONS ARE AUTOMATICALLY ADDED INTO ISO CACHE\n\033[0m\033[1m\033[0m\033[1m" << std::endl;
     std::cout << bold << "Select file(s) to convert to " << bold << "\033[1;92mISO(s)\033[0m\033[1m:\n";
     std::cout << " " << std::endl;
 
