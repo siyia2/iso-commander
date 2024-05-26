@@ -7,16 +7,16 @@ https://github.com/siyia2/mounter_elite
 
 State of the art secure and blazing fast terminal `ISO` manager written in C++. All paths are mounted under `/mnt/iso_*` format and conversion results are stored in their respective source directories. `ROOT` access is required to `mount&unmount ISOs`.
 
-For best experience i recommend executing it with `sudo isocmd`.
+For best experience execute with `sudo isocmd`.
 
 Features:
 * Cached ISO management for reduced disk thrashing.
-* Utilizes GNU/Linux utilities: rm,rmdir,cp,mv,mount,umount,find.
+* Utilizes GNU/Linux utilities: rm,rmdir,cp,mv,libmount,umount,find.
 * Tab completion and history support.
 * Sanitized shell commands for improved security.
+* Ultra lightweight as it does not rely on ncurses or any extenral library for terminal control.
 * Multithreaded asynchronous operations based on unique valid indices and max available system cores.
-* Capable of effortlessly handling anywhere from 1 to an astonishing 100,000 ISO files.
-* Includes a high precision timer for performance measurements.
+* Capable of seamlessly handling anywhere from 1 to an astonishing 100,000 ISO files.
 * Support for BIN/IMG/MDF conversion to ISO by utilizing ccd2iso and mdf2iso.
 * Clean codebase in case someone decides to contribute in the future.
   
