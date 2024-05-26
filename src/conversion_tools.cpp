@@ -15,23 +15,6 @@ bool fileExistsConversions(const std::string& fullPath) {
 }
 
 
-// Function to filter files based on search query (case-insensitive)
-std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query) {
-    std::vector<std::string> filteredFiles;
-    std::string lowerQuery = query;
-    std::transform(lowerQuery.begin(), lowerQuery.end(), lowerQuery.begin(), ::tolower);
-
-    for (const std::string& file : files) {
-        std::string lowerFile = file;
-        std::transform(lowerFile.begin(), lowerFile.end(), lowerFile.begin(), ::tolower);
-        if (lowerFile.find(lowerQuery) != std::string::npos) {
-            filteredFiles.push_back(file);
-        }
-    }
-    return filteredFiles;
-}
-
-
 // Function to select and convert files based on user's choice of file type
 void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     std::vector<std::string> files;
@@ -138,6 +121,8 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         
         if (strcmp(input, "/") == 0) {
             while (true) {
+				// Clear history
+				clear_history();
                 clearScrollBuffer();
                 char* searchQuery = readline("\n\033[1;92mSearchQuery\033[1;94m ↵ or ↵ to return (case-insensitive): \033[0m\033[1m");
                 clearScrollBuffer();
