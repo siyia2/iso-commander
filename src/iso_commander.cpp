@@ -1527,11 +1527,12 @@ while (true) {
     if (std::isspace(input[0]) || input[0] == '\0') {
         break;
     }
-
+    
 	bool validFilterPattern = false;
-
-	while (!validFilterPattern) {
-		if (input[0] == '/') {
+	
+	if (input[0] == '/') {
+		
+		while (!validFilterPattern) {
 			isFiltering = true;
 			clearScrollBuffer();
 			listMountedISOs();
