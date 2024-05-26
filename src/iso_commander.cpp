@@ -1528,55 +1528,71 @@ while (true) {
         break;
     }
 
-    // Check if the user wants to filter the ISOs
-    if (input[0] == '/') {
-        isFiltering = true;
-        clearScrollBuffer();
-        listMountedISOs();
-        char* filterPattern = readline("\n\033[1;92mFilterPattern\033[1;94m ↵ for \033[1;93mumount\033[1;94m or ↵ to return (case-insensitive, length > 4):\033[0m\033[1m ");
+	bool validFilterPattern = false;
 
-        // Convert filterPattern to std::string
-        std::string filterPatternStr(filterPattern);
-        clearScrollBuffer();
-        std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
+	while (!validFilterPattern) {
+		if (input[0] == '/') {
+			isFiltering = true;
+			clearScrollBuffer();
+			listMountedISOs();
+			char* filterPattern = readline("\n\033[1;92mFilterPattern\033[1;94m ↵ for \033[1;93mumount\033[1;94m or ↵ to return (case-insensitive, length > 4):\033[0m\033[1m ");
 
-        if (!std::isspace(filterPattern[0]) && filterPattern[0] != '\0' && filterPattern[0] != '/') {
-            // Convert to lowercase
-            std::string filterPatternLower;
-            std::transform(filterPatternStr.begin(), filterPatternStr.end(), std::back_inserter(filterPatternLower), ::tolower);
+			// Break loop if user presses Enter
+			if (std::isspace(input[0]) || input[0] == '\0') {
+				skipEnter = true;
+				break;
+			}
 
-            for (const auto& dir : isoDirs) {
-                std::string dirLower;
-                std::transform(dir.begin(), dir.end(), std::back_inserter(dirLower), ::tolower);
+			// Convert filterPattern to std::string
+			std::string filterPatternStr(filterPattern);
 
-                if (dirLower.find(filterPatternLower) != std::string::npos && filterPatternStr.length() >= 5) {
-                    filteredIsoDirs.push_back(dir);
-                }
-            }
+			clearScrollBuffer();
+			std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
-            // If no ISOs match the filter pattern, print a message and continue
-            if (filteredIsoDirs.empty()) {
-                if (filterPattern[0] != '\0') {
-                    if (filterPatternStr.length() < 5) {
-                        clearScrollBuffer();
-                        std::cout << "\033[1;91mFilterPattern must be longer than 4 characters.\033[0m\033[1m" << std::endl;
-                    } else {
-                        clearScrollBuffer();
-                        std::cout << "\033[1;93mNo ISO mountpoints match the filter pattern.\033[0m\033[1m" << std::endl;
-                    }
-                    std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
-                    std::cin.get();
-                    clearScrollBuffer();
-                }
-                clearScrollBuffer();
-                isFiltering = false;
-                continue;
-            }
-        } else {
-			skipEnter = true;
+			if (!std::isspace(filterPattern[0]) && filterPattern[0] != '\0' && filterPattern[0] != '/') {
+				// Convert to lowercase
+				std::string filterPatternLower;
+				std::transform(filterPatternStr.begin(), filterPatternStr.end(), std::back_inserter(filterPatternLower), ::tolower);
+
+				for (const auto& dir : isoDirs) {
+					std::string dirLower;
+					std::transform(dir.begin(), dir.end(), std::back_inserter(dirLower), ::tolower);
+
+					if (dirLower.find(filterPatternLower) != std::string::npos && filterPatternStr.length() >= 5) {
+						filteredIsoDirs.push_back(dir);
+					}
+				}
+
+				// If no ISOs match the filter pattern, print a message and continue
+				if (filteredIsoDirs.empty()) {
+					if (filterPattern[0] != '\0') {
+						if (filterPatternStr.length() < 5) {
+							clearScrollBuffer();
+							std::cout << "\033[1;91mFilterPattern must be longer than 4 characters.\033[0m\033[1m" << std::endl;
+						} else {
+							clearScrollBuffer();
+							std::cout << "\033[1;93mNo ISO mountpoints match the filter pattern.\033[0m\033[1m" << std::endl;
+						}
+
+						std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
+						std::cin.get();
+						clearScrollBuffer();
+					}
+
+					clearScrollBuffer();
+					isFiltering = false;
+					continue;
+				} else {
+					validFilterPattern = true;
+					break;
+				}
+			} else {
+				skipEnter = true;
+				break;
+				}
+			}
 		}
-    }
-
+		
         // Unmount all ISOs if '00' is entered
         if (std::strcmp(input, "00") == 0) {
             // Detect and use the minimum of available threads and isoDirs to ensure efficient parallelism
