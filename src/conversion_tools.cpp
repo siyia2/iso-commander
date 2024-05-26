@@ -111,7 +111,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         std::cout << " " << std::endl;
         clear_history();
 
-        std::string prompt = "\033[1;94m" + fileTypeName + " file(s) ↵ for conversion (e.g., '1-3', '1 5'), / ↵ to filter or ↵ to return:\033[0m\033[1m ";
+        std::string prompt = "\033[1;94m" + fileTypeName + " file(s) ↵ for conversion (e.g., '1-3', '1 5'), / ↵ to filter, or ↵ to return:\033[0m\033[1m ";
         char* input = readline(prompt.c_str());
 
         if (std::isspace(input[0]) || input[0] == '\0') {
@@ -124,7 +124,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 				// Clear history
 				clear_history();
                 clearScrollBuffer();
-                char* searchQuery = readline("\n\033[1;92mSearchQuery\033[1;94m ↵ or ↵ to return (case-insensitive): \033[0m\033[1m");
+                char* searchQuery = readline("\n\033[1;92mSearchQuery\033[1;94m ↵ to filter list (case-insensitive), or ↵ to return: \033[0m\033[1m");
                 clearScrollBuffer();
                 std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 

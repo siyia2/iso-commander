@@ -821,7 +821,7 @@ void select_and_mount_files_by_number() {
         printIsoFileList(isoFiles);
 
         // Prompt user for input
-        char* input = readline("\n\033[1;94mISO(s) ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5', '00' for all), / ↵ to filter or ↵ to return:\033[0m\033[1m ");
+        char* input = readline("\n\033[1;94mISO(s) ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5', '00' for all), / ↵ to filter, or ↵ to return:\033[0m\033[1m ");
         clearScrollBuffer();
         std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
         // Start the timer
@@ -838,7 +838,7 @@ void select_and_mount_files_by_number() {
 			clearScrollBuffer();
         
 			// User pressed '/', start the filtering process
-			char* searchQuery = readline("\n\033[1;92mSearchQuery\033[1;94m ↵ or ↵ to return (case-insensitive): \033[0m\033[1m");
+			char* searchQuery = readline("\n\033[1;92mSearchQuery\033[1;94m ↵ to filter list (case-insensitive), or ↵ to return: \033[0m\033[1m");
 			clearScrollBuffer();
 			std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
@@ -1519,7 +1519,7 @@ while (true) {
     }
 
     // Prompt user to choose ISOs for unmounting
-    char* input = readline("\033[1;94mISO(s) ↵ for \033[1;93mumount\033[1;94m (e.g., '1-3', '1 5', '00' for all), / ↵ to filter\033[1;94m or ↵ to return:\033[0m\033[1m ");
+    char* input = readline("\033[1;94mISO(s) ↵ for \033[1;93mumount\033[1;94m (e.g., '1-3', '1 5', '00' for all), / ↵ to filter\033[1;94m , or ↵ to return:\033[0m\033[1m ");
     clearScrollBuffer();
     std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
@@ -1536,7 +1536,7 @@ while (true) {
 			isFiltering = true;
 			clearScrollBuffer();
 			listMountedISOs();
-			char* filterPattern = readline("\n\033[1;92mFilterPattern\033[1;94m ↵ for \033[1;93mumount\033[1;94m or ↵ to return (case-insensitive, length > 4):\033[0m\033[1m ");
+			char* filterPattern = readline("\n\033[1;92mFilterPattern\033[1;94m ↵ for \033[1;93mumount\033[1;94m (case-insensitive, length > 4), or ↵ to return:\033[0m\033[1m ");
 
 			// Break loop if user presses Enter
 			if (std::isspace(input[0]) || input[0] == '\0') {
@@ -1572,7 +1572,7 @@ while (true) {
 							std::cout << "\033[1;91mFilterPattern must be longer than 4 characters.\033[0m\033[1m" << std::endl;
 						} else {
 							clearScrollBuffer();
-							std::cout << "\033[1;93mNo ISO mountpoints match the filter pattern.\033[0m\033[1m" << std::endl;
+							std::cout << "\033[1;93mNo ISO mountpoint(s) match the filter pattern.\033[0m\033[1m" << std::endl;
 						}
 
 						std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
