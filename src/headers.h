@@ -251,8 +251,7 @@ void print_ascii();
 //	stds
 
 // General functions
-std::string toLower(const std::string& str);
-std::vector<std::string> filterIsoFiles(const std::vector<std::string>& isoFiles, const std::string& searchQuery);
+std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query);
 
 // Cache functions
 std::future<bool> iequals(std::string_view a, std::string_view b);

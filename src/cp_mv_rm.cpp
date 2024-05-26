@@ -90,7 +90,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
         }), isoFiles.end());
 
         std::string searchQuery;
-        std::vector<std::string> filteredIsoFiles = isoFiles;
+        std::vector<std::string> filteredFiles = isoFiles;
         printIsoFileList(isoFiles);
 
         // Prompt user for input or filter
@@ -117,9 +117,9 @@ void select_and_operate_files_by_number(const std::string& operation) {
             if (!(std::isspace(searchQuery[0]) || searchQuery[0] == '\0')) {
 
             if (searchQuery != nullptr) {
-                filteredIsoFiles = filterIsoFiles(isoFiles, searchQuery);
+                std::vector<std::string> filteredFiles = filterFiles(isoFiles, searchQuery);
 
-                if (filteredIsoFiles.empty()) {
+                if (filteredFiles.empty()) {
 					clearScrollBuffer();
                     std::cout << "\033[1;93mNo ISO(s) match the search query.\033[0m\033[1m\n";
 					std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
@@ -127,7 +127,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
                 } else {
                     clearScrollBuffer();
                     std::cout << "\033[1mFiltered results:\n\033[0m\033[1m" << std::endl;
-                    printIsoFileList(filteredIsoFiles); // Print the filtered list of ISO files
+                    printIsoFileList(filteredFiles); // Print the filtered list of ISO files
 
                     // Prompt user for input again with the filtered list
                     char* input = readline(("\n\033[1;94mISO(s) ↵ for " + operationColor + operation + "\033[1;94m (e.g., '1-3', '1 5'), or ↵ to return:\033[0m\033[1m ").c_str());
@@ -139,13 +139,13 @@ void select_and_operate_files_by_number(const std::string& operation) {
                         // Process the user input with the filtered list
                         if (operation == "rm") {
                             process = "rm";
-                            processOperationInput(input, filteredIsoFiles, operationSet, process);
+                            processOperationInput(input, filteredFiles, operationSet, process);
                         } else if (operation == "mv") {
                             process = "mv";
-                            processOperationInput(input, filteredIsoFiles, operationSet, process);
+                            processOperationInput(input, filteredFiles, operationSet, process);
                         } else if (operation == "cp") {
                             process = "cp";
-                            processOperationInput(input, filteredIsoFiles, operationSet, process);
+                            processOperationInput(input, filteredFiles, operationSet, process);
 							}
 						}
 					}
@@ -406,9 +406,9 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 	clearScrollBuffer();
     std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
-    ThreadPool pool(chunkSize);
+    ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
-    futures.reserve(chunkSize);
+    futures.reserve(numThreads);
 
     std::lock_guard<std::mutex> highLock(Mutex4High);
 

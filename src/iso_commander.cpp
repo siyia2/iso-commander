@@ -254,24 +254,18 @@ std::string toLower(const std::string& str) {
 }
 
 
-// Function to filter ISO in a case insensitive manner
-std::vector<std::string> filterIsoFiles(const std::vector<std::string>& isoFiles, const std::string& searchQuery) {
+// Function to filter files based on search query (case-insensitive)
+std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query) {
     std::vector<std::string> filteredFiles;
-    std::string lowerSearchQuery = toLower(searchQuery);
-    
-    for (const auto& isoFile : isoFiles) {
-        // Find the position of the last '/'
-        size_t lastSlashPos = isoFile.find_last_of('/');
-        
-        // Extract the part after the last '/'
-        std::string fileName = (lastSlashPos != std::string::npos) ? isoFile.substr(lastSlashPos + 1) : isoFile;
-        
-        // Perform case-insensitive search
-        if (toLower(fileName).find(lowerSearchQuery) != std::string::npos) {
-            filteredFiles.push_back(isoFile);
+    std::string lowerQuery = toLower(query);
+
+    for (const std::string& file : files) {
+        size_t lastSlashPos = file.find_last_of('/');
+        std::string fileName = (lastSlashPos != std::string::npos) ? file.substr(lastSlashPos + 1) : file;
+        if (toLower(fileName).find(lowerQuery) != std::string::npos) {
+            filteredFiles.push_back(file);
         }
     }
-    
     return filteredFiles;
 }
 
@@ -823,7 +817,7 @@ void select_and_mount_files_by_number() {
         // Load ISO files from cache
         isoFiles = loadCache();
         std::string searchQuery;
-        std::vector<std::string> filteredIsoFiles = isoFiles;
+        std::vector<std::string> filteredFiles = isoFiles;
         printIsoFileList(isoFiles);
 
         // Prompt user for input
@@ -855,9 +849,9 @@ void select_and_mount_files_by_number() {
         
 
 			if (searchQuery != nullptr) {
-				filteredIsoFiles = filterIsoFiles(isoFiles, searchQuery);
+				std::vector<std::string> filteredFiles = filterFiles(isoFiles, searchQuery);
 
-				if (filteredIsoFiles.empty()) {
+				if (filteredFiles.empty()) {
 					clearScrollBuffer();
 					std::cout << "\033[1;93mNo ISO(s) match the search query.\033[0m\033[1m\n";
 					std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
@@ -865,7 +859,7 @@ void select_and_mount_files_by_number() {
 				} else {
 					clearScrollBuffer();
 					std::cout << "\033[1mFiltered results:\n\033[0m\033[1m" << std::endl;
-					printIsoFileList(filteredIsoFiles); // Print the filtered list of ISO files
+					printIsoFileList(filteredFiles); // Print the filtered list of ISO files
 					
 					// Prompt user for input again with the filtered list
 					char* input = readline("\n\033[1;94mISO(s) ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5'), ↵ to return:\033[0m\033[1m ");
@@ -884,7 +878,7 @@ void select_and_mount_files_by_number() {
 						std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
 						// Process the user input with the filtered list
-						processAndMountIsoFiles(input, filteredIsoFiles, mountedSet);
+						processAndMountIsoFiles(input, filteredFiles, mountedSet);
 						
 						clearScrollBuffer();
 
