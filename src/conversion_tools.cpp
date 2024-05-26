@@ -140,26 +140,33 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
                     std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
                     std::cin.get();
                 } else {
-                    clearScrollBuffer();
-                    std::cout << "\033[1mFiltered results:\n\033[0m\033[1m" << std::endl;
-                    printFileList(filteredFiles);
+					while (true) {
+						clearScrollBuffer();
+						std::cout << "\033[1mFiltered results:\n\033[0m\033[1m" << std::endl;
+						printFileList(filteredFiles);
 
-                    std::string filterPrompt = "\n\033[1;94mFiltered file(s) ↵ for conversion (e.g., '1-3', '1 5'), or ↵ to return:\033[0m\033[1m ";
-                    char* filterInput = readline(filterPrompt.c_str());
+						std::string filterPrompt = "\n\033[1;94mFiltered file(s) ↵ for conversion (e.g., '1-3', '1 5'), or ↵ to return:\033[0m\033[1m ";
+						char* filterInput = readline(filterPrompt.c_str());
+                    
+						// Check if the user wants to return
+						if (std::isspace(input[0]) || input[0] == '\0') {
+							break;
+						}
 
-                    if (std::isspace(filterInput[0]) || filterInput[0] == '\0') {
-                        break;
-                    }
+						if (std::isspace(filterInput[0]) || filterInput[0] == '\0') {
+							break;
+						}
 
-                    clearScrollBuffer();
-                    std::cout << "\033[1mPlease wait...\n\033[1m" << std::endl;
-                    processInput(filterInput, filteredFiles, inputPaths, flag);
+						clearScrollBuffer();
+						std::cout << "\033[1mPlease wait...\n\033[1m" << std::endl;
+						processInput(filterInput, filteredFiles, inputPaths, flag);
 
-                    std::cout << " " << std::endl;
-                    std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
-                    std::cin.ignore();
-                }
-            }
+						std::cout << " " << std::endl;
+						std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
+						std::cin.ignore();
+					}
+				}
+			}
         } else {
             clearScrollBuffer();
             std::cout << "\033[1mPlease wait...\n\033[1m" << std::endl;
@@ -171,7 +178,6 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         }
     }
 }
-
 
 
 // Function to process user input and convert selected BIN files to ISO format

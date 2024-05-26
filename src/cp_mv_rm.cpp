@@ -125,31 +125,38 @@ void select_and_operate_files_by_number(const std::string& operation) {
 					std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
 					std::cin.get();
                 } else {
-                    clearScrollBuffer();
-                    std::cout << "\033[1mFiltered results:\n\033[0m\033[1m" << std::endl;
-                    printIsoFileList(filteredFiles); // Print the filtered list of ISO files
+					while (true) {
+						clearScrollBuffer();
+						std::cout << "\033[1mFiltered results:\n\033[0m\033[1m" << std::endl;
+						printIsoFileList(filteredFiles); // Print the filtered list of ISO files
 
-                    // Prompt user for input again with the filtered list
-                    char* input = readline(("\n\033[1;94mISO(s) ↵ for " + operationColor + operation + "\033[1;94m (e.g., '1-3', '1 5'), or ↵ to return:\033[0m\033[1m ").c_str());
+						// Prompt user for input again with the filtered list
+						char* input = readline(("\n\033[1;94mISO(s) ↵ for " + operationColor + operation + "\033[1;94m (e.g., '1-3', '1 5'), or ↵ to return:\033[0m\033[1m ").c_str());
+                    
+						// Check if the user wants to return
+						if (std::isspace(input[0]) || input[0] == '\0') {
+							break;
+						}
 
-                    // Check if the user provided input
-                    if (input[0] != '\0' && (strcmp(input, "/") != 0)) {
-                        clearScrollBuffer();
+						// Check if the user provided input
+						if (input[0] != '\0' && (strcmp(input, "/") != 0)) {
+							clearScrollBuffer();
 
-                        // Process the user input with the filtered list
-                        if (operation == "rm") {
-                            process = "rm";
-                            processOperationInput(input, filteredFiles, operationSet, process);
-                        } else if (operation == "mv") {
-                            process = "mv";
-                            processOperationInput(input, filteredFiles, operationSet, process);
-                        } else if (operation == "cp") {
-                            process = "cp";
-                            processOperationInput(input, filteredFiles, operationSet, process);
+							// Process the user input with the filtered list
+							if (operation == "rm") {
+								process = "rm";
+								processOperationInput(input, filteredFiles, operationSet, process);
+							} else if (operation == "mv") {
+								process = "mv";
+								processOperationInput(input, filteredFiles, operationSet, process);
+							} else if (operation == "cp") {
+								process = "cp";
+								processOperationInput(input, filteredFiles, operationSet, process);
+								}
 							}
 						}
 					}
-				} 
+				}
 			} else {
 					isoFiles = originalIsoFiles; // Revert to the original cache list
 					break;

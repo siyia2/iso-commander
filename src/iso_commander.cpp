@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
 
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("3.0.7");
+        printVersionNumber("3.0.8");
         return 0;
     }
 
@@ -857,34 +857,41 @@ void select_and_mount_files_by_number() {
 					std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
 					std::cin.get();
 				} else {
-					clearScrollBuffer();
-					std::cout << "\033[1mFiltered results:\n\033[0m\033[1m" << std::endl;
-					printIsoFileList(filteredFiles); // Print the filtered list of ISO files
+					while (true) {
+						clearScrollBuffer();
+						std::cout << "\033[1mFiltered results:\n\033[0m\033[1m" << std::endl;
+						printIsoFileList(filteredFiles); // Print the filtered list of ISO files
 					
-					// Prompt user for input again with the filtered list
-					char* input = readline("\n\033[1;94mISO(s) ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5'), ↵ to return:\033[0m\033[1m ");
-					if (std::strcmp(input, "00") == 0) {
-					clearScrollBuffer();
-					std::cout << "\033[1;91m'00' is not available for filtered results.\033[0m\033[1m\n";
-					std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
-					std::cin.get();
-				}
+						// Prompt user for input again with the filtered list
+						char* input = readline("\n\033[1;94mISO(s) ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5'), ↵ to return:\033[0m\033[1m ");
+					
+						// Check if the user wants to return
+						if (std::isspace(input[0]) || input[0] == '\0') {
+							break;
+						}
+					
+						if (std::strcmp(input, "00") == 0) {
+							clearScrollBuffer();
+							std::cout << "\033[1;91m'00' is not available for filtered results.\033[0m\033[1m\n";
+							std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
+							std::cin.get();
+						}
 				
 						
-				//	display_time= false;
-					// Check if the user provided input
-					if (input[0] != '\0' && (strcmp(input, "/") != 0)) {
-						clearScrollBuffer();
-						std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
+						//	display_time= false;
+						// Check if the user provided input
+						if (input[0] != '\0' && (strcmp(input, "/") != 0)) {
+							clearScrollBuffer();
+							std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
-						// Process the user input with the filtered list
-						processAndMountIsoFiles(input, filteredFiles, mountedSet);
+							// Process the user input with the filtered list
+							processAndMountIsoFiles(input, filteredFiles, mountedSet);
 						
-						clearScrollBuffer();
+							clearScrollBuffer();
 
-						verbose(mountedFiles, skippedMessages, errorMessages, uniqueErrorMessages);
+							verbose(mountedFiles, skippedMessages, errorMessages, uniqueErrorMessages);
 					
-					
+						}
 					}
 				}
 				
