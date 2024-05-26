@@ -1708,6 +1708,8 @@ void unmountISOs() {
 								validFilterPattern = false;
 								filteredIsoDirs.clear();
 								continue;
+							} else {
+								skipEnter = true;
 							}
 						}
 					}
