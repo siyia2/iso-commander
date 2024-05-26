@@ -1638,7 +1638,7 @@ void unmountISOs() {
 						validFilterPattern = true;
 						if (validFilterPattern) {
 						clearScrollBuffer();
-						std::cout << "\033[1mThe following mountpoint(s) match the \033[1;93mumount\033[1;92m FilterPattern\033[0m\033[1m:\n" << std::endl;
+						std::cout << "\033[1;94mThe following mountpoint(s) match the\033[1;92m FilterPattern\033[1;94m and will be unmounted:\033[0m\033[1m\n" << std::endl;
 						for (const auto& dir : filteredIsoDirs) {
 						std::string afterSlash = dir.substr(dir.find_last_of("/") + 1);
 						std::string afterUnderscore = afterSlash.substr(afterSlash.find("_") + 1);
@@ -1647,7 +1647,7 @@ void unmountISOs() {
 
 						std::string confirmation;
 						std::cout << " " << std::endl;
-						std::cout << "\033[1;94mDo you want to proceed with unmounting the above? (y/n):\033[0m\033[1m ";
+						std::cout << "\033[1;94mDo you want to proceed? (y/n):\033[0m\033[1m ";
 						std::getline(std::cin, confirmation);
 					
 						// Convert the string to lowercase
