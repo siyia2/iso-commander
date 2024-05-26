@@ -1699,8 +1699,12 @@ void unmountISOs() {
 									selectedIsoDirsFiltered.push_back(filteredIsoDirs[index]);
 								}
 
-							} else {
-								std::cerr << "\033[1;91mNo valid mountpoints chosen.\033[0m" << std::endl;
+							} else if (chosenIndices.empty() && (!(std::isspace(chosenNumbers[0]) || chosenNumbers[0] == '\0'))){
+								clearScrollBuffer();
+								std::cerr << "\033[1;91mNo valid selection(s) for umount.\033[0m" << std::endl;
+								std::cout << " " << std::endl;
+								std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
+								std::cin.get();
 								validFilterPattern = false;
 								filteredIsoDirs.clear();
 								continue;
