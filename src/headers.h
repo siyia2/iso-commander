@@ -27,6 +27,7 @@
 #include <thread>
 #include <unordered_set>
 #include <vector>
+#include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
 

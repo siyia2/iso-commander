@@ -349,21 +349,45 @@ void removeNonExistentPathsFromCache() {
     // Define the path to the cache file
     const std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/mounter_elite_plus_iso_cache.txt";
 
-    // Read the cache file into memory
-    std::vector<std::string> cache;
-    {
-        // Open the cache file for reading
-        std::ifstream cacheFile(cacheFilePath);
-        if (!cacheFile.is_open()) {
-            // Handle error if unable to open cache file
-            return;
-        }
+    // Open the cache file for reading
+    std::ifstream cacheFile(cacheFilePath, std::ios::in | std::ios::binary);
+    if (!cacheFile.is_open()) {
+        // Handle error if unable to open cache file
+        return;
+    }
 
-        // Read paths from the cache file into the cache vector
-        for (std::string line; std::getline(cacheFile, line);) {
-            cache.push_back(std::move(line));
-        }
-    } // Cache vector goes out of scope here, ensuring file is closed
+    // Get the file size
+    const auto fileSize = cacheFile.seekg(0, std::ios::end).tellg();
+    cacheFile.seekg(0, std::ios::beg);
+
+    // Open the file for memory mapping
+    int fd = open(cacheFilePath.c_str(), O_RDONLY);
+    if (fd == -1) {
+        // Handle error if unable to open the file
+        return;
+    }
+
+    // Memory map the file
+    char* mappedFile = static_cast<char*>(mmap(nullptr, fileSize, PROT_READ, MAP_PRIVATE, fd, 0));
+    if (mappedFile == MAP_FAILED) {
+        // Handle error if unable to map the file
+        close(fd);
+        return;
+    }
+
+    // Process the memory-mapped file
+    std::vector<std::string> cache;
+    char* start = mappedFile;
+    char* end = mappedFile + fileSize;
+    while (start < end) {
+        char* lineEnd = std::find(start, end, '\n');
+        cache.emplace_back(start, lineEnd);
+        start = lineEnd + 1;
+    }
+
+    // Unmap the file
+    munmap(mappedFile, fileSize);
+    close(fd);
 
     // Calculate dynamic batch size based on the number of available processor cores
     const std::size_t maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
@@ -377,7 +401,6 @@ void removeNonExistentPathsFromCache() {
     for (size_t i = 0; i < cache.size(); i += batchSize) {
         auto begin = cache.begin() + i;
         auto end = std::min(begin + batchSize, cache.end());
-
         futures.push_back(std::async(std::launch::async, [begin, end]() {
             // Process batch
             std::future<std::vector<std::string>> futureResult = FileExistsAsync({begin, end});
@@ -388,10 +411,8 @@ void removeNonExistentPathsFromCache() {
     // Wait for all asynchronous tasks to complete and collect the results
     std::vector<std::string> retainedPaths;
     retainedPaths.reserve(cache.size()); // Reserve memory for retained paths
-
     for (auto& future : futures) {
         auto result = future.get();
-
         // Protect the critical section with a mutex
         {
             std::lock_guard<std::mutex> highLock(Mutex4High);
@@ -428,23 +449,52 @@ std::string getHomeDirectory() {
 // Load cache
 std::vector<std::string> loadCache() {
     std::vector<std::string> isoFiles;
+
     std::string cacheFilePath = getHomeDirectory() + "/.cache/mounter_elite_plus_iso_cache.txt";
-    std::ifstream cacheFile(cacheFilePath);
 
-    if (cacheFile.is_open()) {
-        std::string line;
-        while (std::getline(cacheFile, line)) {
-            // Check if the line is not empty
-            if (!line.empty()) {
-                isoFiles.push_back(line);
-            }
-        }
-        cacheFile.close();
-
-        // Remove duplicates from the loaded cache
-        std::sort(isoFiles.begin(), isoFiles.end());
-        isoFiles.erase(std::unique(isoFiles.begin(), isoFiles.end()), isoFiles.end());
+    // Open the file for memory mapping
+    int fd = open(cacheFilePath.c_str(), O_RDONLY);
+    if (fd == -1) {
+        // Handle error if unable to open the file
+        return isoFiles;
     }
+
+    // Get the file size
+    struct stat fileStat;
+    if (fstat(fd, &fileStat) == -1) {
+        // Handle error if unable to get file statistics
+        close(fd);
+        return isoFiles;
+    }
+    const auto fileSize = fileStat.st_size;
+
+    // Memory map the file
+    char* mappedFile = static_cast<char*>(mmap(nullptr, fileSize, PROT_READ, MAP_PRIVATE, fd, 0));
+    if (mappedFile == MAP_FAILED) {
+        // Handle error if unable to map the file
+        close(fd);
+        return isoFiles;
+    }
+
+    // Process the memory-mapped file
+    char* start = mappedFile;
+    char* end = mappedFile + fileSize;
+    while (start < end) {
+        char* lineEnd = std::find(start, end, '\n');
+        std::string line(start, lineEnd);
+        if (!line.empty()) {
+            isoFiles.push_back(std::move(line));
+        }
+        start = lineEnd + 1;
+    }
+
+    // Unmap the file
+    munmap(mappedFile, fileSize);
+    close(fd);
+
+    // Remove duplicates from the loaded cache
+    std::sort(isoFiles.begin(), isoFiles.end());
+    isoFiles.erase(std::unique(isoFiles.begin(), isoFiles.end()), isoFiles.end());
 
     return isoFiles;
 }
