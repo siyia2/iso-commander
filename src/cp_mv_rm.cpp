@@ -121,7 +121,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
                 if (filteredFiles.empty()) {
 					clearScrollBuffer();
-                    std::cout << "\033[1;93mNo ISO(s) match the search query.\033[0m\033[1m\n";
+                    std::cout << "\033[1;91mNo ISO(s) match the search query.\033[0m\033[1m\n";
 					std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
 					std::cin.get();
                 } else {

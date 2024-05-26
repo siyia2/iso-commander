@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
 
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("3.0.8");
+        printVersionNumber("3.0.9");
         return 0;
     }
 
@@ -141,7 +141,7 @@ void submenu1() {
         std::cout << "\033[1;32m|5. Copy                  |" << std::endl;
         std::cout << "\033[1;32m+-------------------------+" << std::endl;
         std::cout << " " << std::endl;
-        char* submenu_input = readline("\033[1;94mChoose a function, or ↵ to return:\033[0m\033[1m ");
+        char* submenu_input = readline("\033[1;94mChoose an option:\033[0m\033[1m ");
 
         if (!submenu_input || std::strlen(submenu_input) == 0) {
 			delete[] submenu_input;
@@ -199,7 +199,7 @@ void submenu2() {
         std::cout << "\033[1;32m|2. MDF2ISO               |" << std::endl;
         std::cout << "\033[1;32m+-------------------------+" << std::endl;
         std::cout << " " << std::endl;
-        char* submenu_input = readline("\033[1;94mChoose a function, or ↵ to return:\033[0m\033[1m ");
+        char* submenu_input = readline("\033[1;94mChoose an option:\033[0m\033[1m ");
 
         if (!submenu_input || std::strlen(submenu_input) == 0) {
 			delete[] submenu_input;
@@ -853,7 +853,7 @@ void select_and_mount_files_by_number() {
 
 				if (filteredFiles.empty()) {
 					clearScrollBuffer();
-					std::cout << "\033[1;93mNo ISO(s) match the search query.\033[0m\033[1m\n";
+					std::cout << "\033[1;91mNo ISO(s) match the search query.\033[0m\033[1m\n";
 					std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
 					std::cin.get();
 				} else {
@@ -1563,6 +1563,7 @@ while (true) {
 						filteredIsoDirs.push_back(dir);
 					}
 				}
+				
 
 				// If no ISOs match the filter pattern, print a message and continue
 				if (filteredIsoDirs.empty()) {
@@ -1572,7 +1573,7 @@ while (true) {
 							std::cout << "\033[1;91mFilterPattern must be longer than 4 characters.\033[0m\033[1m" << std::endl;
 						} else {
 							clearScrollBuffer();
-							std::cout << "\033[1;93mNo ISO mountpoint(s) match the filter pattern.\033[0m\033[1m" << std::endl;
+							std::cout << "\033[1;91mNo ISO mountpoint(s) match the filter pattern.\033[0m\033[1m" << std::endl;
 						}
 
 						std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
@@ -1585,7 +1586,30 @@ while (true) {
 					continue;
 				} else {
 					validFilterPattern = true;
-					break;
+					if (validFilterPattern) {
+					clearScrollBuffer();
+					std::cout << "\033[1mThe following mountpoint(s) match the \033[1;93mumount\033[1;92m FilterPattern\033[0m\033[1m:\n" << std::endl;
+					for (const auto& dir : filteredIsoDirs) {
+						std::cout << "\033[1;93m" << dir << "\033\[0m\033\[1m" << std::endl;
+					}
+
+					std::string confirmation;
+					std::cout << " " << std::endl;
+					std::cout << "\033[1;94mDo you want to proceed with unmounting the above? (y/n):\033[0m\033[1m ";
+					std::getline(std::cin, confirmation);
+					
+					// Convert the string to lowercase
+					std::transform(confirmation.begin(), confirmation.end(), confirmation.begin(), ::tolower);
+
+					if (confirmation == "y") {
+						break;
+					} else {
+						validFilterPattern = false;
+						filteredIsoDirs.clear();
+						continue;
+				
+						}
+					}
 				}
 			} else {
 				skipEnter = true;

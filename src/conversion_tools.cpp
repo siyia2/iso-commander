@@ -136,7 +136,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
                 if (filteredFiles.empty()) {
                     clearScrollBuffer();
-                    std::cout << "\033[1;93mNo file(s) match the search query.\033[0m\033[1m\n";
+                    std::cout << "\033[1;91mNo file(s) match the search query.\033[0m\033[1m\n";
                     std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
                     std::cin.get();
                 } else {
