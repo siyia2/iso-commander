@@ -1657,8 +1657,11 @@ void unmountISOs() {
 										selectedIndices.insert(index);
 									} else {
 										// Handle the case where the index is out of bounds
+										if (token == "00"){
+										} else {
 										errorMessages.push_back("Invalid index: '" + token + "'.");
 										invalidInput = true;
+										}
 									}
 								}
 							} catch (const std::invalid_argument&) {
@@ -1727,25 +1730,28 @@ void unmountISOs() {
 					selectedIndices.insert(index);
 				} else {
 					// Handle the case where the index is out of bounds
-					errorMessages.push_back("Invalid index: '" + token + "'.");
-					invalidInput = true;
+					if (token == "00"){
+					} else {
+						errorMessages.push_back("Invalid index: '" + token + "'.");
+						invalidInput = true;
+					}
 				}
 			}
-		} catch (const std::invalid_argument&) {
-			errorMessages.push_back("Invalid input: '" + token + "'.");
-			invalidInput = true;
-		}
-	}
+				} catch (const std::invalid_argument&) {
+				errorMessages.push_back("Invalid input: '" + token + "'.");
+				invalidInput = true;
+				}
+			}
 
-		if (!selectedIndices.empty()) {
-        for (size_t index : selectedIndices) {
-            selectedIsoDirs.push_back(isoDirs[index]);
-        }
-		} else {
-			clearScrollBuffer();
-			std::cerr << "\n\033[1;91mNo valid selection(s) for umount.\n";
+			if (!selectedIndices.empty()) {
+				for (size_t index : selectedIndices) {
+					selectedIsoDirs.push_back(isoDirs[index]);
+				}
+			} else {
+				clearScrollBuffer();
+				std::cerr << "\n\033[1;91mNo valid selection(s) for umount.\n";
+			}
 		}
-	}
 
 
         if (!selectedIsoDirs.empty()) {
