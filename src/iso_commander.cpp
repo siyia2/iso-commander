@@ -1557,7 +1557,7 @@ void unmountISOs() {
 				clearScrollBuffer();
                 isFiltered = true;
                 listMountedISOs();
-                char* filterPattern = readline("\n\033[1;92mFilterPattern\033[1;94m ↵ for \033[1;93mumount\033[1;94m (case-insensitive, length > 4), or ↵ to return:\033[0m\033[1m ");
+                char* filterPattern = readline("\n\033[1;92mSearchQuery\033[1;94m ↵ to filter list (case-insensitive, length > 4), or ↵ to return: \033[0m\033[1m");
                 if (std::isspace(filterPattern[0]) || filterPattern[0] == '\0') {
                     skipEnter = true;
                     break;
