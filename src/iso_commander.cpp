@@ -1322,45 +1322,55 @@ bool isAlreadyMounted(const std::string& mountPoint) {
 
 // Function to list mounted ISOs in the /mnt directory
 void listMountedISOs() {
+    // Path where ISO directories are expected to be mounted
     const std::string isoPath = "/mnt";
+
+    // Vector to store names of mounted ISOs
     static std::mutex mtx;
     std::vector<std::string> isoDirs;
 
+    // Lock mutex for accessing shared resource
     std::lock_guard<std::mutex> lock(mtx);
 
+    // Open the /mnt directory and find directories with names starting with "iso_"
     DIR* dir;
     struct dirent* entry;
+
     if ((dir = opendir(isoPath.c_str())) != NULL) {
         while ((entry = readdir(dir)) != NULL) {
+            // Check if the entry is a directory and has a name starting with "iso_"
             if (entry->d_type == DT_DIR && std::string(entry->d_name).find("iso_") == 0) {
+                // Build the full path and extract the ISO name
                 std::string fullDirPath = isoPath + "/" + entry->d_name;
-                std::string isoName = entry->d_name + 4;
+                std::string isoName = entry->d_name + 4; // Remove "/mnt/iso_" part
                 isoDirs.push_back(isoName);
             }
         }
         closedir(dir);
     } else {
+        // Print an error message if there is an issue opening the /mnt directory
         std::cerr << "\033[1;91mError opening the /mnt directory.\033[0m\033[1m" << std::endl;
         return;
     }
 
+    // Display a list of mounted ISOs with ISO names in bold and alternating colors
     if (!isoDirs.empty()) {
-        std::cout << "\033[0m\033[1mList of mounted ISO(s):\033[0m\033[1m" << std::endl;
+        std::cout << "\033[1mList of mounted ISO(s):\033[0m\033[1m" << std::endl; // White and bold
         std::cout << " " << std::endl;
 
-        // Sort the vector of ISO names
-        std::sort(isoDirs.begin(), isoDirs.end());
+        bool useRedColor = true; // Start with red color for sequence numbers
 
-        bool useRedColor = true;
         for (size_t i = 0; i < isoDirs.size(); ++i) {
+            // Determine color based on alternating pattern
             std::string sequenceColor = (useRedColor) ? "\033[31;1m" : "\033[32;1m";
-            useRedColor = !useRedColor;
+            useRedColor = !useRedColor; // Toggle between red and green
 
+            // Print sequence number with the determined color
             std::cout << sequenceColor << std::setw(2) << i + 1 << ". ";
+
+            // Print ISO directory path in bold and magenta
             std::cout << "\033[0m\033[1m/mnt/iso_\033[1m\033[95m" << isoDirs[i] << "\033[0m\033[1m" << std::endl;
         }
-    } else {
-        std::cout << "\033[0m\033[1mNo mounted ISOs found.\033[0m\033[1m" << std::endl;
     }
 }
 
@@ -1499,13 +1509,6 @@ void unmountISO(const std::vector<std::string>& isoDirs) {
 }
 
 
-// Function to check if a given index is within the valid range of available ISOs
-bool isValidIndex(int index, size_t isoDirsSize) {
-    // Use size_t for the comparison to avoid signed/unsigned comparison warnings
-    return (index >= 1) && (static_cast<size_t>(index) <= isoDirsSize);
-}
-
-
 // Main function for unmounting ISOs
 void unmountISOs() {
     std::set<std::string> uniqueErrorMessages;
@@ -1592,60 +1595,60 @@ void unmountISOs() {
 
                         char* chosenNumbers = readline("\n\033[1;92mISO(s)\033[1;94m ↵ for \033[1;93mumount\033[1;94m (e.g., '1-3', '1 5', '00' for all), or ↵ to return:\033[0m\033[1m ");
 
-if (std::strcmp(chosenNumbers, "00") == 0) {
-    selectedIsoDirs = filteredIsoDirs;
-    break;
-}
+						if (std::strcmp(chosenNumbers, "00") == 0) {
+							selectedIsoDirs = filteredIsoDirs;
+							break;
+						}
 
-std::set<size_t> selectedIndices;
-std::istringstream iss(chosenNumbers);
-for (std::string token; iss >> token;) {
-    try {
-        size_t dashPos = token.find('-');
-        if (dashPos != std::string::npos) {
-            size_t start = std::stoi(token.substr(0, dashPos)) - 1;
-            size_t end = std::stoi(token.substr(dashPos + 1)) - 1;
-            if (start < filteredIsoDirs.size() && end < filteredIsoDirs.size()) {
-                for (size_t i = std::min(start, end); i <= std::max(start, end); ++i) {
-                    selectedIndices.insert(i);
-                }
-            } else {
-                // Handle the case where the range is invalid
-                errorMessages.push_back("Invalid range: '" + token + "'.");
-                invalidInput = true;
-            }
-        } else {
-            size_t index = std::stoi(token) - 1;
-            if (index < filteredIsoDirs.size()) {
-                selectedIndices.insert(index);
-            } else {
-                // Handle the case where the index is out of bounds
-                errorMessages.push_back("Index out of bounds: '" + token + "'.");
-                invalidInput = true;
-            }
-        }
-    } catch (const std::invalid_argument&) {
-        errorMessages.push_back("Invalid input: '" + token + "'.");
-        invalidInput = true;
-    }
-}
+						std::set<size_t> selectedIndices;
+						std::istringstream iss(chosenNumbers);
+						for (std::string token; iss >> token;) {
+							try {
+								size_t dashPos = token.find('-');
+								if (dashPos != std::string::npos) {
+									size_t start = std::stoi(token.substr(0, dashPos)) - 1;
+									size_t end = std::stoi(token.substr(dashPos + 1)) - 1;
+										if (start < filteredIsoDirs.size() && end < filteredIsoDirs.size()) {
+											for (size_t i = std::min(start, end); i <= std::max(start, end); ++i) {
+												selectedIndices.insert(i);
+											}
+										} else {
+											// Handle the case where the range is invalid
+											errorMessages.push_back("Invalid range: '" + token + "'.");
+											invalidInput = true;
+										}
+								} else {
+									size_t index = std::stoi(token) - 1;
+									if (index < filteredIsoDirs.size()) {
+										selectedIndices.insert(index);
+									} else {
+										// Handle the case where the index is out of bounds
+										errorMessages.push_back("Index out of bounds: '" + token + "'.");
+										invalidInput = true;
+									}
+								}
+							} catch (const std::invalid_argument&) {
+								errorMessages.push_back("Invalid input: '" + token + "'.");
+								invalidInput = true;
+							}
+						}
 
-selectedIsoDirsFiltered.clear();
-for (size_t index : selectedIndices) {
-    selectedIsoDirsFiltered.push_back(filteredIsoDirs[index]);
-}
+						selectedIsoDirsFiltered.clear();
+						for (size_t index : selectedIndices) {
+							selectedIsoDirsFiltered.push_back(filteredIsoDirs[index]);
+						}
 
-if (!selectedIsoDirsFiltered.empty()) {
-    selectedIsoDirs = selectedIsoDirsFiltered;
-    isFiltered = true;
-    break; // Exit filter loop to process unmount
-} else {
-    clearScrollBuffer();
-    std::cerr << "\n\033[1;91mNo valid selection(s) for umount.\n";
-    std::cout << "\n\033[1;32m↵ to continue...";
-    std::cin.get();
-}
-}
+						if (!selectedIsoDirsFiltered.empty()) {
+							selectedIsoDirs = selectedIsoDirsFiltered;
+							isFiltered = true;
+							break; // Exit filter loop to process unmount
+						} else {
+							clearScrollBuffer();
+							std::cerr << "\n\033[1;91mNo valid selection(s) for umount.\n";
+							std::cout << "\n\033[1;32m↵ to continue...";
+							std::cin.get();
+						}
+					}
                 } else {
 					clearScrollBuffer();
                     std::cout << "\n\033[1;91mFilterPattern must be longer than 4 characters.\n";
@@ -1655,56 +1658,54 @@ if (!selectedIsoDirsFiltered.empty()) {
             }
         }
 
-        if (std::strcmp(input, "00") == 0) {
-    selectedIsoDirs = isoDirs;
-} else if (!isFiltered) {
-    std::set<size_t> selectedIndices;
-    std::istringstream iss(input);
-    for (std::string token; iss >> token;) {
-        if (token == "00") {
-            // If "00" is found, ignore other tokens
-            selectedIsoDirs = isoDirs;
-            break;
-        }
-        try {
-            size_t dashPos = token.find('-');
-            if (dashPos != std::string::npos) {
-                size_t start = std::stoi(token.substr(0, dashPos)) - 1;
-                size_t end = std::stoi(token.substr(dashPos + 1)) - 1;
-                if (start < isoDirs.size() && end < isoDirs.size()) {
-                    for (size_t i = std::min(start, end); i <= std::max(start, end); ++i) {
-                        selectedIndices.insert(i);
-                    }
-                } else {
-                    // Handle the case where the range is invalid
-                    errorMessages.push_back("Invalid range: '" + token + "'.");
-                    invalidInput = true;
-                }
-            } else {
-                size_t index = std::stoi(token) - 1;
-                if (index < isoDirs.size()) {
-                    selectedIndices.insert(index);
-                } else {
-                    // Handle the case where the index is out of bounds
-                    errorMessages.push_back("Index out of bounds: '" + token + "'.");
-                    invalidInput = true;
-                }
-            }
-        } catch (const std::invalid_argument&) {
-            errorMessages.push_back("Invalid input: '" + token + "'.");
-            invalidInput = true;
-        }
-    }
+		if (std::strcmp(input, "00") == 0) {
+			selectedIsoDirs = isoDirs;
+		} else if (!isFiltered) {
+			std::set<size_t> selectedIndices;
+			std::istringstream iss(input);
+			for (std::string token; iss >> token;) {
+				if (token == "00" && selectedIndices.size() != 0) {
+					return;
+				}
+			try {
+				size_t dashPos = token.find('-');
+				if (dashPos != std::string::npos) {
+					size_t start = std::stoi(token.substr(0, dashPos)) - 1;
+					size_t end = std::stoi(token.substr(dashPos + 1)) - 1;
+					if (start < isoDirs.size() && end < isoDirs.size()) {
+						for (size_t i = std::min(start, end); i <= std::max(start, end); ++i) {
+							selectedIndices.insert(i);
+						}
+				} else {
+					// Handle the case where the range is invalid
+					errorMessages.push_back("Invalid range: '" + token + "'.");
+					invalidInput = true;
+				}
+			} else {
+				size_t index = std::stoi(token) - 1;
+				if (index < isoDirs.size()) {
+					selectedIndices.insert(index);
+				} else {
+					// Handle the case where the index is out of bounds
+					errorMessages.push_back("Index out of bounds: '" + token + "'.");
+					invalidInput = true;
+				}
+			}
+		} catch (const std::invalid_argument&) {
+			errorMessages.push_back("Invalid input: '" + token + "'.");
+			invalidInput = true;
+		}
+	}
 
-    if (!selectedIndices.empty()) {
+		if (!selectedIndices.empty()) {
         for (size_t index : selectedIndices) {
             selectedIsoDirs.push_back(isoDirs[index]);
         }
-    } else {
-        clearScrollBuffer();
-        std::cerr << "\n\033[1;91mNo valid selection(s) for umount.\n";
-    }
-}
+		} else {
+			clearScrollBuffer();
+			std::cerr << "\n\033[1;91mNo valid selection(s) for umount.\n";
+		}
+	}
 
 
         if (!selectedIsoDirs.empty()) {

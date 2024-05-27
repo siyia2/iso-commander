@@ -213,7 +213,6 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
 
 // Unmount functions
 bool isDirectoryEmpty(const std::string& path);
-bool isValidIndex(int index, size_t isoDirsSize);
 
 // General functions
 bool isAllZeros(const std::string& str);
@@ -239,10 +238,6 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 void removeNonExistentPathsFromCache();
 
 // Unmount functions
-void printUnmountedFilesAndErrors(std::vector<std::string>& unmountedFiles,
-                                  std::vector<std::string>& unmountedErrors,
-                                  bool invalidInput,
-                                  std::set<std::string>& uniqueErrorMessages);
 void filterAndUnmountISOs(const std::vector<std::string>& isoDirs, std::vector<std::string>& selectedIsoDirs, bool validFilterPattern, bool skipEnter, bool invalidInput, bool isFiltering);
 void listMountedISOs();
 void unmountISOs();
