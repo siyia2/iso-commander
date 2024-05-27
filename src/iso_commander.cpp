@@ -1353,6 +1353,18 @@ void listMountedISOs() {
         return;
     }
 
+    // Sort ISO directory names alphabetically in a case-insensitive manner
+    std::sort(isoDirs.begin(), isoDirs.end(), [](const std::string& a, const std::string& b) {
+        // Convert both strings to lowercase before comparison
+        std::string lowerA = a;
+        std::transform(lowerA.begin(), lowerA.end(), lowerA.begin(), [](unsigned char c) { return std::tolower(c); });
+
+        std::string lowerB = b;
+        std::transform(lowerB.begin(), lowerB.end(), lowerB.begin(), [](unsigned char c) { return std::tolower(c); });
+
+        return lowerA < lowerB;
+    });
+
     // Display a list of mounted ISOs with ISO names in bold and alternating colors
     if (!isoDirs.empty()) {
         std::cout << "\033[1mList of mounted ISO(s):\033[0m\033[1m" << std::endl; // White and bold
@@ -1528,12 +1540,27 @@ void unmountISOs() {
 
         {
             std::lock_guard<std::mutex> lock(isoDirsMutex);
-            for (const auto& entry : std::filesystem::directory_iterator(isoPath)) {
-                if (entry.is_directory() && entry.path().filename().string().find("iso_") == 0) {
-                    isoDirs.push_back(entry.path().string());
-                }
+        // Populate isoDirs and sort it alphabetically based on substrings after the last '/'
+        for (const auto& entry : std::filesystem::directory_iterator(isoPath)) {
+            if (entry.is_directory() && entry.path().filename().string().find("iso_") == 0) {
+                isoDirs.push_back(entry.path().string());
             }
         }
+        // Sort isoDirs alphabetically based on substrings after the last '/'
+        std::sort(isoDirs.begin(), isoDirs.end(), [](const std::string& a, const std::string& b) {
+            // Find the position of the last '/'
+            size_t lastSlashA = a.find_last_of('/');
+            size_t lastSlashB = b.find_last_of('/');
+
+            // Extract substrings after the last '/'
+            std::string subA = a.substr(lastSlashA + 1);
+            std::string subB = b.substr(lastSlashB + 1);
+
+            // Compare the substrings (case-insensitive)
+            return std::lexicographical_compare(subA.begin(), subA.end(), subB.begin(), subB.end(),
+                                                 [](char a, char b) { return std::tolower(a) < std::tolower(b); });
+        });
+    }
 
         if (isoDirs.empty()) {
 			std::cerr << "\033[1;93mNo mounted ISO(s) found.\033[0m\033[1m" << std::endl;
