@@ -1612,7 +1612,11 @@ void unmountISOs() {
 
         // Check if the user wants to filter the list of ISOs
         if (strcmp(input, "/") == 0) {
+			bool breakOuterLoop = false;
             while (true) {
+				if (breakOuterLoop) {
+							break;
+				}
                 clearScrollBuffer();
                 isFiltered = true;
                 char* filterPattern = readline("\n\033[1;92mSearchQuery\033[1;94m ↵ to filter \033[1;93mumount\033[1;94m list (case-insensitive), or ↵ to return: \033[0m\033[1m");
@@ -1667,6 +1671,8 @@ void unmountISOs() {
 
                         if (std::strcmp(chosenNumbers, "00") == 0) {
                             selectedIsoDirs = filteredIsoDirs;
+                            isFiltered = true;
+                            breakOuterLoop = true;
                             break;
                         }
 
@@ -1697,8 +1703,8 @@ void unmountISOs() {
                                     }
                                 }
                             } catch (const std::invalid_argument&) {
-                                errorMessages.push_back("Invalid input: '" + token + "'.");
-                                invalidInput = true;
+									errorMessages.push_back("Invalid input: '" + token + "'.");
+									invalidInput = true;
                             }
                         }
 
@@ -1722,6 +1728,7 @@ void unmountISOs() {
                 }
 
                 if (!selectedIsoDirsFiltered.empty() && isFiltered) {
+					isFiltered = true;
                     break;
                 }
             }
