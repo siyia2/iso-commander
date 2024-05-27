@@ -1551,7 +1551,7 @@ void unmountISOs() {
     std::vector<std::string> isoDirs;
     std::mutex isoDirsMutex;
     const std::string isoPath = "/mnt";
-    bool invalidInput = false, skipEnter = false, isFiltered = false;
+    bool invalidInput = false, skipEnter = false, isFiltered = false, noValid=true;
     const int maxThreads = std::thread::hardware_concurrency();
 
     while (true) {
@@ -1610,7 +1610,9 @@ void unmountISOs() {
                 isFiltered = true;
                 char* filterPattern = readline("\n\033[1;92mSearchQuery\033[1;94m ↵ to filter \033[1;93mumount\033[1;94m list (case-insensitive, length > 4), or ↵ to return: \033[0m\033[1m");
                 if (std::isspace(filterPattern[0]) || filterPattern[0] == '\0') {
-                    skipEnter = true;
+                    skipEnter = false;
+                    isFiltered = false;
+                    noValid = false;
                     break;
                 }
                 std::string filterPatternStr(filterPattern);
@@ -1650,6 +1652,7 @@ void unmountISOs() {
                         char* chosenNumbers = readline("\n\033[1;92mISO(s)\033[1;94m ↵ for \033[1;93mumount\033[1;94m (e.g., '1-3', '1 5', '00' for all), or ↵ to return:\033[0m\033[1m ");
                         
                         if (std::isspace(chosenNumbers[0]) ||chosenNumbers[0] == '\0') {
+							noValid=false;
 							skipEnter = true;
 							break;
 						}
@@ -1774,9 +1777,12 @@ void unmountISOs() {
 				}
 			} else {
 				clearScrollBuffer();
-				std::cerr << "\n\033[1;91mNo valid selection(s) for umount.\n";
-				std::cout << "\n\033[1;32m↵ to continue...";
-				std::cin.get();
+				if (noValid) {
+					std::cerr << "\n\033[1;91mNo valid selection(s) for umount.\n";
+					std::cout << "\n\033[1;32m↵ to continue...";
+					std::cin.get();
+				}
+				noValid = true;
 			}
 		}
 
