@@ -1710,7 +1710,7 @@ void unmountISOs() {
 							break; // Exit filter loop to process unmount
 						} else {
 							clearScrollBuffer();
-							std::cerr << "\n\033[1;91mNo valid selection(s) for umount.\n";
+							std::cerr << "\n\033[1;91mNo valid input provided for umount.\n";
 							std::cout << "\n\033[1;32m↵ to continue...";
 							std::cin.get();
 							}
@@ -1775,7 +1775,7 @@ void unmountISOs() {
 			} else {
 				clearScrollBuffer();
 				if (noValid) {
-					std::cerr << "\n\033[1;91mNo valid selection(s) for umount.\n";
+					std::cerr << "\n\033[1;91mNo valid input provided for umount.\n";
 					std::cout << "\n\033[1;32m↵ to continue...";
 					std::cin.get();
 				}
