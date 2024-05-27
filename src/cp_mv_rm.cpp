@@ -313,6 +313,10 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0m\033[1m");
         }
     }
+    
+    if (!uniqueErrorMessages.empty()) {
+        std::cout << " " << std::endl;
+    }
 
     // Display unique errors at the end
     if (invalidInput) {
@@ -326,7 +330,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     }
 
     if (validIndices.empty()) {
-        std::cout << "\033[1;91mNo valid selections to be " << operationDescription << ".\033[1;91m" << std::endl;
+        std::cout << "\n\033[1;91mNo valid selections to be " << operationDescription << ".\033[1;91m" << std::endl;
         std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
         std::cin.get();
         clear_history();
@@ -343,15 +347,17 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     if (!isDelete) {
         while (true) {
 			clearScrollBuffer();
+			
+			if (!uniqueErrorMessages.empty()) {
+            std::cout << " " << std::endl;
+			}
             
             for (const auto& uniqueErrorMessage : uniqueErrorMessages) {
             std::cout << uniqueErrorMessage << std::endl;
 			}
-			if (!uniqueErrorMessages.empty()) {
-            std::cout << " " << std::endl;
-			}
+			
 			if (validIndices.empty()) {
-			std::cout << "\033[1;91mNo valid selections to be " << operationDescription << ".\033[1;91m" << std::endl;
+			std::cout << "\n\033[1;91mNo valid selections to be " << operationDescription << ".\033[1;91m" << std::endl;
 			std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
             std::cin.get();
             clear_history();
@@ -360,8 +366,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 				
 
             // Display selected operations
-            std::cout << "\033[1;94mThe following ISO(s) will be " << operationColor + operationDescription << " \033[1;94mto ?\033[1;93m" << userDestDir << "\033[1;94m:\033[0m\033[1m" << std::endl;
-            std::cout << " " << std::endl;
+            std::cout << "\n\033[1;94mThe following ISO(s) will be " << operationColor + operationDescription << " \033[1;94mto ?\033[1;93m" << userDestDir << "\033[1;94m:\n\033[0m\033[1m" << std::endl;
             for (const auto& chunk : indexChunks) {
                 for (const auto& index : chunk) {
                     auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFiles[index - 1]);
@@ -390,8 +395,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             }
         }
     } else {
-        std::cout << "\033[1;94mThe following ISO(s) will be "<< operationColor + operationDescription << "\033[1;94m:\033[0m\033[1m" << std::endl;
-        std::cout << " " << std::endl;
+        std::cout << "\033[1;94mThe following ISO(s) will be "<< operationColor + operationDescription << "\033[1;94m:\n\033[0m\033[1m" << std::endl;
         for (const auto& chunk : indexChunks) {
             for (const auto& index : chunk) {
                 auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFiles[index - 1]);
@@ -400,17 +404,14 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         }
 
         if (!uniqueErrorMessages.empty() && indexChunks.empty()) {
-            std::cout << " " << std::endl;
-            std::cout << "\033[1;91mNo valid selection(s) for deletion.\033[0m\033[1m" << std::endl;
+            std::cout << "\n\033[1;91mNo valid selection(s) for deletion.\033[0m\033[1m" << std::endl;
         } else {
             std::string confirmation;
-            std::cout << " " << std::endl;
-            std::cout << "\033[1;94mDo you want to proceed? (y/n):\033[0m\033[1m ";
+            std::cout << "\n\033[1;94mDo you want to proceed? (y/n):\033[0m\033[1m ";
             std::getline(std::cin, confirmation);
 
             if (!(confirmation == "y" || confirmation == "Y")) {
-                std::cout << " " << std::endl;
-                std::cout << "\033[1;93mDelete operation aborted by user.\033[0m\033[1m" << std::endl;
+                std::cout << "\n\033[1;93mDelete operation aborted by user.\033[0m\033[1m" << std::endl;
 				std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
 				std::cin.get();
                 return;
