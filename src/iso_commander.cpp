@@ -1560,10 +1560,45 @@ void printUnmountedAndErrors(bool invalidInput) {
     uniqueErrorMessages.clear();
 }
 
+
+// Function to unmount ISO directories in parallel
+void unmountIsoDirsParallel(const std::vector<std::string>& selectedIsoDirs, std::mutex& isoDirsMutex) {
+    if (selectedIsoDirs.empty())
+        return;
+
+    std::vector<std::future<void>> futures;
+    // Detect and use the minimum of available threads and selectedIsoDirs to ensure efficient parallelism
+    unsigned int numThreads = std::min(static_cast<int>(selectedIsoDirs.size()), static_cast<int>(maxThreads));
+    // Create a ThreadPool with optimized size
+    ThreadPool pool(numThreads);
+    std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
+
+    // Divide selectedIsoDirs into batches based on maxThreads
+    size_t batchSize = (selectedIsoDirs.size() + maxThreads - 1) / maxThreads;
+    std::vector<std::vector<std::string>> batches;
+    for (size_t i = 0; i < selectedIsoDirs.size(); i += batchSize) {
+        batches.emplace_back(selectedIsoDirs.begin() + i, std::min(selectedIsoDirs.begin() + i + batchSize, selectedIsoDirs.end()));
+    }
+
+    // Enqueue unmounting tasks for all batches
+    for (const auto& batch : batches) {
+        futures.emplace_back(pool.enqueue([batch]() {
+            std::lock_guard<std::mutex> highLock(Mutex4High); // Assuming Mutex4High is a global mutex
+            unmountISO(batch); // Assuming unmountISO function exists
+        }));
+    }
+
+    // Wait for all tasks to complete
+    for (auto& future : futures) {
+        future.wait();
+    }
+}
+
+
 // Main function for unmounting ISOs
 void unmountISOs() {
     std::vector<std::string> isoDirs;
-    std::mutex isoDirsMutex, errorMessagesMutex, uniqueErrorMessagesMutex;
+    std::mutex isoDirsMutex;
     const std::string isoPath = "/mnt";
     bool invalidInput = false, skipEnter = false, isFiltered = false;
     const int maxThreads = std::thread::hardware_concurrency();
@@ -1818,9 +1853,6 @@ void unmountISOs() {
 			for (auto& future : futures) {
 				future.wait();
 			}
-			
-			// Lock access to error messages
-			std::lock_guard<std::mutex> errorMessagesLock(errorMessagesMutex);
 
             printUnmountedAndErrors(invalidInput);
 
