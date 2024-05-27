@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
 
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("3.1.2");
+        printVersionNumber("3.1.3");
         return 0;
     }
 
