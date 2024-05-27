@@ -248,26 +248,23 @@ void printMenu() {
 
 // GENERAL STUFF
 
-// Helper function for filterIsoFiles
-std::string toLower(const std::string& str) {
-    std::string lowerStr = str;
-    std::transform(lowerStr.begin(), lowerStr.end(), lowerStr.begin(), ::tolower);
-    return lowerStr;
-}
-
-
 // Function to filter files based on search query (case-insensitive)
 std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query) {
     std::vector<std::string> filteredFiles;
-    std::string lowerQuery = toLower(query);
+    std::string lowerQuery(query);
+    std::transform(lowerQuery.begin(), lowerQuery.end(), lowerQuery.begin(), ::tolower);
 
     for (const std::string& file : files) {
         size_t lastSlashPos = file.find_last_of('/');
         std::string fileName = (lastSlashPos != std::string::npos) ? file.substr(lastSlashPos + 1) : file;
-        if (toLower(fileName).find(lowerQuery) != std::string::npos) {
+        std::string lowerFileName(fileName);
+        std::transform(lowerFileName.begin(), lowerFileName.end(), lowerFileName.begin(), ::tolower);
+
+        if (lowerFileName.find(lowerQuery) != std::string::npos) {
             filteredFiles.push_back(file);
         }
     }
+
     return filteredFiles;
 }
 

@@ -238,6 +238,7 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 void removeNonExistentPathsFromCache();
 
 // Unmount functions
+void printUnmountedAndErrors(bool invalidInput);
 void filterAndUnmountISOs(const std::vector<std::string>& isoDirs, std::vector<std::string>& selectedIsoDirs, bool validFilterPattern, bool skipEnter, bool invalidInput, bool isFiltering);
 void listMountedISOs();
 void unmountISOs();
