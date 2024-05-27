@@ -1692,7 +1692,7 @@ void unmountISOs() {
                     std::cin.get();
                 }
 				
-				if (!selectedIsoDirsFiltered.empty() && isFiltered && !skipEnter) {
+				if (!selectedIsoDirsFiltered.empty() && isFiltered) {
 					break;
 				}
             }
@@ -1749,20 +1749,31 @@ void unmountISOs() {
 
 
         if (!selectedIsoDirs.empty()) {
-            unsigned int numThreads = std::min(static_cast<int>(selectedIsoDirs.size()), maxThreads);
-            std::vector<std::future<void>> futures;
-            ThreadPool pool(numThreads);
+			std::vector<std::future<void>> futures;
+            // Detect and use the minimum of available threads and selectedIsoDirs to ensure efficient parallelism
+			unsigned int numThreads = std::min(static_cast<int>(selectedIsoDirs.size()), static_cast<int>(maxThreads));
+			// Create a ThreadPool with optimized size
+			ThreadPool pool(numThreads);
+			std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
 
-            size_t batchSize = (selectedIsoDirs.size() + maxThreads - 1) / maxThreads;
-            for (size_t i = 0; i < selectedIsoDirs.size(); i += batchSize) {
-                std::vector<std::string> batch(selectedIsoDirs.begin() + i, std::min(selectedIsoDirs.begin() + i + batchSize, selectedIsoDirs.end()));
-                futures.emplace_back(pool.enqueue([batch]() {
-                    unmountISO(batch);
-                }));
-            }
-            for (auto& future : futures) {
-                future.wait();
-            }
+			// Divide selectedIsoDirs into batches based on maxThreads
+			size_t batchSize = (selectedIsoDirs.size() + maxThreads - 1) / maxThreads;
+			std::vector<std::vector<std::string>> batches;
+			for (size_t i = 0; i < selectedIsoDirs.size(); i += batchSize) {
+				batches.emplace_back(selectedIsoDirs.begin() + i, std::min(selectedIsoDirs.begin() + i + batchSize, selectedIsoDirs.end()));
+			}
+
+			// Enqueue unmounting tasks for all batches
+			for (const auto& batch : batches) {
+				futures.emplace_back(pool.enqueue([batch]() {
+					std::lock_guard<std::mutex> highLock(Mutex4High);
+					unmountISO(batch);
+				}));
+			}
+
+			for (auto& future : futures) {
+				future.wait();
+			}
 
             clearScrollBuffer();
             if (!unmountedFiles.empty()) {
