@@ -1735,9 +1735,6 @@ void unmountISOs() {
 			std::set<size_t> selectedIndices;
 			std::istringstream iss(input);
 			for (std::string token; iss >> token;) {
-				if (token == "00" && selectedIndices.size() != 0) {
-					return;
-				}
 			try {
 				size_t dashPos = token.find('-');
 				if (dashPos != std::string::npos) {
