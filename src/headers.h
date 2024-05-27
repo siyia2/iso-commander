@@ -225,6 +225,7 @@ bool isNumeric(const std::string& str);
 void clearScrollBuffer();
 
 // Mount functions
+void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet, std::vector<std::string>& isoFilesToMount, unsigned int maxThreads, bool allFiltered, bool verboseFiltered);
 void verbose(std::vector<std::string>& mountedFiles,std::vector<std::string>& skippedMessages,std::vector<std::string>& errorMessages,std::unordered_set<std::string>& uniqueErrorMessages);
 void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordered_set<std::string>& mountedSet);
 void select_and_mount_files_by_number();
@@ -238,6 +239,11 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 void removeNonExistentPathsFromCache();
 
 // Unmount functions
+void printUnmountedFilesAndErrors(std::vector<std::string>& unmountedFiles,
+                                  std::vector<std::string>& unmountedErrors,
+                                  bool invalidInput,
+                                  std::set<std::string>& uniqueErrorMessages);
+void filterAndUnmountISOs(const std::vector<std::string>& isoDirs, std::vector<std::string>& selectedIsoDirs, bool validFilterPattern, bool skipEnter, bool invalidInput, bool isFiltering);
 void listMountedISOs();
 void unmountISOs();
 void unmountISO(const std::vector<std::string>& isoDirs);
