@@ -1588,7 +1588,7 @@ void unmountISOs() {
     }
 
         if (isoDirs.empty()) {
-			std::cerr << "\033[1;93mNo folder(s) matching the '/mnt/iso_*' format found.\033[0m\033[1m" << std::endl;
+			std::cerr << "\033[1;93mNo path(s) matching the '/mnt/iso_*' pattern found.\033[0m\033[1m" << std::endl;
 			std::cout << "\n\033[1;32m↵ to continue...";
             std::cin.get();
             return;
