@@ -12,7 +12,7 @@ For best experience execute with: `sudo isocmd`.
 Features:
 * Cached ISO management for reduced disk thrashing.
 * Utilizes GNU/Linux utilities: rm,rmdir,cp,mv,libmount,umount,find.
-* Tab completion and history support.
+* Tab completion and history support for path searching.
 * Sanitized shell commands for improved security.
 * Ultra lightweight with no reliance on ncurses or external libraries for terminal control.
 * Multithreaded asynchronous operations based on unique valid indices and max available system cores.
