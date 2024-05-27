@@ -991,6 +991,7 @@ void select_and_mount_files_by_number() {
 }
 
 
+// Function to print mount verbose messages
 void verbose(std::vector<std::string>& mountedFiles,std::vector<std::string>& skippedMessages,std::vector<std::string>& errorMessages,std::unordered_set<std::string>& uniqueErrorMessages) {
     if (!mountedFiles.empty()) {
         std::cout << " " << std::endl;
