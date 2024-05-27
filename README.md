@@ -14,7 +14,7 @@ Features:
 * Utilizes GNU/Linux utilities: rm,rmdir,cp,mv,libmount,umount,find.
 * Tab completion and history support for path searching.
 * Sanitized shell commands for improved security.
-* Ultra lightweight with no reliance on ncurses or external libraries for terminal control.
+* Ultra lightweight with no reliance on ncurses or any other external libraries for terminal control.
 * Multithreaded asynchronous operations based on unique valid indices and max available system cores.
 * Capable of seamlessly handling anywhere from 1 to an astonishing 100,000 ISO files.
 * Support for BIN/IMG/MDF conversion to ISO by utilizing ccd2iso and mdf2iso.
