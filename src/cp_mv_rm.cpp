@@ -94,7 +94,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
         printIsoFileList(isoFiles);
 
         // Prompt user for input or filter
-        char* input = readline(("\n\033[1;94mISO(s) ↵ for " + operationColor + operation + "\033[1;94m (e.g., '1-3', '1 5'), / ↵ to filter, or ↵ to return:\033[0m\033[1m ").c_str());
+        char* input = readline(("\n\033[1;92mISO(s)\033[1;94m ↵ for " + operationColor + operation + "\033[1;94m (e.g., '1-3', '1 5'), / ↵ to filter, or ↵ to return:\033[0m\033[1m ").c_str());
         clearScrollBuffer();
 
         // Check if the user wants to return
@@ -107,7 +107,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
             clearScrollBuffer();
 
             // User pressed '/', start the filtering process
-            char* searchQuery = readline("\n\033[1;92mSearchQuery\033[1;94m ↵ to filter list (case-insensitive), or ↵ to return: \033[0m\033[1m");
+            char* searchQuery = readline(("\n\033[1;92mSearchQuery\033[1;94m ↵ to filter " + operationColor + operation + " \033[1;94mlist (case-insensitive), or ↵ to return: \033[0m\033[1m").c_str());
             clearScrollBuffer();
 			std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
@@ -131,7 +131,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 						printIsoFileList(filteredFiles); // Print the filtered list of ISO files
 
 						// Prompt user for input again with the filtered list
-						char* input = readline(("\n\033[1;94mISO(s) ↵ for " + operationColor + operation + "\033[1;94m (e.g., '1-3', '1 5'), or ↵ to return:\033[0m\033[1m ").c_str());
+						char* input = readline(("\n\033[1;92mISO(s)\033[1;94m ↵ for " + operationColor + operation + "\033[1;94m (e.g., '1-3', '1 5'), or ↵ to return:\033[0m\033[1m ").c_str());
                     
 						// Check if the user wants to return
 						if (std::isspace(input[0]) || input[0] == '\0') {

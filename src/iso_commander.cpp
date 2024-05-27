@@ -871,7 +871,7 @@ void select_and_mount_files_by_number() {
         printIsoFileList(isoFiles);
 
         // Prompt user for input
-        char* input = readline("\n\033[1;94mISO(s) ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5', '00' for all), / ↵ to filter, or ↵ to return:\033[0m\033[1m ");
+        char* input = readline("\n\033[1;92mISO(s)\033[1;94m ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5', '00' for all), / ↵ to filter, or ↵ to return:\033[0m\033[1m ");
         clearScrollBuffer();
         std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
         // Start the timer
@@ -888,7 +888,7 @@ void select_and_mount_files_by_number() {
 			clearScrollBuffer();
         
 			// User pressed '/', start the filtering process
-			char* searchQuery = readline("\n\033[1;92mSearchQuery\033[1;94m ↵ to filter list (case-insensitive), or ↵ to return: \033[0m\033[1m");
+			char* searchQuery = readline("\n\033[1;92mSearchQuery\033[1;94m ↵ to filter \033[1;92mmount\033[1;94m list (case-insensitive), or ↵ to return: \033[0m\033[1m");
 			clearScrollBuffer();
 			std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
@@ -913,7 +913,7 @@ void select_and_mount_files_by_number() {
 						printIsoFileList(filteredFiles); // Print the filtered list of ISO files
 					
 						// Prompt user for input again with the filtered list
-						char* input = readline("\n\033[1;94mISO(s) ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5'), ↵ to return:\033[0m\033[1m ");
+						char* input = readline("\n\033[1;92mISO(s)\033[1;94m ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5'), ↵ to return:\033[0m\033[1m ");
 					
 						// Check if the user wants to return
 						if (std::isspace(input[0]) || input[0] == '\0') {
@@ -1346,7 +1346,7 @@ void listMountedISOs() {
 
     // Display a list of mounted ISOs with ISO names in bold and alternating colors
     if (!isoDirs.empty()) {
-        std::cout << "\033[1mList of mounted ISO(s):\033[0m\033[1m" << std::endl; // White and bold
+        std::cout << "\033[0m\033[1mList of mounted ISO(s):\033[0m\033[1m" << std::endl; // White and bold
         std::cout << " " << std::endl;
 
         bool useRedColor = true; // Start with red color for sequence numbers
@@ -1542,7 +1542,7 @@ void unmountISOs() {
             return;
         }
 
-        char* input = readline("\n\033[1;94mISO(s) ↵ for \033[1;93mumount\033[1;94m (e.g., '1-3', '1 5', '00' for all), / ↵ to filter\033[1;94m , or ↵ to return:\033[0m\033[1m ");
+        char* input = readline("\n\033[1;92mISO(s)\033[1;94m ↵ for \033[1;93mumount\033[1;94m (e.g., '1-3', '1 5', '00' for all), / ↵ to filter\033[1;94m , or ↵ to return:\033[0m\033[1m ");
         clearScrollBuffer();
         if (input[0] != '/') {
         std::cout << "Please wait...\n";
@@ -1556,8 +1556,7 @@ void unmountISOs() {
             while (true) {
 				clearScrollBuffer();
                 isFiltered = true;
-                listMountedISOs();
-                char* filterPattern = readline("\n\033[1;92mSearchQuery\033[1;94m ↵ to filter list (case-insensitive, length > 4), or ↵ to return: \033[0m\033[1m");
+                char* filterPattern = readline("\n\033[1;92mSearchQuery\033[1;94m ↵ to filter \033[1;93mumount\033[1;94m list (case-insensitive, length > 4), or ↵ to return: \033[0m\033[1m");
                 if (std::isspace(filterPattern[0]) || filterPattern[0] == '\0') {
                     skipEnter = true;
                     break;
@@ -1583,7 +1582,7 @@ void unmountISOs() {
                         clearScrollBuffer();
                     } else {
 						 clearScrollBuffer();
-                        std::cout << "\033[1;94mThe following mountpoint(s) match the\033[1;92m FilterPattern\033[1;94m:\033[0m\033[1m\n" << std::endl;
+                        std::cout << "\033[1mFiltered results:\n\033[0m\033[1m" << std::endl;
                         for (size_t i = 0; i < filteredIsoDirs.size(); ++i) {
 								std::string afterSlash = filteredIsoDirs[i].substr(filteredIsoDirs[i].find_last_of("/") + 1);
 								std::string afterUnderscore = afterSlash.substr(afterSlash.find("_") + 1);
@@ -1592,7 +1591,7 @@ void unmountISOs() {
 								std::cout << color << "\033[1m" << i + 1 << ".\033[0m\033[1m /mnt/iso_" << "\033[1;95m" << afterUnderscore << "\033[0m\033[1m" << std::endl;
 							}
 
-                        char* chosenNumbers = readline("\n\033[1;94mISO(s) ↵ for \033[1;93mumount\033[1;94m (e.g., '1-3', '1 5'), or ↵ to return:\033[0m\033[1m ");
+                        char* chosenNumbers = readline("\n\033[1;92mISO(s)\033[1;94m ↵ for \033[1;93mumount\033[1;94m (e.g., '1-3', '1 5'), or ↵ to return:\033[0m\033[1m ");
                         std::istringstream iss(chosenNumbers);
                         std::vector<int> chosenIndices;
                         for (std::string token; iss >> token;) {

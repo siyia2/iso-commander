@@ -30,7 +30,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         fileTypeName = "BIN/IMG";
     } else if (fileType == "mdf" || fileType == "mds") {
         fileExtension = ".mdf";
-        fileTypeName = "MDF/MDS";
+        fileTypeName = "MDF";
     } else {
         std::cout << "Invalid file type choice. Supported types: BIN/IMG, MDF/MDS" << std::endl;
         return;
@@ -69,7 +69,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
             flag = false;
             newFilesFound = true;
         });
-    } else if (fileType == "mdf" || fileType == "mds") {
+    } else if (fileType == "mdf") {
         files = findFiles(directoryPaths, "mdf", [&](const std::string& fileName, const std::string& filePath) {
             flag = true;
             newFilesFound = true;
@@ -111,7 +111,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         std::cout << " " << std::endl;
         clear_history();
 
-        std::string prompt = "\033[1;94m" + fileTypeName + " file(s) ↵ for conversion (e.g., '1-3', '1 5'), / ↵ to filter, or ↵ to return:\033[0m\033[1m ";
+        std::string prompt = "\033[1;38;5;208m" + fileTypeName + " \033[1;94mfile(s) ↵ for conversion (e.g., '1-3', '1 5'), / ↵ to filter, or ↵ to return:\033[0m\033[1m ";
         char* input = readline(prompt.c_str());
 
         if (std::isspace(input[0]) || input[0] == '\0') {
@@ -124,7 +124,13 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 				// Clear history
 				clear_history();
                 clearScrollBuffer();
-                char* searchQuery = readline("\n\033[1;92mSearchQuery\033[1;94m ↵ to filter list (case-insensitive), or ↵ to return: \033[0m\033[1m");
+                std::string prompt;
+				if (fileType == "bin" || fileType == "img") {
+					prompt = "\n\033[1;92mSearchQuery\033[1;94m ↵ to filter \033[1;38;5;208mBIN/IMG\033[1;94m list (case-insensitive), or ↵ to return: \033[0m\033[1m";
+				} else if (fileType == "mdf" || fileType == "mds") {
+					prompt = "\n\033[1;92mSearchQuery\033[1;94m ↵ to filter \033[1;38;5;208mMDF\033[1;94m conversion list (case-insensitive), or ↵ to return: \033[0m\033[1m";
+				}
+				char* searchQuery = readline(prompt.c_str());
                 clearScrollBuffer();
                 std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
@@ -145,7 +151,12 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 						std::cout << "\033[1mFiltered results:\n\033[0m\033[1m" << std::endl;
 						printFileList(filteredFiles);
 
-						std::string filterPrompt = "\n\033[1;94mFiltered file(s) ↵ for conversion (e.g., '1-3', '1 5'), or ↵ to return:\033[0m\033[1m ";
+						std::string filterPrompt;
+						if (fileType == "bin" || fileType == "img") {
+							filterPrompt = "\n\033[1;94mFiltered \033[1;38;5;208mBIN/IMG\033[1;94m file(s) ↵ for conversion (e.g., '1-3', '1 5'), or ↵ to return:\033[0m\033[1m ";
+						} else if (fileType == "mdf") {
+							filterPrompt = "\n\033[1;94mFiltered \033[1;38;5;208mMDF\033[1;94m file(s) ↵ for conversion (e.g., '1-3', '1 5'), or ↵ to return:\033[0m\033[1m ";
+						}
 						char* filterInput = readline(filterPrompt.c_str());
                     
 						// Check if the user wants to return
