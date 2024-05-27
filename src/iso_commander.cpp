@@ -1656,41 +1656,44 @@ void unmountISOs() {
 
 					while (iss >> token) {
 						try {
-						if (token.find('-') != std::string::npos) {
-							// Handle range
-							size_t dashPos = token.find('-');
-							int start = std::stoi(token.substr(0, dashPos));
-							int end = std::stoi(token.substr(dashPos + 1));
+							if (token.find('-') != std::string::npos) {
+								// Handle range
+								size_t dashPos = token.find('-');
+								int start = std::stoi(token.substr(0, dashPos));
+								int end = std::stoi(token.substr(dashPos + 1));
 
-							if (start > end) std::swap(start, end);
-
-							if (start > 0 && static_cast<size_t>(end) <= filteredIsoDirs.size()) {
-								for (int i = start; i <= end; ++i) {
-									chosenIndices.push_back(i - 1);
+								if (start > 0 && static_cast<size_t>(end) <= filteredIsoDirs.size() && start != end) {
+									if (start < end) {
+										for (int i = start; i <= end; ++i) {
+											chosenIndices.push_back(i - 1);
+										}
+									} else {
+										for (int i = start; i >= end; --i) {
+											chosenIndices.push_back(i - 1);
+										}
+									}
+								} else {
+									errorMessages.push_back("\033[1;91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0m\033[1m");
+									invalidInput = true;
 								}
 							} else {
-								errorMessages.push_back("\033[1;91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0m\033[1m");
-								invalidInput = true;
+								// Handle single number
+								int index = std::stoi(token);
+								if (index > 0 && static_cast<size_t>(index) <= filteredIsoDirs.size()) {
+									chosenIndices.push_back(index - 1);
+								} else {
+									errorMessages.push_back("\033[1;91mFile index: '" + token + "' does not exist.\033[0m\033[1m");
+									invalidInput = true;
+								}
 							}
-						} else {
-							// Handle single number
-							int index = std::stoi(token);
-							if (index > 0 && static_cast<size_t>(index) <= filteredIsoDirs.size()) {
-								chosenIndices.push_back(index - 1);
-							} else {
-								errorMessages.push_back("\033[1;91mFile index: '" + token + "' does not exist.\033[0m\033[1m");
-								invalidInput = true;
-							}
+						} catch (const std::invalid_argument& e) {
+							errorMessages.push_back("\033[1;91mInvalid input: '" + token + "'.\033[0m\033[1m");
+							invalidInput = true;
 						}
-					} catch (const std::invalid_argument& e) {
-						errorMessages.push_back("\033[1;91mInvalid input: '" + token + "'.\033[0m\033[1m");
-						invalidInput = true;
 					}
-				}
 
 							if (!chosenIndices.empty()) {
 								clearScrollBuffer();
-								std::cout << "\033[1;94mThe following mountpoint(s) will be unmounted:\033[0m\033[1m\n" << std::endl;
 								std::vector<std::string> selectedIsoDirs;
 								for (int index : chosenIndices) {
 									std::string afterSlash = filteredIsoDirs[index].substr(filteredIsoDirs[index].find_last_of("/") + 1);
