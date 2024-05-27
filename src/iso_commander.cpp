@@ -852,11 +852,12 @@ void select_and_mount_files_by_number() {
 
     // Set to track mounted ISO files
     std::unordered_set<std::string> mountedSet;
+    std::vector<std::string> isoFilesToMount;
 
     // Main loop for selecting and mounting ISO files
     while (true) {
-		bool wasFiltered = false;
-		bool display_time = false;
+		std::vector<std::string> isoFilesToMount;
+		bool verboseFiltered = false;
         clearScrollBuffer();
         std::cout << "\033[1;93m ! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\033[0m\033[1m" << std::endl;
         std::cout << "\033[1;93m         	! ROOT ACCESS IS PARAMOUNT FOR SUCCESSFUL MOUNTS !\n\033[0m\033[1m" << std::endl;
@@ -867,7 +868,7 @@ void select_and_mount_files_by_number() {
         // Load ISO files from cache
         isoFiles = loadCache();
         std::string searchQuery;
-        std::vector<std::string> filteredFiles = isoFiles;
+        std::vector<std::string> filteredFiles;
         printIsoFileList(isoFiles);
 
         // Prompt user for input
@@ -883,7 +884,7 @@ void select_and_mount_files_by_number() {
         }
 
 		if (strcmp(input, "/") == 0) {
-			wasFiltered = true;
+			verboseFiltered = true;
 			while (true) {
 			clearScrollBuffer();
         
@@ -913,7 +914,7 @@ void select_and_mount_files_by_number() {
 						printIsoFileList(filteredFiles); // Print the filtered list of ISO files
 					
 						// Prompt user for input again with the filtered list
-						char* input = readline("\n\033[1;92mISO(s)\033[1;94m ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5'), ↵ to return:\033[0m\033[1m ");
+						char* input = readline("\n\033[1;92mISO(s)\033[1;94m ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5', '00' for all), ↵ to return:\033[0m\033[1m ");
 					
 						// Check if the user wants to return
 						if (std::isspace(input[0]) || input[0] == '\0') {
@@ -921,14 +922,27 @@ void select_and_mount_files_by_number() {
 						}
 					
 						if (std::strcmp(input, "00") == 0) {
-							clearScrollBuffer();
-							std::cout << "\033[1;91m'00' is not available for filtered results.\033[0m\033[1m\n";
-							std::cout << "\n\033[1;32m↵ to continue...\033[0m\033[1m";
-							std::cin.get();
+							// Restore the original list of ISO files
+							isoFiles = filteredFiles;
+							verboseFiltered = false;
+							// Detect and use the minimum of available threads and ISOs to ensure efficient parallelism
+							unsigned int numThreads = std::min(static_cast<int>(isoFiles.size()), static_cast<int>(maxThreads));
+
+							// Create a ThreadPool with maxThreads
+							ThreadPool pool(numThreads);
+
+							// Process all ISO files asynchronously
+							for (size_t i = 0; i < isoFiles.size(); ++i) {
+							// Capture isoFiles and mountedSet by reference, and i by value
+							pool.enqueue([i, &isoFiles, &mountedSet, &isoFilesToMount]() {
+							// Create a vector containing the single ISO file to mount
+							std::vector<std::string> isoFilesToMountLocal = { isoFiles[i] }; // Assuming isoFiles is 1-based indexed
+							// Call mountIsoFile with the vector of ISO files to mount and the mounted set
+							mountIsoFile(isoFilesToMountLocal, mountedSet);
+							});
+							}				
 						}
-				
-						
-						//	display_time= false;
+
 						// Check if the user provided input
 						if (input[0] != '\0' && (strcmp(input, "/") != 0)) {
 							clearScrollBuffer();
@@ -947,7 +961,7 @@ void select_and_mount_files_by_number() {
 				
 			} 
 				} else {
-					wasFiltered = true;
+					verboseFiltered = true;
 					isoFiles = originalIsoFiles; // Revert to the original cache list
 					break;
 			}
@@ -956,7 +970,7 @@ void select_and_mount_files_by_number() {
 
         // Check if the user wants to mount all ISO files
         if (std::strcmp(input, "00") == 0) {
-			display_time= true;
+			verboseFiltered = false;
             // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism
             unsigned int numThreads = std::min(static_cast<int>(isoFiles.size()), static_cast<int>(maxThreads));
 
@@ -965,36 +979,24 @@ void select_and_mount_files_by_number() {
 
             // Process all ISO files asynchronously
             for (size_t i = 0; i < isoFiles.size(); ++i) {
-                // Enqueue the mounting task to the thread pool with associated index
-                pool.enqueue([i, &isoFiles, &mountedSet]() {
-                    // Create a vector containing the single ISO file to mount
-                    std::vector<std::string> isoFilesToMount = { isoFiles[i] }; // Assuming isoFiles is 1-based indexed
-                    // Call mountIsoFile with the vector of ISO files to mount and the mounted set
-                    mountIsoFile(isoFilesToMount, mountedSet);
-                });
-            }
-        } else if (!wasFiltered) {
+				// Capture isoFiles and mountedSet by reference, and i by value
+				pool.enqueue([i, &isoFiles, &mountedSet, &isoFilesToMount]() {
+				// Create a vector containing the single ISO file to mount
+				std::vector<std::string> isoFilesToMountLocal = { isoFiles[i] }; // Assuming isoFiles is 1-based indexed
+				// Call mountIsoFile with the vector of ISO files to mount and the mounted set
+				mountIsoFile(isoFilesToMountLocal, mountedSet);
+				});
+			}
+		
+		}
+        if (input[0] != '\0' && (strcmp(input, "/") != 0) && !verboseFiltered) {
             // Process user input to select and mount specific ISO files
             processAndMountIsoFiles(input, isoFiles, mountedSet);
             clearScrollBuffer();
             verbose(mountedFiles, skippedMessages, errorMessages, uniqueErrorMessages);
 
         }
-
-        clearScrollBuffer();
 		
-		if (display_time) {
-			
-        // Stop the timer after completing the mounting process
-       // auto end_time = std::chrono::high_resolution_clock::now();
-		clearScrollBuffer();
-        verbose(mountedFiles, skippedMessages, errorMessages, uniqueErrorMessages);
-        // Calculate and print the elapsed time
-      //  std::cout << " " << std::endl;
-        //auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-        // Print the time taken for the entire process in bold with one decimal place
-      //  std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\033[1m" << std::endl;
-		}
     }
 }
 
@@ -1575,6 +1577,7 @@ void unmountISOs() {
                             filteredIsoDirs.push_back(dir);
                         }
                     }
+                    
 
                     if (filteredIsoDirs.empty()) {
                         std::cout << "\033[1;91mNo ISO mountpoint(s) match the filter pattern.\033[0m\033[1m" << std::endl;
@@ -1591,7 +1594,12 @@ void unmountISOs() {
 								std::cout << color << "\033[1m" << i + 1 << ".\033[0m\033[1m /mnt/iso_" << "\033[1;95m" << afterUnderscore << "\033[0m\033[1m" << std::endl;
 							}
 
-                        char* chosenNumbers = readline("\n\033[1;92mISO(s)\033[1;94m ↵ for \033[1;93mumount\033[1;94m (e.g., '1-3', '1 5'), or ↵ to return:\033[0m\033[1m ");
+                        char* chosenNumbers = readline("\n\033[1;92mISO(s)\033[1;94m ↵ for \033[1;93mumount\033[1;94m (e.g., '1-3', '1 5', '00' for all), or ↵ to return:\033[0m\033[1m ");
+                        
+                        if (std::strcmp(chosenNumbers, "00") == 0) {
+							selectedIsoDirs = filteredIsoDirs;
+							break;
+						}
                         std::istringstream iss(chosenNumbers);
                         std::vector<int> chosenIndices;
                         for (std::string token; iss >> token;) {
@@ -1748,4 +1756,3 @@ void unmountISOs() {
         isFiltered = false;
     }
 }
-
