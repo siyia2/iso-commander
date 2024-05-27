@@ -1563,7 +1563,7 @@ void unmountISOs() {
     }
 
         if (isoDirs.empty()) {
-			std::cerr << "\033[1;93mNo mounted ISO(s) found.\033[0m\033[1m" << std::endl;
+			std::cerr << "\033[1;93mNo mountpoint(s) with the '/mnt/iso_*' format were found.\033[0m\033[1m" << std::endl;
 			std::cout << "\n\033[1;92m↵ to continue...";
             std::cin.get();
             return;
