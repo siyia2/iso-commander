@@ -1615,7 +1615,7 @@ void unmountISOs() {
 			bool breakOuterLoop = false;
             while (true) {
 				if (breakOuterLoop) {
-							break;
+					break;
 				}
                 clearScrollBuffer();
                 isFiltered = true;
