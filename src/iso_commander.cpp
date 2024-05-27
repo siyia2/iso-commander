@@ -1605,14 +1605,16 @@ void unmountISOs() {
                     
 
                     if (filteredIsoDirs.empty()) {
-                        std::cout << "\033[1;91mNo ISO mountpoint(s) match the filter pattern.\033[0m\033[1m" << std::endl;
+						clearScrollBuffer();
+                        std::cout << "\n\033[1;91mNo ISO mountpoint(s) match the filter pattern.\033[0m\033[1m" << std::endl;
                         std::cout << "\n\033[1;32m↵ to continue...";
                         std::cin.get();
                         clearScrollBuffer();
                     } else {
-						 clearScrollBuffer();
-                        std::cout << "\033[1mFiltered results:\n\033[0m\033[1m" << std::endl;
-                        for (size_t i = 0; i < filteredIsoDirs.size(); ++i) {
+						while (true) {
+							clearScrollBuffer();
+							std::cout << "\033[1mFiltered results:\n\033[0m\033[1m" << std::endl;
+							for (size_t i = 0; i < filteredIsoDirs.size(); ++i) {
 								std::string afterSlash = filteredIsoDirs[i].substr(filteredIsoDirs[i].find_last_of("/") + 1);
 								std::string afterUnderscore = afterSlash.substr(afterSlash.find("_") + 1);
 								// Alternate between red and green
@@ -1621,6 +1623,11 @@ void unmountISOs() {
 							}
 
                         char* chosenNumbers = readline("\n\033[1;92mISO(s)\033[1;94m ↵ for \033[1;93mumount\033[1;94m (e.g., '1-3', '1 5', '00' for all), or ↵ to return:\033[0m\033[1m ");
+                        
+                        if (std::isspace(chosenNumbers[0]) ||chosenNumbers[0] == '\0') {
+							skipEnter = true;
+							break;
+						}
 
 						if (std::strcmp(chosenNumbers, "00") == 0) {
 							selectedIsoDirs = filteredIsoDirs;
@@ -1667,6 +1674,7 @@ void unmountISOs() {
 
 						if (!selectedIsoDirsFiltered.empty()) {
 							selectedIsoDirs = selectedIsoDirsFiltered;
+							skipEnter = false;
 							isFiltered = true;
 							break; // Exit filter loop to process unmount
 						} else {
@@ -1674,14 +1682,19 @@ void unmountISOs() {
 							std::cerr << "\n\033[1;91mNo valid selection(s) for umount.\n";
 							std::cout << "\n\033[1;32m↵ to continue...";
 							std::cin.get();
+							}
 						}
-					}
-                } else {
+					} 
+				} else {
 					clearScrollBuffer();
                     std::cout << "\n\033[1;91mFilterPattern must be longer than 4 characters.\n";
                     std::cout << "\n\033[1;32m↵ to continue...";
                     std::cin.get();
                 }
+				
+				if (!selectedIsoDirsFiltered.empty() && isFiltered && !skipEnter) {
+					break;
+				}
             }
         }
 
