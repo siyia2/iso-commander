@@ -1366,7 +1366,7 @@ void listMountedISOs() {
 
     // Display a list of mounted ISOs with ISO names in bold and alternating colors
     if (!isoDirs.empty()) {
-        std::cout << "\033[1mList of mounted ISO(s):\033[0m\033[1m" << std::endl; // White and bold
+        std::cout << "\033[0m\033[1mList of mounted ISO(s):\033[0m\033[1m" << std::endl; // White and bold
         std::cout << " " << std::endl;
 
         bool useRedColor = true; // Start with red color for sequence numbers
@@ -1571,6 +1571,7 @@ void unmountISOs() {
 
     while (true) {
         std::vector<std::string> filteredIsoDirs, selectedIsoDirs, selectedIsoDirsFiltered;
+        clearScrollBuffer();
         listMountedISOs();
         isoDirs.clear();
         errorMessages.clear();
@@ -1789,6 +1790,8 @@ void unmountISOs() {
 			} else {
 				clearScrollBuffer();
 				std::cerr << "\n\033[1;91mNo valid selection(s) for umount.\n";
+				std::cout << "\n\033[1;32m↵ to continue...";
+				std::cin.get();
 			}
 		}
 
