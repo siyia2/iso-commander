@@ -1657,7 +1657,7 @@ void unmountISOs() {
 										selectedIndices.insert(index);
 									} else {
 										// Handle the case where the index is out of bounds
-										errorMessages.push_back("Index out of bounds: '" + token + "'.");
+										errorMessages.push_back("Invalid index: '" + token + "'.");
 										invalidInput = true;
 									}
 								}
