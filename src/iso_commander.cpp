@@ -23,7 +23,9 @@ bool gapPrintedtraverse = false; // for traverse function
 std::vector<std::string> mountedFiles;
 // Vector to store skipped ISO mounts
 std::vector<std::string> skippedMessages;
-// Vector to store ISO mount errors
+
+
+// Vector to store ISO mount/unmount errors
 std::vector<std::string> errorMessages;
 // Vector to store ISO unique input errors
 std::unordered_set<std::string> uniqueErrorMessages;
@@ -1521,10 +1523,49 @@ void unmountISO(const std::vector<std::string>& isoDirs) {
 }
 
 
+// Function to print unmounted ISOs and errors
+void printUnmountedAndErrors(bool invalidInput) {
+	clearScrollBuffer();
+	
+	if (!unmountedFiles.empty()) {
+		std::cout << " " << std::endl; // Print a blank line before unmounted files
+	}
+	
+    // Print unmounted files
+    for (const auto& unmountedFile : unmountedFiles) {
+        std::cout << unmountedFile << std::endl;
+    }
+
+    if (!unmountedErrors.empty()) {
+        std::cout << " " << std::endl; // Print a blank line before deleted folders
+    }
+    // Print unmounted errors
+    for (const auto& unmountedError : unmountedErrors) {
+        std::cout << unmountedError << std::endl;
+    }
+
+    // Clear vectors
+    unmountedFiles.clear();
+    unmountedErrors.clear();
+    
+    if (invalidInput) {
+				std::cout << " " << std::endl;
+			}
+
+    // Print unique error messages
+    for (const auto& errorMessage : errorMessages) {
+        if (uniqueErrorMessages.find(errorMessage) == uniqueErrorMessages.end()) {
+            // If not found, store the error message and print it
+            uniqueErrorMessages.insert(errorMessage);
+            std::cerr << "\033[1;91m" << errorMessage << "\033[0m\033[1m" << std::endl;
+        }
+    }
+    uniqueErrorMessages.clear();
+}
+
 // Main function for unmounting ISOs
 void unmountISOs() {
-    std::set<std::string> uniqueErrorMessages;
-    std::vector<std::string> isoDirs, errorMessages;
+    std::vector<std::string> isoDirs;
     std::mutex isoDirsMutex, errorMessagesMutex, uniqueErrorMessagesMutex;
     const std::string isoPath = "/mnt";
     bool invalidInput = false, skipEnter = false, isFiltered = false;
@@ -1780,44 +1821,12 @@ void unmountISOs() {
 			for (auto& future : futures) {
 				future.wait();
 			}
-
-            clearScrollBuffer();
-            if (!unmountedFiles.empty()) {
-				std::cout << " " << std::endl; // Print a blank line before unmounted files
-			}
-			// Print all unmounted files
-			for (const auto& unmountedFile : unmountedFiles) {
-				std::cout << unmountedFile << std::endl;
-			}
-
-			if (!unmountedErrors.empty()) {
-				std::cout << " " << std::endl; // Print a blank line before deleted folders
-			}
-			// Print all unmounted files
-			for (const auto& unmountedError : unmountedErrors) {
-				std::cout << unmountedError << std::endl;
-			}
-
-			// Clear vectors
-			unmountedFiles.clear();
-			unmountedErrors.clear();
-
+			
 			// Lock access to error messages
 			std::lock_guard<std::mutex> errorMessagesLock(errorMessagesMutex);
 
-			if (invalidInput) {
-				std::cout << " " << std::endl;
-			}
+            printUnmountedAndErrors(invalidInput);
 
-			// Print error messages
-			for (const auto& errorMessage : errorMessages) {
-				if (uniqueErrorMessages.find(errorMessage) == uniqueErrorMessages.end()) {
-					// If not found, store the error message and print it
-					uniqueErrorMessages.insert(errorMessage);
-					std::cerr << "\033[1;91m" << errorMessage << "\033[0m\033[1m" << std::endl;
-				}
-			}
-        }
 
         if (!skipEnter) {
             std::cout << "\n\033[1;32m↵ to continue...";
@@ -1827,4 +1836,5 @@ void unmountISOs() {
         skipEnter = false;
         isFiltered = false;
     }
+}
 }
