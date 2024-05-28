@@ -11,6 +11,7 @@ MAKEFLAGS = -j$(NUM_PROCESSORS)
 
 SRC_DIR = $(CURDIR)/src
 OBJ_DIR = $(CURDIR)/obj
+INSTALL_DIR = $(CURDIR)/bin
 SRC_FILES = iso_commander.cpp conversion_tools.cpp sanitization_extraction_readline.cpp cp_mv_rm.cpp
 OBJ_FILES = $(patsubst %.cpp,$(OBJ_DIR)/%.o,$(SRC_FILES))
 
@@ -29,6 +30,7 @@ clean:
 .PHONY: clean
 
 install: isocmd
+	mkdir bin
 	install -m 755 isocmd $(INSTALL_DIR)
 
 uninstall:
