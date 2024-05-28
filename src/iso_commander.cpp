@@ -7,7 +7,7 @@ unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread:
 // Cache Variables
 
 const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.cache"; // Construct the full path to the cache directory
-const std::string cacheFileName = "mounter_elite_plus_iso_cache.txt";;
+const std::string cacheFileName = "iso_commander_cache.txt";;
 const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
 std::mutex Mutex4High; // Mutex for high level functions
