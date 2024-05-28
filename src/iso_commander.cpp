@@ -47,7 +47,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
 
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("3.1.6");
+        printVersionNumber("3.1.7");
         return 0;
     }
 
@@ -289,8 +289,7 @@ bool isAllZeros(const std::string& str) {
 
 // Function to check if a string is numeric
 bool isNumeric(const std::string& str) {
-    // Use parallel execution policy for parallelization
-    return std::all_of(std::execution::par, str.begin(), str.end(), [](char c) {
+    return std::all_of(str.begin(), str.end(), [](char c) {
         return std::isdigit(c);
     });
 }
@@ -605,7 +604,7 @@ void manualRefreshCache(const std::string& initialDir) {
         inputLine = initialDir;
     } else {
         // Prompt the user to enter directory paths for manual cache refresh
-        inputLine = readInputLine("\033[1;94mDirectory path(s) ↵ from which to populate the \033[1m\033[1;92mISO Cache\033[94m (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1;94m), or ↵ to return:\n\033[0m\033[1m");
+        inputLine = readInputLine("\033[1;94mDirectory path(s) ↵ to build/refresh the \033[1m\033[1;92mISO Cache\033[94m (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1;94m), or ↵ to return:\n\033[0m\033[1m");
     }
 
     if (!inputLine.empty()) {
