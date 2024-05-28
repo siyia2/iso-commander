@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -O2 -Wall -Werror -D_PSTL_SUPPRESS_WARNINGS
+CXXFLAGS = -O2 -Wall -Werror
 LIBS = -lreadline
 LDFLAGS = -lreadline -lmount
 
