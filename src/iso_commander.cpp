@@ -19,6 +19,9 @@ bool gapPrinted = false; // for cache refresh for directory function
 bool promptFlag = true; // for cache refresh for directory function
 bool gapPrintedtraverse = false; // for traverse function
 
+// For saving history to a differrent cache for FilterPatterns
+bool historyPattern = false;
+
 // Vector to store ISO mounts
 std::vector<std::string> mountedFiles;
 // Vector to store skipped ISO mounts
@@ -907,11 +910,21 @@ void select_and_mount_files_by_number() {
 
 		if (strcmp(input, "/") == 0) {
 			verboseFiltered = true;
+			
 			while (true) {
+			
 			clearScrollBuffer();
+			historyPattern = true;
+			loadHistory();
         
 			// User pressed '/', start the filtering process
-			char* searchQuery = readline("\n\033[1;92mSearchQuery\033[1;94m ↵ to filter \033[1;92mmount\033[1;94m list (case-insensitive), or ↵ to return: \033[0m\033[1m");
+			const char* searchQuery = readInputLine("\033[1;92mSearchQuery\033[1;94m ↵ to filter \033[1;92mmount\033[1;94m list (case-insensitive), or ↵ to return: \n\033[0m\033[1m").c_str();
+			
+			if (searchQuery && searchQuery[0] != '\0') {
+				saveHistory();
+			}
+			clear_history();
+			
 			clearScrollBuffer();
 			std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
@@ -940,6 +953,7 @@ void select_and_mount_files_by_number() {
 					
 						// Check if the user wants to return
 						if (std::isspace(input[0]) || input[0] == '\0') {
+							historyPattern = false;
 							break;
 						}
 					
@@ -968,6 +982,7 @@ void select_and_mount_files_by_number() {
 				
 			} 
 				} else {
+					historyPattern = false;
 					verboseFiltered = true;
 					isoFiles = originalIsoFiles; // Revert to the original cache list
 					break;
@@ -1597,15 +1612,25 @@ void unmountISOs() {
 			bool breakOuterLoop = false;
             while (true) {
 				if (breakOuterLoop) {
+					historyPattern = false;
 					break;
 				}
                 clearScrollBuffer();
                 isFiltered = true;
-                char* filterPattern = readline("\n\033[1;92mSearchQuery\033[1;94m ↵ to filter \033[1;93mumount\033[1;94m list (case-insensitive), or ↵ to return: \033[0m\033[1m");
+                historyPattern = true;
+                loadHistory();
+                const char* filterPattern = readInputLine("\033[1;92mSearchQuery\033[1;94m ↵ to filter \033[1;93mumount\033[1;94m list (case-insensitive), or ↵ to return: \n\033[0m\033[1m").c_str();
+                
+                if (filterPattern && filterPattern[0] != '\0') {
+					saveHistory();
+				}
+                clear_history();
+                
                 if (std::isspace(filterPattern[0]) || filterPattern[0] == '\0') {
                     skipEnter = false;
                     isFiltered = false;
                     noValid = false;
+                    historyPattern = false;
                     break;
                 }
                 std::string filterPatternStr(filterPattern);
@@ -1648,6 +1673,7 @@ void unmountISOs() {
                         if (std::isspace(chosenNumbers[0]) || chosenNumbers[0] == '\0') {
                             noValid = false;
                             skipEnter = true;
+                            historyPattern = false;
                             break;
                         }
 
@@ -1655,6 +1681,7 @@ void unmountISOs() {
                             selectedIsoDirs = filteredIsoDirs;
                             isFiltered = true;
                             breakOuterLoop = true;
+                            historyPattern = false;
                             break;
                         }
 
@@ -1699,6 +1726,7 @@ void unmountISOs() {
                             selectedIsoDirs = selectedIsoDirsFiltered;
                             skipEnter = false;
                             isFiltered = true;
+                            historyPattern = false;
                             break; // Exit filter loop to process unmount
                         } else {
                             clearScrollBuffer();
@@ -1711,6 +1739,7 @@ void unmountISOs() {
 
                 if (!selectedIsoDirsFiltered.empty() && isFiltered) {
 					isFiltered = true;
+					historyPattern = false;
                     break;
                 }
             }

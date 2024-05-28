@@ -45,6 +45,9 @@ extern std::mutex Mutex4High;
 // For making cache refresh headless
 extern bool promptFlag;
 
+// For saving history to a differrent cache for FilterPatterns
+extern bool historyPattern;
+
 // A simple global thread pool for async tasks
 class ThreadPool {
 public:

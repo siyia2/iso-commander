@@ -105,9 +105,17 @@ void select_and_operate_files_by_number(const std::string& operation) {
         if (strcmp(input, "/") == 0) {
 			while (true) {
             clearScrollBuffer();
-
+			
+			historyPattern = true;
+			loadHistory();
             // User pressed '/', start the filtering process
-            char* searchQuery = readline(("\n\033[1;92mSearchQuery\033[1;94m ↵ to filter " + operationColor + operation + " \033[1;94mlist (case-insensitive), or ↵ to return: \033[0m\033[1m").c_str());
+            const char* searchQuery = readInputLine("\033[1;92mSearchQuery\033[1;94m ↵ to filter " + operationColor + operation + " \033[1;94mlist (case-insensitive), or ↵ to return: \n\033[0m\033[1m").c_str();
+            
+            if (searchQuery && searchQuery[0] != '\0') {
+				saveHistory();
+			}
+            clear_history();
+            
             clearScrollBuffer();
 			std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
@@ -135,6 +143,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
                     
 						// Check if the user wants to return
 						if (std::isspace(input[0]) || input[0] == '\0') {
+							historyPattern = false;
 							break;
 						}
 
@@ -159,6 +168,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 				}
 			} else {
 					isoFiles = originalIsoFiles; // Revert to the original cache list
+					historyPattern = false;
 					break;
 				}
 			}

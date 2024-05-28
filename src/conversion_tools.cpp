@@ -123,18 +123,32 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
             while (true) {
 				// Clear history
 				clear_history();
+				
+				historyPattern = true;
+				loadHistory();
+				
                 clearScrollBuffer();
+                
                 std::string prompt;
 				if (fileType == "bin" || fileType == "img") {
-					prompt = "\n\033[1;92mSearchQuery\033[1;94m ↵ to filter \033[1;38;5;208mBIN/IMG\033[1;94m list (case-insensitive), or ↵ to return: \033[0m\033[1m";
+					prompt = "\033[1;92mSearchQuery\033[1;94m ↵ to filter \033[1;38;5;208mBIN/IMG\033[1;94m list (case-insensitive), or ↵ to return: \n\033[0m\033[1m";
 				} else if (fileType == "mdf") {
-					prompt = "\n\033[1;92mSearchQuery\033[1;94m ↵ to filter \033[1;38;5;208mMDF\033[1;94m conversion list (case-insensitive), or ↵ to return: \033[0m\033[1m";
+					prompt = "\033[1;92mSearchQuery\033[1;94m ↵ to filter \033[1;38;5;208mMDF\033[1;94m conversion list (case-insensitive), or ↵ to return: \n\033[0m\033[1m";
 				}
-				char* searchQuery = readline(prompt.c_str());
+
+				// Use std::string to store the result from readInputLine
+				std::string searchQuery = readInputLine(prompt.c_str());
+				
+				if (!searchQuery.empty()) {
+					saveHistory();
+				}
+				clear_history();
+				
                 clearScrollBuffer();
                 std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
                 if (std::isspace(searchQuery[0]) || searchQuery[0] == '\0') {
+					historyPattern = false;
                     break;
                 }
 
@@ -161,10 +175,12 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
                     
 						// Check if the user wants to return
 						if (std::isspace(input[0]) || input[0] == '\0') {
+							historyPattern = false;
 							break;
 						}
 
 						if (std::isspace(filterInput[0]) || filterInput[0] == '\0') {
+							historyPattern = false;
 							break;
 						}
 

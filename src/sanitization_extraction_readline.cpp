@@ -97,18 +97,25 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(const std::strin
 
 // Default readline history save path
 const std::string historyFilePath = std::string(getenv("HOME")) + "/.cache/iso_commander_history_cache.txt";
+const std::string historyPatternFilePath = std::string(getenv("HOME")) + "/.cache/iso_commander_history_Pattern_cache.txt";
 
 // Function to load history from readline
 void loadHistory() {
     // Only load history from file if it's not already populated in memory
     if (history_length == 0) {
-        std::ifstream historyFile(historyFilePath);
-        if (historyFile.is_open()) {
+        std::ifstream file;
+        if (!historyPattern) {
+            file.open(historyFilePath);
+        } else {
+            file.open(historyPatternFilePath);
+        }
+
+        if (file.is_open()) {
             std::string line;
-            while (std::getline(historyFile, line)) {
+            while (std::getline(file, line)) {
                 add_history(line.c_str());
             }
-            historyFile.close();
+            file.close();
         }
     }
 }
@@ -119,7 +126,13 @@ const int MAX_HISTORY_LINES = 100;
 
 // Function to save history from readline
 void saveHistory() {
-    std::ofstream historyFile(historyFilePath, std::ios::out | std::ios::trunc);
+    std::ofstream historyFile;
+    if (!historyPattern) {
+        historyFile.open(historyFilePath, std::ios::out | std::ios::trunc);
+    } else {
+        historyFile.open(historyPatternFilePath, std::ios::out | std::ios::trunc);
+    }
+
 
     if (historyFile.is_open()) {
         HIST_ENTRY **histList = history_list();
