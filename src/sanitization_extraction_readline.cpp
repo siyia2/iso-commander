@@ -124,7 +124,7 @@ void loadHistory() {
 //Maximum number of history entries at a time
 const int MAX_HISTORY_LINES = 100;
 
-const int MAX_HISTORY_PATTERN_LINES = 10;
+const int MAX_HISTORY_PATTERN_LINES = 20;
 
 // Function to save history from readline
 void saveHistory() {
@@ -161,6 +161,7 @@ void saveHistory() {
                     }
                 }
             }
+			
 			int excessLines; // Declare excessLines outside the if-else block
 
 			if (!historyPattern) {
