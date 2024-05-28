@@ -1,10 +1,10 @@
 CXX = g++
-CXXFLAGS = -O2 -Wall -Werror
+CXXFLAGS = -O2 -Wall -Werror -D_PSTL_SUPPRESS_WARNINGS
 LIBS = -lreadline
 LDFLAGS = -lreadline -lmount
 
 # Use the number of available processors from nproc
-NUM_PROCESSORS := $(shell nproc 2>/dev/null)
+NUM_PROCESSORS := $(shell nproc)
 
 # Set the default number of jobs to the number of available processors
 MAKEFLAGS = -j$(NUM_PROCESSORS)
@@ -22,7 +22,7 @@ isocmd: $(OBJ_FILES)
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -c $< -o $@ 2>/dev/null
 
 clean:
 	rm -rf $(OBJ_DIR) isocmd
