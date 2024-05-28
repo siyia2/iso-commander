@@ -97,7 +97,7 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(const std::strin
 
 // Default readline history save path
 const std::string historyFilePath = std::string(getenv("HOME")) + "/.cache/iso_commander_history_cache.txt";
-const std::string historyPatternFilePath = std::string(getenv("HOME")) + "/.cache/iso_commander_history_Pattern_cache.txt";
+const std::string historyPatternFilePath = std::string(getenv("HOME")) + "/.cache/iso_commander_pattern_cache.txt";
 
 // Function to load history from readline
 void loadHistory() {
