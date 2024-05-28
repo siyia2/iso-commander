@@ -346,7 +346,7 @@ std::future<std::vector<std::string>> FileExistsAsync(const std::vector<std::str
 // Function to remove non-existent paths from cache asynchronously with basic thread control
 void removeNonExistentPathsFromCache() {
     // Define the path to the cache file
-    const std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/iso_commander_cache.txtt";
+    const std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/iso_commander_cache.txt";
 
     // Open the cache file for reading
     std::ifstream cacheFile(cacheFilePath, std::ios::in | std::ios::binary);
