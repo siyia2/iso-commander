@@ -8,7 +8,6 @@
 #include <condition_variable>
 #include <cstring>
 #include <dirent.h>
-#include <execution>
 #include <filesystem>
 #include <fstream>
 #include <functional>
