@@ -566,17 +566,17 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     if (isMove || isCopy) {
                         bool dirExists = directoryExists(userDestDir);
                         if (!dirExists) {
-                            operationCommand = "sudo mkdir -p " + shell_escape(userDestDir) + " && ";
-                            operationCommand += "sudo chown " + user_str + ":" + group_str + " " + shell_escape(userDestDir) + " && ";
+                            operationCommand = "mkdir -p " + shell_escape(userDestDir) + " && ";
+                            operationCommand += "chown " + user_str + ":" + group_str + " " + shell_escape(userDestDir) + " && ";
                         }
                     }
 
                     if (isMove) {
-                        operationCommand += "sudo mv ";
+                        operationCommand += "mv ";
                     } else if (isCopy) {
-                        operationCommand += "sudo cp -f ";
+                        operationCommand += "cp -f ";
                     } else if (isDelete) {
-                        operationCommand = "sudo rm -f ";
+                        operationCommand = "rm -f ";
                     } else {
                         std::cerr << "Invalid operation specified." << std::endl;
                         return;
@@ -627,7 +627,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 
                             // Change ownership of the copied/moved file
                             if (!isDelete) {
-                                std::string chownCommand = "sudo chown " + user_str + ":" + group_str + " " + shell_escape(destPath);
+                                std::string chownCommand = "chown " + user_str + ":" + group_str + " " + shell_escape(destPath);
                                 system(chownCommand.c_str());
                             }
                         }
