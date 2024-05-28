@@ -124,6 +124,8 @@ void loadHistory() {
 //Maximum number of history entries at a time
 const int MAX_HISTORY_LINES = 100;
 
+const int MAX_HISTORY_PATTERN_LINES = 10;
+
 // Function to save history from readline
 void saveHistory() {
     std::ofstream historyFile;
@@ -159,9 +161,14 @@ void saveHistory() {
                     }
                 }
             }
+			int excessLines; // Declare excessLines outside the if-else block
 
-            // Adjust the number of lines to keep within the limit
-            int excessLines = uniqueLines.size() - MAX_HISTORY_LINES;
+			if (!historyPattern) {
+				// Adjust the number of lines to keep within the limit
+				excessLines = uniqueLines.size() - MAX_HISTORY_LINES;
+			} else {
+				excessLines = uniqueLines.size() - MAX_HISTORY_PATTERN_LINES;
+			}
 
             if (excessLines > 0) {
                 // Remove excess lines from the beginning
