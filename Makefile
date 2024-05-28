@@ -22,7 +22,7 @@ isocmd: $(OBJ_FILES)
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -c $< -o $@ 2>/dev/null
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
 	rm -rf $(OBJ_DIR) isocmd
