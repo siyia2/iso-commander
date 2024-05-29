@@ -895,8 +895,11 @@ void select_and_mount_files_by_number() {
         std::vector<std::string> filteredFiles;
         printIsoFileList(isoFiles);
 
-        // Prompt user for input
-        char* input = readline("\n\033[1;92mISO(s)\033[1;94m ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5', '00' for all), / ↵ to filter, or ↵ to return:\033[0m\033[1m \n");
+        // Display the prompt
+		fputs("\n\033[1;92mISO(s)\033[1;94m ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5', '00' for all), / ↵ to filter, or ↵ to return:\033[0m\033[1m", stdout);
+		// Read the input without a prompt
+		char* input = readline(" ");
+        
         clearScrollBuffer();
         std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
         // Start the timer
@@ -948,7 +951,8 @@ void select_and_mount_files_by_number() {
 						printIsoFileList(filteredFiles); // Print the filtered list of ISO files
 					
 						// Prompt user for input again with the filtered list
-						char* input = readline("\n\033[1;92mISO(s)\033[1;94m ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5', '00' for all), ↵ to return:\033[0m\033[1m \n");
+						fputs("\n\033[1;92mISO(s)\033[1;94m ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5', '00' for all), ↵ to return:\033[0m\033[1m ", stdout);
+						char* input = readline(NULL);
 					
 						// Check if the user wants to return
 						if (std::isspace(input[0]) || input[0] == '\0') {
@@ -1594,7 +1598,10 @@ void unmountISOs() {
         }
 
         // Prompt the user for input
-        char* input = readline("\n\033[1;92mISO(s)\033[1;94m ↵ for \033[1;93mumount\033[1;94m (e.g., '1-3', '1 5', '00' for all), / ↵ to filter\033[1;94m , or ↵ to return:\033[0m\033[1m \n");
+        fputs("\n\033[1;92mISO(s)\033[1;94m ↵ for \033[1;93mumount\033[1;94m (e.g., '1-3', '1 5', '00' for all), / ↵ to filter\033[1;94m , or ↵ to return:\033[0m\033[1m", stdout);
+		// Read the input without a prompt
+		char* input = readline(" ");
+		
         clearScrollBuffer();
 
         if (input[0] != '/') {
@@ -1667,7 +1674,8 @@ void unmountISOs() {
                         }
 
                         // Prompt the user for the list of ISOs to unmount
-                        char* chosenNumbers = readline("\n\033[1;92mISO(s)\033[1;94m ↵ for \033[1;93mumount\033[1;94m (e.g., '1-3', '1 5', '00' for all), or ↵ to return:\033[0m\033[1m \n");
+                        fputs("\n\033[1;92mISO(s)\033[1;94m ↵ for \033[1;93mumount\033[1;94m (e.g., '1-3', '1 5', '00' for all), or ↵ to return:\033[0m\033[1m", stdout);
+						char* chosenNumbers = readline(" ");
 
                         if (std::isspace(chosenNumbers[0]) || chosenNumbers[0] == '\0') {
                             noValid = false;
