@@ -28,11 +28,11 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     if (fileType == "bin" || fileType == "img") {
         fileExtension = ".bin;.img";
         fileTypeName = "BIN/IMG";
-    } else if (fileType == "mdf" || fileType == "mds") {
+    } else if (fileType == "mdf") {
         fileExtension = ".mdf";
         fileTypeName = "MDF";
     } else {
-        std::cout << "Invalid file type choice. Supported types: BIN/IMG, MDF/MDS" << std::endl;
+        std::cout << "Invalid file type choice. Supported types: BIN/IMG, MDF" << std::endl;
         return;
     }
 
