@@ -951,8 +951,8 @@ void select_and_mount_files_by_number() {
 						printIsoFileList(filteredFiles); // Print the filtered list of ISO files
 					
 						// Prompt user for input again with the filtered list
-						fputs("\n\033[1;92mISO(s)\033[1;94m ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5', '00' for all), ↵ to return:\033[0m\033[1m ", stdout);
-						char* input = readline(NULL);
+						fputs("\n\033[1;92mISO(s)\033[1;94m ↵ for \033[1;92mmount\033[1;94m (e.g., '1-3', '1 5', '00' for all), ↵ to return:\033[0m\033[1m", stdout);
+						char* input = readline(" ");
 					
 						// Check if the user wants to return
 						if (std::isspace(input[0]) || input[0] == '\0') {
