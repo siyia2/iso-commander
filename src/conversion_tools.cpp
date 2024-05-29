@@ -28,11 +28,11 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     if (fileType == "bin" || fileType == "img") {
         fileExtension = ".bin;.img";
         fileTypeName = "BIN/IMG";
-    } else if (fileType == "mdf") {
+    } else if (fileType == "mdf" || fileType == "mds") {
         fileExtension = ".mdf";
         fileTypeName = "MDF";
     } else {
-        std::cout << "Invalid file type choice. Supported types: BIN/IMG, MDF" << std::endl;
+        std::cout << "Invalid file type choice. Supported types: BIN/IMG, MDF/MDS" << std::endl;
         return;
     }
 
@@ -111,9 +111,8 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         std::cout << " " << std::endl;
         clear_history();
 
-        std::string prompt = "\033[1;38;5;208m" + fileTypeName + " \033[1;94mfile(s) ↵ for conversion (e.g., '1-3', '1 5'), / ↵ to filter, or ↵ to return:\033[0m\033[1m";
-		fputs(prompt.c_str(), stdout);
-		char* input = readline(" ");
+        std::string prompt = "\001\033[1;38;5;208m\002" + fileTypeName + " \001\033[1;94m\002file(s) ↵ for conversion (e.g., '1-3', '1 5'), / ↵ to filter, or ↵ to return:\001\033[0m\033[1m\002 ";
+        char* input = readline(prompt.c_str());
 
         if (std::isspace(input[0]) || input[0] == '\0') {
             clearScrollBuffer();
@@ -167,15 +166,12 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 						printFileList(filteredFiles);
 
 						std::string filterPrompt;
-
 						if (fileType == "bin" || fileType == "img") {
-							filterPrompt = "\n\033[1;94m\033[1;38;5;208mBIN/IMG\033[1;94m file(s) ↵ for conversion (e.g., '1-3', '1 5'), or ↵ to return:\033[0m\033[1m";
+							filterPrompt = "\n\001\033[1;94m\033[1;38;5;208m\002BIN/IMG\001\033[1;94m\002 file(s) ↵ for conversion (e.g., '1-3', '1 5'), or ↵ to return:\001\033[0m\033[1m\002 ";
 						} else if (fileType == "mdf") {
-							filterPrompt = "\n\033[1;94m\033[1;38;5;208mMDF\033[1;94m file(s) ↵ for conversion (e.g., '1-3', '1 5'), or ↵ to return:\033[0m\033[1m";
+							filterPrompt = "\n\001\033[1;94m\033[1;38;5;208m\002MDF\001\033[1;94m\002 file(s) ↵ for conversion (e.g., '1-3', '1 5'), or ↵ to return:\001\033[0m\033[1m\002 ";
 						}
-
-						fputs(filterPrompt.c_str(), stdout);
-						char* filterInput = readline(" ");
+						char* filterInput = readline(filterPrompt.c_str());
                     
 						// Check if the user wants to return
 						if (std::isspace(input[0]) || input[0] == '\0') {
