@@ -94,7 +94,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
         printIsoFileList(isoFiles);
 
         // Prompt user for input or filter
-        char* input = readline(("\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for " + operationColor + operation + "\001\033[1;94m\002 (e.g., '1-3', '1 5'), / ↵ to filter, or ↵ to return:\001\033[0m\033[1m\002 ").c_str());
+        char* input = readline(("\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + "\001\033[1;94m\002 (e.g., '1-3', '1 5'), / ↵ to filter, or ↵ to return:\001\033[0m\002\001\033[1m\002 ").c_str());
         clearScrollBuffer();
 
         // Check if the user wants to return
@@ -108,8 +108,13 @@ void select_and_operate_files_by_number(const std::string& operation) {
 			
 			historyPattern = true;
 			loadHistory();
+			
+			std::string prompt;
+			
             // User pressed '/', start the filtering process
-            const char* searchQuery = readInputLine("\033[1;92mSearchQuery\033[1;94m ↵ to filter " + operationColor + operation + " \033[1;94mlist (case-insensitive), or ↵ to return: \n\033[0m\033[1m").c_str();
+            prompt = "\n\001\033[1;92m\002SearchQuery\001\033[1;94m\002 ↵ to filter \001" + operationColor + "\002" + operation + "\001" + "\002\001\033[1;94m\002 list (case-insensitive), or ↵ to return: \001\033[0m\002\001\033[1m\002";
+            
+            char* searchQuery = readline(prompt.c_str());
             
             if (searchQuery && searchQuery[0] != '\0') {
 				saveHistory();

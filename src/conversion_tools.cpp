@@ -111,7 +111,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         std::cout << " " << std::endl;
         clear_history();
 
-        std::string prompt = "\001\033[1;38;5;208m\002" + fileTypeName + " \001\033[1;94m\002file(s) ↵ for conversion (e.g., '1-3', '1 5'), / ↵ to filter, or ↵ to return:\001\033[0m\033[1m\002 ";
+        std::string prompt = "\001\033[1;38;5;208m\002" + fileTypeName + " \001\033[1;94m\002file(s) ↵ for conversion (e.g., '1-3', '1 5'), / ↵ to filter, or ↵ to return:\001\033[0m\002\001\033[1m\002 ";
         char* input = readline(prompt.c_str());
 
         if (std::isspace(input[0]) || input[0] == '\0') {
@@ -131,15 +131,14 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
                 
                 std::string prompt;
 				if (fileType == "bin" || fileType == "img") {
-					prompt = "\033[1;92mSearchQuery\033[1;94m ↵ to filter \033[1;38;5;208mBIN/IMG\033[1;94m list (case-insensitive), or ↵ to return: \n\033[0m\033[1m";
+					prompt = "\n\001\033[1;92m\002SearchQuery\001\033[1;94m\002 ↵ to filter \001\033[1;38;5;208m\002BIN/IMG\001\033[1;94m\002 list (case-insensitive), or ↵ to return: \001\033[0m\002\001\033[1m\002";
 				} else if (fileType == "mdf") {
-					prompt = "\033[1;92mSearchQuery\033[1;94m ↵ to filter \033[1;38;5;208mMDF\033[1;94m conversion list (case-insensitive), or ↵ to return: \n\033[0m\033[1m";
+					prompt = "\n\001\033[1;92m\002SearchQuery\001\033[1;94m\002 ↵ to filter \001\033[1;38;5;208m\002MDF\001\033[1;94m\002 conversion list (case-insensitive), or ↵ to return: \001\033[0m\002\001\033[1m\002";
 				}
 
-				// Use std::string to store the result from readInputLine
-				std::string searchQuery = readInputLine(prompt.c_str());
+				char* searchQuery = readline(prompt.c_str());
 				
-				if (!searchQuery.empty()) {
+				if (searchQuery != nullptr && searchQuery[0] != '\0') {
 					saveHistory();
 				}
 				clear_history();

@@ -917,9 +917,13 @@ void select_and_mount_files_by_number() {
 			clearScrollBuffer();
 			historyPattern = true;
 			loadHistory();
-        
+			
+			std::string prompt;
+			
 			// User pressed '/', start the filtering process
-			const char* searchQuery = readInputLine("\033[1;92mSearchQuery\033[1;94m ↵ to filter \033[1;92mmount\033[1;94m list (case-insensitive), or ↵ to return: \n\033[0m\033[1m").c_str();
+			prompt = "\n\001\033[1;92m\002SearchQuery\001\033[1;94m\002 ↵ to filter \001\033[1;92m\002mount\001\033[1;94m\002 list (case-insensitive), or ↵ to return: \001\033[0m\033[1m\002";
+			
+			char* searchQuery = readline(prompt.c_str());
 			
 			if (searchQuery && searchQuery[0] != '\0') {
 				saveHistory();
@@ -1594,9 +1598,9 @@ void unmountISOs() {
             std::cin.get();
             return;
         }
-
+		
         // Prompt the user for input
-        char* input = readline("\n\001\033[1;92m\002ISO(s)\033[1;94m ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 (e.g., '1-3', '1 5', '00' for all), / ↵ to filter\001\033[1;94m\002 , or ↵ to return:\001\033[0m\033[1m\002 ");
+        char* input = readline("\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 (e.g., '1-3', '1 5', '00' for all), / ↵ to filter\001\033[1;94m\002 , or ↵ to return:\001\033[0m\002\001\033[1m\002 ");
         clearScrollBuffer();
 
         if (input[0] != '/') {
@@ -1620,7 +1624,10 @@ void unmountISOs() {
                 isFiltered = true;
                 historyPattern = true;
                 loadHistory();
-                const char* filterPattern = readInputLine("\033[1;92mSearchQuery\033[1;94m ↵ to filter \033[1;93mumount\033[1;94m list (case-insensitive), or ↵ to return: \n\033[0m\033[1m").c_str();
+                std::string prompt;
+                prompt = "\n\001\033[1;92m\002SearchQuery\001\033[1;94m\002 ↵ to filter \001\033[1;93m\002umount\001\033[1;94m\002 list (case-insensitive), or ↵ to return: \001\033[0m\033[1m\002";
+                
+                char* filterPattern = readline(prompt.c_str());
                 
                 if (filterPattern && filterPattern[0] != '\0') {
 					saveHistory();
