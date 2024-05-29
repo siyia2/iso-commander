@@ -139,6 +139,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 				char* searchQuery = readline(prompt.c_str());
 				
 				if (searchQuery != nullptr && searchQuery[0] != '\0') {
+					add_history(searchQuery); // Add the search query to the history
 					saveHistory();
 				}
 				clear_history();

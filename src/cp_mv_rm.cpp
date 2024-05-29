@@ -117,6 +117,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
             char* searchQuery = readline(prompt.c_str());
             
             if (searchQuery && searchQuery[0] != '\0') {
+				add_history(searchQuery); // Add the search query to the history
 				saveHistory();
 			}
             clear_history();

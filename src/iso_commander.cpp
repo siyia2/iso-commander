@@ -47,7 +47,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
 
     if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
-        printVersionNumber("3.1.9");
+        printVersionNumber("3.2.0");
         return 0;
     }
 
@@ -918,14 +918,15 @@ void select_and_mount_files_by_number() {
 			historyPattern = true;
 			loadHistory();
 			
-			std::string prompt;
+			
 			
 			// User pressed '/', start the filtering process
-			prompt = "\n\001\033[1;92m\002SearchQuery\001\033[1;94m\002 ↵ to filter \001\033[1;92m\002mount\001\033[1;94m\002 list (case-insensitive), or ↵ to return: \001\033[0m\033[1m\002";
+			std::string prompt = "\n\001\033[1;92m\002SearchQuery\001\033[1;94m\002 ↵ to filter \001\033[1;92m\002mount\001\033[1;94m\002 list (case-insensitive), or ↵ to return: \001\033[0m\033[1m\002";
 			
 			char* searchQuery = readline(prompt.c_str());
 			
 			if (searchQuery && searchQuery[0] != '\0') {
+				add_history(searchQuery); // Add the search query to the history
 				saveHistory();
 			}
 			clear_history();
@@ -1630,6 +1631,7 @@ void unmountISOs() {
                 char* filterPattern = readline(prompt.c_str());
                 
                 if (filterPattern && filterPattern[0] != '\0') {
+					add_history(filterPattern); // Add the search query to the history
 					saveHistory();
 				}
                 clear_history();
