@@ -1425,7 +1425,7 @@ void unmountISO(const std::vector<std::string>& isoDirs) {
             size_t batchEnd = std::min(i + batchSize, isoDirs.size());
 
             for (size_t j = i; j < batchEnd; ++j) {
-                unmountBatchCommand += " " + shell_escape(isoDirs[j]);
+                unmountBatchCommand += " " + shell_escape(isoDirs[j]) + " 2>/dev/null";
             }
 
             std::future<int> unmountFuture = std::async(std::launch::async, [&unmountBatchCommand]() {
