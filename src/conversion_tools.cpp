@@ -111,7 +111,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         std::cout << " " << std::endl;
         clear_history();
 
-        std::string prompt = "\033[1;38;5;208m" + fileTypeName + " \033[1;94mfile(s) ↵ for conversion (e.g., '1-3', '1 5'), / ↵ to filter, or ↵ to return:\033[0m\033[1m ";
+        std::string prompt = "\033[1;38;5;208m" + fileTypeName + " \033[1;94mfile(s) ↵ for conversion (e.g., '1-3', '1 5'), / ↵ to filter, or ↵ to return:\033[0m\033[1m \n";
         char* input = readline(prompt.c_str());
 
         if (std::isspace(input[0]) || input[0] == '\0') {
@@ -167,9 +167,9 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
 						std::string filterPrompt;
 						if (fileType == "bin" || fileType == "img") {
-							filterPrompt = "\n\033[1;94m\033[1;38;5;208mBIN/IMG\033[1;94m file(s) ↵ for conversion (e.g., '1-3', '1 5'), or ↵ to return:\033[0m\033[1m ";
+							filterPrompt = "\n\033[1;94m\033[1;38;5;208mBIN/IMG\033[1;94m file(s) ↵ for conversion (e.g., '1-3', '1 5'), or ↵ to return:\033[0m\033[1m \n";
 						} else if (fileType == "mdf") {
-							filterPrompt = "\n\033[1;94m\033[1;38;5;208mMDF\033[1;94m file(s) ↵ for conversion (e.g., '1-3', '1 5'), or ↵ to return:\033[0m\033[1m ";
+							filterPrompt = "\n\033[1;94m\033[1;38;5;208mMDF\033[1;94m file(s) ↵ for conversion (e.g., '1-3', '1 5'), or ↵ to return:\033[0m\033[1m \n";
 						}
 						char* filterInput = readline(filterPrompt.c_str());
                     
