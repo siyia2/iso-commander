@@ -254,8 +254,14 @@ void printMenu() {
 // Function to filter files based on search query (case-insensitive)
 std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query) {
     std::vector<std::string> filteredFiles;
-    std::string lowerQuery(query);
-    std::transform(lowerQuery.begin(), lowerQuery.end(), lowerQuery.begin(), ::tolower);
+    std::vector<std::string> queryTokens;
+
+    // Split the query string into tokens using the delimiter ';'
+    std::stringstream ss(query);
+    std::string token;
+    while (std::getline(ss, token, ';')) {
+        queryTokens.push_back(token);
+    }
 
     for (const std::string& file : files) {
         size_t lastSlashPos = file.find_last_of('/');
@@ -263,7 +269,18 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
         std::string lowerFileName(fileName);
         std::transform(lowerFileName.begin(), lowerFileName.end(), lowerFileName.begin(), ::tolower);
 
-        if (lowerFileName.find(lowerQuery) != std::string::npos) {
+        bool matchFound = false;
+        for (const std::string& queryToken : queryTokens) {
+            std::string lowerQueryToken(queryToken);
+            std::transform(lowerQueryToken.begin(), lowerQueryToken.end(), lowerQueryToken.begin(), ::tolower);
+
+            if (lowerFileName.find(lowerQueryToken) != std::string::npos) {
+                matchFound = true;
+                break;
+            }
+        }
+
+        if (matchFound) {
             filteredFiles.push_back(file);
         }
     }
@@ -604,7 +621,7 @@ void manualRefreshCache(const std::string& initialDir) {
         inputLine = initialDir;
     } else {
         // Prompt the user to enter directory paths for manual cache refresh
-        inputLine = readInputLine("\033[1;94mDirectory path(s) ↵ to build/refresh the \033[1m\033[1;92mISO Cache\033[94m (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1;94m), or ↵ to return:\n\033[0m\033[1m");
+        inputLine = readInputLine("\033[1;94mDirectory path(s) ↵ to build/refresh the \033[1m\033[1;92mISO Cache\033[94m (if multiple separate with \033[1m\033[1;93m;\033[0m\033[1;94m), or ↵ to return:\n\033[0m\033[1m");
     }
 
     if (!inputLine.empty()) {
@@ -919,10 +936,8 @@ void select_and_mount_files_by_number() {
 			historyPattern = true;
 			loadHistory();
 			
-			
-			
 			// User pressed '/', start the filtering process
-			std::string prompt = "\n\001\033[1;92m\002SearchQuery\001\033[1;94m\002 ↵ to filter \001\033[1;92m\002mount\001\033[1;94m\002 list (case-insensitive), or ↵ to return: \001\033[0m\033[1m\002";
+			std::string prompt = "\n\001\033[1;92m\002SearchQuery\001\033[1;94m\002 ↵ to filter \001\033[1;92m\002mount\001\033[1;94m\002 list (case-insensitive,if multiple separate with \001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return: \001\033[0m\033[1m\002";
 			
 			char* searchQuery = readline(prompt.c_str());
 			
@@ -1631,37 +1646,55 @@ void unmountISOs() {
                 historyPattern = true;
                 loadHistory();
                 std::string prompt;
-                prompt = "\n\001\033[1;92m\002SearchQuery\001\033[1;94m\002 ↵ to filter \001\033[1;93m\002umount\001\033[1;94m\002 list (case-insensitive), or ↵ to return: \001\033[0m\033[1m\002";
+                prompt = "\n\001\033[1;92m\002SearchQuery\001\033[1;94m\002 ↵ to filter \001\033[1;93m\002umount\001\033[1;94m\002 list (case-insensitive,if multiple separate with \001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return: \001\033[0m\033[1m\002";
                 
                 char* filterPattern = readline(prompt.c_str());
                 clearScrollBuffer();
                 
                 if (filterPattern && filterPattern[0] != '\0') {
-					std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
+					std::cout << "\\033\[1mPlease wait...\\033\[1m" << std::endl;
 					add_history(filterPattern); // Add the search query to the history
 					saveHistory();
 				}
-                clear_history();
-                
-                if (std::isspace(filterPattern[0]) || filterPattern[0] == '\0') {
-                    skipEnter = false;
-                    isFiltered = false;
-                    noValid = false;
-                    historyPattern = false;
-                    break;
-                }
-                std::string filterPatternStr(filterPattern);
-                std::transform(filterPatternStr.begin(), filterPatternStr.end(), filterPatternStr.begin(), ::tolower);
 
-                // Filter the list of ISO directories based on the filter pattern
-                filteredIsoDirs.clear();
-                for (const auto& dir : isoDirs) {
-                    std::string dirLower = dir;
-                    std::transform(dirLower.begin(), dirLower.end(), dirLower.begin(), ::tolower);
-                    if (dirLower.find(filterPatternStr) != std::string::npos) {
-                        filteredIsoDirs.push_back(dir);
-                    }
-                }
+				clear_history();
+
+				if (std::isspace(filterPattern[0]) || filterPattern[0] == '\0') {
+					skipEnter = false;
+					isFiltered = false;
+					noValid = false;
+					historyPattern = false;
+					break;
+				}
+
+				// Split the filterPattern string into tokens using the delimiter ';'
+				std::vector<std::string> filterPatterns;
+				std::stringstream ss(filterPattern);
+				std::string token;
+				while (std::getline(ss, token, ';')) {
+					filterPatterns.push_back(token);
+					std::transform(filterPatterns.back().begin(), filterPatterns.back().end(), filterPatterns.back().begin(), ::tolower);
+				}
+
+				// Filter the list of ISO directories based on the filter pattern
+				filteredIsoDirs.clear();
+
+				for (const auto& dir : isoDirs) {
+					std::string dirLower = dir;
+					std::transform(dirLower.begin(), dirLower.end(), dirLower.begin(), ::tolower);
+
+					bool matchFound = false;
+					for (const std::string& pattern : filterPatterns) {
+						if (dirLower.find(pattern) != std::string::npos) {
+							matchFound = true;
+							break;
+						}
+					}
+
+					if (matchFound) {
+						filteredIsoDirs.push_back(dir);
+					}
+				}
 
                 // Check if any directories matched the filter
                 if (filteredIsoDirs.empty()) {
