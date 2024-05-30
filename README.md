@@ -5,7 +5,7 @@ https://github.com/siyia2/mounter_elite
 ![2024-04-27-212552_grim](https://github.com/siyia2/iso-commander/assets/46220960/c823f745-0231-491d-a86d-6b5610d1f5a1)
 
 
-State of the art secure and blazing fast terminal `ISO` manager written in C++. All paths are mounted under `/mnt/iso_*` format and conversion results are stored in their respective source directories. `ROOT` access is essential for `mount&umount` operations.
+State of the art secure and blazing fast terminal `ISO` manager written in C++. All paths are mounted under `/mnt/iso_*` format and conversions are stored in their respective source directories. `ROOT` access is essential for `mount&umount` operations.
 
 For best experience execute with: `sudo isocmd`.
 
