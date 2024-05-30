@@ -37,7 +37,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     }
 
     loadHistory();
-    std::string inputPaths = readInputLine("\033[1;94mDirectory path(s) ↵ (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1m\033[1;94m) to search for \033[1m\033[1;92m" + fileExtension + " \033[1;94mfiles, or ↵ to return:\n\033[0m\033[1m");
+    std::string inputPaths = readInputLine("\033[1;94mDirectory path(s) ↵ (multi-path separator: \033[1m\033[1;93m;\033[0m\033[1m\033[1;94m) to search for \033[1m\033[1;92m" + fileExtension + " \033[1;94mfiles, or ↵ to return:\n\033[0m\033[1m");
     clearScrollBuffer();
 
     if (!inputPaths.empty()) {
@@ -131,9 +131,9 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
                 
                 std::string prompt;
 				if (fileType == "bin" || fileType == "img") {
-					prompt = "\n\001\033[1;92m\002SearchQuery\001\033[1;94m\002 ↵ to filter \001\033[1;38;5;208m\002BIN/IMG\001\033[1;94m\002 list (case-insensitive,if multiple separate with \001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return: \001\033[0m\002\001\033[1m\002";
+					prompt = "\n\001\033[1;92m\002SearchQuery\001\033[1;94m\002 ↵ to filter \001\033[1;38;5;208m\002BIN/IMG\001\033[1;94m\002 list (ccase-insensitive, multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return: \001\033[0m\002\001\033[1m\002";
 				} else if (fileType == "mdf") {
-					prompt = "\n\001\033[1;92m\002SearchQuery\001\033[1;94m\002 ↵ to filter \001\033[1;38;5;208m\002MDF\001\033[1;94m\002 conversion list (case-insensitive,if multiple separate with \001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return: \001\033[0m\002\001\033[1m\002";
+					prompt = "\n\001\033[1;92m\002SearchQuery\001\033[1;94m\002 ↵ to filter \001\033[1;38;5;208m\002MDF\001\033[1;94m\002 conversion list (case-insensitive, multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return: \001\033[0m\002\001\033[1m\002";
 				}
 
 				char* searchQuery = readline(prompt.c_str());

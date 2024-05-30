@@ -621,7 +621,7 @@ void manualRefreshCache(const std::string& initialDir) {
         inputLine = initialDir;
     } else {
         // Prompt the user to enter directory paths for manual cache refresh
-        inputLine = readInputLine("\033[1;94mDirectory path(s) ↵ to build/refresh the \033[1m\033[1;92mISO Cache\033[94m (if multiple separate with \033[1m\033[1;93m;\033[0m\033[1;94m), or ↵ to return:\n\033[0m\033[1m");
+        inputLine = readInputLine("\033[1;94mDirectory path(s) ↵ to build/refresh the \033[1m\033[1;92mISO Cache\033[94m (multi-path separator: \033[1m\033[1;93m;\033[0m\033[1;94m), or ↵ to return:\n\033[0m\033[1m");
     }
 
     if (!inputLine.empty()) {
@@ -937,7 +937,7 @@ void select_and_mount_files_by_number() {
 			loadHistory();
 			
 			// User pressed '/', start the filtering process
-			std::string prompt = "\n\001\033[1;92m\002SearchQuery\001\033[1;94m\002 ↵ to filter \001\033[1;92m\002mount\001\033[1;94m\002 list (case-insensitive,if multiple separate with \001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return: \001\033[0m\033[1m\002";
+			std::string prompt = "\n\001\033[1;92m\002SearchQuery\001\033[1;94m\002 ↵ to filter \001\033[1;92m\002mount\001\033[1;94m\002 list (case-insensitive, multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return: \001\033[0m\033[1m\002";
 			
 			char* searchQuery = readline(prompt.c_str());
 			
@@ -1646,7 +1646,7 @@ void unmountISOs() {
                 historyPattern = true;
                 loadHistory();
                 std::string prompt;
-                prompt = "\n\001\033[1;92m\002SearchQuery\001\033[1;94m\002 ↵ to filter \001\033[1;93m\002umount\001\033[1;94m\002 list (case-insensitive,if multiple separate with \001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return: \001\033[0m\033[1m\002";
+                prompt = "\n\001\033[1;92m\002SearchQuery\001\033[1;94m\002 ↵ to filter \001\033[1;93m\002umount\001\033[1;94m\002 list (case-insensitive, multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return: \001\033[0m\033[1m\002";
                 
                 char* filterPattern = readline(prompt.c_str());
                 clearScrollBuffer();
