@@ -918,7 +918,7 @@ void select_and_mount_files_by_number() {
     );
         clearScrollBuffer();
         
-        if (strcmp(input, "/") != 0) {
+        if (strcmp(input, "/") != 0 || (!(std::isspace(input[0]) || input[0] == '\0'))) {
 			std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 		}
 
@@ -1624,7 +1624,7 @@ void unmountISOs() {
         char* input = readline("\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 (e.g., '1-3', '1 5', '00' for all), / ↵ to filter\001\033[1;94m\002 , or ↵ to return:\001\033[0m\002\001\033[1m\002 ");
         clearScrollBuffer();
 
-        if (input[0] != '/') {
+        if (input[0] != '/' || (!(std::isspace(input[0]) || input[0] == '\0'))) {
             std::cout << "Please wait...\n";
         }
 
