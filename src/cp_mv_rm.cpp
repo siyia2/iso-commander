@@ -96,6 +96,10 @@ void select_and_operate_files_by_number(const std::string& operation) {
         // Prompt user for input or filter
         char* input = readline(("\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + "\001\033[1;94m\002 (e.g., '1-3', '1 5'), / ↵ to filter, or ↵ to return:\001\033[0m\002\001\033[1m\002 ").c_str());
         clearScrollBuffer();
+        
+        if (strcmp(input, "/") != 0) {
+			std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
+		}
 
         // Check if the user wants to return
         if (std::isspace(input[0]) || input[0] == '\0') {
@@ -115,15 +119,15 @@ void select_and_operate_files_by_number(const std::string& operation) {
             prompt = "\n\001\033[1;92m\002SearchQuery\001\033[1;94m\002 ↵ to filter \001" + operationColor + "\002" + operation + "\001" + "\002\001\033[1;94m\002 list (case-insensitive), or ↵ to return: \001\033[0m\002\001\033[1m\002";
             
             char* searchQuery = readline(prompt.c_str());
+            clearScrollBuffer();
             
             if (searchQuery && searchQuery[0] != '\0') {
+				std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 				add_history(searchQuery); // Add the search query to the history
 				saveHistory();
 			}
             clear_history();
             
-            clearScrollBuffer();
-			std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
             // Store the original isoFiles vector
             std::vector<std::string> originalIsoFiles = isoFiles;

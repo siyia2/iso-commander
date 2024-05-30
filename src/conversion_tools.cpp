@@ -39,9 +39,9 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     loadHistory();
     std::string inputPaths = readInputLine("\033[1;94mDirectory path(s) ↵ (if many, separate them with \033[1m\033[1;93m;\033[0m\033[1m\033[1;94m) to search for \033[1m\033[1;92m" + fileExtension + " \033[1;94mfiles, or ↵ to return:\n\033[0m\033[1m");
     clearScrollBuffer();
-    std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
     if (!inputPaths.empty()) {
+		std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
         saveHistory();
     }
 
@@ -138,14 +138,14 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
 				char* searchQuery = readline(prompt.c_str());
 				
+				clearScrollBuffer();
+				
 				if (searchQuery != nullptr && searchQuery[0] != '\0') {
+					std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 					add_history(searchQuery); // Add the search query to the history
 					saveHistory();
 				}
 				clear_history();
-				
-                clearScrollBuffer();
-                std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 
                 if (std::isspace(searchQuery[0]) || searchQuery[0] == '\0') {
 					historyPattern = false;
