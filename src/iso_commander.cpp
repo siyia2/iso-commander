@@ -187,6 +187,7 @@ void submenu1() {
 		}
 					
           std::string submenu_choice(submenu_input);
+          free(submenu_input);
          // Check if the input length is exactly 1
         if (submenu_choice.empty() || submenu_choice.length() == 1) {
 		std::string operation;
@@ -221,7 +222,6 @@ void submenu1() {
             break;
 			}
 		}
-		free(submenu_input);
     }
 }
 
@@ -247,6 +247,7 @@ void submenu2() {
 		}
 					
           std::string submenu_choice(submenu_input);
+          free(submenu_input);
          // Check if the input length is exactly 1
 		 if (submenu_choice.empty() || submenu_choice.length() == 1){
          switch (submenu_choice[0]) {		
@@ -262,7 +263,6 @@ void submenu2() {
                 break;
 			}
 		}
-		free(submenu_input);
 	}	
 }
 
@@ -971,10 +971,12 @@ void select_and_mount_files_by_number() {
 
         // Check if the user wants to return
         if (std::isspace(input[0]) || input[0] == '\0') {
+			free(input);
             break;
         }
 
 		if (strcmp(input, "/") == 0) {
+			free(input);
 			verboseFiltered = true;
 			
 			while (true) {
@@ -1005,6 +1007,7 @@ void select_and_mount_files_by_number() {
 
 			if (searchQuery != nullptr) {
 				std::vector<std::string> filteredFiles = filterFiles(isoFiles, searchQuery);
+				free(searchQuery);
 
 				if (filteredFiles.empty()) {
 					clearScrollBuffer();
@@ -1022,11 +1025,13 @@ void select_and_mount_files_by_number() {
 					
 						// Check if the user wants to return
 						if (std::isspace(input[0]) || input[0] == '\0') {
+							free(input);
 							historyPattern = false;
 							break;
 						}
 					
 						if (std::strcmp(input, "00") == 0) {
+							free(input);
 							clearScrollBuffer();
 							std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 							// Restore the original list of ISO files
@@ -1046,12 +1051,10 @@ void select_and_mount_files_by_number() {
 							clearScrollBuffer();
 
 							verbose(mountedFiles, skippedMessages, errorMessages, uniqueErrorMessages);
-					
+							free(input);
 						}
-						free(input);
 					}
-				}
-				
+				}	
 			} 
 				} else {
 					historyPattern = false;
@@ -1059,7 +1062,6 @@ void select_and_mount_files_by_number() {
 					isoFiles = originalIsoFiles; // Revert to the original cache list
 					break;
 			}
-			free(searchQuery);
 		}
 	}
 
@@ -1074,8 +1076,8 @@ void select_and_mount_files_by_number() {
             verbose(mountedFiles, skippedMessages, errorMessages, uniqueErrorMessages);
 
         }
-        free(input);
-		
+        
+        free(input);		
     }
 }
 
@@ -1678,11 +1680,13 @@ void unmountISOs() {
 
         // Check if the user wants to return to the main menu
         if (std::isspace(input[0]) || input[0] == '\0') {
+			free(input);
             break;
         }
 
         // Check if the user wants to filter the list of ISOs
         if (strcmp(input, "/") == 0) {
+			free(input);
 			bool breakOuterLoop = false;
             while (true) {
 				if (breakOuterLoop) {
@@ -1723,6 +1727,7 @@ void unmountISOs() {
 					filterPatterns.push_back(token);
 					std::transform(filterPatterns.back().begin(), filterPatterns.back().end(), filterPatterns.back().begin(), ::tolower);
 				}
+				free(filterPattern);
 
 				// Filter the list of ISO directories based on the filter pattern
 				filteredIsoDirs.clear();
@@ -1774,6 +1779,7 @@ void unmountISOs() {
                         }
 
                         if (std::strcmp(chosenNumbers, "00") == 0) {
+							free(chosenNumbers);
 							clearScrollBuffer();
 							std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
                             selectedIsoDirs = filteredIsoDirs;
@@ -1814,6 +1820,8 @@ void unmountISOs() {
 									invalidInput = true;
                             }
                         }
+                        
+                        free(chosenNumbers);
 
                         selectedIsoDirsFiltered.clear();
                         for (size_t index : selectedIndices) {
@@ -1832,7 +1840,6 @@ void unmountISOs() {
                             std::cout << "\n\033[1;32m↵ to continue...";
                             std::cin.get();
                         }
-                        free(chosenNumbers);
                     }
                 }
 
@@ -1843,12 +1850,12 @@ void unmountISOs() {
 					historyPattern = false;
                     break;
                 }
-                free(filterPattern);
             }
         }
 
         // Check if the user wants to unmount all ISOs
         if (std::strcmp(input, "00") == 0) {
+			free(input);
             selectedIsoDirs = isoDirs;
         } else if (!isFiltered) {
             // Parse the user input to determine which ISOs to unmount

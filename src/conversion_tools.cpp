@@ -115,6 +115,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         char* input = readline(prompt.c_str());
 
         if (std::isspace(input[0]) || input[0] == '\0') {
+			free(input);
             clearScrollBuffer();
             break;
         }
@@ -148,11 +149,13 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 				clear_history();
 
                 if (std::isspace(searchQuery[0]) || searchQuery[0] == '\0') {
+					free(searchQuery);
 					historyPattern = false;
                     break;
                 }
 
                 std::vector<std::string> filteredFiles = filterFiles(files, searchQuery);
+                free(searchQuery);
 
                 if (filteredFiles.empty()) {
                     clearScrollBuffer();
@@ -175,11 +178,13 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
                     
 						// Check if the user wants to return
 						if (std::isspace(input[0]) || input[0] == '\0') {
+							free(input);
 							historyPattern = false;
 							break;
 						}
 
 						if (std::isspace(filterInput[0]) || filterInput[0] == '\0') {
+							free(filterInput);
 							historyPattern = false;
 							break;
 						}
@@ -187,20 +192,20 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 						clearScrollBuffer();
 						std::cout << "\033[1mPlease wait...\n\033[1m" << std::endl;
 						processInput(filterInput, filteredFiles, inputPaths, flag);
+						
+						free(filterInput);
 
 						std::cout << " " << std::endl;
 						std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
 						std::cin.ignore();
-						
-						free(input);
 					}
 				}
-				free(searchQuery);
 			}
         } else {
             clearScrollBuffer();
             std::cout << "\033[1mPlease wait...\n\033[1m" << std::endl;
             processInput(input, files, inputPaths, flag);
+            free(input);
 
             std::cout << " " << std::endl;
             std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";

@@ -98,15 +98,18 @@ void select_and_operate_files_by_number(const std::string& operation) {
         clearScrollBuffer();
         
         if (strcmp(input, "/") != 0 || (!(std::isspace(input[0]) || input[0] == '\0'))) {
+			free(input);
 			std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 		}
 
         // Check if the user wants to return
         if (std::isspace(input[0]) || input[0] == '\0') {
+			free(input);
             break;
         }
 
         if (strcmp(input, "/") == 0) {
+			free(input);
 			while (true) {
             clearScrollBuffer();
 			
@@ -136,6 +139,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
             if (searchQuery != nullptr) {
                 std::vector<std::string> filteredFiles = filterFiles(isoFiles, searchQuery);
+                free(searchQuery);
 
                 if (filteredFiles.empty()) {
 					clearScrollBuffer();
@@ -153,6 +157,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
                     
 						// Check if the user wants to return
 						if (std::isspace(input[0]) || input[0] == '\0') {
+							free(input);
 							historyPattern = false;
 							break;
 						}
@@ -172,17 +177,17 @@ void select_and_operate_files_by_number(const std::string& operation) {
 								process = "cp";
 								processOperationInput(input, filteredFiles, operationSet, process);
 								}
+								free(input);
 							}
-							free(input);
 						}
 					}
 				}
 			} else {
+					free(searchQuery);
 					isoFiles = originalIsoFiles; // Revert to the original cache list
 					historyPattern = false;
 					break;
 				}
-				free(searchQuery);
 			}
 			
         } else {
@@ -197,6 +202,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
                 process = "cp";
                 processOperationInput(input, isoFiles, operationSet, process);
             }
+            free(input);
         }
 
         // If ISO files become empty after operation, display a message and return
