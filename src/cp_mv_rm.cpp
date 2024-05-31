@@ -98,7 +98,6 @@ void select_and_operate_files_by_number(const std::string& operation) {
         clearScrollBuffer();
         
         if (strcmp(input, "/") != 0 || (!(std::isspace(input[0]) || input[0] == '\0'))) {
-			free(input);
 			std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 		}
 
@@ -214,7 +213,6 @@ void select_and_operate_files_by_number(const std::string& operation) {
             std::cin.get();
             break;
         }
-        free(input);
     }
 }
 

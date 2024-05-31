@@ -211,7 +211,6 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
             std::cout << "\033[1;32m↵ to continue...\033[0m\033[1m";
             std::cin.ignore();
         }
-        free(input);
     }
 }
 

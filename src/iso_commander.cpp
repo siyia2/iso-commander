@@ -1047,16 +1047,17 @@ void select_and_mount_files_by_number() {
 
 							// Process the user input with the filtered list
 							processAndMountIsoFiles(input, filteredFiles, mountedSet);
+							free(input);
 						
 							clearScrollBuffer();
 
 							verbose(mountedFiles, skippedMessages, errorMessages, uniqueErrorMessages);
-							free(input);
 						}
 					}
 				}	
 			} 
 				} else {
+					free(searchQuery);
 					historyPattern = false;
 					verboseFiltered = true;
 					isoFiles = originalIsoFiles; // Revert to the original cache list
@@ -1067,6 +1068,7 @@ void select_and_mount_files_by_number() {
 
         // Check if the user wants to mount all ISO files
 		if (std::strcmp(input, "00") == 0) {
+			free(input);
 			mountAllIsoFiles(isoFiles, mountedSet, isoFilesToMount);
 		}
         if (input[0] != '\0' && (strcmp(input, "/") != 0) && !verboseFiltered) {
@@ -1074,10 +1076,8 @@ void select_and_mount_files_by_number() {
             processAndMountIsoFiles(input, isoFiles, mountedSet);
             clearScrollBuffer();
             verbose(mountedFiles, skippedMessages, errorMessages, uniqueErrorMessages);
-
-        }
-        
-        free(input);		
+            free(input);
+        }      
     }
 }
 
@@ -1860,6 +1860,7 @@ void unmountISOs() {
             // Parse the user input to determine which ISOs to unmount
             std::set<size_t> selectedIndices;
             std::istringstream iss(input);
+            free(input);
             for (std::string token; iss >> token;) {
                 try {
                     size_t dashPos = token.find('-');
@@ -1942,6 +1943,5 @@ void unmountISOs() {
             skipEnter = false;
             isFiltered = false;
         }
-        free(input);
     }
 }
