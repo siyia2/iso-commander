@@ -41,13 +41,52 @@ std::vector<std::string> unmountedErrors;
 
 
 
+// Global variables for cleanup
+int lockFileDescriptor = -1;
+
+// Function to handle termination signals
+void signalHandler(int signum) {
+    
+    // Perform cleanup before exiting
+    if (lockFileDescriptor != -1) {
+        close(lockFileDescriptor);
+    }
+    
+    exit(signum);
+}
+
+
 // Main function
 int main(int argc, char *argv[]) {
+    const char* lockFile = "/tmp/my_app.lock";
+    lockFileDescriptor = open(lockFile, O_CREAT | O_RDWR, 0666);
+    if (lockFileDescriptor == -1) {
+        std::cerr << "Unable to open lock file." << std::endl;
+        return 1;
+    }
+
+    struct flock fl;
+    fl.l_type = F_WRLCK;  // Write lock
+    fl.l_whence = SEEK_SET;
+    fl.l_start = 0;
+    fl.l_len = 0;  // Lock the whole file
+
+    if (fcntl(lockFileDescriptor, F_SETLK, &fl) == -1) {
+        std::cerr << "Another instance is already running." << std::endl;
+        close(lockFileDescriptor);
+        return 1;
+    }
+
+    // Register signal handlers
+    signal(SIGINT, signalHandler);  // Handle Ctrl+C
+    signal(SIGTERM, signalHandler); // Handle termination signals
+    
     bool exitProgram = false;
     std::string choice;
 
-    if (argc == 2 && (std::string(argv[1]) == "--version"|| std::string(argv[1]) == "-v")) {
+    if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
         printVersionNumber("3.2.1");
+        close(lockFileDescriptor); // Close the file descriptor before exiting
         return 0;
     }
 
@@ -56,7 +95,7 @@ int main(int argc, char *argv[]) {
         print_ascii();
         // Display the main menu options
         printMenu();
-        
+
         // Clear history
         clear_history();
 
@@ -67,6 +106,8 @@ int main(int argc, char *argv[]) {
         }
 
         std::string choice(input);
+        free(input); // Free the allocated memory by readline
+
         if (choice == "1") {
             submenu1();
         } else {
@@ -81,7 +122,7 @@ int main(int argc, char *argv[]) {
                         clearScrollBuffer();
                         break;
                     case '4':
-						exitProgram = true; // Exit the program
+                        exitProgram = true; // Exit the program
                         clearScrollBuffer();
                         break;
                     default:
@@ -91,6 +132,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    close(lockFileDescriptor); // Close the file descriptor, releasing the lock
     return 0;
 }
 
