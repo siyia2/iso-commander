@@ -1792,6 +1792,7 @@ void unmountISOs() {
                         // Parse the user input to determine which ISOs to unmount
                         std::set<size_t> selectedIndices;
                         std::istringstream iss(chosenNumbers);
+                        free(chosenNumbers);
                         for (std::string token; iss >> token;) {
                             try {
                                 size_t dashPos = token.find('-');
@@ -1819,9 +1820,7 @@ void unmountISOs() {
 									errorMessages.push_back("Invalid input: '" + token + "'.");
 									invalidInput = true;
                             }
-                        }
-                        
-                        free(chosenNumbers);
+                        }               
 
                         selectedIsoDirsFiltered.clear();
                         for (size_t index : selectedIndices) {
