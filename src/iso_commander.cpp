@@ -1627,10 +1627,12 @@ void unmountISOs() {
             bool breakOuterLoop = false;
             while (true) {
                 if (breakOuterLoop) {
+					historyPattern = false;
                     break;
                 }
                 clearScrollBuffer();
                 isFiltered = true;
+                historyPattern = true;
                 loadHistory();
                 std::string prompt = "\n\001\033[1;92m\002SearchQuery\001\033[1;94m\002 ↵ to filter \001\033[1;93m\002umount\001\033[1;94m\002 list (case-insensitive, multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return: \001\033[0m\033[1m\002";
                 
@@ -1670,6 +1672,7 @@ void unmountISOs() {
                     for (const std::string& pattern : filterPatterns) {
                         if (dirLower.find(pattern) != std::string::npos) {
                             matchFound = true;
+                            historyPattern = false;
                             break;
                         }
                     }
@@ -1710,6 +1713,7 @@ void unmountISOs() {
                             selectedIsoDirs = filteredIsoDirs;
                             isFiltered = true;
                             breakOuterLoop = true;
+                            historyPattern = false;
                             break;
                         }
 
@@ -1753,6 +1757,7 @@ void unmountISOs() {
                             selectedIsoDirs = selectedIsoDirsFiltered;
                             skipEnter = false;
                             isFiltered = true;
+                            historyPattern = false;
                             break;
                         } else {
                             clearScrollBuffer();
@@ -1767,6 +1772,7 @@ void unmountISOs() {
                     clearScrollBuffer();
                     std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
                     isFiltered = true;
+                    historyPattern = false;
                     break;
                 }
             }
