@@ -1712,6 +1712,7 @@ void unmountISOs() {
 				clear_history();
 
 				if (std::isspace(filterPattern[0]) || filterPattern[0] == '\0') {
+					free(filterPattern);
 					skipEnter = false;
 					isFiltered = false;
 					noValid = false;
@@ -1772,6 +1773,7 @@ void unmountISOs() {
                         char* chosenNumbers = readline("\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 (e.g., '1-3', '1 5', '00' for all), or ↵ to return:\001\033[0m\002\001\033[1m\002 ");
 
                         if (std::isspace(chosenNumbers[0]) || chosenNumbers[0] == '\0') {
+							free(chosenNumbers);
                             noValid = false;
                             skipEnter = true;
                             historyPattern = false;
