@@ -1621,7 +1621,6 @@ void unmountISOs() {
     std::mutex isoDirsMutex;
     const std::string isoPath = "/mnt";
     bool invalidInput = false, skipEnter = false, isFiltered = false, noValid = true;
-    const int maxThreads = std::thread::hardware_concurrency();
 
     while (true) {
         // Initialize variables for each loop iteration
