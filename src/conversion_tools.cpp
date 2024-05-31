@@ -165,6 +165,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
                 } else {
 					while (true) {
 						clearScrollBuffer();
+						clear_history();
 						std::cout << "\033[1mFiltered results:\n\033[0m\033[1m" << std::endl;
 						printFileList(filteredFiles);
 

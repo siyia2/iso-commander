@@ -164,6 +164,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 						// Check if the user provided input
 						if (input[0] != '\0' && (strcmp(input, "/") != 0)) {
 							clearScrollBuffer();
+							historyPattern = false;
 
 							// Process the user input with the filtered list
 							if (operation == "rm") {
