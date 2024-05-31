@@ -173,6 +173,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 								processOperationInput(input, filteredFiles, operationSet, process);
 								}
 							}
+							free(input);
 						}
 					}
 				}
@@ -181,6 +182,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 					historyPattern = false;
 					break;
 				}
+				free(searchQuery);
 			}
 			
         } else {
@@ -206,6 +208,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
             std::cin.get();
             break;
         }
+        free(input);
     }
 }
 

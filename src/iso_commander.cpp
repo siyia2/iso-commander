@@ -57,7 +57,7 @@ int main(int argc, char *argv[]) {
     lockFileDescriptor = open(lockFile, O_CREAT | O_RDWR, 0666);
     
     if (lockFileDescriptor == -1) {
-        std::cerr << "\033[1;91m\033[1;93mAnother instance of isocmd is already running. If not do - rm /tmp/isocmd.lock.\n\033[0m" << std::endl;
+        std::cerr << "\033[91m\033[93mAnother instance of isocmd is already running. If not run \"rm /tmp/isocmd.lock\".\n\033[0m" << std::endl;
         return 1;
     }
 
@@ -68,7 +68,7 @@ int main(int argc, char *argv[]) {
     fl.l_len = 0;  // Lock the whole file
 
     if (fcntl(lockFileDescriptor, F_SETLK, &fl) == -1) {
-        std::cerr << "\033[1;93mAnother instance of isocmd is already running.\n\033[0m" << std::endl;
+        std::cerr << "\033[93mAnother instance of isocmd is already running.\n\033[0m" << std::endl;
         close(lockFileDescriptor);
         return 1;
     }
@@ -221,6 +221,7 @@ void submenu1() {
             break;
 			}
 		}
+		free(submenu_input);
     }
 }
 
@@ -238,6 +239,7 @@ void submenu2() {
         std::cout << "\033[1;32m+-------------------------+" << std::endl;
         std::cout << " " << std::endl;
         char* submenu_input = readline("\001\033[1;94m\002Choose an option:\001\033[0m\033[1m\002 ");
+        
 
         if (!submenu_input || std::strlen(submenu_input) == 0) {
 			delete[] submenu_input;
@@ -260,8 +262,8 @@ void submenu2() {
                 break;
 			}
 		}
-	}
-	
+		free(submenu_input);
+	}	
 }
 
 
@@ -985,7 +987,6 @@ void select_and_mount_files_by_number() {
 			std::string prompt = "\n\001\033[1;92m\002SearchQuery\001\033[1;94m\002 ↵ to filter \001\033[1;92m\002mount\001\033[1;94m\002 list (case-insensitive, multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return: \001\033[0m\033[1m\002";
 			
 			char* searchQuery = readline(prompt.c_str());
-			
 			clearScrollBuffer();
 			
 			
@@ -1018,7 +1019,6 @@ void select_and_mount_files_by_number() {
 					
 						// Prompt user for input again with the filtered list
 						char* input = readline("\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., '1-3', '1 5', '00' for all), ↵ to return:\001\033[0m\033[1m\002 ");
-						
 					
 						// Check if the user wants to return
 						if (std::isspace(input[0]) || input[0] == '\0') {
@@ -1048,6 +1048,7 @@ void select_and_mount_files_by_number() {
 							verbose(mountedFiles, skippedMessages, errorMessages, uniqueErrorMessages);
 					
 						}
+						free(input);
 					}
 				}
 				
@@ -1058,6 +1059,7 @@ void select_and_mount_files_by_number() {
 					isoFiles = originalIsoFiles; // Revert to the original cache list
 					break;
 			}
+			free(searchQuery);
 		}
 	}
 
@@ -1072,6 +1074,7 @@ void select_and_mount_files_by_number() {
             verbose(mountedFiles, skippedMessages, errorMessages, uniqueErrorMessages);
 
         }
+        free(input);
 		
     }
 }
@@ -1667,6 +1670,7 @@ void unmountISOs() {
         // Prompt the user for input
         char* input = readline("\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 (e.g., '1-3', '1 5', '00' for all), / ↵ to filter\001\033[1;94m\002 , or ↵ to return:\001\033[0m\002\001\033[1m\002 ");
         clearScrollBuffer();
+        
 
         if (input[0] != '/' || (!(std::isspace(input[0]) || input[0] == '\0'))) {
             std::cout << "Please wait...\n";
@@ -1828,6 +1832,7 @@ void unmountISOs() {
                             std::cout << "\n\033[1;32m↵ to continue...";
                             std::cin.get();
                         }
+                        free(chosenNumbers);
                     }
                 }
 
@@ -1838,6 +1843,7 @@ void unmountISOs() {
 					historyPattern = false;
                     break;
                 }
+                free(filterPattern);
             }
         }
 
@@ -1930,5 +1936,6 @@ void unmountISOs() {
             skipEnter = false;
             isFiltered = false;
         }
+        free(input);
     }
 }
