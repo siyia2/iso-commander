@@ -40,7 +40,6 @@ std::vector<std::string> unmountedFiles;
 std::vector<std::string> unmountedErrors;
 
 
-
 // Global variables for cleanup
 int lockFileDescriptor = -1;
 
