@@ -22,6 +22,10 @@ bool gapPrintedtraverse = false; // for traverse function
 // For saving history to a differrent cache for FilterPatterns
 bool historyPattern = false;
 
+// Global variables for cleanup
+int lockFileDescriptor = -1;
+
+
 // Vector to store ISO mounts
 std::vector<std::string> mountedFiles;
 // Vector to store skipped ISO mounts
@@ -38,21 +42,6 @@ std::unordered_set<std::string> uniqueErrorMessages;
 std::vector<std::string> unmountedFiles;
 // Vector to store ISO unmount errors
 std::vector<std::string> unmountedErrors;
-
-
-// Global variables for cleanup
-int lockFileDescriptor = -1;
-
-// Function to handle termination signals
-void signalHandler(int signum) {
-    
-    // Perform cleanup before exiting
-    if (lockFileDescriptor != -1) {
-        close(lockFileDescriptor);
-    }
-    
-    exit(signum);
-}
 
 
 // Main function
@@ -336,6 +325,18 @@ void clearScrollBuffer() {
     std::cout << "\033[2J";  // Clear the screen
     std::cout << "\033[H";   // Move the cursor to the top-left corner
     std::cout.flush();       // Ensure the output is flushed
+}
+
+
+// Function to handle termination signals
+void signalHandler(int signum) {
+    
+    // Perform cleanup before exiting
+    if (lockFileDescriptor != -1) {
+        close(lockFileDescriptor);
+    }
+    
+    exit(signum);
 }
 
 
