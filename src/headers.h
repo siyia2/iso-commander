@@ -6,6 +6,7 @@
 #include <cctype>
 #include <chrono>
 #include <condition_variable>
+#include <csignal>
 #include <cstring>
 #include <dirent.h>
 #include <filesystem>
@@ -223,6 +224,7 @@ bool isNumeric(const std::string& str);
 //	voids
 
 // General functions
+void signalHandler(int signum);
 void clearScrollBuffer();
 
 // Mount functions
