@@ -57,7 +57,7 @@ int main(int argc, char *argv[]) {
     lockFileDescriptor = open(lockFile, O_CREAT | O_RDWR, 0666);
     
     if (lockFileDescriptor == -1) {
-        std::cerr << "\033[91m\033[93mAnother instance of isocmd is already running. If not run \"rm /tmp/isocmd.lock\".\n\033[0m" << std::endl;
+        std::cerr << "\033[93mAnother instance of isocmd is already running. If not run \"rm /tmp/isocmd.lock\".\n\033[0m" << std::endl;
         return 1;
     }
 
