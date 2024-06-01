@@ -48,7 +48,7 @@ std::vector<std::string> unmountedErrors;
 int main(int argc, char *argv[]) {
 	
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
-        printVersionNumber("3.2.4");
+        printVersionNumber("3.2.5");
         return 0;
     }
 	
@@ -1779,12 +1779,19 @@ void unmountISOs() {
                     while (true) {
                         clearScrollBuffer();
                         std::cout << "\033[1mFiltered results:\n\033[0m\033[1m" << std::endl;
-                        for (size_t i = 0; i < filteredIsoDirs.size(); ++i) {
-                            std::string afterSlash = filteredIsoDirs[i].substr(filteredIsoDirs[i].find_last_of("/") + 1);
-                            std::string afterUnderscore = afterSlash.substr(afterSlash.find("_") + 1);
-                            std::string color = (i % 2 == 0) ? "\033[1;31m" : "\033[1;32m"; // Red if even, Green if odd
-                            std::cout << color << "\033[1m" << i + 1 << ".\033[0m\033[1m /mnt/iso_" << "\033[1;95m" << afterUnderscore << "\033[0m\033[1m" << std::endl;
-                        }
+                        size_t maxIndex = filteredIsoDirs.size();
+						size_t numDigits = std::to_string(maxIndex).length();
+
+						for (size_t i = 0; i < filteredIsoDirs.size(); ++i) {
+							std::string afterSlash = filteredIsoDirs[i].substr(filteredIsoDirs[i].find_last_of("/") + 1);
+							std::string afterUnderscore = afterSlash.substr(afterSlash.find("_") + 1);
+							std::string color = (i % 2 == 0) ? "\033[1;31m" : "\033[1;32m"; // Red if even, Green if odd
+
+							std::cout << color << "\033[1m"
+							<< std::setw(numDigits) << std::setfill(' ') << (i + 1) << ".\033[0m\033[1m /mnt/iso_" 
+							<< "\033[1;95m" << afterUnderscore << "\033[0m\033[1m" 
+							<< std::endl;
+						}
 
                         // Prompt the user for the list of ISOs to unmount
                         char* chosenNumbers = readline("\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 (e.g., '1-3', '1 5', '00' for all), or ↵ to return:\001\033[0m\002\001\033[1m\002 ");
