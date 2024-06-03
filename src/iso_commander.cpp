@@ -1233,6 +1233,18 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
 }
 
 
+// For std::unordered_set<std::pair<int, int>, pair_hash> processedRanges; in processAndMountIsoFiles
+struct pair_hash {
+    template <class T1, class T2>
+    std::size_t operator () (const std::pair<T1, T2>& pair) const {
+        // Hash combination algorithm
+        size_t h1 = std::hash<T1>{}(pair.first);
+        size_t h2 = std::hash<T2>{}(pair.second);
+        return h1 ^ (h2 << 1);
+    }
+};
+
+
 // Function to process input and mount ISO files asynchronously
 void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
     // Initialize input string stream with the provided input
@@ -1251,7 +1263,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     std::unordered_set<int> validIndices;
     
     // Set to store processed ranges
-    std::set<std::pair<int, int>> processedRanges;
+    std::unordered_set<std::pair<int, int>, pair_hash> processedRanges;
 
     // Create a ThreadPool with maxThreads
     ThreadPool pool(numThreads);
