@@ -415,7 +415,15 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             }
         }
     } else {
-        std::cout << "\033[1;94mThe following ISO(s) will be "<< operationColor + operationDescription << "\033[1;94m:\n\033[0;1m" << std::endl;
+		clearScrollBuffer();	
+		if (!uniqueErrorMessages.empty()) {
+            std::cout << " " << std::endl;
+		}
+        for (const auto& uniqueErrorMessage : uniqueErrorMessages) {
+            std::cout << uniqueErrorMessage << std::endl;
+		}
+		
+        std::cout << "\n\033[1;94mThe following ISO(s) will be "<< operationColor + operationDescription << "\033[1;94m:\n\033[0;1m" << std::endl;
         for (const auto& chunk : indexChunks) {
             for (const auto& index : chunk) {
                 auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFiles[index - 1]);
