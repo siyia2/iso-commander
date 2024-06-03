@@ -1,5 +1,4 @@
 #include "headers.h"
-#include <list>
 
  
 // Get max available CPU cores for global use, fallback is 2 cores
