@@ -854,7 +854,6 @@ void manualRefreshCache(const std::string& initialDir) {
     }
     std::cout << "\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore();
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 	}
 	promptFlag = true;
 }
@@ -978,7 +977,6 @@ void select_and_mount_files_by_number() {
         std::cout << " " << std::endl;
         std::cout << "\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore();
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         return;
     }
 
@@ -1058,7 +1056,6 @@ void select_and_mount_files_by_number() {
 					std::cout << "\033[1;91mNo ISO(s) match the search query.\033[0;1m\n";
 					std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 					std::cin.ignore();
-					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 				} else {
 					while (true) {
 						clearScrollBuffer();
@@ -1162,7 +1159,6 @@ void verbose(std::vector<std::string>& mountedFiles,std::vector<std::string>& sk
     std::cout << " " << std::endl;
 	std::cout << "\033[1;32m↵ to continue...\033[0;1m";
 	std::cin.ignore();
-	std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
 
@@ -1745,7 +1741,6 @@ std::vector<std::string> parseUserInput(const std::string& input, const std::vec
             std::cerr << "\n\033[1;91mNo valid input provided for umount.\n";
             std::cout << "\n\033[1;32m↵ to continue...";
             std::cin.ignore();
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         }
         noValid = true;
     }
@@ -1829,7 +1824,6 @@ void unmountISOs() {
             std::cerr << "\033[1;93mNo path(s) matching the '/mnt/iso_*' pattern found.\033[0;1m" << std::endl;
             std::cout << "\n\033[1;32m↵ to continue...";
             std::cin.ignore();
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             return;
         }
 
@@ -1924,7 +1918,6 @@ void unmountISOs() {
                     std::cout << "\n\033[1;91mNo ISO mountpoint(s) match the filter pattern.\033[0;1m" << std::endl;
                     std::cout << "\n\033[1;32m↵ to continue...";
                     std::cin.ignore();
-                    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                     clearScrollBuffer();
                 } else {
                     // Display the filtered list and prompt the user for input
@@ -1985,7 +1978,6 @@ void unmountISOs() {
                             std::cerr << "\n\033[1;91mNo valid input provided for umount.\n";
                             std::cout << "\n\033[1;32m↵ to continue...";
                             std::cin.ignore();
-                            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                         }
                     }
 
@@ -2041,7 +2033,6 @@ void unmountISOs() {
             if (!skipEnter) {
                 std::cout << "\n\033[1;32m↵ to continue...";
                 std::cin.ignore();
-                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             }
             clearScrollBuffer();
             skipEnter = false;

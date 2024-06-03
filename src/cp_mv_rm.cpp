@@ -53,7 +53,6 @@ void select_and_operate_files_by_number(const std::string& operation) {
         std::cout << " " << std::endl;
         std::cout << "\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore();
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         return;
     }
 
@@ -138,7 +137,6 @@ void select_and_operate_files_by_number(const std::string& operation) {
                     std::cout << "\033[1;91mNo ISO(s) match the search query.\033[0;1m\n";
 					std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 					std::cin.ignore();
-					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 } else {
 					while (true) {
 						clearScrollBuffer();
@@ -206,7 +204,6 @@ void select_and_operate_files_by_number(const std::string& operation) {
             std::cout << " " << std::endl;
             std::cout << "↵ to continue..." << std::endl;
             std::cin.ignore();
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             break;
         }
     }
@@ -357,7 +354,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         std::cout << "\n\033[1;91mNo valid input to be " << operationDescription << ".\033[1;91m" << std::endl;
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore();
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         clear_history();
         return;
     }
@@ -386,7 +382,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 			std::cout << "\n\033[1;91mNo valid input to be " << operationDescription << ".\033[1;91m" << std::endl;
 			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore();
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             clear_history();
             return;
 			}
@@ -527,7 +522,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         std::cout << " " << std::endl;
         std::cout << "\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore();
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         
 }
 
