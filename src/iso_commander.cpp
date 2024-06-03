@@ -49,7 +49,7 @@ std::vector<std::string> unmountedErrors;
 int main(int argc, char *argv[]) {
 	
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
-        printVersionNumber("3.2.7");
+        printVersionNumber("3.2.8");
         return 0;
     }
 	
