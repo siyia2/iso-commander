@@ -56,13 +56,6 @@ void select_and_operate_files_by_number(const std::string& operation) {
         return;
     }
 
-		// Filter ISO files to keep only those that end with ".iso"
-		isoFiles.erase(std::remove_if(isoFiles.begin(), isoFiles.end(), [](const std::string& iso) {
-		std::string lowercaseIso = iso;
-		std::transform(lowercaseIso.begin(), lowercaseIso.end(), lowercaseIso.begin(), ::tolower);
-		return !ends_with_iso(lowercaseIso);
-	}), isoFiles.end());
-
     // Color code based on the operation
     std::string operationColor;
     if (operation == "rm") {
@@ -87,11 +80,6 @@ void select_and_operate_files_by_number(const std::string& operation) {
         // Reload ISO files (in case the cache was updated)
         removeNonExistentPathsFromCache();
         isoFiles = loadCache();
-        isoFiles.erase(std::remove_if(isoFiles.begin(), isoFiles.end(), [](const std::string& iso) {
-		std::string lowercaseIso = iso;
-		std::transform(lowercaseIso.begin(), lowercaseIso.end(), lowercaseIso.begin(), ::tolower);
-		return !ends_with_iso(lowercaseIso);
-	}), isoFiles.end());
 
         std::string searchQuery;
         std::vector<std::string> filteredFiles = isoFiles;
