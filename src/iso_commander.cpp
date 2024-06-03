@@ -289,27 +289,24 @@ void printMenu() {
 // Function to filter files based on search query (case-insensitive)
 std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query) {
     std::vector<std::string> filteredFiles;
-    std::vector<std::string> queryTokens;
+    std::unordered_set<std::string> queryTokens;
 
-    // Split the query string into tokens using the delimiter ';'
+    // Split the query string into tokens using the delimiter ';' and store them in a set
     std::stringstream ss(query);
     std::string token;
     while (std::getline(ss, token, ';')) {
-        queryTokens.push_back(token);
+        std::transform(token.begin(), token.end(), token.begin(), ::tolower);
+        queryTokens.insert(token);
     }
 
     for (const std::string& file : files) {
         size_t lastSlashPos = file.find_last_of('/');
         std::string fileName = (lastSlashPos != std::string::npos) ? file.substr(lastSlashPos + 1) : file;
-        std::string lowerFileName(fileName);
-        std::transform(lowerFileName.begin(), lowerFileName.end(), lowerFileName.begin(), ::tolower);
+        std::transform(fileName.begin(), fileName.end(), fileName.begin(), ::tolower);
 
         bool matchFound = false;
         for (const std::string& queryToken : queryTokens) {
-            std::string lowerQueryToken(queryToken);
-            std::transform(lowerQueryToken.begin(), lowerQueryToken.end(), lowerQueryToken.begin(), ::tolower);
-
-            if (lowerFileName.find(lowerQueryToken) != std::string::npos) {
+            if (fileName.find(queryToken) != std::string::npos) {
                 matchFound = true;
                 break;
             }
