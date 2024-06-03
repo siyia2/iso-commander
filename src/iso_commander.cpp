@@ -1252,9 +1252,6 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
 }
 
 
-
-
-
 // Function to process input and mount ISO files asynchronously
 void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
     std::istringstream iss(input);  // Create an input string stream from the input string
@@ -1958,6 +1955,7 @@ void unmountISOs() {
                             clearScrollBuffer();
                             std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
                             selectedIsoDirs = filteredIsoDirs;
+                            skipEnter = false;
                             isFiltered = true;
                             breakOuterLoop = true;
                             historyPattern = false;
