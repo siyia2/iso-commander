@@ -282,7 +282,7 @@ void printMenu() {
 
 // GENERAL STUFF
 
-// Function to filter files based on search query (case-insensitive)
+// Function to filter cached ISO files based on search query (case-insensitive)
 std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query) {
     // Vector to store filtered file names
     std::vector<std::string> filteredFiles;
@@ -1881,11 +1881,11 @@ void unmountISOs() {
                 std::vector<std::string> filterPatterns;
                 std::stringstream ss(filterPattern);
                 std::string token;
+                free(filterPattern);
                 while (std::getline(ss, token, ';')) {
                     filterPatterns.push_back(token);
                     std::transform(filterPatterns.back().begin(), filterPatterns.back().end(), filterPatterns.back().begin(), ::tolower);
                 }
-                free(filterPattern);
 
                 // Filter the list of ISO directories based on the filter pattern
                 filteredIsoDirs.clear();
