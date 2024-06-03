@@ -1630,8 +1630,8 @@ void printUnmountedAndErrors(bool invalidInput) {
     unmountedErrors.clear();
     
     if (invalidInput) {
-				std::cout << " " << std::endl;
-			}
+		std::cout << " " << std::endl;
+	}
 
     // Print unique error messages
     if (!uniqueErrorMessages.empty()) {
@@ -1668,37 +1668,41 @@ std::vector<std::string> parseUserInput(const std::string& input, const std::vec
     auto parseToken = [&](const std::string& token) {
         try {
             size_t dashPos = token.find('-');
-            if (dashPos != std::string::npos) {
-                // Token contains a range (e.g., "1-5")
-                size_t start = std::stoi(token.substr(0, dashPos)) - 1;
-                size_t end = std::stoi(token.substr(dashPos + 1)) - 1;
-                
-                // Process the range
-                if (start < isoDirs.size() && end < isoDirs.size()) {
-                    if (start < end) {
-                        for (size_t i = start; i <= end; ++i) {
-                            std::lock_guard<std::mutex> lock(processedMutex);
-                            if (processedIndices.find(i) == processedIndices.end()) {
-                                std::lock_guard<std::mutex> lock(indicesMutex);
-                                selectedIndices.push_back(i);
-                                processedIndices.insert(i);
-                            }
-                        }
-                    } else {
-                        for (size_t i = start; i >= end; --i) {
-                            std::lock_guard<std::mutex> lock(processedMutex);
-                            if (processedIndices.find(i) == processedIndices.end()) {
-                                std::lock_guard<std::mutex> lock(indicesMutex);
-                                selectedIndices.push_back(i);
-                                processedIndices.insert(i);
-                                if (i == end) break;
-                            }
-                        }
-                    }
-                } else {
-                    // Range indices are out of bounds
-                    invalidInput = true;
-                }
+			if (dashPos != std::string::npos) {
+				// Token contains a range (e.g., "1-5")
+				size_t start = std::stoi(token.substr(0, dashPos)) - 1;
+				size_t end = std::stoi(token.substr(dashPos + 1)) - 1;
+
+				// Process the range
+				if (start < isoDirs.size() && end < isoDirs.size()) {
+					if (start < end) {
+						for (size_t i = start; i <= end; ++i) {
+							std::lock_guard<std::mutex> lock(processedMutex);
+							if (processedIndices.find(i) == processedIndices.end()) {
+								std::lock_guard<std::mutex> lock(indicesMutex);
+								selectedIndices.push_back(i);
+								processedIndices.insert(i);
+							}
+						}
+					} else if (start > end) { // Changed condition to start > end
+						for (size_t i = start; i >= end; --i) {
+							std::lock_guard<std::mutex> lock(processedMutex);
+							if (processedIndices.find(i) == processedIndices.end()) {
+								std::lock_guard<std::mutex> lock(indicesMutex);
+								selectedIndices.push_back(i);
+								processedIndices.insert(i);
+								if (i == end) break;
+							}
+						}
+					} else { // Added else branch for equal start and end
+						uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + std::to_string(start + 1) + "-" + std::to_string(end + 1) + "'. Ensure that numbers align with the list.\033[0;1m");
+						invalidInput = true;
+					}
+				} else {
+					uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + std::to_string(start + 1) + "-" + std::to_string(end + 1) + "'. Ensure that numbers align with the list.\033[0;1m");
+					invalidInput = true;
+				}
+						
             } else {
                 // Token is a single index
                 size_t index = std::stoi(token) - 1;
@@ -1713,11 +1717,13 @@ std::vector<std::string> parseUserInput(const std::string& input, const std::vec
                     }
                 } else {
                     // Single index is out of bounds
+                    uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(index) + "' does not exist.\033[0;1m");
                     invalidInput = true;
                 }
             }
         } catch (const std::invalid_argument&) {
             // Token is not a valid integer
+            uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
             invalidInput = true;
         }
     };
