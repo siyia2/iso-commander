@@ -1245,10 +1245,10 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     bool invalidInput = false;
     
     // Set to store indices of processed tokens
-    std::set<int> processedIndices;
+    std::unordered_set<int> processedIndices;
     
     // Set to store valid indices encountered
-    std::set<int> validIndices;
+    std::unordered_set<int> validIndices;
     
     // Set to store processed ranges
     std::set<std::pair<int, int>> processedRanges;
@@ -1830,7 +1830,7 @@ void unmountISOs() {
                         }
 
                         // Parse the user input to determine which ISOs to unmount
-                        std::set<size_t> selectedIndices;
+                        std::unordered_set<size_t> selectedIndices;
                         std::istringstream iss(chosenNumbers);
                         free(chosenNumbers);
                         for (std::string token; iss >> token;) {
@@ -1898,7 +1898,7 @@ void unmountISOs() {
             selectedIsoDirs = isoDirs;
         } else if (!isFiltered) {
             // Parse the user input to determine which ISOs to unmount
-            std::set<size_t> selectedIndices;
+            std::unordered_set<size_t> selectedIndices;
             std::istringstream iss(input);
             free(input);
             for (std::string token; iss >> token;) {

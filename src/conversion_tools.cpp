@@ -253,13 +253,13 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     std::string token;
 
 	// Set to track processed indices to avoid duplicates
-    std::set<int> processedIndices;
+    std::unordered_set<int> processedIndices;
     
     // Set to track processed error messages to avoid duplicate error reporting
-    std::set<std::string> processedErrors;
+    std::unordered_set<std::string> processedErrors;
 
     // Define and populate uniqueValidIndices before this line
-    std::set<int> uniqueValidIndices;
+    std::unordered_set<int> uniqueValidIndices;
 
     // Vector to store asynchronous tasks for file conversion
     std::vector<std::future<void>> futures;
@@ -466,7 +466,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     static std::vector<std::string> cachedInvalidPaths;
     
     // Vector to store permission errors
-    std::set<std::string> uniqueInvalidPaths;
+    std::unordered_set<std::string> uniqueInvalidPaths;
 
     // Static variables to cache results for reuse
     static std::vector<std::string> binImgFilesCache;
@@ -475,10 +475,10 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     static std::vector<std::string> mdfMdsFilesCache;
     
     // Set to store processed paths
-    static std::set<std::string> processedPathsMdf;
+    static std::unordered_set<std::string> processedPathsMdf;
     
     // Set to store processed paths
-    static std::set<std::string> processedPathsBin;
+    static std::unordered_set<std::string> processedPathsBin;
     
     bool blacklistMdf =false;
 
