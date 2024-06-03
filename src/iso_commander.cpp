@@ -814,15 +814,12 @@ void manualRefreshCache(const std::string& initialDir) {
 }
 
 
-// Functor struct for case-insensitive character comparison
+// Define CaseInsensitiveCompare struct globally
 struct CaseInsensitiveCompare {
-    // Overloaded operator() to compare two characters in a case-insensitive manner
     bool operator()(char a, char b) const {
-        // Convert characters to lowercase using std::tolower and compare them
         return std::tolower(a) == std::tolower(b);
     }
 };
-
 
 // Function to compare two strings in a case-insensitive manner using vectorized approach
 bool iequals_vectorized(std::string_view a, std::string_view b) {
@@ -1655,17 +1652,17 @@ void unmountISOs() {
                 }
             }
 
-            // Sort isoDirs alphabetically based on the substring after the last '/'
-            std::sort(isoDirs.begin(), isoDirs.end(), [](const std::string& a, const std::string& b) {
-                size_t lastSlashA = a.find_last_of('/');
-                size_t lastSlashB = b.find_last_of('/');
+				// Sort ISO directory names alphabetically in a case-insensitive manner
+				std::sort(isoDirs.begin(), isoDirs.end(), [](const std::string& a, const std::string& b) {
+				// Convert both strings to lowercase before comparison
+				std::string lowerA = a;
+				std::transform(lowerA.begin(), lowerA.end(), lowerA.begin(), [](unsigned char c) { return std::tolower(c); });
 
-                std::string subA = a.substr(lastSlashA + 1);
-                std::string subB = b.substr(lastSlashB + 1);
+				std::string lowerB = b;
+				std::transform(lowerB.begin(), lowerB.end(), lowerB.begin(), [](unsigned char c) { return std::tolower(c); });
 
-                return std::lexicographical_compare(subA.begin(), subB.end(), subB.begin(), subB.end(),
-                                                    [](char a, char b) { return std::tolower(a) < std::tolower(b); });
-            });
+				return lowerA < lowerB;
+			});
         }
 
         // Check if there are no matching directories
