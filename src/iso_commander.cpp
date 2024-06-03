@@ -1252,16 +1252,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
 }
 
 
-// For std::unordered_set<std::pair<int, int>, pair_hash> processedRanges; in processAndMountIsoFiles
-struct pair_hash {
-    template <class T1, class T2>
-    std::size_t operator () (const std::pair<T1, T2>& pair) const {
-        // Hash combination algorithm
-        size_t h1 = std::hash<T1>{}(pair.first);
-        size_t h2 = std::hash<T2>{}(pair.second);
-        return h1 ^ (h2 << 1);
-    }
-};
+
 
 
 // Function to process input and mount ISO files asynchronously
@@ -1274,7 +1265,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     bool invalidInput = false;  // Flag to indicate invalid input
     std::unordered_set<int> processedIndices;  // Set to track processed indices
     std::unordered_set<int> validIndices;      // Set to track valid indices
-    std::unordered_set<std::pair<int, int>, pair_hash> processedRanges;  // Set to track processed ranges
+    std::set<std::pair<int, int>> processedRanges;  // Set to track processed ranges
 
     ThreadPool pool(numThreads);  // Thread pool with the determined number of threads
     std::mutex MutexForProcessedIndices;  // Mutex for protecting access to processedIndices
