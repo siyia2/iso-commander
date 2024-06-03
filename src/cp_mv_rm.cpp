@@ -56,10 +56,12 @@ void select_and_operate_files_by_number(const std::string& operation) {
         return;
     }
 
-    // Filter ISO files to keep only those that end with ".iso"
-    isoFiles.erase(std::remove_if(isoFiles.begin(), isoFiles.end(), [](const std::string& iso) {
-        return !ends_with_iso(iso);
-    }), isoFiles.end());
+		// Filter ISO files to keep only those that end with ".iso"
+		isoFiles.erase(std::remove_if(isoFiles.begin(), isoFiles.end(), [](const std::string& iso) {
+		std::string lowercaseIso = iso;
+		std::transform(lowercaseIso.begin(), lowercaseIso.end(), lowercaseIso.begin(), ::tolower);
+		return !ends_with_iso(lowercaseIso);
+	}), isoFiles.end());
 
     // Color code based on the operation
     std::string operationColor;
@@ -86,8 +88,10 @@ void select_and_operate_files_by_number(const std::string& operation) {
         removeNonExistentPathsFromCache();
         isoFiles = loadCache();
         isoFiles.erase(std::remove_if(isoFiles.begin(), isoFiles.end(), [](const std::string& iso) {
-            return !ends_with_iso(iso);
-        }), isoFiles.end());
+		std::string lowercaseIso = iso;
+		std::transform(lowercaseIso.begin(), lowercaseIso.end(), lowercaseIso.begin(), ::tolower);
+		return !ends_with_iso(lowercaseIso);
+	}), isoFiles.end());
 
         std::string searchQuery;
         std::vector<std::string> filteredFiles = isoFiles;

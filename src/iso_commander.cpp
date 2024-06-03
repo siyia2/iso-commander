@@ -814,37 +814,31 @@ void manualRefreshCache(const std::string& initialDir) {
 }
 
 
-// Function to perform case-insensitive string comparison using std::string_view asynchronously
-std::future<bool> iequals(std::string_view a, std::string_view b) {
-    // Using std::async to perform the comparison asynchronously
-    return std::async(std::launch::async, [a, b]() {
-        // Check if the string views have different sizes, if so, they can't be equal
-        if (a.size() != b.size()) {
-            return false;
-        }
+// Functor struct for case-insensitive character comparison
+struct CaseInsensitiveCompare {
+    // Overloaded operator() to compare two characters in a case-insensitive manner
+    bool operator()(char a, char b) const {
+        // Convert characters to lowercase using std::tolower and compare them
+        return std::tolower(a) == std::tolower(b);
+    }
+};
 
-        // Iterate through each character of the string views and compare them
-        for (std::size_t i = 0; i < a.size(); ++i) {
-            // Convert characters to lowercase using std::tolower and compare them
-            if (std::tolower(a[i]) != std::tolower(b[i])) {
-                // If characters are not equal, strings are not equal
-                return false;
-            }
-        }
 
-        // If all characters are equal, the strings are case-insensitively equal
-        return true;
-    });
+// Function to compare two strings in a case-insensitive manner using vectorized approach
+bool iequals_vectorized(std::string_view a, std::string_view b) {
+    // Check if the sizes of both strings are equal
+    return a.size() == b.size() && // If sizes are not equal, strings are not equal
+           // Use std::equal to compare each character in the strings
+           std::equal(a.begin(), a.end(), b.begin(), 
+                      // Provide a custom comparison functor (CaseInsensitiveCompare{})
+                      CaseInsensitiveCompare{}); // CaseInsensitiveCompare{} is an instance of the comparison functor
 }
 
 
 // Function to check if a string ends with ".iso" (case-insensitive)
-bool ends_with_iso(const std::string& str) {
-    // Convert the string to lowercase
-    std::string lowercase = str;
-    std::transform(lowercase.begin(), lowercase.end(), lowercase.begin(), ::tolower);
-    // Check if the string ends with ".iso" by comparing the last 4 characters
-    return (lowercase.size() >= 4) && (lowercase.compare(lowercase.size() - 4, 4, ".iso") == 0);
+bool ends_with_iso(std::string_view str) {
+    constexpr std::string_view iso_suffix = ".iso";
+    return str.ends_with(iso_suffix);
 }
 
 
@@ -853,24 +847,22 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
     try {
         // Vector to store futures for asynchronous tasks
         std::vector<std::future<void>> futures;
+        ThreadPool pool(maxThreads);
 
         // Iterate over entries in the specified directory and its subdirectories
         for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
             // Check if the entry is a regular file
             if (entry.is_regular_file()) {
                 const std::filesystem::path& filePath = entry.path();
-
                 // Check file size and skip if less than 5MB or empty, or if it has a ".bin" extension
                 const auto fileSize = std::filesystem::file_size(filePath);
-                if (fileSize < 5 * 1024 * 1024 || fileSize == 0 || iequals(filePath.stem().string(), ".bin").get()) {
+                if (fileSize < 5 * 1024 * 1024 || fileSize == 0 || iequals_vectorized(filePath.stem().string(), ".bin")) {
                     continue;
                 }
-
                 // Extract the file extension
                 std::string_view extension = filePath.extension().string();
-
                 // Check if the file has a ".iso" extension
-                if (iequals(extension, ".iso").get()) {
+                if (iequals_vectorized(extension, ".iso")) {
                     // Asynchronously push the file path to the isoFiles vector while protecting access with a mutex
                     futures.push_back(std::async(std::launch::async, [filePath, &isoFiles, &Mutex4Low]() {
                         std::lock_guard<std::mutex> lowLock(Mutex4Low);
