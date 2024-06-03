@@ -229,7 +229,7 @@ void clearScrollBuffer();
 
 // Mount functions
 void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet, std::vector<std::string>& isoFilesToMount);
-void verbose(std::vector<std::string>& mountedFiles,std::vector<std::string>& skippedMessages,std::vector<std::string>& errorMessages,std::unordered_set<std::string>& uniqueErrorMessages);
+void verbose(std::vector<std::string>& mountedFiles,std::vector<std::string>& skippedMessages,std::unordered_set<std::string>& errorMessages);
 void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordered_set<std::string>& mountedSet);
 void select_and_mount_files_by_number();
 void printIsoFileList(const std::vector<std::string>& isoFiles);
@@ -243,7 +243,7 @@ void removeNonExistentPathsFromCache();
 
 // Unmount functions
 void printUnmountedAndErrors(bool invalidInput);
-void filterAndUnmountISOs(const std::vector<std::string>& isoDirs, std::vector<std::string>& selectedIsoDirs, bool validFilterPattern, bool skipEnter, bool invalidInput, bool isFiltering);
+void filterIsoDirs(const std::vector<std::string>& isoDirs, const std::vector<std::string>& filterPatterns, std::vector<std::string>& filteredIsoDirs, std::mutex& resultMutex, size_t start, size_t end);
 void listMountedISOs();
 void unmountISOs();
 void unmountISO(const std::vector<std::string>& isoDirs);
