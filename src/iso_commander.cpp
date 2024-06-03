@@ -288,35 +288,50 @@ void printMenu() {
 
 // Function to filter files based on search query (case-insensitive)
 std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query) {
+    // Vector to store filtered file names
     std::vector<std::string> filteredFiles;
+    
+    // Set to store query tokens (lowercased)
     std::unordered_set<std::string> queryTokens;
 
     // Split the query string into tokens using the delimiter ';' and store them in a set
     std::stringstream ss(query);
     std::string token;
     while (std::getline(ss, token, ';')) {
+        // Convert token to lowercase
         std::transform(token.begin(), token.end(), token.begin(), ::tolower);
+        // Insert token into the set
         queryTokens.insert(token);
     }
 
+    // Iterate through each file in the input vector
     for (const std::string& file : files) {
+        // Find the position of the last '/' character to extract file name
         size_t lastSlashPos = file.find_last_of('/');
+        // Extract file name (excluding path) or use the full path if no '/' is found
         std::string fileName = (lastSlashPos != std::string::npos) ? file.substr(lastSlashPos + 1) : file;
+        // Convert file name to lowercase
         std::transform(fileName.begin(), fileName.end(), fileName.begin(), ::tolower);
 
+        // Flag to track if a match is found for the file
         bool matchFound = false;
+        // Iterate through each query token
         for (const std::string& queryToken : queryTokens) {
+            // If the file name contains the current query token
             if (fileName.find(queryToken) != std::string::npos) {
+                // Set matchFound flag to true and break out of the loop
                 matchFound = true;
                 break;
             }
         }
 
+        // If a match is found, add the file to the filtered list
         if (matchFound) {
             filteredFiles.push_back(file);
         }
     }
 
+    // Return the vector of filtered file names
     return filteredFiles;
 }
 
