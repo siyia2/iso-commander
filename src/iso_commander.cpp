@@ -286,7 +286,7 @@ void printMenu() {
 std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query) {
     // Vector to store filtered file names
     std::vector<std::string> filteredFiles;
-    
+
     // Set to store query tokens (lowercased)
     std::unordered_set<std::string> queryTokens;
 
@@ -300,31 +300,63 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
         queryTokens.insert(token);
     }
 
-    // Iterate through each file in the input vector
-    for (const std::string& file : files) {
-        // Find the position of the last '/' character to extract file name
-        size_t lastSlashPos = file.find_last_of('/');
-        // Extract file name (excluding path) or use the full path if no '/' is found
-        std::string fileName = (lastSlashPos != std::string::npos) ? file.substr(lastSlashPos + 1) : file;
-        // Convert file name to lowercase
-        std::transform(fileName.begin(), fileName.end(), fileName.begin(), ::tolower);
+    // Create a thread pool with the desired number of threads
+    ThreadPool pool(maxThreads);
 
-        // Flag to track if a match is found for the file
-        bool matchFound = false;
-        // Iterate through each query token
-        for (const std::string& queryToken : queryTokens) {
-            // If the file name contains the current query token
-            if (fileName.find(queryToken) != std::string::npos) {
-                // Set matchFound flag to true and break out of the loop
-                matchFound = true;
-                break;
+    // Vector to store futures for tracking tasks' completion
+    std::vector<std::future<void>> futures;
+
+    // Function to filter files
+    auto filterTask = [&](size_t start, size_t end) {
+        for (size_t i = start; i < end; ++i) {
+            const std::string& file = files[i];
+
+            // Find the position of the last '/' character to extract file name
+            size_t lastSlashPos = file.find_last_of('/');
+            // Extract file name (excluding path) or use the full path if no '/' is found
+            std::string fileName = (lastSlashPos != std::string::npos) ? file.substr(lastSlashPos + 1) : file;
+            // Convert file name to lowercase
+            std::transform(fileName.begin(), fileName.end(), fileName.begin(), ::tolower);
+
+            // Flag to track if a match is found for the file
+            bool matchFound = false;
+            // Iterate through each query token
+            for (const std::string& queryToken : queryTokens) {
+                // If the file name contains the current query token
+                if (fileName.find(queryToken) != std::string::npos) {
+                    // Set matchFound flag to true and break out of the loop
+                    matchFound = true;
+                    break;
+                }
+            }
+
+            // If a match is found, add the file to the filtered list
+            if (matchFound) {
+                // Lock access to the shared vector
+                std::lock_guard<std::mutex> lock(Mutex4Med);
+                filteredFiles.push_back(file);
             }
         }
+    };
 
-        // If a match is found, add the file to the filtered list
-        if (matchFound) {
-            filteredFiles.push_back(file);
-        }
+    // Calculate the number of files per thread
+    size_t numFiles = files.size();
+    size_t numThreads = maxThreads;
+    size_t filesPerThread = numFiles / numThreads;
+
+    // Enqueue filter tasks into the thread pool
+    for (size_t i = 0; i < numThreads - 1; ++i) {
+        size_t start = i * filesPerThread;
+        size_t end = start + filesPerThread;
+        futures.emplace_back(pool.enqueue(filterTask, start, end));
+    }
+
+    // Handle the remaining files in the main thread
+    filterTask((numThreads - 1) * filesPerThread, numFiles);
+
+    // Wait for all tasks to complete
+    for (auto& future : futures) {
+        future.wait();
     }
 
     // Return the vector of filtered file names
@@ -1234,25 +1266,27 @@ struct pair_hash {
 
 // Function to process input and mount ISO files asynchronously
 void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
-    std::istringstream iss(input);
+    std::istringstream iss(input);  // Create an input string stream from the input string
 
+    // Determine the number of threads to use, based on the number of ISO files and hardware concurrency
     unsigned int numThreads = std::min(static_cast<int>(isoFiles.size()), static_cast<int>(std::thread::hardware_concurrency()));
 
-    bool invalidInput = false;
-    std::unordered_set<int> processedIndices;
-    std::unordered_set<int> validIndices;
-    std::unordered_set<std::pair<int, int>, pair_hash> processedRanges;
+    bool invalidInput = false;  // Flag to indicate invalid input
+    std::unordered_set<int> processedIndices;  // Set to track processed indices
+    std::unordered_set<int> validIndices;      // Set to track valid indices
+    std::unordered_set<std::pair<int, int>, pair_hash> processedRanges;  // Set to track processed ranges
 
-    ThreadPool pool(numThreads);
-    std::mutex MutexForProcessedIndices;
-    std::mutex MutexForValidIndices;
+    ThreadPool pool(numThreads);  // Thread pool with the determined number of threads
+    std::mutex MutexForProcessedIndices;  // Mutex for protecting access to processedIndices
+    std::mutex MutexForValidIndices;      // Mutex for protecting access to validIndices
 
     std::string token;
-    while (iss >> token) {
-        if (token == "/") {
+    while (iss >> token) {  // Iterate through each token in the input
+        if (token == "/") {  // Break the loop if a '/' is encountered
             break;
         }
 
+        // Handle special case for input "00"
         if (token != "00" && isAllZeros(token)) {
             if (!invalidInput) {
                 invalidInput = true;
@@ -1261,8 +1295,10 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
             continue;
         }
 
+        // Check if the token contains a dash ('-'), indicating a range
         size_t dashPos = token.find('-');
         if (dashPos != std::string::npos) {
+            // Check for invalid range format
             if (token.find('-', dashPos + 1) != std::string::npos || 
                 (dashPos == 0 || dashPos == token.size() - 1 || !std::isdigit(token[dashPos - 1]) || !std::isdigit(token[dashPos + 1]))) {
                 invalidInput = true;
@@ -1272,6 +1308,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
 
             int start, end;
             try {
+                // Parse the start and end of the range
                 start = std::stoi(token.substr(0, dashPos));
                 end = std::stoi(token.substr(dashPos + 1));
             } catch (const std::invalid_argument&) {
@@ -1284,6 +1321,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                 continue;
             }
 
+            // Validate range
             if (start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) {
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0;1m\n");
@@ -1294,42 +1332,43 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
             if (processedRanges.find(range) == processedRanges.end()) {
                 processedRanges.insert(range);
 
+                // Determine step direction and iterate through the range
                 int step = (start <= end) ? 1 : -1;
                 for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
                     if (processedIndices.find(i) == processedIndices.end()) {
                         processedIndices.insert(i);
 
-                        pool.enqueue([&, i]() {
-                            std::lock_guard<std::mutex> validLock(MutexForValidIndices);
+                        pool.enqueue([&, i]() {  // Enqueue a task to the thread pool
+                            std::lock_guard<std::mutex> validLock(MutexForValidIndices);  // Protect access to validIndices
                             if (validIndices.find(i) == validIndices.end()) {
                                 validIndices.insert(i);
                                 std::vector<std::string> isoFilesToMount;
                                 isoFilesToMount.push_back(isoFiles[i - 1]);
-                                mountIsoFile(isoFilesToMount, mountedSet);
+                                mountIsoFile(isoFilesToMount, mountedSet);  // Mount the ISO file
                             }
                         });
                     }
                 }
             }
-        } else if (isNumeric(token)) {
+        } else if (isNumeric(token)) {  // Handle single numeric token
             int num = std::stoi(token);
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && processedIndices.find(num) == processedIndices.end()) {
                 processedIndices.insert(num);
 
-                pool.enqueue([&, num]() {
-                    std::lock_guard<std::mutex> validLock(MutexForValidIndices);
+                pool.enqueue([&, num]() {  // Enqueue a task to the thread pool
+                    std::lock_guard<std::mutex> validLock(MutexForValidIndices);  // Protect access to validIndices
                     if (validIndices.find(num) == validIndices.end()) {
                         validIndices.insert(num);
                         std::vector<std::string> isoFilesToMount;
                         isoFilesToMount.push_back(isoFiles[num - 1]);
-                        mountIsoFile(isoFilesToMount, mountedSet);
+                        mountIsoFile(isoFilesToMount, mountedSet);  // Mount the ISO file
                     }
                 });
             } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(num) + "' does not exist.\033[0;1m\n");
             }
-        } else {
+        } else {  // Handle invalid token
             invalidInput = true;
             uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m\n");
         }
@@ -1606,28 +1645,50 @@ void printUnmountedAndErrors(bool invalidInput) {
 
 // Function to parse user input for selecting ISOs to unmount
 std::vector<std::string> parseUserInput(const std::string& input, const std::vector<std::string>& isoDirs, bool& invalidInput, bool& noValid, bool& isFiltered) {
+    // Vector to store selected ISO directories
     std::vector<std::string> selectedIsoDirs;
+
+    // Vector to store selected indices
     std::vector<size_t> selectedIndices;
+
+    // Set to keep track of processed indices
     std::unordered_set<size_t> processedIndices;
-    
+
+    // Create a stringstream to tokenize the input
     std::istringstream iss(input);
-    for (std::string token; iss >> token;) {
+
+    // ThreadPool and mutexes for synchronization
+    ThreadPool pool(maxThreads);
+    std::vector<std::future<void>> futures;
+    std::mutex indicesMutex;
+    std::mutex processedMutex;
+    std::mutex dirsMutex;
+
+    // Lambda function to parse each token
+    auto parseToken = [&](const std::string& token) {
         try {
             size_t dashPos = token.find('-');
             if (dashPos != std::string::npos) {
+                // Token contains a range (e.g., "1-5")
                 size_t start = std::stoi(token.substr(0, dashPos)) - 1;
                 size_t end = std::stoi(token.substr(dashPos + 1)) - 1;
+                
+                // Process the range
                 if (start < isoDirs.size() && end < isoDirs.size()) {
                     if (start < end) {
                         for (size_t i = start; i <= end; ++i) {
+                            std::lock_guard<std::mutex> lock(processedMutex);
                             if (processedIndices.find(i) == processedIndices.end()) {
+                                std::lock_guard<std::mutex> lock(indicesMutex);
                                 selectedIndices.push_back(i);
                                 processedIndices.insert(i);
                             }
                         }
                     } else {
                         for (size_t i = start; i >= end; --i) {
+                            std::lock_guard<std::mutex> lock(processedMutex);
                             if (processedIndices.find(i) == processedIndices.end()) {
+                                std::lock_guard<std::mutex> lock(indicesMutex);
                                 selectedIndices.push_back(i);
                                 processedIndices.insert(i);
                                 if (i == end) break;
@@ -1635,34 +1696,54 @@ std::vector<std::string> parseUserInput(const std::string& input, const std::vec
                         }
                     }
                 } else {
-                    uniqueErrorMessages.insert("Invalid range: '" + token + "'.");
+                    // Range indices are out of bounds
                     invalidInput = true;
                 }
             } else {
+                // Token is a single index
                 size_t index = std::stoi(token) - 1;
+                
+                // Process single index
                 if (index < isoDirs.size()) {
+                    std::lock_guard<std::mutex> lock(processedMutex);
                     if (processedIndices.find(index) == processedIndices.end()) {
+                        std::lock_guard<std::mutex> lock(indicesMutex);
                         selectedIndices.push_back(index);
                         processedIndices.insert(index);
                     }
                 } else {
-                    uniqueErrorMessages.insert("Invalid index: '" + token + "'.");
+                    // Single index is out of bounds
                     invalidInput = true;
                 }
             }
         } catch (const std::invalid_argument&) {
-            uniqueErrorMessages.insert("Invalid input: '" + token + "'.");
+            // Token is not a valid integer
             invalidInput = true;
         }
+    };
+
+    // Tokenize input and enqueue tasks to thread pool
+    for (std::string token; iss >> token;) {
+        futures.emplace_back(pool.enqueue(parseToken, token));
     }
 
+    // Wait for all tasks to complete
+    for (auto& future : futures) {
+        future.wait();
+    }
+
+    // Check if any directories were selected
     if (!selectedIndices.empty()) {
+        // Lock the mutex and retrieve selected directories
+        std::lock_guard<std::mutex> lock(dirsMutex);
         for (size_t index : selectedIndices) {
             selectedIsoDirs.push_back(isoDirs[index]);
         }
     } else {
+        // No valid directories were selected
         if (noValid && !isFiltered) {
-			clearScrollBuffer();
+            // Clear the console buffer and display an error message
+            clearScrollBuffer();
             std::cerr << "\n\033[1;91mNo valid input provided for umount.\n";
             std::cout << "\n\033[1;32m↵ to continue...";
             std::cin.get();
@@ -1671,6 +1752,35 @@ std::vector<std::string> parseUserInput(const std::string& input, const std::vec
     }
 
     return selectedIsoDirs;
+}
+
+
+// Function to filter mounted isoDirs
+void filterIsoDirs(const std::vector<std::string>& isoDirs, const std::vector<std::string>& filterPatterns, std::vector<std::string>& filteredIsoDirs, std::mutex& resultMutex, size_t start, size_t end) {
+    // Iterate through the chunk of ISO directories
+    for (size_t i = start; i < end; ++i) {
+        const std::string& dir = isoDirs[i];
+        std::string dirLower = dir;
+        std::transform(dirLower.begin(), dirLower.end(), dirLower.begin(), ::tolower);
+
+        // Flag to track if a match is found for the directory
+        bool matchFound = false;
+        // Iterate through each filter pattern
+        for (const std::string& pattern : filterPatterns) {
+            // If the directory matches the current filter pattern
+            if (dirLower.find(pattern) != std::string::npos) {
+                matchFound = true;
+                break;
+            }
+        }
+
+        // If a match is found, add the directory to the filtered list
+        if (matchFound) {
+            // Lock access to the shared vector
+            std::lock_guard<std::mutex> lock(resultMutex);
+            filteredIsoDirs.push_back(dir);
+        }
+    }
 }
 
 
@@ -1702,17 +1812,17 @@ void unmountISOs() {
                 }
             }
 
-				// Sort ISO directory names alphabetically in a case-insensitive manner
-				std::sort(isoDirs.begin(), isoDirs.end(), [](const std::string& a, const std::string& b) {
-				// Convert both strings to lowercase before comparison
-				std::string lowerA = a;
-				std::transform(lowerA.begin(), lowerA.end(), lowerA.begin(), [](unsigned char c) { return std::tolower(c); });
+            // Sort ISO directory names alphabetically in a case-insensitive manner
+            std::sort(isoDirs.begin(), isoDirs.end(), [](const std::string& a, const std::string& b) {
+                // Convert both strings to lowercase before comparison
+                std::string lowerA = a;
+                std::transform(lowerA.begin(), lowerA.end(), lowerA.begin(), [](unsigned char c) { return std::tolower(c); });
 
-				std::string lowerB = b;
-				std::transform(lowerB.begin(), lowerB.end(), lowerB.begin(), [](unsigned char c) { return std::tolower(c); });
+                std::string lowerB = b;
+                std::transform(lowerB.begin(), lowerB.end(), lowerB.begin(), [](unsigned char c) { return std::tolower(c); });
 
-				return lowerA < lowerB;
-			});
+                return lowerA < lowerB;
+            });
         }
 
         // Check if there are no matching directories
@@ -1722,11 +1832,11 @@ void unmountISOs() {
             std::cin.get();
             return;
         }
-		
+
         // Prompt the user for input
         char* input = readline("\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 (e.g., '1-3', '1 5', '00' for all), / ↵ to filter\001\033[1;94m\002 , or ↵ to return:\001\033[0;1m\002 ");
         clearScrollBuffer();
-        
+
 
         if (input[0] != '/' || (!(std::isspace(input[0]) || input[0] == '\0'))) {
             std::cout << "Please wait...\n";
@@ -1734,74 +1844,79 @@ void unmountISOs() {
 
         // Check if the user wants to return to the main menu
         if (std::isspace(input[0]) || input[0] == '\0') {
-			free(input);
+            free(input);
             break;
         }
 
         // Check if the user wants to filter the list of ISOs
         if (strcmp(input, "/") == 0) {
-			bool breakOuterLoop = false;
+            bool breakOuterLoop = false;
             while (true) {
-				if (breakOuterLoop) {
-					historyPattern = false;
-					break;
-				}
+                if (breakOuterLoop) {
+                    historyPattern = false;
+                    break;
+                }
                 clearScrollBuffer();
                 isFiltered = true;
                 historyPattern = true;
                 loadHistory();
                 std::string prompt;
                 prompt = "\n\001\033[1;92m\002SearchQuery\001\033[1;94m\002 ↵ to filter \001\033[1;93m\002umount\001\033[1;94m\002 list (case-insensitive, multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return: \001\033[0;1m\002";
-                
+
                 char* filterPattern = readline(prompt.c_str());
                 clearScrollBuffer();
-                
+
                 if (filterPattern && filterPattern[0] != '\0') {
-					std::cout << "\\033\[1mPlease wait...\\033\[1m" << std::endl;
-					add_history(filterPattern); // Add the search query to the history
-					saveHistory();
-				}
+                    std::cout << "\\033\[1mPlease wait...\\033\[1m" << std::endl;
+                    add_history(filterPattern); // Add the search query to the history
+                    saveHistory();
+                }
 
-				clear_history();
+                clear_history();
 
-				if (std::isspace(filterPattern[0]) || filterPattern[0] == '\0') {
-					free(filterPattern);
-					skipEnter = false;
-					isFiltered = false;
-					noValid = false;
-					historyPattern = false;
-					break;
-				}
+                if (std::isspace(filterPattern[0]) || filterPattern[0] == '\0') {
+                    free(filterPattern);
+                    skipEnter = false;
+                    isFiltered = false;
+                    noValid = false;
+                    historyPattern = false;
+                    break;
+                }
 
-				// Split the filterPattern string into tokens using the delimiter ';'
-				std::vector<std::string> filterPatterns;
-				std::stringstream ss(filterPattern);
-				std::string token;
-				while (std::getline(ss, token, ';')) {
-					filterPatterns.push_back(token);
-					std::transform(filterPatterns.back().begin(), filterPatterns.back().end(), filterPatterns.back().begin(), ::tolower);
-				}
-				free(filterPattern);
+                // Split the filterPattern string into tokens using the delimiter ';'
+                std::vector<std::string> filterPatterns;
+                std::stringstream ss(filterPattern);
+                std::string token;
+                while (std::getline(ss, token, ';')) {
+                    filterPatterns.push_back(token);
+                    std::transform(filterPatterns.back().begin(), filterPatterns.back().end(), filterPatterns.back().begin(), ::tolower);
+                }
+                free(filterPattern);
 
-				// Filter the list of ISO directories based on the filter pattern
-				filteredIsoDirs.clear();
+                // Filter the list of ISO directories based on the filter pattern
+                filteredIsoDirs.clear();
 
-				for (const auto& dir : isoDirs) {
-					std::string dirLower = dir;
-					std::transform(dirLower.begin(), dirLower.end(), dirLower.begin(), ::tolower);
+                // Create a thread pool with the desired number of threads
+                ThreadPool pool(maxThreads);
 
-					bool matchFound = false;
-					for (const std::string& pattern : filterPatterns) {
-						if (dirLower.find(pattern) != std::string::npos) {
-							matchFound = true;
-							break;
-						}
-					}
+                // Vector to store futures for tracking tasks' completion
+                std::vector<std::future<void>> futures;
 
-					if (matchFound) {
-						filteredIsoDirs.push_back(dir);
-					}
-				}
+                // Calculate the number of directories per thread
+                size_t numDirs = isoDirs.size();
+				unsigned int numThreads = std::min(static_cast<unsigned int>(numDirs), maxThreads);                
+				size_t dirsPerThread = numDirs / numThreads;
+                // Enqueue filter tasks into the thread pool
+                for (size_t i = 0; i < numThreads; ++i) {
+                    size_t start = i * dirsPerThread;
+                    size_t end = (i == numThreads - 1) ? numDirs : start + dirsPerThread;
+                    futures.push_back(pool.enqueue(filterIsoDirs, std::ref(isoDirs), std::ref(filterPatterns), std::ref(filteredIsoDirs), std::ref(isoDirsMutex), start, end));
+                }
+
+                // Wait for all filter tasks to complete
+                for (auto& future : futures) {
+                    future.wait();
+                }
 
                 // Check if any directories matched the filter
                 if (filteredIsoDirs.empty()) {
@@ -1813,82 +1928,82 @@ void unmountISOs() {
                 } else {
                     // Display the filtered list and prompt the user for input
                     while (true) {
+                        // Display filtered results
                         clearScrollBuffer();
                         std::cout << "\033[1mFiltered results:\n\033[0;1m" << std::endl;
                         size_t maxIndex = filteredIsoDirs.size();
-						size_t numDigits = std::to_string(maxIndex).length();
+                        size_t numDigits = std::to_string(maxIndex).length();
 
-						for (size_t i = 0; i < filteredIsoDirs.size(); ++i) {
-							std::string afterSlash = filteredIsoDirs[i].substr(filteredIsoDirs[i].find_last_of("/") + 1);
-							std::string afterUnderscore = afterSlash.substr(afterSlash.find("_") + 1);
-							std::string color = (i % 2 == 0) ? "\033[1;31m" : "\033[1;32m"; // Red if even, Green if odd
+                        for (size_t i = 0; i < filteredIsoDirs.size(); ++i) {
+                            std::string afterSlash = filteredIsoDirs[i].substr(filteredIsoDirs[i].find_last_of("/") + 1);
+                            std::string afterUnderscore = afterSlash.substr(afterSlash.find("_") + 1);
+                            std::string color = (i % 2 == 0) ? "\033[1;31m" : "\033[1;32m"; // Red if even, Green if odd
 
-							std::cout << color << "\033[1m"
-							<< std::setw(numDigits) << std::setfill(' ') << (i + 1) << ".\033[0;1m /mnt/iso_" 
-							<< "\033[1;95m" << afterUnderscore << "\033[0;1m" 
-							<< std::endl;
-						}
+                            std::cout << color << "\033[1m"
+                                      << std::setw(numDigits) << std::setfill(' ') << (i + 1) << ".\033[0;1m /mnt/iso_"
+                                      << "\033[1;95m" << afterUnderscore << "\033[0;1m"
+                                      << std::endl;
+                        }
 
                         // Prompt the user for the list of ISOs to unmount
-                    char* chosenNumbers = readline("\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 (e.g., '1-3', '1 5', '00' for all), or ↵ to return:\001\033[0;1m\002 ");
+                        char* chosenNumbers = readline("\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 (e.g., '1-3', '1 5', '00' for all), or ↵ to return:\001\033[0;1m\002 ");
 
-                    if (std::isspace(chosenNumbers[0]) || chosenNumbers[0] == '\0') {
-                        free(chosenNumbers);
-                        noValid = false;
-                        skipEnter = true;
-                        historyPattern = false;
-                        break;
+                        if (std::isspace(chosenNumbers[0]) || chosenNumbers[0] == '\0') {
+                            free(chosenNumbers);
+                            noValid = false;
+                            skipEnter = true;
+                            historyPattern = false;
+                            break;
+                        }
+
+                        if (std::strcmp(chosenNumbers, "00") == 0) {
+                            free(chosenNumbers);
+                            clearScrollBuffer();
+                            std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
+                            selectedIsoDirs = filteredIsoDirs;
+                            isFiltered = true;
+                            breakOuterLoop = true;
+                            historyPattern = false;
+                            break;
+                        }
+
+                        // Parse the user input to determine which ISOs to unmount
+                        selectedIsoDirsFiltered = parseUserInput(chosenNumbers, filteredIsoDirs, invalidInput, noValid, isFiltered);
+
+                        if (!selectedIsoDirsFiltered.empty()) {
+                            selectedIsoDirs = selectedIsoDirsFiltered;
+                            skipEnter = false;
+                            isFiltered = true;
+                            historyPattern = false;
+                            break; // Exit filter loop to process unmount
+                        } else {
+                            clearScrollBuffer();
+                            invalidInput = false;
+                            uniqueErrorMessages.clear();
+                            std::cerr << "\n\033[1;91mNo valid input provided for umount.\n";
+                            std::cout << "\n\033[1;32m↵ to continue...";
+                            std::cin.get();
+                        }
                     }
 
-                    if (std::strcmp(chosenNumbers, "00") == 0) {
-                        free(chosenNumbers);
+                    if (!selectedIsoDirsFiltered.empty() && isFiltered) {
                         clearScrollBuffer();
                         std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
-                        selectedIsoDirs = filteredIsoDirs;
                         isFiltered = true;
-                        breakOuterLoop = true;
                         historyPattern = false;
                         break;
-                    }
-					isFiltered = true;
-                    // Parse the user input to determine which ISOs to unmount
-                    selectedIsoDirsFiltered = parseUserInput(chosenNumbers, filteredIsoDirs, invalidInput, noValid, isFiltered);
-
-                    if (!selectedIsoDirsFiltered.empty()) {
-                        selectedIsoDirs = selectedIsoDirsFiltered;
-                        skipEnter = false;
-                        isFiltered = true;
-                        historyPattern = false;
-                        break; // Exit filter loop to process unmount
-                    } else {
-                        clearScrollBuffer();
-                        invalidInput = false;
-                        uniqueErrorMessages.clear();
-                        std::cerr << "\n\033[1;91mNo valid input provided for umount.\n";
-                        std::cout << "\n\033[1;32m↵ to continue...";
-                        std::cin.get();
                     }
                 }
             }
-
-				if (!selectedIsoDirsFiltered.empty() && isFiltered) {
-					clearScrollBuffer();
-					std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
-					isFiltered = true;
-					historyPattern = false;
-					break;
-				}
-			}
-		}
+        }
 
         // Check if the user wants to unmount all ISOs
         if (std::strcmp(input, "00") == 0) {
-			free(input);
+            free(input);
             selectedIsoDirs = isoDirs;
         } else if (!isFiltered) {
             selectedIsoDirs = parseUserInput(input, isoDirs, invalidInput, noValid, isFiltered);
-            
-		}
+        }
 
         // If there are selected ISOs, proceed to unmount them
         if (!selectedIsoDirs.empty()) {
@@ -1930,3 +2045,4 @@ void unmountISOs() {
         }
     }
 }
+
