@@ -1663,6 +1663,71 @@ void printUnmountedAndErrors(bool invalidInput) {
 }
 
 
+void parseInput(const std::string& input, const std::vector<std::string>& isoDirs, std::vector<std::string>& selectedIsoDirs, bool& invalidInput) {
+    std::vector<size_t> selectedIndices;
+    std::unordered_set<size_t> processedIndices;
+    std::istringstream iss(input);
+    
+    for (std::string token; iss >> token;) {
+        try {
+            size_t dashPos = token.find('-');
+            if (dashPos != std::string::npos) {
+                size_t start = std::stoi(token.substr(0, dashPos)) - 1;
+                size_t end = std::stoi(token.substr(dashPos + 1)) - 1;
+                if (start < isoDirs.size() && end < isoDirs.size()) {
+                    if (start < end) {
+                        for (size_t i = start; i <= end; ++i) {
+                            if (processedIndices.find(i) == processedIndices.end()) {
+                                selectedIndices.push_back(i);
+                                processedIndices.insert(i);
+                            }
+                        }
+                    } else if (start > end) {
+                        for (size_t i = start; i >= end; --i) {
+                            if (processedIndices.find(i) == processedIndices.end()) {
+                                selectedIndices.push_back(i);
+                                processedIndices.insert(i);
+                                if (end == i) {
+                                    break;
+                                }
+                            }
+                        }
+                    } else { // start == end
+                        if (processedIndices.find(start) == processedIndices.end()) {
+                            selectedIndices.push_back(start);
+                            processedIndices.insert(start);
+                        }
+                    }
+                } else {
+                    errorMessages.push_back("Invalid range: '" + token + "'.");
+                    invalidInput = true;
+                }
+            } else {
+                size_t index = std::stoi(token) - 1;
+                if (index < isoDirs.size()) {
+                    if (processedIndices.find(index) == processedIndices.end()) {
+                        selectedIndices.push_back(index);
+                        processedIndices.insert(index);
+                    }
+                } else {
+                    errorMessages.push_back("Invalid index: '" + token + "'.");
+                    invalidInput = true;
+                }
+            }
+        } catch (const std::invalid_argument&) {
+            errorMessages.push_back("Invalid input: '" + token + "'.");
+            invalidInput = true;
+        }
+    }
+
+    if (!selectedIndices.empty()) {
+        for (size_t index : selectedIndices) {
+            selectedIsoDirs.push_back(isoDirs[index]);
+        }
+    }
+}
+
+
 // Main function for unmounting ISOs
 void unmountISOs() {
     // Initialize necessary variables
@@ -1847,46 +1912,46 @@ void unmountISOs() {
                         std::istringstream iss(chosenNumbers);
                         free(chosenNumbers);			
                         for (std::string token; iss >> token;) {
-                            try {
+							try {
 								size_t dashPos = token.find('-');
 								if (dashPos != std::string::npos) {
 									size_t start = std::stoi(token.substr(0, dashPos)) - 1;
 									size_t end = std::stoi(token.substr(dashPos + 1)) - 1;
-										if (start < isoDirs.size() && end < isoDirs.size()) {
-											if (start < end) {
-												size_t minIndex = std::min(start, end);
-												size_t maxIndex = std::max(start, end);
-												for (size_t i = minIndex; i <= maxIndex; ++i) {
-													if (processedIndices.find(i) == processedIndices.end()) {
-														selectedIndices.push_back(i);
-														processedIndices.insert(i);
-													}
-												}
-											} else if (start > end){
-												size_t minIndex = std::min(start, end);
-												size_t maxIndex = std::max(start, end);
-												for (size_t i = maxIndex; i >= minIndex; --i) {
-													if (processedIndices.find(i) == processedIndices.end()) {
-														selectedIndices.push_back(i);
-														processedIndices.insert(i);
-														if (std::min(start, end) == i) {
-															break;
-														}
-													}
-												}
-											} else if (start == end) {
-												// Process a single token
-												if (processedIndices.find(start) == processedIndices.end()) {
-													selectedIndices.push_back(start);
-													processedIndices.insert(start);
+									if (start < isoDirs.size() && end < isoDirs.size()) {
+										if (start < end) {
+											size_t minIndex = std::min(start, end);
+											size_t maxIndex = std::max(start, end);
+											for (size_t i = minIndex; i <= maxIndex; ++i) {
+												if (processedIndices.find(i) == processedIndices.end()) {
+													selectedIndices.push_back(i);
+													processedIndices.insert(i);
 												}
 											}
-												
-										} else {
-											errorMessages.push_back("Invalid range: '" + token + "'.");
-											invalidInput = true;
+										} else if (start > end) {
+											size_t minIndex = std::min(start, end);
+											size_t maxIndex = std::max(start, end);
+											for (size_t i = maxIndex; i >= minIndex; --i) {
+												if (processedIndices.find(i) == processedIndices.end()) {
+													selectedIndices.push_back(i);
+													processedIndices.insert(i);
+													if (std::min(start, end) == i) {
+														break;
+													}
+												}
+											}
+										} else if (start == end) {
+											// Process a single token
+											if (processedIndices.find(start) == processedIndices.end()) {
+												selectedIndices.push_back(start);
+												processedIndices.insert(start);
+											}
 										}
+									} else {
+										errorMessages.push_back("Invalid range: '" + token + "'.");
+										invalidInput = true;
+									}
 								} else {
+									// Single token
 									size_t index = std::stoi(token) - 1;
 									if (index < isoDirs.size()) {
 										if (processedIndices.find(index) == processedIndices.end()) {
@@ -1902,7 +1967,7 @@ void unmountISOs() {
 								errorMessages.push_back("Invalid input: '" + token + "'.");
 								invalidInput = true;
 							}
-						}               
+						}        
 
                         selectedIsoDirsFiltered.clear();
                         for (size_t index : selectedIndices) {
@@ -1943,7 +2008,6 @@ void unmountISOs() {
             std::vector<size_t> selectedIndices;
 			std::unordered_set<size_t> processedIndices;
 			std::istringstream iss(input);
-			free(input);
 			for (std::string token; iss >> token;) {
 				try {
 					size_t dashPos = token.find('-');
@@ -1960,7 +2024,7 @@ void unmountISOs() {
 										processedIndices.insert(i);
 									}
 								}
-							} else if (start > end){
+							} else if (start > end) {
 								size_t minIndex = std::min(start, end);
 								size_t maxIndex = std::max(start, end);
 								for (size_t i = maxIndex; i >= minIndex; --i) {
@@ -1984,6 +2048,7 @@ void unmountISOs() {
 							invalidInput = true;
 						}
 					} else {
+						// Single token
 						size_t index = std::stoi(token) - 1;
 						if (index < isoDirs.size()) {
 							if (processedIndices.find(index) == processedIndices.end()) {
@@ -1996,8 +2061,8 @@ void unmountISOs() {
 						}
 					}
 				} catch (const std::invalid_argument&) {
-						errorMessages.push_back("Invalid input: '" + token + "'.");
-						invalidInput = true;
+					errorMessages.push_back("Invalid input: '" + token + "'.");
+					invalidInput = true;
 				}
 			}
 
