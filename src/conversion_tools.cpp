@@ -101,7 +101,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.ignore();
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     }
 
     // Display message if no files are found
@@ -115,7 +115,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.ignore();
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         return;
     }
 
@@ -183,7 +183,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 					clearScrollBuffer(); // Clear scroll buffer
 					std::cout << "\033[1;91mNo file(s) match the search query.\033[0;1m\n"; // Inform user
 					std::cout << "\n\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
-					std::cin.ignore(); // Wait for user input
+					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 				} else {
 					while (true) { // Enter another loop for handling filtered results
 						clearScrollBuffer(); // Clear scroll buffer
@@ -221,7 +221,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
 						std::cout << " " << std::endl; // Print newline
 						std::cout << "\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
-						std::cin.ignore(); // Wait for user input
+						std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 					}
 				}
 			}
@@ -234,7 +234,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
 		std::cout << " " << std::endl; // Print newline
 		std::cout << "\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
-		std::cin.ignore(); // Wait for user input
+		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 		}
 	}
 }
@@ -690,7 +690,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     //    std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.ignore();
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     }
 
     // Remove duplicates from fileNames by sorting and using unique erase idiom
