@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -std=c++20 -O2 -Wall -Werror
+CXXFLAGS = -O2 -Wall -Werror
 LIBS = -lreadline
 LDFLAGS = -lreadline -lmount
 
