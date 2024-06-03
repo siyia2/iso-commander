@@ -266,6 +266,9 @@ std::future<bool> FileExists(const std::string& path);
 std::string getHomeDirectory();
 std::vector<std::string> loadCache();
 
+// Unmount functions
+std::vector<std::string> parseUserInput(const std::string& input, const std::vector<std::string>& isoDirs, bool& invalidInput, bool& noValid, bool &isFiltered);
+
 
 // CONVERSION TOOLS
 
