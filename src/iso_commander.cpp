@@ -1854,14 +1854,18 @@ void unmountISOs() {
 									size_t end = std::stoi(token.substr(dashPos + 1)) - 1;
 										if (start < isoDirs.size() && end < isoDirs.size()) {
 											if (start < end) {
-												for (size_t i = std::min(start, end); i <= std::max(start, end); ++i) {
+												size_t minIndex = std::min(start, end);
+												size_t maxIndex = std::max(start, end);
+												for (size_t i = minIndex; i <= maxIndex; ++i) {
 													if (processedIndices.find(i) == processedIndices.end()) {
 														selectedIndices.push_back(i);
 														processedIndices.insert(i);
 													}
 												}
 											} else if (start > end){
-												for (size_t i = std::max(start, end); i >= std::min(start, end); --i) {
+												size_t minIndex = std::min(start, end);
+												size_t maxIndex = std::max(start, end);
+												for (size_t i = maxIndex; i >= minIndex; --i) {
 													if (processedIndices.find(i) == processedIndices.end()) {
 														selectedIndices.push_back(i);
 														processedIndices.insert(i);
@@ -1948,14 +1952,18 @@ void unmountISOs() {
 						size_t end = std::stoi(token.substr(dashPos + 1)) - 1;
 						if (start < isoDirs.size() && end < isoDirs.size()) {
 							if (start < end) {
-								for (size_t i = std::min(start, end); i <= std::max(start, end); ++i) {
+								size_t minIndex = std::min(start, end);
+								size_t maxIndex = std::max(start, end);
+								for (size_t i = minIndex; i <= maxIndex; ++i) {
 									if (processedIndices.find(i) == processedIndices.end()) {
 										selectedIndices.push_back(i);
 										processedIndices.insert(i);
 									}
 								}
 							} else if (start > end){
-								for (size_t i = std::max(start, end); i >= (std::min(start, end)); --i) {
+								size_t minIndex = std::min(start, end);
+								size_t maxIndex = std::max(start, end);
+								for (size_t i = maxIndex; i >= minIndex; --i) {
 									if (processedIndices.find(i) == processedIndices.end()) {
 										selectedIndices.push_back(i);
 										processedIndices.insert(i);
