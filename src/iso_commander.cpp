@@ -182,7 +182,7 @@ void submenu1() {
         char* submenu_input = readline("\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
 
         if (!submenu_input || std::strlen(submenu_input) == 0) {
-			delete[] submenu_input;
+			free(submenu_input);
 			break; // Exit the submenu if input is empty or NULL
 		}
 					
@@ -242,7 +242,7 @@ void submenu2() {
         
 
         if (!submenu_input || std::strlen(submenu_input) == 0) {
-			delete[] submenu_input;
+			free(submenu_input);
 			break; // Exit the submenu if input is empty or NULL
 		}
 					
