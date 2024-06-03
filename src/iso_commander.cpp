@@ -31,12 +31,8 @@ std::vector<std::string> mountedFiles;
 // Vector to store skipped ISO mounts
 std::vector<std::string> skippedMessages;
 
-
-// Vector to store ISO mount/unmount errors
-std::vector<std::string> errorMessages;
 // Vector to store ISO unique input errors
 std::unordered_set<std::string> uniqueErrorMessages;
-
 
 // Vector to store ISO unmounts
 std::vector<std::string> unmountedFiles;
@@ -1064,7 +1060,7 @@ void select_and_mount_files_by_number() {
 						
 							clearScrollBuffer();
 
-							verbose(mountedFiles, skippedMessages, errorMessages, uniqueErrorMessages);
+							verbose(mountedFiles, skippedMessages, uniqueErrorMessages);
 						}
 					}
 				}	
@@ -1087,7 +1083,7 @@ void select_and_mount_files_by_number() {
             // Process user input to select and mount specific ISO files
             processAndMountIsoFiles(input, isoFiles, mountedSet);
             clearScrollBuffer();
-            verbose(mountedFiles, skippedMessages, errorMessages, uniqueErrorMessages);
+            verbose(mountedFiles, skippedMessages, uniqueErrorMessages);
             free(input);
         }          
     }
@@ -1095,7 +1091,7 @@ void select_and_mount_files_by_number() {
 
 
 // Function to print mount verbose messages
-void verbose(std::vector<std::string>& mountedFiles,std::vector<std::string>& skippedMessages,std::vector<std::string>& errorMessages,std::unordered_set<std::string>& uniqueErrorMessages) {
+void verbose(std::vector<std::string>& mountedFiles,std::vector<std::string>& skippedMessages,std::unordered_set<std::string>& uniqueErrorMessages) {
     if (!mountedFiles.empty()) {
         std::cout << " " << std::endl;
     }
@@ -1114,27 +1110,18 @@ void verbose(std::vector<std::string>& mountedFiles,std::vector<std::string>& sk
         std::cerr << skippedMessage;
     }
 
-    if (!errorMessages.empty()) {
-        std::cout << " " << std::endl;
-    }
-
-    // Print all the stored error messages
-    for (const auto& errorMessage : errorMessages) {
-        std::cerr << errorMessage;
-    }
-
     if (!uniqueErrorMessages.empty()) {
         std::cout << " " << std::endl;
     }
 
-    for (const auto& errorMsg : uniqueErrorMessages) {
-        std::cerr << "\033[1;93m" << errorMsg << "\033[0;1m" << std::endl;
+    // Print all the stored error messages
+    for (const auto& errorMessage : uniqueErrorMessages) {
+        std::cerr << errorMessage;
     }
 
     // Clear the vectors after each iteration
     mountedFiles.clear();
     skippedMessages.clear();
-    errorMessages.clear();
     uniqueErrorMessages.clear();
     
     std::cout << " " << std::endl;
@@ -1212,10 +1199,10 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
                 std::stringstream errorMessage;
                 errorMessage << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[0;1m\033[1;91m.\033[0;1m" << std::endl;
                 fs::remove(mountPoint);
-                std::unordered_set<std::string> errorSet(errorMessages.begin(), errorMessages.end());
+                std::unordered_set<std::string> errorSet(uniqueErrorMessages.begin(), uniqueErrorMessages.end());
                     if (errorSet.find(errorMessage.str()) == errorSet.end()) {
                         // Error message not found, add it to the vector
-                        errorMessages.push_back(errorMessage.str());
+                        uniqueErrorMessages.insert(errorMessage.str());
                     }
             } else {
                 // Mount successful
@@ -1247,148 +1234,104 @@ struct pair_hash {
 
 // Function to process input and mount ISO files asynchronously
 void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
-    // Initialize input string stream with the provided input
     std::istringstream iss(input);
-    
-     // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism
-	unsigned int numThreads = std::min(static_cast<int>(isoFiles.size()), static_cast<int>(maxThreads));
-    
-    // Flag to track if any invalid input is encountered
+
+    unsigned int numThreads = std::min(static_cast<int>(isoFiles.size()), static_cast<int>(std::thread::hardware_concurrency()));
+
     bool invalidInput = false;
-    
-    // Set to store indices of processed tokens
     std::unordered_set<int> processedIndices;
-    
-    // Set to store valid indices encountered
     std::unordered_set<int> validIndices;
-    
-    // Set to store processed ranges
     std::unordered_set<std::pair<int, int>, pair_hash> processedRanges;
 
-    // Create a ThreadPool with maxThreads
     ThreadPool pool(numThreads);
-    
-    // Define mutexes for synchronization
     std::mutex MutexForProcessedIndices;
     std::mutex MutexForValidIndices;
 
-    // Iterate through each token in the input stream
     std::string token;
     while (iss >> token) {
-		
-		if (token == "/") {
-			break;
-		}
-		
-        // Check if token consists of only zeros or is not 00
+        if (token == "/") {
+            break;
+        }
+
         if (token != "00" && isAllZeros(token)) {
             if (!invalidInput) {
                 invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist.\033[0;1m");
+                uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist.\033[0;1m\n");
             }
             continue;
         }
 
-        // Check for presence of dash in token
         size_t dashPos = token.find('-');
         if (dashPos != std::string::npos) {
-            // Check for multiple dashes
             if (token.find('-', dashPos + 1) != std::string::npos || 
                 (dashPos == 0 || dashPos == token.size() - 1 || !std::isdigit(token[dashPos - 1]) || !std::isdigit(token[dashPos + 1]))) {
                 invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
+                uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m\n");
                 continue;
             }
 
-            // Extract start and end indices from token
             int start, end;
             try {
                 start = std::stoi(token.substr(0, dashPos));
                 end = std::stoi(token.substr(dashPos + 1));
-            } catch (const std::invalid_argument& e) {
+            } catch (const std::invalid_argument&) {
                 invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
+                uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m\n");
                 continue;
-            } catch (const std::out_of_range& e) {
+            } catch (const std::out_of_range&) {
                 invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0;1m");
+                uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0;1m\n");
                 continue;
             }
 
-            // Check validity of range indices
             if (start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) {
                 invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0;1m");
+                uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0;1m\n");
                 continue;
             }
-            
-            // Lock the global mutex for synchronization
-            std::lock_guard<std::mutex> highLock(Mutex4High);
-            // Check if the range has been processed before
+
             std::pair<int, int> range(start, end);
             if (processedRanges.find(range) == processedRanges.end()) {
-                // Enqueue task for marking range as processed
-                pool.enqueue([&]() {
-                    processedRanges.insert(range);
-                });
+                processedRanges.insert(range);
 
-                // Determine step for iteration
                 int step = (start <= end) ? 1 : -1;
                 for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
-                    // Check if the index has been processed before
                     if (processedIndices.find(i) == processedIndices.end()) {
-                        // Enqueue task for marking index as processed
-                        pool.enqueue([&]() {
-                            std::lock_guard<std::mutex> processedLock(MutexForProcessedIndices);
-                            processedIndices.insert(i);
-                        });
+                        processedIndices.insert(i);
 
-                        // Enqueue mounting task
                         pool.enqueue([&, i]() {
                             std::lock_guard<std::mutex> validLock(MutexForValidIndices);
-                            if (validIndices.find(i) == validIndices.end()) { // Ensure not processed before
-								validIndices.insert(i);
-								std::vector<std::string> isoFilesToMount;
-								isoFilesToMount.push_back(isoFiles[i - 1]); // Assuming isoFiles is 1-based indexed
-								mountIsoFile(isoFilesToMount, mountedSet);
-							}
+                            if (validIndices.find(i) == validIndices.end()) {
+                                validIndices.insert(i);
+                                std::vector<std::string> isoFilesToMount;
+                                isoFilesToMount.push_back(isoFiles[i - 1]);
+                                mountIsoFile(isoFilesToMount, mountedSet);
+                            }
                         });
                     }
                 }
             }
         } else if (isNumeric(token)) {
-            // Lock the global mutex for synchronization
-            std::lock_guard<std::mutex> highLock(Mutex4High);
-
-            // Handle single index token
             int num = std::stoi(token);
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && processedIndices.find(num) == processedIndices.end()) {
-                // Enqueue task for marking index as processed
-                pool.enqueue([&]() {
-                    // Lock the mutex for processedIndices
-                    std::lock_guard<std::mutex> processedLock(MutexForProcessedIndices);
-                    processedIndices.insert(num);
-                });
+                processedIndices.insert(num);
 
-                // Enqueue mounting task
                 pool.enqueue([&, num]() {
-                    // Lock the mutex for validIndices
                     std::lock_guard<std::mutex> validLock(MutexForValidIndices);
-                    if (validIndices.find(num) == validIndices.end()) { // Ensure not processed before
-						validIndices.insert(num);
-						std::vector<std::string> isoFilesToMount;
-						isoFilesToMount.push_back(isoFiles[num - 1]); // Assuming isoFiles is 0-based indexed
-						mountIsoFile(isoFilesToMount, mountedSet);
-					}
+                    if (validIndices.find(num) == validIndices.end()) {
+                        validIndices.insert(num);
+                        std::vector<std::string> isoFilesToMount;
+                        isoFilesToMount.push_back(isoFiles[num - 1]);
+                        mountIsoFile(isoFilesToMount, mountedSet);
+                    }
                 });
             } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
                 invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(num) + "' does not exist.\033[0;1m");
+                uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(num) + "' does not exist.\033[0;1m\n");
             }
         } else {
-            // Handle invalid token
             invalidInput = true;
-            uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
+            uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m\n");
         }
     }
 }
@@ -1652,89 +1595,21 @@ void printUnmountedAndErrors(bool invalidInput) {
 			}
 
     // Print unique error messages
-    for (const auto& errorMessage : errorMessages) {
-        if (uniqueErrorMessages.find(errorMessage) == uniqueErrorMessages.end()) {
-            // If not found, store the error message and print it
-            uniqueErrorMessages.insert(errorMessage);
-            std::cerr << "\033[1;91m" << errorMessage << "\033[0;1m" << std::endl;
+    if (!uniqueErrorMessages.empty()) {
+        for (const std::string& uniqueErrorMessage : uniqueErrorMessages) {
+            std::cerr << "\033[1;91m" << uniqueErrorMessage << "\033[0;1m" <<std::endl;
         }
-    }
-    uniqueErrorMessages.clear();
-}
-
-
-void parseInput(const std::string& input, const std::vector<std::string>& isoDirs, std::vector<std::string>& selectedIsoDirs, bool& invalidInput) {
-    std::vector<size_t> selectedIndices;
-    std::unordered_set<size_t> processedIndices;
-    std::istringstream iss(input);
-    
-    for (std::string token; iss >> token;) {
-        try {
-            size_t dashPos = token.find('-');
-            if (dashPos != std::string::npos) {
-                size_t start = std::stoi(token.substr(0, dashPos)) - 1;
-                size_t end = std::stoi(token.substr(dashPos + 1)) - 1;
-                if (start < isoDirs.size() && end < isoDirs.size()) {
-                    if (start < end) {
-                        for (size_t i = start; i <= end; ++i) {
-                            if (processedIndices.find(i) == processedIndices.end()) {
-                                selectedIndices.push_back(i);
-                                processedIndices.insert(i);
-                            }
-                        }
-                    } else if (start > end) {
-                        for (size_t i = start; i >= end; --i) {
-                            if (processedIndices.find(i) == processedIndices.end()) {
-                                selectedIndices.push_back(i);
-                                processedIndices.insert(i);
-                                if (end == i) {
-                                    break;
-                                }
-                            }
-                        }
-                    } else { // start == end
-                        if (processedIndices.find(start) == processedIndices.end()) {
-                            selectedIndices.push_back(start);
-                            processedIndices.insert(start);
-                        }
-                    }
-                } else {
-                    errorMessages.push_back("Invalid range: '" + token + "'.");
-                    invalidInput = true;
-                }
-            } else {
-                size_t index = std::stoi(token) - 1;
-                if (index < isoDirs.size()) {
-                    if (processedIndices.find(index) == processedIndices.end()) {
-                        selectedIndices.push_back(index);
-                        processedIndices.insert(index);
-                    }
-                } else {
-                    errorMessages.push_back("Invalid index: '" + token + "'.");
-                    invalidInput = true;
-                }
-            }
-        } catch (const std::invalid_argument&) {
-            errorMessages.push_back("Invalid input: '" + token + "'.");
-            invalidInput = true;
-        }
-    }
-
-    if (!selectedIndices.empty()) {
-        for (size_t index : selectedIndices) {
-            selectedIsoDirs.push_back(isoDirs[index]);
-        }
+        uniqueErrorMessages.clear();
     }
 }
 
 
 // Function to parse user input for selecting ISOs to unmount
-std::vector<std::string> parseUserInput(const std::string& input, const std::vector<std::string>& isoDirs, bool& invalidInput, bool& noValid, bool &isFiltered) {
+std::vector<std::string> parseUserInput(const std::string& input, const std::vector<std::string>& isoDirs, bool& invalidInput, bool& noValid, bool& isFiltered) {
     std::vector<std::string> selectedIsoDirs;
-
-    // Parse the user input to determine which ISOs to unmount
     std::vector<size_t> selectedIndices;
     std::unordered_set<size_t> processedIndices;
+    
     std::istringstream iss(input);
     for (std::string token; iss >> token;) {
         try {
@@ -1750,27 +1625,20 @@ std::vector<std::string> parseUserInput(const std::string& input, const std::vec
                                 processedIndices.insert(i);
                             }
                         }
-                    } else if (start > end) {
+                    } else {
                         for (size_t i = start; i >= end; --i) {
                             if (processedIndices.find(i) == processedIndices.end()) {
                                 selectedIndices.push_back(i);
                                 processedIndices.insert(i);
-                                if (end == i) break;
+                                if (i == end) break;
                             }
-                        }
-                    } else if (start == end) {
-                        // Process a single token
-                        if (processedIndices.find(start) == processedIndices.end()) {
-                            selectedIndices.push_back(start);
-                            processedIndices.insert(start);
                         }
                     }
                 } else {
-                    errorMessages.push_back("Invalid range: '" + token + "'.");
+                    uniqueErrorMessages.insert("Invalid range: '" + token + "'.");
                     invalidInput = true;
                 }
             } else {
-                // Single token
                 size_t index = std::stoi(token) - 1;
                 if (index < isoDirs.size()) {
                     if (processedIndices.find(index) == processedIndices.end()) {
@@ -1778,12 +1646,12 @@ std::vector<std::string> parseUserInput(const std::string& input, const std::vec
                         processedIndices.insert(index);
                     }
                 } else {
-                    errorMessages.push_back("Invalid index: '" + token + "'.");
+                    uniqueErrorMessages.insert("Invalid index: '" + token + "'.");
                     invalidInput = true;
                 }
             }
         } catch (const std::invalid_argument&) {
-            errorMessages.push_back("Invalid input: '" + token + "'.");
+            uniqueErrorMessages.insert("Invalid input: '" + token + "'.");
             invalidInput = true;
         }
     }
@@ -1820,9 +1688,8 @@ void unmountISOs() {
         clearScrollBuffer();
         listMountedISOs();
         isoDirs.clear();
-        errorMessages.clear();
-        invalidInput = false;
         uniqueErrorMessages.clear();
+        invalidInput = false;
 
         {
             // Lock the mutex to protect isoDirs from concurrent access
@@ -1996,7 +1863,7 @@ void unmountISOs() {
                     } else {
                         clearScrollBuffer();
                         invalidInput = false;
-                        errorMessages.clear();
+                        uniqueErrorMessages.clear();
                         std::cerr << "\n\033[1;91mNo valid input provided for umount.\n";
                         std::cout << "\n\033[1;32m↵ to continue...";
                         std::cin.get();
