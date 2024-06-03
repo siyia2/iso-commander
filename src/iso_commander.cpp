@@ -853,7 +853,7 @@ void manualRefreshCache(const std::string& initialDir) {
         std::cout << " " << std::endl;
     }
     std::cout << "\033[1;32m↵ to continue...\033[0;1m";
-    std::cin.get();
+    std::cin.ignore();
 	}
 	promptFlag = true;
 }
@@ -976,7 +976,7 @@ void select_and_mount_files_by_number() {
         std::cout << "\033[1;93mISO Cache is empty. Please refresh it from the main Menu Options.\033[0;1m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.get();
+        std::cin.ignore();
         return;
     }
 
@@ -1158,7 +1158,7 @@ void verbose(std::vector<std::string>& mountedFiles,std::vector<std::string>& sk
     
     std::cout << " " << std::endl;
 	std::cout << "\033[1;32m↵ to continue...\033[0;1m";
-	std::cin.get();
+	std::cin.ignore();
 }
 
 

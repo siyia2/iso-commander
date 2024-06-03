@@ -52,7 +52,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
         std::cout << "\033[1;93mISO Cache is empty. Please refresh it from the main Menu Options.\033[0;1m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.get();
+        std::cin.ignore();
         return;
     }
 
@@ -423,6 +423,11 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             std::cout << uniqueErrorMessage << std::endl;
 		}
 		
+		// Clear input buffer
+		std::cin.clear();
+		// Discard characters up to a new line
+		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+		
         std::cout << "\n\033[1;94mThe following ISO(s) will be "<< operationColor + operationDescription << "\033[1;94m:\n\033[0;1m" << std::endl;
         for (const auto& chunk : indexChunks) {
             for (const auto& index : chunk) {
@@ -517,7 +522,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     //    std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m" << std::endl;
         std::cout << " " << std::endl;
         std::cout << "\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.get();
+        std::cin.ignore();
         
 }
 
