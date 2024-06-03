@@ -211,8 +211,7 @@ void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<s
 bool isAlreadyMounted(const std::string& mountPoint);
 
 // Iso cache functions
-bool iequals_vectorized(std::string_view a, std::string_view b);
-bool ends_with_iso(std::string_view str);
+bool ends_with_iso(const std::string& str);
 bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize);
 
 // Unmount functions
@@ -262,6 +261,7 @@ void print_ascii();
 std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query);
 
 // Cache functions
+std::future<bool> iequals(std::string_view a, std::string_view b);
 std::future<bool> FileExists(const std::string& path);
 std::string getHomeDirectory();
 std::vector<std::string> loadCache();
