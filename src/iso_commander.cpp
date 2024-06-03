@@ -747,35 +747,48 @@ void manualRefreshCache(const std::string& initialDir) {
     auto start_time = std::chrono::high_resolution_clock::now();
 
     // Create a task for each valid directory to refresh the cache and pass the vector by reference
-    std::istringstream iss2(inputLine); // Reset the string stream 
-        
-ThreadPool pool(maxThreads); 
+    std::istringstream iss2(inputLine); // Reset the string stream
+    std::size_t runningTasks = 0;  // Track the number of running tasks
+    
+    ThreadPool pool(maxThreads);
 
-while (std::getline(iss2, path, ';')) {
-    // Check if the directory path is valid
-    if (!isValidDirectory(path)) {
-        continue; // Skip invalid paths
+    while (std::getline(iss2, path, ';')) {
+        // Check if the directory path is valid
+        if (!isValidDirectory(path)) {
+            continue; // Skip invalid paths
+        }
+
+        // Check if the path has already been processed
+        if (processedValidPaths.find(path) != processedValidPaths.end()) {
+            continue; // Skip already processed valid paths
+        }
+
+        // Add a task to the thread pool for refreshing the cache for each directory
+        futures.emplace_back(std::async(std::launch::async, refreshCacheForDirectory, path, std::ref(allIsoFiles)));
+
+        ++runningTasks;
+
+        // Mark the path as processed
+        processedValidPaths.insert(path);
+
+        // Check if the number of running tasks has reached the maximum allowed
+        if (runningTasks >= maxThreads) {
+            // Wait for the tasks to complete
+            for (auto& future : futures) {
+                future.wait();
+            }
+            // Clear completed tasks from the vector
+            futures.clear();
+            runningTasks = 0;  // Reset the count of running tasks
+            std::cout << " " << std::endl;
+            gapPrinted = false;
+        }
     }
 
-    // Check if the path has already been processed
-    if (processedValidPaths.find(path) != processedValidPaths.end()) {
-        continue; // Skip already processed valid paths
+    // Wait for the remaining tasks to complete
+    for (auto& future : futures) {
+        future.wait();
     }
-
-    // Add a task to the thread pool for refreshing the cache for each directory
-    futures.emplace_back(pool.enqueue([path, &allIsoFiles] {
-        refreshCacheForDirectory(path, allIsoFiles);
-    }));
-
-    // Mark the path as processed
-    processedValidPaths.insert(path);   
-}
-
-// Wait for all tasks to complete
-for (auto& future : futures) {
-    future.wait();
-}
-
     
     // Save the combined cache to disk
     bool saveSuccess = saveCache(allIsoFiles, maxCacheSize);
@@ -820,7 +833,7 @@ for (auto& future : futures) {
 }
 
 
-// Function to perform case-insensitive string comparison using std::string_view asynchronously
+//Function to perform case-insensitive string comparison using std::string_view asynchronously
 std::future<bool> iequals(std::string_view a, std::string_view b) {
     // Using std::async to perform the comparison asynchronously
     return std::async(std::launch::async, [a, b]() {
@@ -859,7 +872,6 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
     try {
         // Vector to store futures for asynchronous tasks
         std::vector<std::future<void>> futures;
-        ThreadPool pool(maxThreads);
 
         // Iterate over entries in the specified directory and its subdirectories
         for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
