@@ -136,7 +136,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 					clearScrollBuffer();
                     std::cout << "\033[1;91mNo ISO(s) match the search query.\033[0;1m\n";
 					std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-					std::cin.get();
+					std::cin.ignore();
                 } else {
 					while (true) {
 						clearScrollBuffer();
@@ -203,7 +203,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
             std::cout << "\033[1;93mNo ISO(s) available for " << operation << ".\033[0;1m" << std::endl;
             std::cout << " " << std::endl;
             std::cout << "↵ to continue..." << std::endl;
-            std::cin.get();
+            std::cin.ignore();
             break;
         }
     }
@@ -353,7 +353,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 		clearScrollBuffer();
         std::cout << "\n\033[1;91mNo valid input to be " << operationDescription << ".\033[1;91m" << std::endl;
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.get();
+        std::cin.ignore();
         clear_history();
         return;
     }
@@ -378,10 +378,10 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 			}
 			
 			if (validIndices.empty()) {
-			clearScrollBuffer();	
+			clearScrollBuffer();
 			std::cout << "\n\033[1;91mNo valid input to be " << operationDescription << ".\033[1;91m" << std::endl;
 			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-            std::cin.get();
+            std::cin.ignore();
             clear_history();
             return;
 			}
@@ -413,7 +413,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             } else {
                 std::cout << "\n\033[1;91mInvalid paths and/or multiple paths are excluded from \033[1;92mcp\033[1;91m and \033[1;93mmv\033[1;91m operations.\033[0;1m" << std::endl;
                 std::cout << "\n\033[1;32mPress Enter to try again...\033[0;1m";
-                std::cin.get();
+                std::cin.ignore();
             }
         }
     } else {
