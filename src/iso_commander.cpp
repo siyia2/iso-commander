@@ -750,8 +750,6 @@ void manualRefreshCache(const std::string& initialDir) {
     std::istringstream iss2(inputLine); // Reset the string stream
     std::size_t runningTasks = 0;  // Track the number of running tasks
     
-    ThreadPool pool(maxThreads);
-
     while (std::getline(iss2, path, ';')) {
         // Check if the directory path is valid
         if (!isValidDirectory(path)) {
