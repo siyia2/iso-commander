@@ -1750,7 +1750,7 @@ std::vector<std::string> parseUserInputUnmountISOs(const std::string& input, con
 
 
 // Function to filter mounted isoDirs
-void filterMountPoints(const std::vector<std::string>& isoDirs, const std::vector<std::string>& filterPatterns, std::vector<std::string>& filteredIsoDirs, std::mutex& resultMutex, size_t start, size_t end) {
+void filterMountPoints(const std::vector<std::string>& isoDirs, std::unordered_set<std::string>& filterPatterns, std::vector<std::string>& filteredIsoDirs, std::mutex& resultMutex, size_t start, size_t end) {
     // Iterate through the chunk of ISO directories
     for (size_t i = start; i < end; ++i) {
         const std::string& dir = isoDirs[i];
@@ -1878,7 +1878,7 @@ void unmountISOs() {
                 }
 
                 // Split the filterPattern string into tokens using the delimiter ';'
-                std::vector<std::string> filterPatterns;
+                std::unordered_set<std::string> filterPatterns;
                 std::stringstream ss(filterPattern);
                 std::string token;
                 while (std::getline(ss, token, ';')) {
@@ -1888,8 +1888,8 @@ void unmountISOs() {
 					} else if (token.find('/') != std::string::npos) {
 						break;
 					}
-                    filterPatterns.push_back(token);
-                    std::transform(filterPatterns.back().begin(), filterPatterns.back().end(), filterPatterns.back().begin(), ::tolower);
+                    std::transform(token.begin(), token.end(), token.begin(), ::tolower);
+					filterPatterns.insert(token);
                 }
                 free(filterPattern);
 
@@ -1910,7 +1910,8 @@ void unmountISOs() {
                 for (size_t i = 0; i < numThreads; ++i) {
                     size_t start = i * dirsPerThread;
                     size_t end = (i == numThreads - 1) ? numDirs : start + dirsPerThread;
-                    futures.push_back(pool.enqueue(filterMountPoints, std::ref(isoDirs), std::ref(filterPatterns), std::ref(filteredIsoDirs), std::ref(isoDirsMutex), start, end));
+                    futures.push_back(pool.enqueue([&](std::mutex& mutex, size_t& start, size_t& end) {
+					filterMountPoints(isoDirs, filterPatterns, filteredIsoDirs, mutex, start, end);}, std::ref(isoDirsMutex), start, end));
                 }
 
                 // Wait for all filter tasks to complete
