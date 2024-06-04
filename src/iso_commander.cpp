@@ -1883,6 +1883,10 @@ void unmountISOs() {
                 std::string token;
                 free(filterPattern);
                 while (std::getline(ss, token, ';')) {
+					 if (token.find('/') != std::string::npos) {
+						// Handle the token containing '/'
+						break;
+					}
                     filterPatterns.push_back(token);
                     std::transform(filterPatterns.back().begin(), filterPatterns.back().end(), filterPatterns.back().begin(), ::tolower);
                 }
@@ -1915,7 +1919,7 @@ void unmountISOs() {
                 // Check if any directories matched the filter
                 if (filteredIsoDirs.empty()) {
                     clearScrollBuffer();
-                    std::cout << "\n\033[1;91mNo ISO mountpoint(s) match the filter pattern.\033[0;1m" << std::endl;
+                    std::cout << "\033[1;91mNo ISO mountpoint(s) match the search query.\033[0;1m" << std::endl;
                     std::cout << "\n\033[1;32m↵ to continue...";
                     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                     clearScrollBuffer();
