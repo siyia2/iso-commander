@@ -1,8 +1,7 @@
 CXX = g++
-CXXFLAGS = -O2 -Wall -Werror
+CXXFLAGS = -O2 -Wall -Werror -flto -fmerge-all-constants -fdata-sections -ffunction-sections
 LIBS = -lreadline
-LDFLAGS = -lreadline -lmount
-
+LDFLAGS = -lreadline -lmount -flto -ffunction-sections -fdata-sections -Wl,--gc-sections
 # Use the number of available processors from nproc
 NUM_PROCESSORS := $(shell nproc)
 
@@ -12,7 +11,7 @@ MAKEFLAGS = -j$(NUM_PROCESSORS)
 SRC_DIR = $(CURDIR)/src
 OBJ_DIR = $(CURDIR)/obj
 INSTALL_DIR = $(CURDIR)/bin
-SRC_FILES = isocmd/main_general.cpp isocmd/cache.cpp conversion_tools/conversion_tools.cpp cp_mv_rm/cp_mv_rm.cpp isocmd/filtering.cpp isocmd/mount.cpp isocmd/umount.cpp
+SRC_FILES = isocmd/main_general.cpp isocmd/cache.cpp isocmd/filtering.cpp isocmd/mount.cpp isocmd/umount.cpp conversion_tools/conversion_tools.cpp cp_mv_rm/cp_mv_rm.cpp
 OBJ_FILES = $(patsubst %.cpp,$(OBJ_DIR)/%.o,$(SRC_FILES))
 
 all: isocmd
