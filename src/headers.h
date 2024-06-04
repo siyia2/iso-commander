@@ -12,7 +12,6 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
-#include <future>
 #include <iostream>
 #include <libmount/libmount.h>
 #include <memory>
@@ -38,6 +37,7 @@
 // Get max available CPU cores for global use
 extern unsigned int maxThreads;
 
+// For storing unique input errors
 extern std::unordered_set<std::string> uniqueErrorMessages;
 
 // Mutexes for global use
