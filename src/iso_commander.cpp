@@ -44,7 +44,7 @@ std::vector<std::string> unmountedErrors;
 int main(int argc, char *argv[]) {
 	
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
-        printVersionNumber("3.3.0");
+        printVersionNumber("3.2.9");
         return 0;
     }
 	
@@ -1881,15 +1881,17 @@ void unmountISOs() {
                 std::vector<std::string> filterPatterns;
                 std::stringstream ss(filterPattern);
                 std::string token;
-                free(filterPattern);
                 while (std::getline(ss, token, ';')) {
-					 if (token.find('/') != std::string::npos) {
+					 if (token.find('/') != std::string::npos && strlen(filterPattern) != 1) {
 						// Handle the token containing '/'
+						token.erase(std::remove(token.begin(), token.end(), '/'), token.end());
+					} else if (token.find('/') != std::string::npos) {
 						break;
 					}
                     filterPatterns.push_back(token);
                     std::transform(filterPatterns.back().begin(), filterPatterns.back().end(), filterPatterns.back().begin(), ::tolower);
                 }
+                free(filterPattern);
 
                 // Filter the list of ISO directories based on the filter pattern
                 filteredIsoDirs.clear();
