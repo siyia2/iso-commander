@@ -243,26 +243,35 @@ bool isValidDirectory(const std::string& path) {
 
 // Function to refresh the cache for a single directory
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles) {
-    if (promptFlag) {
-    std::cout << "\033[1;93mProcessing directory path: '" << path << "'.\033[0m" << std::endl;
-	}
-	
-    std::vector<std::string> newIsoFiles;
-
-    // Perform the cache refresh for the directory (e.g., using parallelTraverse)
-    parallelTraverse(path, newIsoFiles, Mutex4Low);
-    std::lock_guard<std::mutex> MedLock(Mutex4Med);
-
-    // Check if the gap has been printed, if not, print it
-    if (!gapPrinted && promptFlag) {
-        std::cout << " " << std::endl;
-        gapPrinted = true; // Set the flag to true to indicate that the gap has been printed
-    }
-    
-    // Append the new entries to the shared vector
-    allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
 	if (promptFlag) {
-    std::cout << "\033[1;92mProcessed directory path: '" << path << "'.\033[0m" << std::endl;
+		std::cout << "\033[1;93mProcessing directory path: '" << path << "'.\033[0m" << std::endl;
+	}
+
+	std::vector<std::string> newIsoFiles;
+
+	// Perform the cache refresh for the directory (e.g., using parallelTraverse)
+	parallelTraverse(path, newIsoFiles, Mutex4Low);
+
+	// Use a separate mutex for read/write access to allIsoFiles
+	std::mutex allIsoFilesMutex;
+
+	{
+		// Acquire lock for checking gapPrinted and potential printing
+		std::lock_guard<std::mutex> lock(allIsoFilesMutex);
+		if (!gapPrinted && promptFlag) {
+		std::cout << " " << std::endl;
+		gapPrinted = true; // Set the flag to true
+		}
+	}
+
+	// Append new entries to allIsoFiles under lock protection
+	{
+		std::lock_guard<std::mutex> lock(allIsoFilesMutex);
+		allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
+	}
+
+	if (promptFlag) {
+		std::cout << "\033[1;92mProcessed directory path: '" << path << "'.\033[0m" << std::endl;
 	}
 }
 
@@ -353,9 +362,7 @@ void manualRefreshCache(const std::string& initialDir) {
     // Create a task for each valid directory to refresh the cache and pass the vector by reference
     std::istringstream iss2(inputLine); // Reset the string stream
     std::size_t runningTasks = 0;  // Track the number of running tasks
-    
-    std::mutex gapPrintedMutex;  // Create a mutex for gapPrinted
-    
+        
     while (std::getline(iss2, path, ';')) {
         // Check if the directory path is valid
         if (!isValidDirectory(path)) {
