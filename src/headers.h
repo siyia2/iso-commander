@@ -57,21 +57,6 @@ extern bool promptFlag;
 extern bool historyPattern;
 
 
-// SANITIZATION&EXTRACTION&READLINE
-
-//voids
-
-void loadHistory();
-void saveHistory();
-
-//stds
-
-std::string shell_escape(const std::string& s);
-std::pair<std::string, std::string> extractDirectoryAndFilename(const std::string& path);
-std::string readInputLine(const std::string& prompt);
-
-bool isValidLinuxPathFormat(const std::string& path);
-
 //	CP&MV&RM
 
 //	bools
@@ -84,6 +69,7 @@ bool isValidLinuxPathFormat(const std::string& path);
 
 //	bools
 bool fileExists(const std::string& filename);
+
 
 //	voids
 
@@ -115,9 +101,19 @@ bool isDirectoryEmpty(const std::string& path);
 bool isAllZeros(const std::string& str);
 bool isNumeric(const std::string& str);
 
+
 //	voids
 
+// Art
+void printVersionNumber(const std::string& version);
+void printMenu();
+void submenu1();
+void submenu2();
+void print_ascii();
+
 // General functions
+void loadHistory();
+void saveHistory();
 void signalHandler(int signum);
 void clearScrollBuffer();
 
@@ -129,36 +125,38 @@ void select_and_mount_files_by_number();
 void printIsoFileList(const std::vector<std::string>& isoFiles);
 void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
 
-// Iso cache functions
+// Cache functions
 void manualRefreshCache(const std::string& initialDir = "");
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& Mutex4Low);
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles);
 void removeNonExistentPathsFromCache();
 
+// Filter functions
+void filterMountPoints(const std::vector<std::string>& isoDirs, std::unordered_set<std::string>& filterPatterns, std::vector<std::string>& filteredIsoDirs, std::mutex& resultMutex, size_t start, size_t end);
+
 // Unmount functions
 void printUnmountedAndErrors(bool invalidInput);
-void filterMountPoints(const std::vector<std::string>& isoDirs, std::unordered_set<std::string>& filterPatterns, std::vector<std::string>& filteredIsoDirs, std::mutex& resultMutex, size_t start, size_t end);
 void listMountedISOs();
 void unmountISOs();
 void unmountISO(const std::vector<std::string>& isoDirs);
 
-// Art
-void printVersionNumber(const std::string& version);
-void printMenu();
-void submenu1();
-void submenu2();
-void print_ascii();
 
 //	stds
 
 // General functions
-std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query);
+std::string shell_escape(const std::string& s);
+std::pair<std::string, std::string> extractDirectoryAndFilename(const std::string& path);
+std::string readInputLine(const std::string& prompt);
+
 
 // Cache functions
 std::future<bool> iequals(std::string_view a, std::string_view b);
 std::future<bool> FileExists(const std::string& path);
 std::string getHomeDirectory();
 std::vector<std::string> loadCache();
+
+// Filter functions
+std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query);
 
 // Unmount functions
 std::vector<std::string> parseUserInputUnmountISOs(const std::string& input, const std::vector<std::string>& isoDirs, bool& invalidInput, bool& noValid, bool &isFiltered);
@@ -173,6 +171,7 @@ bool blacklist(const std::filesystem::path& entry, bool blacklistMdf);
 
 // stds
 std::vector<std::string> findFiles(const std::vector<std::string>& paths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback);
+
 
 // voids
 void select_and_convert_files_to_iso(const std::string& fileTypeChoice);
