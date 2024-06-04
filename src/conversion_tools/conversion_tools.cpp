@@ -674,6 +674,11 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
 
     // Print success message if files were found
     if (!fileNames.empty()) {
+		
+		// Remove duplicates from fileNames by sorting and using unique erase idiom
+		std::sort(fileNames.begin(), fileNames.end());
+		fileNames.erase(std::unique(fileNames.begin(), fileNames.end()), fileNames.end());
+    
         // Stop the timer after completing the mounting process
     //    auto end_time = std::chrono::high_resolution_clock::now();
         std::cout << " " << std::endl;
@@ -693,10 +698,6 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         std::cout << "\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     }
-
-    // Remove duplicates from fileNames by sorting and using unique erase idiom
-    std::sort(fileNames.begin(), fileNames.end());
-    fileNames.erase(std::unique(fileNames.begin(), fileNames.end()), fileNames.end());
     
     std::lock_guard<std::mutex> lock(mutex4search);
     if (mode == "bin") {
