@@ -10,26 +10,26 @@ std::vector<std::string> mountedFiles;
 std::vector<std::string> skippedMessages;
 
 
-// Function to mount all ISO files
 void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet, std::vector<std::string>& isoFilesToMount) {
-    
-    // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism
-    unsigned int numThreads = std::min(static_cast<int>(isoFiles.size()), static_cast<int>(maxThreads));
 
-    // Create a ThreadPool with maxThreads
-    ThreadPool pool(numThreads);
-      
-    // Process all ISO files asynchronously
-	for (size_t i = 0; i < isoFiles.size(); ++i) {
-        // Capture isoFiles and mountedSet by reference, and i by value
-        pool.enqueue([i, &isoFiles, &mountedSet, &isoFilesToMount]() {
-        // Create a vector containing the single ISO file to mount
-        std::vector<std::string> isoFilesToMountLocal = { isoFiles[i] }; // Assuming isoFiles is 1-based indexed
+  // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism
+  unsigned int numThreads = std::min(static_cast<int>(isoFiles.size()), static_cast<int>(maxThreads));
 
-        // Call mountIsoFile with the vector of ISO files to mount and the mounted set
-		mountIsoFile(isoFilesToMountLocal, mountedSet);
-		});
-	}
+  // Create a ThreadPool with maxThreads
+  ThreadPool pool(numThreads);
+
+  // Process all ISO files asynchronously
+  for (size_t i = 0; i < isoFiles.size(); ++i) {
+    // Capture isoFiles by reference, mountedSet by reference, and i by value
+    pool.enqueue([i, &isoFiles, &mountedSet]() {
+      // No need to create a local copy of isoFiles[i]
+      // Use isoFiles[i] directly within the lambda
+      std::vector<std::string> isoFilesToMountLocal = { isoFiles[i] }; // Assuming isoFiles is 1-based indexed
+
+      // Call mountIsoFile with the vector of ISO files to mount and the mounted set
+      mountIsoFile(isoFilesToMountLocal, mountedSet);
+    });
+  }
 }
 
 
