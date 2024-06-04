@@ -243,7 +243,7 @@ void removeNonExistentPathsFromCache();
 
 // Unmount functions
 void printUnmountedAndErrors(bool invalidInput);
-void filterMountPoints(const std::vector<std::string>& isoDirs, const std::vector<std::string>& filterPatterns, std::vector<std::string>& filteredIsoDirs, std::mutex& resultMutex, size_t start, size_t end);
+void filterMountPoints(const std::vector<std::string>& isoDirs, std::unordered_set<std::string>& filterPatterns, std::vector<std::string>& filteredIsoDirs, std::mutex& resultMutex, size_t start, size_t end);
 void listMountedISOs();
 void unmountISOs();
 void unmountISO(const std::vector<std::string>& isoDirs);
