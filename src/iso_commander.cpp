@@ -44,7 +44,7 @@ std::vector<std::string> unmountedErrors;
 int main(int argc, char *argv[]) {
 	
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
-        printVersionNumber("3.2.9");
+        printVersionNumber("3.3.0");
         return 0;
     }
 	
@@ -1092,7 +1092,7 @@ void select_and_mount_files_by_number() {
 						
 							clearScrollBuffer();
 
-							verbose(mountedFiles, skippedMessages, uniqueErrorMessages);
+							printMountedAndErrors(mountedFiles, skippedMessages, uniqueErrorMessages);
 						}
 					}
 				}	
@@ -1115,7 +1115,7 @@ void select_and_mount_files_by_number() {
             // Process user input to select and mount specific ISO files
             processAndMountIsoFiles(input, isoFiles, mountedSet);
             clearScrollBuffer();
-            verbose(mountedFiles, skippedMessages, uniqueErrorMessages);
+            printMountedAndErrors(mountedFiles, skippedMessages, uniqueErrorMessages);
             free(input);
         }          
     }
@@ -1123,7 +1123,7 @@ void select_and_mount_files_by_number() {
 
 
 // Function to print mount verbose messages
-void verbose(std::vector<std::string>& mountedFiles,std::vector<std::string>& skippedMessages,std::unordered_set<std::string>& uniqueErrorMessages) {
+void printMountedAndErrors(std::vector<std::string>& mountedFiles,std::vector<std::string>& skippedMessages,std::unordered_set<std::string>& uniqueErrorMessages) {
     if (!mountedFiles.empty()) {
         std::cout << " " << std::endl;
     }
@@ -1632,7 +1632,7 @@ void printUnmountedAndErrors(bool invalidInput) {
 
 
 // Function to parse user input for selecting ISOs to unmount
-std::vector<std::string> parseUserInput(const std::string& input, const std::vector<std::string>& isoDirs, bool& invalidInput, bool& noValid, bool& isFiltered) {
+std::vector<std::string> parseUserInputUnmountISOs(const std::string& input, const std::vector<std::string>& isoDirs, bool& invalidInput, bool& noValid, bool& isFiltered) {
     // Vector to store selected ISO directories
     std::vector<std::string> selectedIsoDirs;
 
@@ -1750,7 +1750,7 @@ std::vector<std::string> parseUserInput(const std::string& input, const std::vec
 
 
 // Function to filter mounted isoDirs
-void filterIsoDirs(const std::vector<std::string>& isoDirs, const std::vector<std::string>& filterPatterns, std::vector<std::string>& filteredIsoDirs, std::mutex& resultMutex, size_t start, size_t end) {
+void filterMountPoints(const std::vector<std::string>& isoDirs, const std::vector<std::string>& filterPatterns, std::vector<std::string>& filteredIsoDirs, std::mutex& resultMutex, size_t start, size_t end) {
     // Iterate through the chunk of ISO directories
     for (size_t i = start; i < end; ++i) {
         const std::string& dir = isoDirs[i];
@@ -1908,7 +1908,7 @@ void unmountISOs() {
                 for (size_t i = 0; i < numThreads; ++i) {
                     size_t start = i * dirsPerThread;
                     size_t end = (i == numThreads - 1) ? numDirs : start + dirsPerThread;
-                    futures.push_back(pool.enqueue(filterIsoDirs, std::ref(isoDirs), std::ref(filterPatterns), std::ref(filteredIsoDirs), std::ref(isoDirsMutex), start, end));
+                    futures.push_back(pool.enqueue(filterMountPoints, std::ref(isoDirs), std::ref(filterPatterns), std::ref(filteredIsoDirs), std::ref(isoDirsMutex), start, end));
                 }
 
                 // Wait for all filter tasks to complete
@@ -1967,7 +1967,7 @@ void unmountISOs() {
                         }
 
                         // Parse the user input to determine which ISOs to unmount
-                        selectedIsoDirsFiltered = parseUserInput(chosenNumbers, filteredIsoDirs, invalidInput, noValid, isFiltered);
+                        selectedIsoDirsFiltered = parseUserInputUnmountISOs(chosenNumbers, filteredIsoDirs, invalidInput, noValid, isFiltered);
 
                         if (!selectedIsoDirsFiltered.empty()) {
                             selectedIsoDirs = selectedIsoDirsFiltered;
@@ -2001,7 +2001,7 @@ void unmountISOs() {
             free(input);
             selectedIsoDirs = isoDirs;
         } else if (!isFiltered) {
-            selectedIsoDirs = parseUserInput(input, isoDirs, invalidInput, noValid, isFiltered);
+            selectedIsoDirs = parseUserInputUnmountISOs(input, isoDirs, invalidInput, noValid, isFiltered);
         }
 
         // If there are selected ISOs, proceed to unmount them
