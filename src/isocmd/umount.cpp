@@ -319,7 +319,7 @@ std::vector<std::string> parseUserInputUnmountISOs(const std::string& input, con
                     }
                 } else {
                     // Single index is out of bounds
-                    uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(index) + "' does not exist.\033[0;1m");
+                    uniqueErrorMessages.insert("\033[1;91mFile index '" + token + "' does not exist.\033[0;1m");
                     invalidInput = true;
                 }
             }
