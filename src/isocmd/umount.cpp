@@ -314,7 +314,7 @@ std::vector<std::string> parseUserInputUnmountISOs(const std::string& input, con
                     if (token != "00" && isAllZeros(token)){
 						uniqueErrorMessages.insert("\033[1;91mFile index '" + token + "' does not exist.\033[0;1m");
 						invalidInput = true;
-					} else {
+					} else if (token != "00") {
 						uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(index) + "' does not exist.\033[0;1m");
 						invalidInput = true;
 					}
