@@ -172,6 +172,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 								processOperationInput(input, filteredFiles, operationSet, process);
 							} else if (operation == "cp") {
 								process = "cp";
+								mvDelBreak=false;
 								processOperationInput(input, filteredFiles, operationSet, process);
 								}
 								free(input);
@@ -402,6 +403,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
             // Check if the user canceled
             if (inputLine.empty()) {
+				mvDelBreak=false;
 				clear_history();
                 return;
             }
@@ -445,6 +447,8 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             std::getline(std::cin, confirmation);
 
             if (!(confirmation == "y" || confirmation == "Y")) {
+				mvDelBreak=false;
+				clear_history();
                 std::cout << "\n\033[1;93mDelete operation aborted by user.\033[0;1m" << std::endl;
 				std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
