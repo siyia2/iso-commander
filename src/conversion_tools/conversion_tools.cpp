@@ -6,6 +6,23 @@ static std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles h
 static std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
 
 std::mutex fileCheckMutex;
+    
+// Set to track processed error messages to avoid duplicate error reporting
+std::set<std::string> processedErrors;
+
+// Set to track succesful conversions
+std::set<std::string> successOuts;
+
+// Set to track skipped conversions
+std::set<std::string> skippedOuts;
+
+// Set to track failed conversions
+std::set<std::string> failedOuts;
+
+// Set to track deleted conversions for ccd2iso only
+std::set<std::string> deletedOuts;
+
+
 
 // GENERAL
 
@@ -13,6 +30,31 @@ std::mutex fileCheckMutex;
 bool fileExistsConversions(const std::string& fullPath) {
     std::lock_guard<std::mutex> lock(fileCheckMutex);
         return std::filesystem::exists(fullPath);
+}
+
+// Function to print verbose conversion messages
+void verboseConversion() {
+    // Lambda function to print each element in a set followed by a newline
+    auto printWithNewline = [](const std::set<std::string>& outs) {
+        for (const auto& out : outs) {
+            std::cout << out << std::endl; // Print each element in the set
+        }
+        if (!outs.empty()) {
+            std::cout << " " << std::endl; // Print an additional newline if the set is not empty
+        }
+    };
+
+    // Print each set of messages with a newline after each set
+    printWithNewline(successOuts);   // Print success messages
+    printWithNewline(skippedOuts);   // Print skipped messages
+    printWithNewline(deletedOuts);   // Print deleted messages
+    printWithNewline(processedErrors); // Print error messages
+    
+    // Clear all sets after printing
+    successOuts.clear();   // Clear the set of success messages
+    skippedOuts.clear();   // Clear the set of skipped messages
+    deletedOuts.clear();   // Clear the set of deleted messages
+    processedErrors.clear(); // Clear the set of error messages
 }
 
 
@@ -223,6 +265,11 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 							std::cout << "\033[1mPlease wait...\n\033[1m" << std::endl; // Inform user to wait
 							processInput(filterInput, filteredFiles, inputPaths, flag); // Process user input
 							free(filterInput); // Free memory allocated for filter input
+							
+							clearScrollBuffer(); // Clear scroll buffer
+							std::cout << " " << std::endl; // Print newline
+			
+							verboseConversion();
 
 							std::cout << " " << std::endl; // Print newline
 							std::cout << "\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
@@ -237,14 +284,17 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 			std::cout << "\033[1mPlease wait...\n\033[1m" << std::endl; // Inform user to wait
 			processInput(input, files, inputPaths, flag); // Process input
 			free(input); // Free memory allocated for input
-
-		std::cout << " " << std::endl; // Print newline
+			
+			clearScrollBuffer(); // Clear scroll buffer
+			std::cout << " " << std::endl; // Print newline
+			
+			verboseConversion();
+			
 		std::cout << "\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
 		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 		}
 	}
 }
-
 
 
 // Function to process user input and convert selected BIN files to ISO format
@@ -257,18 +307,12 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     // Create a string stream to tokenize the input
     std::istringstream iss(input);
     std::string token;
-
-	// Set to track processed indices to avoid duplicates
-    std::unordered_set<int> processedIndices;
     
-    // Set to track processed error messages to avoid duplicate error reporting
-    std::unordered_set<std::string> processedErrors;
+    // Set to track processed indices to avoid duplicates
+	std::set<int> processedIndices;
 
     // Vector to store asynchronous tasks for file conversion
     std::vector<std::future<void>> futures;
-
-    // Vector to store error messages
-    std::vector<std::string> errorMessages;
 
     // Protect the critical section with a lock
     std::lock_guard<std::mutex> lock(indicesMutex);
@@ -321,7 +365,6 @@ void processInput(const std::string& input, const std::vector<std::string>& file
                             if (processedErrors.find(errorMessage) == processedErrors.end()) {
                                 // Protect the critical section with a lock
                                 std::lock_guard<std::mutex> lock(errorsMutex);
-                                errorMessages.push_back(errorMessage);
                                 processedErrors.insert(errorMessage);
                             }
                         } else if (start > 0 && end > 0 && start <= static_cast<int>(fileList.size()) && end <= static_cast<int>(fileList.size())) {  // Check if the range is valid
@@ -349,7 +392,6 @@ void processInput(const std::string& input, const std::vector<std::string>& file
                                     if (processedErrors.find(errorMessage) == processedErrors.end()) {
                                         // Protect the critical section with a lock
                                         std::lock_guard<std::mutex> lock(errorsMutex);
-                                        errorMessages.push_back(errorMessage);
                                         processedErrors.insert(errorMessage);
                                     }
                                     break; // Exit the loop to avoid further errors
@@ -361,7 +403,6 @@ void processInput(const std::string& input, const std::vector<std::string>& file
                             if (processedErrors.find(errorMessage) == processedErrors.end()) {
                                 // Protect the critical section with a lock
                                 std::lock_guard<std::mutex> lock(errorsMutex);
-                                errorMessages.push_back(errorMessage);
                                 processedErrors.insert(errorMessage);
                             }
                         }
@@ -371,7 +412,6 @@ void processInput(const std::string& input, const std::vector<std::string>& file
                         if (processedErrors.find(errorMessage) == processedErrors.end()) {
                             // Protect the critical section with a lock
                             std::lock_guard<std::mutex> lock(errorsMutex);
-                            errorMessages.push_back(errorMessage);
                             processedErrors.insert(errorMessage);
                         }
                     }
@@ -381,7 +421,6 @@ void processInput(const std::string& input, const std::vector<std::string>& file
                     if (processedErrors.find(errorMessage) == processedErrors.end()) {
                         // Protect the critical section with a lock
                         std::lock_guard<std::mutex> lock(errorsMutex);
-                        errorMessages.push_back(errorMessage);
                         processedErrors.insert(errorMessage);
                     }
                 }
@@ -405,7 +444,6 @@ void processInput(const std::string& input, const std::vector<std::string>& file
                         if (processedErrors.find(errorMessage) == processedErrors.end()) {
                             // Protect the critical section with a lock
                             std::lock_guard<std::mutex> lock(errorsMutex);
-                            errorMessages.push_back(errorMessage);
                             processedErrors.insert(errorMessage);
                         }
                     }
@@ -416,7 +454,6 @@ void processInput(const std::string& input, const std::vector<std::string>& file
                 if (processedErrors.find(errorMessage) == processedErrors.end()) {
                     // Protect the critical section with a lock
                     std::lock_guard<std::mutex> lock(errorsMutex);
-                    errorMessages.push_back(errorMessage);
                     processedErrors.insert(errorMessage);
                 }
             }
@@ -426,7 +463,6 @@ void processInput(const std::string& input, const std::vector<std::string>& file
             if (processedErrors.find(errorMessage) == processedErrors.end()) {
                 // Protect the critical section with a lock
                 std::lock_guard<std::mutex> lock(errorsMutex);
-                errorMessages.push_back(errorMessage);
                 processedErrors.insert(errorMessage);
             }
         }
@@ -435,15 +471,6 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     // Wait for all futures to finish
     for (auto& future : futures) {
         future.wait();
-    }
-	
-	if (!errorMessages.empty() && !processedIndices.empty()) {
-		std::cout << " " << std::endl;	
-	}
-	
-    // Print error messages
-    for (const auto& errorMessage : errorMessages) {
-        std::cout << errorMessage << std::endl;
     }
     
     promptFlag = false;
@@ -467,7 +494,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     static std::vector<std::string> cachedInvalidPaths;
     
     // Vector to store permission errors
-    std::unordered_set<std::string> uniqueInvalidPaths;
+    std::set<std::string> uniqueInvalidPaths;
 
     // Static variables to cache results for reuse
     static std::vector<std::string> binImgFilesCache;
@@ -476,10 +503,10 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     static std::vector<std::string> mdfMdsFilesCache;
     
     // Set to store processed paths
-    static std::unordered_set<std::string> processedPathsMdf;
+    static std::set<std::string> processedPathsMdf;
     
     // Set to store processed paths
-    static std::unordered_set<std::string> processedPathsBin;
+    static std::set<std::string> processedPathsBin;
     
     bool blacklistMdf =false;
 
@@ -745,7 +772,7 @@ bool blacklist(const std::filesystem::path& entry, bool blacklistMdf) {
     }
 
     // Use a set for blacklisted keywords
-    std::unordered_set<std::string> blacklistKeywords = {
+    std::set<std::string> blacklistKeywords = {
         "block", "list", "sdcard", "index", "data", "shader", "navmesh",
         "obj", "terrain", "script", "history", "system", "vendor", "flora",
         "cache", "dictionary", "initramfs", "map", "setup", "encrypt"
@@ -853,7 +880,8 @@ void convertBINToISO(const std::string& inputPath) {
 
     // Check if the output ISO file already exists
     if (fileExistsConversions(outputPath)) {
-        std::cout << "\033[1;93mThe corresponding .iso file already exists for: \033[1;92m'" << directory << "/" << fileNameOnly << "'\033[1;93m. Skipped conversion.\033[0;1m" << std::endl;
+		std::string skipMessage = "\033[1;93mThe corresponding .iso file already exists for: \033[1;92m'" + directory + "/" + fileNameOnly + "'\033[1;93m. Skipped conversion.\033[0;1m";
+        skippedOuts.insert(skipMessage);
         return;  // Skip conversion if the file already exists
     }
 
@@ -863,15 +891,19 @@ void convertBINToISO(const std::string& inputPath) {
 	auto [outDirectory, outFileNameOnly] = extractDirectoryAndFilename(outputPath);
     // Check the result of the conversion
     if (conversionStatus == 0) {
-        std::cout << "\033[1mImage file converted to ISO:\033[0;1m \033[1;92m'" << outDirectory << "/" << outFileNameOnly << "'\033[0;1m.\033[0;1m" << std::endl;
+        std::string successMessage = "\033[1mImage file converted to ISO:\033[0;1m \033[1;92m'" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m.\033[0;1m";
+        successOuts.insert(successMessage);
     } else {
-        std::cout << "\n\033[1;91mConversion of \033[1;93m'" << directory << "/" << fileNameOnly << "'\033[1;91m failed.\033[0;1m" << std::endl;
+        std::string FailedMessage = "\033[1;91mConversion of \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m failed.\033[0;1m";
+        failedOuts.insert(FailedMessage);
 
         // Delete the partially created ISO file
         if (std::remove(outputPath.c_str()) == 0) {
-            std::cout << "\n\033[1;92mDeleted incomplete ISO file:\033[1;91m '" << outDirectory << "/" << outFileNameOnly << "'\033[1;92m.\033[0;1m" << std::endl;
+            std::string DeletedMessage = "\033[1;92mDeleted incomplete ISO file:\033[1;91m '" + outDirectory + "/" + outFileNameOnly + "'\033[1;92m.\033[0;1m";
+            deletedOuts.insert(DeletedMessage);
         } else {
-            std::cerr << "\n\033[1;91mFailed to delete partially created ISO file: \033[1;93m'" << outDirectory << "/" << outFileNameOnly << "'\033[1;91m.\033[0;1m" << std::endl;
+            std::string DeletedMessage = "\033[1;91mFailed to delete partially created ISO file: \033[1;93m'" + outDirectory + "/" + outFileNameOnly + "'\033[1;91m.\033[0;1m";
+            deletedOuts.insert(DeletedMessage);
         }
     }
 }
@@ -903,7 +935,8 @@ void convertMDFToISO(const std::string& inputPath) {
     // Check if the corresponding .iso file already exists
     std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
     if (fileExistsConversions(outputPath)) {
-        std::cout << "\033[1;93mThe corresponding .iso file already exists for: \033[1;92m'" << directory << "/" << fileNameOnly << "'\033[1;93m. Skipped conversion.\033[0;1m" << std::endl;
+        std::string skipMessage = "\033[1;93mThe corresponding .iso file already exists for: \033[1;92m'" + directory + "/" + fileNameOnly + "'\033[1;93m. Skipped conversion.\033[0;1m";
+        skippedOuts.insert(skipMessage);
         return;
     }
 
@@ -924,7 +957,8 @@ void convertMDFToISO(const std::string& inputPath) {
     // Capture the output of the mdf2iso command
     FILE* pipe = popen(conversionCommand.c_str(), "r");
     if (!pipe) {
-        std::cout << "\033[1;91mFailed to execute conversion command\033[0;1m" << std::endl;
+        std::string FailedMessage = "\033[1;91mFailed to execute conversion command\033[0;1m";
+        failedOuts.insert(FailedMessage);
         return;
     }
 
@@ -939,12 +973,15 @@ void convertMDFToISO(const std::string& inputPath) {
     if (conversionStatus == 0) {
         // Check if the conversion output contains the "already ISO9660" message
         if (conversionOutput.find("already ISO") != std::string::npos) {
-            std::cout << "\033[1;91mThe selected file \033[1;93m'" << directory << "/" << fileNameOnly << "'\033[1;91m is already in ISO format, maybe rename it to .iso?. Skipped conversion.\033[0;1m" << std::endl;
+            std::string FailedMessage = "\033[1;91mThe selected file \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m is already in ISO format, maybe rename it to .iso?. Skipped conversion.\033[0;1m";
+            failedOuts.insert(FailedMessage);
         } else {
-            std::cout << "\033[1mImage file converted to ISO: \033[1;92m'" << outDirectory << "/" << outFileNameOnly << "'\033[0;1m\033[1m.\033[0;1m" << std::endl;
+            std::string successMessage = "\033[1mImage file converted to ISO: \033[1;92m'" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m\033[1m.\033[0;1m";
+            successOuts.insert(successMessage);
         }
     } else {
-        std::cout << "\n\033[1;91mConversion of \033[1;93m'" << directory << "/" << fileNameOnly << "'\033[1;91m failed.\033[0;1m" << std::endl;
+        std::string FailedMessage = "\033[1;91mConversion of \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m failed.\033[0;1m";
+        failedOuts.insert(FailedMessage);
 	}
 }
 
