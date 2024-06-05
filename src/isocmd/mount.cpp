@@ -230,6 +230,10 @@ void printMountedAndErrors(std::set<std::string>& mountedFiles,std::set<std::str
     for (const auto& errorMessage : uniqueErrorMessages) {
         std::cerr << "\n" << errorMessage << "\033[0;1m";
     }
+    
+    if (!uniqueErrorMessages.empty()) {
+        std::cout << "\n";
+    }
 
     // Clear the vectors after each iteration
     mountedFiles.clear();
@@ -434,11 +438,11 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                 });
             } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
                 invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(num) + "' does not exist.\033[0;1m\n");
+                uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(num) + "' does not exist.\033[0;1m");
             }
         } else {  // Handle invalid token
             invalidInput = true;
-            uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m\n");
+            uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
         }
     }
 }
