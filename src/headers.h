@@ -25,7 +25,6 @@
 #include <string>
 #include <sys/mount.h>
 #include <thread>
-#include <unordered_set>
 #include <vector>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -39,7 +38,7 @@
 extern unsigned int maxThreads;
 
 // For storing unique input errors
-extern std::unordered_set<std::string> uniqueErrorMessages;
+extern std::set<std::string> uniqueErrorMessages;
 
 // Mutexes for global use
 extern std::mutex Mutex4Low;
@@ -76,12 +75,12 @@ bool fileExists(const std::string& filename);
 
 // General
 void select_and_operate_files_by_number(const std::string& operation);
-void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& operationSet, const std::string& process);
+void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& operationSet, const std::string& process);
 void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete);
 
 
 // RM functions
-void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::unordered_set<std::string>& deletedSet);
+void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::set<std::string>& deletedSet);
 
 
 //	ISO COMMANDER
@@ -119,12 +118,12 @@ void signalHandler(int signum);
 void clearScrollBuffer();
 
 // Mount functions
-void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet, std::vector<std::string>& isoFilesToMount);
-void printMountedAndErrors(std::vector<std::string>& mountedFiles,std::vector<std::string>& skippedMessages,std::unordered_set<std::string>& errorMessages);
-void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordered_set<std::string>& mountedSet);
+void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedSet, std::vector<std::string>& isoFilesToMount);
+void printMountedAndErrors(std::set<std::string>& mountedFiles,std::set<std::string>& skippedMessages);
+void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std::string>& mountedSet);
 void select_and_mount_files_by_number();
 void printIsoFileList(const std::vector<std::string>& isoFiles);
-void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet);
+void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::set<std::string>& mountedSet);
 
 // Cache functions
 void manualRefreshCache(const std::string& initialDir = "");
@@ -133,7 +132,7 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 void removeNonExistentPathsFromCache();
 
 // Filter functions
-void filterMountPoints(const std::vector<std::string>& isoDirs, std::unordered_set<std::string>& filterPatterns, std::vector<std::string>& filteredIsoDirs, std::mutex& resultMutex, size_t start, size_t end);
+void filterMountPoints(const std::vector<std::string>& isoDirs, std::set<std::string>& filterPatterns, std::vector<std::string>& filteredIsoDirs, std::mutex& resultMutex, size_t start, size_t end);
 
 // Unmount functions
 void printUnmountedAndErrors(bool invalidInput);
@@ -175,6 +174,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
 
 
 // voids
+void verboseConversion();
 void select_and_convert_files_to_iso(const std::string& fileTypeChoice);
 void processInput(const std::string& input, const std::vector<std::string>& fileList, const std::string& inputPaths, bool flag);
 void printFileList(const std::vector<std::string>& fileList);
