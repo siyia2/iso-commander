@@ -52,8 +52,8 @@ void select_and_operate_files_by_number(const std::string& operation) {
     // If no ISO files are available, display a message and return
     if (isoFiles.empty()) {
         clearScrollBuffer();
-        std::cout << "\033[1;93mISO Cache is empty. Please refresh it from the main Menu Options.\033[0;1m" << std::endl;
-        std::cout << " " << std::endl;
+        std::cout << "\033[1;93mISO Cache is empty. Please refresh it from the main Menu Options.\033[0;1m\n";
+        std::cout << "\n";
         std::cout << "\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         return;
@@ -77,8 +77,8 @@ void select_and_operate_files_by_number(const std::string& operation) {
         clearScrollBuffer();
 
         // Display header message
-        std::cout << "\033[1;93m! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\033[0;1m" << std::endl;
-        std::cout << "\033[94;1m 		CHANGES TO CACHED ISOS ARE REFLECTED AUTOMATICALLY\n\033[0;1m" << std::endl;
+        std::cout << "\033[1;93m! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\033[0;1m\n";
+        std::cout << "\033[94;1m 		CHANGES TO CACHED ISOS ARE REFLECTED AUTOMATICALLY\033[0;1m\n";
 
         // Reload ISO files (in case the cache was updated)
         removeNonExistentPathsFromCache();
@@ -89,11 +89,11 @@ void select_and_operate_files_by_number(const std::string& operation) {
         printIsoFileList(isoFiles);
 
         // Prompt user for input or filter
-        char* input = readline(("\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + "\001\033[1;94m\002 (e.g., '1-3', '1 5'), / ↵ to filter, or ↵ to return:\001\033[0;1m\002 ").c_str());
+        char* input = readline(("\n\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + "\001\033[1;94m\002 (e.g., '1-3', '1 5'), / ↵ to filter, or ↵ to return:\001\033[0;1m\002 ").c_str());
         clearScrollBuffer();
         
         if (strcmp(input, "/") != 0 || (!(std::isspace(input[0]) || input[0] == '\0'))) {
-			std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
+			std::cout << "\033[1mPlease wait...\033[1m\n";
 		}
 
         // Check if the user wants to return
@@ -119,7 +119,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
             clearScrollBuffer();
             
             if (searchQuery && searchQuery[0] != '\0') {
-				std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
+				std::cout << "\033[1mPlease wait...\033[1m\n";
 				add_history(searchQuery); // Add the search query to the history
 				saveHistory();
 			}
@@ -143,11 +143,11 @@ void select_and_operate_files_by_number(const std::string& operation) {
                 } else {
 					while (!mvDelBreak) {
 						clearScrollBuffer();
-						std::cout << "\033[1mFiltered results:\n\033[0;1m" << std::endl;
+						std::cout << "\033[1mFiltered results:\033[0;1m\n";
 						printIsoFileList(filteredFiles); // Print the filtered list of ISO files
 
 						// Prompt user for input again with the filtered list
-						char* input = readline(("\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for " + operationColor + operation + "\001\033[1;94m\002 (e.g., '1-3', '1 5'), or ↵ to return:\001\033[0;1m\002 ").c_str());
+						char* input = readline(("\n\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for " + operationColor + operation + "\001\033[1;94m\002 (e.g., '1-3', '1 5'), or ↵ to return:\001\033[0;1m\002 ").c_str());
                     
 						// Check if the user wants to return
 						if (std::isspace(input[0]) || input[0] == '\0') {
@@ -205,10 +205,10 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
         // If ISO files become empty after operation, display a message and return
         if (isoFiles.empty()) {
-            std::cout << " " << std::endl;
-            std::cout << "\033[1;93mNo ISO(s) available for " << operation << ".\033[0;1m" << std::endl;
-            std::cout << " " << std::endl;
-            std::cout << "↵ to continue..." << std::endl;
+            std::cout << "\n";
+            std::cout << "\033[1;93mNo ISO(s) available for " << operation << ".\033[0;1m\n";
+            std::cout << "\n";
+            std::cout << "↵ to continue...\n";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             break;
         }
@@ -332,24 +332,24 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     }
     
     if (!uniqueErrorMessages.empty()) {
-        std::cout << " " << std::endl;
+        std::cout << "\n";
     }
 
     // Display unique errors at the end
     if (invalidInput) {
         for (const auto& errorMsg : uniqueErrorMessages) {
-            std::cerr << "\033[1;93m" << errorMsg << "\033[0;1m" << std::endl;
+            std::cerr << "\033[1;93m" << errorMsg << "\033[0;1m\n";
         }
     }
 
     if (invalidInput && !processedIndices.empty()) {
-        std::cout << " " << std::endl;
+        std::cout << "\n";
     }
 
     if (processedIndices.empty()) {
 		clearScrollBuffer();
 		mvDelBreak=false;
-        std::cout << "\n\033[1;91mNo valid input to be " << operationDescription << ".\033[1;91m" << std::endl;
+        std::cout << "\n\033[1;91mNo valid input to be " << operationDescription << ".\033[1;91m\n";
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         clear_history();
@@ -368,17 +368,17 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 			clearScrollBuffer();
 			
 			if (!uniqueErrorMessages.empty()) {
-            std::cout << " " << std::endl;
+            std::cout << "\n";
 			}
             
             for (const auto& uniqueErrorMessage : uniqueErrorMessages) {
-            std::cout << uniqueErrorMessage << std::endl;
+            std::cout << uniqueErrorMessage << "\033[0;1m\n";
 			}
 			
 			if (processedIndices.empty()) {
 			clearScrollBuffer();
 			mvDelBreak=false;
-			std::cout << "\n\033[1;91mNo valid input to be " << operationDescription << ".\033[1;91m" << std::endl;
+			std::cout << "\n\033[1;91mNo valid input to be " << operationDescription << ".\033[1;91m\n";
 			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             clear_history();
@@ -387,11 +387,11 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 				
 
             // Display selected operations
-            std::cout << "\n\033[1;94mThe following ISO(s) will be " << operationColor + operationDescription << " \033[1;94mto ?\033[1;93m" << userDestDir << "\033[1;94m:\n\033[0;1m" << std::endl;
+            std::cout << "\n\033[1;94mThe following ISO(s) will be " << operationColor + operationDescription << " \033[1;94mto ?\033[1;93m" << userDestDir << "\033[1;94m:\n\033[0;1m\n";
             for (const auto& chunk : indexChunks) {
                 for (const auto& index : chunk) {
                     auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFiles[index - 1]);
-                    std::cout << "\033[1m" << isoDirectory << "/\033[1;95m" << isoFilename << "\033[0;1m" << std::endl;
+                    std::cout << "\033[1m" << isoDirectory << "/\033[1;95m" << isoFilename << "\033[0;1m\n";
                 }
             }
             
@@ -415,7 +415,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
                     clear_history();
                 break;
             } else {
-                std::cout << "\n\033[1;91mInvalid paths and/or multiple paths are excluded from \033[1;92mcp\033[1;91m and \033[1;93mmv\033[1;91m operations.\033[0;1m" << std::endl;
+                std::cout << "\n\033[1;91mInvalid paths and/or multiple paths are excluded from \033[1;92mcp\033[1;91m and \033[1;93mmv\033[1;91m operations.\033[0;1m\n";
                 std::cout << "\n\033[1;32m↵ to try again...\033[0;1m";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             }
@@ -423,24 +423,24 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     } else {
 		clearScrollBuffer();	
 		if (!uniqueErrorMessages.empty()) {
-            std::cout << " " << std::endl;
+            std::cout << "\n";
 		}
         for (const auto& uniqueErrorMessage : uniqueErrorMessages) {
-            std::cout << uniqueErrorMessage << std::endl;
+            std::cout << uniqueErrorMessage << "\033[0;1m\n";
 		}
 		
-        std::cout << "\n\033[1;94mThe following ISO(s) will be "<< operationColor + operationDescription << "\033[1;94m:\n\033[0;1m" << std::endl;
+        std::cout << "\n\033[1;94mThe following ISO(s) will be "<< operationColor + operationDescription << "\033[1;94m:\n\033[0;1m\n";
         for (const auto& chunk : indexChunks) {
             for (const auto& index : chunk) {
                 auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFiles[index - 1]);
-                std::cout << "\033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[0;1m" << std::endl;
+                std::cout << "\033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[0;1m\n";
             }
         }
 
         if (!uniqueErrorMessages.empty() && indexChunks.empty()) {
 			clearScrollBuffer();
 			mvDelBreak=false;
-            std::cout << "\n\033[1;91mNo valid input for deletion.\033[0;1m" << std::endl;
+            std::cout << "\n\033[1;91mNo valid input for deletion.\033[0;1m\n";
         } else {
             std::string confirmation;
             std::cout << "\n\033[1;94mDo you want to proceed? (y/n):\033[0;1m ";
@@ -448,7 +448,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
             if (!(confirmation == "y" || confirmation == "Y")) {
 				mvDelBreak=false;
-                std::cout << "\n\033[1;93mDelete operation aborted by user.\033[0;1m" << std::endl;
+                std::cout << "\n\033[1;93mDelete operation aborted by user.\033[0;1m\n";
 				std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 return;
@@ -459,7 +459,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
    // auto start_time = std::chrono::high_resolution_clock::now();
 	
 	clearScrollBuffer();
-    std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
+    std::cout << "\033[1mPlease wait...\033[1m\n";
 
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
@@ -493,20 +493,20 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 		clearScrollBuffer();
         
         if (!operationIsos.empty()) {
-            std::cout << " " << std::endl;
+            std::cout << "\n";
         }
     
         // Print all moved files
         for (const auto& operationIso : operationIsos) {
-            std::cout << operationIso << std::endl;
+            std::cout << operationIso << "\n\033[0;1m";
         }
         
         if (!operationErrors.empty()) {
-            std::cout << " " << std::endl;
+            std::cout << "\n";
         }
         
         for (const auto& operationError : operationErrors) {
-            std::cout << operationError << std::endl;
+            std::cout << operationError << "\n\033[0;1m";
         }
         
         // Clear the vector after each iteration
@@ -520,11 +520,11 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     //    auto end_time = std::chrono::high_resolution_clock::now();
 
         // Calculate and print the elapsed time
-    //    std::cout << " " << std::endl;
+    //    std::cout << "\n";
      //   auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
         // Print the time taken for the entire process in bold with one decimal place
-    //    std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m" << std::endl;
-        std::cout << " " << std::endl;
+    //    std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n";
+        std::cout << "\n";
         std::cout << "\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         
@@ -564,12 +564,12 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
     // Get current user and group
     char* current_user = getlogin();
     if (current_user == nullptr) {
-        std::cerr << "Error getting current user: " << strerror(errno) << std::endl;
+        std::cerr << "\nError getting current user: " << strerror(errno) << "\033[0;1m";
         return;
     }
     gid_t current_group = getegid();
     if (current_group == static_cast<unsigned int>(-1)) {
-        std::cerr << "\033[1;91mError getting current group:\033[0;1m " << strerror(errno) << std::endl;
+        std::cerr << "\n\033[1;91mError getting current group:\033[0;1m " << strerror(errno) << "\033[0;1m";
         return;
     }
     std::string user_str(current_user);
@@ -615,7 +615,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     } else if (isDelete) {
                         operationCommand = "rm -f ";
                     } else {
-                        std::cerr << "Invalid operation specified." << std::endl;
+                        std::cerr << "Invalid operation specified.\n";
                         return;
                     }
 
@@ -690,11 +690,11 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                 }
             } else {
                 // Print message if file not found
-                std::cout << "\033[1;35mFile not found: \033[0;1m'" << isoDirectory << "/" << isoFilename << "'\033[1;95m.\033[0;1m" << std::endl;
+                std::cout << "\033[1;35mFile not found: \033[0;1m'" << isoDirectory << "/" << isoFilename << "'\033[1;95m.\033[0;1m\n";
             }
         } else {
             // Print message if file not found in cache
-            std::cout << "\033[1;93mFile not found in cache: \033[0;1m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m.\033[0;1m" << std::endl;
+            std::cout << "\033[1;93mFile not found in cache: \033[0;1m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m.\033[0;1m\n";
         }
     }
 }
