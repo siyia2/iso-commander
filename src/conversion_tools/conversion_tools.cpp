@@ -37,10 +37,10 @@ void verboseConversion() {
     // Lambda function to print each element in a set followed by a newline
     auto printWithNewline = [](const std::set<std::string>& outs) {
         for (const auto& out : outs) {
-            std::cout << out << std::endl; // Print each element in the set
+            std::cout << out << "\033[0;1m\n"; // Print each element in the set
         }
         if (!outs.empty()) {
-            std::cout << " " << std::endl; // Print an additional newline if the set is not empty
+            std::cout << " \n"; // Print an additional newline if the set is not empty
         }
     };
 
@@ -80,7 +80,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         fileTypeName = "MDF";
     } else {
         // Print error message for unsupported file types
-        std::cout << "Invalid file type choice. Supported types: BIN/IMG, MDF" << std::endl;
+        std::cout << "Invalid file type choice. Supported types: BIN/IMG, MDF\n";
         return;
     }
 
@@ -93,7 +93,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
     if (!inputPaths.empty()) {
         // Save search history if input paths are provided
-        std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
+        std::cout << "\033[1mPlease wait...\033[1m\n";
         saveHistory();
     }
 
@@ -136,13 +136,13 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     // Display message if no new files are found
     if (!newFilesFound && !files.empty()) {
         clearScrollBuffer();
-        std::cout << " " << std::endl;
+        std::cout << " \n";
         auto end_time = std::chrono::high_resolution_clock::now();
-        std::cout << "\033[1;91mNo new " << fileExtension << " file(s) over 5MB found. \033[1;92m" << files.size() << " file(s) are cached in RAM from previous searches.\033[0;1m" << std::endl;
-        std::cout << " " << std::endl;
+        std::cout << "\033[1;91mNo new " << fileExtension << " file(s) over 5MB found. \033[1;92m" << files.size() << " file(s) are cached in RAM from previous searches.\033[0;1m\n";
+        std::cout << " \n";
         auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m" << std::endl;
-        std::cout << " " << std::endl;
+        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n";
+        std::cout << " \n";
         std::cout << "\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     }
@@ -150,13 +150,13 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     // Display message if no files are found
     if (files.empty()) {
         clearScrollBuffer();
-        std::cout << " " << std::endl;
+        std::cout << " \n";
         auto end_time = std::chrono::high_resolution_clock::now();
         std::cout << "\033[1;91mNo " << fileExtension << " file(s) over 5MB found in the specified path(s) or cached in RAM.\n\033[0;1m";
-        std::cout << " " << std::endl;
+        std::cout << " \n";
         auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m" << std::endl;
-        std::cout << " " << std::endl;
+        std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n";
+        std::cout << " \n";
         std::cout << "\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         return;
@@ -166,13 +166,12 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     while (true) {
         // Display file list and prompt user for input
         clearScrollBuffer();
-        std::cout << "\033[94;1mSUCCESSFUL CONVERSIONS ARE AUTOMATICALLY ADDED INTO ISO CACHE\n\033[0;1m\033[0;1m" << std::endl;
+        std::cout << "\033[94;1mSUCCESSFUL CONVERSIONS ARE AUTOMATICALLY ADDED INTO ISO CACHE\033[0;1m\033[0;1m\n\n";
         printFileList(files);
 
-        std::cout << " " << std::endl;
         clear_history();
 
-        std::string prompt = "\001\033[1;38;5;208m\002" + fileTypeName + " \001\033[1;94m\002file(s) ↵ for conversion (e.g., '1-3', '1 5'), / ↵ to filter, or ↵ to return:\001\033[0;1m\002 ";
+        std::string prompt = "\n\001\033[1;38;5;208m\002" + fileTypeName + " \001\033[1;94m\002file(s) ↵ for conversion (e.g., '1-3', '1 5'), / ↵ to filter, or ↵ to return:\001\033[0;1m\002 ";
         char* input = readline(prompt.c_str());
 
         // Check if user wants to return
@@ -207,7 +206,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 				clearScrollBuffer(); // Clear scroll buffer to prepare for new content
 
 				if (searchQuery != nullptr && searchQuery[0] != '\0') { // Check if the search query is not empty
-					std::cout << "\033[1mPlease wait...\033[1m" << std::endl; // Inform user to wait
+					std::cout << "\033[1mPlease wait...\033[1m\n"; // Inform user to wait
 					add_history(searchQuery); // Add the search query to the history
 					saveHistory(); // Save the history
 				}
@@ -233,7 +232,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 					while (true) { // Enter another loop for handling filtered results
 						clearScrollBuffer(); // Clear scroll buffer
 						clear_history(); // Clear history for fresh start
-						std::cout << "\033[1mFiltered results:\n\033[0;1m" << std::endl; // Display filtered results header
+						std::cout << "\033[1mFiltered results:\n\033[0;1m\n"; // Display filtered results header
 						printFileList(filteredFiles); // Print filtered file list
 
 						std::string filterPrompt; // Define a string variable for filter prompt
@@ -242,7 +241,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 							filterPrompt = "\n\001\033[1;94m\033[1;38;5;208m\002BIN/IMG\001\033[1;94m\002 file(s) ↵ for conversion (e.g., '1-3', '1 5'), or ↵ to return:\001\033[0;1m\002 ";
 						} else if (fileType == "mdf") {
 							// Prompt for MDF files
-							filterPrompt = "\n\001\033[1;94m\033[1;38;5;208m\002MDF\001\033[1;94m\002 file(s) ↵ for conversion (e.g., '1-3', '1 5'), or ↵ to return:\001\033[0;1m\002 ";
+							filterPrompt = "\n\n\001\033[1;94m\033[1;38;5;208m\002MDF\001\033[1;94m\002 file(s) ↵ for conversion (e.g., '1-3', '1 5'), or ↵ to return:\001\033[0;1m\002 ";
 						}
 						char* filterInput = readline(filterPrompt.c_str()); // Get input for file conversion
 
@@ -262,16 +261,16 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 						}
 						if (isFiltered) {
 							clearScrollBuffer(); // Clear scroll buffer
-							std::cout << "\033[1mPlease wait...\n\033[1m" << std::endl; // Inform user to wait
+							std::cout << "\033[1mPlease wait...\n\033[1m\n"; // Inform user to wait
 							processInput(filterInput, filteredFiles, inputPaths, flag); // Process user input
 							free(filterInput); // Free memory allocated for filter input
 							
 							clearScrollBuffer(); // Clear scroll buffer
-							std::cout << " " << std::endl; // Print newline
+							std::cout << " \n"; // Print newline
 			
 							verboseConversion();
 
-							std::cout << " " << std::endl; // Print newline
+							std::cout << " \n"; // Print newline
 							std::cout << "\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
 							std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 						}
@@ -281,12 +280,12 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 		} else {
 			// If input is not "/", process the input
 			clearScrollBuffer(); // Clear scroll buffer
-			std::cout << "\033[1mPlease wait...\n\033[1m" << std::endl; // Inform user to wait
+			std::cout << "\033[1mPlease wait...\n\033[1m\n"; // Inform user to wait
 			processInput(input, files, inputPaths, flag); // Process input
 			free(input); // Free memory allocated for input
 			
 			clearScrollBuffer(); // Clear scroll buffer
-			std::cout << " " << std::endl; // Print newline
+			std::cout << " \n"; // Print newline
 			
 			verboseConversion();
 			
@@ -322,12 +321,12 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     // Get current user and group
     char* current_user = getlogin();
     if (current_user == nullptr) {
-		std::cerr << "Error getting current user: " << strerror(errno) << std::endl;
+		std::cerr << "Error getting current user: " << strerror(errno) << "\033[0;1m\n";
 		return;
     }
     gid_t current_group = getegid();
     if (current_group == static_cast<unsigned int>(-1)) {
-		std::cerr << "\033[1;91mError getting current group:\033[0;1m " << strerror(errno) << std::endl;
+		std::cerr << "\033[1;91mError getting current group:\033[0;1m " << strerror(errno) << "\033[0;1m\n";
 		return;
     }
     std::string user_str(current_user);
@@ -481,9 +480,9 @@ void processInput(const std::string& input, const std::vector<std::string>& file
   //  auto end_time = std::chrono::high_resolution_clock::now();
     // Calculate and print the elapsed time
   //  auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
- //   std::cout << " " << std::endl;
+ //   std::cout << " \n";
     // Print the time taken for the entire process in bold with one decimal place
-  //  std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m" << std::endl;
+  //  std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n";
         
 }
 
@@ -667,21 +666,21 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                     if (uniqueInvalidPaths.insert(path).second) {
                         // If it's a new path, print an empty line before printing the error (only once)
                         if (!printedEmptyLine) {
-                            std::cout << " " << std::endl;
+                            std::cout << " \n";
                             printedEmptyLine = true;
                         }
                         // Handle permission error differently, you can choose to skip or print a specific message
-                        std::cerr << "\033[1;91mInsufficient permissions for directory path: \033[1;93m'" << path << "'\033[1;91m.\033[0;1m" << std::endl;
+                        std::cerr << "\033[1;91mInsufficient permissions for directory path: \033[1;93m'" << path << "'\033[1;91m.\033[0;1m\n";
                     }
                 } else if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
                     if (!printedEmptyLine) {
                         // Print an empty line before starting to print invalid paths (only once)
-                        std::cout << " " << std::endl;
+                        std::cout << " \n";
                         printedEmptyLine = true;
                     }
 
                     // Print the specific error details for non-permission errors
-                    std::cerr << "\033[1;91m" << e.what() << ".\033[0;1m" << std::endl;
+                    std::cerr << "\033[1;91m" << e.what() << ".\033[0;1m\n";
 
                     // Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
                     cachedInvalidPaths.push_back(path);
@@ -692,11 +691,11 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     } catch (const std::filesystem::filesystem_error& e) {
         if (!printedEmptyLine) {
             // Print an empty line before starting to print invalid paths (only once)
-            std::cout << " " << std::endl;
+            std::cout << " \n";
             printedEmptyLine = true;
         }
         // Handle filesystem errors for the overall operation
-        std::cerr << "\033[1;91m" << e.what() << ".\033[0;1m" << std::endl;
+        std::cerr << "\033[1;91m" << e.what() << ".\033[0;1m\n";
     }
 
     // Print success message if files were found
@@ -704,20 +703,20 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     
         // Stop the timer after completing the mounting process
     //    auto end_time = std::chrono::high_resolution_clock::now();
-        std::cout << " " << std::endl;
+        std::cout << " \n";
         if (mode == "bin") {
 			clearScrollBuffer();
-			std::cout << "\033[1;92mFound " << fileNames.size() << " matching file(s)\033[0;1m" << ".\033[1;93m " << binImgFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0;1m" << std::endl;
+			std::cout << "\033[1;92mFound " << fileNames.size() << " matching file(s)\033[0;1m" << ".\033[1;93m " << binImgFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0;1m\n";
 		} else {
 			clearScrollBuffer();
-			std::cout << "\033[1;92mFound " << fileNames.size() << " matching file(s)\033[0;1m" << ".\033[1;93m " << mdfMdsFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0;1m" << std::endl;
+			std::cout << "\033[1;92mFound " << fileNames.size() << " matching file(s)\033[0;1m" << ".\033[1;93m " << mdfMdsFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0;1m\n";
 		}
         // Calculate and print the elapsed time
-   //     std::cout << " " << std::endl;
+   //     std::cout << " \n";
    //     auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
         // Print the time taken for the entire process in bold with one decimal place
-    //    std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m" << std::endl;
-        std::cout << " " << std::endl;
+    //    std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n";
+        std::cout << " \n";
         std::cout << "\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     }
@@ -819,13 +818,26 @@ void printFileList(const std::vector<std::string>& fileList) {
 
     // Print header for file selection
     std::cout << bold << "Select file(s) to convert to " << bold << "\033[1;92mISO(s)\033[0;1m:\n";
-    std::cout << " " << std::endl;
+    std::cout << " \n";
 
     // Counter for line numbering
     int lineNumber = 1;
+    int stew = 1;
+    
+    if (fileList.size() >= 10) {
+			stew = 2;
+		} else if (fileList.size() >= 100) {
+			stew = 3;
+		} else if (fileList.size() >= 1000) {
+			stew = 4;
+		} else if (fileList.size() >= 10000) {
+			stew = 5;
+		} else if (fileList.size() >= 100000) {
+			stew = 6;
+		}	
 
     // Apply formatting once before the loop
-    std::cout << std::right << std::setw(2);
+    std::cout << std::right << std::setw(stew);
 
     for (const auto& filename : fileList) {
         // Extract directory and filename
@@ -846,14 +858,14 @@ void printFileList(const std::vector<std::string>& fileList) {
 
                 // Print sequence number in the determined color and the rest in default color
                 std::cout << sequenceColor << std::setw(2) << std::right << lineNumber << ". " << reset;
-                std::cout << bold << directory << bold << "/" << orangeBold << fileNameOnly << reset << std::endl;
+                std::cout << bold << directory << bold << "/" << orangeBold << fileNameOnly << reset << "\033[0;1m\n";
             } else {
                 // Print entire path and filename with the default color
-                std::cout << std::setw(2) << std::right << lineNumber << ". " << bold << filename << reset << std::endl;
+                std::cout << std::setw(2) << std::right << lineNumber << ". " << bold << filename << reset << "\033[0;1m\n";
             }
         } else {
             // No extension found, print entire path and filename with the default color
-            std::cout << std::setw(2) << std::right << lineNumber << ". " << bold << filename << reset << std::endl;
+            std::cout << std::setw(2) << std::right << lineNumber << ". " << bold << filename << reset << "\033[0;1m\n";
         }
 
         // Increment line number
@@ -871,7 +883,7 @@ void convertBINToISO(const std::string& inputPath) {
 	auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath);
     // Check if the input file exists
     if (!std::ifstream(inputPath)) {
-        std::cout << "\033[1;91mThe specified input file \033[1;93m'" << directory << "/" << fileNameOnly << "'\033[1;91m does not exist.\033[0;1m" << std::endl;
+        std::cout << "\033[1;91mThe specified input file \033[1;93m'" << directory << "/" << fileNameOnly << "'\033[1;91m does not exist.\033[0;1m\n";
         return;
     }
 
@@ -928,7 +940,7 @@ void convertMDFToISO(const std::string& inputPath) {
 	auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath);
     // Check if the input file exists
     if (!std::ifstream(inputPath)) {
-        std::cout << "\033[1;91mThe specified input file \033[1;93m'" << directory << "/" << fileNameOnly << "'\033[1;91m does not exist.\033[0;1m" << std::endl;
+        std::cout << "\033[1;91mThe specified input file \033[1;93m'" << directory << "/" << fileNameOnly << "'\033[1;91m does not exist.\033[0;1m\n";
         return;
     }
 
