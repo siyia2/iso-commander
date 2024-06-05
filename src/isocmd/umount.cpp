@@ -280,6 +280,13 @@ std::vector<std::string> parseUserInputUnmountISOs(const std::string& input, con
 				// Token contains a range (e.g., "1-5")
 				size_t start = std::stoi(token.substr(0, dashPos)) - 1;
 				size_t end = std::stoi(token.substr(dashPos + 1)) - 1;
+				
+				if (start > end) {
+					// Swap values
+					size_t temp = start;
+					start = end;
+					end = temp;
+				}
 
 				// Process the range
 				if (start < isoDirs.size() && end < isoDirs.size()) {
@@ -292,20 +299,7 @@ std::vector<std::string> parseUserInputUnmountISOs(const std::string& input, con
 								processedIndices.insert(i);
 							}
 						}
-					} else if (start > end) { // Changed condition to start > end
-						for (size_t i = start; i >= end; --i) {
-							std::lock_guard<std::mutex> lock(processedMutex);
-							if (processedIndices.find(i) == processedIndices.end()) {
-								std::lock_guard<std::mutex> lock(indicesMutex);
-								selectedIndices.push_back(i);
-								processedIndices.insert(i);
-								if (i == end) break;
-							}
-						}
-					} else { // Added else branch for equal start and end
-						uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + std::to_string(start + 1) + "-" + std::to_string(end + 1) + "'. Ensure that numbers align with the list.\033[0;1m");
-						invalidInput = true;
-					}
+					} 
 				} else {
 					uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + std::to_string(start + 1) + "-" + std::to_string(end + 1) + "'. Ensure that numbers align with the list.\033[0;1m");
 					invalidInput = true;
