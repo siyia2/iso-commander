@@ -7,6 +7,8 @@ std::vector<std::string> operationIsos;
 // Vector to store errors for operation ISOs
 std::vector<std::string> operationErrors;
 
+bool mvDelBreak=false;
+
 
 // General
 
@@ -99,10 +101,10 @@ void select_and_operate_files_by_number(const std::string& operation) {
 			free(input);
             break;
         }
-
+		mvDelBreak=false;
         if (strcmp(input, "/") == 0) {
 			free(input);
-			while (true) {
+			while (!mvDelBreak) {
             clearScrollBuffer();
 			
 			historyPattern = true;
@@ -139,7 +141,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 					std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 } else {
-					while (true) {
+					while (!mvDelBreak) {
 						clearScrollBuffer();
 						std::cout << "\033[1mFiltered results:\n\033[0;1m" << std::endl;
 						printIsoFileList(filteredFiles); // Print the filtered list of ISO files
@@ -162,9 +164,11 @@ void select_and_operate_files_by_number(const std::string& operation) {
 							// Process the user input with the filtered list
 							if (operation == "rm") {
 								process = "rm";
+								mvDelBreak=true;
 								processOperationInput(input, filteredFiles, operationSet, process);
 							} else if (operation == "mv") {
 								process = "mv";
+								mvDelBreak=true;
 								processOperationInput(input, filteredFiles, operationSet, process);
 							} else if (operation == "cp") {
 								process = "cp";
@@ -346,6 +350,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
     if (processedIndices.empty()) {
 		clearScrollBuffer();
+		mvDelBreak=false;
         std::cout << "\n\033[1;91mNo valid input to be " << operationDescription << ".\033[1;91m" << std::endl;
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -374,6 +379,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 			
 			if (processedIndices.empty()) {
 			clearScrollBuffer();
+			mvDelBreak=false;
 			std::cout << "\n\033[1;91mNo valid input to be " << operationDescription << ".\033[1;91m" << std::endl;
 			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -431,6 +437,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
         if (!uniqueErrorMessages.empty() && indexChunks.empty()) {
 			clearScrollBuffer();
+			mvDelBreak=false;
             std::cout << "\n\033[1;91mNo valid input for deletion.\033[0;1m" << std::endl;
         } else {
             std::string confirmation;
