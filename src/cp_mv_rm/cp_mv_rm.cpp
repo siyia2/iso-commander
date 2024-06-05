@@ -222,9 +222,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 	// variable for user specified destination
 	std::string userDestDir;
 
-	// Load history from file
-	loadHistory();
-	     
     // Create an input string stream to tokenize the user input
     std::istringstream iss(input);
 
@@ -397,6 +394,9 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
                     std::cout << "\033[1m" << isoDirectory << "/\033[1;95m" << isoFilename << "\033[0;1m" << std::endl;
                 }
             }
+            
+            // Load history from file
+			loadHistory();
 
             // Ask for the destination directory
             std::string inputLine = readInputLine("\n\033[1;94mDestination directory ↵ for selected ISO file(s), or ↵ to cancel:\n\033[0;1m");
@@ -412,6 +412,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             if (isValidLinuxPathFormat(inputLine)) {
                 userDestDir = inputLine;
                     saveHistory();
+                    clear_history();
                 break;
             } else {
                 std::cout << "\n\033[1;91mInvalid paths and/or multiple paths are excluded from \033[1;92mcp\033[1;91m and \033[1;93mmv\033[1;91m operations.\033[0;1m" << std::endl;
@@ -448,7 +449,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
             if (!(confirmation == "y" || confirmation == "Y")) {
 				mvDelBreak=false;
-				clear_history();
                 std::cout << "\n\033[1;93mDelete operation aborted by user.\033[0;1m" << std::endl;
 				std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
