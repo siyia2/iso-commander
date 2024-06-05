@@ -408,9 +408,6 @@ void manualRefreshCache(const std::string& initialDir) {
     }
     
     uniqueErrorMessages.clear();
-    
-    // Save the combined cache to disk
-    bool saveSuccess = saveCache(allIsoFiles, maxCacheSize);
 
     // Stop the timer after completing the cache refresh and removal of non-existent paths
     auto end_time = std::chrono::high_resolution_clock::now();
@@ -424,27 +421,6 @@ void manualRefreshCache(const std::string& initialDir) {
     // Print the time taken for the entire process in bold with one decimal place
     std::cout << "\n\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\n";
 
-    // Inform the user about the cache refresh status
-    if (saveSuccess && !validPaths.empty() && invalidPaths.empty()) {
-        std::cout << "\n";
-        std::cout << "\033[1;92mCache refreshed successfully.\033[0m";
-        std::cout << "\n";
-    } 
-    if (saveSuccess && !validPaths.empty() && !invalidPaths.empty()) {
-        std::cout << "\n";
-        std::cout << "\033[1;93mCache refreshed with error(s).\033[0m";
-        std::cout << "\n";
-    }
-    if (saveSuccess && validPaths.empty() && !invalidPaths.empty()) {
-        std::cout << "\n";
-        std::cout << "\033[1;91mCache refresh failed due to missing valid path(s).\033[0m";
-        std::cout << "\n";
-    } 
-    if (!saveSuccess) {
-        std::cout << "\n";
-        std::cout << "\033[1;91mCache refresh failed.\033[0m";
-        std::cout << "\n";
-    }
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 	}
