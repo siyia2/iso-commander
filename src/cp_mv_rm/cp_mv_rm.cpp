@@ -7,8 +7,8 @@ std::vector<std::string> operationIsos;
 // Vector to store errors for operation ISOs
 std::vector<std::string> operationErrors;
 
+// For breaking mv&rm gracefully
 bool mvDelBreak=false;
-
 
 // General
 
