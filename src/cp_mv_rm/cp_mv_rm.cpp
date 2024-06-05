@@ -417,7 +417,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             } else {
                 std::cout << "\n\033[1;91mInvalid paths and/or multiple paths are excluded from \033[1;92mcp\033[1;91m and \033[1;93mmv\033[1;91m operations.\033[0;1m" << std::endl;
                 std::cout << "\n\033[1;32m↵ to try again...\033[0;1m";
-                std::cin.ignore();
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             }
         }
