@@ -268,7 +268,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 							filterPrompt = "\n\001\033[1;94m\033[1;38;5;208m\002BIN/IMG\001\033[1;94m\002 file(s) ↵ for conversion (e.g., '1-3', '1 5'), or ↵ to return:\001\033[0;1m\002 ";
 						} else if (fileType == "mdf") {
 							// Prompt for MDF files
-							filterPrompt = "\n\n\001\033[1;94m\033[1;38;5;208m\002MDF\001\033[1;94m\002 file(s) ↵ for conversion (e.g., '1-3', '1 5'), or ↵ to return:\001\033[0;1m\002 ";
+							filterPrompt = "\n\001\033[1;94m\033[1;38;5;208m\002MDF\001\033[1;94m\002 file(s) ↵ for conversion (e.g., '1-3', '1 5'), or ↵ to return:\001\033[0;1m\002 ";
 						}
 						char* filterInput = readline(filterPrompt.c_str()); // Get input for file conversion
 
@@ -850,31 +850,21 @@ void printFileList(const std::vector<std::string>& fileList) {
     int stew = 1;
     
     if (fileList.size() >= 10) {
-        stew = 2;
-    } else if (fileList.size() >= 100) {
-        stew = 3;
-    } else if (fileList.size() >= 1000) {
-        stew = 4;
-    } else if (fileList.size() >= 10000) {
-        stew = 5;
-    } else if (fileList.size() >= 100000) {
-        stew = 6;
-    }   
+			stew = 2;
+		} else if (fileList.size() >= 100) {
+			stew = 3;
+		} else if (fileList.size() >= 1000) {
+			stew = 4;
+		} else if (fileList.size() >= 10000) {
+			stew = 5;
+		} else if (fileList.size() >= 100000) {
+			stew = 6;
+		}	
 
     // Apply formatting once before the loop
     std::cout << std::right << std::setw(stew);
 
-    // Sort the file list in a case-insensitive manner
-    std::vector<std::string> sortedFileList = fileList;
-    std::sort(sortedFileList.begin(), sortedFileList.end(), [](const std::string& a, const std::string& b) {
-        // Case-insensitive comparison
-        return std::lexicographical_compare(a.begin(), a.end(), b.begin(), b.end(), [](char c1, char c2) {
-            return std::tolower(c1) < std::tolower(c2);
-        });
-    });
-
-    // Print the sorted file list
-    for (const auto& filename : sortedFileList) {
+    for (const auto& filename : fileList) {
         // Extract directory and filename
         auto [directory, fileNameOnly] = extractDirectoryAndFilename(filename);
 
