@@ -844,28 +844,38 @@ void printFileList(const std::vector<std::string>& fileList) {
 
     // Print header for file selection
     std::cout << bold << "Select file(s) to convert to " << bold << "\033[1;92mISO(s)\033[0;1m:\n";
-    std::cout << "\n";
+    std::cout << " \n";
 
     // Counter for line numbering
     int lineNumber = 1;
     int stew = 1;
     
     if (fileList.size() >= 10) {
-			stew = 2;
-		} else if (fileList.size() >= 100) {
-			stew = 3;
-		} else if (fileList.size() >= 1000) {
-			stew = 4;
-		} else if (fileList.size() >= 10000) {
-			stew = 5;
-		} else if (fileList.size() >= 100000) {
-			stew = 6;
-		}	
+        stew = 2;
+    } else if (fileList.size() >= 100) {
+        stew = 3;
+    } else if (fileList.size() >= 1000) {
+        stew = 4;
+    } else if (fileList.size() >= 10000) {
+        stew = 5;
+    } else if (fileList.size() >= 100000) {
+        stew = 6;
+    }   
 
     // Apply formatting once before the loop
     std::cout << std::right << std::setw(stew);
 
-    for (const auto& filename : fileList) {
+    // Sort the file list in a case-insensitive manner
+    std::vector<std::string> sortedFileList = fileList;
+    std::sort(sortedFileList.begin(), sortedFileList.end(), [](const std::string& a, const std::string& b) {
+        // Case-insensitive comparison
+        return std::lexicographical_compare(a.begin(), a.end(), b.begin(), b.end(), [](char c1, char c2) {
+            return std::tolower(c1) < std::tolower(c2);
+        });
+    });
+
+    // Print the sorted file list
+    for (const auto& filename : sortedFileList) {
         // Extract directory and filename
         auto [directory, fileNameOnly] = extractDirectoryAndFilename(filename);
 
@@ -883,15 +893,15 @@ void printFileList(const std::vector<std::string>& fileList) {
                 useRedColor = !useRedColor; // Toggle between red and green
 
                 // Print sequence number in the determined color and the rest in default color
-                std::cout << sequenceColor << std::setw(2) << std::right << lineNumber << ". " << reset;
+                std::cout << sequenceColor << std::setw(stew) << std::right << lineNumber << ". " << reset;
                 std::cout << bold << directory << bold << "/" << orangeBold << fileNameOnly << reset << "\033[0;1m\n";
             } else {
                 // Print entire path and filename with the default color
-                std::cout << std::setw(2) << std::right << lineNumber << ". " << bold << filename << reset << "\033[0;1m\n";
+                std::cout << std::setw(stew) << std::right << lineNumber << ". " << bold << filename << reset << "\033[0;1m\n";
             }
         } else {
             // No extension found, print entire path and filename with the default color
-            std::cout << std::setw(2) << std::right << lineNumber << ". " << bold << filename << reset << "\033[0;1m\n";
+            std::cout << std::setw(stew) << std::right << lineNumber << ". " << bold << filename << reset << "\033[0;1m\n";
         }
 
         // Increment line number
