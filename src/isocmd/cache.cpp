@@ -416,7 +416,9 @@ void manualRefreshCache(const std::string& initialDir) {
     if (promptFlag) {
 
     // Calculate and print the elapsed time
+    if (!validPaths.empty()) {
     std::cout << "\n";
+	}
     auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
 
     // Print the time taken for the entire process in bold with one decimal place
