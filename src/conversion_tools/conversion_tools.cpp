@@ -63,6 +63,8 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     // Initialize variables
     std::vector<std::string> files;
     std::vector<std::string> directoryPaths;
+    std::set<std::string> uniquePaths;
+    std::set<std::string> invalidDirectoryPaths;
     bool flag = false;
 
     std::string fileExtension;
@@ -91,18 +93,9 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     std::string inputPaths = readInputLine("\033[1;94mDirectory path(s) ↵ (multi-path separator: \033[1m\033[1;93m;\033[0;1m\033[1;94m) to search for \033[1m\033[1;92m" + fileExtension + " \033[1;94mfiles, or ↵ to return:\n\033[0;1m");
     clearScrollBuffer();
 
-    if (!inputPaths.empty()) {
-        // Save search history if input paths are provided
-        std::cout << "\033[1mPlease wait...\033[1m\n";
-        saveHistory();
-    }
-
-    // Clear command line history
-    clear_history();
-
     // Record start time for performance measurement
     auto start_time = std::chrono::high_resolution_clock::now();
-
+    
     // Split inputPaths into individual directory paths
     std::istringstream iss(inputPaths);
     std::string path;
@@ -110,14 +103,37 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         size_t start = path.find_first_not_of(" \t");
         size_t end = path.find_last_not_of(" \t");
         if (start != std::string::npos && end != std::string::npos) {
-            directoryPaths.push_back(path.substr(start, end - start + 1));
+            std::string cleanedPath = path.substr(start, end - start + 1);
+            if (uniquePaths.find(cleanedPath) == uniquePaths.end()) {
+                if (directoryExists(cleanedPath)) {
+                    directoryPaths.push_back(cleanedPath);
+                    uniquePaths.insert(cleanedPath);
+                } else {
+                    std::string invalid = "\n\033[1;91m" + cleanedPath;
+                    invalidDirectoryPaths.insert(invalid);
+                }
+            }
         }
     }
-
-    // Return if no directory paths are provided
-    if (directoryPaths.empty()) {
-        return;
-    }
+    if (!invalidDirectoryPaths.empty()) {
+		std::cout << "\033[1;93mThe following invalid paths will be omitted from the search:\n";
+		for (const auto& invalidPath : invalidDirectoryPaths) {
+			std::cerr << invalidPath;
+		}
+		std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
+		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+	}
+	
+	if (!inputPaths.empty()) {
+		std::cout << "\033[1mPlease wait...\033[1m\n"; // Inform user to wait
+        // Save search history if input paths are provided
+        saveHistory();
+    } else {
+		clear_history();
+		return;
+	}
+	// Clear command line history
+    clear_history();
 
     // Search for files based on file type
     bool newFilesFound = false;
