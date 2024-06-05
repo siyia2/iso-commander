@@ -5,9 +5,9 @@
 //	MOUNT STUFF
 
 // Vector to store ISO mounts
-std::vector<std::string> mountedFiles;
+std::set<std::string> mountedFiles;
 // Vector to store skipped ISO mounts
-std::vector<std::string> skippedMessages;
+std::set<std::string> skippedMessages;
 
 
 void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet, std::vector<std::string>& isoFilesToMount) {
@@ -163,7 +163,7 @@ void select_and_mount_files_by_number() {
 						
 							clearScrollBuffer();
 
-							printMountedAndErrors(mountedFiles, skippedMessages, uniqueErrorMessages);
+							printMountedAndErrors(mountedFiles, skippedMessages);
 						}
 					}
 				}	
@@ -186,7 +186,7 @@ void select_and_mount_files_by_number() {
             // Process user input to select and mount specific ISO files
             processAndMountIsoFiles(input, isoFiles, mountedSet);
             clearScrollBuffer();
-            printMountedAndErrors(mountedFiles, skippedMessages, uniqueErrorMessages);
+            printMountedAndErrors(mountedFiles, skippedMessages);
             free(input);
         }          
     }
@@ -194,7 +194,7 @@ void select_and_mount_files_by_number() {
 
 
 // Function to print mount verbose messages
-void printMountedAndErrors(std::vector<std::string>& mountedFiles,std::vector<std::string>& skippedMessages,std::unordered_set<std::string>& uniqueErrorMessages) {
+void printMountedAndErrors(std::set<std::string>& mountedFiles,std::set<std::string>& skippedMessages) {
     if (!mountedFiles.empty()) {
         std::cout << " " << std::endl;
     }
@@ -273,7 +273,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
                 // Check for duplicates
                 if (skippedSet.find(skippedMessage.str()) == skippedSet.end()) {
                     // Error message not found, add it to the vector
-                    skippedMessages.push_back(skippedMessage.str());
+                    skippedMessages.insert(skippedMessage.str());
                 }
 
                 continue; // Skip mounting this ISO file
@@ -312,7 +312,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
                 mountedSet.insert(mountPoint);
                 std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0;1m"
                                               + "\033[1m mounted at: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename + "'\033[0;1m\033[1m.\033[0;1m";
-                mountedFiles.push_back(mountedFileInfo);
+                mountedFiles.insert(mountedFileInfo);
             }
 
             // Clean up libmount resources
