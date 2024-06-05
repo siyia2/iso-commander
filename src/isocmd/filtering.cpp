@@ -2,89 +2,116 @@
 #include "../threadpool.h"
 
 
+// Boyer-Moore string search implementation for mount
+std::vector<size_t> boyerMooreSearch(const std::string& pattern, const std::string& text) {
+    std::vector<size_t> shifts(256, pattern.length());
+    std::vector<size_t> matches;
+
+    for (size_t i = 0; i < pattern.length() - 1; i++) {
+        shifts[pattern[i]] = pattern.length() - i - 1;
+    }
+
+    size_t patternLen = pattern.length();
+    size_t textLen = text.length();
+    size_t skip = 0;
+
+    for (size_t i = patternLen - 1; i < textLen;) {
+        for (skip = 0; skip < patternLen; skip++) {
+            if (pattern[patternLen - 1 - skip] != text[i - skip]) {
+                break;
+            }
+        }
+
+        if (skip == patternLen) {
+            matches.push_back(i - patternLen + 1);
+        }
+
+        i += std::max(shifts[text[i]], patternLen - skip);
+    }
+
+    return matches;
+}
+
 // Function to filter cached ISO files based on search query (case-insensitive)
 std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query) {
-    // Vector to store filtered file names
     std::vector<std::string> filteredFiles;
-
-    // Set to store query tokens (lowercased)
     std::set<std::string> queryTokens;
-
-    // Split the query string into tokens using the delimiter ';' and store them in a set
     std::stringstream ss(query);
     std::string token;
     while (std::getline(ss, token, ';')) {
-        // Convert token to lowercase
         std::transform(token.begin(), token.end(), token.begin(), ::tolower);
-        // Insert token into the set
         queryTokens.insert(token);
     }
 
-    // Create a thread pool with the desired number of threads
     ThreadPool pool(maxThreads);
-
-    // Vector to store futures for tracking tasks' completion
     std::vector<std::future<void>> futures;
-
-    // Function to filter files
     auto filterTask = [&](size_t start, size_t end) {
         for (size_t i = start; i < end; ++i) {
             const std::string& file = files[i];
-
-            // Find the position of the last '/' character to extract file name
             size_t lastSlashPos = file.find_last_of('/');
-            // Extract file name (excluding path) or use the full path if no '/' is found
             std::string fileName = (lastSlashPos != std::string::npos) ? file.substr(lastSlashPos + 1) : file;
-            // Convert file name to lowercase
             std::transform(fileName.begin(), fileName.end(), fileName.begin(), ::tolower);
-
-            // Flag to track if a match is found for the file
             bool matchFound = false;
-            // Iterate through each query token
             for (const std::string& queryToken : queryTokens) {
-                // If the file name contains the current query token
-                if (fileName.find(queryToken) != std::string::npos) {
-                    // Set matchFound flag to true and break out of the loop
+                if (!boyerMooreSearch(queryToken, fileName).empty()) {
                     matchFound = true;
                     break;
                 }
             }
-
-            // If a match is found, add the file to the filtered list
             if (matchFound) {
-                // Lock access to the shared vector
                 std::lock_guard<std::mutex> lock(Mutex4Med);
                 filteredFiles.push_back(file);
             }
         }
     };
 
-    // Calculate the number of files per thread
     size_t numFiles = files.size();
     size_t numThreads = maxThreads;
     size_t filesPerThread = numFiles / numThreads;
-
-    // Enqueue filter tasks into the thread pool
     for (size_t i = 0; i < numThreads - 1; ++i) {
         size_t start = i * filesPerThread;
         size_t end = start + filesPerThread;
         futures.emplace_back(pool.enqueue(filterTask, start, end));
     }
-
-    // Handle the remaining files in the main thread
     filterTask((numThreads - 1) * filesPerThread, numFiles);
-
-    // Wait for all tasks to complete
     for (auto& future : futures) {
         future.wait();
     }
 
-    // Return the vector of filtered file names
     return filteredFiles;
 }
 
 
-// Function to filter mounted isoDirs
+// Boyer-Moore string search implementation for umount
+size_t boyerMooreSearchMountPoints(const std::string& haystack, const std::string& needle) {
+    size_t m = needle.length();
+    size_t n = haystack.length();
+    if (m == 0) return 0;
+    if (n == 0 || n < m) return std::string::npos;
+
+    // Construct the bad character heuristic table
+    std::vector<int> badChar(256, -1);
+    for (size_t i = 0; i < m; ++i) {
+        badChar[needle[i]] = i;
+    }
+
+    // Start searching
+    size_t shift = 0;
+    while (shift <= n - m) {
+        int j = m - 1;
+        while (j >= 0 && needle[j] == haystack[shift + j]) {
+            j--;
+        }
+        if (j < 0) {
+            return shift; // Match found
+        } else {
+            shift += std::max(1, static_cast<int>(j - badChar[haystack[shift + j]]));
+        }
+    }
+    return std::string::npos; // No match found
+}
+
+// Function to filter mounted isoDirs using Boyer-Moore search
 void filterMountPoints(const std::vector<std::string>& isoDirs, std::set<std::string>& filterPatterns, std::vector<std::string>& filteredIsoDirs, std::mutex& resultMutex, size_t start, size_t end) {
     // Iterate through the chunk of ISO directories
     for (size_t i = start; i < end; ++i) {
@@ -96,8 +123,8 @@ void filterMountPoints(const std::vector<std::string>& isoDirs, std::set<std::st
         bool matchFound = false;
         // Iterate through each filter pattern
         for (const std::string& pattern : filterPatterns) {
-            // If the directory matches the current filter pattern
-            if (dirLower.find(pattern) != std::string::npos) {
+            // If the directory matches the current filter pattern using Boyer-Moore search
+            if (boyerMooreSearchMountPoints(dirLower, pattern) != std::string::npos) {
                 matchFound = true;
                 break;
             }
