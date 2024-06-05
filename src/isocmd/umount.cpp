@@ -260,7 +260,7 @@ std::vector<std::string> parseUserInputUnmountISOs(const std::string& input, con
     std::vector<size_t> selectedIndices;
 
     // Set to keep track of processed indices
-    std::unordered_set<size_t> processedIndices;
+    std::set<size_t> processedIndices;
 
     // Create a stringstream to tokenize the input
     std::istringstream iss(input);
@@ -463,7 +463,7 @@ void unmountISOs() {
                 }
 
                 // Split the filterPattern string into tokens using the delimiter ';'
-                std::unordered_set<std::string> filterPatterns;
+                std::set<std::string> filterPatterns;
                 std::stringstream ss(filterPattern);
                 std::string token;
                 while (std::getline(ss, token, ';')) {

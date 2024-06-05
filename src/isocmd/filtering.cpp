@@ -8,7 +8,7 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
     std::vector<std::string> filteredFiles;
 
     // Set to store query tokens (lowercased)
-    std::unordered_set<std::string> queryTokens;
+    std::set<std::string> queryTokens;
 
     // Split the query string into tokens using the delimiter ';' and store them in a set
     std::stringstream ss(query);
@@ -85,7 +85,7 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
 
 
 // Function to filter mounted isoDirs
-void filterMountPoints(const std::vector<std::string>& isoDirs, std::unordered_set<std::string>& filterPatterns, std::vector<std::string>& filteredIsoDirs, std::mutex& resultMutex, size_t start, size_t end) {
+void filterMountPoints(const std::vector<std::string>& isoDirs, std::set<std::string>& filterPatterns, std::vector<std::string>& filteredIsoDirs, std::mutex& resultMutex, size_t start, size_t end) {
     // Iterate through the chunk of ISO directories
     for (size_t i = start; i < end; ++i) {
         const std::string& dir = isoDirs[i];

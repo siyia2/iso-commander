@@ -10,7 +10,7 @@ std::set<std::string> mountedFiles;
 std::set<std::string> skippedMessages;
 
 
-void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet, std::vector<std::string>& isoFilesToMount) {
+void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedSet, std::vector<std::string>& isoFilesToMount) {
 
   // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism
   unsigned int numThreads = std::min(static_cast<int>(isoFiles.size()), static_cast<int>(maxThreads));
@@ -52,7 +52,7 @@ void select_and_mount_files_by_number() {
     }
 
     // Set to track mounted ISO files
-    std::unordered_set<std::string> mountedSet;
+    std::set<std::string> mountedSet;
     std::vector<std::string> isoFilesToMount;
 
     // Main loop for selecting and mounting ISO files
@@ -234,7 +234,7 @@ void printMountedAndErrors(std::set<std::string>& mountedFiles,std::set<std::str
 
 
 // Function to mount selected ISO files called from processAndMountIsoFiles
-void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordered_set<std::string>& mountedSet) {
+void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std::string>& mountedSet) {
     // Lock the global mutex for synchronization
     std::lock_guard<std::mutex> lowLock(Mutex4Low);
 
@@ -268,7 +268,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
                 skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m already mounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;93m.\033[0;1m" << std::endl;
 
                 // Create the unordered set after populating skippedMessages
-                std::unordered_set<std::string> skippedSet(skippedMessages.begin(), skippedMessages.end());
+                std::set<std::string> skippedSet(skippedMessages.begin(), skippedMessages.end());
 
                 // Check for duplicates
                 if (skippedSet.find(skippedMessage.str()) == skippedSet.end()) {
@@ -302,7 +302,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
                 std::stringstream errorMessage;
                 errorMessage << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[0;1m\033[1;91m.\033[0;1m" << std::endl;
                 fs::remove(mountPoint);
-                std::unordered_set<std::string> errorSet(uniqueErrorMessages.begin(), uniqueErrorMessages.end());
+                std::set<std::string> errorSet(uniqueErrorMessages.begin(), uniqueErrorMessages.end());
                     if (errorSet.find(errorMessage.str()) == errorSet.end()) {
                         // Error message not found, add it to the vector
                         uniqueErrorMessages.insert(errorMessage.str());
@@ -324,15 +324,15 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::unordere
 
 
 // Function to process input and mount ISO files asynchronously
-void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedSet) {
+void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::set<std::string>& mountedSet) {
     std::istringstream iss(input);  // Create an input string stream from the input string
 
     // Determine the number of threads to use, based on the number of ISO files and hardware concurrency
     unsigned int numThreads = std::min(static_cast<int>(isoFiles.size()), static_cast<int>(std::thread::hardware_concurrency()));
 
     bool invalidInput = false;  // Flag to indicate invalid input
-    std::unordered_set<int> processedIndices;  // Set to track processed indices
-    std::unordered_set<int> validIndices;      // Set to track valid indices
+    std::set<int> processedIndices;  // Set to track processed indices
+    std::set<int> validIndices;      // Set to track valid indices
     std::set<std::pair<int, int>> processedRanges;  // Set to track processed ranges
 
     ThreadPool pool(numThreads);  // Thread pool with the determined number of threads
