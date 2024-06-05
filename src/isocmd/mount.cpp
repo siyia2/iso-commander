@@ -24,7 +24,7 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_s
     pool.enqueue([i, &isoFiles, &mountedSet]() {
       // No need to create a local copy of isoFiles[i]
       // Use isoFiles[i] directly within the lambda
-      std::vector<std::string> isoFilesToMountLocal = { isoFiles[i] }; // Assuming isoFiles is 1-based indexed
+      std::vector<std::string> isoFilesToMountLocal = { isoFiles[i] };
 
       // Call mountIsoFile with the vector of ISO files to mount and the mounted set
       mountIsoFile(isoFilesToMountLocal, mountedSet);

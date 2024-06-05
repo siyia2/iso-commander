@@ -127,7 +127,6 @@ std::string getHomeDirectory() {
 // Load cache
 std::vector<std::string> loadCache() {
     std::vector<std::string> isoFiles;
-
     std::string cacheFilePath = getHomeDirectory() + "/.cache/iso_commander_cache.txt";
 
     // Open the file for memory mapping
@@ -154,6 +153,9 @@ std::vector<std::string> loadCache() {
         return isoFiles;
     }
 
+    // Use a set to store unique lines
+    std::set<std::string> uniqueIsoFiles;
+
     // Process the memory-mapped file
     char* start = mappedFile;
     char* end = mappedFile + fileSize;
@@ -161,7 +163,7 @@ std::vector<std::string> loadCache() {
         char* lineEnd = std::find(start, end, '\n');
         std::string line(start, lineEnd);
         if (!line.empty()) {
-            isoFiles.push_back(std::move(line));
+            uniqueIsoFiles.insert(std::move(line));
         }
         start = lineEnd + 1;
     }
@@ -170,9 +172,8 @@ std::vector<std::string> loadCache() {
     munmap(mappedFile, fileSize);
     close(fd);
 
-    // Remove duplicates from the loaded cache
-    std::sort(isoFiles.begin(), isoFiles.end());
-    isoFiles.erase(std::unique(isoFiles.begin(), isoFiles.end()), isoFiles.end());
+    // Convert the set to a vector
+    isoFiles.assign(uniqueIsoFiles.begin(), uniqueIsoFiles.end());
 
     return isoFiles;
 }

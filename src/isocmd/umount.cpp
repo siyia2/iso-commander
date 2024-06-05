@@ -16,7 +16,7 @@ void listMountedISOs() {
 
     // Vector to store names of mounted ISOs
     static std::mutex mtx;
-    std::vector<std::string> isoDirs;
+    std::set<std::string> isoDirs;
 
     // Lock mutex for accessing shared resource
     std::lock_guard<std::mutex> lock(mtx);
@@ -32,7 +32,7 @@ void listMountedISOs() {
                 // Build the full path and extract the ISO name
                 std::string fullDirPath = isoPath + "/" + entry->d_name;
                 std::string isoName = entry->d_name + 4; // Remove "/mnt/iso_" part
-                isoDirs.push_back(isoName);
+                isoDirs.insert(isoName);
             }
         }
         closedir(dir);
@@ -41,36 +41,24 @@ void listMountedISOs() {
         std::cerr << "\033[1;91mError opening the /mnt directory.\033[0;1m" << std::endl;
         return;
     }
-
-    // Sort ISO directory names alphabetically in a case-insensitive manner
-    std::sort(isoDirs.begin(), isoDirs.end(), [](const std::string& a, const std::string& b) {
-        // Convert both strings to lowercase before comparison
-        std::string lowerA = a;
-        std::transform(lowerA.begin(), lowerA.end(), lowerA.begin(), [](unsigned char c) { return std::tolower(c); });
-
-        std::string lowerB = b;
-        std::transform(lowerB.begin(), lowerB.end(), lowerB.begin(), [](unsigned char c) { return std::tolower(c); });
-
-        return lowerA < lowerB;
-    });
+    bool useRedColor = true;  // Start with red color
+    int i = 1;  // Initialize sequence counter
 
     // Display a list of mounted ISOs with ISO names in bold and alternating colors
     if (!isoDirs.empty()) {
         std::cout << "\033[0;1mList of mounted ISO(s):\033[0;1m" << std::endl; // White and bold
         std::cout << " " << std::endl;
 
-        bool useRedColor = true; // Start with red color for sequence numbers
-
-        for (size_t i = 0; i < isoDirs.size(); ++i) {
+        for (const auto& isoDir : isoDirs) {
             // Determine color based on alternating pattern
             std::string sequenceColor = (useRedColor) ? "\033[31;1m" : "\033[32;1m";
             useRedColor = !useRedColor; // Toggle between red and green
 
             // Print sequence number with the determined color
-            std::cout << sequenceColor << std::setw(2) << i + 1 << ". ";
+            std::cout << sequenceColor << std::setw(2) << i++ << ". ";
 
             // Print ISO directory path in bold and magenta
-            std::cout << "\033[0;1m/mnt/iso_\033[1m\033[95m" << isoDirs[i] << "\033[0;1m" << std::endl;
+            std::cout << "\033[0;1m/mnt/iso_\033[1m\033[95m" << isoDir << "\033[0;1m" << std::endl;
         }
     }
 }
@@ -252,12 +240,9 @@ void printUnmountedAndErrors(bool invalidInput) {
 
 
 // Function to parse user input for selecting ISOs to unmount
-std::vector<std::string> parseUserInputUnmountISOs(const std::string& input, const std::vector<std::string>& isoDirs, bool& invalidInput, bool& noValid, bool& isFiltered) {
+std::vector<std::string> parseUserInputUnmountISOs(const std::string& input, const std::set<std::string>& isoDirs, bool& invalidInput, bool& noValid, bool& isFiltered) {
     // Vector to store selected ISO directories
     std::vector<std::string> selectedIsoDirs;
-
-    // Vector to store selected indices
-    std::vector<size_t> selectedIndices;
 
     // Set to keep track of processed indices
     std::unordered_set<size_t> processedIndices;
@@ -288,7 +273,6 @@ std::vector<std::string> parseUserInputUnmountISOs(const std::string& input, con
 							std::lock_guard<std::mutex> lock(processedMutex);
 							if (processedIndices.find(i) == processedIndices.end()) {
 								std::lock_guard<std::mutex> lock(indicesMutex);
-								selectedIndices.push_back(i);
 								processedIndices.insert(i);
 							}
 						}
@@ -297,7 +281,6 @@ std::vector<std::string> parseUserInputUnmountISOs(const std::string& input, con
 							std::lock_guard<std::mutex> lock(processedMutex);
 							if (processedIndices.find(i) == processedIndices.end()) {
 								std::lock_guard<std::mutex> lock(indicesMutex);
-								selectedIndices.push_back(i);
 								processedIndices.insert(i);
 								if (i == end) break;
 							}
@@ -320,7 +303,6 @@ std::vector<std::string> parseUserInputUnmountISOs(const std::string& input, con
                     std::lock_guard<std::mutex> lock(processedMutex);
                     if (processedIndices.find(index) == processedIndices.end()) {
                         std::lock_guard<std::mutex> lock(indicesMutex);
-                        selectedIndices.push_back(index);
                         processedIndices.insert(index);
                     }
                 } else {
@@ -347,11 +329,12 @@ std::vector<std::string> parseUserInputUnmountISOs(const std::string& input, con
     }
 
     // Check if any directories were selected
-    if (!selectedIndices.empty()) {
+    if (!processedIndices.empty()) {
         // Lock the mutex and retrieve selected directories
         std::lock_guard<std::mutex> lock(dirsMutex);
-        for (size_t index : selectedIndices) {
-            selectedIsoDirs.push_back(isoDirs[index]);
+        for (size_t index : processedIndices) {
+            std::vector<std::string> isoDirsVector(isoDirs.begin(), isoDirs.end());
+			selectedIsoDirs.push_back(isoDirsVector[index]);
         }
     } else {
         // No valid directories were selected
@@ -372,7 +355,7 @@ std::vector<std::string> parseUserInputUnmountISOs(const std::string& input, con
 // Main function for unmounting ISOs
 void unmountISOs() {
     // Initialize necessary variables
-    std::vector<std::string> isoDirs;
+    std::set<std::string> isoDirs;
     std::mutex isoDirsMutex;
     const std::string isoPath = "/mnt";
     bool invalidInput = false, skipEnter = false, isFiltered = false, noValid = true;
@@ -393,21 +376,9 @@ void unmountISOs() {
             // Populate isoDirs with directories that match the "iso_" prefix
             for (const auto& entry : std::filesystem::directory_iterator(isoPath)) {
                 if (entry.is_directory() && entry.path().filename().string().find("iso_") == 0) {
-                    isoDirs.push_back(entry.path().string());
+                    isoDirs.insert(entry.path().string());
                 }
             }
-
-            // Sort ISO directory names alphabetically in a case-insensitive manner
-            std::sort(isoDirs.begin(), isoDirs.end(), [](const std::string& a, const std::string& b) {
-                // Convert both strings to lowercase before comparison
-                std::string lowerA = a;
-                std::transform(lowerA.begin(), lowerA.end(), lowerA.begin(), [](unsigned char c) { return std::tolower(c); });
-
-                std::string lowerB = b;
-                std::transform(lowerB.begin(), lowerB.end(), lowerB.begin(), [](unsigned char c) { return std::tolower(c); });
-
-                return lowerA < lowerB;
-            });
         }
 
         // Check if there are no matching directories
@@ -499,11 +470,13 @@ void unmountISOs() {
 				size_t dirsPerThread = numDirs / numThreads;
                 // Enqueue filter tasks into the thread pool
                 for (size_t i = 0; i < numThreads; ++i) {
-                    size_t start = i * dirsPerThread;
-                    size_t end = (i == numThreads - 1) ? numDirs : start + dirsPerThread;
-                    futures.push_back(pool.enqueue([&](std::mutex& mutex, size_t& start, size_t& end) {
-					filterMountPoints(isoDirs, filterPatterns, filteredIsoDirs, mutex, start, end);}, std::ref(isoDirsMutex), start, end));
-                }
+					size_t start = i * dirsPerThread;
+					size_t end = (i == numThreads - 1) ? numDirs : start + dirsPerThread;
+
+					futures.push_back(std::async(std::launch::async, [&](size_t start, size_t end) {
+					filterMountPoints(selectedIsoDirs, filterPatterns, filteredIsoDirs, isoDirsMutex, start, end);
+					}, start, end));
+				}
 
                 // Wait for all filter tasks to complete
                 for (auto& future : futures) {
@@ -561,7 +534,7 @@ void unmountISOs() {
                         }
 
                         // Parse the user input to determine which ISOs to unmount
-                        selectedIsoDirsFiltered = parseUserInputUnmountISOs(chosenNumbers, filteredIsoDirs, invalidInput, noValid, isFiltered);
+                            selectedIsoDirs = parseUserInputUnmountISOs(chosenNumbers, isoDirs, invalidInput, noValid, isFiltered);
 
                         if (!selectedIsoDirsFiltered.empty()) {
                             selectedIsoDirs = selectedIsoDirsFiltered;
@@ -593,7 +566,7 @@ void unmountISOs() {
         // Check if the user wants to unmount all ISOs
         if (std::strcmp(input, "00") == 0) {
             free(input);
-            selectedIsoDirs = isoDirs;
+            std::vector<std::string> selectedIsoDirs(isoDirs.begin(), isoDirs.end());
         } else if (!isFiltered) {
             selectedIsoDirs = parseUserInputUnmountISOs(input, isoDirs, invalidInput, noValid, isFiltered);
         }
