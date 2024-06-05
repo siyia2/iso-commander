@@ -245,7 +245,7 @@ std::vector<std::string> parseUserInputUnmountISOs(const std::string& input, con
     std::vector<std::string> selectedIsoDirs;
 
     // Set to keep track of processed indices
-    std::unordered_set<size_t> processedIndices;
+    std::set<size_t> processedIndices;
 
     // Create a stringstream to tokenize the input
     std::istringstream iss(input);
@@ -253,7 +253,6 @@ std::vector<std::string> parseUserInputUnmountISOs(const std::string& input, con
     // ThreadPool and mutexes for synchronization
     ThreadPool pool(maxThreads);
     std::vector<std::future<void>> futures;
-    std::mutex indicesMutex;
     std::mutex processedMutex;
     std::mutex dirsMutex;
 
@@ -263,37 +262,27 @@ std::vector<std::string> parseUserInputUnmountISOs(const std::string& input, con
             size_t dashPos = token.find('-');
 			if (dashPos != std::string::npos) {
 				// Token contains a range (e.g., "1-5")
-				size_t start = std::stoi(token.substr(0, dashPos)) - 1;
-				size_t end = std::stoi(token.substr(dashPos + 1)) - 1;
+				size_t dashPos = token.find('-');
+        if (dashPos != std::string::npos) {
+            // Token contains a range (e.g., "1-5")
+            size_t start = std::stoi(token.substr(0, dashPos)) - 1;
+            size_t end = std::stoi(token.substr(dashPos + 1)) - 1;
 
-				// Process the range
-				if (start < isoDirs.size() && end < isoDirs.size()) {
-					if (start < end) {
-						for (size_t i = start; i <= end; ++i) {
-							std::lock_guard<std::mutex> lock(processedMutex);
-							if (processedIndices.find(i) == processedIndices.end()) {
-								std::lock_guard<std::mutex> lock(indicesMutex);
-								processedIndices.insert(i);
-							}
-						}
-					} else if (start > end) { // Changed condition to start > end
-						for (size_t i = start; i >= end; --i) {
-							std::lock_guard<std::mutex> lock(processedMutex);
-							if (processedIndices.find(i) == processedIndices.end()) {
-								std::lock_guard<std::mutex> lock(indicesMutex);
-								processedIndices.insert(i);
-								if (i == end) break;
-							}
-						}
-					} else { // Added else branch for equal start and end
-						uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + std::to_string(start + 1) + "-" + std::to_string(end + 1) + "'. Ensure that numbers align with the list.\033[0;1m");
-						invalidInput = true;
-					}
-				} else {
-					uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + std::to_string(start + 1) + "-" + std::to_string(end + 1) + "'. Ensure that numbers align with the list.\033[0;1m");
-					invalidInput = true;
-				}
-						
+            // Lock the mutex before accessing shared data
+            std::lock_guard<std::mutex> lock(processedMutex);
+
+            // Process the range
+            if (start < isoDirs.size() && end < isoDirs.size()) {
+                for (size_t i = start; i <= end; ++i) {
+                    // Insert the index into the ordered set
+                    processedIndices.insert(i);
+                }
+            } else {
+                uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + std::to_string(start + 1) + "-" + std::to_string(end + 1) + "'. Ensure that numbers align with the list.\033[0;1m");
+                invalidInput = true;
+            }
+        }
+				
             } else {
                 // Token is a single index
                 size_t index = std::stoi(token) - 1;
@@ -302,7 +291,6 @@ std::vector<std::string> parseUserInputUnmountISOs(const std::string& input, con
                 if (index < isoDirs.size()) {
                     std::lock_guard<std::mutex> lock(processedMutex);
                     if (processedIndices.find(index) == processedIndices.end()) {
-                        std::lock_guard<std::mutex> lock(indicesMutex);
                         processedIndices.insert(index);
                     }
                 } else {
