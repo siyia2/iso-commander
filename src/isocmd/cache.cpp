@@ -432,7 +432,7 @@ void manualRefreshCache(const std::string& initialDir) {
     } 
     if (saveSuccess && !validPaths.empty() && !invalidPaths.empty()) {
         std::cout << "\n";
-        std::cout << "\033[1;93mCache refreshed with errors from invalid path(s).\033[0m";
+        std::cout << "\033[1;93mCache refreshed with error(s).\033[0m";
         std::cout << "\n";
     }
     if (saveSuccess && validPaths.empty() && !invalidPaths.empty()) {
