@@ -139,8 +139,9 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
             clearScrollBuffer();
             break;
         }
-        
+			bool isFiltered = false;
 			if (strcmp(input, "/") == 0) { // Check if the input is "/"
+				isFiltered = true;
 				while (true) { // Enter an infinite loop for handling input
 				// Clear history for a fresh start
 				clear_history();
@@ -173,6 +174,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 				if (std::isspace(searchQuery[0]) || searchQuery[0] == '\0') { // Check if the search query is empty or contains only spaces
 					free(searchQuery); // Free memory allocated for search query
 					historyPattern = false; // Set history pattern to false
+					isFiltered = false;
 					break; // Exit the loop
 				}
 
@@ -206,23 +208,26 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 						if (std::isspace(input[0]) || input[0] == '\0') {
 							free(input); // Free memory allocated for input
 							historyPattern = false; // Set history pattern to false
+							isFiltered = false;
 							break; // Exit the loop
 						}
 
 						if (std::isspace(filterInput[0]) || filterInput[0] == '\0') { // Check if filter input is empty or contains only spaces
 							free(filterInput); // Free memory allocated for filter input
 							historyPattern = false; // Set history pattern to false
+							isFiltered = false;
 							break; // Exit the loop
 						}
+						if (isFiltered) {
+							clearScrollBuffer(); // Clear scroll buffer
+							std::cout << "\033[1mPlease wait...\n\033[1m" << std::endl; // Inform user to wait
+							processInput(filterInput, filteredFiles, inputPaths, flag); // Process user input
+							free(filterInput); // Free memory allocated for filter input
 
-						clearScrollBuffer(); // Clear scroll buffer
-						std::cout << "\033[1mPlease wait...\n\033[1m" << std::endl; // Inform user to wait
-						processInput(filterInput, filteredFiles, inputPaths, flag); // Process user input
-						free(filterInput); // Free memory allocated for filter input
-
-						std::cout << " " << std::endl; // Print newline
-						std::cout << "\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
-						std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+							std::cout << " " << std::endl; // Print newline
+							std::cout << "\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
+							std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+						}
 					}
 				}
 			}
