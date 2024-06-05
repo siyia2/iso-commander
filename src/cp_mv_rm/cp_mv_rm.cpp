@@ -217,9 +217,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 	// variable for user specified destination
 	std::string userDestDir;
 
-	// Vector to store selected ISOs for display
-	std::vector<std::string> selectedIsos;
-
 	// Load history from file
 	loadHistory();
 	     
@@ -230,7 +227,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     bool invalidInput = false;
     std::unordered_set<std::string> uniqueErrorMessages; // Set to store unique error messages
     std::vector<int> processedIndices; // Vector to keep track of processed indices
-    std::vector<int> validIndices;     // Vector to keep track of valid indices
     
     bool isDelete = (process == "rm");
     bool isMove = (process == "mv");
@@ -313,7 +309,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             for (int i = start; ((start <= end) && (i <= end)) || ((start > end) && (i >= end)); i += step) {
                 if ((i >= 1) && (i <= static_cast<int>(isoFiles.size())) && std::find(processedIndices.begin(), processedIndices.end(), i) == processedIndices.end()) {
                     processedIndices.push_back(i); // Mark as processed
-                    validIndices.push_back(i);
                 } else if ((i < 1) || (i > static_cast<int>(isoFiles.size()))) {
                     invalidInput = true;
                     uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(i) + "' does not exist.\033[0;1m");
@@ -324,7 +319,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             int num = std::stoi(token);
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && std::find(processedIndices.begin(), processedIndices.end(), num) == processedIndices.end()) {
                 processedIndices.push_back(num); // Mark index as processed
-                validIndices.push_back(num);
             } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(num) + "' does not exist.\033[0;1m");
@@ -346,11 +340,11 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         }
     }
 
-    if (invalidInput && !validIndices.empty()) {
+    if (invalidInput && !processedIndices.empty()) {
         std::cout << " " << std::endl;
     }
 
-    if (validIndices.empty()) {
+    if (processedIndices.empty()) {
 		clearScrollBuffer();
         std::cout << "\n\033[1;91mNo valid input to be " << operationDescription << ".\033[1;91m" << std::endl;
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
@@ -359,11 +353,11 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         return;
     }
 
-    unsigned int numThreads = std::min(static_cast<int>(validIndices.size()), static_cast<int>(maxThreads));
+    unsigned int numThreads = std::min(static_cast<int>(processedIndices.size()), static_cast<int>(maxThreads));
     std::vector<std::vector<int>> indexChunks;
-    const size_t chunkSize = (validIndices.size() + numThreads - 1) / numThreads;
-    for (size_t i = 0; i < validIndices.size(); i += chunkSize) {
-        indexChunks.emplace_back(validIndices.begin() + i, std::min(validIndices.begin() + i + chunkSize, validIndices.end()));
+    const size_t chunkSize = (processedIndices.size() + numThreads - 1) / numThreads;
+    for (size_t i = 0; i < processedIndices.size(); i += chunkSize) {
+        indexChunks.emplace_back(processedIndices.begin() + i, std::min(processedIndices.begin() + i + chunkSize, processedIndices.end()));
     }
 
     if (!isDelete) {
@@ -378,7 +372,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             std::cout << uniqueErrorMessage << std::endl;
 			}
 			
-			if (validIndices.empty()) {
+			if (processedIndices.empty()) {
 			clearScrollBuffer();
 			std::cout << "\n\033[1;91mNo valid input to be " << operationDescription << ".\033[1;91m" << std::endl;
 			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
