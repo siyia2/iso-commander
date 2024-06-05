@@ -829,7 +829,6 @@ bool blacklist(const std::filesystem::path& entry, bool blacklistMdf) {
 }
 
 
-
 // Function to print found BIN/IMG files with alternating colored sequence numbers
 void printFileList(const std::vector<std::string>& fileList) {
     // ANSI escape codes for text formatting
