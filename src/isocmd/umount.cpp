@@ -256,9 +256,6 @@ std::vector<std::string> parseUserInputUnmountISOs(const std::string& input, con
     // Vector to store selected ISO directories
     std::vector<std::string> selectedIsoDirs;
 
-    // Vector to store selected indices
-    std::vector<size_t> selectedIndices;
-
     // Set to keep track of processed indices
     std::set<size_t> processedIndices;
 
@@ -268,7 +265,6 @@ std::vector<std::string> parseUserInputUnmountISOs(const std::string& input, con
     // ThreadPool and mutexes for synchronization
     ThreadPool pool(maxThreads);
     std::vector<std::future<void>> futures;
-    std::mutex indicesMutex;
     std::mutex processedMutex;
     std::mutex dirsMutex;
 
@@ -294,8 +290,6 @@ std::vector<std::string> parseUserInputUnmountISOs(const std::string& input, con
 						for (size_t i = start; i <= end; ++i) {
 							std::lock_guard<std::mutex> lock(processedMutex);
 							if (processedIndices.find(i) == processedIndices.end()) {
-								std::lock_guard<std::mutex> lock(indicesMutex);
-								selectedIndices.push_back(i);
 								processedIndices.insert(i);
 							}
 						}
@@ -313,14 +307,17 @@ std::vector<std::string> parseUserInputUnmountISOs(const std::string& input, con
                 if (index < isoDirs.size()) {
                     std::lock_guard<std::mutex> lock(processedMutex);
                     if (processedIndices.find(index) == processedIndices.end()) {
-                        std::lock_guard<std::mutex> lock(indicesMutex);
-                        selectedIndices.push_back(index);
                         processedIndices.insert(index);
                     }
                 } else {
                     // Single index is out of bounds
-                    uniqueErrorMessages.insert("\033[1;91mFile index '" + token + "' does not exist.\033[0;1m");
-                    invalidInput = true;
+                    if (token != "00" && isAllZeros(token)){
+						uniqueErrorMessages.insert("\033[1;91mFile index '" + token + "' does not exist.\033[0;1m");
+						invalidInput = true;
+					} else {
+						uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(index) + "' does not exist.\033[0;1m");
+						invalidInput = true;
+					}
                 }
             }
         } catch (const std::invalid_argument&) {
@@ -341,10 +338,10 @@ std::vector<std::string> parseUserInputUnmountISOs(const std::string& input, con
     }
 
     // Check if any directories were selected
-    if (!selectedIndices.empty()) {
+    if (!processedIndices.empty()) {
         // Lock the mutex and retrieve selected directories
         std::lock_guard<std::mutex> lock(dirsMutex);
-        for (size_t index : selectedIndices) {
+        for (size_t index : processedIndices) {
             selectedIsoDirs.push_back(isoDirs[index]);
         }
     } else {
