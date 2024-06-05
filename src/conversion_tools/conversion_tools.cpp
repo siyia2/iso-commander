@@ -40,7 +40,7 @@ void verboseConversion() {
             std::cout << out << "\033[0;1m\n"; // Print each element in the set
         }
         if (!outs.empty()) {
-            std::cout << " \n"; // Print an additional newline if the set is not empty
+            std::cout << "\n"; // Print an additional newline if the set is not empty
         }
     };
 
@@ -129,7 +129,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 		if (directoryPaths.empty()) {
 			std::cout << "\033[1;91mNo valid paths provided.";
 		} else {
-			std::cout << "\033[1;93mThe following invalid path(s) will be omitted from the search:\n";
+			std::cout << "\033[1;93mThe following invalid path(s) will be omitted from search:\n";
 			for (const auto& invalidPath : invalidDirectoryPaths) {
 				std::cerr << invalidPath;
 			}
@@ -163,13 +163,13 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     // Display message if no new files are found
     if (!newFilesFound && !files.empty()) {
         clearScrollBuffer();
-        std::cout << " \n";
+        std::cout << "\n";
         auto end_time = std::chrono::high_resolution_clock::now();
         std::cout << "\033[1;91mNo new " << fileExtension << " file(s) over 5MB found. \033[1;92m" << files.size() << " file(s) are cached in RAM from previous searches.\033[0;1m\n";
-        std::cout << " \n";
+        std::cout << "\n";
         auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
         std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n";
-        std::cout << " \n";
+        std::cout << "\n";
         std::cout << "\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     }
@@ -177,13 +177,13 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     // Display message if no files are found
     if (files.empty()) {
         clearScrollBuffer();
-        std::cout << " \n";
+        std::cout << "\n";
         auto end_time = std::chrono::high_resolution_clock::now();
         std::cout << "\033[1;91mNo " << fileExtension << " file(s) over 5MB found in the specified path(s) or cached in RAM.\n\033[0;1m";
-        std::cout << " \n";
+        std::cout << "\n";
         auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
         std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n";
-        std::cout << " \n";
+        std::cout << "\n";
         std::cout << "\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         return;
@@ -293,11 +293,10 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 							free(filterInput); // Free memory allocated for filter input
 							
 							clearScrollBuffer(); // Clear scroll buffer
-							std::cout << " \n"; // Print newline
+							std::cout << "\n"; // Print newline
 			
 							verboseConversion();
 
-							std::cout << " \n"; // Print newline
 							std::cout << "\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
 							std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 						}
@@ -312,7 +311,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 			free(input); // Free memory allocated for input
 			
 			clearScrollBuffer(); // Clear scroll buffer
-			std::cout << " \n"; // Print newline
+			std::cout << "\n"; // Print newline
 			
 			verboseConversion();
 			
@@ -507,7 +506,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
   //  auto end_time = std::chrono::high_resolution_clock::now();
     // Calculate and print the elapsed time
   //  auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
- //   std::cout << " \n";
+ //   std::cout << "\n";
     // Print the time taken for the entire process in bold with one decimal place
   //  std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n";
         
@@ -693,7 +692,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                     if (uniqueInvalidPaths.insert(path).second) {
                         // If it's a new path, print an empty line before printing the error (only once)
                         if (!printedEmptyLine) {
-                            std::cout << " \n";
+                            std::cout << "\n";
                             printedEmptyLine = true;
                         }
                         // Handle permission error differently, you can choose to skip or print a specific message
@@ -702,7 +701,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                 } else if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
                     if (!printedEmptyLine) {
                         // Print an empty line before starting to print invalid paths (only once)
-                        std::cout << " \n";
+                        std::cout << "\n";
                         printedEmptyLine = true;
                     }
 
@@ -718,7 +717,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     } catch (const std::filesystem::filesystem_error& e) {
         if (!printedEmptyLine) {
             // Print an empty line before starting to print invalid paths (only once)
-            std::cout << " \n";
+            std::cout << "\n";
             printedEmptyLine = true;
         }
         // Handle filesystem errors for the overall operation
@@ -730,7 +729,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     
         // Stop the timer after completing the mounting process
     //    auto end_time = std::chrono::high_resolution_clock::now();
-        std::cout << " \n";
+        std::cout << "\n";
         if (mode == "bin") {
 			clearScrollBuffer();
 			std::cout << "\033[1;92mFound " << fileNames.size() << " matching file(s)\033[0;1m" << ".\033[1;93m " << binImgFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0;1m\n";
@@ -739,11 +738,11 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
 			std::cout << "\033[1;92mFound " << fileNames.size() << " matching file(s)\033[0;1m" << ".\033[1;93m " << mdfMdsFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0;1m\n";
 		}
         // Calculate and print the elapsed time
-   //     std::cout << " \n";
+   //     std::cout << "\n";
    //     auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
         // Print the time taken for the entire process in bold with one decimal place
     //    std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n";
-        std::cout << " \n";
+        std::cout << "\n";
         std::cout << "\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     }
@@ -845,7 +844,7 @@ void printFileList(const std::vector<std::string>& fileList) {
 
     // Print header for file selection
     std::cout << bold << "Select file(s) to convert to " << bold << "\033[1;92mISO(s)\033[0;1m:\n";
-    std::cout << " \n";
+    std::cout << "\n";
 
     // Counter for line numbering
     int lineNumber = 1;
