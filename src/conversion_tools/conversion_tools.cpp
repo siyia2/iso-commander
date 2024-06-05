@@ -92,6 +92,15 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     // Prompt user to input directory paths
     std::string inputPaths = readInputLine("\033[1;94mDirectory path(s) ↵ (multi-path separator: \033[1m\033[1;93m;\033[0;1m\033[1;94m) to search for \033[1m\033[1;92m" + fileExtension + " \033[1;94mfiles, or ↵ to return:\n\033[0;1m");
     clearScrollBuffer();
+    
+    if (!inputPaths.empty()) {
+        // Save search history if input paths are provided
+        std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
+        saveHistory();
+    }
+
+    // Clear command line history
+    clear_history();
 
     // Record start time for performance measurement
     auto start_time = std::chrono::high_resolution_clock::now();
@@ -116,26 +125,26 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         }
     }
     if (!invalidDirectoryPaths.empty()) {
-		std::cout << "\033[1;93mThe following invalid paths will be omitted from the search:\n";
-		for (const auto& invalidPath : invalidDirectoryPaths) {
-			std::cerr << invalidPath;
+		clearScrollBuffer();
+		if (directoryPaths.empty()) {
+			std::cout << "\n\033[1;91mNo valid paths provided.";
+		} else {
+			std::cout << "\033[1;93mThe following invalid path(s) will be omitted from the search:\n";
+			for (const auto& invalidPath : invalidDirectoryPaths) {
+				std::cerr << invalidPath;
+			}
 		}
 		invalidDirectoryPaths.clear();
 		std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
 		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 		clearScrollBuffer();
+		std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
 	}
 	
-	if (!inputPaths.empty()) {
-		std::cout << "\033[1mPlease wait...\033[1m\n"; // Inform user to wait
-        // Save search history if input paths are provided
-        saveHistory();
-    } else {
-		clear_history();
-		return;
-	}
-	// Clear command line history
-    clear_history();
+	// Return if no directory paths are provided
+    if (directoryPaths.empty()) {
+        return;
+    }
 
     // Search for files based on file type
     bool newFilesFound = false;
