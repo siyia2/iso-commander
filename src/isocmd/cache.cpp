@@ -129,6 +129,13 @@ std::vector<std::string> loadCache() {
     std::vector<std::string> isoFiles;
     std::string cacheFilePath = getHomeDirectory() + "/.cache/iso_commander_cache.txt";
 
+    // Check if the cache file exists
+    struct stat fileStat;
+    if (stat(cacheFilePath.c_str(), &fileStat) == -1) {
+        // File doesn't exist, return an empty vector
+        return isoFiles;
+    }
+
     // Open the file for memory mapping
     int fd = open(cacheFilePath.c_str(), O_RDONLY);
     if (fd == -1) {
@@ -137,12 +144,6 @@ std::vector<std::string> loadCache() {
     }
 
     // Get the file size
-    struct stat fileStat;
-    if (fstat(fd, &fileStat) == -1) {
-        // Handle error if unable to get file statistics
-        close(fd);
-        return isoFiles;
-    }
     const auto fileSize = fileStat.st_size;
 
     // Memory map the file
@@ -174,7 +175,6 @@ std::vector<std::string> loadCache() {
 
     // Convert the set to a vector
     isoFiles.assign(uniqueIsoFiles.begin(), uniqueIsoFiles.end());
-
     return isoFiles;
 }
 
@@ -407,7 +407,8 @@ void manualRefreshCache(const std::string& initialDir) {
         std::cout << error;
     }
     
-    uniqueErrorMessages.clear();
+    // Save the combined cache to disk
+    bool saveSuccess = saveCache(allIsoFiles, maxCacheSize);
 
     // Stop the timer after completing the cache refresh and removal of non-existent paths
     auto end_time = std::chrono::high_resolution_clock::now();
@@ -421,9 +422,31 @@ void manualRefreshCache(const std::string& initialDir) {
     // Print the time taken for the entire process in bold with one decimal place
     std::cout << "\n\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\n";
 
+    // Inform the user about the cache refresh status
+    if (saveSuccess && !validPaths.empty() && invalidPaths.empty() && uniqueErrorMessages.empty()) {
+        std::cout << "\n";
+        std::cout << "\033[1;92mCache refreshed successfully.\033[0m";
+        std::cout << "\n";
+    } 
+    if (saveSuccess && !validPaths.empty() && (!invalidPaths.empty() || !uniqueErrorMessages.empty())) {
+        std::cout << "\n";
+        std::cout << "\033[1;93mCache refreshed with error(s).\033[0m";
+        std::cout << "\n";
+    }
+    if (saveSuccess && validPaths.empty() && !invalidPaths.empty()) {
+        std::cout << "\n";
+        std::cout << "\033[1;91mCache refresh failed due to missing valid path(s).\033[0m";
+        std::cout << "\n";
+    } 
+    if (!saveSuccess) {
+        std::cout << "\n";
+        std::cout << "\033[1;91mCache refresh failed.\033[0m";
+        std::cout << "\n";
+    }
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 	}
+	uniqueErrorMessages.clear();
 	promptFlag = true;
 }
 
