@@ -92,6 +92,7 @@ bool isAlreadyMounted(const std::string& mountPoint);
 // Iso cache functions
 bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize);
 bool ends_with_iso(const std::string& str);
+
 // Unmount functions
 bool isDirectoryEmpty(const std::string& path);
 
