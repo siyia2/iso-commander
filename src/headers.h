@@ -138,7 +138,7 @@ void filterMountPoints(const std::vector<std::string>& isoDirs, std::set<std::st
 void printUnmountedAndErrors(bool invalidInput);
 void listMountedISOs();
 void unmountISOs();
-void unmountISO(const std::set<std::string>& isoDirs);
+void unmountISO(const std::vector<std::string>& isoDirs);
 
 
 //	stds
@@ -159,7 +159,7 @@ std::vector<std::string> loadCache();
 std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query);
 
 // Unmount functions
-std::vector<std::string> parseUserInputUnmountISOs(const std::string& input, const std::set<std::string>& isoDirs, bool& invalidInput, bool& noValid, bool& isFiltered);
+std::vector<std::string> parseUserInputUnmountISOs(const std::string& input, const std::vector<std::string>& isoDirs, bool& invalidInput, bool& noValid, bool& isFiltered);
 
 
 // CONVERSION TOOLS
