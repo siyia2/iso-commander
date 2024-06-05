@@ -120,6 +120,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 		for (const auto& invalidPath : invalidDirectoryPaths) {
 			std::cerr << invalidPath;
 		}
+		invalidDirectoryPaths.clear();
 		std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
 		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 		clearScrollBuffer();
