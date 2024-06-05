@@ -4,9 +4,9 @@
 // UMOUNT STUFF
 
 // Vector to store ISO unmounts
-std::vector<std::string> unmountedFiles;
+std::set<std::string> unmountedFiles;
 // Vector to store ISO unmount errors
-std::vector<std::string> unmountedErrors;
+std::set<std::string> unmountedErrors;
 
 
 // Function to list mounted ISOs in the /mnt directory
@@ -161,7 +161,7 @@ void unmountISO(const std::vector<std::string>& isoDirs) {
                 errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDir << "'\033[1;91m.\033[0;1m";
 
                 if (std::find(unmountedErrors.begin(), unmountedErrors.end(), errorMessage.str()) == unmountedErrors.end()) {
-                    unmountedErrors.push_back(errorMessage.str());
+                    unmountedErrors.insert(errorMessage.str());
                 }
             }
         }
@@ -193,14 +193,14 @@ void unmountISO(const std::vector<std::string>& isoDirs) {
                 if (removeDirResult == 0) {
                     auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(emptyDirs[i]);
                     std::string unmountedFileInfo = "\033[1mUnmounted: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0;1m.";
-                    unmountedFiles.push_back(unmountedFileInfo);
+                    unmountedFiles.insert(unmountedFileInfo);
                 } else {
                     auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(emptyDirs[i]);
                     std::stringstream errorMessage;
                     errorMessage << "\033[1;91mFailed to remove directory: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;91m ...Please check it out manually.\033[0;1m";
 
                     if (std::find(unmountedErrors.begin(), unmountedErrors.end(), errorMessage.str()) == unmountedErrors.end()) {
-                        unmountedErrors.push_back(errorMessage.str());
+                        unmountedErrors.insert(errorMessage.str());
                     }
                 }
             }
