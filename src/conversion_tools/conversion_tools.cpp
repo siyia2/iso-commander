@@ -259,9 +259,6 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     // Set to track processed error messages to avoid duplicate error reporting
     std::unordered_set<std::string> processedErrors;
 
-    // Define and populate uniqueValidIndices before this line
-    std::unordered_set<int> uniqueValidIndices;
-
     // Vector to store asynchronous tasks for file conversion
     std::vector<std::future<void>> futures;
 
@@ -332,7 +329,6 @@ void processInput(const std::string& input, const std::vector<std::string>& file
                                 if (selectedIndex >= 0 && static_cast<std::vector<std::string>::size_type>(selectedIndex) < fileList.size()) {
                                     if (processedIndices.find(selectedIndex) == processedIndices.end()) {
                                         std::string selectedFile = fileList[selectedIndex];
-                                        uniqueValidIndices.insert(selectedIndex);
                                         if (!flag) {
 											futures.push_back(pool.enqueue(asyncConvertBINToISO, selectedFile));
 										} else {
@@ -391,7 +387,6 @@ void processInput(const std::string& input, const std::vector<std::string>& file
                     if (selectedIndex >= 0 && static_cast<std::vector<std::string>::size_type>(selectedIndex) < fileList.size()) {
                         // Convert BIN to ISO asynchronously and store the future in the vector
                         std::string selectedFile = fileList[selectedIndex];
-                        uniqueValidIndices.insert(selectedIndex);
 						if (!flag) {
 							futures.push_back(pool.enqueue(asyncConvertBINToISO, selectedFile));
 						} else {
@@ -437,7 +432,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
         future.wait();
     }
 	
-	if (!errorMessages.empty() && !uniqueValidIndices.empty()) {
+	if (!errorMessages.empty() && !processedIndices.empty()) {
 		std::cout << " " << std::endl;	
 	}
 	
@@ -484,7 +479,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     bool blacklistMdf =false;
 
     // Vector to store file names that match the criteria
-    std::vector<std::string> fileNames;
+    std::set<std::string> fileNames;
 
     // Clear the cachedInvalidPaths before processing a new set of paths
     cachedInvalidPaths.clear();
@@ -541,7 +536,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                     std::lock_guard<std::mutex> lock(mutex4search);
 
                     // Add the file name to the shared data
-                    fileNames.push_back(fileName);
+                    fileNames.insert(fileName);
 
                     // Decrement the ongoing tasks counter
                     --numOngoingTasks;
@@ -674,10 +669,6 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
 
     // Print success message if files were found
     if (!fileNames.empty()) {
-		
-		// Remove duplicates from fileNames by sorting and using unique erase idiom
-		std::sort(fileNames.begin(), fileNames.end());
-		fileNames.erase(std::unique(fileNames.begin(), fileNames.end()), fileNames.end());
     
         // Stop the timer after completing the mounting process
     //    auto end_time = std::chrono::high_resolution_clock::now();
