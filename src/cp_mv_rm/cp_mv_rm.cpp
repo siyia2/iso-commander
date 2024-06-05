@@ -3,9 +3,9 @@
 
 
 // Vector to store operation ISOs
-std::vector<std::string> operationIsos;
+std::set<std::string> operationIsos;
 // Vector to store errors for operation ISOs
-std::vector<std::string> operationErrors;
+std::set<std::string> operationErrors;
 
 // For breaking mv&rm gracefully
 bool mvDelBreak=false;
@@ -660,7 +660,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                                     << isoDirectory << "/" << isoFilename << "'\033[0;1m";
                             }
                             std::string operationInfo = oss.str();
-                            operationIsos.push_back(operationInfo);
+                            operationIsos.insert(operationInfo);
 
                             // Change ownership of the copied/moved file
                             if (!isDelete) {
@@ -681,7 +681,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                                     << isoDir << "/" << isoFilename << "'\033[0;1m";
                             }
                             errorMessageInfo = oss.str();
-                            operationErrors.push_back(errorMessageInfo);
+                            operationErrors.insert(errorMessageInfo);
                         }
                     }
 
