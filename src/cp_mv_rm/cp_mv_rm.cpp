@@ -69,7 +69,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
         operationColor = "\033[1;93m"; // Yellow for other operations
     }
 
-    std::unordered_set<std::string> operationSet;
+    std::set<std::string> operationSet;
     std::string process;
 
     // Main loop for interacting with ISO files
@@ -217,7 +217,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
 
 // Function to process either mv or cp indices
-void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& operationSet, const std::string& process) {
+void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& operationSet, const std::string& process) {
 	
 	// variable for user specified destination
 	std::string userDestDir;
@@ -227,7 +227,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
     // Variables for tracking errors, processed indices, and valid indices
     bool invalidInput = false;
-    std::unordered_set<std::string> uniqueErrorMessages; // Set to store unique error messages
+    std::set<std::string> uniqueErrorMessages; // Set to store unique error messages
     std::vector<int> processedIndices; // Vector to keep track of processed indices
     
     bool isDelete = (process == "rm");
