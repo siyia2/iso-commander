@@ -192,8 +192,8 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
 
     // Check if cache directory exists
     if (!exists(cacheDirectory) || !std::filesystem::is_directory(cacheDirectory)) {
-		std::cout << " " << std::endl;
-        std::cerr << "\033[1;91mInvalid cache directory.\033[0;1m" << std::endl;
+		std::cout << "\n";
+        std::cerr << "\033[1;91mInvalid cache directory.\033[0;1m\n";
         return false;  // Cache save failed
     }
 
@@ -223,14 +223,14 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
             cacheFile.close();
             return true;  // Cache save successful
         } else {
-			std::cout << " " << std::endl;
-            std::cerr << "\033[1;91mFailed to write to cache file.\033[0;1m" << std::endl;
+			std::cout << "\n";
+            std::cerr << "\033[1;91mFailed to write to cache file.\033[0;1m\n";
             cacheFile.close();
             return false;  // Cache save failed
         }
     } else {
-		std::cout << " " << std::endl;
-        std::cerr << "\033[1;91mFailed to open ISO cache file: \033[1;93m'"<< cacheDirectory + "/" + cacheFileName <<"'\033[1;91m. Check read/write permissions.\033[0;1m" << std::endl;
+		std::cout << "\n";
+        std::cerr << "\033[1;91mFailed to open ISO cache file: \033[1;93m'"<< cacheDirectory + "/" + cacheFileName <<"'\033[1;91m. Check read/write permissions.\033[0;1m\n";
         return false;  // Cache save failed
     }
 }
@@ -245,7 +245,7 @@ bool isValidDirectory(const std::string& path) {
 // Function to refresh the cache for a single directory
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles) {
 	if (promptFlag) {
-		std::cout << "\033[1;93mProcessing directory path: '" << path << "'.\033[0m" << std::endl;
+		std::cout << "\n\033[1;93mProcessing directory path: '" << path << "'.\033[0m";
 	}
 
 	std::vector<std::string> newIsoFiles;
@@ -260,7 +260,7 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 		// Acquire lock for checking gapPrinted and potential printing
 		std::lock_guard<std::mutex> lock(allIsoFilesMutex);
 		if (!gapPrinted && promptFlag) {
-		std::cout << " " << std::endl;
+		std::cout << "\n";
 		gapPrinted = true; // Set the flag to true
 		}
 	}
@@ -272,7 +272,7 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 	}
 
 	if (promptFlag) {
-		std::cout << "\033[1;92mProcessed directory path: '" << path << "'.\033[0m" << std::endl;
+		std::cout << "\n\033[1;92mProcessed directory path: '" << path << "'.\033[0m";
 	}
 }
 
@@ -343,18 +343,14 @@ void manualRefreshCache(const std::string& initialDir) {
     }
 
     // Check if any invalid paths were encountered and add a gap
-    if ((!invalidPaths.empty() || !validPaths.empty()) && promptFlag) {
+    if (!invalidPaths.empty() && promptFlag) {
 		std::lock_guard<std::mutex> lock(Mutex4High);
-        std::cout << " " << std::endl;
+        std::cout << "\n";
     }
 
     // Print invalid paths
     for (const auto& invalidPath : invalidPaths) {
         std::cout << invalidPath << std::endl;
-    }
-
-    if (!invalidPaths.empty() && !validPaths.empty() && promptFlag) {
-        std::cout << " " << std::endl;
     }
 
     // Start the timer
@@ -393,7 +389,7 @@ void manualRefreshCache(const std::string& initialDir) {
             futures.clear();
             runningTasks = 0;  // Reset the count of running tasks
             std::lock_guard<std::mutex> lock(Mutex4High);
-            std::cout << " " << std::endl;
+            std::cout << "\n";
             gapPrinted = false;
         }
     }
@@ -402,6 +398,16 @@ void manualRefreshCache(const std::string& initialDir) {
     for (auto& future : futures) {
         future.wait();
     }
+    
+    if (!uniqueErrorMessages.empty()) {
+		std::cout << "\n";
+	}
+    
+    for (const auto& error : uniqueErrorMessages) {
+        std::cout << error;
+    }
+    
+    uniqueErrorMessages.clear();
     
     // Save the combined cache to disk
     bool saveSuccess = saveCache(allIsoFiles, maxCacheSize);
@@ -412,34 +418,34 @@ void manualRefreshCache(const std::string& initialDir) {
     if (promptFlag) {
 
     // Calculate and print the elapsed time
-    std::cout << " " << std::endl;
+    std::cout << "\n";
     auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
 
     // Print the time taken for the entire process in bold with one decimal place
-    std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m" << std::endl;
+    std::cout << "\n\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\n";
 
     // Inform the user about the cache refresh status
     if (saveSuccess && !validPaths.empty() && invalidPaths.empty()) {
-        std::cout << " " << std::endl;
-        std::cout << "\033[1;92mCache refreshed successfully.\033[0m" << std::endl;
-        std::cout << " " << std::endl;
+        std::cout << "\n";
+        std::cout << "\033[1;92mCache refreshed successfully.\033[0m";
+        std::cout << "\n";
     } 
     if (saveSuccess && !validPaths.empty() && !invalidPaths.empty()) {
-        std::cout << " " << std::endl;
-        std::cout << "\033[1;93mCache refreshed with errors from invalid path(s).\033[0m" << std::endl;
-        std::cout << " " << std::endl;
+        std::cout << "\n";
+        std::cout << "\033[1;93mCache refreshed with errors from invalid path(s).\033[0m";
+        std::cout << "\n";
     }
     if (saveSuccess && validPaths.empty() && !invalidPaths.empty()) {
-        std::cout << " " << std::endl;
-        std::cout << "\033[1;91mCache refresh failed due to missing valid path(s).\033[0m" << std::endl;
-        std::cout << " " << std::endl;
+        std::cout << "\n";
+        std::cout << "\033[1;91mCache refresh failed due to missing valid path(s).\033[0m";
+        std::cout << "\n";
     } 
     if (!saveSuccess) {
-        std::cout << " " << std::endl;
-        std::cout << "\033[1;91mCache refresh failed.\033[0m" << std::endl;
-        std::cout << " " << std::endl;
+        std::cout << "\n";
+        std::cout << "\033[1;91mCache refresh failed.\033[0m";
+        std::cout << "\n";
     }
-    std::cout << "\033[1;32m↵ to continue...\033[0;1m";
+    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 	}
 	promptFlag = true;
@@ -518,7 +524,8 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
         }
     } catch (const std::filesystem::filesystem_error& e) {
         // Handle filesystem errors, print a message, and introduce a 2-second delay
-        std::cerr << "\033[1;91m" << e.what() << ".\033[0;1m" << std::endl;
-        std::this_thread::sleep_for(std::chrono::seconds(2));
+        std::string formattedError = std::string("\n\033[1;91m") + e.what() + ".\033[0;1m";
+        uniqueErrorMessages.insert(formattedError);
+        
     }
 }

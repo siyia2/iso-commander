@@ -8,6 +8,9 @@
 std::set<std::string> mountedFiles;
 // Vector to store skipped ISO mounts
 std::set<std::string> skippedMessages;
+// Vector to store failed ISO mounts
+std::set<std::string> mountedFails;
+
 
 
 void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedSet, std::vector<std::string>& isoFilesToMount) {
@@ -44,8 +47,8 @@ void select_and_mount_files_by_number() {
     // Check if the cache is empty
     if (isoFiles.empty()) {
         clearScrollBuffer();
-        std::cout << "\033[1;93mISO Cache is empty. Please refresh it from the main Menu Options.\033[0;1m" << std::endl;
-        std::cout << " " << std::endl;
+        std::cout << "\033[1;93mISO Cache is empty. Please refresh it from the main Menu Options.\033[0;1m\n";
+        std::cout << " \n";
         std::cout << "\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         return;
@@ -60,8 +63,8 @@ void select_and_mount_files_by_number() {
 		std::vector<std::string> isoFilesToMount;
 		bool verboseFiltered = false;
         clearScrollBuffer();
-        std::cout << "\033[1;93m ! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\033[0;1m" << std::endl;
-        std::cout << "\033[1;93m         	! ROOT ACCESS IS PARAMOUNT FOR SUCCESSFUL MOUNTS !\n\033[0;1m" << std::endl;
+        std::cout << "\033[1;93m ! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\033[0;1m\n";
+        std::cout << "\033[1;93m         	! ROOT ACCESS IS PARAMOUNT FOR SUCCESSFUL MOUNTS !\n\033[0;1m";
 
         // Remove non-existent paths from the cache after selection
         removeNonExistentPathsFromCache();
@@ -74,12 +77,12 @@ void select_and_mount_files_by_number() {
 		
         // Prompt user for input
         char* input = readline(
-        "\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., '1-3', '1 5', '00' for all), / ↵ to filter, or ↵ to return:\001\033[0;1m\002 "
+        "\n\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., '1-3', '1 5', '00' for all), / ↵ to filter, or ↵ to return:\001\033[0;1m\002 "
     );
         clearScrollBuffer();
         
         if (strcmp(input, "/") != 0 || (!(std::isspace(input[0]) || input[0] == '\0'))) {
-			std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
+			std::cout << "\033[1mPlease wait...\033[1m\n";
 		}
 
         // Check if the user wants to return
@@ -106,7 +109,7 @@ void select_and_mount_files_by_number() {
 			
 			
 			if (searchQuery && searchQuery[0] != '\0') {
-				std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
+				std::cout << "\033[1mPlease wait...\033[1m\n";
 				add_history(searchQuery); // Add the search query to the history
 				saveHistory();
 			}
@@ -115,7 +118,7 @@ void select_and_mount_files_by_number() {
 			// Store the original isoFiles vector
 			std::vector<std::string> originalIsoFiles = isoFiles;
 			// Check if the user wants to return
-        if (!(std::isspace(searchQuery[0]) || searchQuery[0] == '\0')) {
+			if (!(std::isspace(searchQuery[0]) || searchQuery[0] == '\0')) {
         
 
 			if (searchQuery != nullptr) {
@@ -130,11 +133,11 @@ void select_and_mount_files_by_number() {
 				} else {
 					while (true) {
 						clearScrollBuffer();
-						std::cout << "\033[1mFiltered results:\n\033[0;1m" << std::endl;
+						std::cout << "\033[1mFiltered results:\033[0;1m\n";
 						printIsoFileList(filteredFiles); // Print the filtered list of ISO files
 					
 						// Prompt user for input again with the filtered list
-						char* input = readline("\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., '1-3', '1 5', '00' for all), or ↵ to return:\001\033[0;1m\002 ");
+						char* input = readline("\n\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., '1-3', '1 5', '00' for all), or ↵ to return:\001\033[0;1m\002 ");
 					
 						// Check if the user wants to return
 						if (std::isspace(input[0]) || input[0] == '\0') {
@@ -145,7 +148,7 @@ void select_and_mount_files_by_number() {
 					
 						if (std::strcmp(input, "00") == 0) {
 							clearScrollBuffer();
-							std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
+							std::cout << "\033[1mPlease wait...\033[1m\n";
 							// Restore the original list of ISO files
 							isoFiles = filteredFiles;
 							verboseFiltered = false;
@@ -155,7 +158,7 @@ void select_and_mount_files_by_number() {
 						// Check if the user provided input
 						if (input[0] != '\0' && (strcmp(input, "/") != 0)) {
 							clearScrollBuffer();
-							std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
+							std::cout << "\033[1mPlease wait...\033[1m\n";
 
 							// Process the user input with the filtered list
 							processAndMountIsoFiles(input, filteredFiles, mountedSet);
@@ -195,40 +198,46 @@ void select_and_mount_files_by_number() {
 
 // Function to print mount verbose messages
 void printMountedAndErrors(std::set<std::string>& mountedFiles,std::set<std::string>& skippedMessages) {
-    if (!mountedFiles.empty()) {
-        std::cout << " " << std::endl;
-    }
 
     // Print all mounted files
     for (const auto& mountedFile : mountedFiles) {
-        std::cout << mountedFile << std::endl;
+        std::cout << "\n" << mountedFile << "\033[0;1m";
     }
-
-    if (!skippedMessages.empty()) {
-        std::cout << " " << std::endl;
+    
+    if (!mountedFiles.empty()) {
+        std::cout << "\n";
     }
 
     // Print all the stored skipped messages
     for (const auto& skippedMessage : skippedMessages) {
-        std::cerr << skippedMessage;
+        std::cerr << "\n" << skippedMessage << "\033[0;1m";
     }
-
-    if (!uniqueErrorMessages.empty()) {
-        std::cout << " " << std::endl;
+    
+    if (!skippedMessages.empty()) {
+        std::cout << "\n";
     }
 
     // Print all the stored error messages
+    for (const auto& mountedFail : mountedFails) {
+        std::cerr << "\n" << mountedFail << "\033[0;1m";
+    }
+    
+    if (!mountedFails.empty()) {
+        std::cout << "\n";
+    }
+    
+    // Print all the stored error messages
     for (const auto& errorMessage : uniqueErrorMessages) {
-        std::cerr << errorMessage;
+        std::cerr << "\n" << errorMessage << "\033[0;1m";
     }
 
     // Clear the vectors after each iteration
     mountedFiles.clear();
     skippedMessages.clear();
+    mountedFails.clear();
     uniqueErrorMessages.clear();
     
-    std::cout << " " << std::endl;
-	std::cout << "\033[1;32m↵ to continue...\033[0;1m";
+	std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 	std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
@@ -265,7 +274,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
             if (isAlreadyMounted(mountPoint)) {
                 // If already mounted, print a message and continue
                 std::stringstream skippedMessage;
-                skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m already mounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;93m.\033[0;1m" << std::endl;
+                skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m already mounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;93m.\033[0;1m";
 
                 // Create the unordered set after populating skippedMessages
                 std::set<std::string> skippedSet(skippedMessages.begin(), skippedMessages.end());
@@ -300,12 +309,12 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
             if (ret != 0) {
                 // Handle mount error
                 std::stringstream errorMessage;
-                errorMessage << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[0;1m\033[1;91m.\033[0;1m" << std::endl;
+                errorMessage << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[0;1m\033[1;91m.\033[0;1m";
                 fs::remove(mountPoint);
-                std::set<std::string> errorSet(uniqueErrorMessages.begin(), uniqueErrorMessages.end());
+                std::set<std::string> errorSet(mountedFails.begin(), mountedFails.end());
                     if (errorSet.find(errorMessage.str()) == errorSet.end()) {
                         // Error message not found, add it to the vector
-                        uniqueErrorMessages.insert(errorMessage.str());
+                        mountedFails.insert(errorMessage.str());
                     }
             } else {
                 // Mount successful
@@ -349,7 +358,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
         if (token != "00" && isAllZeros(token)) {
             if (!invalidInput) {
                 invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist.\033[0;1m\n");
+                uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist.\033[0;1m");
             }
             continue;
         }
@@ -361,7 +370,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
             if (token.find('-', dashPos + 1) != std::string::npos || 
                 (dashPos == 0 || dashPos == token.size() - 1 || !std::isdigit(token[dashPos - 1]) || !std::isdigit(token[dashPos + 1]))) {
                 invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m\n");
+                uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
                 continue;
             }
 
@@ -372,18 +381,18 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                 end = std::stoi(token.substr(dashPos + 1));
             } catch (const std::invalid_argument&) {
                 invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m\n");
+                uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
                 continue;
             } catch (const std::out_of_range&) {
                 invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0;1m\n");
+                uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0;1m");
                 continue;
             }
 
             // Validate range
             if (start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) {
                 invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0;1m\n");
+                uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0;1m");
                 continue;
             }
 

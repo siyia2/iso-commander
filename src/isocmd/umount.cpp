@@ -38,7 +38,7 @@ void listMountedISOs() {
         closedir(dir);
     } else {
         // Print an error message if there is an issue opening the /mnt directory
-        std::cerr << "\033[1;91mError opening the /mnt directory.\033[0;1m" << std::endl;
+        std::cerr << "\033[1;91mError opening the /mnt directory.\033[0;1m\n";
         return;
     }
 
@@ -56,8 +56,8 @@ void listMountedISOs() {
 
     // Display a list of mounted ISOs with ISO names in bold and alternating colors
     if (!isoDirs.empty()) {
-        std::cout << "\033[0;1mList of mounted ISO(s):\033[0;1m" << std::endl; // White and bold
-        std::cout << " " << std::endl;
+        std::cout << "\033[0;1mList of mounted ISO(s):\033[0;1m\n"; // White and bold
+        std::cout << " \n";
 
         bool useRedColor = true; // Start with red color for sequence numbers
 
@@ -70,7 +70,7 @@ void listMountedISOs() {
             std::cout << sequenceColor << std::setw(2) << i + 1 << ". ";
 
             // Print ISO directory path in bold and magenta
-            std::cout << "\033[0;1m/mnt/iso_\033[1m\033[95m" << isoDirs[i] << "\033[0;1m" << std::endl;
+            std::cout << "\033[0;1m/mnt/iso_\033[1m\033[95m" << isoDirs[i] << "\033[0;1m\n";
         }
     }
 }
@@ -217,20 +217,21 @@ void printUnmountedAndErrors(bool invalidInput) {
 	clearScrollBuffer();
 	
 	if (!unmountedFiles.empty()) {
-		std::cout << " " << std::endl; // Print a blank line before unmounted files
+		std::cout << "\n"; // Print a blank line before unmounted files
 	}
 	
     // Print unmounted files
     for (const auto& unmountedFile : unmountedFiles) {
-        std::cout << unmountedFile << std::endl;
+        std::cout << unmountedFile << "\033[0;1m\n";
+    }
+    
+    if (!unmountedErrors.empty()) {
+        std::cout << "\n"; // Print a blank line before deleted folders
     }
 
-    if (!unmountedErrors.empty()) {
-        std::cout << " " << std::endl; // Print a blank line before deleted folders
-    }
     // Print unmounted errors
     for (const auto& unmountedError : unmountedErrors) {
-        std::cout << unmountedError << std::endl;
+        std::cout << unmountedError << "\033[0;1m\n";
     }
 
     // Clear vectors
@@ -238,13 +239,13 @@ void printUnmountedAndErrors(bool invalidInput) {
     unmountedErrors.clear();
     
     if (invalidInput) {
-		std::cout << " " << std::endl;
+		std::cout << "\n";
 	}
 
     // Print unique error messages
     if (!uniqueErrorMessages.empty()) {
         for (const std::string& uniqueErrorMessage : uniqueErrorMessages) {
-            std::cerr << "\033[1;91m" << uniqueErrorMessage << "\033[0;1m" <<std::endl;
+            std::cerr << "\033[1;91m" << uniqueErrorMessage << "\033[0;1m\n";
         }
         uniqueErrorMessages.clear();
     }
@@ -403,7 +404,7 @@ void unmountISOs() {
 
         // Check if there are no matching directories
         if (isoDirs.empty()) {
-            std::cerr << "\033[1;93mNo path(s) matching the '/mnt/iso_*' pattern found.\033[0;1m" << std::endl;
+            std::cerr << "\033[1;93mNo path(s) matching the '/mnt/iso_*' pattern found.\033[0;1m\n";
             std::cout << "\n\033[1;32m↵ to continue...";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             return;
@@ -443,7 +444,7 @@ void unmountISOs() {
                 clearScrollBuffer();
 
                 if (filterPattern && filterPattern[0] != '\0') {
-                    std::cout << "\\033\[1mPlease wait...\\033\[1m" << std::endl;
+                    std::cout << "\\033\[1mPlease wait...\\033\[1m\n";
                     add_history(filterPattern); // Add the search query to the history
                     saveHistory();
                 }
@@ -504,7 +505,7 @@ void unmountISOs() {
                 // Check if any directories matched the filter
                 if (filteredIsoDirs.empty()) {
                     clearScrollBuffer();
-                    std::cout << "\033[1;91mNo ISO mountpoint(s) match the search query.\033[0;1m" << std::endl;
+                    std::cout << "\033[1;91mNo ISO mountpoint(s) match the search query.\033[0;1m\n";
                     std::cout << "\n\033[1;32m↵ to continue...";
                     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                     clearScrollBuffer();
@@ -513,7 +514,7 @@ void unmountISOs() {
                     while (true) {
                         // Display filtered results
                         clearScrollBuffer();
-                        std::cout << "\033[1mFiltered results:\n\033[0;1m" << std::endl;
+                        std::cout << "\033[1mFiltered results:\n\033[0;1m\n";
                         size_t maxIndex = filteredIsoDirs.size();
                         size_t numDigits = std::to_string(maxIndex).length();
 
@@ -524,8 +525,7 @@ void unmountISOs() {
 
                             std::cout << color << "\033[1m"
                                       << std::setw(numDigits) << std::setfill(' ') << (i + 1) << ".\033[0;1m /mnt/iso_"
-                                      << "\033[1;95m" << afterUnderscore << "\033[0;1m"
-                                      << std::endl;
+                                      << "\033[1;95m" << afterUnderscore << "\033[0;1m\n";
                         }
 
                         // Prompt the user for the list of ISOs to unmount
@@ -542,7 +542,7 @@ void unmountISOs() {
                         if (std::strcmp(chosenNumbers, "00") == 0) {
                             free(chosenNumbers);
                             clearScrollBuffer();
-                            std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
+                            std::cout << "\033[1mPlease wait...\033[1m\n";
                             selectedIsoDirs = filteredIsoDirs;
                             skipEnter = false;
                             isFiltered = true;
@@ -572,7 +572,7 @@ void unmountISOs() {
 
                     if (!selectedIsoDirsFiltered.empty() && isFiltered) {
                         clearScrollBuffer();
-                        std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
+                        std::cout << "\033[1mPlease wait...\033[1m\n";
                         isFiltered = true;
                         historyPattern = false;
                         break;

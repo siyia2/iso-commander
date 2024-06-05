@@ -47,7 +47,7 @@ int main(int argc, char *argv[]) {
     lockFileDescriptor = open(lockFile, O_CREAT | O_RDWR, 0666);
     
     if (lockFileDescriptor == -1) {
-        std::cerr << "\033[93mAnother instance of isocmd is already running. If not run \"rm /tmp/isocmd.lock\".\n\033[0m" << std::endl;
+        std::cerr << "\033[93mAnother instance of isocmd is already running. If not run \"rm /tmp/isocmd.lock\".\n\033[0m";
         return 1;
     }
 
@@ -58,7 +58,7 @@ int main(int argc, char *argv[]) {
     fl.l_len = 0;  // Lock the whole file
 
     if (fcntl(lockFileDescriptor, F_SETLK, &fl) == -1) {
-        std::cerr << "\033[93mAnother instance of isocmd is already running.\n\033[0m" << std::endl;
+        std::cerr << "\033[93mAnother instance of isocmd is already running.\n\033[0m";
         close(lockFileDescriptor);
         return 1;
     }
@@ -80,7 +80,7 @@ int main(int argc, char *argv[]) {
         clear_history();
 
         // Prompt for the main menu choice
-        char* input = readline("\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
+        char* input = readline("\n\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
         if (!input) {
             break; // Exit the program if readline returns NULL (e.g., on EOF or Ctrl+D)
         }
@@ -124,7 +124,7 @@ int main(int argc, char *argv[]) {
 // Print the version number of the program
 void printVersionNumber(const std::string& version) {
     
-    std::cout << "\x1B[32mIso Commander v" << version << "\x1B[0m\n" << std::endl; // Output the version number in green color
+    std::cout << "\x1B[32mIso Commander v" << version << "\x1B[0m\n"; // Output the version number in green color
 }
 
 
@@ -154,21 +154,21 @@ void submenu1() {
 
     while (true) {
         clearScrollBuffer();
-        std::cout << "\033[1;32m+-------------------------+" << std::endl;
-        std::cout << "\033[1;32m|↵ Manage ISO              |" << std::endl;
-        std::cout << "\033[1;32m+-------------------------+" << std::endl;
-        std::cout << "\033[1;32m|1. Mount                 |" << std::endl;
-        std::cout << "\033[1;32m+-------------------------+" << std::endl;
-        std::cout << "\033[1;32m|2. Unmount               |" << std::endl;
-        std::cout << "\033[1;32m+-------------------------+" << std::endl;
-        std::cout << "\033[1;32m|3. Delete                |" << std::endl;
-        std::cout << "\033[1;32m+-------------------------+" << std::endl;
-        std::cout << "\033[1;32m|4. Move                  |" << std::endl;
-        std::cout << "\033[1;32m+-------------------------+" << std::endl;
-        std::cout << "\033[1;32m|5. Copy                  |" << std::endl;
-        std::cout << "\033[1;32m+-------------------------+" << std::endl;
-        std::cout << " " << std::endl;
-        char* submenu_input = readline("\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
+        std::cout << "\033[1;32m+-------------------------+\n";
+        std::cout << "\033[1;32m|↵ Manage ISO              |\n";
+        std::cout << "\033[1;32m+-------------------------+\n";
+        std::cout << "\033[1;32m|1. Mount                 |\n";
+        std::cout << "\033[1;32m+-------------------------+\n";
+        std::cout << "\033[1;32m|2. Unmount               |\n";
+        std::cout << "\033[1;32m+-------------------------+\n";
+        std::cout << "\033[1;32m|3. Delete                |\n";
+        std::cout << "\033[1;32m+-------------------------+\n";
+        std::cout << "\033[1;32m|4. Move                  |\n";
+        std::cout << "\033[1;32m+-------------------------+\n";
+        std::cout << "\033[1;32m|5. Copy                  |\n";
+        std::cout << "\033[1;32m+-------------------------+\n";
+        std::cout << " ";
+        char* submenu_input = readline("\n\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
 
         if (!submenu_input || std::strlen(submenu_input) == 0) {
 			free(submenu_input);
@@ -219,15 +219,15 @@ void submenu1() {
 void submenu2() {
 	while (true) {
 		clearScrollBuffer();
-		std::cout << "\033[1;32m+-------------------------+" << std::endl;
-		std::cout << "\033[1;32m|↵ Convert2ISO             |" << std::endl;
-		std::cout << "\033[1;32m+-------------------------+" << std::endl;
-        std::cout << "\033[1;32m|1. CCD2ISO               |" << std::endl;
-        std::cout << "\033[1;32m+-------------------------+" << std::endl;
-        std::cout << "\033[1;32m|2. MDF2ISO               |" << std::endl;
-        std::cout << "\033[1;32m+-------------------------+" << std::endl;
-        std::cout << " " << std::endl;
-        char* submenu_input = readline("\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
+		std::cout << "\033[1;32m+-------------------------+\n";
+		std::cout << "\033[1;32m|↵ Convert2ISO             |\n";
+		std::cout << "\033[1;32m+-------------------------+\n";
+        std::cout << "\033[1;32m|1. CCD2ISO               |\n";
+        std::cout << "\033[1;32m+-------------------------+\n";
+        std::cout << "\033[1;32m|2. MDF2ISO               |\n";
+        std::cout << "\033[1;32m+-------------------------+\n";
+        std::cout << " ";
+        char* submenu_input = readline("\n\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
         
 
         if (!submenu_input || std::strlen(submenu_input) == 0) {
@@ -258,18 +258,18 @@ void submenu2() {
 
 // Function to print menu
 void printMenu() {
-    std::cout << "\033[1;32m+-------------------------+" << std::endl;
-    std::cout << "\033[1;32m|       Menu Options       |" << std::endl;
-    std::cout << "\033[1;32m+-------------------------+" << std::endl;
-    std::cout << "\033[1;32m|1. Manage ISO            | " << std::endl;
-    std::cout << "\033[1;32m+-------------------------+" << std::endl;
-    std::cout << "\033[1;32m|2. Convert2ISO           |" << std::endl;
-    std::cout << "\033[1;32m+-------------------------+" << std::endl;
-    std::cout << "\033[1;32m|3. Refresh ISO Cache     |" << std::endl;
-    std::cout << "\033[1;32m+-------------------------+" << std::endl;
-    std::cout << "\033[1;32m|4. Exit Program          |" << std::endl;
-    std::cout << "\033[1;32m+-------------------------+" << std::endl;
-    std::cout << std::endl;
+    std::cout << "\033[1;32m+-------------------------+\n";
+    std::cout << "\033[1;32m|       Menu Options       |\n";
+    std::cout << "\033[1;32m+-------------------------+\n";
+    std::cout << "\033[1;32m|1. Manage ISO            |\n";
+    std::cout << "\033[1;32m+-------------------------+\n";
+    std::cout << "\033[1;32m|2. Convert2ISO           |\n";
+    std::cout << "\033[1;32m+-------------------------+\n";
+    std::cout << "\033[1;32m|3. Refresh ISO Cache     |\n";
+    std::cout << "\033[1;32m+-------------------------+\n";
+    std::cout << "\033[1;32m|4. Exit Program          |\n";
+    std::cout << "\033[1;32m+-------------------------+\n";
+    std::cout << " ";
 }
 
 
@@ -324,22 +324,30 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
     for (size_t i = 0; i < isoFiles.size(); ++i) {
         // Determine sequence number
         int sequenceNumber = i + 1;
+        int stew = 1;
+        
+        if (isoFiles.size() >= 10) {
+			stew = 2;
+		} else if (isoFiles.size() >= 100) {
+			stew = 3;
+		} else if (isoFiles.size() >= 1000) {
+			stew = 4;
+		} else if (isoFiles.size() >= 10000) {
+			stew = 5;
+		} else if (isoFiles.size() >= 100000) {
+			stew = 6;
+		}	
 
         // Determine color based on alternating pattern
         std::string sequenceColor = (useRedColor) ? red : green;
         useRedColor = !useRedColor; // Toggle between red and green
 
-        // Print sequence number with the determined color
-        std::cout << sequenceColor << std::right << std::setw(2) << sequenceNumber <<". ";
-
         // Extract directory and filename
         auto [directory, filename] = extractDirectoryAndFilename(isoFiles[i]);
 
         // Print the directory part in the default color
-        std::cout << defaultColor << bold << directory << defaultColor;
+        std::cout << "\n" << sequenceColor << std::right << std::setw(stew) << sequenceNumber << ". " << defaultColor << bold << directory << defaultColor << bold << "/" << magenta << filename << defaultColor;
 
-        // Print the filename part in bold
-        std::cout << bold << "/" << magenta << filename << defaultColor << std::endl;
     }
 }
 
@@ -517,7 +525,7 @@ void saveHistory() {
 
         historyFile.close();
     } else {
-        std::cerr << "\n\033[1;91mFailed to open history cache file: \033[1;93m'" << historyFilePath << "'\033[1;91m. Check read/write permissions.\033[0m" << std::endl;
+        std::cerr << "\n\033[1;91mFailed to open history cache file: \033[1;93m'" << historyFilePath << "'\033[1;91m. Check read/write permissions.\033[0m";
     }
 }
 
@@ -542,7 +550,7 @@ std::string readInputLine(const std::string& prompt) {
         }
     } catch (const std::exception& e) {
         // Log the error or handle it in a way suitable for your application
-        std::cerr << "\033[91m" << e.what() << "\033[0m" << std::endl;
+        std::cerr << "\033[91m" << e.what() << "\033[0m";
     }
 
     // Return an empty string if readline fails or input is empty
