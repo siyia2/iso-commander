@@ -90,9 +90,8 @@ void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<s
 bool isAlreadyMounted(const std::string& mountPoint);
 
 // Iso cache functions
-bool ends_with_iso(const std::string& str);
 bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize);
-
+bool ends_with_iso(const std::string& str);
 // Unmount functions
 bool isDirectoryEmpty(const std::string& path);
 
