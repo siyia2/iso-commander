@@ -127,7 +127,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     if (!invalidDirectoryPaths.empty()) {
 		clearScrollBuffer();
 		if (directoryPaths.empty()) {
-			std::cout << "\n\033[1;91mNo valid paths provided.";
+			std::cout << "\033[1;91mNo valid paths provided.";
 		} else {
 			std::cout << "\033[1;93mThe following invalid path(s) will be omitted from the search:\n";
 			for (const auto& invalidPath : invalidDirectoryPaths) {
