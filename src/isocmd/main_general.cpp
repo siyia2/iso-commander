@@ -38,7 +38,7 @@ std::unordered_set<std::string> uniqueErrorMessages;
 int main(int argc, char *argv[]) {
 	
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
-        printVersionNumber("3.3.4");
+        printVersionNumber("3.3.5");
         return 0;
     }
 	
