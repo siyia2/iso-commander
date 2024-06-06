@@ -4,8 +4,6 @@
 
 static std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles here
 static std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
-
-std::mutex fileCheckMutex;
     
 // Set to track processed error messages to avoid duplicate error reporting
 std::set<std::string> processedErrors;
@@ -28,7 +26,6 @@ std::set<std::string> deletedOuts;
 
 // Function to check if a file already exists
 bool fileExistsConversions(const std::string& fullPath) {
-    std::lock_guard<std::mutex> lock(fileCheckMutex);
         return std::filesystem::exists(fullPath);
 }
 
@@ -527,6 +524,8 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     
     // Set to store processed paths
     static std::set<std::string> processedPathsBin;
+    
+    std::mutex fileCheckMutex;
     
     bool blacklistMdf =false;
 
