@@ -73,8 +73,7 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
         queryTokens.insert(token);
     }
 
-    ThreadPool pool(maxThreads);
-    std::vector<std::future<void>> futures;
+    std::shared_mutex mutex;
     auto filterTask = [&](size_t start, size_t end) {
         for (size_t i = start; i < end; ++i) {
             const std::string& file = files[i];
@@ -89,19 +88,21 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
                 }
             }
             if (matchFound) {
-                std::lock_guard<std::mutex> lock(Mutex4Med);
+                std::unique_lock<std::shared_mutex> lock(mutex);
                 filteredFiles.push_back(file);
             }
         }
     };
 
+    constexpr size_t maxThreads = 8; // Adjust as needed
     size_t numFiles = files.size();
-    size_t numThreads = maxThreads;
+    size_t numThreads = std::min(maxThreads, numFiles);
     size_t filesPerThread = numFiles / numThreads;
+    std::vector<std::future<void>> futures;
     for (size_t i = 0; i < numThreads - 1; ++i) {
         size_t start = i * filesPerThread;
         size_t end = start + filesPerThread;
-        futures.emplace_back(pool.enqueue(filterTask, start, end));
+        futures.emplace_back(std::async(std::launch::async, filterTask, start, end));
     }
     filterTask((numThreads - 1) * filesPerThread, numFiles);
     for (auto& future : futures) {
