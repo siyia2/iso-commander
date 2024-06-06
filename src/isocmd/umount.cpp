@@ -404,6 +404,7 @@ void unmountISOs() {
 
         // Check if the user wants to return to the main menu
         if (std::isspace(input[0]) || input[0] == '\0') {
+			selectedIsoDirs.clear();
             free(input);
             break;
         }
@@ -436,6 +437,7 @@ void unmountISOs() {
                 clear_history();
 
                 if (std::isspace(filterPattern[0]) || filterPattern[0] == '\0') {
+					selectedIsoDirs.clear();
                     free(filterPattern);
                     skipEnter = false;
                     isFiltered = false;
