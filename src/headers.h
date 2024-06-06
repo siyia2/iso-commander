@@ -131,6 +131,7 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 void removeNonExistentPathsFromCache();
 
 // Filter functions
+size_t boyerMooreSearchMountPoints(const std::string& haystack, const std::string& needle);
 void filterMountPoints(const std::vector<std::string>& isoDirs, std::set<std::string>& filterPatterns, std::vector<std::string>& filteredIsoDirs, std::mutex& resultMutex, size_t start, size_t end);
 
 // Unmount functions
@@ -155,6 +156,7 @@ std::string getHomeDirectory();
 std::vector<std::string> loadCache();
 
 // Filter functions
+std::vector<size_t> boyerMooreSearch(const std::string& pattern, const std::string& text);
 std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query);
 
 // Unmount functions
