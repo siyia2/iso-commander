@@ -17,8 +17,6 @@ void listMountedISOs() {
     // Vector to store names of mounted ISOs
     std::vector<std::string> isoDirs;
 
-    // Lock mutex for accessing shared resource
-
     // Open the /mnt directory and find directories with names starting with "iso_"
     DIR* dir;
     struct dirent* entry;
