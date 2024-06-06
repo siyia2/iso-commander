@@ -842,22 +842,12 @@ void printFileList(const std::vector<std::string>& fileList) {
 
     // Counter for line numbering
     int lineNumber = 1;
-    int stew = 1;
     
-    if (fileList.size() >= 10) {
-			stew = 2;
-		} else if (fileList.size() >= 100) {
-			stew = 3;
-		} else if (fileList.size() >= 1000) {
-			stew = 4;
-		} else if (fileList.size() >= 10000) {
-			stew = 5;
-		} else if (fileList.size() >= 100000) {
-			stew = 6;
-		}	
+    size_t maxIndex = fileList.size();
+    size_t numDigits = std::to_string(maxIndex).length();
 
     // Apply formatting once before the loop
-    std::cout << std::right << std::setw(stew);
+    std::cout << std::right << std::setw(numDigits);
 
     for (const auto& filename : fileList) {
         // Extract directory and filename
@@ -877,15 +867,15 @@ void printFileList(const std::vector<std::string>& fileList) {
                 useRedColor = !useRedColor; // Toggle between red and green
 
                 // Print sequence number in the determined color and the rest in default color
-                std::cout << sequenceColor << std::setw(stew) << std::right << lineNumber << ". " << reset;
+                std::cout << sequenceColor << std::setw(numDigits) << std::right << lineNumber << ". " << reset;
                 std::cout << bold << directory << bold << "/" << orangeBold << fileNameOnly << reset << "\033[0;1m\n";
             } else {
                 // Print entire path and filename with the default color
-                std::cout << std::setw(stew) << std::right << lineNumber << ". " << bold << filename << reset << "\033[0;1m\n";
+                std::cout << std::setw(numDigits) << std::right << lineNumber << ". " << bold << filename << reset << "\033[0;1m\n";
             }
         } else {
             // No extension found, print entire path and filename with the default color
-            std::cout << std::setw(stew) << std::right << lineNumber << ". " << bold << filename << reset << "\033[0;1m\n";
+            std::cout << std::setw(numDigits) << std::right << lineNumber << ". " << bold << filename << reset << "\033[0;1m\n";
         }
 
         // Increment line number
