@@ -58,6 +58,20 @@ void listMountedISOs() {
     if (!isoDirs.empty()) {
         std::cout << "\033[0;1mList of mounted ISO(s):\033[0;1m\n"; // White and bold
         std::cout << " \n";
+        
+        int stew = 1;
+        
+        if (isoDirs.size() >= 10) {
+			stew = 2;
+		} else if (isoDirs.size() >= 100) {
+			stew = 3;
+		} else if (isoDirs.size() >= 1000) {
+			stew = 4;
+		} else if (isoDirs.size() >= 10000) {
+			stew = 5;
+		} else if (isoDirs.size() >= 100000) {
+			stew = 6;
+		}	
 
         bool useRedColor = true; // Start with red color for sequence numbers
 
@@ -67,7 +81,7 @@ void listMountedISOs() {
             useRedColor = !useRedColor; // Toggle between red and green
 
             // Print sequence number with the determined color
-            std::cout << sequenceColor << std::setw(2) << i + 1 << ". ";
+            std::cout << sequenceColor << std::setw(stew) << i + 1 << ". ";
 
             // Print ISO directory path in bold and magenta
             std::cout << "\033[0;1m/mnt/iso_\033[1m\033[95m" << isoDirs[i] << "\033[0;1m\n";
