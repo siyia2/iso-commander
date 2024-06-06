@@ -260,8 +260,8 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 					while (true) { // Enter another loop for handling filtered results
 						clearScrollBuffer(); // Clear scroll buffer
 						clear_history(); // Clear history for fresh start
-						std::cout << "\033[1mFiltered results:\n\033[0;1m\n"; // Display filtered results header
 						sortFilesCaseInsensitive(filteredFiles);
+						std::cout << "\033[1mFiltered results:\n\033[0;1m\n"; // Display filtered results header
 						printFileList(filteredFiles); // Print filtered file list
 
 						std::string filterPrompt; // Define a string variable for filter prompt
