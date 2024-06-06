@@ -149,6 +149,7 @@ void select_and_mount_files_by_number() {
 					
 						if (std::strcmp(input, "00") == 0) {
 							clearScrollBuffer();
+							free(input);
 							std::cout << "\033[1mPlease wait...\033[1m\n";
 							// Restore the original list of ISO files
 							isoFiles = filteredFiles;
@@ -184,6 +185,7 @@ void select_and_mount_files_by_number() {
 
         // Check if the user wants to mount all ISO files
 		if (std::strcmp(input, "00") == 0) {
+			free(input);
 			mountAllIsoFiles(isoFiles, mountedSet, isoFilesToMount);
 		}
         if (input[0] != '\0' && (strcmp(input, "/") != 0) && !verboseFiltered) {
