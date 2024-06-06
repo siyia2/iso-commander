@@ -321,19 +321,8 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
 
     bool useRedColor = true; // Start with red color
     
-    int stew = 1;
-        
-        if (isoFiles.size() >= 10) {
-			stew = 2;
-		} else if (isoFiles.size() >= 100) {
-			stew = 3;
-		} else if (isoFiles.size() >= 1000) {
-			stew = 4;
-		} else if (isoFiles.size() >= 10000) {
-			stew = 5;
-		} else if (isoFiles.size() >= 100000) {
-			stew = 6;
-		}	
+    size_t maxIndex = isoFiles.size();
+    size_t numDigits = std::to_string(maxIndex).length();
 
     for (size_t i = 0; i < isoFiles.size(); ++i) {
         // Determine sequence number
@@ -347,7 +336,7 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
         auto [directory, filename] = extractDirectoryAndFilename(isoFiles[i]);
 
         // Print the directory part in the default color
-        std::cout << "\n" << sequenceColor << std::right << std::setw(stew) << sequenceNumber << ". " << defaultColor << bold << directory << defaultColor << bold << "/" << magenta << filename << defaultColor;
+        std::cout << "\n" << sequenceColor << std::right << std::setw(numDigits) << sequenceNumber << ". " << defaultColor << bold << directory << defaultColor << bold << "/" << magenta << filename << defaultColor;
 
     }
 }
