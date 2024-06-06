@@ -15,11 +15,9 @@ void listMountedISOs() {
     const std::string isoPath = "/mnt";
 
     // Vector to store names of mounted ISOs
-    static std::mutex mtx;
     std::vector<std::string> isoDirs;
 
     // Lock mutex for accessing shared resource
-    std::lock_guard<std::mutex> lock(mtx);
 
     // Open the /mnt directory and find directories with names starting with "iso_"
     DIR* dir;
@@ -544,6 +542,7 @@ void unmountISOs() {
                         selectedIsoDirsFiltered = parseUserInputUnmountISOs(chosenNumbers, filteredIsoDirs, invalidInput, noValid, isFiltered);
 
                         if (!selectedIsoDirsFiltered.empty()) {
+							free(chosenNumbers);
                             selectedIsoDirs = selectedIsoDirsFiltered;
                             skipEnter = false;
                             isFiltered = true;
