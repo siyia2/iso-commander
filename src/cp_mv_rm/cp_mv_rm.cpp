@@ -466,8 +466,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     std::vector<std::future<void>> futures;
     futures.reserve(numThreads);
 
-    std::lock_guard<std::mutex> highLock(Mutex4High);
-
     for (const auto& chunk : indexChunks) {
         std::vector<std::string> isoFilesInChunk;
         for (const auto& index : chunk) {
@@ -543,8 +541,6 @@ bool directoryExists(const std::string& path) {
 
 // Function to handle the deletion of ISO files in batches
 void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete) {
-    // Lock the low-level mutex to ensure thread safety
-    std::lock_guard<std::mutex> lowLock(Mutex4Low);
 
     // Determine batch size based on the number of ISO files and maxThreads
     size_t batchSize = 1;
@@ -585,6 +581,9 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
     for (const auto& iso : isoFiles) {
         // Extract directory and filename from the ISO file path
         auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(iso);
+        
+        // Lock the low-level mutex to ensure thread safety
+		std::lock_guard<std::mutex> lowLock(Mutex4Low);
 
         // Check if ISO file is present in the copy list
         auto it = std::find(isoFilesCopy.begin(), isoFilesCopy.end(), iso);
