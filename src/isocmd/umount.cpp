@@ -427,6 +427,7 @@ void unmountISOs() {
 
         // Check if the user wants to filter the list of ISOs
         if (strcmp(input, "/") == 0) {
+			free(input);
             bool breakOuterLoop = false;
             while (true) {
                 if (breakOuterLoop) {
@@ -568,6 +569,7 @@ void unmountISOs() {
                             std::cout << "\n\033[1;32m↵ to continue...";
                             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                         }
+                        free(chosenNumbers);
                     }
 
                     if (!selectedIsoDirsFiltered.empty() && isFiltered) {
