@@ -131,6 +131,7 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 void removeNonExistentPathsFromCache();
 
 // Filter functions
+void sortFilesCaseInsensitive(std::vector<std::string>& files);
 size_t boyerMooreSearchMountPoints(const std::string& haystack, const std::string& needle);
 void filterMountPoints(const std::vector<std::string>& isoDirs, std::set<std::string>& filterPatterns, std::vector<std::string>& filteredIsoDirs, std::mutex& resultMutex, size_t start, size_t end);
 
