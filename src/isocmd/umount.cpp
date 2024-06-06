@@ -49,7 +49,7 @@ void listMountedISOs() {
         std::cout << "\033[0;1mList of mounted ISO(s):\033[0;1m\n"; // White and bold
         std::cout << " \n";
         
-        size_t maxIndex = isoFiles.size();
+        size_t maxIndex = isoDirs.size();
 		size_t numDigits = std::to_string(maxIndex).length();
 
         bool useRedColor = true; // Start with red color for sequence numbers
