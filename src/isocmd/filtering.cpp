@@ -2,35 +2,65 @@
 #include "../threadpool.h"
 
 
+void sortFilesCaseInsensitive(std::vector<std::string>& files) {
+    std::sort(files.begin(), files.end(), [](const std::string& a, const std::string& b) {
+        std::string lowerA = a;
+        std::string lowerB = b;
+        std::transform(lowerA.begin(), lowerA.end(), lowerA.begin(), ::tolower);
+        std::transform(lowerB.begin(), lowerB.end(), lowerB.begin(), ::tolower);
+        return lowerA < lowerB;
+    });
+}
+
 // Boyer-Moore string search implementation for mount
 std::vector<size_t> boyerMooreSearch(const std::string& pattern, const std::string& text) {
-    std::vector<size_t> shifts(256, pattern.length());
+    // Helper lambda to convert a string to lowercase
+    auto toLower = [](const std::string& str) {
+        std::string lowerStr = str;
+        std::transform(lowerStr.begin(), lowerStr.end(), lowerStr.begin(),
+                       [](unsigned char c){ return std::tolower(c); });
+        return lowerStr;
+    };
+
+    std::string lowerPattern = toLower(pattern);
+    std::string lowerText = toLower(text);
+
+    std::vector<size_t> shifts(256, lowerPattern.length());
     std::vector<size_t> matches;
 
-    for (size_t i = 0; i < pattern.length() - 1; i++) {
-        shifts[pattern[i]] = pattern.length() - i - 1;
+    for (size_t i = 0; i < lowerPattern.length() - 1; i++) {
+        shifts[static_cast<unsigned char>(lowerPattern[i])] = lowerPattern.length() - i - 1;
     }
 
-    size_t patternLen = pattern.length();
-    size_t textLen = text.length();
-    size_t skip = 0;
+    size_t patternLen = lowerPattern.length();
+    size_t textLen = lowerText.length();
 
-    for (size_t i = patternLen - 1; i < textLen;) {
-        for (skip = 0; skip < patternLen; skip++) {
-            if (pattern[patternLen - 1 - skip] != text[i - skip]) {
-                break;
-            }
+    size_t i = 0; // Start at the beginning of the text
+
+    while (i <= textLen - patternLen) {
+        size_t skip = 0;
+        
+        // Match pattern from end to start
+        while (skip < patternLen && lowerPattern[patternLen - 1 - skip] == lowerText[i + patternLen - 1 - skip]) {
+            skip++;
         }
-
+        
+        // If the whole pattern was found, record the match
         if (skip == patternLen) {
-            matches.push_back(i - patternLen + 1);
+            matches.push_back(i);
         }
 
-        i += std::max(shifts[text[i]], patternLen - skip);
+        // Move the pattern based on the last character of the current window in the text
+        if (i + patternLen < textLen) {
+            i += shifts[static_cast<unsigned char>(lowerText[i + patternLen - 1])];
+        } else {
+            break;
+        }
     }
 
     return matches;
 }
+
 
 // Function to filter cached ISO files based on search query (case-insensitive)
 std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query) {

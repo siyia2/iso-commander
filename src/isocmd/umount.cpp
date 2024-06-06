@@ -42,17 +42,7 @@ void listMountedISOs() {
         return;
     }
 
-    // Sort ISO directory names alphabetically in a case-insensitive manner
-    std::sort(isoDirs.begin(), isoDirs.end(), [](const std::string& a, const std::string& b) {
-        // Convert both strings to lowercase before comparison
-        std::string lowerA = a;
-        std::transform(lowerA.begin(), lowerA.end(), lowerA.begin(), [](unsigned char c) { return std::tolower(c); });
-
-        std::string lowerB = b;
-        std::transform(lowerB.begin(), lowerB.end(), lowerB.begin(), [](unsigned char c) { return std::tolower(c); });
-
-        return lowerA < lowerB;
-    });
+    sortFilesCaseInsensitive(isoDirs);
 
     // Display a list of mounted ISOs with ISO names in bold and alternating colors
     if (!isoDirs.empty()) {
@@ -407,17 +397,7 @@ void unmountISOs() {
                 }
             }
 
-            // Sort ISO directory names alphabetically in a case-insensitive manner
-            std::sort(isoDirs.begin(), isoDirs.end(), [](const std::string& a, const std::string& b) {
-                // Convert both strings to lowercase before comparison
-                std::string lowerA = a;
-                std::transform(lowerA.begin(), lowerA.end(), lowerA.begin(), [](unsigned char c) { return std::tolower(c); });
-
-                std::string lowerB = b;
-                std::transform(lowerB.begin(), lowerB.end(), lowerB.begin(), [](unsigned char c) { return std::tolower(c); });
-
-                return lowerA < lowerB;
-            });
+            sortFilesCaseInsensitive(isoDirs);
         }
 
         // Check if there are no matching directories
