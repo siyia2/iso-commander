@@ -151,7 +151,7 @@ std::string readInputLine(const std::string& prompt);
 
 
 // Cache functions
-bool iequals(std::string_view a, std::string_view b);
+std::future<bool> iequals(std::string_view a, std::string_view b);
 std::future<bool> FileExists(const std::string& path);
 std::string getHomeDirectory();
 std::vector<std::string> loadCache();
