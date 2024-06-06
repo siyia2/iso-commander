@@ -320,11 +320,8 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
     const std::string magenta = "\033[95m";
 
     bool useRedColor = true; // Start with red color
-
-    for (size_t i = 0; i < isoFiles.size(); ++i) {
-        // Determine sequence number
-        int sequenceNumber = i + 1;
-        int stew = 1;
+    
+    int stew = 1;
         
         if (isoFiles.size() >= 10) {
 			stew = 2;
@@ -337,6 +334,10 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
 		} else if (isoFiles.size() >= 100000) {
 			stew = 6;
 		}	
+
+    for (size_t i = 0; i < isoFiles.size(); ++i) {
+        // Determine sequence number
+        int sequenceNumber = i + 1;
 
         // Determine color based on alternating pattern
         std::string sequenceColor = (useRedColor) ? red : green;
