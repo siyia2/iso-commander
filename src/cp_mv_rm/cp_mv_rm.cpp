@@ -175,8 +175,8 @@ void select_and_operate_files_by_number(const std::string& operation) {
 								mvDelBreak=false;
 								processOperationInput(input, filteredFiles, operationSet, process);
 								}
-								free(input);
 							}
+							free(input);
 						}
 					}
 				}
