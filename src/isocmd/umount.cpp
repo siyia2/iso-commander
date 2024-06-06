@@ -462,29 +462,28 @@ void unmountISOs() {
 
                 // Filter the list of ISO directories based on the filter pattern
                 filteredIsoDirs.clear();
-
-                // Create a thread pool with the desired number of threads
-                ThreadPool pool(maxThreads);
-
+				
                 // Vector to store futures for tracking tasks' completion
-                std::vector<std::future<void>> futures;
+				std::vector<std::future<void>> futures;
 
-                // Calculate the number of directories per thread
-                size_t numDirs = isoDirs.size();
-				unsigned int numThreads = std::min(static_cast<unsigned int>(numDirs), maxThreads);                
+				// Calculate the number of directories per thread
+				size_t numDirs = isoDirs.size();
+				unsigned int numThreads = std::min(static_cast<unsigned int>(numDirs), maxThreads);
 				size_t dirsPerThread = numDirs / numThreads;
-                // Enqueue filter tasks into the thread pool
-                for (size_t i = 0; i < numThreads; ++i) {
-                    size_t start = i * dirsPerThread;
-                    size_t end = (i == numThreads - 1) ? numDirs : start + dirsPerThread;
-                    futures.push_back(pool.enqueue([&](std::mutex& mutex, size_t& start, size_t& end) {
-					filterMountPoints(isoDirs, filterPatterns, filteredIsoDirs, mutex, start, end);}, std::ref(isoDirsMutex), start, end));
-                }
 
-                // Wait for all filter tasks to complete
-                for (auto& future : futures) {
-                    future.wait();
-                }
+				// Launch filter tasks asynchronously
+				for (size_t i = 0; i < numThreads; ++i) {
+					size_t start = i * dirsPerThread;
+					size_t end = (i == numThreads - 1) ? numDirs : start + dirsPerThread;
+					futures.push_back(std::async(std::launch::async, [start, end, &isoDirs, &filterPatterns, &filteredIsoDirs, &isoDirsMutex] {
+						filterMountPoints(isoDirs, filterPatterns, filteredIsoDirs, isoDirsMutex, start, end);
+					}));
+				}
+
+				// Wait for all filter tasks to complete
+				for (auto& future : futures) {
+					future.get();
+				}
 
                 // Check if any directories matched the filter
                 if (filteredIsoDirs.empty()) {
