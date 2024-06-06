@@ -299,6 +299,7 @@ void unmountISOs() {
 
         // Check if the user wants to filter the list of ISOs
         if (strcmp(input, "/") == 0) {
+			free(input);
 			bool breakOuterLoop = false;
             while (true) {
 				if (breakOuterLoop) {
