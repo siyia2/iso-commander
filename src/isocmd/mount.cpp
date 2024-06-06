@@ -133,8 +133,8 @@ void select_and_mount_files_by_number() {
 				} else {
 					while (true) {
 						clearScrollBuffer();
-						std::cout << "\033[1mFiltered results:\033[0;1m\n";
 						sortFilesCaseInsensitive(filteredFiles);
+						std::cout << "\033[1mFiltered results:\033[0;1m\n";
 						printIsoFileList(filteredFiles); // Print the filtered list of ISO files
 					
 						// Prompt user for input again with the filtered list
