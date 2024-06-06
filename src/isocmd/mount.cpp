@@ -78,7 +78,7 @@ void select_and_mount_files_by_number() {
         // Prompt user for input
         char* input = readline(
         "\n\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., '1-3', '1 5', '00' for all), / ↵ to filter, or ↵ to return:\001\033[0;1m\002 "
-    );
+		);
         clearScrollBuffer();
         
         if (strcmp(input, "/") != 0 || (!(std::isspace(input[0]) || input[0] == '\0'))) {
