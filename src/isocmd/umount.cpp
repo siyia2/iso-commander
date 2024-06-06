@@ -410,10 +410,10 @@ void unmountISOs() {
 
         // Check if the user wants to filter the list of ISOs
         if (strcmp(input, "/") == 0) {
-			free(input);
             bool breakOuterLoop = false;
             while (true) {
                 if (breakOuterLoop) {
+                    free(input);
                     historyPattern = false;
                     break;
                 }
@@ -437,6 +437,7 @@ void unmountISOs() {
 
                 if (std::isspace(filterPattern[0]) || filterPattern[0] == '\0') {
                     free(filterPattern);
+                    free(input);
                     skipEnter = false;
                     isFiltered = false;
                     noValid = false;
@@ -517,6 +518,7 @@ void unmountISOs() {
 
                         if (std::isspace(chosenNumbers[0]) || chosenNumbers[0] == '\0') {
                             free(chosenNumbers);
+                            free(input);
                             noValid = false;
                             skipEnter = true;
                             historyPattern = false;
@@ -525,6 +527,7 @@ void unmountISOs() {
 
                         if (std::strcmp(chosenNumbers, "00") == 0) {
                             free(chosenNumbers);
+                            free(input);
                             clearScrollBuffer();
                             std::cout << "\033[1mPlease wait...\033[1m\n";
                             selectedIsoDirs = filteredIsoDirs;
@@ -540,6 +543,7 @@ void unmountISOs() {
 
                         if (!selectedIsoDirsFiltered.empty()) {
 							free(chosenNumbers);
+							free(input);
                             selectedIsoDirs = selectedIsoDirsFiltered;
                             skipEnter = false;
                             isFiltered = true;
@@ -557,6 +561,7 @@ void unmountISOs() {
                     }
 
                     if (!selectedIsoDirsFiltered.empty() && isFiltered) {
+						free(input);
                         clearScrollBuffer();
                         std::cout << "\033[1mPlease wait...\033[1m\n";
                         isFiltered = true;
