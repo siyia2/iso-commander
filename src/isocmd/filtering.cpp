@@ -167,31 +167,3 @@ size_t boyerMooreSearchMountPoints(const std::string& haystack, const std::strin
     }
     return std::string::npos; // No match found
 }
-
-// Function to filter mounted isoDirs using Boyer-Moore search
-void filterMountPoints(const std::vector<std::string>& isoDirs, std::set<std::string>& filterPatterns, std::vector<std::string>& filteredIsoDirs, std::mutex& resultMutex, size_t start, size_t end) {
-    // Iterate through the chunk of ISO directories
-    for (size_t i = start; i < end; ++i) {
-        const std::string& dir = isoDirs[i];
-        std::string dirLower = dir;
-        std::transform(dirLower.begin(), dirLower.end(), dirLower.begin(), ::tolower);
-
-        // Flag to track if a match is found for the directory
-        bool matchFound = false;
-        // Iterate through each filter pattern
-        for (const std::string& pattern : filterPatterns) {
-            // If the directory matches the current filter pattern using Boyer-Moore search
-            if (boyerMooreSearchMountPoints(dirLower, pattern) != std::string::npos) {
-                matchFound = true;
-                break;
-            }
-        }
-
-        // If a match is found, add the directory to the filtered list
-        if (matchFound) {
-            // Lock access to the shared vector
-            std::lock_guard<std::mutex> lock(resultMutex);
-            filteredIsoDirs.push_back(dir);
-        }
-    }
-}
