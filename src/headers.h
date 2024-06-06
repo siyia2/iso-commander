@@ -133,8 +133,6 @@ void removeNonExistentPathsFromCache();
 
 // Filter functions
 void sortFilesCaseInsensitive(std::vector<std::string>& files);
-size_t boyerMooreSearchMountPoints(const std::string& haystack, const std::string& needle);
-void filterMountPoints(const std::vector<std::string>& isoDirs, std::set<std::string>& filterPatterns, std::vector<std::string>& filteredIsoDirs, std::mutex& resultMutex, size_t start, size_t end);
 
 // Unmount functions
 void printUnmountedAndErrors(bool invalidInput);
@@ -152,7 +150,7 @@ std::string readInputLine(const std::string& prompt);
 
 
 // Cache functions
-std::future<bool> iequals(std::string_view a, std::string_view b);
+bool iequals(std::string_view a, std::string_view b);
 std::future<bool> FileExists(const std::string& path);
 std::string getHomeDirectory();
 std::vector<std::string> loadCache();
