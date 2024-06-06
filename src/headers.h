@@ -22,6 +22,7 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 #include <set>
+#include <shared_mutex>
 #include <string>
 #include <sys/mount.h>
 #include <vector>
