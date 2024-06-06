@@ -133,6 +133,7 @@ void removeNonExistentPathsFromCache();
 
 // Filter functions
 void sortFilesCaseInsensitive(std::vector<std::string>& files);
+size_t boyerMooreSearchMountPoints(const std::string& haystack, const std::string& needle);
 
 // Unmount functions
 void printUnmountedAndErrors(bool invalidInput);
