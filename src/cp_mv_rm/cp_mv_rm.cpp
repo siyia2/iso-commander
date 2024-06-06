@@ -513,8 +513,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         operationErrors.clear();
         userDestDir.clear();
         
-        clear_history();
-
         // Stop the timer after completing all deletion tasks
     //    auto end_time = std::chrono::high_resolution_clock::now();
 
