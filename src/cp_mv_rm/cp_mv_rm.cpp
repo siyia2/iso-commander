@@ -144,6 +144,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 					while (!mvDelBreak) {
 						clearScrollBuffer();
 						std::cout << "\033[1mFiltered results:\033[0;1m\n";
+						sortFilesCaseInsensitive(filteredFiles);
 						printIsoFileList(filteredFiles); // Print the filtered list of ISO files
 
 						// Prompt user for input again with the filtered list
