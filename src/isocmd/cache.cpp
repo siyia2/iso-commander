@@ -8,6 +8,7 @@ const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.cache";
 const std::string cacheFileName = "iso_commander_cache.txt";;
 const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
+
 // Function to check if a file exists asynchronously
 std::future<std::vector<std::string>> FileExistsAsync(const std::vector<std::string>& paths) {
     return std::async(std::launch::async, [paths]() {
