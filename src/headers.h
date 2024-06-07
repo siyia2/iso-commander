@@ -119,12 +119,12 @@ void signalHandler(int signum);
 void clearScrollBuffer();
 
 // Mount functions
-void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedSet, std::vector<std::string>& isoFilesToMount);
+void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesToMount);
 void printMountedAndErrors();
-void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std::string>& mountedSet);
+void mountIsoFile(const std::vector<std::string>& isoFilesToMount);
 void select_and_mount_files_by_number();
 void printIsoFileList(const std::vector<std::string>& isoFiles);
-void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::set<std::string>& mountedSet);
+void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles);
 
 // Cache functions
 void manualRefreshCache(const std::string& initialDir = "");
