@@ -2,11 +2,6 @@
 #include "../threadpool.h"
 
 
-// Vector to store operation ISOs
-std::set<std::string> operationIsos;
-// Vector to store errors for operation ISOs
-std::set<std::string> operationErrors;
-
 // For breaking mv&rm gracefully
 bool mvDelBreak=false;
 
@@ -43,6 +38,12 @@ bool isValidLinuxPathFormat(const std::string& path) {
 
 // Main function to select and operate on files by number
 void select_and_operate_files_by_number(const std::string& operation) {
+	
+	// Vector to store operation ISOs
+	std::set<std::string> operationIsos;
+	// Vector to store errors for operation ISOs
+	std::set<std::string> operationErrors;
+	
     // Remove non-existent paths from the cache
     removeNonExistentPathsFromCache();
 
@@ -165,15 +166,15 @@ void select_and_operate_files_by_number(const std::string& operation) {
 							if (operation == "rm") {
 								process = "rm";
 								mvDelBreak=true;
-								processOperationInput(input, filteredFiles, process);
+								processOperationInput(input, filteredFiles, process, operationIsos, operationErrors);
 							} else if (operation == "mv") {
 								process = "mv";
 								mvDelBreak=true;
-								processOperationInput(input, filteredFiles, process);
+								processOperationInput(input, filteredFiles, process, operationIsos, operationErrors);
 							} else if (operation == "cp") {
 								process = "cp";
 								mvDelBreak=false;
-								processOperationInput(input, filteredFiles, process);
+								processOperationInput(input, filteredFiles, process, operationIsos, operationErrors);
 								}
 							}
 							free(input);
@@ -192,13 +193,13 @@ void select_and_operate_files_by_number(const std::string& operation) {
             // Process the user input with the original list
             if (operation == "rm") {
                 process = "rm";
-                processOperationInput(input, isoFiles, process);
+                processOperationInput(input, isoFiles, process, operationIsos, operationErrors);
             } else if (operation == "mv") {
                 process = "mv";
-                processOperationInput(input, isoFiles, process);
+                processOperationInput(input, isoFiles, process, operationIsos, operationErrors);
             } else if (operation == "cp") {
                 process = "cp";
-                processOperationInput(input, isoFiles, process);
+                processOperationInput(input, isoFiles, process, operationIsos, operationErrors);
             }
             free(input);
         }
@@ -217,7 +218,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
 
 // Function to process either mv or cp indices
-void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process) {
+void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors) {
 	
 	// variable for user specified destination
 	std::string userDestDir;
@@ -470,13 +471,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         for (const auto& index : chunk) {
             isoFilesInChunk.push_back(isoFiles[index - 1]);
         }
-        if (isDelete) {
-            futures.emplace_back(pool.enqueue(handleIsoFileOperation, isoFilesInChunk, std::ref(isoFiles), userDestDir, isMove, isCopy, isDelete));
-        } else if (isMove) {
-             futures.emplace_back(pool.enqueue(handleIsoFileOperation, isoFilesInChunk, std::ref(isoFiles), userDestDir, isMove, isCopy, isDelete));
-        } else {
-             futures.emplace_back(pool.enqueue(handleIsoFileOperation, isoFilesInChunk, std::ref(isoFiles), userDestDir, isMove, isCopy, isDelete));
-        }
+        futures.emplace_back(pool.enqueue(handleIsoFileOperation,isoFilesInChunk,std::ref(isoFiles),std::ref(operationIsos),std::ref(operationErrors),userDestDir,isMove,isCopy,isDelete));
     }
 
     for (auto& future : futures) {
@@ -537,7 +532,7 @@ bool directoryExists(const std::string& path) {
 
 
 // Function to handle the deletion of ISO files in batches
-void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete) {
+void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete) {
     // Determine batch size based on the number of ISO files and maxThreads
     size_t batchSize = 1;
     if (isoFiles.size() > 100000 && isoFiles.size() > maxThreads) {
