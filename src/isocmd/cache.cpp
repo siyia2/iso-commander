@@ -11,9 +11,8 @@ const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
 // Function to check if a file exists asynchronously
 std::future<std::vector<std::string>> FileExistsAsync(const std::vector<std::string>& paths) {
-    return std::async(std::launch::async, [&paths]() {
+    return std::async(std::launch::async, [paths]() {
         std::vector<std::string> result;
-        result.reserve(paths.size()); // Reserve space for the result
         for (const auto& path : paths) {
             if (std::filesystem::exists(path)) {
                 result.push_back(path);
@@ -22,7 +21,6 @@ std::future<std::vector<std::string>> FileExistsAsync(const std::vector<std::str
         return result;
     });
 }
-
 
 
 // Function to remove non-existent paths from cache asynchronously with basic thread control
