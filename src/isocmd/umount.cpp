@@ -345,21 +345,28 @@ void unmountISOs() {
 				// Filter the list of ISO directories based on the filter pattern
 				filteredIsoDirs.clear();
 
-				for (const auto& dir : isoDirs) {
-					std::string dirLower = dir;
-					std::transform(dirLower.begin(), dirLower.end(), dirLower.begin(), ::tolower);
+				// Vector to store futures for tracking tasks' completion
+				std::vector<std::future<void>> futures;
 
-					bool matchFound = false;
-					for (const std::string& pattern : filterPatterns) {
-						if (boyerMooreSearchMountPoints(dirLower, pattern) != std::string::npos) {
-							matchFound = true;
-							break;
-						}
-					}
+				// Calculate the number of directories per thread
+				size_t numDirs = isoDirs.size();
+				unsigned int numThreads = std::min(static_cast<unsigned int>(numDirs), maxThreads);
+				size_t baseDirsPerThread = numDirs / numThreads;
+				size_t remainder = numDirs % numThreads;
 
-					if (matchFound) {
-						filteredIsoDirs.push_back(dir);
-					}
+				// Launch filter tasks asynchronously
+				for (size_t i = 0; i < numThreads; ++i) {
+					size_t start = i * baseDirsPerThread + std::min(i, remainder);
+					size_t end = start + baseDirsPerThread + (i < remainder ? 1 : 0);
+
+					futures.push_back(std::async(std::launch::async, [&](size_t start, size_t end) {
+						filterMountPoints(isoDirs, filterPatterns, filteredIsoDirs, isoDirsMutex, start, end);
+					}, start, end));
+				}
+
+				// Wait for all filter tasks to complete
+				for (auto& future : futures) {
+					future.get();
 				}
 
                 // Check if any directories matched the filter
