@@ -167,7 +167,7 @@ void select_and_mount_files_by_number() {
 						
 							clearScrollBuffer();
 
-							printMountedAndErrors(mountedFiles, skippedMessages);
+							printMountedAndErrors();
 						}
 					}
 				}	
@@ -190,7 +190,7 @@ void select_and_mount_files_by_number() {
             // Process user input to select and mount specific ISO files
             processAndMountIsoFiles(input, isoFiles, mountedSet);
             clearScrollBuffer();
-            printMountedAndErrors(mountedFiles, skippedMessages);
+            printMountedAndErrors();
             free(input);
         }          
     }
@@ -198,7 +198,7 @@ void select_and_mount_files_by_number() {
 
 
 // Function to print mount verbose messages
-void printMountedAndErrors(std::set<std::string>& mountedFiles,std::set<std::string>& skippedMessages) {
+void printMountedAndErrors() {
 
     // Print all mounted files
     for (const auto& mountedFile : mountedFiles) {
