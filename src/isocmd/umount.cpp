@@ -16,9 +16,14 @@ std::set<std::string> unmountedErrors;
 void listMountedISOs() {
     // Path where ISO directories are expected to be mounted
     const std::string isoPath = "/mnt";
-
+	
+	static std::mutex listMutex;
+	
     // Vector to store names of mounted ISOs
     std::vector<std::string> isoDirs;
+    
+    // Lock mutex for accessing shared resource
+    std::lock_guard<std::mutex> lock(listMutex);
 
     // Open the /mnt directory and find directories with names starting with "iso_"
     DIR* dir;
@@ -41,10 +46,9 @@ void listMountedISOs() {
         return;
     }
 
-    sortFilesCaseInsensitive(isoDirs);
-
     // Display a list of mounted ISOs with ISO names in bold and alternating colors
     if (!isoDirs.empty()) {
+		sortFilesCaseInsensitive(isoDirs);
         std::cout << "\033[0;1mList of mounted ISO(s):\033[0;1m\n"; // White and bold
         std::cout << " \n";
         
