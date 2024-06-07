@@ -249,93 +249,75 @@ void printMountedAndErrors(std::set<std::string>& mountedFiles,std::set<std::str
 
 // Function to mount selected ISO files called from processAndMountIsoFiles
 void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std::string>& mountedSet) {
-    
     namespace fs = std::filesystem;
+    std::vector<std::future<void>> futures;
 
     for (const auto& isoFile : isoFilesToMount) {
-        // Use the filesystem library to extract the ISO file name
         fs::path isoPath(isoFile);
-        std::string isoFileName = isoPath.stem().string(); // Remove the .iso extension
-
-        // Use the modified ISO file name in the mount point with "iso_" prefix
+        std::string isoFileName = isoPath.stem().string(); 
         std::string mountPoint = "/mnt/iso_" + isoFileName;
 
-        auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint);
-        auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
-
         // Asynchronously check and create the mount point directory
-        auto future = std::async(std::launch::async, [&]() {
-            // Lock the global mutex for synchronization
-			std::lock_guard<std::mutex> lowLock(Mutex4Low);
+        futures.push_back(std::async(std::launch::async, [mountPoint]() {
+            std::lock_guard<std::mutex> lowLock(Mutex4Low);
             if (!fs::exists(mountPoint)) {
                 fs::create_directory(mountPoint);
             }
-        });
+        }));
+    }
 
-        // Wait for the asynchronous operation to complete
+    // Wait for all directory creation tasks to complete
+    for (auto& future : futures) {
         future.wait();
+    }
 
-        // Check if the mount point is already mounted
+    futures.clear();
+
+    for (const auto& isoFile : isoFilesToMount) {
+        fs::path isoPath(isoFile);
+        std::string isoFileName = isoPath.stem().string(); 
+        std::string mountPoint = "/mnt/iso_" + isoFileName;
+
+        auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
+        auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint);
+
         if (isAlreadyMounted(mountPoint)) {
-            // If already mounted, print a message and continue
             std::stringstream skippedMessage;
             skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m already mounted at: \033[1;94m'" << mountisoDirectory << "/" << mountisoFilename << "'\033[1;93m.\033[0;1m";
 
-            // Lock the global mutex for synchronization
-			std::lock_guard<std::mutex> lowLock(Mutex4Low);
-            // Create the unordered set after populating skippedMessages
-            std::set<std::string> skippedSet(skippedMessages.begin(), skippedMessages.end());
-
-            // Check for duplicates
-            if (skippedSet.find(skippedMessage.str()) == skippedSet.end()) {
-                // Error message not found, add it to the vector
-                skippedMessages.insert(skippedMessage.str());
-            }
-
-            continue; // Skip mounting this ISO file
+            std::lock_guard<std::mutex> lowLock(Mutex4Low);
+            skippedMessages.insert(skippedMessage.str());
+            continue;
         }
 
         // Initialize libmount context
-        struct libmnt_context *cxt = mnt_new_context();
+        struct libmnt_context* cxt = mnt_new_context();
+        struct libmnt_cache* cache = mnt_new_cache();
+        struct libmnt_fs* fs = mnt_new_fs();
 
-        // Initialize the source and target paths
-        struct libmnt_cache *cache = mnt_new_cache();
-        struct libmnt_fs *fs = mnt_new_fs();
         mnt_fs_set_source(fs, isoFile.c_str());
         mnt_fs_set_target(fs, mountPoint.c_str());
-
-        // Set the mount options
         mnt_fs_set_fstype(fs, "iso9660");
         mnt_fs_set_options(fs, "loop");
 
-        // Associate the libmnt_fs object with the libmnt_context
         mnt_context_set_fs(cxt, fs);
 
-        // Mount the ISO file
         int ret = mnt_context_mount(cxt);
         if (ret != 0) {
-            // Handle mount error
             std::stringstream errorMessage;
             errorMessage << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[0;1m\033[1;91m.\033[0;1m";
             fs::remove(mountPoint);
 
-            // Lock the global mutex for synchronization
-			std::lock_guard<std::mutex> lowLock(Mutex4Low);
-            std::set<std::string> errorSet(mountedFails.begin(), mountedFails.end());
-            if (errorSet.find(errorMessage.str()) == errorSet.end()) {
-                // Error message not found, add it to the vector
-                mountedFails.insert(errorMessage.str());
-            }
+            std::lock_guard<std::mutex> lowLock(Mutex4Low);
+            mountedFails.insert(errorMessage.str());
         } else {
-            // Lock the global mutex for synchronization
-			std::lock_guard<std::mutex> lowLock(Mutex4Low);
+            std::lock_guard<std::mutex> lowLock(Mutex4Low);
             mountedSet.insert(mountPoint);
             std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0;1m"
                                           + "\033[1m mounted at: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename + "'\033[0;1m\033[1m.\033[0;1m";
             mountedFiles.insert(mountedFileInfo);
         }
 
-        // Clean up libmount resources
         mnt_free_fs(fs);
         mnt_free_cache(cache);
         mnt_free_context(cxt);
