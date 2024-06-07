@@ -69,7 +69,6 @@ void select_and_operate_files_by_number(const std::string& operation) {
         operationColor = "\033[1;93m"; // Yellow for other operations
     }
 
-    std::set<std::string> operationSet;
     std::string process;
 
     // Main loop for interacting with ISO files
@@ -166,15 +165,15 @@ void select_and_operate_files_by_number(const std::string& operation) {
 							if (operation == "rm") {
 								process = "rm";
 								mvDelBreak=true;
-								processOperationInput(input, filteredFiles, operationSet, process);
+								processOperationInput(input, filteredFiles, process);
 							} else if (operation == "mv") {
 								process = "mv";
 								mvDelBreak=true;
-								processOperationInput(input, filteredFiles, operationSet, process);
+								processOperationInput(input, filteredFiles, process);
 							} else if (operation == "cp") {
 								process = "cp";
 								mvDelBreak=false;
-								processOperationInput(input, filteredFiles, operationSet, process);
+								processOperationInput(input, filteredFiles, process);
 								}
 							}
 							free(input);
@@ -193,13 +192,13 @@ void select_and_operate_files_by_number(const std::string& operation) {
             // Process the user input with the original list
             if (operation == "rm") {
                 process = "rm";
-                processOperationInput(input, isoFiles, operationSet, process);
+                processOperationInput(input, isoFiles, process);
             } else if (operation == "mv") {
                 process = "mv";
-                processOperationInput(input, isoFiles, operationSet, process);
+                processOperationInput(input, isoFiles, process);
             } else if (operation == "cp") {
                 process = "cp";
-                processOperationInput(input, isoFiles, operationSet, process);
+                processOperationInput(input, isoFiles, process);
             }
             free(input);
         }
@@ -218,7 +217,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
 
 // Function to process either mv or cp indices
-void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& operationSet, const std::string& process) {
+void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process) {
 	
 	// variable for user specified destination
 	std::string userDestDir;
