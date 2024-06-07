@@ -633,7 +633,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         std::string result;
                         std::unique_ptr<FILE, decltype(pclose_deleter)> pipe(popen(operationCommand.c_str(), "r"), pclose_deleter);
                         if (!pipe) {
-                            throw std::runtime_error("popen() failed!");
+                           // throw std::runtime_error("popen() failed!");
                         }
                         while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
                             result += buffer.data();
