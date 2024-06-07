@@ -246,7 +246,7 @@ bool isValidDirectory(const std::string& path) {
 // Function to refresh the cache for a single directory
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles) {
 	if (promptFlag) {
-		std::cout << "\n\033[1;93mProcessing directory path: '" << path << "'.\033[0m";
+		std::cout << "\033[1;93mProcessing directory path: '" << path << "'.\033[0m"<< std::endl;
 	}
 
 	std::vector<std::string> newIsoFiles;
@@ -273,7 +273,7 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 	}
 
 	if (promptFlag) {
-		std::cout << "\n\033[1;92mProcessed directory path: '" << path << "'.\033[0m";
+		std::cout << "\033[1;92mProcessed directory path: '" << path << "'.\033[0m" << std::endl;
 	}
 }
 
@@ -346,7 +346,7 @@ void manualRefreshCache(const std::string& initialDir) {
     }
 
     // Check if any invalid paths were encountered and add a gap
-    if (!invalidPaths.empty() && promptFlag) {
+    if ((!invalidPaths.empty() || !validPaths.empty()) && promptFlag) {
 		std::lock_guard<std::mutex> lock(Mutex4High);
         std::cout << "\n";
     }
@@ -354,6 +354,10 @@ void manualRefreshCache(const std::string& initialDir) {
     // Print invalid paths
     for (const auto& invalidPath : invalidPaths) {
         std::cout << invalidPath << std::endl;
+    }
+    
+    if (!invalidPaths.empty() && !validPaths.empty() && promptFlag) {
+        std::cout << "\n";
     }
 
     // Start the timer
@@ -425,7 +429,7 @@ void manualRefreshCache(const std::string& initialDir) {
     auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
 
     // Print the time taken for the entire process in bold with one decimal place
-    std::cout << "\n\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\n";
+    std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\n";
 
     // Inform the user about the cache refresh status
     if (saveSuccess && !validPaths.empty() && invalidPaths.empty() && uniqueErrorMessages.empty()) {
