@@ -157,16 +157,17 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     // Search for files based on file type
     bool newFilesFound = false;
     if (fileType == "bin" || fileType == "img") {
-        files = findFiles(directoryPaths, "bin", [&](const std::string& fileName, const std::string& filePath) {
-            flag = false;
-            newFilesFound = true;
-        });
-    } else if (fileType == "mdf") {
-        files = findFiles(directoryPaths, "mdf", [&](const std::string& fileName, const std::string& filePath) {
-            flag = true;
-            newFilesFound = true;
-        });
-    }
+		files = findFiles(directoryPaths, "bin", [&](const std::string&, const std::string&) {
+			flag = false;
+			newFilesFound = true;
+		});
+	
+	} else if (fileType == "mdf") {
+		files = findFiles(directoryPaths, "mdf", [&](const std::string&, const std::string&) {
+			flag = true;
+			newFilesFound = true;
+		});
+	}
 
     // Display message if no new files are found
     if (!newFilesFound && !files.empty() && !noValid) {
