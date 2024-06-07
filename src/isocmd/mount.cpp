@@ -4,16 +4,7 @@
 
 //	MOUNT STUFF
 
-// Vector to store ISO mounts
-std::set<std::string> mountedFiles;
-// Vector to store skipped ISO mounts
-std::set<std::string> skippedMessages;
-// Vector to store failed ISO mounts
-std::set<std::string> mountedFails;
-
-
-
-void mountAllIsoFiles(const std::vector<std::string>& isoFiles) {
+void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages,std::set<std::string>& mountedFails) {
 
   // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism
   unsigned int numThreads = std::min(static_cast<int>(isoFiles.size()), static_cast<int>(maxThreads));
@@ -24,13 +15,13 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles) {
   // Process all ISO files asynchronously
   for (size_t i = 0; i < isoFiles.size(); ++i) {
     // Capture isoFiles by reference and i by value
-    pool.enqueue([i, &isoFiles]() {
+    pool.enqueue([i, &isoFiles, &mountedFiles, &skippedMessages, &mountedFails]() {
       // No need to create a local copy of isoFiles[i]
       // Use isoFiles[i] directly within the lambda
       std::vector<std::string> isoFilesToMountLocal = { isoFiles[i] };
 
       // Call mountIsoFile with the vector of ISO files to mount and the mounted set
-      mountIsoFile(isoFilesToMountLocal);
+      mountIsoFile(isoFilesToMountLocal, mountedFiles, skippedMessages, mountedFails);
     });
   }
 }
@@ -38,6 +29,14 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles) {
 
 // Function to select and mount ISO files by number
 void select_and_mount_files_by_number() {
+	
+	// Vector to store ISO mounts
+	std::set<std::string> mountedFiles;
+	// Vector to store skipped ISO mounts
+	std::set<std::string> skippedMessages;
+	// Vector to store failed ISO mounts
+	std::set<std::string> mountedFails;
+	
     // Remove non-existent paths from the cache
     removeNonExistentPathsFromCache();
 
@@ -152,7 +151,7 @@ void select_and_mount_files_by_number() {
 							// Restore the original list of ISO files
 							isoFiles = filteredFiles;
 							verboseFiltered = false;
-							mountAllIsoFiles(isoFiles);
+							mountAllIsoFiles(isoFiles, mountedFiles, skippedMessages, mountedFails);
 						}
 
 						// Check if the user provided input
@@ -161,12 +160,12 @@ void select_and_mount_files_by_number() {
 							std::cout << "\033[1mPlease wait...\033[1m\n";
 
 							// Process the user input with the filtered list
-							processAndMountIsoFiles(input, filteredFiles);
+							processAndMountIsoFiles(input, filteredFiles, mountedFiles, skippedMessages, mountedFails);
 							free(input);
 						
 							clearScrollBuffer();
 
-							printMountedAndErrors();
+							printMountedAndErrors(mountedFiles, skippedMessages, mountedFails);
 						}
 					}
 				}	
@@ -183,13 +182,13 @@ void select_and_mount_files_by_number() {
 
         // Check if the user wants to mount all ISO files
 		if (std::strcmp(input, "00") == 0) {
-			mountAllIsoFiles(isoFiles);
+			mountAllIsoFiles(isoFiles, mountedFiles, skippedMessages, mountedFails);
 		}
         if (input[0] != '\0' && (strcmp(input, "/") != 0) && !verboseFiltered) {
             // Process user input to select and mount specific ISO files
-            processAndMountIsoFiles(input, isoFiles);
+            processAndMountIsoFiles(input, isoFiles, mountedFiles, skippedMessages, mountedFails);
             clearScrollBuffer();
-            printMountedAndErrors();
+            printMountedAndErrors(mountedFiles, skippedMessages, mountedFails);
             free(input);
         }          
     }
@@ -197,7 +196,7 @@ void select_and_mount_files_by_number() {
 
 
 // Function to print mount verbose messages
-void printMountedAndErrors() {
+void printMountedAndErrors( std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
 
     // Print all mounted files
     for (const auto& mountedFile : mountedFiles) {
@@ -247,12 +246,12 @@ void printMountedAndErrors() {
 
 
 // Function to mount selected ISO files called from processAndMountIsoFiles
-void mountIsoFile(const std::vector<std::string>& isoFilesToMount) {
+void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages,std::set<std::string>& mountedFails) {
     namespace fs = std::filesystem;
     std::vector<std::future<void>> futures;
 
     for (const auto& isoFile : isoFilesToMount) {
-        futures.push_back(std::async(std::launch::async, [&isoFile]() {
+        futures.push_back(std::async(std::launch::async, [&isoFile, &mountedFiles, &skippedMessages, &mountedFails]() {
             fs::path isoPath(isoFile);
             std::string isoFileName = isoPath.stem().string();
             std::string mountPoint = "/mnt/iso_" + isoFileName;
@@ -318,7 +317,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount) {
 
 
 // Function to process input and mount ISO files asynchronously
-void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles) {
+void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages,std::set<std::string>& mountedFails) {
     std::istringstream iss(input);  // Create an input string stream from the input string
 
     // Determine the number of threads to use, based on the number of ISO files and hardware concurrency
@@ -397,7 +396,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                                 validIndices.insert(i);
                                 std::vector<std::string> isoFilesToMount;
                                 isoFilesToMount.push_back(isoFiles[i - 1]);
-                                mountIsoFile(isoFilesToMount);  // Mount the ISO file
+                                mountIsoFile(isoFilesToMount, mountedFiles, skippedMessages, mountedFails);  // Mount the ISO file
                             }
                         });
                     }
@@ -414,7 +413,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                         validIndices.insert(num);
                         std::vector<std::string> isoFilesToMount;
                         isoFilesToMount.push_back(isoFiles[num - 1]);
-                        mountIsoFile(isoFilesToMount);  // Mount the ISO file
+                        mountIsoFile(isoFilesToMount, mountedFiles, skippedMessages, mountedFails);  // Mount the ISO file
                     }
                 });
             } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {

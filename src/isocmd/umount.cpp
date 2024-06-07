@@ -1,16 +1,8 @@
 #include "../headers.h"
 #include "../threadpool.h"
 
+
 // UMOUNT STUFF
-
-
-// Vector to store ISO mount/unmount errors
-std::vector<std::string> errorMessages;
-// Vector to store ISO unmounts
-std::set<std::string> unmountedFiles;
-// Vector to store ISO unmount errors
-std::set<std::string> unmountedErrors;
-
 
 // Function to list mounted ISOs in the /mnt directory
 void listMountedISOs() {
@@ -101,7 +93,7 @@ bool isDirectoryEmpty(const std::string& path) {
 
 
 // Function to unmount ISO files asynchronously
-void unmountISO(const std::vector<std::string>& isoDirs) {
+void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors) {
     // Determine batch size based on the number of isoDirs
     size_t batchSize = 1;
     size_t maxThreads = std::thread::hardware_concurrency();
@@ -121,7 +113,7 @@ void unmountISO(const std::vector<std::string>& isoDirs) {
     }
 
     // Use std::async to unmount and remove the directories asynchronously
-    auto unmountFuture = std::async(std::launch::async, [&isoDirs, batchSize]() {
+    auto unmountFuture = std::async(std::launch::async, [&isoDirs, &unmountedFiles, &unmountedErrors, batchSize]() {
         // Unmount directories in batches
         for (size_t i = 0; i < isoDirs.size(); i += batchSize) {
             std::string unmountBatchCommand = "umount -l";
@@ -188,22 +180,23 @@ void unmountISO(const std::vector<std::string>& isoDirs) {
 
 
 // Function to print unmounted ISOs and errors
-void printUnmountedAndErrors(bool invalidInput) {
+void printUnmountedAndErrors(bool invalidInput, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors, std::vector<std::string>& errorMessages) {
 	clearScrollBuffer();
 	
     // Print unmounted files
     for (const auto& unmountedFile : unmountedFiles) {
         std::cout << "\n" << unmountedFile;
     }
-
-    // Clear vectors
-    unmountedFiles.clear();
-    unmountedErrors.clear();
     
     if (invalidInput) {
 				std::cout << "\n";
 			}
-
+			
+	for (const auto& errors : unmountedErrors) {
+        std::cout << "\n" << errors;
+    }
+	unmountedFiles.clear();
+	unmountedErrors.clear();
     // Print unique error messages
     for (const auto& errorMessage : errorMessages) {
         if (uniqueErrorMessages.find(errorMessage) == uniqueErrorMessages.end()) {
@@ -221,6 +214,14 @@ void unmountISOs() {
     // Initialize necessary variables
     std::vector<std::string> isoDirs;
     std::mutex isoDirsMutex;
+    
+    // Vector to store ISO mount/unmount errors
+	std::vector<std::string> errorMessages;
+	// Vector to store ISO unmounts
+	std::set<std::string> unmountedFiles;
+	// Vector to store ISO unmount errors
+	std::set<std::string> unmountedErrors;
+	
     const std::string isoPath = "/mnt";
     bool invalidInput = false, skipEnter = false, isFiltered = false, noValid = true;
 
@@ -524,9 +525,9 @@ void unmountISOs() {
 
             // Enqueue unmount tasks for each batch of ISOs
             for (const auto& batch : batches) {
-                futures.emplace_back(pool.enqueue([batch]() {
+                futures.emplace_back(pool.enqueue([batch, &unmountedFiles, &unmountedErrors]() {
                     std::lock_guard<std::mutex> highLock(Mutex4High);
-                    unmountISO(batch);
+                    unmountISO(batch, unmountedFiles, unmountedErrors);
                 }));
             }
 
@@ -535,7 +536,7 @@ void unmountISOs() {
                 future.wait();
             }
             
-            printUnmountedAndErrors(invalidInput);
+            printUnmountedAndErrors(invalidInput, unmountedFiles, unmountedErrors, errorMessages);
 
             // Prompt the user to press Enter to continue
             if (!skipEnter) {
