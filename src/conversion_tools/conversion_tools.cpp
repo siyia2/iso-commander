@@ -510,6 +510,8 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     // Vector to store cached invalid paths
     static std::vector<std::string> cachedInvalidPaths;
     
+    std::vector<std::exception_ptr> caughtExceptions;
+    
     // Vector to store permission errors
     std::set<std::string> uniqueInvalidPaths;
 
@@ -678,6 +680,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                 }
             } catch (const std::filesystem::filesystem_error& e) {
                 std::lock_guard<std::mutex> lock(mutex4search);
+                caughtExceptions.push_back(std::make_exception_ptr(e));
 
                 // Check if the exception is related to a permission error
                 const std::error_code& ec = e.code();
@@ -689,8 +692,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                             std::cout << "\n";
                             printedEmptyLine = true;
                         }
-                        // Handle permission error differently, you can choose to skip or print a specific message
-                        std::cerr << "\033[1;91mInsufficient permissions for directory path: \033[1;93m'" << path << "'\033[1;91m.\033[0;1m\n";
+                        
                     }
                 } else if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
                     if (!printedEmptyLine) {
@@ -698,25 +700,34 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                         std::cout << "\n";
                         printedEmptyLine = true;
                     }
-
-                    // Print the specific error details for non-permission errors
-                    std::cerr << "\033[1;91m" << e.what() << ".\033[0;1m\n";
-
-                    // Add the invalid path to cachedInvalidPaths to avoid duplicate error messages
                     cachedInvalidPaths.push_back(path);
                 }
             }
         }
 
     } catch (const std::filesystem::filesystem_error& e) {
+		caughtExceptions.push_back(std::make_exception_ptr(e));
         if (!printedEmptyLine) {
             // Print an empty line before starting to print invalid paths (only once)
             std::cout << "\n";
             printedEmptyLine = true;
         }
         // Handle filesystem errors for the overall operation
-        std::cerr << "\033[1;91m" << e.what() << ".\033[0;1m\n";
+       // std::cerr << "\033[1;91m" << e.what() << ".\033[0;1m\n";
     }
+    
+    if (!caughtExceptions.empty()) {
+		clearScrollBuffer(); // Clear scroll buffer
+			for (const auto& ex : caughtExceptions) {
+				try {
+					std::rethrow_exception(ex);
+				} catch (const std::exception& e) {
+					std::cout << "\n\033[1;91m" << e.what() << "\033[0;1m";
+				}
+			}
+			std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
+			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+		}
 
     // Print success message if files were found
     if (!fileNames.empty()) {
