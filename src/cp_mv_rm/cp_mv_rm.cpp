@@ -648,7 +648,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         // Store operation success info
                         for (const auto& iso : isoFilesToOperate) {
                             auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(iso);
-                            std::string destPath = userDestDir + "/" + isoFilename;
+                            std::string destPath = userDestDir + isoFilename;
                             oss.str("");
                             if (!isDelete) {
                                 oss << "\033[1m" << (isCopy ? "Copied" : "Moved") << ": \033[1;92m'"
