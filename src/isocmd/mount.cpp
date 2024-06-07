@@ -13,7 +13,7 @@ std::set<std::string> mountedFails;
 
 
 
-void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesToMount) {
+void mountAllIsoFiles(const std::vector<std::string>& isoFiles) {
 
   // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism
   unsigned int numThreads = std::min(static_cast<int>(isoFiles.size()), static_cast<int>(maxThreads));
@@ -152,7 +152,7 @@ void select_and_mount_files_by_number() {
 							// Restore the original list of ISO files
 							isoFiles = filteredFiles;
 							verboseFiltered = false;
-							mountAllIsoFiles(isoFiles, isoFilesToMount);
+							mountAllIsoFiles(isoFiles);
 						}
 
 						// Check if the user provided input
@@ -183,7 +183,7 @@ void select_and_mount_files_by_number() {
 
         // Check if the user wants to mount all ISO files
 		if (std::strcmp(input, "00") == 0) {
-			mountAllIsoFiles(isoFiles, isoFilesToMount);
+			mountAllIsoFiles(isoFiles);
 		}
         if (input[0] != '\0' && (strcmp(input, "/") != 0) && !verboseFiltered) {
             // Process user input to select and mount specific ISO files
