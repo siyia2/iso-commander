@@ -406,13 +406,13 @@ void manualRefreshCache(const std::string& initialDir) {
         future.wait();
     }
     
-    if (!uniqueErrorMessages.empty()) {
-		std::cout << "\n";
-	}
-    
     for (const auto& error : uniqueErrorMessages) {
         std::cout << error;
     }
+    
+    if (!uniqueErrorMessages.empty()) {
+		std::cout << "\n";
+	}
     
     // Save the combined cache to disk
     bool saveSuccess = saveCache(allIsoFiles, maxCacheSize);
@@ -423,7 +423,7 @@ void manualRefreshCache(const std::string& initialDir) {
     if (promptFlag) {
 
     // Calculate and print the elapsed time
-    if (!validPaths.empty()) {
+    if (!validPaths.empty() || (!invalidPaths.empty() && validPaths.empty())) {
     std::cout << "\n";
 	}
     auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
