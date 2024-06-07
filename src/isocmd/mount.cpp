@@ -13,7 +13,7 @@ std::set<std::string> mountedFails;
 
 
 
-void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedSet, std::vector<std::string>& isoFilesToMount) {
+void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesToMount) {
 
   // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism
   unsigned int numThreads = std::min(static_cast<int>(isoFiles.size()), static_cast<int>(maxThreads));
@@ -23,14 +23,14 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::st
 
   // Process all ISO files asynchronously
   for (size_t i = 0; i < isoFiles.size(); ++i) {
-    // Capture isoFiles by reference, mountedSet by reference, and i by value
-    pool.enqueue([i, &isoFiles, &mountedSet]() {
+    // Capture isoFiles by reference and i by value
+    pool.enqueue([i, &isoFiles]() {
       // No need to create a local copy of isoFiles[i]
       // Use isoFiles[i] directly within the lambda
       std::vector<std::string> isoFilesToMountLocal = { isoFiles[i] };
 
       // Call mountIsoFile with the vector of ISO files to mount and the mounted set
-      mountIsoFile(isoFilesToMountLocal, mountedSet);
+      mountIsoFile(isoFilesToMountLocal);
     });
   }
 }
@@ -55,7 +55,6 @@ void select_and_mount_files_by_number() {
     }
 
     // Set to track mounted ISO files
-    std::set<std::string> mountedSet;
     std::vector<std::string> isoFilesToMount;
 
     // Main loop for selecting and mounting ISO files
@@ -153,7 +152,7 @@ void select_and_mount_files_by_number() {
 							// Restore the original list of ISO files
 							isoFiles = filteredFiles;
 							verboseFiltered = false;
-							mountAllIsoFiles(isoFiles, mountedSet, isoFilesToMount);
+							mountAllIsoFiles(isoFiles, isoFilesToMount);
 						}
 
 						// Check if the user provided input
@@ -162,7 +161,7 @@ void select_and_mount_files_by_number() {
 							std::cout << "\033[1mPlease wait...\033[1m\n";
 
 							// Process the user input with the filtered list
-							processAndMountIsoFiles(input, filteredFiles, mountedSet);
+							processAndMountIsoFiles(input, filteredFiles);
 							free(input);
 						
 							clearScrollBuffer();
@@ -184,11 +183,11 @@ void select_and_mount_files_by_number() {
 
         // Check if the user wants to mount all ISO files
 		if (std::strcmp(input, "00") == 0) {
-			mountAllIsoFiles(isoFiles, mountedSet, isoFilesToMount);
+			mountAllIsoFiles(isoFiles, isoFilesToMount);
 		}
         if (input[0] != '\0' && (strcmp(input, "/") != 0) && !verboseFiltered) {
             // Process user input to select and mount specific ISO files
-            processAndMountIsoFiles(input, isoFiles, mountedSet);
+            processAndMountIsoFiles(input, isoFiles);
             clearScrollBuffer();
             printMountedAndErrors();
             free(input);
@@ -248,12 +247,12 @@ void printMountedAndErrors() {
 
 
 // Function to mount selected ISO files called from processAndMountIsoFiles
-void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std::string>& mountedSet) {
+void mountIsoFile(const std::vector<std::string>& isoFilesToMount) {
     namespace fs = std::filesystem;
     std::vector<std::future<void>> futures;
 
     for (const auto& isoFile : isoFilesToMount) {
-        futures.push_back(std::async(std::launch::async, [&isoFile, &mountedSet]() {
+        futures.push_back(std::async(std::launch::async, [&isoFile]() {
             fs::path isoPath(isoFile);
             std::string isoFileName = isoPath.stem().string();
             std::string mountPoint = "/mnt/iso_" + isoFileName;
@@ -300,7 +299,6 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
                 mountedFails.insert(errorMessage.str());
             } else {
                 std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                mountedSet.insert(mountPoint);
                 std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0;1m"
                                               + "\033[1m mounted at: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename + "'\033[0;1m\033[1m.\033[0;1m";
                 mountedFiles.insert(mountedFileInfo);
@@ -320,7 +318,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
 
 
 // Function to process input and mount ISO files asynchronously
-void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::set<std::string>& mountedSet) {
+void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles) {
     std::istringstream iss(input);  // Create an input string stream from the input string
 
     // Determine the number of threads to use, based on the number of ISO files and hardware concurrency
@@ -399,7 +397,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                                 validIndices.insert(i);
                                 std::vector<std::string> isoFilesToMount;
                                 isoFilesToMount.push_back(isoFiles[i - 1]);
-                                mountIsoFile(isoFilesToMount, mountedSet);  // Mount the ISO file
+                                mountIsoFile(isoFilesToMount);  // Mount the ISO file
                             }
                         });
                     }
@@ -416,7 +414,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                         validIndices.insert(num);
                         std::vector<std::string> isoFilesToMount;
                         isoFilesToMount.push_back(isoFiles[num - 1]);
-                        mountIsoFile(isoFilesToMount, mountedSet);  // Mount the ISO file
+                        mountIsoFile(isoFilesToMount);  // Mount the ISO file
                     }
                 });
             } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
