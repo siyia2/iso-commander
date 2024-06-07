@@ -68,7 +68,7 @@ void verboseFind() {
             std::cerr << ", ";
         }
     }
-		std::cerr << std::endl; // Print a newline at the end
+		std::cerr << ".\n"; // Print a newline at the end
 		invalidDirectoryPaths.clear();
 	}
 }
