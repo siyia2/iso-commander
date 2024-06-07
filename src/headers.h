@@ -119,12 +119,12 @@ void signalHandler(int signum);
 void clearScrollBuffer();
 
 // Mount functions
-void mountAllIsoFiles(const std::vector<std::string>& isoFiles);
-void printMountedAndErrors();
-void mountIsoFile(const std::vector<std::string>& isoFilesToMount);
+void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages,std::set<std::string>& mountedFails);
+void printMountedAndErrors(std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails);
+void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages,std::set<std::string>& mountedFails);
 void select_and_mount_files_by_number();
 void printIsoFileList(const std::vector<std::string>& isoFiles);
-void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles);
+void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages,std::set<std::string>& mountedFails);
 
 // Cache functions
 void manualRefreshCache(const std::string& initialDir = "");
@@ -138,10 +138,10 @@ void filterMountPoints(const std::vector<std::string>& isoDirs, std::vector<std:
 size_t boyerMooreSearchMountPoints(const std::string& haystack, const std::string& needle);
 
 // Unmount functions
-void printUnmountedAndErrors(bool invalidInput);
+void printUnmountedAndErrors(bool invalidInput, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors);
 void listMountedISOs();
 void unmountISOs();
-void unmountISO(const std::vector<std::string>& isoDirs);
+void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors);
 
 
 //	stds
