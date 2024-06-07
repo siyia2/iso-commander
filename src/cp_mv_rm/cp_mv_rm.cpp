@@ -410,7 +410,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             }
 
             // Check if the entered path is valid
-            if (isValidLinuxPathFormat(inputLine)) {
+            if (isValidLinuxPathFormat(inputLine) && inputLine.back() == '/') {
                 userDestDir = inputLine;
                     saveHistory();
                     clear_history();
