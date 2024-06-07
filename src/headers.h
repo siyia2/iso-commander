@@ -25,6 +25,7 @@
 #include <shared_mutex>
 #include <string>
 #include <sys/mount.h>
+#include <thread>
 #include <vector>
 #include <sys/mman.h>
 #include <sys/stat.h>
