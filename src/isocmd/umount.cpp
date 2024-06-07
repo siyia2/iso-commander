@@ -197,6 +197,7 @@ void unmountISO(const std::vector<std::string>& isoDirs) {
                 }
             }
             emptyDirs.erase(emptyDirs.begin(), emptyDirs.begin() + std::min(batchSize, emptyDirs.size()));
+            
         }
     });
 
@@ -211,14 +212,6 @@ void printUnmountedAndErrors(bool invalidInput) {
     // Print unmounted files
     for (const auto& unmountedFile : unmountedFiles) {
         std::cout << "\n" << unmountedFile;
-    }
-
-    if (!unmountedErrors.empty()) {
-        std::cout << "\n"; // Print a blank line before deleted folders
-    }
-    // Print unmounted errors
-    for (const auto& unmountedError : unmountedErrors) {
-        std::cout << "\n" << unmountedError;
     }
 
     // Clear vectors
@@ -559,7 +552,7 @@ void unmountISOs() {
             for (auto& future : futures) {
                 future.wait();
             }
-
+            
             printUnmountedAndErrors(invalidInput);
 
             // Prompt the user to press Enter to continue
