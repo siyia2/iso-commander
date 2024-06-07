@@ -104,6 +104,8 @@ bool isDirectoryEmpty(const std::string& path) {
 void unmountISO(const std::vector<std::string>& isoDirs) {
     // Determine batch size based on the number of isoDirs
     size_t batchSize = 1;
+    size_t maxThreads = std::thread::hardware_concurrency();
+
     if (isoDirs.size() > 100000 && isoDirs.size() > maxThreads) {
         batchSize = 100;
     } else if (isoDirs.size() > 10000 && isoDirs.size() > maxThreads) {
@@ -129,21 +131,11 @@ void unmountISO(const std::vector<std::string>& isoDirs) {
                 unmountBatchCommand += " " + shell_escape(isoDirs[j]) + " 2>/dev/null";
             }
 
-            std::future<int> unmountFuture = std::async(std::launch::async, [&unmountBatchCommand]() {
-                std::array<char, 128> buffer;
-                std::string result;
-                auto pclose_deleter = [](FILE* fp) { return pclose(fp); };
-                std::unique_ptr<FILE, decltype(pclose_deleter)> pipe(popen(unmountBatchCommand.c_str(), "r"), pclose_deleter);
-                if (!pipe) {
-                    throw std::runtime_error("popen() failed!");
-                }
-                while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
-                    result += buffer.data();
-                }
-                return 0; // Return value doesn't matter for umount
-            });
-
-            unmountFuture.get();
+            // Execute the unmount command
+            int unmountResult = system(unmountBatchCommand.c_str());
+            if (unmountResult != 0) {
+                std::cerr << "Error unmounting batch: " << unmountBatchCommand << std::endl;
+            }
         }
 
         // Check and remove empty directories
@@ -156,7 +148,7 @@ void unmountISO(const std::vector<std::string>& isoDirs) {
                 std::stringstream errorMessage;
                 errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDir << "'\033[1;91m.\033[0;1m";
 
-                if (std::find(unmountedErrors.begin(), unmountedErrors.end(), errorMessage.str()) == unmountedErrors.end()) {
+                if (unmountedErrors.find(errorMessage.str()) == unmountedErrors.end()) {
                     unmountedErrors.insert(errorMessage.str());
                 }
             }
@@ -169,21 +161,8 @@ void unmountISO(const std::vector<std::string>& isoDirs) {
                 removeDirCommand += shell_escape(emptyDirs[i]) + " ";
             }
 
-            std::future<int> removeDirFuture = std::async(std::launch::async, [&removeDirCommand]() {
-                std::array<char, 128> buffer;
-                std::string result;
-                auto pclose_deleter = [](FILE* fp) { return pclose(fp); };
-                std::unique_ptr<FILE, decltype(pclose_deleter)> pipe(popen(removeDirCommand.c_str(), "r"), pclose_deleter);
-                if (!pipe) {
-                    throw std::runtime_error("popen() failed!");
-                }
-                while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
-                    result += buffer.data();
-                }
-                return pipe.get() ? 0 : -1;
-            });
-
-            int removeDirResult = removeDirFuture.get();
+            // Execute the remove directory command
+            int removeDirResult = system(removeDirCommand.c_str());
 
             for (size_t i = 0; i < std::min(batchSize, emptyDirs.size()); ++i) {
                 if (removeDirResult == 0) {
@@ -195,13 +174,12 @@ void unmountISO(const std::vector<std::string>& isoDirs) {
                     std::stringstream errorMessage;
                     errorMessage << "\033[1;91mFailed to remove directory: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;91m ...Please check it out manually.\033[0;1m";
 
-                    if (std::find(unmountedErrors.begin(), unmountedErrors.end(), errorMessage.str()) == unmountedErrors.end()) {
+                    if (unmountedErrors.find(errorMessage.str()) == unmountedErrors.end()) {
                         unmountedErrors.insert(errorMessage.str());
                     }
                 }
             }
             emptyDirs.erase(emptyDirs.begin(), emptyDirs.begin() + std::min(batchSize, emptyDirs.size()));
-            
         }
     });
 
