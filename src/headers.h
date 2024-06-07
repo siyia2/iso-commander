@@ -178,6 +178,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
 
 
 // voids
+void verboseFind();
 void verboseConversion();
 void select_and_convert_files_to_iso(const std::string& fileTypeChoice);
 void processInput(const std::string& input, const std::vector<std::string>& fileList, const std::string& inputPaths, bool flag);
