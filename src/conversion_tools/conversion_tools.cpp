@@ -4,25 +4,6 @@
 
 static std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles here
 static std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
-    
-// Set to track processed error messages to avoid duplicate error reporting
-std::set<std::string> processedErrors;
-
-// Set to track succesful conversions
-std::set<std::string> successOuts;
-
-// Set to track skipped conversions
-std::set<std::string> skippedOuts;
-
-// Set to track failed conversions
-std::set<std::string> failedOuts;
-
-// Set to track deleted conversions for ccd2iso only
-std::set<std::string> deletedOuts;
-
-// Set to hold invalid paths for search
-std::set<std::string> invalidDirectoryPaths;
-
 
 
 // GENERAL
@@ -33,7 +14,7 @@ bool fileExistsConversions(const std::string& fullPath) {
 }
 
 // Function to print verbose conversion messages
-void verboseConversion() {
+void verboseConversion(std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts) {
     // Lambda function to print each element in a set followed by a newline
     auto printWithNewline = [](const std::set<std::string>& outs) {
         for (const auto& out : outs) {
@@ -47,6 +28,7 @@ void verboseConversion() {
     // Print each set of messages with a newline after each set
     printWithNewline(successOuts);   // Print success messages
     printWithNewline(skippedOuts);   // Print skipped messages
+    printWithNewline(failedOuts);	 // Print failed messages
     printWithNewline(deletedOuts);   // Print deleted messages
     printWithNewline(processedErrors); // Print error messages
     
@@ -58,7 +40,7 @@ void verboseConversion() {
 }
 
 
-void verboseFind() {
+void verboseFind(std::set<std::string> invalidDirectoryPaths) {
 	if (!invalidDirectoryPaths.empty()) {
 		std::cout << "\n\033[0;1mInvalid path(s) omitted from search: ";
 		for (auto it = invalidDirectoryPaths.begin(); it != invalidDirectoryPaths.end(); ++it) {
@@ -80,6 +62,24 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     std::vector<std::string> files;
     std::vector<std::string> directoryPaths;
     std::set<std::string> uniquePaths;
+    // Set to track processed error messages to avoid duplicate error reporting
+	std::set<std::string> processedErrors;
+
+	// Set to track succesful conversions
+	std::set<std::string> successOuts;
+
+	// Set to track skipped conversions
+	std::set<std::string> skippedOuts;
+
+	// Set to track failed conversions
+	std::set<std::string> failedOuts;
+
+	// Set to track deleted conversions for ccd2iso only
+	std::set<std::string> deletedOuts;
+
+	// Set to hold invalid paths for search
+	std::set<std::string> invalidDirectoryPaths;
+	
     bool flag = false;
 
     std::string fileExtension;
@@ -158,21 +158,21 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     bool newFilesFound = false;
     if (fileType == "bin" || fileType == "img") {
 		files = findFiles(directoryPaths, "bin", [&](const std::string&, const std::string&) {
-			flag = false;
+			flag = true;
 			newFilesFound = true;
-		});
+		}, invalidDirectoryPaths, processedErrors);
 	
 	} else if (fileType == "mdf") {
 		files = findFiles(directoryPaths, "mdf", [&](const std::string&, const std::string&) {
 			flag = true;
 			newFilesFound = true;
-		});
+		}, invalidDirectoryPaths, processedErrors);
 	}
 
     // Display message if no new files are found
     if (!newFilesFound && !files.empty() && !noValid) {
         clearScrollBuffer();
-        verboseFind();
+        verboseFind(invalidDirectoryPaths);
         std::cout << "\n";
         auto end_time = std::chrono::high_resolution_clock::now();
         std::cout << "\033[1;91mNo new " << fileExtension << " file(s) over 5MB found. \033[1;92m" << files.size() << " file(s) are cached in RAM from previous searches.\033[0;1m\n";
@@ -187,7 +187,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     // Display message if no files are found
     if (files.empty() && !noValid) {
         clearScrollBuffer();
-        verboseFind();
+        verboseFind(invalidDirectoryPaths);
         std::cout << "\n";
         auto end_time = std::chrono::high_resolution_clock::now();
         std::cout << "\033[1;91mNo " << fileExtension << " file(s) over 5MB found in the specified path(s) or cached in RAM.\n\033[0;1m";
@@ -295,13 +295,13 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 						if (isFiltered) {
 							clearScrollBuffer(); // Clear scroll buffer
 							std::cout << "\033[1mPlease wait...\n\033[1m\n"; // Inform user to wait
-							processInput(filterInput, filteredFiles, inputPaths, flag); // Process user input
+							processInput(filterInput, filteredFiles, inputPaths, flag, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts); // Process user input
 							free(filterInput); // Free memory allocated for filter input
 							
 							clearScrollBuffer(); // Clear scroll buffer
 							std::cout << "\n"; // Print newline
 			
-							verboseConversion();
+							verboseConversion(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts);
 
 							std::cout << "\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
 							std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -313,13 +313,13 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 			// If input is not "/", process the input
 			clearScrollBuffer(); // Clear scroll buffer
 			std::cout << "\033[1mPlease wait...\n\033[1m\n"; // Inform user to wait
-			processInput(input, files, inputPaths, flag); // Process input
+			processInput(input, files, inputPaths, flag, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts); // Process input
 			free(input); // Free memory allocated for input
 			
 			clearScrollBuffer(); // Clear scroll buffer
 			std::cout << "\n"; // Print newline
 			
-			verboseConversion();
+			verboseConversion(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts);
 			
 		std::cout << "\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
 		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -329,7 +329,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
 
 // Function to process user input and convert selected BIN files to ISO format
-void processInput(const std::string& input, const std::vector<std::string>& fileList, const std::string& inputPaths, bool flag) {
+void processInput(const std::string& input, const std::vector<std::string>& fileList, const std::string& inputPaths, bool flag, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts) {
 
     // Mutexes to protect the critical sections
     std::mutex indicesMutex;
@@ -364,14 +364,14 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     std::string user_str(current_user);
     std::string group_str = std::to_string(static_cast<unsigned int>(current_group));
 
-    // Function to execute asynchronously
     auto asyncConvertBINToISO = [&](const std::string& selectedFile) {
-        convertBINToISO(selectedFile);
-		};
-		// Function to execute asynchronously
-		auto asyncConvertMDFToISO = [&](const std::string& selectedFile) {
-        convertMDFToISO(selectedFile);
-		};
+        convertBINToISO(selectedFile, successOuts, skippedOuts, failedOuts, deletedOuts);
+    };
+
+    // Function to execute asynchronously
+    auto asyncConvertMDFToISO = [&](const std::string& selectedFile) {
+        convertMDFToISO(selectedFile, successOuts, skippedOuts, failedOuts);
+    };
 	
 	// Start the timer
   //  auto start_time = std::chrono::high_resolution_clock::now();
@@ -465,7 +465,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 						if (!flag) {
 							futures.push_back(pool.enqueue(asyncConvertBINToISO, selectedFile));
 						} else {
-						futures.push_back(pool.enqueue(asyncConvertMDFToISO, selectedFile));
+						    futures.push_back(pool.enqueue(asyncConvertMDFToISO, selectedFile));
 					}
 						processedIndices.insert(selectedIndex);
 							
@@ -520,7 +520,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 
 
 // Function to search for .bin and .img files over 5MB
-std::vector<std::string> findFiles(const std::vector<std::string>& paths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback) {
+std::vector<std::string> findFiles(const std::vector<std::string>& paths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrors) {
     // Vector to store cached invalid paths
     static std::vector<std::string> cachedInvalidPaths;
             
@@ -753,11 +753,11 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         std::cout << "\n";
         if (mode == "bin") {
 			clearScrollBuffer();
-			verboseFind();
+			verboseFind(invalidDirectoryPaths);
 			std::cout << "\n\033[1;92mFound " << fileNames.size() << " matching file(s)\033[0;1m" << ".\033[1;93m " << binImgFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0;1m\n";
 		} else {
 			clearScrollBuffer();
-			verboseFind();
+			verboseFind(invalidDirectoryPaths);
 			std::cout << "\n\033[1;92mFound " << fileNames.size() << " matching file(s)\033[0;1m" << ".\033[1;93m " << mdfMdsFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0;1m\n";
 		}
         // Calculate and print the elapsed time
@@ -916,7 +916,7 @@ void printFileList(const std::vector<std::string>& fileList) {
 
 
 // Function to convert a BIN file to ISO format
-void convertBINToISO(const std::string& inputPath) {
+void convertBINToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts) {
 	
 	auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath);
     // Check if the input file exists
@@ -974,7 +974,7 @@ bool isCcd2IsoInstalled() {
 
 
 // Function to convert an MDF file to ISO format using mdf2iso
-void convertMDFToISO(const std::string& inputPath) {
+void convertMDFToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts) {
 	auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath);
     // Check if the input file exists
     if (!std::ifstream(inputPath)) {
