@@ -539,7 +539,6 @@ bool directoryExists(const std::string& path) {
 
 // Function to handle the deletion of ISO files in batches
 void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete) {
-
     // Determine batch size based on the number of ISO files and maxThreads
     size_t batchSize = 1;
     if (isoFiles.size() > 100000 && isoFiles.size() > maxThreads) {
@@ -555,7 +554,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
     } else if (isoFiles.size() > maxThreads) {
         batchSize = 2;
     }
-    
+
     // Get current user and group
     char* current_user = getlogin();
     if (current_user == nullptr) {
@@ -573,15 +572,13 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
     // Vector to store ISO files to operate on
     std::vector<std::string> isoFilesToOperate;
 
-    auto pclose_deleter = [](FILE* fp) { return pclose(fp); };
-
     // Iterate over each ISO file
     for (const auto& iso : isoFiles) {
         // Extract directory and filename from the ISO file path
         auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(iso);
         
         // Lock the low-level mutex to ensure thread safety
-		std::lock_guard<std::mutex> lowLock(Mutex4Low);
+        std::lock_guard<std::mutex> lowLock(Mutex4Low);
 
         // Check if ISO file is present in the copy list
         auto it = std::find(isoFilesCopy.begin(), isoFilesCopy.end(), iso);
@@ -627,21 +624,8 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         operationCommand += shell_escape(userDestDir);
                     }
 
-                    // Execute the operation command asynchronously
-                    std::future<int> operationFuture = std::async(std::launch::async, [&operationCommand, &pclose_deleter]() {
-                        std::array<char, 128> buffer;
-                        std::string result;
-                        std::unique_ptr<FILE, decltype(pclose_deleter)> pipe(popen(operationCommand.c_str(), "r"), pclose_deleter);
-                        if (!pipe) {
-                           // throw std::runtime_error("popen() failed!");
-                        }
-                        while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
-                            result += buffer.data();
-                        }
-                        return pipe.get() ? 0 : -1;
-                    });
-
-                    int result = operationFuture.get();
+                    // Execute the operation command
+                    int result = system(operationCommand.c_str());
 
                     // Handle operation result
                     if (result == 0) {
