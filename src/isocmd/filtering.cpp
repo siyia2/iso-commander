@@ -16,6 +16,7 @@ void sortFilesCaseInsensitive(std::vector<std::string>& files) {
     });
 }
 
+
 // Boyer-Moore string search implementation for mount
 std::vector<size_t> boyerMooreSearch(const std::string& pattern, const std::string& text) {
     // Helper lambda to convert a string to lowercase
