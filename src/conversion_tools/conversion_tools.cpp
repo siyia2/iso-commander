@@ -509,9 +509,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 std::vector<std::string> findFiles(const std::vector<std::string>& paths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback) {
     // Vector to store cached invalid paths
     static std::vector<std::string> cachedInvalidPaths;
-    
-    std::vector<std::exception_ptr> caughtExceptions;
-    
+            
     // Vector to store permission errors
     std::set<std::string> uniqueInvalidPaths;
 
@@ -549,12 +547,28 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         // Preallocate enough space for the futures vector
         size_t totalFiles = 0;
         for (const auto& path : paths) {
-            for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
-                if (entry.is_regular_file()) {
-                    totalFiles++;
-                }
-            }
-        }
+			try {
+				for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
+					if (entry.is_regular_file()) {
+						totalFiles++;
+					}
+				}
+			} catch (const std::filesystem::filesystem_error& e) {
+				std::string exception = "\033[1;91mError accessing path: " + path + " - " + e.what() + "\033[0;1m";
+				processedErrors.insert(exception);
+				uniqueInvalidPaths.insert(path);
+			}
+		}
+		
+		if (!processedErrors.empty()) {
+			std::cout << "\n";
+			for (const auto& processedError : processedErrors) {
+				std::cout << processedError << std::endl;
+			}
+			processedErrors.clear();
+			std::chrono::seconds duration(2);
+			std::this_thread::sleep_for(duration);
+		}
         
         std::vector<std::future<void>> futures;
         futures.reserve(totalFiles);
@@ -680,7 +694,6 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                 }
             } catch (const std::filesystem::filesystem_error& e) {
                 std::lock_guard<std::mutex> lock(mutex4search);
-                caughtExceptions.push_back(std::make_exception_ptr(e));
 
                 // Check if the exception is related to a permission error
                 const std::error_code& ec = e.code();
@@ -706,7 +719,6 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         }
 
     } catch (const std::filesystem::filesystem_error& e) {
-		caughtExceptions.push_back(std::make_exception_ptr(e));
         if (!printedEmptyLine) {
             // Print an empty line before starting to print invalid paths (only once)
             std::cout << "\n";
@@ -716,43 +728,29 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
        // std::cerr << "\033[1;91m" << e.what() << ".\033[0;1m\n";
     }
     
-    if (!caughtExceptions.empty()) {
-		clearScrollBuffer(); // Clear scroll buffer
-			for (const auto& ex : caughtExceptions) {
-				try {
-					std::rethrow_exception(ex);
-				} catch (const std::exception& e) {
-					std::cout << "\n\033[1;91m" << e.what() << "\033[0;1m";
-				}
-			}
-			std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
-			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-		}
 
     // Print success message if files were found
     if (!fileNames.empty()) {
     
         // Stop the timer after completing the mounting process
-		auto end_time = std::chrono::high_resolution_clock::now();
+        auto end_time = std::chrono::high_resolution_clock::now();
         std::cout << "\n";
         if (mode == "bin") {
 			clearScrollBuffer();
-			std::cout << "\n\033[1;92mFound " << fileNames.size() << " matching file(s)\033[0;1m" << ".\033[1;93m " << binImgFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0;1m\n";
+			std::cout << "\033[1;92mFound " << fileNames.size() << " matching file(s)\033[0;1m" << ".\033[1;93m " << binImgFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0;1m\n";
 		} else {
 			clearScrollBuffer();
-			std::cout << "\n\033[1;92mFound " << fileNames.size() << " matching file(s)\033[0;1m" << ".\033[1;93m " << mdfMdsFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0;1m\n";
+			std::cout << "\033[1;92mFound " << fileNames.size() << " matching file(s)\033[0;1m" << ".\033[1;93m " << mdfMdsFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0;1m\n";
 		}
-		// Calculate and print the elapsed time
+        // Calculate and print the elapsed time
 		std::cout << "\n";
 		auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
         // Print the time taken for the entire process in bold with one decimal place
 		std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n";
         std::cout << "\n";
-        
         std::cout << "\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        
-    }   
+    }
     
     std::lock_guard<std::mutex> lock(mutex4search);
     if (mode == "bin") {
