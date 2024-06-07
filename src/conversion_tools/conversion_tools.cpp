@@ -20,6 +20,7 @@ std::set<std::string> failedOuts;
 // Set to track deleted conversions for ccd2iso only
 std::set<std::string> deletedOuts;
 
+// Set to hold invalid paths for search
 std::set<std::string> invalidDirectoryPaths;
 
 
@@ -60,9 +61,13 @@ void verboseConversion() {
 void verboseFind() {
 	if (!invalidDirectoryPaths.empty()) {
 		std::cout << "\n\033[0;1mInvalid path(s) omitted from search: ";
-		for (const auto& invalidPath : invalidDirectoryPaths) {
-			std::cerr << invalidPath << ", "; // Add a space after each path
-		}
+		for (auto it = invalidDirectoryPaths.begin(); it != invalidDirectoryPaths.end(); ++it) {
+        std::cerr << *it;
+        // Check if it's not the last element
+        if (std::next(it) != invalidDirectoryPaths.end()) {
+            std::cerr << ", ";
+        }
+    }
 		std::cerr << std::endl; // Print a newline at the end
 		invalidDirectoryPaths.clear();
 	}
@@ -134,11 +139,20 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
             }
         }
     }
-	
+	bool noValid= false;
 	// Return if no directory paths are provided
-    if (directoryPaths.empty()) {
-        return;
-    }
+    if (directoryPaths.empty() && !invalidDirectoryPaths.empty()) {
+		clearScrollBuffer();
+		invalidDirectoryPaths.clear();
+		std::cout << "\n\033[1;91mNo valid path(s) provided.\033[0;1m\n";
+		std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        noValid = true;
+        
+    } else if (directoryPaths.empty()) {
+		return;
+		
+	}
 
     // Search for files based on file type
     bool newFilesFound = false;
@@ -155,7 +169,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     }
 
     // Display message if no new files are found
-    if (!newFilesFound && !files.empty()) {
+    if (!newFilesFound && !files.empty() && !noValid) {
         clearScrollBuffer();
         verboseFind();
         std::cout << "\n";
@@ -170,7 +184,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     }
 
     // Display message if no files are found
-    if (files.empty()) {
+    if (files.empty() && !noValid) {
         clearScrollBuffer();
         verboseFind();
         std::cout << "\n";
@@ -186,7 +200,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     }
 
     // Main loop for file selection and conversion
-    while (true) {
+    while (!noValid) {
         // Display file list and prompt user for input
         clearScrollBuffer();
         std::cout << "\033[94;1mSUCCESSFUL CONVERSIONS ARE AUTOMATICALLY ADDED INTO ISO CACHE\033[0;1m\033[0;1m\n\n";
