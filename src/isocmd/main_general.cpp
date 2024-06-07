@@ -373,47 +373,48 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(const std::strin
     std::string directory;
     std::string filename;
 
-    // Initialize variables to track positions of slashes in the path
-    std::size_t lastSlashPos = 0;
-    std::size_t currentSlashPos = path.find_first_of("/\\");
+    // Find the position of the last slash to separate the directory and filename
+    std::size_t lastSlashPos = path.find_last_of("/\\");
+    
+    // If there is no slash, the entire path is considered as the filename
+    if (lastSlashPos == std::string::npos) {
+        return {"", path};
+    }
 
-    // Use stringstream for efficient string concatenation
-    std::stringstream dirStream;
+    // Extract the directory part
+    directory = path.substr(0, lastSlashPos);
 
-    // Loop through the path to extract directory components
-    while (currentSlashPos != std::string::npos) {
-        // Extract the current component between slashes
-        std::string component = path.substr(lastSlashPos, currentSlashPos - lastSlashPos);
+    // Extract the filename part
+    filename = path.substr(lastSlashPos + 1);
 
-        // Limit each component to 28 characters or the first space gap or the first hyphen
-        std::size_t maxComponentSize = 28;
-        std::size_t spacePos = component.find(' ');
-        std::size_t hyphenPos = component.find('-');
+    // Process the directory to limit each component to 28 characters or until the first space or hyphen
+    std::size_t start = 0;
+    std::size_t end;
+    std::string processedDir;
+    while ((end = directory.find_first_of("/\\", start)) != std::string::npos) {
+        std::string component = directory.substr(start, end - start);
 
-        if (spacePos != std::string::npos && spacePos <= maxComponentSize) {
-            component = component.substr(0, spacePos);
-        } 
-        if (hyphenPos != std::string::npos && hyphenPos <= maxComponentSize) {
-            component = component.substr(0, hyphenPos);
+        // Find the first space or hyphen in the component
+        std::size_t truncatePos = std::min(component.find(' '), component.find('-'));
+        if (truncatePos != std::string::npos && truncatePos <= 28) {
+            component = component.substr(0, truncatePos);
         } else {
-            component = component.substr(0, maxComponentSize);
+            component = component.substr(0, 28);
         }
 
-        // Append the processed component to the stringstream
-        dirStream << component << '/';
-        // Update positions for the next iteration
-        lastSlashPos = currentSlashPos + 1;
-        currentSlashPos = path.find_first_of("/\\", lastSlashPos);
+        processedDir += component + '/';
+        start = end + 1;
     }
-
-    // Extract the last component as the filename
-    filename = path.substr(lastSlashPos);
-
-    // Remove the last '/' if the directory is not empty
-    directory = dirStream.str();
-    if (!directory.empty() && directory.back() == '/') {
-        directory.pop_back();
+    
+    // Add the last component of the directory
+    std::string component = directory.substr(start);
+    std::size_t truncatePos = std::min(component.find(' '), component.find('-'));
+    if (truncatePos != std::string::npos && truncatePos <= 28) {
+        component = component.substr(0, truncatePos);
+    } else {
+        component = component.substr(0, 28);
     }
+    processedDir += component;
 
     // Replace specific Linux standard directories with custom strings
     std::unordered_map<std::string, std::string> replacements = {
@@ -422,16 +423,15 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(const std::strin
         // Add more replacements as needed
     };
 
-    // Iterate through the replacements and update the directory
     for (const auto& [oldDir, newDir] : replacements) {
-        size_t pos = directory.find(oldDir);
+        size_t pos = processedDir.find(oldDir);
         if (pos != std::string::npos) {
-            directory.replace(pos, oldDir.length(), newDir);
+            processedDir.replace(pos, oldDir.length(), newDir);
         }
     }
 
-    // Return the pair of directory and filename
-    return {directory, filename};
+    // Return the pair of processed directory and filename
+    return {processedDir, filename};
 }
 
 
