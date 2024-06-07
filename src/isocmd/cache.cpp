@@ -252,7 +252,7 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 	std::vector<std::string> newIsoFiles;
 
 	// Perform the cache refresh for the directory (e.g., using parallelTraverse)
-	parallelTraverse(path, newIsoFiles, Mutex4Low);
+	parallelTraverse(path, newIsoFiles);
 
 	// Use a separate mutex for read/write access to allIsoFiles
 	std::mutex allIsoFilesMutex;
@@ -495,7 +495,7 @@ bool ends_with_iso(const std::string& str) {
 
 
 // Function to parallel traverse a directory and find ISO files
-void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::mutex& Mutex4Low) {
+void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles) {
     try {
         // Vector to store futures for asynchronous tasks
         std::vector<std::future<void>> futures;
@@ -518,7 +518,7 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
                 // Check if the file has a ".iso" extension
                 if (iequals(extension, ".iso").get()) {
                     // Asynchronously push the file path to the isoFiles vector while protecting access with a mutex
-                    futures.push_back(std::async(std::launch::async, [filePath, &isoFiles, &Mutex4Low]() {
+                    futures.push_back(std::async(std::launch::async, [filePath, &isoFiles]() {
                         std::lock_guard<std::mutex> lowLock(Mutex4Low);
                         isoFiles.push_back(filePath.string());
                     }));
