@@ -30,7 +30,6 @@ int lockFileDescriptor = -1;
 
 
 // Vector to store ISO unique input errors
-std::set<std::string> uniqueErrorMessages;
 
 
 

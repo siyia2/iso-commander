@@ -149,7 +149,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
 
 
 // Function to print unmounted ISOs and errors
-void printUnmountedAndErrors(bool invalidInput, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors, std::vector<std::string>& errorMessages) {
+void printUnmountedAndErrors(bool invalidInput, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors, std::vector<std::string>& errorMessages,std::set<std::string>& uniqueErrorMessages) {
 	clearScrollBuffer();
 	
     // Print unmounted files
@@ -194,6 +194,8 @@ void unmountISOs() {
 	std::set<std::string> unmountedFiles;
 	// Vector to store ISO unmount errors
 	std::set<std::string> unmountedErrors;
+	
+	std::set<std::string> uniqueErrorMessages;
 	
     const std::string isoPath = "/mnt";
     bool invalidInput = false, skipEnter = false, isFiltered = false, noValid = true;
@@ -509,7 +511,7 @@ void unmountISOs() {
                 future.wait();
             }
             
-            printUnmountedAndErrors(invalidInput, unmountedFiles, unmountedErrors, errorMessages);
+            printUnmountedAndErrors(invalidInput, unmountedFiles, unmountedErrors, errorMessages, uniqueErrorMessages);
 
             // Prompt the user to press Enter to continue
             if (!skipEnter) {

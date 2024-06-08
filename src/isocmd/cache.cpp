@@ -244,7 +244,7 @@ bool isValidDirectory(const std::string& path) {
 
 
 // Function to refresh the cache for a single directory
-void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles) {
+void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles, std::set<std::string>& uniqueErrorMessages) {
 	if (promptFlag) {
 		std::cout << "\033[1;93mProcessing directory path: '" << path << "'.\033[0m"<< std::endl;
 	}
@@ -252,7 +252,7 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 	std::vector<std::string> newIsoFiles;
 
 	// Perform the cache refresh for the directory (e.g., using parallelTraverse)
-	parallelTraverse(path, newIsoFiles);
+	parallelTraverse(path, newIsoFiles, uniqueErrorMessages);
 
 	// Use a separate mutex for read/write access to allIsoFiles
 	std::mutex allIsoFilesMutex;
@@ -325,6 +325,8 @@ void manualRefreshCache(const std::string& initialDir) {
     
     // Set to store processed valid paths
     std::set<std::string> processedValidPaths;
+    
+    std::set<std::string> uniqueErrorMessages;
 
     std::vector<std::future<void>> futures;
 
@@ -379,7 +381,7 @@ void manualRefreshCache(const std::string& initialDir) {
         }
 
         // Add a task to the thread pool for refreshing the cache for each directory
-        futures.emplace_back(std::async(std::launch::async, refreshCacheForDirectory, path, std::ref(allIsoFiles)));
+        futures.emplace_back(std::async(std::launch::async, refreshCacheForDirectory, path, std::ref(allIsoFiles), std::ref(uniqueErrorMessages)));
 
         ++runningTasks;
 
@@ -495,7 +497,7 @@ bool ends_with_iso(const std::string& str) {
 
 
 // Function to parallel traverse a directory and find ISO files
-void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles) {
+void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages) {
     try {
         // Vector to store futures for asynchronous tasks
         std::vector<std::future<void>> futures;
