@@ -209,9 +209,7 @@ void unmountISOs() {
         clearScrollBuffer();
         listMountedISOs();
         isoDirs.clear();
-        errorMessages.clear();
         invalidInput = false;
-        uniqueErrorMessages.clear();
 
         {
             // Lock the mutex to protect isoDirs from concurrent access
