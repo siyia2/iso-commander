@@ -592,7 +592,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 
         // If not deleting, append destination directory
         if (!isDelete) {
-            operationCommand += shell_escape(userDestDir);
+            operationCommand += shell_escape(userDestDir) + " 2>/dev/null";
         }
 
         // Execute the operation command
