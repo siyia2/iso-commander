@@ -43,7 +43,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 	std::set<std::string> operationIsos;
 	// Vector to store errors for operation ISOs
 	std::set<std::string> operationErrors;
-	
+	// Vector to store ISO unique input errors
 	std::set<std::string> uniqueErrorMessages;
 	
     // Remove non-existent paths from the cache
