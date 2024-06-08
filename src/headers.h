@@ -40,7 +40,6 @@ extern unsigned int maxThreads;
 
 // Mutexes for global use
 extern std::mutex Mutex4Low;
-extern std::mutex Mutex4Med;
 extern std::mutex Mutex4High;
 
 // For cache directory creation
