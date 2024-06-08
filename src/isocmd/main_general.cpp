@@ -11,7 +11,6 @@ std::mutex Mutex4Low; // Mutex for low level functions
 // For cache directory creation
 bool gapPrinted = false; // for cache refresh for directory function
 bool promptFlag = true; // for cache refresh for directory function
-bool gapPrintedtraverse = false; // for traverse function
 
 // For saving history to a differrent cache for FilterPatterns
 bool historyPattern = false;
