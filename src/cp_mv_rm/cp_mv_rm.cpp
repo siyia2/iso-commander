@@ -43,6 +43,8 @@ void select_and_operate_files_by_number(const std::string& operation) {
 	std::set<std::string> operationIsos;
 	// Vector to store errors for operation ISOs
 	std::set<std::string> operationErrors;
+	// Vector to store ISO unique input errors
+	std::set<std::string> uniqueErrorMessages;
 	
     // Remove non-existent paths from the cache
     removeNonExistentPathsFromCache();
@@ -166,15 +168,15 @@ void select_and_operate_files_by_number(const std::string& operation) {
 							if (operation == "rm") {
 								process = "rm";
 								mvDelBreak=true;
-								processOperationInput(input, filteredFiles, process, operationIsos, operationErrors);
+								processOperationInput(input, filteredFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
 							} else if (operation == "mv") {
 								process = "mv";
 								mvDelBreak=true;
-								processOperationInput(input, filteredFiles, process, operationIsos, operationErrors);
+								processOperationInput(input, filteredFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
 							} else if (operation == "cp") {
 								process = "cp";
 								mvDelBreak=false;
-								processOperationInput(input, filteredFiles, process, operationIsos, operationErrors);
+								processOperationInput(input, filteredFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
 								}
 							}
 							free(input);
@@ -193,13 +195,13 @@ void select_and_operate_files_by_number(const std::string& operation) {
             // Process the user input with the original list
             if (operation == "rm") {
                 process = "rm";
-                processOperationInput(input, isoFiles, process, operationIsos, operationErrors);
+                processOperationInput(input, isoFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
             } else if (operation == "mv") {
                 process = "mv";
-                processOperationInput(input, isoFiles, process, operationIsos, operationErrors);
+                processOperationInput(input, isoFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
             } else if (operation == "cp") {
                 process = "cp";
-                processOperationInput(input, isoFiles, process, operationIsos, operationErrors);
+                processOperationInput(input, isoFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
             }
             free(input);
         }
@@ -218,7 +220,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
 
 // Function to process either mv or cp indices
-void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors) {
+void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages) {
 	
 	// variable for user specified destination
 	std::string userDestDir;
@@ -228,7 +230,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
     // Variables for tracking errors, processed indices, and valid indices
     bool invalidInput = false;
-    std::set<std::string> uniqueErrorMessages; // Set to store unique error messages
     std::vector<int> processedIndices; // Vector to keep track of processed indices
     
     bool isDelete = (process == "rm");
@@ -280,16 +281,19 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             int start, end;
 
             try {
-                // Lock to ensure thread safety in a multi-threaded environment
-                std::lock_guard<std::mutex> highLock(Mutex4High);
+                
                 start = std::stoi(token.substr(0, dashPos));
                 end = std::stoi(token.substr(dashPos + 1));
             } catch (const std::invalid_argument& e) {
+				// Lock to ensure thread safety in a multi-threaded environment
+                std::lock_guard<std::mutex> highLock(Mutex4High);
                 // Handle the exception for invalid input
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
                 continue;
             } catch (const std::out_of_range& e) {
+				// Lock to ensure thread safety in a multi-threaded environment
+                std::lock_guard<std::mutex> highLock(Mutex4High);
                 // Handle the exception for out-of-range input
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0;1m");
@@ -302,6 +306,8 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             // Check for validity of the specified range
             if ((start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) ||
                 (start == 0 || end == 0)) {
+				// Lock to ensure thread safety in a multi-threaded environment
+                std::lock_guard<std::mutex> highLock(Mutex4High);
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0;1m");
                 continue;
@@ -311,8 +317,12 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             int step = (start <= end) ? 1 : -1;
             for (int i = start; ((start <= end) && (i <= end)) || ((start > end) && (i >= end)); i += step) {
                 if ((i >= 1) && (i <= static_cast<int>(isoFiles.size())) && std::find(processedIndices.begin(), processedIndices.end(), i) == processedIndices.end()) {
+					// Lock to ensure thread safety in a multi-threaded environment
+                std::lock_guard<std::mutex> highLock(Mutex4High);
                     processedIndices.push_back(i); // Mark as processed
                 } else if ((i < 1) || (i > static_cast<int>(isoFiles.size()))) {
+					// Lock to ensure thread safety in a multi-threaded environment
+					std::lock_guard<std::mutex> highLock(Mutex4High);
                     invalidInput = true;
                     uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(i) + "' does not exist.\033[0;1m");
                 }
@@ -321,12 +331,18 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             // Process single numeric indices
             int num = std::stoi(token);
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && std::find(processedIndices.begin(), processedIndices.end(), num) == processedIndices.end()) {
+				// Lock to ensure thread safety in a multi-threaded environment
+                std::lock_guard<std::mutex> highLock(Mutex4High);
                 processedIndices.push_back(num); // Mark index as processed
             } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
+				// Lock to ensure thread safety in a multi-threaded environment
+                std::lock_guard<std::mutex> highLock(Mutex4High);
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(num) + "' does not exist.\033[0;1m");
             }
         } else {
+			// Lock to ensure thread safety in a multi-threaded environment
+            std::lock_guard<std::mutex> highLock(Mutex4High);
             invalidInput = true;
             uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
         }
@@ -465,6 +481,8 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
     futures.reserve(numThreads);
+    // Lock to ensure thread safety in a multi-threaded environment
+    std::lock_guard<std::mutex> highLock(Mutex4High);
 
     for (const auto& chunk : indexChunks) {
         std::vector<std::string> isoFilesInChunk;
@@ -507,14 +525,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         operationErrors.clear();
         userDestDir.clear();
         
-        // Stop the timer after completing all deletion tasks
-    //    auto end_time = std::chrono::high_resolution_clock::now();
-
-        // Calculate and print the elapsed time
-    //    std::cout << "\n";
-     //   auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-        // Print the time taken for the entire process in bold with one decimal place
-    //    std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n";
         std::cout << "\n";
         std::cout << "\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -533,7 +543,6 @@ bool directoryExists(const std::string& path) {
 
 // Function to handle the deletion of ISO files in batches
 void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete) {
-    
     // Get current user and group
     char* current_user = getlogin();
     if (current_user == nullptr) {
@@ -637,9 +646,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
         }
     };
 
-    // Vector to hold futures for async operations
-    std::vector<std::future<void>> futures;
-
     // Iterate over each ISO file
     for (const auto& iso : isoFiles) {
         // Extract directory and filename from the ISO file path
@@ -655,13 +661,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
             if (fileExists(iso)) {
                 // Add ISO file to the list of files to operate on
                 isoFilesToOperate.push_back(iso);
-
-                // Execute operations in batches
-                if (isoFilesToOperate.size() == batchSize || &iso == &isoFiles.back()) {
-                    // Create a thread for the current batch
-                    futures.push_back(std::async(std::launch::async, executeOperation, isoFilesToOperate));
-                    isoFilesToOperate.clear();
-                }
             } else {
                 // Print message if file not found
                 std::cout << "\033[1;35mFile not found: \033[0;1m'" << isoDirectory << "/" << isoFilename << "'\033[1;95m.\033[0;1m\n";
@@ -672,10 +671,8 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
         }
     }
 
-    // Wait for all threads to complete
-    for (auto& future : futures) {
-        future.get();
-    }
+    // Execute the operation for all files in one go
+    executeOperation(isoFilesToOperate);
 }
 
 
