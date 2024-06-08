@@ -46,7 +46,6 @@ extern std::mutex Mutex4High;
 // For cache directory creation
 extern bool gapPrinted; // for cache refresh for directory function
 extern bool promptFlag; // for cache refresh for directory function
-extern bool gapPrintedtraverse; // for traverse function
 
 // For saving history to a differrent cache for FilterPatterns
 extern bool historyPattern;
