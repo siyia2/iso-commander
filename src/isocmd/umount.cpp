@@ -106,10 +106,12 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
         for (const auto& isoDir : isoDirs) {
             auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoDir);
             std::stringstream errorMessage;
-            errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;91m.\033[0;1m";
-            if (unmountedErrors.find(errorMessage.str()) == unmountedErrors.end()) {
-                unmountedErrors.insert(errorMessage.str());
-            }
+            if (!isDirectoryEmpty(isoDir)) {
+				errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;91m.\033[0;1m";
+				if (unmountedErrors.find(errorMessage.str()) == unmountedErrors.end()) {
+					unmountedErrors.insert(errorMessage.str());
+				}
+			}
         }
     }
     // Remove empty directories
@@ -155,7 +157,7 @@ void printUnmountedAndErrors(bool invalidInput, std::set<std::string>& unmounted
         std::cout << "\n" << unmountedFile;
     }
     
-    if (invalidInput && unmountedErrors.empty()) {
+    if (!unmountedErrors.empty() && !unmountedFiles.empty()) {
 				std::cout << "\n";
 			}
 			
@@ -163,7 +165,7 @@ void printUnmountedAndErrors(bool invalidInput, std::set<std::string>& unmounted
         std::cout << "\n" << unmountedError;
     }
     
-    if (invalidInput && !unmountedErrors.empty()) {
+    if (invalidInput) {
 				std::cout << "\n";
 			}
 	unmountedFiles.clear();
