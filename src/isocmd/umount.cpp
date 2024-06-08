@@ -94,6 +94,7 @@ bool isDirectoryEmpty(const std::string& path) {
 
 // Function to unmount ISO files asynchronously
 void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors) {
+
     // Construct the unmount command
     std::string unmountCommand = "umount -l";
     for (const auto& isoDir : isoDirs) {
@@ -115,9 +116,8 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
             std::stringstream errorMessage;
             if (!isDirectoryEmpty(isoDir)) {
                 errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;91m.\033[0;1m";
-                if (unmountedErrors.find(errorMessage.str()) == unmountedErrors.end()) {
-                    unmountedErrors.insert(errorMessage.str());
-                }
+                std::lock_guard<std::mutex> lock(Mutex4Low);  // Protect access to unmountedErrors
+                unmountedErrors.insert(errorMessage.str());
             }
         }
     }
@@ -143,15 +143,15 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
             for (const auto& dir : directoriesToRemove) {
                 auto [directory, filename] = extractDirectoryAndFilename(dir);
                 std::string removedDirInfo = "\033[1mUnmounted: \033[1;92m'" + directory + "/" + filename + "'\033[0;1m.";
+                std::lock_guard<std::mutex> lock(Mutex4Low);  // Protect access to unmountedFiles
                 unmountedFiles.insert(removedDirInfo);
             }
         } else {
             for (const auto& isoDir : directoriesToRemove) {
                 std::stringstream errorMessage;
                 errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDir << "'\033[1;91m.\033[0;1m";
-                if (unmountedErrors.find(errorMessage.str()) == unmountedErrors.end()) {
-                    unmountedErrors.insert(errorMessage.str());
-                }
+                std::lock_guard<std::mutex> lock(Mutex4Low);  // Protect access to unmountedErrors
+                unmountedErrors.insert(errorMessage.str());
             }
         }
     }
