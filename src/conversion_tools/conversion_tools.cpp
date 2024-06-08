@@ -40,14 +40,20 @@ void verboseConversion(std::set<std::string>& processedErrors, std::set<std::str
 }
 
 
+// Function to print invalid directory paths from search
 void verboseFind(std::set<std::string> invalidDirectoryPaths) {
 	if (!invalidDirectoryPaths.empty()) {
-		std::cout << "\n\033[0;1mInvalid path(s) omitted from search: ";
+		std::cout << "\n\033[0;1mInvalid path(s) omitted from search: \033[1:91m";
 		for (auto it = invalidDirectoryPaths.begin(); it != invalidDirectoryPaths.end(); ++it) {
-        std::cerr << *it;
+        if (it == invalidDirectoryPaths.begin()) {
+            std::cerr << "\033[31m'"; // Red color for the first quote
+        } else {
+            std::cerr << "'";
+        }
+        std::cerr << *it << "'";
         // Check if it's not the last element
         if (std::next(it) != invalidDirectoryPaths.end()) {
-            std::cerr << ", ";
+            std::cerr << " ";
         }
     }
 		std::cerr << "\033[0;1m.\n"; // Print a newline at the end
