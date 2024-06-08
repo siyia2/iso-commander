@@ -79,6 +79,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 bool isAlreadyMounted(const std::string& mountPoint);
 
 // Iso cache functions
+bool iequals(const std::string& a, const std::string& b);
 bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize);
 bool ends_with_iso(const std::string& str);
 
@@ -139,8 +140,6 @@ std::string readInputLine(const std::string& prompt);
 
 
 // Cache functions
-std::future<bool> iequals(std::string_view a, std::string_view b);
-std::future<bool> FileExists(const std::string& path);
 std::string getHomeDirectory();
 std::vector<std::string> loadCache();
 
