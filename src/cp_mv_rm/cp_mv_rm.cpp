@@ -475,7 +475,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     }
 
    // auto start_time = std::chrono::high_resolution_clock::now();
-	
 	clearScrollBuffer();
     std::cout << "\033[1mPlease wait...\033[1m\n";
 
@@ -523,6 +522,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         operationIsos.clear();
         operationErrors.clear();
         userDestDir.clear();
+        clear_history();
         
         std::cout << "\n";
         std::cout << "\033[1;32m↵ to continue...\033[0;1m";
