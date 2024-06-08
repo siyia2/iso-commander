@@ -109,6 +109,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
             if (!isDirectoryEmpty(isoDir)) {
 				errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;91m.\033[0;1m";
 				if (unmountedErrors.find(errorMessage.str()) == unmountedErrors.end()) {
+					std::lock_guard<std::mutex> lock(Mutex4Low);
 					unmountedErrors.insert(errorMessage.str());
 				}
 			}
@@ -133,6 +134,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
             for (const auto& dir : directoriesToRemove) {
                 auto [directory, filename] = extractDirectoryAndFilename(dir);
                 std::string removedDirInfo = "\033[1mUnmounted: \033[1;92m'" + directory + "/" + filename + "'\033[0;1m.";
+                std::lock_guard<std::mutex> lock(Mutex4Low);
                 unmountedFiles.insert(removedDirInfo);
             }
         } else {
@@ -140,6 +142,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
                 std::stringstream errorMessage;
                 errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDir << "'\033[1;91m.\033[0;1m";
                 if (unmountedErrors.find(errorMessage.str()) == unmountedErrors.end()) {
+					std::lock_guard<std::mutex> lock(Mutex4Low);
                     unmountedErrors.insert(errorMessage.str());
                 }
             }
@@ -501,7 +504,6 @@ void unmountISOs() {
             // Enqueue unmount tasks for each batch of ISOs
             for (const auto& batch : batches) {
                 futures.emplace_back(pool.enqueue([batch, &unmountedFiles, &unmountedErrors]() {
-                    std::lock_guard<std::mutex> highLock(Mutex4High);
                     unmountISO(batch, unmountedFiles, unmountedErrors);
                 }));
             }
