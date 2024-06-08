@@ -128,7 +128,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
                 unmountedFiles.insert(removedDirInfo);
             } else {
                 std::stringstream errorMessage;
-                errorMessage << "\033[1;91mFailed to remove directory: \033[1;93m'" << isoDir << "'\033[1;91m ...Please check it out manually.\033[0;1m";
+                errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDir << "'\033[1;91m.\033[0;1m";
 
                 if (unmountedErrors.find(errorMessage.str()) == unmountedErrors.end()) {
                     unmountedErrors.insert(errorMessage.str());
