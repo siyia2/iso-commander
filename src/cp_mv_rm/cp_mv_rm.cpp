@@ -481,8 +481,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
     futures.reserve(numThreads);
-    // Lock to ensure thread safety in a multi-threaded environment
-    std::lock_guard<std::mutex> highLock(Mutex4High);
 
     for (const auto& chunk : indexChunks) {
         std::vector<std::string> isoFilesInChunk;
