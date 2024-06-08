@@ -44,6 +44,8 @@ void select_and_operate_files_by_number(const std::string& operation) {
 	// Vector to store errors for operation ISOs
 	std::set<std::string> operationErrors;
 	
+	std::set<std::string> uniqueErrorMessages;
+	
     // Remove non-existent paths from the cache
     removeNonExistentPathsFromCache();
 
@@ -166,15 +168,15 @@ void select_and_operate_files_by_number(const std::string& operation) {
 							if (operation == "rm") {
 								process = "rm";
 								mvDelBreak=true;
-								processOperationInput(input, filteredFiles, process, operationIsos, operationErrors);
+								processOperationInput(input, filteredFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
 							} else if (operation == "mv") {
 								process = "mv";
 								mvDelBreak=true;
-								processOperationInput(input, filteredFiles, process, operationIsos, operationErrors);
+								processOperationInput(input, filteredFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
 							} else if (operation == "cp") {
 								process = "cp";
 								mvDelBreak=false;
-								processOperationInput(input, filteredFiles, process, operationIsos, operationErrors);
+								processOperationInput(input, filteredFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
 								}
 							}
 							free(input);
@@ -193,13 +195,13 @@ void select_and_operate_files_by_number(const std::string& operation) {
             // Process the user input with the original list
             if (operation == "rm") {
                 process = "rm";
-                processOperationInput(input, isoFiles, process, operationIsos, operationErrors);
+                processOperationInput(input, isoFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
             } else if (operation == "mv") {
                 process = "mv";
-                processOperationInput(input, isoFiles, process, operationIsos, operationErrors);
+                processOperationInput(input, isoFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
             } else if (operation == "cp") {
                 process = "cp";
-                processOperationInput(input, isoFiles, process, operationIsos, operationErrors);
+                processOperationInput(input, isoFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
             }
             free(input);
         }
@@ -218,7 +220,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
 
 // Function to process either mv or cp indices
-void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors) {
+void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages) {
 	
 	// variable for user specified destination
 	std::string userDestDir;
@@ -228,7 +230,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
     // Variables for tracking errors, processed indices, and valid indices
     bool invalidInput = false;
-    std::set<std::string> uniqueErrorMessages; // Set to store unique error messages
     std::vector<int> processedIndices; // Vector to keep track of processed indices
     
     bool isDelete = (process == "rm");
