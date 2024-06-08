@@ -5,7 +5,6 @@
 unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
 std::mutex Mutex4High; // Mutex for high level functions
-std::mutex Mutex4Med; // Mutex for mid level functions
 std::mutex Mutex4Low; // Mutex for low level functions
 
 // For cache directory creation

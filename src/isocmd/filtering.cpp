@@ -84,7 +84,7 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
     }
 
     // Mutex for thread-safe access to filteredFiles.
-    std::shared_mutex mutex;
+    std::shared_mutex filterMutex;
     
     // Lambda function to perform filtering on a subset of files.
     auto filterTask = [&](size_t start, size_t end) {
@@ -107,7 +107,7 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
             
             // If a match is found, add the file to the filtered list.
             if (matchFound) {
-                std::unique_lock<std::shared_mutex> lock(mutex);
+                std::unique_lock<std::shared_mutex> lock(filterMutex);
                 filteredFiles.push_back(file);
             }
         }
