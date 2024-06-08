@@ -194,7 +194,7 @@ void unmountISOs() {
 	std::set<std::string> unmountedFiles;
 	// Vector to store ISO unmount errors
 	std::set<std::string> unmountedErrors;
-	
+	// Vector to store ISO unique input errors
 	std::set<std::string> uniqueErrorMessages;
 	
     const std::string isoPath = "/mnt";

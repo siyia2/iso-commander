@@ -29,10 +29,6 @@ const int MAX_HISTORY_PATTERN_LINES = 20;
 int lockFileDescriptor = -1;
 
 
-// Vector to store ISO unique input errors
-
-
-
 // Main function
 int main(int argc, char *argv[]) {
 	

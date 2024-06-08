@@ -325,7 +325,7 @@ void manualRefreshCache(const std::string& initialDir) {
     
     // Set to store processed valid paths
     std::set<std::string> processedValidPaths;
-    
+    // Vector to store ISO unique input errors
     std::set<std::string> uniqueErrorMessages;
 
     std::vector<std::future<void>> futures;
