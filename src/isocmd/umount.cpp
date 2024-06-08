@@ -99,21 +99,29 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
     for (const auto& isoDir : isoDirs) {
         unmountCommand += " " + shell_escape(isoDir) + " 2>/dev/null";
     }
-    // Execute the unmount command
-    int unmountResult = system(unmountCommand.c_str());
+
+    // Execute the unmount command asynchronously
+    auto future = std::async(std::launch::async, [unmountCommand]() {
+        return system(unmountCommand.c_str());
+    });
+
+    // Wait for the async operation to complete
+    int unmountResult = future.get();
+
     if (unmountResult != 0) {
         // Some error occurred during unmounting
         for (const auto& isoDir : isoDirs) {
             auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoDir);
             std::stringstream errorMessage;
             if (!isDirectoryEmpty(isoDir)) {
-				errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;91m.\033[0;1m";
-				if (unmountedErrors.find(errorMessage.str()) == unmountedErrors.end()) {
-					unmountedErrors.insert(errorMessage.str());
-				}
-			}
+                errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;91m.\033[0;1m";
+                if (unmountedErrors.find(errorMessage.str()) == unmountedErrors.end()) {
+                    unmountedErrors.insert(errorMessage.str());
+                }
+            }
         }
     }
+
     // Remove empty directories
     std::vector<const char*> directoriesToRemove;
     for (const auto& isoDir : isoDirs) {
@@ -121,6 +129,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
             directoriesToRemove.push_back(isoDir.c_str());
         }
     }
+
     if (!directoriesToRemove.empty()) {
         int removeDirResult = 0;
         for (const char* dir : directoriesToRemove) {
@@ -129,6 +138,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
                 break;
             }
         }
+
         if (removeDirResult == 0) {
             for (const auto& dir : directoriesToRemove) {
                 auto [directory, filename] = extractDirectoryAndFilename(dir);
