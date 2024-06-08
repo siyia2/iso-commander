@@ -43,8 +43,6 @@ void select_and_operate_files_by_number(const std::string& operation) {
 	std::set<std::string> operationIsos;
 	// Vector to store errors for operation ISOs
 	std::set<std::string> operationErrors;
-	// Vector to store ISO unique input errors
-	std::set<std::string> uniqueErrorMessages;
 	
     // Remove non-existent paths from the cache
     removeNonExistentPathsFromCache();
@@ -168,15 +166,15 @@ void select_and_operate_files_by_number(const std::string& operation) {
 							if (operation == "rm") {
 								process = "rm";
 								mvDelBreak=true;
-								processOperationInput(input, filteredFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
+								processOperationInput(input, filteredFiles, process, operationIsos, operationErrors);
 							} else if (operation == "mv") {
 								process = "mv";
 								mvDelBreak=true;
-								processOperationInput(input, filteredFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
+								processOperationInput(input, filteredFiles, process, operationIsos, operationErrors);
 							} else if (operation == "cp") {
 								process = "cp";
 								mvDelBreak=false;
-								processOperationInput(input, filteredFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
+								processOperationInput(input, filteredFiles, process, operationIsos, operationErrors);
 								}
 							}
 							free(input);
@@ -195,13 +193,13 @@ void select_and_operate_files_by_number(const std::string& operation) {
             // Process the user input with the original list
             if (operation == "rm") {
                 process = "rm";
-                processOperationInput(input, isoFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
+                processOperationInput(input, isoFiles, process, operationIsos, operationErrors);
             } else if (operation == "mv") {
                 process = "mv";
-                processOperationInput(input, isoFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
+                processOperationInput(input, isoFiles, process, operationIsos, operationErrors);
             } else if (operation == "cp") {
                 process = "cp";
-                processOperationInput(input, isoFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
+                processOperationInput(input, isoFiles, process, operationIsos, operationErrors);
             }
             free(input);
         }
@@ -220,7 +218,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
 
 // Function to process either mv or cp indices
-void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages) {
+void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors) {
 	
 	// variable for user specified destination
 	std::string userDestDir;
@@ -230,6 +228,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
     // Variables for tracking errors, processed indices, and valid indices
     bool invalidInput = false;
+    std::set<std::string> uniqueErrorMessages; // Set to store unique error messages
     std::vector<int> processedIndices; // Vector to keep track of processed indices
     
     bool isDelete = (process == "rm");
@@ -534,6 +533,7 @@ bool directoryExists(const std::string& path) {
 
 // Function to handle the deletion of ISO files in batches
 void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete) {
+    
     // Get current user and group
     char* current_user = getlogin();
     if (current_user == nullptr) {
@@ -637,6 +637,9 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
         }
     };
 
+    // Vector to hold futures for async operations
+    std::vector<std::future<void>> futures;
+
     // Iterate over each ISO file
     for (const auto& iso : isoFiles) {
         // Extract directory and filename from the ISO file path
@@ -652,6 +655,13 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
             if (fileExists(iso)) {
                 // Add ISO file to the list of files to operate on
                 isoFilesToOperate.push_back(iso);
+
+                // Execute operations in batches
+                if (isoFilesToOperate.size() == batchSize || &iso == &isoFiles.back()) {
+                    // Create a thread for the current batch
+                    futures.push_back(std::async(std::launch::async, executeOperation, isoFilesToOperate));
+                    isoFilesToOperate.clear();
+                }
             } else {
                 // Print message if file not found
                 std::cout << "\033[1;35mFile not found: \033[0;1m'" << isoDirectory << "/" << isoFilename << "'\033[1;95m.\033[0;1m\n";
@@ -662,8 +672,10 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
         }
     }
 
-    // Execute the operation for all files in one go
-    executeOperation(isoFilesToOperate);
+    // Wait for all threads to complete
+    for (auto& future : futures) {
+        future.get();
+    }
 }
 
 
