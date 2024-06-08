@@ -38,9 +38,6 @@
 // Get max available CPU cores for global use
 extern unsigned int maxThreads;
 
-// For storing unique input errors
-extern std::set<std::string> uniqueErrorMessages;
-
 // Mutexes for global use
 extern std::mutex Mutex4Low;
 extern std::mutex Mutex4Med;
@@ -76,12 +73,8 @@ bool fileExists(const std::string& filename);
 
 // General
 void select_and_operate_files_by_number(const std::string& operation);
-void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors);
+void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages);
 void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete);
-
-
-// RM functions
-void handleDeleteIsoFile(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::set<std::string>& deletedSet);
 
 
 //	ISO COMMANDER
@@ -120,16 +113,16 @@ void clearScrollBuffer();
 
 // Mount functions
 void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages,std::set<std::string>& mountedFails);
-void printMountedAndErrors(std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails);
+void printMountedAndErrors(std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages);
 void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages,std::set<std::string>& mountedFails);
 void select_and_mount_files_by_number();
 void printIsoFileList(const std::vector<std::string>& isoFiles);
-void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages,std::set<std::string>& mountedFails);
+void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages,std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages);
 
 // Cache functions
 void manualRefreshCache(const std::string& initialDir = "");
-void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles);
-void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles);
+void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages);
+void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles, std::set<std::string>& uniqueErrorMessages);
 void removeNonExistentPathsFromCache();
 
 // Filter functions
@@ -138,7 +131,7 @@ void filterMountPoints(const std::vector<std::string>& isoDirs, std::vector<std:
 size_t boyerMooreSearchMountPoints(const std::string& haystack, const std::string& needle);
 
 // Unmount functions
-void printUnmountedAndErrors(bool invalidInput, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors);
+void printUnmountedAndErrors(bool invalidInput, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors, std::set<std::string>& uniqueErrorMessages);
 void listMountedISOs();
 void unmountISOs();
 void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors);
