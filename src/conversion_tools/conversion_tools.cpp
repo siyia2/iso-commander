@@ -111,7 +111,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     loadHistory();
     
     // Prompt user to input directory paths
-    std::string inputPaths = readInputLine("\033[1;94mDirectory path(s) ↵ (multi-path separator: \033[1m\033[1;93m;\033[0;1m\033[1;94m) to search for \033[1m\033[1;92m" + fileExtension + " \033[1;94mfiles, or ↵ to return:\n\033[0;1m");
+    std::string inputPaths = readInputLine("\033[1;94mDirectory path(s) ↵ (multi-path separator: \033[1m\033[1;93m;\033[0;1m\033[1;94m) to search for \033[1m\033[1;92m" + fileExtension + " \033[1;94mfiles, \033[1;93mclr\033[1;94m ↵ to clear \033[1;92m" + fileTypeName + " \033[1;94mRAM cache, or ↵ to return:\n\033[0;1m");
     clearScrollBuffer();
     
     if (!inputPaths.empty()) {
@@ -129,22 +129,28 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     // Split inputPaths into individual directory paths
     std::istringstream iss(inputPaths);
     std::string path;
+    bool clr = false;
     while (std::getline(iss, path, ';')) {
-        size_t start = path.find_first_not_of(" \t");
-        size_t end = path.find_last_not_of(" \t");
-        if (start != std::string::npos && end != std::string::npos) {
-            std::string cleanedPath = path.substr(start, end - start + 1);
-            if (uniquePaths.find(cleanedPath) == uniquePaths.end()) {
-                if (directoryExists(cleanedPath)) {
-                    directoryPaths.push_back(cleanedPath);
-                    uniquePaths.insert(cleanedPath);
-                } else {
-                    std::string invalid = "\033[1;91m" + cleanedPath;
-                    invalidDirectoryPaths.insert(invalid);
-                }
+    size_t start = path.find_first_not_of(" \t");
+    size_t end = path.find_last_not_of(" \t");
+    if (start != std::string::npos && end != std::string::npos) {
+        std::string cleanedPath = path.substr(start, end - start + 1);
+        if (cleanedPath == "clr" && uniquePaths.empty()) {
+			clr = true;
+            // If the cleaned path is "clr" and uniquePaths is empty (i.e., it's the only input)
+            directoryPaths.push_back(cleanedPath);
+            uniquePaths.insert(cleanedPath);
+        } else if (uniquePaths.find(cleanedPath) == uniquePaths.end()) {
+            if (directoryExists(cleanedPath)) {
+                directoryPaths.push_back(cleanedPath);
+                uniquePaths.insert(cleanedPath);
+            } else {
+                std::string invalid = "\033[1;91m" + cleanedPath;
+                invalidDirectoryPaths.insert(invalid);
             }
         }
     }
+}
 	bool noValid= false;
 	// Return if no directory paths are provided
     if (directoryPaths.empty() && !invalidDirectoryPaths.empty()) {
@@ -176,7 +182,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 	}
 
     // Display message if no new files are found
-    if (!newFilesFound && !files.empty() && !noValid) {
+    if (!newFilesFound && !files.empty() && !noValid && !clr) {
         clearScrollBuffer();
         verboseFind(invalidDirectoryPaths);
         std::cout << "\n";
@@ -191,7 +197,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     }
 
     // Display message if no files are found
-    if (files.empty() && !noValid) {
+    if (files.empty() && !noValid && !clr) {
         clearScrollBuffer();
         verboseFind(invalidDirectoryPaths);
         std::cout << "\n";
@@ -207,7 +213,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     }
 
     // Main loop for file selection and conversion
-    while (!noValid) {
+    while (!noValid && !clr) {
         // Display file list and prompt user for input
         clearScrollBuffer();
         std::cout << "\033[94;1mSUCCESSFUL CONVERSIONS ARE AUTOMATICALLY ADDED INTO ISO CACHE\033[0;1m\033[0;1m\n\n";
@@ -544,6 +550,31 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     
     // Set to store processed paths
     static std::set<std::string> processedPathsBin;
+    
+    // Check if the paths vector has only one element and it is "clr"
+    if (paths.size() == 1 && paths[0] == "clr") {
+        // Clear the static variables used for caching and processed paths
+        if (mode == "bin"){
+		processedPathsBin.clear();
+        binImgFilesCache.clear();
+        clearScrollBuffer(); // Clear scroll buffer
+        std::cout << "\n\033[1;92mBIN/IMG RAM cache cleared.\033[0;1m\n";
+        
+        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
+		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        
+		} else {
+        mdfMdsFilesCache.clear();
+        processedPathsMdf.clear();
+        clearScrollBuffer(); // Clear scroll buffer
+        std::cout << "\n\033[1;92mMDF RAM cache cleared.\033[0;1m\n";
+        
+        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
+		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+		}
+        // Return an empty vector since there are no files to search
+        return std::vector<std::string>();
+    }
     
     std::mutex fileCheckMutex;
     
