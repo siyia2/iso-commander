@@ -114,7 +114,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     std::string inputPaths = readInputLine("\033[1;94mDirectory path(s) ↵ (multi-path separator: \033[1m\033[1;93m;\033[0;1m\033[1;94m) to search for \033[1m\033[1;92m" + fileExtension + " \033[1;94mfiles, \033[1;93mclr\033[1;94m ↵ to clear \033[1;92m" + fileTypeName + " \033[1;94mRAM cache, or ↵ to return:\n\033[0;1m");
     clearScrollBuffer();
     
-    if (!inputPaths.empty()) {
+    if (!(inputPaths.empty()) && !(inputPaths == "clr")) {
         // Save search history if input paths are provided
         std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
         saveHistory();
