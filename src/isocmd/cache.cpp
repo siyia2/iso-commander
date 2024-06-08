@@ -9,20 +9,6 @@ const std::string cacheFileName = "iso_commander_cache.txt";;
 const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
 
-// Function to check if a file exists asynchronously
-std::future<std::vector<std::string>> FileExistsAsync(const std::vector<std::string>& paths) {
-    return std::async(std::launch::async, [paths]() {
-        std::vector<std::string> result;
-        for (const auto& path : paths) {
-            if (std::filesystem::exists(path)) {
-                result.push_back(path);
-            }
-        }
-        return result;
-    });
-}
-
-
 // Function to remove non-existent paths from cache asynchronously with basic thread control
 void removeNonExistentPathsFromCache() {
     // Define the path to the cache file
@@ -69,7 +55,6 @@ void removeNonExistentPathsFromCache() {
     close(fd);
 
     // Calculate dynamic batch size based on the number of available processor cores
-    const std::size_t maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
     const size_t batchSize = std::max(cache.size() / maxThreads + 1, static_cast<std::size_t>(2));
 
     // Create a vector to hold futures for asynchronous tasks
@@ -81,9 +66,13 @@ void removeNonExistentPathsFromCache() {
         auto begin = cache.begin() + i;
         auto end = std::min(begin + batchSize, cache.end());
         futures.push_back(std::async(std::launch::async, [begin, end]() {
-            // Process batch
-            std::future<std::vector<std::string>> futureResult = FileExistsAsync({begin, end});
-            return futureResult.get();
+            std::vector<std::string> result;
+            for (auto it = begin; it != end; ++it) {
+                if (std::filesystem::exists(*it)) {
+                    result.push_back(*it);
+                }
+            }
+            return result;
         }));
     }
 
@@ -92,11 +81,7 @@ void removeNonExistentPathsFromCache() {
     retainedPaths.reserve(cache.size()); // Reserve memory for retained paths
     for (auto& future : futures) {
         auto result = future.get();
-        // Protect the critical section with a mutex
-        {
-            std::lock_guard<std::mutex> highLock(Mutex4High);
-            retainedPaths.insert(retainedPaths.end(), std::make_move_iterator(result.begin()), std::make_move_iterator(result.end()));
-        }
+        retainedPaths.insert(retainedPaths.end(), std::make_move_iterator(result.begin()), std::make_move_iterator(result.end()));
     }
 
     // Open the cache file for writing
@@ -462,27 +447,12 @@ void manualRefreshCache(const std::string& initialDir) {
 }
 
 
-//Function to perform case-insensitive string comparison using std::string_view asynchronously
-std::future<bool> iequals(std::string_view a, std::string_view b) {
-    // Using std::async to perform the comparison asynchronously
-    return std::async(std::launch::async, [a, b]() {
-        // Check if the string views have different sizes, if so, they can't be equal
-        if (a.size() != b.size()) {
-            return false;
-        }
-
-        // Iterate through each character of the string views and compare them
-        for (std::size_t i = 0; i < a.size(); ++i) {
-            // Convert characters to lowercase using std::tolower and compare them
-            if (std::tolower(a[i]) != std::tolower(b[i])) {
-                // If characters are not equal, strings are not equal
-                return false;
-            }
-        }
-
-        // If all characters are equal, the strings are case-insensitively equal
-        return true;
-    });
+// Case-insensitive string comparison
+bool iequals(const std::string& a, const std::string& b) {
+    return std::equal(a.begin(), a.end(), b.begin(), b.end(),
+        [](char a, char b) {
+            return tolower(a) == tolower(b);
+        });
 }
 
 
@@ -499,9 +469,6 @@ bool ends_with_iso(const std::string& str) {
 // Function to parallel traverse a directory and find ISO files
 void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages) {
     try {
-        // Vector to store futures for asynchronous tasks
-        std::vector<std::future<void>> futures;
-
         // Iterate over entries in the specified directory and its subdirectories
         for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
             // Check if the entry is a regular file
@@ -510,32 +477,23 @@ void parallelTraverse(const std::filesystem::path& path, std::vector<std::string
 
                 // Check file size and skip if less than 5MB or empty, or if it has a ".bin" extension
                 const auto fileSize = std::filesystem::file_size(filePath);
-                if (fileSize < 5 * 1024 * 1024 || fileSize == 0 || iequals(filePath.stem().string(), ".bin").get()) {
+                if (fileSize < 5 * 1024 * 1024 || fileSize == 0 || iequals(filePath.extension().string(), ".bin")) {
                     continue;
                 }
 
                 // Extract the file extension
-                std::string_view extension = filePath.extension().string();
+                std::string extension = filePath.extension().string();
 
                 // Check if the file has a ".iso" extension
-                if (iequals(extension, ".iso").get()) {
-                    // Asynchronously push the file path to the isoFiles vector while protecting access with a mutex
-                    futures.push_back(std::async(std::launch::async, [filePath, &isoFiles]() {
-                        std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                        isoFiles.push_back(filePath.string());
-                    }));
+                if (iequals(extension, ".iso")) {
+                    // Push the file path to the isoFiles vector
+                    isoFiles.push_back(filePath.string());
                 }
             }
-        }
-
-        // Wait for all asynchronous tasks to complete
-        for (auto& future : futures) {
-            future.get();
         }
     } catch (const std::filesystem::filesystem_error& e) {
         // Handle filesystem errors, print a message, and introduce a 2-second delay
         std::string formattedError = std::string("\n\033[1;91m") + e.what() + ".\033[0;1m";
         uniqueErrorMessages.insert(formattedError);
-        
     }
 }
