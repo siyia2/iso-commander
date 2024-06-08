@@ -265,6 +265,9 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 
 // Function for manual cache refresh
 void manualRefreshCache(const std::string& initialDir) {
+	
+	std::mutex cacheRefreshMutex;
+	
     if (promptFlag){
     clearScrollBuffer();
     gapPrinted = false;
@@ -334,7 +337,7 @@ void manualRefreshCache(const std::string& initialDir) {
 
     // Check if any invalid paths were encountered and add a gap
     if ((!invalidPaths.empty() || !validPaths.empty()) && promptFlag) {
-		std::lock_guard<std::mutex> lock(Mutex4High);
+		std::lock_guard<std::mutex> lock(cacheRefreshMutex);
         std::cout << "\n";
     }
 
@@ -382,7 +385,7 @@ void manualRefreshCache(const std::string& initialDir) {
             // Clear completed tasks from the vector
             futures.clear();
             runningTasks = 0;  // Reset the count of running tasks
-            std::lock_guard<std::mutex> lock(Mutex4High);
+            std::lock_guard<std::mutex> lock(cacheRefreshMutex);
             std::cout << "\n";
             gapPrinted = false;
         }

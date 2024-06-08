@@ -333,6 +333,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     ThreadPool pool(numThreads);  // Thread pool with the determined number of threads
     std::mutex MutexForProcessedIndices;  // Mutex for protecting access to processedIndices
     std::mutex MutexForValidIndices;      // Mutex for protecting access to validIndices
+    std::mutex MutexForUniqueErrors;
 
     std::string token;
     while (iss >> token) {  // Iterate through each token in the input
@@ -355,6 +356,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
             // Check for invalid range format
             if (token.find('-', dashPos + 1) != std::string::npos || 
                 (dashPos == 0 || dashPos == token.size() - 1 || !std::isdigit(token[dashPos - 1]) || !std::isdigit(token[dashPos + 1]))) {
+				std::lock_guard<std::mutex> lock(MutexForUniqueErrors);
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
                 continue;
@@ -366,10 +368,12 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                 start = std::stoi(token.substr(0, dashPos));
                 end = std::stoi(token.substr(dashPos + 1));
             } catch (const std::invalid_argument&) {
+                std::lock_guard<std::mutex> lock(MutexForUniqueErrors);
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
                 continue;
             } catch (const std::out_of_range&) {
+                std::lock_guard<std::mutex> lock(MutexForUniqueErrors);
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0;1m");
                 continue;
@@ -377,6 +381,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
 
             // Validate range
             if (start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) {
+                std::lock_guard<std::mutex> lock(MutexForUniqueErrors);
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0;1m");
                 continue;
@@ -390,6 +395,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                 int step = (start <= end) ? 1 : -1;
                 for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
                     if (processedIndices.find(i) == processedIndices.end()) {
+						std::lock_guard<std::mutex> lock(MutexForProcessedIndices);
                         processedIndices.insert(i);
 
                         pool.enqueue([&, i]() {  // Enqueue a task to the thread pool
@@ -419,10 +425,12 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                     }
                 });
             } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
+				std::lock_guard<std::mutex> lock(MutexForUniqueErrors);
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(num) + "' does not exist.\033[0;1m");
             }
         } else {  // Handle invalid token
+			std::lock_guard<std::mutex> lock(MutexForUniqueErrors);
             invalidInput = true;
             uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
         }
