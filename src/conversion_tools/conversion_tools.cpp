@@ -133,24 +133,24 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     while (std::getline(iss, path, ';')) {
     size_t start = path.find_first_not_of(" \t");
     size_t end = path.find_last_not_of(" \t");
-    if (start != std::string::npos && end != std::string::npos) {
-        std::string cleanedPath = path.substr(start, end - start + 1);
-        if (cleanedPath == "clr" && uniquePaths.empty()) {
-			clr = true;
-            // If the cleaned path is "clr" and uniquePaths is empty (i.e., it's the only input)
-            directoryPaths.push_back(cleanedPath);
-            uniquePaths.insert(cleanedPath);
-        } else if (uniquePaths.find(cleanedPath) == uniquePaths.end()) {
-            if (directoryExists(cleanedPath)) {
-                directoryPaths.push_back(cleanedPath);
-                uniquePaths.insert(cleanedPath);
-            } else {
-                std::string invalid = "\033[1;91m" + cleanedPath;
-                invalidDirectoryPaths.insert(invalid);
-            }
-        }
-    }
-}
+		if (start != std::string::npos && end != std::string::npos) {
+			std::string cleanedPath = path.substr(start, end - start + 1);
+			if (cleanedPath == "clr" && uniquePaths.empty()) {
+				clr = true;
+				// If the cleaned path is "clr" and uniquePaths is empty (i.e., it's the only input)
+				directoryPaths.push_back(cleanedPath);
+				uniquePaths.insert(cleanedPath);
+			} else if (uniquePaths.find(cleanedPath) == uniquePaths.end()) {
+				if (directoryExists(cleanedPath)) {
+					directoryPaths.push_back(cleanedPath);
+					uniquePaths.insert(cleanedPath);
+				} else {
+					std::string invalid = "\033[1;91m" + cleanedPath;
+					invalidDirectoryPaths.insert(invalid);
+				}
+			}
+		}
+	}
 	bool noValid= false;
 	// Return if no directory paths are provided
     if (directoryPaths.empty() && !invalidDirectoryPaths.empty()) {
@@ -161,7 +161,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         noValid = true;
         
-    } else if (directoryPaths.empty()) {
+    } else if (directoryPaths.empty() && !clr) {
 		return;
 		
 	}
@@ -562,6 +562,8 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
 		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+		clearScrollBuffer(); // Clear scroll buffer
+		select_and_convert_files_to_iso(mode);
         
 		} else {
         mdfMdsFilesCache.clear();
@@ -571,6 +573,8 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
 		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+		clearScrollBuffer(); // Clear scroll buffer
+		select_and_convert_files_to_iso(mode);
 		}
         // Return an empty vector since there are no files to search
         return std::vector<std::string>();
