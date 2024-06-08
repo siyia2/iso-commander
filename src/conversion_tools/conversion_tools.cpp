@@ -754,11 +754,11 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         if (mode == "bin") {
 			clearScrollBuffer();
 			verboseFind(invalidDirectoryPaths);
-			std::cout << "\n\033[1;92mFound " << fileNames.size() << " matching file(s)\033[0;1m" << ".\033[1;93m " << binImgFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0;1m\n";
+			std::cout << "\n\033[1;92mFound " << fileNames.size() << " matching file(s)" << ".\033[1;93m " << binImgFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0;1m\n";
 		} else {
 			clearScrollBuffer();
 			verboseFind(invalidDirectoryPaths);
-			std::cout << "\n\033[1;92mFound " << fileNames.size() << " matching file(s)\033[0;1m" << ".\033[1;93m " << mdfMdsFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0;1m\n";
+			std::cout << "\n\033[1;92mFound " << fileNames.size() << " matching file(s)" << ".\033[1;93m " << mdfMdsFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0;1m\n";
 		}
         // Calculate and print the elapsed time
 		std::cout << "\n";
