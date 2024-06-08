@@ -48,9 +48,6 @@ extern bool gapPrinted; // for cache refresh for directory function
 extern bool promptFlag; // for cache refresh for directory function
 extern bool gapPrintedtraverse; // for traverse function
 
-// For making cache refresh headless
-extern bool promptFlag;
-
 // For saving history to a differrent cache for FilterPatterns
 extern bool historyPattern;
 
@@ -75,7 +72,6 @@ bool fileExists(const std::string& filename);
 void select_and_operate_files_by_number(const std::string& operation);
 void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages);
 void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete);
-
 
 //	ISO COMMANDER
 
@@ -136,7 +132,6 @@ void listMountedISOs();
 void unmountISOs();
 void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors);
 
-
 //	stds
 
 // General functions
@@ -169,7 +164,6 @@ bool blacklist(const std::filesystem::path& entry, bool blacklistMdf);
 // stds
 std::vector<std::string> findFiles(const std::vector<std::string>& paths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrors);
 
-
 // voids
 void verboseFind(std::set<std::string> invalidDirectoryPaths);
 void verboseConversion(std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts);
@@ -180,12 +174,10 @@ void printFileList(const std::vector<std::string>& fileList);
 // bools
 bool fileExistsConversions(const std::string& fullPath);
 
-
 // BIN/IMG CONVERSION
 
 // bools
 bool isCcd2IsoInstalled();
-
 
 // voids
 void convertBINToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts);
@@ -195,7 +187,6 @@ void convertBINToISO(const std::string& inputPath, std::set<std::string>& succes
 
 // bools
 bool isMdf2IsoInstalled();
-
 
 // voids
 void convertMDFToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts);
