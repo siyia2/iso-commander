@@ -533,22 +533,6 @@ bool directoryExists(const std::string& path) {
 
 // Function to handle the deletion of ISO files in batches
 void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete) {
-    // Determine batch size based on the number of ISO files and maxThreads
-    size_t batchSize = 1;
-    if (isoFiles.size() > 100000 && isoFiles.size() > maxThreads) {
-        batchSize = 100;
-    } else if (isoFiles.size() > 10000 && isoFiles.size() > maxThreads) {
-        batchSize = 50;
-    } else if (isoFiles.size() > 1000 && isoFiles.size() > maxThreads) {
-        batchSize = 25;
-    } else if (isoFiles.size() > 100 && isoFiles.size() > maxThreads) {
-        batchSize = 10;
-    } else if (isoFiles.size() > 50 && isoFiles.size() > maxThreads) {
-        batchSize = 5;
-    } else if (isoFiles.size() > maxThreads) {
-        batchSize = 2;
-    }
-
     // Get current user and group
     char* current_user = getlogin();
     if (current_user == nullptr) {
@@ -652,9 +636,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
         }
     };
 
-    // Vector to hold futures for async operations
-    std::vector<std::future<void>> futures;
-
     // Iterate over each ISO file
     for (const auto& iso : isoFiles) {
         // Extract directory and filename from the ISO file path
@@ -670,13 +651,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
             if (fileExists(iso)) {
                 // Add ISO file to the list of files to operate on
                 isoFilesToOperate.push_back(iso);
-
-                // Execute operations in batches
-                if (isoFilesToOperate.size() == batchSize || &iso == &isoFiles.back()) {
-                    // Create a thread for the current batch
-                    futures.push_back(std::async(std::launch::async, executeOperation, isoFilesToOperate));
-                    isoFilesToOperate.clear();
-                }
             } else {
                 // Print message if file not found
                 std::cout << "\033[1;35mFile not found: \033[0;1m'" << isoDirectory << "/" << isoFilename << "'\033[1;95m.\033[0;1m\n";
@@ -687,10 +661,8 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
         }
     }
 
-    // Wait for all threads to complete
-    for (auto& future : futures) {
-        future.get();
-    }
+    // Execute the operation for all files in one go
+    executeOperation(isoFilesToOperate);
 }
 
 
