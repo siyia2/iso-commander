@@ -94,34 +94,26 @@ bool isDirectoryEmpty(const std::string& path) {
 
 // Function to unmount ISO files asynchronously
 void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors) {
-
     // Construct the unmount command
     std::string unmountCommand = "umount -l";
     for (const auto& isoDir : isoDirs) {
         unmountCommand += " " + shell_escape(isoDir) + " 2>/dev/null";
     }
-
-    // Execute the unmount command asynchronously
-    auto future = std::async(std::launch::async, [unmountCommand]() {
-        return system(unmountCommand.c_str());
-    });
-
-    // Wait for the async operation to complete
-    int unmountResult = future.get();
-
+    // Execute the unmount command
+    int unmountResult = system(unmountCommand.c_str());
     if (unmountResult != 0) {
         // Some error occurred during unmounting
         for (const auto& isoDir : isoDirs) {
             auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoDir);
             std::stringstream errorMessage;
             if (!isDirectoryEmpty(isoDir)) {
-                errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;91m.\033[0;1m";
-                std::lock_guard<std::mutex> lock(Mutex4Low);  // Protect access to unmountedErrors
-                unmountedErrors.insert(errorMessage.str());
-            }
+				errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;91m.\033[0;1m";
+				if (unmountedErrors.find(errorMessage.str()) == unmountedErrors.end()) {
+					unmountedErrors.insert(errorMessage.str());
+				}
+			}
         }
     }
-
     // Remove empty directories
     std::vector<const char*> directoriesToRemove;
     for (const auto& isoDir : isoDirs) {
@@ -129,7 +121,6 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
             directoriesToRemove.push_back(isoDir.c_str());
         }
     }
-
     if (!directoriesToRemove.empty()) {
         int removeDirResult = 0;
         for (const char* dir : directoriesToRemove) {
@@ -138,20 +129,19 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
                 break;
             }
         }
-
         if (removeDirResult == 0) {
             for (const auto& dir : directoriesToRemove) {
                 auto [directory, filename] = extractDirectoryAndFilename(dir);
                 std::string removedDirInfo = "\033[1mUnmounted: \033[1;92m'" + directory + "/" + filename + "'\033[0;1m.";
-                std::lock_guard<std::mutex> lock(Mutex4Low);  // Protect access to unmountedFiles
                 unmountedFiles.insert(removedDirInfo);
             }
         } else {
             for (const auto& isoDir : directoriesToRemove) {
                 std::stringstream errorMessage;
                 errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDir << "'\033[1;91m.\033[0;1m";
-                std::lock_guard<std::mutex> lock(Mutex4Low);  // Protect access to unmountedErrors
-                unmountedErrors.insert(errorMessage.str());
+                if (unmountedErrors.find(errorMessage.str()) == unmountedErrors.end()) {
+                    unmountedErrors.insert(errorMessage.str());
+                }
             }
         }
     }
