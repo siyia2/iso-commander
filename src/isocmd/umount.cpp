@@ -209,6 +209,8 @@ void unmountISOs() {
         clearScrollBuffer();
         listMountedISOs();
         isoDirs.clear();
+        errorMessages.clear();
+        uniqueErrorMessages.clear();
         invalidInput = false;
 
         {
