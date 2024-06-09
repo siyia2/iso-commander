@@ -115,7 +115,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
 
 // Cache functions
 void manualRefreshCache(const std::string& initialDir = "");
-void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages);
+void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages);
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles, std::set<std::string>& uniqueErrorMessages);
 void removeNonExistentPathsFromCache();
 
