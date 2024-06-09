@@ -470,7 +470,7 @@ bool ends_with_iso(const std::string& str) {
 
 
 // Function to traverse a directory and find ISO files
-void raverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages) {
+void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages) {
     try {
         // Iterate over entries in the specified directory and its subdirectories
         for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
