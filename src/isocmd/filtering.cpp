@@ -92,8 +92,7 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
             const std::string& file = files[i];
             
             // Extract filename from the full path and convert it to lowercase.
-            size_t lastSlashPos = file.find_last_of('/');
-            std::string fileName = (lastSlashPos != std::string::npos) ? file.substr(lastSlashPos + 1) : file;
+            std::string fileName = file;
             std::transform(fileName.begin(), fileName.end(), fileName.begin(), ::tolower);
             
             // Check if any query token matches the filename using Boyer-Moore search.
