@@ -152,7 +152,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
 
 
 // Function to print unmounted ISOs and errors
-void printUnmountedAndErrors(bool invalidInput, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors, std::vector<std::string>& errorMessages,std::set<std::string>& uniqueErrorMessages) {
+void printUnmountedAndErrors(bool invalidInput, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors, std::set<std::string>& errorMessages) {
 	clearScrollBuffer();
 	
     // Print unmounted files
@@ -175,13 +175,9 @@ void printUnmountedAndErrors(bool invalidInput, std::set<std::string>& unmounted
 	unmountedErrors.clear();
     // Print unique error messages
     for (const auto& errorMessage : errorMessages) {
-        if (uniqueErrorMessages.find(errorMessage) == uniqueErrorMessages.end()) {
-            // If not found, store the error message and print it
-            uniqueErrorMessages.insert(errorMessage);
             std::cerr << "\n\033[1;91m" << errorMessage << "\033[0m\033[1m";
         }
-    }
-    uniqueErrorMessages.clear();
+    errorMessages.clear();
 }
 
 
@@ -191,14 +187,12 @@ void unmountISOs() {
     std::vector<std::string> isoDirs;
     std::mutex isoDirsMutex;
     
-    // Vector to store ISO mount/unmount errors
-	std::vector<std::string> errorMessages;
+    // Vector to store ISO invalid input errors
+	std::set<std::string> errorMessages;
 	// Vector to store ISO unmounts
 	std::set<std::string> unmountedFiles;
 	// Vector to store ISO unmount errors
 	std::set<std::string> unmountedErrors;
-	// Vector to store ISO unique input errors
-	std::set<std::string> uniqueErrorMessages;
 	
     const std::string isoPath = "/mnt";
     bool invalidInput = false, skipEnter = false, isFiltered = false, noValid = true;
@@ -209,8 +203,6 @@ void unmountISOs() {
         clearScrollBuffer();
         listMountedISOs();
         isoDirs.clear();
-        errorMessages.clear();
-        uniqueErrorMessages.clear();
         invalidInput = false;
 
         {
@@ -386,7 +378,7 @@ void unmountISOs() {
                                             selectedIndices.insert(i);
                                         }
                                     } else {
-                                        errorMessages.push_back("Invalid range: '" + token + "'.");
+                                        errorMessages.insert("Invalid range: '" + token + "'.");
                                         invalidInput = true;
                                     }
                                 } else {
@@ -394,12 +386,12 @@ void unmountISOs() {
                                     if (index < filteredIsoDirs.size()) {
                                         selectedIndices.insert(index);
                                     } else {
-                                        errorMessages.push_back("Invalid index: '" + token + "'.");
+                                        errorMessages.insert("Invalid index: '" + token + "'.");
                                         invalidInput = true;
                                     }
                                 }
                             } catch (const std::invalid_argument&) {
-									errorMessages.push_back("Invalid input: '" + token + "'.");
+									errorMessages.insert("Invalid input: '" + token + "'.");
 									invalidInput = true;
                             }
                         }               
@@ -454,7 +446,7 @@ void unmountISOs() {
                                 selectedIndices.insert(i);
                             }
                         } else {
-                            errorMessages.push_back("Invalid range: '" + token + "'.");
+                            errorMessages.insert("Invalid range: '" + token + "'.");
                             invalidInput = true;
                         }
                     } else {
@@ -462,12 +454,12 @@ void unmountISOs() {
                         if (index < isoDirs.size()) {
                             selectedIndices.insert(index);
                         } else {
-                            errorMessages.push_back("Invalid index: '" + token + "'.");
+                            errorMessages.insert("Invalid index: '" + token + "'.");
                             invalidInput = true;
                         }
                     }
                 } catch (const std::invalid_argument&) {
-                    errorMessages.push_back("Invalid input: '" + token + "'.");
+                    errorMessages.insert("Invalid input: '" + token + "'.");
                     invalidInput = true;
                 }
             }
@@ -513,7 +505,7 @@ void unmountISOs() {
                 future.wait();
             }
             
-            printUnmountedAndErrors(invalidInput, unmountedFiles, unmountedErrors, errorMessages, uniqueErrorMessages);
+            printUnmountedAndErrors(invalidInput, unmountedFiles, unmountedErrors, errorMessages);
 
             // Prompt the user to press Enter to continue
             if (!skipEnter) {
