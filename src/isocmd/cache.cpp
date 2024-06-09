@@ -15,21 +15,28 @@ void removeNonExistentPathsFromCache() {
     const std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/iso_commander_cache.txt";
 
     // Open the cache file for reading
-    int cacheFileDescriptor = open(cacheFilePath.c_str(), O_RDONLY);
-    if (cacheFileDescriptor == -1) {
+    std::ifstream cacheFile(cacheFilePath, std::ios::in | std::ios::binary);
+    if (!cacheFile.is_open()) {
         // Handle error if unable to open cache file
         return;
     }
 
     // Get the file size
-    off_t fileSize = lseek(cacheFileDescriptor, 0, SEEK_END);
-    lseek(cacheFileDescriptor, 0, SEEK_SET);
+    const auto fileSize = cacheFile.seekg(0, std::ios::end).tellg();
+    cacheFile.seekg(0, std::ios::beg);
+
+    // Open the file for memory mapping
+    int fd = open(cacheFilePath.c_str(), O_RDONLY);
+    if (fd == -1) {
+        // Handle error if unable to open the file
+        return;
+    }
 
     // Memory map the file
-    char* mappedFile = static_cast<char*>(mmap(nullptr, fileSize, PROT_READ, MAP_PRIVATE, cacheFileDescriptor, 0));
+    char* mappedFile = static_cast<char*>(mmap(nullptr, fileSize, PROT_READ, MAP_PRIVATE, fd, 0));
     if (mappedFile == MAP_FAILED) {
         // Handle error if unable to map the file
-        close(cacheFileDescriptor);
+        close(fd);
         return;
     }
 
@@ -45,7 +52,7 @@ void removeNonExistentPathsFromCache() {
 
     // Unmap the file
     munmap(mappedFile, fileSize);
-    close(cacheFileDescriptor);
+    close(fd);
 
     // Calculate dynamic batch size based on the number of available processor cores
     const size_t batchSize = std::max(cache.size() / maxThreads + 1, static_cast<std::size_t>(2));
@@ -61,7 +68,7 @@ void removeNonExistentPathsFromCache() {
         futures.push_back(std::async(std::launch::async, [begin, end]() {
             std::vector<std::string> result;
             for (auto it = begin; it != end; ++it) {
-                if (access(it->c_str(), F_OK) != -1) {
+                if (std::filesystem::exists(*it)) {
                     result.push_back(*it);
                 }
             }
@@ -78,25 +85,18 @@ void removeNonExistentPathsFromCache() {
     }
 
     // Open the cache file for writing
-    int updatedCacheFileDescriptor = open(cacheFilePath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-    if (updatedCacheFileDescriptor == -1) {
+    std::ofstream updatedCacheFile(cacheFilePath);
+    if (!updatedCacheFile.is_open()) {
         // Handle error if unable to open cache file for writing
         return;
     }
 
     // Write the retained paths to the updated cache file
     for (const std::string& path : retainedPaths) {
-        std::string entry = path + "\n";
-        ssize_t bytesWritten = write(updatedCacheFileDescriptor, entry.c_str(), entry.size());
-        if (bytesWritten == -1) {
-            // Error writing to the file
-            close(updatedCacheFileDescriptor);
-            return;
-        }
+        updatedCacheFile << path << '\n';
     }
 
-    // Close the updated cache file descriptor
-    close(updatedCacheFileDescriptor);
+    // RAII: Close the updated cache file automatically when it goes out of scope
 }
 
 
@@ -173,43 +173,51 @@ bool exists(const std::filesystem::path& path) {
 
 // Save cache
 bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize) {
-    std::string cacheFilePath = cacheDirectory + "/" + cacheFileName;
+    std::filesystem::path cachePath = cacheDirectory;
+    cachePath /= cacheFileName;
+
+    // Check if cache directory exists
+    if (!exists(cacheDirectory) || !std::filesystem::is_directory(cacheDirectory)) {
+		std::cout << "\n";
+        std::cerr << "\033[1;91mInvalid cache directory.\033[0;1m\n";
+        return false;  // Cache save failed
+    }
+
+    // Load the existing cache
+    std::vector<std::string> existingCache = loadCache();
+
+    // Combine new and existing entries and remove duplicates
+    std::set<std::string> combinedCache(existingCache.begin(), existingCache.end());
+    for (const std::string& iso : isoFiles) {
+        combinedCache.insert(iso);
+    }
+
+    // Limit the cache size to the maximum allowed size
+    while (combinedCache.size() > maxCacheSize) {
+        combinedCache.erase(combinedCache.begin());
+    }
 
     // Open the cache file in write mode (truncating it)
-    int fileDescriptor = open(cacheFilePath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-    if (fileDescriptor != -1) {
-        // Combine new and existing entries and remove duplicates
-        std::set<std::string> combinedCache;
-        std::vector<std::string> existingCache = loadCache();
-        combinedCache.insert(existingCache.begin(), existingCache.end());
-        for (const std::string& iso : isoFiles) {
-            combinedCache.insert(iso);
-        }
-
-        // Limit the cache size to the maximum allowed size
-        while (combinedCache.size() > maxCacheSize) {
-            combinedCache.erase(combinedCache.begin());
-        }
-
-        // Write combinedCache entries to the cache file
+    std::ofstream cacheFile(cachePath, std::ios::out | std::ios::trunc);
+    if (cacheFile.is_open()) {
         for (const std::string& iso : combinedCache) {
-            std::string entry = iso + "\n";
-            ssize_t bytesWritten = write(fileDescriptor, entry.c_str(), entry.size());
-            if (bytesWritten == -1) {
-                // Error writing to the file
-                close(fileDescriptor);
-                std::cerr << "Failed to write to cache file.\n";
-                return false; // Cache save failed
-            }
+            cacheFile << iso << "\n";
         }
 
-        // Close the file descriptor
-        close(fileDescriptor);
-        return true; // Cache save successful
+        // Check if writing to the file was successful
+        if (cacheFile.good()) {
+            cacheFile.close();
+            return true;  // Cache save successful
+        } else {
+			std::cout << "\n";
+            std::cerr << "\033[1;91mFailed to write to cache file.\033[0;1m\n";
+            cacheFile.close();
+            return false;  // Cache save failed
+        }
     } else {
-        // Error opening the file
-        std::cerr << "Failed to open ISO cache file: '" << cacheFilePath << "'. Check read/write permissions.\n";
-        return false; // Cache save failed
+		std::cout << "\n";
+        std::cerr << "\033[1;91mFailed to open ISO cache file: \033[1;93m'"<< cacheDirectory + "/" + cacheFileName <<"'\033[1;91m. Check read/write permissions.\033[0;1m\n";
+        return false;  // Cache save failed
     }
 }
 
@@ -229,7 +237,7 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 	std::vector<std::string> newIsoFiles;
 
 	// Perform the cache refresh for the directory (e.g., using parallelTraverse)
-	traverse(path, newIsoFiles, uniqueErrorMessages);
+	parallelTraverse(path, newIsoFiles, uniqueErrorMessages);
 
 	// Use a separate mutex for read/write access to allIsoFiles
 	std::mutex allIsoFilesMutex;
@@ -462,7 +470,7 @@ bool ends_with_iso(const std::string& str) {
 
 
 // Function to parallel traverse a directory and find ISO files
-void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages) {
+void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages) {
     try {
         // Iterate over entries in the specified directory and its subdirectories
         for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
