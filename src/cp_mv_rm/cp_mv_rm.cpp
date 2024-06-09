@@ -260,7 +260,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         if (isAllZeros(token)) {
             if (!invalidInput) {
                 invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist.\033[0;1m");
+                uniqueErrorMessages.insert("\033[1;91mInvalid index '0'.\033[0;1m");
             }
         }
 
@@ -268,7 +268,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         if (token == "0") {
             if (!invalidInput) {
                 invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mFile index '0' does not exist.\033[0;1m");
+                uniqueErrorMessages.insert("\033[1;91mInvalid index '0'.\033[0;1m");
             }
         }
         
@@ -300,7 +300,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
                 std::lock_guard<std::mutex> lock(MutexForUniqueErrors);
                 // Handle the exception for out-of-range input
                 invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0;1m");
+                uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + token + "'.\033[0;1m");
                 continue;
             }
             
@@ -310,7 +310,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 				// Lock to ensure thread safety in a multi-threaded environment
                 std::lock_guard<std::mutex> lock(MutexForUniqueErrors);
                 invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0;1m");
+                uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'.\033[0;1m");
                 continue;
             }
 
@@ -325,7 +325,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 					// Lock to ensure thread safety in a multi-threaded environment
 					std::lock_guard<std::mutex> lock(MutexForUniqueErrors);
                     invalidInput = true;
-                    uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(i) + "' does not exist.\033[0;1m");
+                    uniqueErrorMessages.insert("\033[1;91mInvalid index '" + std::to_string(i) + "'.\033[0;1m");
                 }
             }
         } else if (isNumeric(token)) {
@@ -339,7 +339,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 				// Lock to ensure thread safety in a multi-threaded environment
                 std::lock_guard<std::mutex> lock(MutexForUniqueErrors);
                 invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mFile index '" + std::to_string(num) + "' does not exist.\033[0;1m");
+                uniqueErrorMessages.insert("\033[1;91mInvalid index '" + std::to_string(num) + "'.\033[0;1m");
             }
         } else {
 			// Lock to ensure thread safety in a multi-threaded environment
