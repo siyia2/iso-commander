@@ -656,29 +656,15 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
         // Check if ISO file is present in the copy list
         auto it = std::find(isoFilesCopy.begin(), isoFilesCopy.end(), iso);
         if (it != isoFilesCopy.end()) {
-            // Check if the file exists
-            if (fileExists(iso)) {
-                // Add ISO file to the list of files to operate on
-                isoFilesToOperate.push_back(iso);
-            } else {
-                // Print message if file not found
-                std::cout << "\033[1;35mFile not found: \033[0;1m'" << isoDirectory << "/" << isoFilename << "'\033[1;95m.\033[0;1m\n";
-            }
-        } else {
-            // Print message if file not found in cache
-            std::cout << "\033[1;93mFile not found in cache: \033[0;1m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m.\033[0;1m\n";
-        }
-    }
+			// Add ISO file to the list of files to operate on
+            isoFilesToOperate.push_back(iso);
 
-    // Execute the operation for all files in one go
-    executeOperation(isoFilesToOperate);
+		}
+
+		// Execute the operation for all files in one go
+		executeOperation(isoFilesToOperate);
+	}
 }
-
 
 // RM
 
-// Function to check if a file exists
-bool fileExists(const std::string& filename) {
-    std::ifstream file(filename);
-    return file.good();
-}
