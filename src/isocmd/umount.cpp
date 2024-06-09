@@ -362,6 +362,7 @@ void unmountISOs() {
                             isFiltered = true;
                             breakOuterLoop = true;
                             historyPattern = false;
+                            skipEnter= false;
                             break;
                         }
 
