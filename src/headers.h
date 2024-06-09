@@ -5,12 +5,10 @@
 #include <atomic>
 #include <cctype>
 #include <chrono>
-#include <condition_variable>
 #include <csignal>
 #include <cstring>
 #include <dirent.h>
 #include <filesystem>
-#include <fstream>
 #include <functional>
 #include <future>
 #include <iostream>
@@ -23,12 +21,11 @@
 #include <readline/history.h>
 #include <set>
 #include <shared_mutex>
-#include <string>
 #include <sys/mount.h>
-#include <thread>
 #include <vector>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <thread>
 #include <unistd.h>
 
 
@@ -56,12 +53,6 @@ extern bool historyPattern;
 // General
 bool directoryExists(const std::string& path);
 bool isValidLinuxPathFormat(const std::string& path);
-
-// RM functions
-
-//	bools
-bool fileExists(const std::string& filename);
-
 
 //	voids
 
@@ -115,7 +106,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
 
 // Cache functions
 void manualRefreshCache(const std::string& initialDir = "");
-void parallelTraverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages);
+void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages);
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles, std::set<std::string>& uniqueErrorMessages);
 void removeNonExistentPathsFromCache();
 
