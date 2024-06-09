@@ -226,8 +226,8 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
         // Check if user wants to return
         if (std::isspace(input[0]) || input[0] == '\0') {
-            clearScrollBuffer();
             free(input);
+            clearScrollBuffer();
             break;
         }
 			bool isFiltered = false;
@@ -960,14 +960,11 @@ void printFileList(const std::vector<std::string>& fileList) {
 void convertBINToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts) {
 	
 	auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath);
-	std::string fullPath = directory + "/" + fileNameOnly;
-
-	// Check if the input file exists
-	if (access(fullPath.c_str(), F_OK) == -1) {
-		std::cout << "\033[1;91mThe specified input file \033[1;93m'" << fullPath << "'\033[1;91m does not exist.\033[0;1m\n";
-		return;
-	}
-
+    // Check if the input file exists
+    if (!std::ifstream(inputPath)) {
+        std::cout << "\033[1;91mThe specified input file \033[1;93m'" << directory << "/" << fileNameOnly << "'\033[1;91m does not exist.\033[0;1m\n";
+        return;
+    }
 
     // Define the output path for the ISO file with only the .iso extension
     std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
@@ -1019,15 +1016,12 @@ bool isCcd2IsoInstalled() {
 
 // Function to convert an MDF file to ISO format using mdf2iso
 void convertMDFToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts) {
-    
-    auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath);
-	std::string fullPath = directory + "/" + fileNameOnly;
-
-	// Check if the input file exists
-	if (access(fullPath.c_str(), F_OK) == -1) {
-		std::cout << "\033[1;91mThe specified input file \033[1;93m'" << fullPath << "'\033[1;91m does not exist.\033[0;1m\n";
-		return;
-	}
+	auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath);
+    // Check if the input file exists
+    if (!std::ifstream(inputPath)) {
+        std::cout << "\033[1;91mThe specified input file \033[1;93m'" << directory << "/" << fileNameOnly << "'\033[1;91m does not exist.\033[0;1m\n";
+        return;
+    }
 
     // Check if the corresponding .iso file already exists
     std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
