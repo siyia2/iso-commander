@@ -200,9 +200,11 @@ void unmountISOs() {
     while (true) {
         // Initialize variables for each loop iteration
         std::vector<std::string> filteredIsoDirs, selectedIsoDirs, selectedIsoDirsFiltered;
+        
         clearScrollBuffer();
         listMountedISOs();
         isoDirs.clear();
+        errorMessages.clear();
         invalidInput = false;
 
         {
