@@ -91,7 +91,7 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
         for (size_t i = start; i < end; ++i) {
             const std::string& file = files[i];
             
-            // Extract filename from the full path and convert it to lowercase.
+            // Convert the full path to lowercase.
             std::string fileName = file;
             std::transform(fileName.begin(), fileName.end(), fileName.begin(), ::tolower);
             

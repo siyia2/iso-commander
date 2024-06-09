@@ -431,35 +431,46 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(const std::strin
 void loadHistory() {
     // Only load history from file if it's not already populated in memory
     if (history_length == 0) {
-        std::ifstream file;
+        const char* filePath = nullptr;
         if (!historyPattern) {
-            file.open(historyFilePath);
+            filePath = historyFilePath.c_str();
         } else {
-            file.open(historyPatternFilePath);
+            filePath = historyPatternFilePath.c_str();
         }
 
-        if (file.is_open()) {
+        int fileDescriptor = open(filePath, O_RDONLY);
+        if (fileDescriptor != -1) {
+            char buffer[BUFSIZ];
+            ssize_t bytesRead;
             std::string line;
-            while (std::getline(file, line)) {
-                add_history(line.c_str());
+            while ((bytesRead = read(fileDescriptor, buffer, BUFSIZ)) > 0) {
+                for (ssize_t i = 0; i < bytesRead; ++i) {
+                    if (buffer[i] == '\n') {
+                        if (!line.empty()) {
+                            add_history(line.c_str());
+                            line.clear();
+                        }
+                    } else {
+                        line += buffer[i];
+                    }
+                }
             }
-            file.close();
+            close(fileDescriptor);
         }
     }
 }
 
-
 // Function to save history from readline
 void saveHistory() {
-    std::ofstream historyFile;
+    const char* filePath;
     if (!historyPattern) {
-        historyFile.open(historyFilePath, std::ios::out | std::ios::trunc);
+        filePath = historyFilePath.c_str();
     } else {
-        historyFile.open(historyPatternFilePath, std::ios::out | std::ios::trunc);
+        filePath = historyPatternFilePath.c_str();
     }
 
-
-    if (historyFile.is_open()) {
+    int historyFileDescriptor = open(filePath, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    if (historyFileDescriptor != -1) {
         HIST_ENTRY **histList = history_list();
 
         if (histList) {
@@ -484,15 +495,15 @@ void saveHistory() {
                     }
                 }
             }
-			
-			int excessLines; // Declare excessLines outside the if-else block
 
-			if (!historyPattern) {
-				// Adjust the number of lines to keep within the limit
-				excessLines = uniqueLines.size() - MAX_HISTORY_LINES;
-			} else {
-				excessLines = uniqueLines.size() - MAX_HISTORY_PATTERN_LINES;
-			}
+            int excessLines;
+
+            if (!historyPattern) {
+                // Adjust the number of lines to keep within the limit
+                excessLines = uniqueLines.size() - MAX_HISTORY_LINES;
+            } else {
+                excessLines = uniqueLines.size() - MAX_HISTORY_PATTERN_LINES;
+            }
 
             if (excessLines > 0) {
                 // Remove excess lines from the beginning
@@ -501,16 +512,24 @@ void saveHistory() {
 
             // Write all the lines to the file
             for (const auto& line : uniqueLines) {
-                historyFile << line << std::endl;
+                std::string entry = line + "\n";
+                ssize_t bytesWritten = write(historyFileDescriptor, entry.c_str(), entry.size());
+                if (bytesWritten == -1) {
+                    // Error writing to the file
+                    close(historyFileDescriptor);
+                    std::cerr << "Failed to write to history cache file.\n";
+                    return;
+                }
             }
         }
-
-        historyFile.close();
+        // Close the file descriptor
+        close(historyFileDescriptor);
     } else {
-        std::cerr << "\n\033[1;91mFailed to open history cache file: \033[1;93m'" << historyFilePath << "'\033[1;91m. Check read/write permissions.\033[0m";
+        // Error opening the file
+        std::cerr << "Failed to open history cache file: '" << filePath << "'. Check read/write permissions.\n";
+        return;
     }
 }
-
 
 // Function for tab completion and history creation
 std::string readInputLine(const std::string& prompt) {
@@ -520,15 +539,20 @@ std::string readInputLine(const std::string& prompt) {
         std::cout.flush();
 
         // Read a line of input using the readline function
-        std::unique_ptr<char, decltype(&free)> input(readline(""), &free);
+        char* input = readline("");
 
         // Check if input is not null (readline successful)
-        if (input && input.get()[0] != '\0' && std::string(input.get()) != "\n") {
+        if (input && input[0] != '\0' && std::string(input) != "\n") {
             // Add the input to the history
-            add_history(input.get());
+            add_history(input);
 
             // Convert the C-style string to a C++ string
-            return std::string(input.get());
+            std::string result(input);
+
+            // Free the memory allocated by readline
+            free(input);
+
+            return result;
         }
     } catch (const std::exception& e) {
         // Log the error or handle it in a way suitable for your application
@@ -538,3 +562,4 @@ std::string readInputLine(const std::string& prompt) {
     // Return an empty string if readline fails or input is empty
     return "";
 }
+
