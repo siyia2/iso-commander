@@ -431,7 +431,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
                                     }
                                 } else {
                                     // Add an error message for an invalid range
-                                    std::string errorMessage = "\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0;1m";
+                                    std::string errorMessage = "\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'.\033[0;1m";
                                     if (processedErrors.find(errorMessage) == processedErrors.end()) {
                                         // Protect the critical section with a lock
                                         std::lock_guard<std::mutex> lock(errorsMutex);
@@ -442,7 +442,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
                             }
                         } else {
                             // Add an error message for an invalid range
-                            std::string errorMessage = "\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'. Ensure that numbers align with the list.\033[0;1m";
+                            std::string errorMessage = "\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'.\033[0;1m";
                             if (processedErrors.find(errorMessage) == processedErrors.end()) {
                                 // Protect the critical section with a lock
                                 std::lock_guard<std::mutex> lock(errorsMutex);
@@ -451,7 +451,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
                         }
                     } else {
                         // Add an error message for an invalid range format
-                        std::string errorMessage = "\033[1;91mInvalid range: '" + token + "'. Ensure that numbers align with the list.\033[0;1m";
+                        std::string errorMessage = "\033[1;91mInvalid range: '" + token + "'.\033[0;1m";
                         if (processedErrors.find(errorMessage) == processedErrors.end()) {
                             // Protect the critical section with a lock
                             std::lock_guard<std::mutex> lock(errorsMutex);
