@@ -344,7 +344,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 void processInput(const std::string& input, const std::vector<std::string>& fileList, const std::string& inputPaths, bool flag, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts) {
 
     // Mutexes to protect the critical sections
-    std::mutex indicesMutex;
+    std::mutex futuresMutex;
     std::mutex errorsMutex;
 
     // Create a string stream to tokenize the input
@@ -358,7 +358,6 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     std::vector<std::future<void>> futures;
 
     // Protect the critical section with a lock
-    std::lock_guard<std::mutex> lock(indicesMutex);
     
     ThreadPool pool(maxThreads);
     
@@ -421,8 +420,12 @@ void processInput(const std::string& input, const std::vector<std::string>& file
                                     if (processedIndices.find(selectedIndex) == processedIndices.end()) {
                                         std::string selectedFile = fileList[selectedIndex];
                                         if (!flag) {
+											    std::lock_guard<std::mutex> lock(futuresMutex);
+
 											futures.push_back(pool.enqueue(asyncConvertBINToISO, selectedFile));
 										} else {
+											    std::lock_guard<std::mutex> lock(futuresMutex);
+
 											futures.push_back(pool.enqueue(asyncConvertMDFToISO, selectedFile));
 										}
 										processedIndices.insert(selectedIndex);
@@ -475,8 +478,12 @@ void processInput(const std::string& input, const std::vector<std::string>& file
                         // Convert BIN to ISO asynchronously and store the future in the vector
                         std::string selectedFile = fileList[selectedIndex];
 						if (!flag) {
+							    std::lock_guard<std::mutex> lock(futuresMutex);
+
 							futures.push_back(pool.enqueue(asyncConvertBINToISO, selectedFile));
 						} else {
+							    std::lock_guard<std::mutex> lock(futuresMutex);
+
 						    futures.push_back(pool.enqueue(asyncConvertMDFToISO, selectedFile));
 					}
 						processedIndices.insert(selectedIndex);
