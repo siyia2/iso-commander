@@ -495,9 +495,11 @@ void unmountISOs() {
             for (size_t i = 0; i < selectedIsoDirs.size(); i += batchSize) {
                 batches.emplace_back(selectedIsoDirs.begin() + i, std::min(selectedIsoDirs.begin() + i + batchSize, selectedIsoDirs.end()));
             }
+            std::mutex futuresMutex;
 
             // Enqueue unmount tasks for each batch of ISOs
             for (const auto& batch : batches) {
+				std::lock_guard<std::mutex> lock(futuresMutex);
                 futures.emplace_back(pool.enqueue([batch, &unmountedFiles, &unmountedErrors]() {
                     unmountISO(batch, unmountedFiles, unmountedErrors);
                 }));
