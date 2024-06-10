@@ -489,7 +489,6 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 }
 
 
-
 // Function to search for .bin and .img files over 5MB
 std::vector<std::string> findFiles(const std::vector<std::string>& paths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrors) {
     // Vector to store cached invalid paths
