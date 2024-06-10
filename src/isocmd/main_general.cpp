@@ -30,7 +30,7 @@ int lockFileDescriptor = -1;
 int main(int argc, char *argv[]) {
 	
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
-        printVersionNumber("4.4.5");
+        printVersionNumber("4.4.6");
         return 0;
     }
 	
@@ -229,17 +229,20 @@ void submenu2() {
 					
           std::string submenu_choice(submenu_input);
           free(submenu_input);
+          std::string operation;
          // Check if the input length is exactly 1
 		 if (submenu_choice.empty() || submenu_choice.length() == 1){
-         switch (submenu_choice[0]) {		
+         switch (submenu_choice[0]) {	
              case '1':
 				clearScrollBuffer();
-                select_and_convert_files_to_iso("bin");
+				operation = "bin";
+                select_and_convert_files_to_iso(operation);
                 clearScrollBuffer();
                 break;
              case '2':
 				clearScrollBuffer();
-                select_and_convert_files_to_iso("mdf");
+				operation = "mdf";
+                select_and_convert_files_to_iso(operation);
                 clearScrollBuffer();
                 break;
 			}
