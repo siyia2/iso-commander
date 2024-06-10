@@ -477,6 +477,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
    // auto start_time = std::chrono::high_resolution_clock::now();
 	clearScrollBuffer();
     std::cout << "\033[1mPlease wait...\033[1m\n";
+    std::mutex futuresMutex;
 
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
@@ -487,6 +488,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         for (const auto& index : chunk) {
             isoFilesInChunk.push_back(isoFiles[index - 1]);
         }
+        std::lock_guard<std::mutex> lock(futuresMutex);
         futures.emplace_back(pool.enqueue(handleIsoFileOperation,isoFilesInChunk,std::ref(isoFiles),std::ref(operationIsos),std::ref(operationErrors),userDestDir,isMove,isCopy,isDelete));
     }
 
