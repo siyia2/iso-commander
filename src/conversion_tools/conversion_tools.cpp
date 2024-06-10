@@ -5,6 +5,9 @@
 static std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles here
 static std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
 
+std::string globalInputStringMdf;
+
+std::string globalInputStringBin;
 
 // GENERAL
 
@@ -115,6 +118,18 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     // Prompt user to input directory paths
     std::string inputPaths = readInputLine("\033[1;94mDirectory path(s) ↵ (multi-path separator: \033[1m\033[1;93m;\033[0;1m\033[1;94m) to search for \033[1m\033[1;92m" + fileExtension + " \033[1;94mfiles, \033[1;93mclr\033[1;94m ↵ to clear \033[1;92m" + fileTypeName + " \033[1;94mRAM cache, or ↵ to return:\n\033[0;1m");
     clearScrollBuffer();
+    
+    if (!flag) {
+		if (!globalInputStringBin.empty()) {
+			globalInputStringBin += ";"; // Add a semicolon if globalInputString is not empty
+		}
+		globalInputStringBin += inputPaths;
+	} else {
+		if (!globalInputStringMdf.empty()) {
+			globalInputStringMdf += ";"; // Add a semicolon if globalInputString is not empty
+		}
+		globalInputStringMdf += inputPaths;
+	}
     
     if (!(inputPaths.empty()) && !(inputPaths == "clr")) {
         // Save search history if input paths are provided
@@ -309,7 +324,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 						if (isFiltered) {
 							clearScrollBuffer(); // Clear scroll buffer
 							std::cout << "\033[1mPlease wait...\n\033[1m\n"; // Inform user to wait
-							processInput(filterInput, filteredFiles, inputPaths, flag, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts); // Process user input
+							processInput(filterInput, filteredFiles, flag, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts); // Process user input
 							free(filterInput); // Free memory allocated for filter input
 							
 							clearScrollBuffer(); // Clear scroll buffer
@@ -327,7 +342,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 			// If input is not "/", process the input
 			clearScrollBuffer(); // Clear scroll buffer
 			std::cout << "\033[1mPlease wait...\n\033[1m\n"; // Inform user to wait
-			processInput(input, files, inputPaths, flag, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts); // Process input
+			processInput(input, files, flag, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts); // Process input
 			free(input); // Free memory allocated for input
 			
 			clearScrollBuffer(); // Clear scroll buffer
@@ -343,37 +358,25 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
 
 // Function to process user input and convert selected BIN files to ISO format
-void processInput(const std::string& input, const std::vector<std::string>& fileList, const std::string& inputPaths, bool flag, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts) {
+void processInput(const std::string& input, const std::vector<std::string>& fileList, bool flag, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts) {
 
-    // Mutexes to protect the critical sections
     std::mutex futuresMutex;
     std::mutex errorsMutex;
-
-    // Create a string stream to tokenize the input
-    std::istringstream iss(input);
-    std::string token;
-    
-    // Set to track processed indices to avoid duplicates
-	std::set<int> processedIndices;
-
-    // Vector to store asynchronous tasks for file conversion
+    std::set<int> processedIndices;
     std::vector<std::future<void>> futures;
+    ThreadPool pool(std::thread::hardware_concurrency());
 
-    // Protect the critical section with a lock
-    
-    ThreadPool pool(maxThreads);
-    
-    // Get current user and group
     char* current_user = getlogin();
     if (current_user == nullptr) {
-		std::cerr << "Error getting current user: " << strerror(errno) << "\033[0;1m\n";
-		return;
+        std::cerr << "Error getting current user: " << strerror(errno) << "\n";
+        return;
     }
     gid_t current_group = getegid();
     if (current_group == static_cast<unsigned int>(-1)) {
-		std::cerr << "\033[1;91mError getting current group:\033[0;1m " << strerror(errno) << "\033[0;1m\n";
-		return;
+        std::cerr << "Error getting current group: " << strerror(errno) << "\n";
+        return;
     }
+
     std::string user_str(current_user);
     std::string group_str = std::to_string(static_cast<unsigned int>(current_group));
 
@@ -381,162 +384,91 @@ void processInput(const std::string& input, const std::vector<std::string>& file
         convertBINToISO(selectedFile, successOuts, skippedOuts, failedOuts, deletedOuts);
     };
 
-    // Function to execute asynchronously
     auto asyncConvertMDFToISO = [&](const std::string& selectedFile) {
         convertMDFToISO(selectedFile, successOuts, skippedOuts, failedOuts);
     };
-	
-	// Start the timer
-  //  auto start_time = std::chrono::high_resolution_clock::now();
-    // Iterate through the tokens in the input string
+
+    std::istringstream iss(input);
+    std::string token;
+
     while (iss >> token) {
-        // Create a string stream to further process the token
         std::istringstream tokenStream(token);
         int start, end;
         char dash;
 
-        // Check if the token can be converted to an integer (starting index)
         if (tokenStream >> start) {
-            // Check for the presence of a dash, indicating a range
             if (tokenStream >> dash) {
                 if (dash == '-') {
-                    // Parse the end of the range
                     if (tokenStream >> end) {
-                        // Check for additional hyphens in the range
-                        if (tokenStream >> dash) {
-                            // Add an error message for ranges with more than one hyphen
-                            std::string errorMessage = "\033[1;91mInvalid input: '" + token + "'.\033[0;1m";
-                            if (processedErrors.find(errorMessage) == processedErrors.end()) {
-                                // Protect the critical section with a lock
-                                std::lock_guard<std::mutex> lock(errorsMutex);
-                                processedErrors.insert(errorMessage);
-                            }
-                        } else if (start > 0 && end > 0 && start <= static_cast<int>(fileList.size()) && end <= static_cast<int>(fileList.size())) {  // Check if the range is valid
-                            // Handle a valid range
-                            int step = (start <= end) ? 1 : -1; // Determine the step based on the range direction
-                            int selectedIndex;  // Declare selectedIndex outside of the loop
-
-                            for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
-                                selectedIndex = i - 1;
-                                if (selectedIndex >= 0 && static_cast<std::vector<std::string>::size_type>(selectedIndex) < fileList.size()) {
+                        if (!(tokenStream >> dash)) {
+                            if (start > 0 && end > 0 && start <= static_cast<int>(fileList.size()) && end <= static_cast<int>(fileList.size())) {
+                                int step = (start <= end) ? 1 : -1;
+                                for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
+                                    int selectedIndex = i - 1;
                                     if (processedIndices.find(selectedIndex) == processedIndices.end()) {
                                         std::string selectedFile = fileList[selectedIndex];
-                                        if (!flag) {
-											    std::lock_guard<std::mutex> lock(futuresMutex);
-
-											futures.push_back(pool.enqueue(asyncConvertBINToISO, selectedFile));
-										} else {
-											    std::lock_guard<std::mutex> lock(futuresMutex);
-
-											futures.push_back(pool.enqueue(asyncConvertMDFToISO, selectedFile));
-										}
-										processedIndices.insert(selectedIndex);
-    
-										
+                                        {
+                                            std::lock_guard<std::mutex> lock(futuresMutex);
+                                            if (!flag) {
+                                                futures.push_back(pool.enqueue(asyncConvertBINToISO, selectedFile));
+                                            } else {
+                                                futures.push_back(pool.enqueue(asyncConvertMDFToISO, selectedFile));
+                                            }
+                                        }
+                                        processedIndices.insert(selectedIndex);
                                     }
-                                } else {
-                                    // Add an error message for an invalid range
-                                    std::string errorMessage = "\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'.\033[0;1m";
-                                    if (processedErrors.find(errorMessage) == processedErrors.end()) {
-                                        // Protect the critical section with a lock
-                                        std::lock_guard<std::mutex> lock(errorsMutex);
-                                        processedErrors.insert(errorMessage);
-                                    }
-                                    break; // Exit the loop to avoid further errors
                                 }
+                            } else {
+                                std::lock_guard<std::mutex> lock(errorsMutex);
+                                processedErrors.insert("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'.\033[1;0m");
                             }
                         } else {
-                            // Add an error message for an invalid range
-                            std::string errorMessage = "\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'.\033[0;1m";
-                            if (processedErrors.find(errorMessage) == processedErrors.end()) {
-                                // Protect the critical section with a lock
-                                std::lock_guard<std::mutex> lock(errorsMutex);
-                                processedErrors.insert(errorMessage);
-                            }
+                            std::lock_guard<std::mutex> lock(errorsMutex);
+                            processedErrors.insert("\033[1;91mInvalid input: '" + token + "'.\033[1;0m");
                         }
                     } else {
-                        // Add an error message for an invalid range format
-                        std::string errorMessage = "\033[1;91mInvalid range: '" + token + "'.\033[0;1m";
-                        if (processedErrors.find(errorMessage) == processedErrors.end()) {
-                            // Protect the critical section with a lock
-                            std::lock_guard<std::mutex> lock(errorsMutex);
-                            processedErrors.insert(errorMessage);
-                        }
+                        std::lock_guard<std::mutex> lock(errorsMutex);
+                        processedErrors.insert("\033[1;91mInvalid range: '" + token + "'.\033[1;0m");
                     }
                 } else {
-                    // Add an error message for an invalid character after the dash
-                    std::string errorMessage = "\033[1;91mInvalid character after dash in range: '" + token + "'.\033[0;1m";
-                    if (processedErrors.find(errorMessage) == processedErrors.end()) {
-                        // Protect the critical section with a lock
-                        std::lock_guard<std::mutex> lock(errorsMutex);
-                        processedErrors.insert(errorMessage);
-                    }
+                    std::lock_guard<std::mutex> lock(errorsMutex);
+                    processedErrors.insert("\033[1;91mInvalid character after dash in range: '" + token + "'.\033[1;0m");
                 }
-            } else if (static_cast<std::vector<std::string>::size_type>(start) >= 1 && static_cast<std::vector<std::string>::size_type>(start) <= fileList.size()) {
-                // Process a single index
+            } else if (start >= 1 && static_cast<size_t>(start) <= fileList.size()) {
                 int selectedIndex = start - 1;
                 if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-                    if (selectedIndex >= 0 && static_cast<std::vector<std::string>::size_type>(selectedIndex) < fileList.size()) {
-                        // Convert BIN to ISO asynchronously and store the future in the vector
-                        std::string selectedFile = fileList[selectedIndex];
-						if (!flag) {
-							    std::lock_guard<std::mutex> lock(futuresMutex);
-
-							futures.push_back(pool.enqueue(asyncConvertBINToISO, selectedFile));
-						} else {
-							    std::lock_guard<std::mutex> lock(futuresMutex);
-
-						    futures.push_back(pool.enqueue(asyncConvertMDFToISO, selectedFile));
-					}
-						processedIndices.insert(selectedIndex);
-							
-                    } else {
-                        // Add an error message for an invalid file index
-                        std::string errorMessage = "\033[1;91mInvalid index: '" + std::to_string(start) + "'.\033[0;1m";
-                        if (processedErrors.find(errorMessage) == processedErrors.end()) {
-                            // Protect the critical section with a lock
-                            std::lock_guard<std::mutex> lock(errorsMutex);
-                            processedErrors.insert(errorMessage);
+                    std::string selectedFile = fileList[selectedIndex];
+                    {
+                        std::lock_guard<std::mutex> lock(futuresMutex);
+                        if (!flag) {
+                            futures.push_back(pool.enqueue(asyncConvertBINToISO, selectedFile));
+                        } else {
+                            futures.push_back(pool.enqueue(asyncConvertMDFToISO, selectedFile));
                         }
                     }
+                    processedIndices.insert(selectedIndex);
                 }
             } else {
-                // Add an error message for an invalid file index
-                std::string errorMessage = "\033[1;91mInvalid index: '" + std::to_string(start) + "'.\033[0;1m";
-                if (processedErrors.find(errorMessage) == processedErrors.end()) {
-                    // Protect the critical section with a lock
-                    std::lock_guard<std::mutex> lock(errorsMutex);
-                    processedErrors.insert(errorMessage);
-                }
+                std::lock_guard<std::mutex> lock(errorsMutex);
+                processedErrors.insert("\033[1;91mInvalid index: '" + std::to_string(start) + "'.\033[1;0m");
             }
         } else {
-            // Add an error message for an invalid input
-            std::string errorMessage = "\033[1;91mInvalid input: '" + token + "'.\033[0;1m";
-            if (processedErrors.find(errorMessage) == processedErrors.end()) {
-                // Protect the critical section with a lock
-                std::lock_guard<std::mutex> lock(errorsMutex);
-                processedErrors.insert(errorMessage);
-            }
+            std::lock_guard<std::mutex> lock(errorsMutex);
+            processedErrors.insert("\033[1;91mInvalid input: '" + token + "'.\033[1;0m");
         }
     }
 
-    // Wait for all futures to finish
     for (auto& future : futures) {
         future.wait();
     }
-    
-    promptFlag = false;
-    
-    manualRefreshCache(inputPaths);
-    
-    // Stop the timer after completing the mounting process
-  //  auto end_time = std::chrono::high_resolution_clock::now();
-    // Calculate and print the elapsed time
-  //  auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
- //   std::cout << "\n";
-    // Print the time taken for the entire process in bold with one decimal place
-  //  std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n";
-        
+
+	promptFlag = false;
+	
+	if (!flag) {
+		manualRefreshCache(globalInputStringBin);
+	} else {
+		manualRefreshCache(globalInputStringMdf);
+	}
 }
 
 
@@ -555,10 +487,10 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     static std::vector<std::string> mdfMdsFilesCache;
     
     // Set to store processed paths
-    static std::set<std::string> processedPathsMdf;
+    static std::vector<std::string> processedPathsMdf;
     
     // Set to store processed paths
-    static std::set<std::string> processedPathsBin;
+    static std::vector<std::string> processedPathsBin;
     
     // Check if the paths vector has only one element and it is "clr"
     if (paths.size() == 1 && paths[0] == "clr") {
@@ -644,12 +576,12 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
 		for (const auto& path : paths) {
 			if (mode == "bin") {
 				// Check if the path has already been processed in "bin" mode
-				if (processedPathsBin.find(path) != processedPathsBin.end()) {
+				if (std::find(processedPathsBin.begin(), processedPathsBin.end(), path) != processedPathsBin.end()) {
 					continue; // Skip already processed paths
 				}
 			} else if (mode == "mdf") {
 				// Check if the path has already been processed in "mdf" mode
-				if (processedPathsMdf.find(path) != processedPathsMdf.end()) {
+				if (std::find(processedPathsMdf.begin(), processedPathsMdf.end(), path) != processedPathsMdf.end()) {
 					continue; // Skip already processed paths
 				}
 			}
@@ -707,7 +639,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                                 }
                             }
                         }
-                        processedPathsBin.insert(path);
+                        processedPathsBin.push_back(path);
                     }
                 } else {                    
                     blacklistMdf = true;
@@ -754,7 +686,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                     }
                     
                     // Add the processed path to the set
-                    processedPathsMdf.insert(path);
+                    processedPathsMdf.push_back(path);
                 }
             } catch (const std::filesystem::filesystem_error& e) {
                 std::lock_guard<std::mutex> lock(mutex4search);
