@@ -118,6 +118,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     std::string inputPaths = readInputLine("\033[1;94mDirectory path(s) ↵ (multi-path separator: \033[1m\033[1;93m;\033[0;1m\033[1;94m) to search for \033[1m\033[1;92m" + fileExtension + " \033[1;94mfiles, \033[1;93mclr\033[1;94m ↵ to clear \033[1;92m" + fileTypeName + " \033[1;94mRAM cache, or ↵ to return:\n\033[0;1m");
     clearScrollBuffer();
     
+    // Save paths for potential automatic cache refresh according to selected mode
     if (!modeMdf) {
 		if (!globalInputStringBin.empty()) {
 			globalInputStringBin += ";"; // Add a semicolon if globalInputString is not empty
