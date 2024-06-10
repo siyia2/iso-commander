@@ -130,8 +130,16 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 		}
 		globalInputStringMdf += inputPaths;
 	}
+	
+	bool onlySpaces = true;
+		for (char c : inputPaths) {
+            if (!std::isspace(c)) {
+                onlySpaces = false;
+                break;
+            }
+		}
     
-    if (!(inputPaths.empty()) && !(inputPaths == "clr")) {
+    if (!(inputPaths.empty()) && !(inputPaths == "clr") && !onlySpaces) {
         // Save search history if input paths are provided
         std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
         saveHistory();
@@ -178,7 +186,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         noValid = true;
         
-    } else if (directoryPaths.empty() && !clr) {
+    } else if ((directoryPaths.empty() && !clr) || (onlySpaces)) {
 		return;
 		
 	}
