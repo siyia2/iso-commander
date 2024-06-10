@@ -86,7 +86,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 	// Set to hold invalid paths for search
 	std::set<std::string> invalidDirectoryPaths;
 	
-    bool flag = false;
+    bool flag;
 
     std::string fileExtension;
     std::string fileTypeName;
@@ -98,9 +98,11 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     if (fileType == "bin" || fileType == "img") {
         fileExtension = ".bin;.img";
         fileTypeName = "BIN/IMG";
+        flag = false;
     } else if (fileType == "mdf") {
         fileExtension = ".mdf";
         fileTypeName = "MDF";
+        flag = true;
     } else {
         // Print error message for unsupported file types
         std::cout << "Invalid file type choice. Supported types: BIN/IMG, MDF\n";
@@ -170,7 +172,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     bool newFilesFound = false;
     if (fileType == "bin" || fileType == "img") {
 		files = findFiles(directoryPaths, "bin", [&](const std::string&, const std::string&) {
-			flag = true;
+			flag = false;
 			newFilesFound = true;
 		}, invalidDirectoryPaths, processedErrors);
 	
