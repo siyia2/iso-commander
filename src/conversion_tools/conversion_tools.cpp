@@ -515,6 +515,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         if (mode == "bin"){
 		processedPathsBin.clear();
         binImgFilesCache.clear();
+        globalInputStringBin = "";
         clearScrollBuffer(); // Clear scroll buffer
         std::cout << "\n\033[1;92mBIN/IMG RAM cache cleared.\033[0;1m\n";
         
@@ -526,6 +527,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
 		} else {
         mdfMdsFilesCache.clear();
         processedPathsMdf.clear();
+        globalInputStringMdf = "";
         clearScrollBuffer(); // Clear scroll buffer
         std::cout << "\n\033[1;92mMDF RAM cache cleared.\033[0;1m\n";
         
