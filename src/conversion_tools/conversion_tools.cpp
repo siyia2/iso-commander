@@ -5,6 +5,8 @@
 static std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles here
 static std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
 
+std::string globalInputStringMdf; // Global string for automatic cache refresh for mdf files
+std::string globalInputStringBin; // Global string for automatic cache refresh for bin/img files
 
 // GENERAL
 
@@ -68,9 +70,6 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     std::vector<std::string> files;
     std::vector<std::string> directoryPaths;
     std::set<std::string> uniquePaths;
-    
-    std::string InputStringCache;
-    
     // Set to track processed error messages to avoid duplicate error reporting
 	std::set<std::string> processedErrors;
 
@@ -118,6 +117,19 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     // Prompt user to input directory paths
     std::string inputPaths = readInputLine("\033[1;94mDirectory path(s) ↵ (multi-path separator: \033[1m\033[1;93m;\033[0;1m\033[1;94m) to search for \033[1m\033[1;92m" + fileExtension + " \033[1;94mfiles, \033[1;93mclr\033[1;94m ↵ to clear \033[1;92m" + fileTypeName + " \033[1;94mRAM cache, or ↵ to return:\n\033[0;1m");
     clearScrollBuffer();
+    
+    // Save paths for potential automatic cache refresh according to selected mode
+    if (!modeMdf) {
+		if (!globalInputStringBin.empty()) {
+			globalInputStringBin += ";"; // Add a semicolon if globalInputString is not empty
+		}
+		globalInputStringBin += inputPaths;
+	} else {
+		if (!globalInputStringMdf.empty()) {
+			globalInputStringMdf += ";"; // Add a semicolon if globalInputString is not empty
+		}
+		globalInputStringMdf += inputPaths;
+	}
 	
 	bool onlySpaces = true;
 		for (char c : inputPaths) {
@@ -320,7 +332,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 						if (isFiltered) {
 							clearScrollBuffer(); // Clear scroll buffer
 							std::cout << "\033[1mPlease wait...\n\033[1m\n"; // Inform user to wait
-							processInput(filterInput, filteredFiles, modeMdf, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, InputStringCache); // Process user input
+							processInput(filterInput, filteredFiles, modeMdf, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts); // Process user input
 							free(filterInput); // Free memory allocated for filter input
 							
 							clearScrollBuffer(); // Clear scroll buffer
@@ -338,7 +350,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 			// If input is not "/", process the input
 			clearScrollBuffer(); // Clear scroll buffer
 			std::cout << "\033[1mPlease wait...\n\033[1m\n"; // Inform user to wait
-			processInput(input, files, modeMdf, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, InputStringCache); // Process input
+			processInput(input, files, modeMdf, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts); // Process input
 			free(input); // Free memory allocated for input
 			
 			clearScrollBuffer(); // Clear scroll buffer
@@ -353,8 +365,9 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 }
 
 
-// Function to process user input and convert selected BIN files to ISO format
-void processInput(const std::string& input, const std::vector<std::string>& fileList, bool modeMdf, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, std::string& InputStringCache) {
+
+// Function to process user input and convert selected BIN/MDF files to ISO format
+void processInput(const std::string& input, const std::vector<std::string>& fileList, bool modeMdf, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts) {
 
     // Mutexes for thread safety
     std::mutex futuresMutex;
@@ -367,7 +380,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     std::vector<std::future<void>> futures;
     
     // ThreadPool for concurrent execution
-    ThreadPool pool(std::thread::hardware_concurrency());
+    ThreadPool pool(maxThreads);
 
     // Get current user and group
     char* current_user = getlogin();
@@ -387,7 +400,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 
     // Lambda function for asynchronously converting BIN to ISO
     auto asyncConvertToISO = [&](const std::string& selectedFile) {
-        convertToISO(selectedFile, successOuts, skippedOuts, failedOuts, deletedOuts, modeMdf, InputStringCache);
+        convertToISO(selectedFile, successOuts, skippedOuts, failedOuts, deletedOuts, modeMdf);
     };
 
 
@@ -464,9 +477,12 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     // Update promptFlag
     promptFlag = false;
     
-    // Automatic cache refresh based on flag
-    manualRefreshCache(InputStringCache);
-    InputStringCache = "";
+    // Manual cache refresh based on flag
+    if (!modeMdf) {
+        manualRefreshCache(globalInputStringBin);
+    } else {
+        manualRefreshCache(globalInputStringMdf);
+    }
 }
 
 
@@ -496,6 +512,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         if (mode == "bin"){
 		processedPathsBin.clear();
         binImgFilesCache.clear();
+        globalInputStringBin = "";
         clearScrollBuffer(); // Clear scroll buffer
         std::cout << "\n\033[1;92mBIN/IMG RAM cache cleared.\033[0;1m\n";
         
@@ -507,6 +524,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
 		} else {
         mdfMdsFilesCache.clear();
         processedPathsMdf.clear();
+        globalInputStringMdf = "";
         clearScrollBuffer(); // Clear scroll buffer
         std::cout << "\n\033[1;92mMDF RAM cache cleared.\033[0;1m\n";
         
@@ -892,11 +910,8 @@ void printFileList(const std::vector<std::string>& fileList) {
 }
 
 
-// BIN/IMG CONVERSION FUNCTIONS
-
-
 // Function to convert a BIN file to ISO format
-void convertToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool modeMdf, std::string& InputStringCache) {
+void convertToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool modeMdf) {
     auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath);
     
     // Check if the input file exists
@@ -918,20 +933,6 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
 
     // Escape the outputPath before using it in shell commands
     std::string escapedOutputPath = shell_escape(outputPath);
-    
-    // Automatic cache generation
-    // Find the position of the last '/'
-    size_t lastSlashPos = inputPath.find_last_of('/');
-    // Extract the output path before and including the last '/'
-    std::string conversionDir = inputPath.substr(0, lastSlashPos + 1);
-    
-    // Save paths for potential automatic cache refresh according to selected mode
-    
-		if (!InputStringCache.empty()) {
-			InputStringCache += ";"; // Add a semicolon if InputStringCache is not empty
-		}
-		InputStringCache += conversionDir;
-		
 
     // Determine the appropriate conversion command
     std::string conversionCommand;
@@ -969,6 +970,8 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
 }
 
 
+// BIN/IMG CONVERSION FUNCTIONS
+
 // Check if ccd2iso is installed on the system
 bool isCcd2IsoInstalled() {
     // Use the system command to check if ccd2iso is available
@@ -979,6 +982,8 @@ bool isCcd2IsoInstalled() {
     }
 }
 
+
+// MDF CONVERSION FUNCTIONS
 
 // Function to check if mdf2iso is installed
 bool isMdf2IsoInstalled() {
