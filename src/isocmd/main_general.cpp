@@ -30,7 +30,7 @@ int lockFileDescriptor = -1;
 int main(int argc, char *argv[]) {
 	
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
-        printVersionNumber("4.4.6");
+        printVersionNumber("4.4.7");
         return 0;
     }
 	
@@ -236,13 +236,25 @@ void submenu2() {
              case '1':
 				clearScrollBuffer();
 				operation = "bin";
-                select_and_convert_files_to_iso(operation);
+				if (isCcd2IsoInstalled()) {
+					select_and_convert_files_to_iso(operation);
+				} else {
+					std::cout << "\033[1;91mccd2iso is not installed.\033[0;1m\n";
+					std::cout << "\n\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
+					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+				}
                 clearScrollBuffer();
                 break;
              case '2':
 				clearScrollBuffer();
 				operation = "mdf";
-                select_and_convert_files_to_iso(operation);
+                if (isMdf2IsoInstalled()) {
+					select_and_convert_files_to_iso(operation);
+				} else {
+					std::cout << "\033[1;91mmdf2iso is not installed.\033[0;1m\n";
+					std::cout << "\n\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
+					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+				}
                 clearScrollBuffer();
                 break;
 			}
