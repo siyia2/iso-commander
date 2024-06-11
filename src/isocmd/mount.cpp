@@ -5,7 +5,8 @@
 //	MOUNT STUFF
 
 void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages,std::set<std::string>& mountedFails) {
-
+	
+   std::mutex mountAllmutex;
   // Detect and use the minimum of available threads and ISOs to ensure efficient parallelism
   unsigned int numThreads = std::min(static_cast<int>(isoFiles.size()), static_cast<int>(maxThreads));
 
@@ -15,7 +16,8 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::st
   // Process all ISO files asynchronously
   for (size_t i = 0; i < isoFiles.size(); ++i) {
     // Capture isoFiles by reference and i by value
-    pool.enqueue([i, &isoFiles, &mountedFiles, &skippedMessages, &mountedFails]() {
+    pool.enqueue([i, &isoFiles, &mountedFiles, &skippedMessages, &mountedFails, &mountAllmutex]() {
+		std::lock_guard<std::mutex> lock(mountAllmutex);
       // No need to create a local copy of isoFiles[i]
       // Use isoFiles[i] directly within the lambda
       std::vector<std::string> isoFilesToMountLocal = { isoFiles[i] };
