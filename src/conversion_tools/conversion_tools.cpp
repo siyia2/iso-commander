@@ -398,14 +398,10 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     std::string group_str = std::to_string(static_cast<unsigned int>(current_group));
 
     // Lambda function for asynchronously converting BIN to ISO
-    auto asyncConvertBINToISO = [&](const std::string& selectedFile) {
-        convertBINToISO(selectedFile, successOuts, skippedOuts, failedOuts, deletedOuts);
+    auto asyncConvertToISO = [&](const std::string& selectedFile) {
+        convertToISO(selectedFile, successOuts, skippedOuts, failedOuts, deletedOuts, modeMdf);
     };
 
-    // Lambda function for asynchronously converting MDF to ISO
-    auto asyncConvertMDFToISO = [&](const std::string& selectedFile) {
-        convertMDFToISO(selectedFile, successOuts, skippedOuts, failedOuts);
-    };
 
     // Tokenize the input string
     std::istringstream iss(input);
@@ -434,11 +430,8 @@ void processInput(const std::string& input, const std::vector<std::string>& file
                                     std::string selectedFile = fileList[selectedIndex];
                                     {
                                         std::lock_guard<std::mutex> lock(futuresMutex);
-                                        if (!modeMdf) {
-                                            futures.push_back(pool.enqueue(asyncConvertBINToISO, selectedFile));
-                                        } else {
-                                            futures.push_back(pool.enqueue(asyncConvertMDFToISO, selectedFile));
-                                        }
+                                            futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));
+                                            futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));
                                     }
                                     processedIndices.insert(selectedIndex);
                                 }
@@ -462,11 +455,8 @@ void processInput(const std::string& input, const std::vector<std::string>& file
                     std::string selectedFile = fileList[selectedIndex];
                     {
                         std::lock_guard<std::mutex> lock(futuresMutex);
-                        if (!modeMdf) {
-                            futures.push_back(pool.enqueue(asyncConvertBINToISO, selectedFile));
-                        } else {
-                            futures.push_back(pool.enqueue(asyncConvertMDFToISO, selectedFile));
-                        }
+                            futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));
+                            futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));
                     }
                     processedIndices.insert(selectedIndex);
                 }
@@ -925,75 +915,7 @@ void printFileList(const std::vector<std::string>& fileList) {
 
 
 // Function to convert a BIN file to ISO format
-void convertBINToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts) {
-	
-	auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath);
-    
-    // Check if the input file exists
-    if (!std::ifstream(inputPath)) {
-        std::cout << "\033[1;91mThe specified input file \033[1;93m'" << directory << "/" << fileNameOnly << "'\033[1;91m does not exist.\033[0;1m\n";
-        return;
-    }
-
-    // Check if the corresponding .iso file already exists
-    std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
-    if (fileExistsConversions(outputPath)) {
-        std::string skipMessage = "\033[1;93mThe corresponding .iso file already exists for: \033[1;92m'" + directory + "/" + fileNameOnly + "'\033[1;93m. Skipped conversion.\033[0;1m";
-        skippedOuts.insert(skipMessage);
-        return;
-    }
-
-    // Escape the inputPath before using it in shell commands
-    std::string escapedInputPath = shell_escape(inputPath);
-
-    // Escape the outputPath before using it in shell commands
-    std::string escapedOutputPath = shell_escape(outputPath);
-
-    // Continue with the rest of the conversion logic...
-
-    // Execute the conversion using mdf2iso
-    std::string conversionCommand = "ccd2iso " + escapedInputPath + " " + escapedOutputPath;
-
-    // Execute the conversion command
-    int conversionStatus = std::system(conversionCommand.c_str());
-
-    auto [outDirectory, outFileNameOnly] = extractDirectoryAndFilename(outputPath);
-    // Check the result of the conversion
-    if (conversionStatus == 0) {
-        std::string successMessage = "\033[1mImage file converted to ISO:\033[0;1m \033[1;92m'" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m.\033[0;1m";
-        successOuts.insert(successMessage);
-    } else {
-        std::string FailedMessage = "\033[1;91mConversion of \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m failed.\033[0;1m";
-        failedOuts.insert(FailedMessage);
-
-        // Delete the partially created ISO file
-        if (std::remove(outputPath.c_str()) == 0) {
-            std::string DeletedMessage = "\033[1;92mDeleted incomplete ISO file:\033[1;91m '" + outDirectory + "/" + outFileNameOnly + "'\033[1;92m.\033[0;1m";
-            deletedOuts.insert(DeletedMessage);
-        } else {
-            std::string DeletedMessage = "\033[1;91mFailed to delete partially created ISO file: \033[1;93m'" + outDirectory + "/" + outFileNameOnly + "'\033[1;91m.\033[0;1m";
-            deletedOuts.insert(DeletedMessage);
-        }
-    }
-}
-
-
-// Check if ccd2iso is installed on the system
-bool isCcd2IsoInstalled() {
-    // Use the system command to check if ccd2iso is available
-    if (std::system("which ccd2iso > /dev/null 2>&1") == 0) {
-        return true; // ccd2iso is installed
-    } else {
-        return false; // ccd2iso is not installed
-    }
-}
-
-
-// MDF CONVERSION FUNCTIONS
-
-
-// Function to convert an MDF file to ISO format using mdf2iso
-void convertMDFToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts) {
+void convertToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool modeMdf) {
     auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath);
     
     // Check if the input file exists
@@ -1016,22 +938,56 @@ void convertMDFToISO(const std::string& inputPath, std::set<std::string>& succes
     // Escape the outputPath before using it in shell commands
     std::string escapedOutputPath = shell_escape(outputPath);
 
-    // Continue with the rest of the conversion logic...
-
-    // Execute the conversion using mdf2iso
-    std::string conversionCommand = "mdf2iso " + escapedInputPath + " " + escapedOutputPath;
+    // Determine the appropriate conversion command
+    std::string conversionCommand;
+    if (modeMdf) {
+        conversionCommand = "mdf2iso " + escapedInputPath + " " + escapedOutputPath;
+    } else if (!modeMdf) {
+        conversionCommand = "ccd2iso " + escapedInputPath + " " + escapedOutputPath;
+    } else {
+        std::string failedMessage = "\033[1;91mUnsupported file format for \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m. Conversion failed.\033[0;1m";
+        failedOuts.insert(failedMessage);
+        return;
+    }
 
     // Execute the conversion command
     int conversionStatus = std::system(conversionCommand.c_str());
 
+    auto [outDirectory, outFileNameOnly] = extractDirectoryAndFilename(outputPath);
+    // Check the result of the conversion
     if (conversionStatus == 0) {
-        std::string successMessage = "\033[1mImage file converted to ISO: \033[1;92m'" + directory + "/" + fileNameOnly + ".iso'\033[0;1m\033[1m.\033[0;1m";
+        std::string successMessage = "\033[1mImage file converted to ISO:\033[0;1m \033[1;92m'" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m.\033[0;1m";
         successOuts.insert(successMessage);
     } else {
         std::string failedMessage = "\033[1;91mConversion of \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m failed.\033[0;1m";
         failedOuts.insert(failedMessage);
+
+        // Delete the partially created ISO file
+        if (std::remove(outputPath.c_str()) == 0) {
+            std::string deletedMessage = "\033[1;92mDeleted incomplete ISO file:\033[1;91m '" + outDirectory + "/" + outFileNameOnly + "'\033[1;92m.\033[0;1m";
+            deletedOuts.insert(deletedMessage);
+        } else {
+            std::string deletedMessage = "\033[1;91mFailed to delete partially created ISO file: \033[1;93m'" + outDirectory + "/" + outFileNameOnly + "'\033[1;91m.\033[0;1m";
+            deletedOuts.insert(deletedMessage);
+        }
     }
 }
+
+
+
+
+// Check if ccd2iso is installed on the system
+bool isCcd2IsoInstalled() {
+    // Use the system command to check if ccd2iso is available
+    if (std::system("which ccd2iso > /dev/null 2>&1") == 0) {
+        return true; // ccd2iso is installed
+    } else {
+        return false; // ccd2iso is not installed
+    }
+}
+
+
+// MDF CONVERSION FUNCTIONS
 
 
 // Function to check if mdf2iso is installed
