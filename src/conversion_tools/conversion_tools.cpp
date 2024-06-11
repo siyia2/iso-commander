@@ -418,7 +418,6 @@ void processInput(const std::string& input, const std::vector<std::string>& file
                                     {
                                         std::lock_guard<std::mutex> lock(futuresMutex);
                                             futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));
-                                            futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));
                                     }
                                     processedIndices.insert(selectedIndex);
                                 }
@@ -442,7 +441,6 @@ void processInput(const std::string& input, const std::vector<std::string>& file
                     std::string selectedFile = fileList[selectedIndex];
                     {
                         std::lock_guard<std::mutex> lock(futuresMutex);
-                            futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));
                             futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));
                     }
                     processedIndices.insert(selectedIndex);
