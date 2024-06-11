@@ -970,8 +970,6 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
 }
 
 
-
-
 // Check if ccd2iso is installed on the system
 bool isCcd2IsoInstalled() {
     // Use the system command to check if ccd2iso is available
@@ -981,9 +979,6 @@ bool isCcd2IsoInstalled() {
         return false; // ccd2iso is not installed
     }
 }
-
-
-// MDF CONVERSION FUNCTIONS
 
 
 // Function to check if mdf2iso is installed
