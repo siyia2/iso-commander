@@ -5,8 +5,8 @@
 static std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles here
 static std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
 
-std::string globalInputStringMdf; // Global string for automatic cache refresh for mdf files
-std::string globalInputStringBin; // Global string for automatic cache refresh for bin/img files
+std::string globalInputString; // Global string for automatic cache refresh for bin/img/mdf files
+
 
 // GENERAL
 
@@ -465,12 +465,9 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     // Update promptFlag
     promptFlag = false;
     
-    // Manual cache refresh based on flag
-    if (!modeMdf) {
-        manualRefreshCache(globalInputStringBin);
-    } else {
-        manualRefreshCache(globalInputStringMdf);
-    }
+    // Automatic cache refresh based on flag
+    manualRefreshCache(globalInputString);
+    globalInputString = "";
 }
 
 
@@ -500,7 +497,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         if (mode == "bin"){
 		processedPathsBin.clear();
         binImgFilesCache.clear();
-        globalInputStringBin = "";
+        globalInputString = "";
         clearScrollBuffer(); // Clear scroll buffer
         std::cout << "\n\033[1;92mBIN/IMG RAM cache cleared.\033[0;1m\n";
         
@@ -512,7 +509,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
 		} else {
         mdfMdsFilesCache.clear();
         processedPathsMdf.clear();
-        globalInputStringMdf = "";
+        globalInputString = "";
         clearScrollBuffer(); // Clear scroll buffer
         std::cout << "\n\033[1;92mMDF RAM cache cleared.\033[0;1m\n";
         
@@ -929,20 +926,15 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
     // Find the position of the last '/'
     size_t lastSlashPos = inputPath.find_last_of('/');
     // Extract the output path before and including the last '/'
-    std::string inputPaths = inputPath.substr(0, lastSlashPos + 1);
+    std::string conversionDir = inputPath.substr(0, lastSlashPos + 1);
     
     // Save paths for potential automatic cache refresh according to selected mode
-    if (!modeMdf) {
-		if (!globalInputStringBin.empty()) {
-			globalInputStringBin += ";"; // Add a semicolon if globalInputString is not empty
+    
+		if (!globalInputString.empty()) {
+			globalInputString += ";"; // Add a semicolon if globalInputString is not empty
 		}
-		globalInputStringBin += inputPaths;
-	} else {
-		if (!globalInputStringMdf.empty()) {
-			globalInputStringMdf += ";"; // Add a semicolon if globalInputString is not empty
-		}
-		globalInputStringMdf += inputPaths;
-	}
+		globalInputString += conversionDir;
+		
 
     // Determine the appropriate conversion command
     std::string conversionCommand;
