@@ -161,6 +161,7 @@ bool blacklist(const std::filesystem::path& entry, bool blacklistMdf);
 std::vector<std::string> findFiles(const std::vector<std::string>& paths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrors);
 
 // voids
+void convertToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool modeMdf);
 void verboseFind(std::set<std::string> invalidDirectoryPaths);
 void verboseConversion(std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts);
 void select_and_convert_files_to_iso(const std::string& fileTypeChoice);
@@ -175,16 +176,11 @@ bool fileExistsConversions(const std::string& fullPath);
 // bools
 bool isCcd2IsoInstalled();
 
-// voids
-void convertBINToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts);
-
 
 // MDF/MDS CONVERSION
 
 // bools
 bool isMdf2IsoInstalled();
 
-// voids
-void convertMDFToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts);
 
 #endif // HEADERS_H
