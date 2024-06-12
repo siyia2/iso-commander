@@ -318,6 +318,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 							clearScrollBuffer(); // Clear scroll buffer
 							std::cout << "\033[1mPlease wait...\n\033[1m\n"; // Inform user to wait
 							processInput(filterInput, filteredFiles, modeMdf, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts); // Process user input
+							free(filterInput);
 							
 							clearScrollBuffer(); // Clear scroll buffer
 							std::cout << "\n"; // Print newline
@@ -335,6 +336,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 			clearScrollBuffer(); // Clear scroll buffer
 			std::cout << "\033[1mPlease wait...\n\033[1m\n"; // Inform user to wait
 			processInput(input, files, modeMdf, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts); // Process input
+			free(input);
 			
 			clearScrollBuffer(); // Clear scroll buffer
 			std::cout << "\n"; // Print newline
