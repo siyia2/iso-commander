@@ -290,6 +290,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 				} else {
 					while (true) { // Enter another loop for handling filtered results
+						isFiltered = true;
 						clearScrollBuffer(); // Clear scroll buffer
 						clear_history(); // Clear history for fresh start
 						sortFilesCaseInsensitive(filteredFiles);
@@ -317,7 +318,6 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 							clearScrollBuffer(); // Clear scroll buffer
 							std::cout << "\033[1mPlease wait...\n\033[1m\n"; // Inform user to wait
 							processInput(filterInput, filteredFiles, modeMdf, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts); // Process user input
-							free(filterInput); // Free memory allocated for filter input
 							
 							clearScrollBuffer(); // Clear scroll buffer
 							std::cout << "\n"; // Print newline
