@@ -383,7 +383,6 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 
 	// Vector to store paths of selected files
 	std::vector<std::string> selectedFilePaths;
-
 	// String to store the concatenated file paths
 	std::string concatenatedFilePaths;
 
@@ -393,27 +392,22 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     std::size_t found = selectedFile.find_last_of("/\\");
     std::string filePath = selectedFile.substr(0, found);
 
-    // Store the file path in the vector
-    selectedFilePaths.push_back(filePath);
+    // Store the file path in the vector if it doesn't already exist
+    if (std::find(selectedFilePaths.begin(), selectedFilePaths.end(), filePath) == selectedFilePaths.end()) {
+        selectedFilePaths.push_back(filePath);
+    }
 
     // Convert to ISO
     convertToISO(selectedFile, successOuts, skippedOuts, failedOuts, deletedOuts, modeMdf);
 
-    // Function to join vector of strings into a single string with a semicolon as delimiter
-    auto joinStrings = [](const std::vector<std::string>& vec, const std::string& delimiter = ";") {
-        std::ostringstream oss;
-        for (size_t i = 0; i < vec.size(); ++i) {
-            oss << vec[i];
-            if (i != vec.size() - 1) {
-                oss << delimiter;
-            }
-        }
-        return oss.str();
-    };
-
     // Concatenate the file paths
-    concatenatedFilePaths = joinStrings(selectedFilePaths);
-
+    concatenatedFilePaths.clear();
+    for (const auto& path : selectedFilePaths) {
+        concatenatedFilePaths += path + ";";
+    }
+    if (!concatenatedFilePaths.empty()) {
+        concatenatedFilePaths.pop_back(); // Remove the trailing semicolon
+    }
 	};
 
     // Tokenize the input string
@@ -488,9 +482,10 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 
     // Update promptFlag
     promptFlag = false;
-    
+    if (!processedIndices.empty()){
     // Manual cache refresh based on flag   
     manualRefreshCache(concatenatedFilePaths);
+	}
     concatenatedFilePaths = "";
 }
 
