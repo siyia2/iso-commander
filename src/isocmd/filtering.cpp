@@ -69,13 +69,9 @@ std::vector<size_t> boyerMooreSearch(const std::string& pattern, const std::stri
 
 // Function to filter cached ISO files based on search query (case-insensitive)
 std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query) {
-    // Vector to hold filtered files.
     std::vector<std::string> filteredFiles;
-    
-    // Set to store lowercase tokens extracted from the query string.
     std::set<std::string> queryTokens;
     
-    // Tokenize the query string and store lowercase tokens in the set.
     std::stringstream ss(query);
     std::string token;
     while (std::getline(ss, token, ';')) {
@@ -83,19 +79,15 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
         queryTokens.insert(token);
     }
 
-    // Mutex for thread-safe access to filteredFiles.
     std::shared_mutex filterMutex;
     
-    // Lambda function to perform filtering on a subset of files.
     auto filterTask = [&](size_t start, size_t end) {
+        std::vector<std::string> localFilteredFiles;
         for (size_t i = start; i < end; ++i) {
             const std::string& file = files[i];
-            
-            // Convert the full path to lowercase.
             std::string fileName = file;
             std::transform(fileName.begin(), fileName.end(), fileName.begin(), ::tolower);
             
-            // Check if any query token matches the filename using Boyer-Moore search.
             bool matchFound = false;
             for (const std::string& queryToken : queryTokens) {
                 if (!boyerMooreSearch(queryToken, fileName).empty()) {
@@ -104,38 +96,33 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
                 }
             }
             
-            // If a match is found, add the file to the filtered list.
             if (matchFound) {
-                std::unique_lock<std::shared_mutex> lock(filterMutex);
-                filteredFiles.push_back(file);
+                localFilteredFiles.push_back(file);
             }
         }
+        
+        std::unique_lock<std::shared_mutex> lock(filterMutex);
+        filteredFiles.insert(filteredFiles.end(), localFilteredFiles.begin(), localFilteredFiles.end());
     };
 
-    // Determine the number of threads based on the number of available files.
     size_t numFiles = files.size();
     size_t numThreads = std::min(static_cast<size_t>(maxThreads), numFiles);
     size_t filesPerThread = numFiles / numThreads;
     
-    // Vector to hold futures for asynchronous tasks.
     std::vector<std::future<void>> futures;
     
-    // Launch filtering tasks asynchronously using threads.
     for (size_t i = 0; i < numThreads - 1; ++i) {
         size_t start = i * filesPerThread;
         size_t end = start + filesPerThread;
         futures.emplace_back(std::async(std::launch::async, filterTask, start, end));
     }
     
-    // Process remaining files in the main thread.
     filterTask((numThreads - 1) * filesPerThread, numFiles);
     
-    // Wait for all asynchronous tasks to complete.
     for (auto& future : futures) {
         future.wait();
     }
 
-    // Return the filtered list of files.
     return filteredFiles;
 }
 
