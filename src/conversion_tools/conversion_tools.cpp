@@ -85,7 +85,8 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 	// Set to hold invalid paths for search
 	std::set<std::string> invalidDirectoryPaths;
 	
-    bool modeMdf;
+    bool modeMdf; // Track which mode is selected
+    bool status; // Track if conversion is successful
 
     std::string fileExtension;
     std::string fileTypeName;
@@ -316,7 +317,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 						if (isFiltered) {
 							clearScrollBuffer(); // Clear scroll buffer
 							std::cout << "\033[1mPlease wait...\n\033[1m\n"; // Inform user to wait
-							processInput(filterInput, filteredFiles, modeMdf, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts); // Process user input
+							processInput(filterInput, filteredFiles, modeMdf, status, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts); // Process user input
 							free(filterInput); // Free memory allocated for filter input
 							
 							clearScrollBuffer(); // Clear scroll buffer
@@ -334,7 +335,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 			// If input is not "/", process the input
 			clearScrollBuffer(); // Clear scroll buffer
 			std::cout << "\033[1mPlease wait...\n\033[1m\n"; // Inform user to wait
-			processInput(input, files, modeMdf, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts); // Process input
+			processInput(input, files, modeMdf, status, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts); // Process input
 			
 			clearScrollBuffer(); // Clear scroll buffer
 			std::cout << "\n"; // Print newline
@@ -350,7 +351,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
 
 // Function to process user input and convert selected BIN/MDF files to ISO format
-void processInput(const std::string& input, const std::vector<std::string>& fileList, bool modeMdf, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts) {
+void processInput(const std::string& input, const std::vector<std::string>& fileList, bool modeMdf, bool& status, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts) {
 
     // Mutexes for thread safety
     std::mutex futuresMutex;
@@ -398,7 +399,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     }
 
     // Convert to ISO
-    convertToISO(selectedFile, successOuts, skippedOuts, failedOuts, deletedOuts, modeMdf);
+    convertToISO(selectedFile, successOuts, skippedOuts, failedOuts, deletedOuts, modeMdf, status);
 
     // Concatenate the file paths
     concatenatedFilePaths.clear();
@@ -482,7 +483,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 
     // Update promptFlag
     promptFlag = false;
-    if (!processedIndices.empty()){
+    if (!processedIndices.empty() && status){
     // Manual cache refresh based on flag   
     manualRefreshCache(concatenatedFilePaths);
 	}
@@ -913,7 +914,7 @@ void printFileList(const std::vector<std::string>& fileList) {
 
 
 // Function to convert a BIN file to ISO format
-void convertToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool modeMdf) {
+void convertToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool modeMdf, bool& status) {
     auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath);
     
     // Check if the input file exists
@@ -954,17 +955,21 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
     auto [outDirectory, outFileNameOnly] = extractDirectoryAndFilename(outputPath);
     // Check the result of the conversion
     if (conversionStatus == 0) {
+		status = true;
         std::string successMessage = "\033[1mImage file converted to ISO:\033[0;1m \033[1;92m'" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m.\033[0;1m";
         successOuts.insert(successMessage);
     } else {
+		status = false;
         std::string failedMessage = "\033[1;91mConversion of \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m failed.\033[0;1m";
         failedOuts.insert(failedMessage);
 
         // Delete the partially created ISO file
         if (std::remove(outputPath.c_str()) == 0) {
+			status = false;
             std::string deletedMessage = "\033[1;92mDeleted incomplete ISO file:\033[1;91m '" + outDirectory + "/" + outFileNameOnly + "'\033[1;92m.\033[0;1m";
             deletedOuts.insert(deletedMessage);
         } else {
+			status = true;
             std::string deletedMessage = "\033[1;91mFailed to delete partially created ISO file: \033[1;93m'" + outDirectory + "/" + outFileNameOnly + "'\033[1;91m.\033[0;1m";
             deletedOuts.insert(deletedMessage);
         }
