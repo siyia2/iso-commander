@@ -5,9 +5,6 @@
 static std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles here
 static std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
 
-std::string globalInputStringMdf; // Global string for automatic cache refresh for mdf files
-std::string globalInputStringBin; // Global string for automatic cache refresh for bin/img files
-
 // GENERAL
 
 // Function to check if a file already exists
@@ -117,19 +114,6 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     // Prompt user to input directory paths
     std::string inputPaths = readInputLine("\033[1;94mDirectory path(s) ↵ (multi-path separator: \033[1m\033[1;93m;\033[0;1m\033[1;94m) to search for \033[1m\033[1;92m" + fileExtension + " \033[1;94mfiles, \033[1;93mclr\033[1;94m ↵ to clear \033[1;92m" + fileTypeName + " \033[1;94mRAM cache, or ↵ to return:\n\033[0;1m");
     clearScrollBuffer();
-    
-    // Save paths for potential automatic cache refresh according to selected mode
-    if (!modeMdf) {
-		if (!globalInputStringBin.empty()) {
-			globalInputStringBin += ";"; // Add a semicolon if globalInputString is not empty
-		}
-		globalInputStringBin += inputPaths;
-	} else {
-		if (!globalInputStringMdf.empty()) {
-			globalInputStringMdf += ";"; // Add a semicolon if globalInputString is not empty
-		}
-		globalInputStringMdf += inputPaths;
-	}
 	
 	bool onlySpaces = true;
 		for (char c : inputPaths) {
@@ -398,11 +382,40 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     std::string user_str(current_user);
     std::string group_str = std::to_string(static_cast<unsigned int>(current_group));
 
-    // Lambda function for asynchronously converting BIN to ISO
-    auto asyncConvertToISO = [&](const std::string& selectedFile) {
-        convertToISO(selectedFile, successOuts, skippedOuts, failedOuts, deletedOuts, modeMdf);
+	// Vector to store paths of selected files
+	std::vector<std::string> selectedFilePaths;
+
+	// String to store the concatenated file paths
+	std::string concatenatedFilePaths;
+
+	// Lambda function for asynchronously converting BIN to ISO
+	auto asyncConvertToISO = [&](const std::string& selectedFile) {
+    // Get the path of the selected file
+    std::size_t found = selectedFile.find_last_of("/\\");
+    std::string filePath = selectedFile.substr(0, found);
+
+    // Store the file path in the vector
+    selectedFilePaths.push_back(filePath);
+
+    // Convert to ISO
+    convertToISO(selectedFile, successOuts, skippedOuts, failedOuts, deletedOuts, modeMdf);
+
+    // Function to join vector of strings into a single string with a semicolon as delimiter
+    auto joinStrings = [](const std::vector<std::string>& vec, const std::string& delimiter = ";") {
+        std::ostringstream oss;
+        for (size_t i = 0; i < vec.size(); ++i) {
+            oss << vec[i];
+            if (i != vec.size() - 1) {
+                oss << delimiter;
+            }
+        }
+        return oss.str();
     };
 
+    // Concatenate the file paths
+    concatenatedFilePaths = joinStrings(selectedFilePaths);
+
+	};
 
     // Tokenize the input string
     std::istringstream iss(input);
@@ -477,12 +490,9 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     // Update promptFlag
     promptFlag = false;
     
-    // Manual cache refresh based on flag
-    if (!modeMdf) {
-        manualRefreshCache(globalInputStringBin);
-    } else {
-        manualRefreshCache(globalInputStringMdf);
-    }
+    // Manual cache refresh based on flag   
+    manualRefreshCache(concatenatedFilePaths);
+    concatenatedFilePaths = "";
 }
 
 
@@ -512,7 +522,6 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         if (mode == "bin"){
 		processedPathsBin.clear();
         binImgFilesCache.clear();
-        globalInputStringBin = "";
         clearScrollBuffer(); // Clear scroll buffer
         std::cout << "\n\033[1;92mBIN/IMG RAM cache cleared.\033[0;1m\n";
         
@@ -524,7 +533,6 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
 		} else {
         mdfMdsFilesCache.clear();
         processedPathsMdf.clear();
-        globalInputStringMdf = "";
         clearScrollBuffer(); // Clear scroll buffer
         std::cout << "\n\033[1;92mMDF RAM cache cleared.\033[0;1m\n";
         
