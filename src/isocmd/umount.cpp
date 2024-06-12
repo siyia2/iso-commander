@@ -328,6 +328,8 @@ void unmountISOs() {
                     // Display the filtered list and prompt the user for input
                     while (true) {
                         clearScrollBuffer();
+                        errorMessages.clear();
+                        invalidInput = false;
                         sortFilesCaseInsensitive(filteredIsoDirs);
                         std::cout << "\033[1mFiltered results:\n\033[0m\033[1m" << std::endl;
                         size_t maxIndex = filteredIsoDirs.size();
