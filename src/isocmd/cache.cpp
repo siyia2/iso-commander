@@ -284,22 +284,15 @@ void manualRefreshCache(const std::string& initialDir) {
         // Prompt the user to enter directory paths for manual cache refresh
         inputLine = readInputLine("\033[1;94mDirectory path(s) ↵ to build/refresh the \033[1m\033[1;92mISO Cache\033[94m (multi-path separator: \033[1m\033[1;93m;\033[0m\033[1;94m), or ↵ to return:\n\033[0;1m");
     }
-	bool onlySpaces = true;
-		for (char c : inputLine) {
-            if (!std::isspace(c)) {
-                onlySpaces = false;
-                break;
-            }
-		}
-    if (!inputLine.empty() && !onlySpaces) {
-				// Save history to file
-				saveHistory();
-			}
-		
-    // Check if the user canceled the cache refresh
+    
+	// Check if the input line is empty or contains only spaces
+    bool onlySpaces = std::all_of(inputLine.begin(), inputLine.end(), [](char c) { return std::isspace(c); });
+    
     if (inputLine.empty() || onlySpaces) {
         return;
     }
+
+    saveHistory();
 
     // Create an input string stream to parse directory paths
     std::istringstream iss(inputLine);
