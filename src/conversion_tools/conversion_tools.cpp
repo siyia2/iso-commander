@@ -225,7 +225,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
         clear_history();
 
-        std::string prompt = "\n\001\033[1;38;5;208m\002" + fileTypeName + " \001\033[1;94m\002file(s) ↵ for conversion (e.g., '1-3', '1 5'), / ↵ to filter, or ↵ to return:\001\033[0;1m\002 ";
+        std::string prompt = "\n\001\033[1;38;5;208m\002" + fileTypeName + " \001\033[1;94m\002file(s) ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion (e.g., '1-3', '1 5'), / ↵ to filter, or ↵ to return:\001\033[0;1m\002 ";
         char* input = readline(prompt.c_str());
 
         // Check if user wants to return
@@ -295,10 +295,10 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 						std::string filterPrompt; // Define a string variable for filter prompt
 						if (fileType == "bin" || fileType == "img") { // Check file type
 							// Prompt for BIN/IMG files
-							filterPrompt = "\n\001\033[1;94m\033[1;38;5;208m\002BIN/IMG\001\033[1;94m\002 file(s) ↵ for conversion (e.g., '1-3', '1 5'), or ↵ to return:\001\033[0;1m\002 ";
+							filterPrompt = "\n\001\033[1;94m\033[1;38;5;208m\002BIN/IMG\001\033[1;94m\002 file(s) ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion (e.g., '1-3', '1 5'), or ↵ to return:\001\033[0;1m\002 ";
 						} else if (fileType == "mdf") {
 							// Prompt for MDF files
-							filterPrompt = "\n\001\033[1;94m\033[1;38;5;208m\002MDF\001\033[1;94m\002 file(s) ↵ for conversion (e.g., '1-3', '1 5'), or ↵ to return:\001\033[0;1m\002 ";
+							filterPrompt = "\n\001\033[1;94m\033[1;38;5;208m\002MDF\001\033[1;94m\002 file(s) ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion (e.g., '1-3', '1 5'), or ↵ to return:\001\033[0;1m\002 ";
 						}
 						char* filterInput = readline(filterPrompt.c_str()); // Get input for file conversion
 
@@ -877,10 +877,6 @@ void printFileList(const std::vector<std::string>& fileList) {
 
     // Toggle between red and green for sequence number coloring
     bool useRedColor = true;
-
-    // Print header for file selection
-    std::cout << bold << "Select file(s) to convert to " << bold << "\033[1;92mISO(s)\033[0;1m:\n";
-    std::cout << " \n";
 
     // Counter for line numbering
     int lineNumber = 1;
