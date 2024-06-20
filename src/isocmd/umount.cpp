@@ -43,7 +43,6 @@ void listMountedISOs() {
 		sortFilesCaseInsensitive(isoDirs);
 		std::cout << "\033[1;93m! ROOT ACCESS IS PARAMOUNT FOR SUCCESSFUL UNMOUNTS !\n\033[0;1m";
 		std::cout << "\033[94;1m       CHANGES ARE REFLECTED AUTOMATICALLY\033[0;1m\n";
-        std::cout << "\n\033[0;1mList of mounted ISO(s):\033[0;1m\n"; // White and bold
         std::cout << " \n";
         
         size_t maxIndex = isoDirs.size();
