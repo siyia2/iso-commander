@@ -220,7 +220,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     while (!noValid && !clr) {
         // Display file list and prompt user for input
         clearScrollBuffer();
-        std::cout << "\033[94;1mSUCCESSFUL CONVERSIONS ARE AUTOMATICALLY ADDED INTO ISO CACHE\033[0;1m\033[0;1m\n\n";
+        std::cout << "\033[35;1m SUCCESSFUL CONVERSIONS ARE AUTOMATICALLY ADDED INTO ISO CACHE\033[0;1m\033[0;1m\n\n";
         printFileList(files);
 
         clear_history();
