@@ -20,7 +20,7 @@ const std::string historyPatternFilePath = std::string(getenv("HOME")) + "/.cach
 //Maximum number of history entries at a time
 const int MAX_HISTORY_LINES = 100;
 
-const int MAX_HISTORY_PATTERN_LINES = 20;
+const int MAX_HISTORY_PATTERN_LINES = 10;
 
 // Global variables for cleanup
 int lockFileDescriptor = -1;
@@ -30,7 +30,7 @@ int lockFileDescriptor = -1;
 int main(int argc, char *argv[]) {
 	
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
-        printVersionNumber("4.4.9");
+        printVersionNumber("4.5.0");
         return 0;
     }
 	
