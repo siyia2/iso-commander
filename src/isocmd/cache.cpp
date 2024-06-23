@@ -8,6 +8,8 @@ const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.cache";
 const std::string cacheFileName = "iso_commander_cache.txt";;
 const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
+int maxDepth = -1;
+
 
 // Function to remove non-existent paths from cache asynchronously with basic thread control
 void removeNonExistentPathsFromCache() {
@@ -449,53 +451,66 @@ void manualRefreshCache(const std::string& initialDir) {
 }
 
 
-// Case-insensitive string comparison
-bool iequals(const std::string& a, const std::string& b) {
+// Case-insensitive string comparison (optimized)
+bool iequals(const std::string_view& a, const std::string_view& b) {
     return std::equal(a.begin(), a.end(), b.begin(), b.end(),
-        [](char a, char b) {
-            return tolower(a) == tolower(b);
+        [](unsigned char a, unsigned char b) {
+            return std::tolower(a) == std::tolower(b);
         });
-}
-
-
-// Function to check if a string ends with ".iso" (case-insensitive)
-bool ends_with_iso(const std::string& str) {
-    // Convert the string to lowercase
-    std::string lowercase = str;
-    std::transform(lowercase.begin(), lowercase.end(), lowercase.begin(), ::tolower);
-    // Check if the string ends with ".iso" by comparing the last 4 characters
-    return (lowercase.size() >= 4) && (lowercase.compare(lowercase.size() - 4, 4, ".iso") == 0);
 }
 
 
 // Function to traverse a directory and find ISO files
 void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages) {
     try {
-        // Iterate over entries in the specified directory and its subdirectories
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
-            // Check if the entry is a regular file
-            if (entry.is_regular_file()) {
-                const std::filesystem::path& filePath = entry.path();
-
-                // Check file size and skip if less than 5MB or empty, or if it has a ".bin" extension
-                const auto fileSize = std::filesystem::file_size(filePath);
-                if (fileSize < 5 * 1024 * 1024 || fileSize == 0 || iequals(filePath.extension().string(), ".bin")) {
-                    continue;
-                }
-
-                // Extract the file extension
-                std::string extension = filePath.extension().string();
-
-                // Check if the file has a ".iso" extension
-                if (iequals(extension, ".iso")) {
-                    // Push the file path to the isoFiles vector
-                    isoFiles.push_back(filePath.string());
-                }
+        // Set directory traversal options; initially none
+        auto options = std::filesystem::directory_options::none;
+        
+        // If maxDepth is non-negative, include symlink directories in traversal
+        if (maxDepth >= 0) {
+            options |= std::filesystem::directory_options::follow_directory_symlink;
+        }
+        
+        // Iterate through the directory recursively
+        for (auto it = std::filesystem::recursive_directory_iterator(path, options); it != std::filesystem::recursive_directory_iterator(); ++it) {
+            // If maxDepth is set and current depth exceeds it, skip further recursion
+            if (maxDepth >= 0 && it.depth() > maxDepth) {
+                it.disable_recursion_pending();
+                continue;
             }
+            
+            const auto& entry = *it;
+            // If the current entry is not a regular file, skip it
+            if (!entry.is_regular_file()) {
+                continue;
+            }
+            
+            const auto& filePath = entry.path();
+            const auto extension = filePath.extension();
+            
+            // Skip files with a ".bin" extension
+            if (iequals(extension.string(), ".bin")) {
+                continue;
+            }
+            
+            // Skip files that do not have a ".iso" extension
+            if (!iequals(extension.string(), ".iso")) {
+                continue;
+            }
+            
+            const auto fileSize = entry.file_size();
+            // Skip files smaller than 5 MB or with a size of 0
+            if (fileSize < 5 * 1024 * 1024 || fileSize == 0) {
+                continue;
+            }
+            
+            // Add valid .iso file paths to the isoFiles vector
+            isoFiles.push_back(filePath.string());
         }
     } catch (const std::filesystem::filesystem_error& e) {
-        // Handle filesystem errors, print a message, and introduce a 2-second delay
+        // Catch any filesystem errors, format the error message, and add it to the set of unique error messages
         std::string formattedError = std::string("\n\033[1;91m") + e.what() + ".\033[0;1m";
         uniqueErrorMessages.insert(formattedError);
     }
 }
+
