@@ -45,6 +45,9 @@ extern std::mutex Mutex4Low;
 extern bool gapPrinted; // for cache refresh for directory function
 extern bool promptFlag; // for cache refresh for directory function
 
+// Global variable to control recursion depth
+extern int maxDepth;
+
 // For saving history to a differrent cache for FilterPatterns
 extern bool historyPattern;
 
@@ -78,9 +81,8 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 bool isAlreadyMounted(const std::string& mountPoint);
 
 // Iso cache functions
-bool iequals(const std::string& a, const std::string& b);
+bool iequals(const std::string_view& a, const std::string_view& b);
 bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize);
-bool ends_with_iso(const std::string& str);
 
 // Unmount functions
 bool isDirectoryEmpty(const std::string& path);
