@@ -378,25 +378,19 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     std::string user_str(current_user);
     std::string group_str = std::to_string(static_cast<unsigned int>(current_group));
 
-	// Vector to store paths of selected files
-	std::vector<std::string> selectedFilePaths;
+	// Use set to store unique paths of selected files in order
+	std::set<std::string> selectedFilePaths;
 	// String to store the concatenated file paths
 	std::string concatenatedFilePaths;
-
 	// Lambda function for asynchronously converting BIN to ISO
 	auto asyncConvertToISO = [&](const std::string& selectedFile) {
 		// Get the path of the selected file
 		std::size_t found = selectedFile.find_last_of("/\\");
 		std::string filePath = selectedFile.substr(0, found);
-
-		// Store the file path in the vector if it doesn't already exist
-		if (std::find(selectedFilePaths.begin(), selectedFilePaths.end(), filePath) == selectedFilePaths.end()) {
-			selectedFilePaths.push_back(filePath);
-		}
-
+		// Store the file path in the set if it doesn't already exist
+		selectedFilePaths.insert(filePath);
 		// Convert to ISO
 		convertToISO(selectedFile, successOuts, skippedOuts, failedOuts, deletedOuts, modeMdf);
-
 		// Concatenate the file paths
 		concatenatedFilePaths.clear();
 		for (const auto& path : selectedFilePaths) {
