@@ -498,9 +498,11 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     // Update promptFlag
     promptFlag = false;
     if (!processedIndices.empty()){
-    // Manual cache refresh based on flag   
-    manualRefreshCache(concatenatedFilePaths);
+		maxDepth = 0;
+		// Manual cache refresh based on flag   
+		manualRefreshCache(concatenatedFilePaths);
 	}
+	maxDepth = -1;
 }
 
 
