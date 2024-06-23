@@ -497,7 +497,8 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     }
     
 		if (!isDelete) {
-			promptFlag = false;        
+			promptFlag = false;
+			maxDepth = 0;   
 			manualRefreshCache(userDestDir);
 		}
 
@@ -525,6 +526,8 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         operationErrors.clear();
         userDestDir.clear();
         clear_history();
+        
+        maxDepth = -1;
         
         std::cout << "\n";
         std::cout << "\033[1;32m↵ to continue...\033[0;1m";
