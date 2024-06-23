@@ -382,39 +382,21 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 	std::vector<std::string> selectedFilePaths;
 	// String to store the concatenated file paths
 	std::string concatenatedFilePaths;
-	
+
 	// Lambda function for asynchronously converting BIN to ISO
 	auto asyncConvertToISO = [&](const std::string& selectedFile) {
 		// Get the path of the selected file
 		std::size_t found = selectedFile.find_last_of("/\\");
 		std::string filePath = selectedFile.substr(0, found);
-    
-		// Check if this path is already covered by a broader path
-		bool isCovered = false;
-		for (const auto& existingPath : selectedFilePaths) {
-			if (filePath.find(existingPath) == 0) {
-				isCovered = true;
-				break;
-			}
-		}
-    
-		if (!isCovered) {
-			// Remove any existing paths that are subpaths of this one
-			selectedFilePaths.erase(
-				std::remove_if(selectedFilePaths.begin(), selectedFilePaths.end(),
-					[&filePath](const std::string& path) {
-						return path.find(filePath) == 0;
-					}),
-				selectedFilePaths.end()
-			);
-        
-			// Add the new path
+
+		// Store the file path in the vector if it doesn't already exist
+		if (std::find(selectedFilePaths.begin(), selectedFilePaths.end(), filePath) == selectedFilePaths.end()) {
 			selectedFilePaths.push_back(filePath);
 		}
-    
+
 		// Convert to ISO
 		convertToISO(selectedFile, successOuts, skippedOuts, failedOuts, deletedOuts, modeMdf);
-    
+
 		// Concatenate the file paths
 		concatenatedFilePaths.clear();
 		for (const auto& path : selectedFilePaths) {
@@ -499,8 +481,8 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     promptFlag = false;
     if (!processedIndices.empty()){
 		maxDepth = 0;
-		// Manual cache refresh based on flag   
-		manualRefreshCache(concatenatedFilePaths);
+    // Manual cache refresh based on flag   
+    manualRefreshCache(concatenatedFilePaths);
 	}
 	maxDepth = -1;
 }
