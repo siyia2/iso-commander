@@ -7,35 +7,6 @@ bool mvDelBreak=false;
 
 // General
 
-// Function to check if a linux path is valid
-bool isValidLinuxPathFormat(const std::string& path) {
-    // Check if the path is empty or does not start with '/'
-    if (path[0] != '/') {
-        return false; // Linux paths must start with '/'
-    }
-
-    bool previousWasSlash = false;
-
-    // Iterate through each character in the path
-    for (char c : path) {
-        if (c == '/') {
-            if (previousWasSlash) {
-                return false; // Consecutive slashes are not allowed
-            }
-            previousWasSlash = true;
-        } else {
-            previousWasSlash = false;
-
-            // Check for invalid characters: '\0', '\n', '\r', '\t'
-            if (c == '\0' || c == '\n' || c == '\r' || c == '\t' || c == ';') {
-                return false; // Invalid characters in Linux path
-            }
-        }
-    }
-
-    return true; // Path format is valid
-}
-
 // Main function to select and operate on files by number
 void select_and_operate_files_by_number(const std::string& operation) {
 	
@@ -429,7 +400,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             }
 
             // Check if the entered path is valid
-            if (isValidLinuxPathFormat(input) && std::string(input).back() == '/') {
+            if (isValidDirectory(input) && std::string(input).back() == '/') {
                 userDestDir = input;
 					add_history(input);
                     saveHistory();
