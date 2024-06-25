@@ -431,11 +431,13 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             // Check if the entered path is valid
             if (isValidLinuxPathFormat(input) && std::string(input).back() == '/') {
                 userDestDir = input;
-                free(input);
+					add_history(input);
                     saveHistory();
                     clear_history();
+                    free(input);
                 break;
             } else {
+				free(input);
                 std::cout << "\n\033[1;91mInvalid paths and/or multiple paths are excluded from \033[1;92mcp\033[1;91m and \033[1;93mmv\033[1;91m operations.\033[0;1m\n";
                 std::cout << "\n\033[1;32m↵ to try again...\033[0;1m";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
