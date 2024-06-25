@@ -75,6 +75,7 @@ void select_and_mount_files_by_number() {
         isoFiles = loadCache();
         std::string searchQuery;
         std::vector<std::string> filteredFiles;
+        sortFilesCaseInsensitive(isoFiles);
         printIsoFileList(isoFiles);
 		
         // Prompt user for input
