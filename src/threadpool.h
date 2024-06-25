@@ -3,7 +3,7 @@
 #include "headers.h"
 
 
-// A global thread lock-free pool for async tasks that includes work stealing
+// A global lock-free thread pool for async tasks that includes work stealing
 template <typename T>
 class LockFreeQueue {
 private:
