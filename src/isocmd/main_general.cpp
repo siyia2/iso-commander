@@ -525,31 +525,3 @@ void saveHistory() {
         std::cerr << "\n\033[1;91mFailed to open history cache file: \033[1;93m'" << historyFilePath << "'\033[1;91m. Check read/write permissions.\033[0m";
     }
 }
-
-
-// Function for tab completion and history creation
-std::string readInputLine(const std::string& prompt) {
-    try {
-        // Ensure the prompt is displayed before reading input
-        std::cout << prompt;
-        std::cout.flush();
-
-        // Read a line of input using the readline function
-        std::unique_ptr<char, decltype(&free)> input(readline(""), &free);
-
-        // Check if input is not null (readline successful)
-        if (input && input.get()[0] != '\0' && std::string(input.get()) != "\n") {
-            // Add the input to the history
-            add_history(input.get());
-
-            // Convert the C-style string to a C++ string
-            return std::string(input.get());
-        }
-    } catch (const std::exception& e) {
-        // Log the error or handle it in a way suitable for your application
-        std::cerr << "\033[91m" << e.what() << "\033[0m";
-    }
-
-    // Return an empty string if readline fails or input is empty
-    return "";
-}

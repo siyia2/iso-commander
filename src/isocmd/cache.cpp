@@ -269,35 +269,42 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 void manualRefreshCache(const std::string& initialDir) {
 	
 	std::mutex cacheRefreshMutex;
-	
-    if (promptFlag){
-    clearScrollBuffer();
-    gapPrinted = false;
+
+	// Assuming promptFlag is defined elsewhere
+	if (promptFlag) {
+		clearScrollBuffer();
+		gapPrinted = false;
 	}
-    // Load history from file
-    loadHistory();
 
-    std::string inputLine;
+	// Load history from file
+	loadHistory();
 
-    // Append the initial directory if provided
-    if (!initialDir.empty()) {
-        inputLine = initialDir;
-    } else {
-        // Prompt the user to enter directory paths for manual cache refresh
-        inputLine = readInputLine("\033[1;94mDirectory path(s) ↵ to build/refresh the \033[1m\033[1;92mISO Cache\033[94m (multi-path separator: \033[1m\033[1;93m;\033[0m\033[1;94m), or ↵ to return:\n\033[0;1m");
-    }
-    
+	std::string input;
+
+	// Append the initial directory if provided
+	if (!initialDir.empty()) {
+		input = initialDir;
+	} else {
+		maxDepth = -1;
+		// Prompt the user to enter directory paths for manual cache refresh
+		std::string prompt = "\001\033[1;94m\002Directory path(s) ↵ to build/refresh the \001\033[1;92m\002ISO Cache\001\033[94m\002 (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return:\n\001\033[0;1m\002";
+		char* inputCString = readline(prompt.c_str());
+		if (inputCString != nullptr) {
+			input = inputCString;
+			free(inputCString); // Remember to free the readline allocated memory
+		}
+	}
+
 	// Check if the input line is empty or contains only spaces
-    bool onlySpaces = std::all_of(inputLine.begin(), inputLine.end(), [](char c) { return std::isspace(c); });
-    
-    if (inputLine.empty() || onlySpaces) {
-        return;
-    }
+	bool onlySpaces = std::all_of(input.begin(), input.end(), [](char c) { return std::isspace(static_cast<unsigned char>(c)); });
 
+	if (input.empty() || onlySpaces) {
+		return;
+	}
     saveHistory();
 
     // Create an input string stream to parse directory paths
-    std::istringstream iss(inputLine);
+    std::istringstream iss(input);
     std::string path;
 
     // Vector to store all ISO files from multiple directories
@@ -355,7 +362,7 @@ void manualRefreshCache(const std::string& initialDir) {
     auto start_time = std::chrono::high_resolution_clock::now();
 
     // Create a task for each valid directory to refresh the cache and pass the vector by reference
-    std::istringstream iss2(inputLine); // Reset the string stream
+    std::istringstream iss2(input); // Reset the string stream
     std::size_t runningTasks = 0;  // Track the number of running tasks
         
     while (std::getline(iss2, path, ';')) {
