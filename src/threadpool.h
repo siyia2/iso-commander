@@ -7,7 +7,7 @@
 template <typename T>
 class LockFreeQueue {
 private:
-    struct Node {
+    struct alignas(64) Node { // Align Node struct to 64 bytes
         T data;
         std::atomic<Node*> next;
         Node(T value = T()) : data(std::move(value)), next(nullptr) {}
@@ -87,12 +87,12 @@ public:
 
 class ThreadPool {
 public:
-    explicit ThreadPool(size_t numThreads) : stop(false), nextQueue(0) {
+    explicit ThreadPool(size_t numThreads) : stop(false) {
         for (size_t i = 0; i < numThreads; ++i) {
             queues.emplace_back(std::make_unique<LockFreeQueue<std::function<void()>>>());
         }
         for (size_t i = 0; i < numThreads; ++i) {
-            workers.emplace_back(&ThreadPool::workerThread, this, i);
+            workers.emplace_back(&ThreadPool::workerThread, this);
         }
     }
 
@@ -109,9 +109,8 @@ public:
             if (stop) {
                 throw std::runtime_error("Enqueue on stopped ThreadPool");
             }
-            size_t queueIndex = nextQueue;
-            nextQueue = (nextQueue + 1) % queues.size();
-            queues[queueIndex]->enqueue([task]() { (*task)(); });
+            size_t threadIndex = getNextQueueIndex();
+            queues[threadIndex]->enqueue([task]() { (*task)(); });
         }
         condition.notify_one();
         return res;
@@ -124,14 +123,6 @@ public:
         }
         condition.notify_all();
 
-        // Wait for all tasks to complete
-        for (auto& queue : queues) {
-            std::function<void()> task;
-            while (queue->dequeue(task)) {
-                task();
-            }
-        }
-
         for (std::thread& worker : workers) {
             if (worker.joinable()) {
                 worker.join();
@@ -140,18 +131,19 @@ public:
     }
 
 private:
-    void workerThread(size_t id) {
+    void workerThread() {
         while (true) {
             std::function<void()> task;
             bool gotTask = false;
             
             // Try to get a task from our own queue
-            gotTask = queues[id]->dequeue(task);
+            size_t threadIndex = getNextQueueIndex();
+            gotTask = queues[threadIndex]->dequeue(task);
             
             // If no task in our queue, try to steal from others
             if (!gotTask) {
                 for (size_t i = 0; i < queues.size(); ++i) {
-                    if (i != id && queues[i]->steal(task)) {
+                    if (i != threadIndex && queues[i]->steal(task)) {
                         gotTask = true;
                         break;
                     }
@@ -166,9 +158,8 @@ private:
             
             // If no task was found, wait for notification
             std::unique_lock<std::mutex> lock(mutex);
-            condition.wait(lock, [this, id] { 
-                return stop || !queues[id]->isEmpty() || 
-                       std::any_of(queues.begin(), queues.end(), 
+            condition.wait(lock, [this] { 
+                return stop || std::any_of(queues.begin(), queues.end(), 
                            [](const auto& q) { return !q->isEmpty(); });
             });
             
@@ -179,12 +170,17 @@ private:
         }
     }
 
+    size_t getNextQueueIndex() {
+        thread_local static size_t nextIndex = 0;
+        size_t index = nextIndex++;
+        return index % queues.size();
+    }
+
     std::vector<std::thread> workers;
     std::vector<std::unique_ptr<LockFreeQueue<std::function<void()>>>> queues;
     std::mutex mutex;
     std::condition_variable condition;
     bool stop;
-    size_t nextQueue; // Round-robin task distribution
 };
 
 #endif // THREAD_POOL_H
