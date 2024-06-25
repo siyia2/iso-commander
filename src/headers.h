@@ -55,6 +55,7 @@ extern bool historyPattern;
 //	CP&MV&RM
 
 //	bools
+bool isValidLinuxPathFormat(const std::string& path);
 
 // General
 bool isValidDirectory(const std::string& path);
