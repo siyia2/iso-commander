@@ -59,6 +59,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
         std::string searchQuery;
         std::vector<std::string> filteredFiles = isoFiles;
+        sortFilesCaseInsensitive(isoFiles);
         printIsoFileList(isoFiles);
 
         // Prompt user for input or filter
