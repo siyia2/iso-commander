@@ -32,9 +32,6 @@
 #include <unistd.h>
 
 
-// Global and shared classes and variables
-
-
 // Get max available CPU cores for global use
 extern unsigned int maxThreads;
 
