@@ -27,48 +27,39 @@ void sortFilesCaseInsensitive(std::vector<std::string>& files) {
 
 // Boyer-Moore string search implementation for mount
 std::vector<size_t> boyerMooreSearch(const std::string& pattern, const std::string& text) {
-    // Helper lambda to convert a string to lowercase
-    auto toLower = [](const std::string& str) {
-        std::string lowerStr = str;
-        std::transform(lowerStr.begin(), lowerStr.end(), lowerStr.begin(),
-                       [](unsigned char c){ return std::tolower(c); });
-        return lowerStr;
-    };
+    // Precompute lowercase pattern for case-insensitive comparison
+    std::string lowerPattern = pattern;
+    std::transform(lowerPattern.begin(), lowerPattern.end(), lowerPattern.begin(),
+                   [](unsigned char c){ return std::tolower(c); });
 
-    std::string lowerPattern = toLower(pattern);
-    std::string lowerText = toLower(text);
-
-    std::vector<size_t> shifts(256, lowerPattern.length());
     std::vector<size_t> matches;
+    
+    size_t patternLen = pattern.length();
+    size_t textLen = text.length();
 
-    for (size_t i = 0; i < lowerPattern.length() - 1; i++) {
-        shifts[static_cast<unsigned char>(lowerPattern[i])] = lowerPattern.length() - i - 1;
+    // Compute the bad character shift table
+    std::vector<size_t> shifts(256, patternLen);
+    for (size_t i = 0; i < patternLen - 1; ++i) {
+        shifts[static_cast<unsigned char>(tolower(pattern[i]))] = patternLen - i - 1;
     }
-
-    size_t patternLen = lowerPattern.length();
-    size_t textLen = lowerText.length();
 
     size_t i = 0; // Start at the beginning of the text
 
     while (i <= textLen - patternLen) {
-        size_t skip = 0;
+        int j = patternLen - 1;
         
         // Match pattern from end to start
-        while (skip < patternLen && lowerPattern[patternLen - 1 - skip] == lowerText[i + patternLen - 1 - skip]) {
-            skip++;
+        while (j >= 0 && tolower(text[i + j]) == lowerPattern[j]) {
+            --j;
         }
         
         // If the whole pattern was found, record the match
-        if (skip == patternLen) {
+        if (j < 0) {
             matches.push_back(i);
         }
 
         // Move the pattern based on the last character of the current window in the text
-        if (i + patternLen < textLen) {
-            i += shifts[static_cast<unsigned char>(lowerText[i + patternLen - 1])];
-        } else {
-            break;
-        }
+        i += shifts[static_cast<unsigned char>(tolower(text[i + patternLen - 1]))];
     }
 
     return matches;
@@ -77,9 +68,10 @@ std::vector<size_t> boyerMooreSearch(const std::string& pattern, const std::stri
 
 // Function to filter cached ISO files based on search query (case-insensitive)
 std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query) {
-    std::vector<std::string> filteredFiles;
-    std::set<std::string> queryTokens;
-    
+    std::vector<std::string> filteredFiles;  // Resultant vector of filtered files
+    std::set<std::string> queryTokens;  // Set to store unique query tokens
+
+    // Tokenize query by ';' and convert tokens to lowercase
     std::stringstream ss(query);
     std::string token;
     while (std::getline(ss, token, ';')) {
@@ -87,51 +79,61 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
         queryTokens.insert(token);
     }
 
-    std::shared_mutex filterMutex;
-    
+    std::shared_mutex filterMutex;  // Shared mutex for thread-safe access to filteredFiles
+
+    // Task function to filter files within a range [start, end)
     auto filterTask = [&](size_t start, size_t end) {
-        std::vector<std::string> localFilteredFiles;
+        std::vector<std::string> localFilteredFiles;  // Local storage for filtered files
+
+        // Iterate through files in the specified range
         for (size_t i = start; i < end; ++i) {
             const std::string& file = files[i];
             std::string fileName = file;
-            std::transform(fileName.begin(), fileName.end(), fileName.begin(), ::tolower);
+            std::transform(fileName.begin(), fileName.end(), fileName.begin(), ::tolower);  // Convert filename to lowercase
             
             bool matchFound = false;
+            // Check each query token against the lowercase filename using Boyer-Moore search
             for (const std::string& queryToken : queryTokens) {
-                if (!boyerMooreSearch(queryToken, fileName).empty()) {
+                if (!boyerMooreSearch(queryToken, fileName).empty()) {  // Use Boyer-Moore search function
                     matchFound = true;
                     break;
                 }
             }
-            
+
+            // If any query token matches, add the file to localFilteredFiles
             if (matchFound) {
                 localFilteredFiles.push_back(file);
             }
         }
-        
+
+        // Lock to safely update shared filteredFiles vector
         std::unique_lock<std::shared_mutex> lock(filterMutex);
         filteredFiles.insert(filteredFiles.end(), localFilteredFiles.begin(), localFilteredFiles.end());
     };
 
     size_t numFiles = files.size();
-    size_t numThreads = std::min(static_cast<size_t>(maxThreads), numFiles);
-    size_t filesPerThread = numFiles / numThreads;
-    
-    std::vector<std::future<void>> futures;
-    
+    int maxThreads = std::thread::hardware_concurrency();  // Maximum number of concurrent threads supported
+    size_t numThreads = std::min(static_cast<size_t>(maxThreads), numFiles);  // Determine number of threads to use
+    size_t filesPerThread = numFiles / numThreads;  // Number of files each thread will process
+
+    std::vector<std::future<void>> futures;  // Vector to hold futures for threads
+
+    // Create async tasks for each thread (except the last one)
     for (size_t i = 0; i < numThreads - 1; ++i) {
         size_t start = i * filesPerThread;
         size_t end = start + filesPerThread;
         futures.emplace_back(std::async(std::launch::async, filterTask, start, end));
     }
-    
+
+    // Handle filtering for the last segment (handles any remaining files)
     filterTask((numThreads - 1) * filesPerThread, numFiles);
-    
+
+    // Wait for all threads to complete
     for (auto& future : futures) {
         future.wait();
     }
 
-    return filteredFiles;
+    return filteredFiles;  // Return the vector of filtered files
 }
 
 
@@ -139,28 +141,30 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
 size_t boyerMooreSearchMountPoints(const std::string& haystack, const std::string& needle) {
     size_t m = needle.length();
     size_t n = haystack.length();
-    if (m == 0) return 0;
-    if (n == 0 || n < m) return std::string::npos;
+    
+    if (m == 0) return 0;  // Edge case: empty needle
+    if (n < m) return std::string::npos;  // Early return if haystack is shorter than needle
 
     // Construct the bad character heuristic table
     std::vector<int> badChar(256, -1);
     for (size_t i = 0; i < m; ++i) {
-        badChar[needle[i]] = i;
+        badChar[static_cast<unsigned char>(needle[i])] = static_cast<int>(i);
     }
 
     // Start searching
     size_t shift = 0;
     while (shift <= n - m) {
-        int j = m - 1;
+        int j = static_cast<int>(m - 1);
         while (j >= 0 && needle[j] == haystack[shift + j]) {
-            j--;
+            --j;
         }
         if (j < 0) {
             return shift; // Match found
         } else {
-            shift += std::max(1, static_cast<int>(j - badChar[haystack[shift + j]]));
+            shift += std::max<size_t>(1, static_cast<size_t>(j - badChar[static_cast<unsigned char>(haystack[shift + j])]));
         }
     }
+    
     return std::string::npos; // No match found
 }
 
