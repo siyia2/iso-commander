@@ -236,7 +236,7 @@ void submenu2() {
              case '1':
 				clearScrollBuffer();
 				operation = "bin";
-				if (isCcd2IsoInstalled()) {
+				if (isProgramInstalled(operation)) {
 					select_and_convert_files_to_iso(operation);
 				} else {
 					std::cout << "\033[1;91mccd2iso is not installed.\033[0;1m\n";
@@ -248,7 +248,7 @@ void submenu2() {
              case '2':
 				clearScrollBuffer();
 				operation = "mdf";
-                if (isMdf2IsoInstalled()) {
+                if (isProgramInstalled(operation)) {
 					select_and_convert_files_to_iso(operation);
 				} else {
 					std::cout << "\033[1;91mmdf2iso is not installed.\033[0;1m\n";
