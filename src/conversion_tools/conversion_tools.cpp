@@ -86,6 +86,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 	std::set<std::string> invalidDirectoryPaths;
 	
     bool modeMdf;
+    bool clr = false;
 
     std::string fileExtension;
     std::string fileTypeName;
@@ -112,13 +113,17 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     loadHistory();
     
     // Prompt user to input directory paths
-    std::string inputPaths = readInputLine("\033[1;94mDirectory path(s) ↵ (multi-path separator: \033[1m\033[1;93m;\033[0;1m\033[1;94m) to search for \033[1m\033[1;92m" + fileExtension + " \033[1;94mfiles, \033[1;93mclr\033[1;94m ↵ to clear \033[1;92m" + fileTypeName + " \033[1;94mRAM cache, or ↵ to return:\n\033[0;1m");
+    std::string prompt = "\001\033[1;94m\002Directory path(s) ↵ (multi-path separator: \001\033[1;93m\002;\001\033[1;94m\002) to search for \001\033[1;92m\002" 
+                        + fileExtension + " \001\033[1;94m\002files, \001\033[1;93m\002clr\001\033[1;94m\002 ↵ to clear \001\033[1;92m\002" + fileTypeName 
+                        + " \001\033[1;94m\002RAM cache, or ↵ to return:\n\001\033[0;1m\002";
+    
+    char* input = readline(prompt.c_str());
     clearScrollBuffer();
 	
 	// Check if inputPaths is empty or contains only spaces
-	bool onlySpaces = std::all_of(inputPaths.begin(), inputPaths.end(), [](char c) { return std::isspace(c); });
+	bool onlySpaces = std::string(input).find_first_not_of(" \t") == std::string::npos;
     
-    if (!(inputPaths.empty()) && !(inputPaths == "clr") && !onlySpaces) {
+    if (!(input == nullptr) && !(std::strcmp(input, "clr") == 0) && !onlySpaces) {
         // Save search history if input paths are provided
         std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
         saveHistory();
@@ -131,26 +136,28 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     auto start_time = std::chrono::high_resolution_clock::now();
     
     // Split inputPaths into individual directory paths
-    std::istringstream iss(inputPaths);
-    std::string path;
-    bool clr = false;
-    while (std::getline(iss, path, ';')) {
-    size_t start = path.find_first_not_of(" \t");
-    size_t end = path.find_last_not_of(" \t");
-		if (start != std::string::npos && end != std::string::npos) {
-			std::string cleanedPath = path.substr(start, end - start + 1);
-			if (cleanedPath == "clr" && uniquePaths.empty()) {
-				clr = true;
-				// If the cleaned path is "clr" and uniquePaths is empty (i.e., it's the only input)
-				directoryPaths.push_back(cleanedPath);
-				uniquePaths.insert(cleanedPath);
-			} else if (uniquePaths.find(cleanedPath) == uniquePaths.end()) {
-				if (directoryExists(cleanedPath)) {
+    if (!onlySpaces || !(input == nullptr)) {
+		std::istringstream iss(input);
+		free(input);
+		std::string path;
+		while (std::getline(iss, path, ';')) {
+		size_t start = path.find_first_not_of(" \t");
+		size_t end = path.find_last_not_of(" \t");
+			if (start != std::string::npos && end != std::string::npos) {
+				std::string cleanedPath = path.substr(start, end - start + 1);
+				if (cleanedPath == "clr" && uniquePaths.empty()) {
+					clr = true;
+					// If the cleaned path is "clr" and uniquePaths is empty (i.e., it's the only input)
 					directoryPaths.push_back(cleanedPath);
 					uniquePaths.insert(cleanedPath);
-				} else {
-					std::string invalid = "\033[1;91m" + cleanedPath;
-					invalidDirectoryPaths.insert(invalid);
+				} else if (uniquePaths.find(cleanedPath) == uniquePaths.end()) {
+					if (directoryExists(cleanedPath)) {
+						directoryPaths.push_back(cleanedPath);
+						uniquePaths.insert(cleanedPath);
+					} else {
+						std::string invalid = "\033[1;91m" + cleanedPath;
+						invalidDirectoryPaths.insert(invalid);
+					}
 				}
 			}
 		}
@@ -220,7 +227,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     while (!noValid && !clr) {
         // Display file list and prompt user for input
         clearScrollBuffer();
-        std::cout << "\033[92;1m // SUCCESSFUL CONVERSIONS ARE AUTOMATICALLY ADDED INTO ISO CACHE //\033[0;1m\033[0;1m\n\n";
+        std::cout << "\033[92;1m// SUCCESSFUL CONVERSIONS ARE AUTOMATICALLY ADDED INTO ISO CACHE //\033[0;1m\033[0;1m\n\n";
         printFileList(files);
 
         clear_history();
