@@ -962,28 +962,21 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
 
 // BIN/IMG CONVERSION FUNCTIONS
 
-// Check if ccd2iso is installed on the system
-bool isCcd2IsoInstalled() {
-    // Use the system command to check if ccd2iso is available
-    if (std::system("which ccd2iso > /dev/null 2>&1") == 0) {
-        return true; // ccd2iso is installed
-    } else {
-        return false; // ccd2iso is not installed
-    }
-}
-
-
-// MDF CONVERSION FUNCTIONS
-
-// Function to check if mdf2iso is installed
-bool isMdf2IsoInstalled() {
-    // Construct a command to check if mdf2iso is in the system's PATH
-    std::string command = "which " + shell_escape("mdf2iso");
+// Function to check if a program is installed based on its name
+bool isProgramInstalled(const std::string& type) {
+    // Construct the command to check if the program is in the system's PATH
+    std::string program;
+    if (type == "mdf") {
+		program = "mdf2iso";
+	} else {
+		program = "ccd2iso";
+	}
+    std::string command = "which " + program;
 
     // Execute the command and check the result
     if (std::system((command + " > /dev/null 2>&1").c_str()) == 0) {
-        return true;  // mdf2iso is installed
+        return true;  // Program is installed
     } else {
-        return false;  // mdf2iso is not installed
+        return false;  // Program is not installed
     }
 }
