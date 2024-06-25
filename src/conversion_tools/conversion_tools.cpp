@@ -229,6 +229,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         // Display file list and prompt user for input
         clearScrollBuffer();
         std::cout << "\033[92;1m// SUCCESSFUL CONVERSIONS ARE AUTOMATICALLY ADDED INTO ISO CACHE //\033[0;1m\033[0;1m\n\n";
+        sortFilesCaseInsensitive(files);
         printFileList(files);
 
         clear_history();
