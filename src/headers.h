@@ -172,17 +172,7 @@ void printFileList(const std::vector<std::string>& fileList);
 
 // bools
 bool fileExistsConversions(const std::string& fullPath);
-
-// BIN/IMG CONVERSION
-
-// bools
-bool isCcd2IsoInstalled();
-
-
-// MDF/MDS CONVERSION
-
-// bools
-bool isMdf2IsoInstalled();
+bool isProgramInstalled(const std::string& type);
 
 
 #endif // HEADERS_H
