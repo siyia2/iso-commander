@@ -276,22 +276,22 @@ void manualRefreshCache(const std::string& initialDir) {
 		gapPrinted = false;
 	}
 
-	// Load history from file
-	loadHistory();
-
 	std::string input;
 
 	// Append the initial directory if provided
 	if (!initialDir.empty()) {
 		input = initialDir;
 	} else {
+		// Load history from file
+		loadHistory();
 		maxDepth = -1;
 		// Prompt the user to enter directory paths for manual cache refresh
 		std::string prompt = "\001\033[1;94m\002Directory path(s) ↵ to build/refresh the \001\033[1;92m\002ISO Cache\001\033[94m\002 (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return:\n\001\033[0;1m\002";
 		char* inputCString = readline(prompt.c_str());
 		if (inputCString != nullptr) {
 			input = inputCString;
-			free(inputCString); // Remember to free the readline allocated memory
+			add_history(inputCString); // Add to history
+			free(inputCString); // Free readline allocated memory
 		}
 	}
 
@@ -301,7 +301,11 @@ void manualRefreshCache(const std::string& initialDir) {
 	if (input.empty() || onlySpaces) {
 		return;
 	}
-    saveHistory();
+	
+	if (promptFlag) {
+		// Save history
+		saveHistory();
+	}
 
     // Create an input string stream to parse directory paths
     std::istringstream iss(input);
