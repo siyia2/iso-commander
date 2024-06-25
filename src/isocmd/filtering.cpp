@@ -6,11 +6,19 @@
 void sortFilesCaseInsensitive(std::vector<std::string>& files) {
     // Sort the vector using a lambda function to compare filenames in a case-insensitive manner.
     std::sort(files.begin(), files.end(), [](const std::string& a, const std::string& b) {
-        // Convert filenames to lowercase for comparison.
-        std::string lowerA = a;
-        std::string lowerB = b;
-        std::transform(lowerA.begin(), lowerA.end(), lowerA.begin(), ::tolower);
-        std::transform(lowerB.begin(), lowerB.end(), lowerB.begin(), ::tolower);
+        // Transform strings to lowercase and compare
+        auto transformToLower = [](const std::string& s) {
+            std::string result;
+            result.reserve(s.size());
+            for (char c : s) {
+                result.push_back(std::tolower(c));
+            }
+            return result;
+        };
+
+        const std::string& lowerA = transformToLower(a);
+        const std::string& lowerB = transformToLower(b);
+
         // Compare lowercase filenames.
         return lowerA < lowerB;  // Return true if 'a' should be placed before 'b'.
     });
