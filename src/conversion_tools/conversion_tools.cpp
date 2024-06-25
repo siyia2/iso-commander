@@ -900,7 +900,7 @@ void printFileList(const std::vector<std::string>& fileList) {
 }
 
 
-// Function to convert a BIN file to ISO format
+// Function to convert a BIN/IMG/MDF file to ISO format
 void convertToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool modeMdf) {
     auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath);
     
@@ -959,8 +959,6 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
     }
 }
 
-
-// BIN/IMG CONVERSION FUNCTIONS
 
 // Function to check if a program is installed based on its name
 bool isProgramInstalled(const std::string& type) {
