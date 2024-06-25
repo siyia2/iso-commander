@@ -4,117 +4,147 @@
 
 
 // A global thread pool for async tasks
+
+template <typename T>
+class LockFreeQueue {
+private:
+    struct Node {
+        T data;
+        std::atomic<Node*> next;
+        Node(T value = T()) : data(std::move(value)), next(nullptr) {}
+    };
+
+public:
+    LockFreeQueue() {
+        Node* dummy = new Node();
+        head.store(dummy, std::memory_order_relaxed);
+        tail.store(dummy, std::memory_order_relaxed);
+    }
+    
+    ~LockFreeQueue() {
+        Node* current = head.load(std::memory_order_relaxed);
+        while (current != nullptr) {
+            Node* next = current->next.load(std::memory_order_relaxed);
+            delete current;
+            current = next;
+        }
+    }
+
+    void enqueue(T value) {
+        Node* newNode = new Node(std::move(value));
+        while (true) {
+            Node* oldTail = tail.load(std::memory_order_relaxed);
+            Node* next = oldTail->next.load(std::memory_order_relaxed);
+            if (next == nullptr) {
+                if (oldTail->next.compare_exchange_weak(next, newNode,
+                                                       std::memory_order_release,
+                                                       std::memory_order_relaxed)) {
+                    tail.compare_exchange_strong(oldTail, newNode,
+                                                 std::memory_order_release,
+                                                 std::memory_order_relaxed);
+                    return;
+                }
+            } else {
+                tail.compare_exchange_strong(oldTail, next,
+                                             std::memory_order_release,
+                                             std::memory_order_relaxed);
+            }
+        }
+    }
+
+    bool dequeue(T& result) {
+        while (true) {
+            Node* oldHead = head.load(std::memory_order_relaxed);
+            Node* next = oldHead->next.load(std::memory_order_relaxed);
+            if (next == nullptr) {
+                return false;  // Queue is empty
+            }
+            if (head.compare_exchange_weak(oldHead, next,
+                                           std::memory_order_release,
+                                           std::memory_order_relaxed)) {
+                result = std::move(next->data);
+                delete oldHead;
+                return true;
+            }
+        }
+    }
+
+private:
+    alignas(64) std::atomic<Node*> head;
+    alignas(64) std::atomic<Node*> tail;
+};
+
 class ThreadPool {
 public:
-    // Constructor to initialize the thread pool with a specified number of threads.
     explicit ThreadPool(size_t numThreads) : stop(false) {
-        // Spawn worker threads.
         for (size_t i = 0; i < numThreads; ++i) {
             workers.emplace_back(&ThreadPool::workerThread, this);
         }
     }
 
-    // Enqueue a task into the thread pool and return a future to track its execution.
     template <class F, class... Args>
     auto enqueue(F&& f, Args&&... args) -> std::future<decltype(f(args...))> {
         using return_type = decltype(f(args...));
         auto task = std::make_shared<std::packaged_task<return_type()>>(
             std::bind(std::forward<F>(f), std::forward<Args>(args)...)
         );
-
-        // Get a future to track the task's result.
         std::future<return_type> res = task->get_future();
         
-        {
-            // Lock the task queue for thread-safe access.
-            std::unique_lock<std::mutex> lock(queueMutex);
-            // Check if the thread pool has been stopped.
-            if (stop) {
-                throw std::runtime_error("enqueue on stopped ThreadPool");
-            }
-            // Enqueue the task into the task queue.
-            tasks.emplace([task]() { (*task)(); });
-        }
-        // Notify a waiting thread that a new task is available.
+        tasks.enqueue([task]() { (*task)(); });
         condition.notify_one();
         return res;
     }
 
-    // Destructor to clean up resources.
     ~ThreadPool() {
         {
-            // Lock the task queue for thread-safe access.
-            std::unique_lock<std::mutex> lock(queueMutex);
-            // Set the stop flag to true to signal worker threads to stop.
+            std::unique_lock<std::mutex> lock(mutex);
             stop = true;
         }
-        // Notify all worker threads that the thread pool is being shut down.
         condition.notify_all();
-        // Join all worker threads to wait for their completion.
         for (std::thread& worker : workers) {
-            worker.join();
+            if (worker.joinable()) {
+                worker.join();
+            }
+        }
+        // Ensure all tasks are handled
+        std::function<void()> task;
+        while (tasks.dequeue(task)) {
+            // Re-enqueue or handle remaining tasks if necessary
         }
     }
 
 private:
-    // Structure representing a worker thread in the thread pool.
-    struct Worker {
-        std::queue<std::function<void()>> tasks; // Queue of tasks assigned to this worker.
-        std::mutex mutex; // Mutex to synchronize access to the task queue.
-    };
-
-    // Function executed by each worker thread.
     void workerThread() {
-        Worker worker;
         while (true) {
             std::function<void()> task;
             {
-                // Lock the task queue for thread-safe access.
-                std::unique_lock<std::mutex> lock(queueMutex);
-                // Wait until there's a task available or the thread pool is stopped.
-                condition.wait(lock, [this, &worker] {
-                    return stop || !tasks.empty() || !worker.tasks.empty();
-                });
-                // If the thread pool is stopped and no tasks remain, exit the loop.
-                if (stop && tasks.empty() && worker.tasks.empty()) {
+                std::unique_lock<std::mutex> lock(mutex);
+                condition.wait(lock, [this] { return stop || !tasks_empty(); });
+                if (stop && tasks_empty()) {
                     return;
                 }
-                // Prioritize tasks from the thread pool's task queue.
-                if (!tasks.empty()) {
-                    task = std::move(tasks.front());
-                    tasks.pop();
-                } 
-                // If the thread's own task queue is not empty, execute a task from it.
-                else if (!worker.tasks.empty()) {
-                    task = std::move(worker.tasks.front());
-                    worker.tasks.pop();
-                } 
-                // If no tasks are available for this thread, perform work stealing.
-                else {
-                    for (auto& other_worker : workers_) {
-                        std::unique_lock<std::mutex> lock(other_worker.mutex);
-                        if (!other_worker.tasks.empty()) {
-                            task = std::move(other_worker.tasks.front());
-                            other_worker.tasks.pop();
-                            break;
-                        }
-                    }
-                }
+                tasks.dequeue(task);  // Dequeue outside of the lock
             }
-            // Execute the retrieved task.
             if (task) {
-                task();
+                task();  // Execute the task outside of the lock
             }
         }
     }
 
-    std::vector<std::thread> workers; // Vector to store worker threads.
-    std::queue<std::function<void()>> tasks; // Queue of tasks for the thread pool.
-    std::mutex queueMutex; // Mutex to synchronize access to the task queue.
-    std::condition_variable condition; // Condition variable for task synchronization.
-    std::atomic<bool> stop; // Atomic flag to indicate whether the thread pool is stopped.
+    bool tasks_empty() {
+        std::function<void()> task;
+        if (tasks.dequeue(task)) {
+            tasks.enqueue(std::move(task));  // Re-enqueue the task
+            return false;
+        }
+        return true;
+    }
 
-    std::vector<Worker> workers_; // Vector to store worker structures for work stealing.
+    std::vector<std::thread> workers;
+    LockFreeQueue<std::function<void()>> tasks;
+    std::mutex mutex;
+    std::condition_variable condition;
+    bool stop;
 };
 
 #endif // THREAD_POOL_H
