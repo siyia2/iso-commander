@@ -57,14 +57,9 @@ extern bool historyPattern;
 //	bools
 
 // General
+bool isValidDirectory(const std::string& path);
 bool directoryExists(const std::string& path);
-bool isValidLinuxPathFormat(const std::string& path);
-
-// RM functions
-
-//	bools
-bool fileExists(const std::string& filename);
-
+bool fileExists(const std::string& fullPath);
 
 //	voids
 
@@ -137,7 +132,6 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
 // General functions
 std::string shell_escape(const std::string& s);
 std::pair<std::string, std::string> extractDirectoryAndFilename(const std::string& path);
-std::string readInputLine(const std::string& prompt);
 
 
 // Cache functions
@@ -171,7 +165,6 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 void printFileList(const std::vector<std::string>& fileList);
 
 // bools
-bool fileExistsConversions(const std::string& fullPath);
 bool isProgramInstalled(const std::string& type);
 
 
