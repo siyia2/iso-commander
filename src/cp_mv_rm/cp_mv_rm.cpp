@@ -654,12 +654,3 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
     // Execute the operation for all files in one go
     executeOperation(isoFilesToOperate);
 }
-
-
-// RM
-
-// Function to check if a file exists
-bool fileExists(const std::string& filename) {
-    std::ifstream file(filename);
-    return file.good();
-}
