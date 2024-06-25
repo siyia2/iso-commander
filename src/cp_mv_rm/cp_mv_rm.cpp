@@ -417,18 +417,21 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 			loadHistory();
 
             // Ask for the destination directory
-            std::string inputLine = readInputLine("\n\033[1;94mDestination directory ↵ for selected ISO file(s), or ↵ to cancel:\n\033[0;1m");
+            std::string prompt = "\n\001\033[1;94m\002Destination directory ↵ for selected ISO file(s), or ↵ to cancel:\n\001\033[0;1m\002";
+            char* input = readline(prompt.c_str());
 
             // Check if the user canceled
-            if (inputLine.empty()) {
+            if (input[0] == '\0') {
+				free(input);
 				mvDelBreak=false;
 				clear_history();
                 return;
             }
 
             // Check if the entered path is valid
-            if (isValidLinuxPathFormat(inputLine) && inputLine.back() == '/') {
-                userDestDir = inputLine;
+            if (isValidLinuxPathFormat(input) && std::string(input).back() == '/') {
+                userDestDir = input;
+                free(input);
                     saveHistory();
                     clear_history();
                 break;
