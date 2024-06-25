@@ -8,7 +8,7 @@ static std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles h
 // GENERAL
 
 // Function to check if a file already exists
-bool fileExistsConversions(const std::string& fullPath) {
+bool fileExists(const std::string& fullPath) {
         return std::filesystem::exists(fullPath);
 }
 
@@ -920,7 +920,7 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
 
     // Check if the corresponding .iso file already exists
     std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
-    if (fileExistsConversions(outputPath)) {
+    if (fileExists(outputPath)) {
         std::string skipMessage = "\033[1;93mThe corresponding .iso file already exists for: \033[1;92m'" + directory + "/" + fileNameOnly + "'\033[1;93m. Skipped conversion.\033[0;1m";
         skippedOuts.insert(skipMessage);
         return;
