@@ -31,7 +31,7 @@ private:
     static size_t calculatePoolSize(size_t num_threads) {
         if (num_threads <= 16) return 1024;
         if (num_threads <= 32) return 2048;
-        if (num_threads <= 64) return 4092;
+        if (num_threads <= 64) return 4096;
         return 8192;
     }
 
