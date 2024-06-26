@@ -379,20 +379,29 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 		if (dashPos != std::string::npos) {
 			std::string start = tokenCount.substr(0, dashPos);
 			std::string end = tokenCount.substr(dashPos + 1);
-			int startNum = std::stoi(start);
-			int endNum = std::stoi(end);
-			int step = (startNum <= endNum) ? 1 : -1;
-			for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
-				tokens.insert(std::to_string(i));
+			if (std::all_of(start.begin(), start.end(), ::isdigit) && 
+				std::all_of(end.begin(), end.end(), ::isdigit)) {
+				int startNum = std::stoi(start);
+				int endNum = std::stoi(end);
+				if (!(startNum < 0 || endNum < 0 || 
+				static_cast<std::vector<std::__cxx11::basic_string<char>>::size_type>(startNum) > fileList.size() || 
+				static_cast<std::vector<std::__cxx11::basic_string<char>>::size_type>(endNum) > fileList.size())){
+					int step = (startNum <= endNum) ? 1 : -1;
+					for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
+						tokens.insert(std::to_string(i));
+						if (tokens.size() >= maxThreads) {
+							break;
+						}
+					}
+				}
+			}
+		} else if (std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
+			int num = std::stoi(tokenCount);
+			if (!(num < 0 || static_cast<std::vector<std::__cxx11::basic_string<char>>::size_type>(num) > fileList.size())) {
+				tokens.insert(tokenCount);
 				if (tokens.size() >= maxThreads) {
 					break;
 				}
-			}
-		} else {
-			// Regular token
-			tokens.insert(tokenCount);
-			if (tokens.size() >= maxThreads) {
-				break;
 			}
 		}
 	}
