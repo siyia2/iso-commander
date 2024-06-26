@@ -368,8 +368,40 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     // Vector to hold futures for asynchronous tasks
     std::vector<std::future<void>> futures;
     
+    std::istringstream issCount(input); // Create an input string stream from the input string for counting selections
+    
+    std::set<std::string> tokens;  // Vector to store tokens extracted from input
+    std::string tokenCount;
+    
+    // Selection size count
+    while (issCount >> tokenCount) {
+		size_t dashPos = tokenCount.find('-');
+		if (dashPos != std::string::npos) {
+			std::string start = tokenCount.substr(0, dashPos);
+			std::string end = tokenCount.substr(dashPos + 1);
+			int startNum = std::stoi(start);
+			int endNum = std::stoi(end);
+			int step = (startNum <= endNum) ? 1 : -1;
+			for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
+				tokens.insert(std::to_string(i));
+				if (tokens.size() >= maxThreads) {
+					break;
+				}
+			}
+		} else {
+			// Regular token
+			tokens.insert(tokenCount);
+			if (tokens.size() >= maxThreads) {
+				break;
+			}
+		}
+	}
+
+    // Determine the number of threads to use, based on the number of ISO files and hardware concurrency
+    unsigned int numThreads = std::min(static_cast<int>(tokens.size()), static_cast<int>(maxThreads));
+    
     // ThreadPool for concurrent execution
-    ThreadPool pool(maxThreads);
+    ThreadPool pool(numThreads);
 
     // Get current user and group
     char* current_user = getlogin();
