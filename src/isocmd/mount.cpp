@@ -325,32 +325,34 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
 void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages,std::set<std::string>& mountedFails,std::set<std::string>& uniqueErrorMessages) {
     
     std::istringstream iss(input);  // Create an input string stream from the input string
-    std::istringstream issCount(input); // Create an input string stream from the input string for counting
+    std::istringstream issCount(input); // Create an input string stream from the input string for counting selections
     
     std::set<std::string> tokens;  // Vector to store tokens extracted from input
     std::string tokenCount;
-
-    while (issCount >> tokenCount) {
-        size_t dashPos = tokenCount.find('-');
-        if (dashPos != std::string::npos) {
+	
+	// Selection size count
+	while (issCount >> tokenCount) {
+		size_t dashPos = tokenCount.find('-');
+		if (dashPos != std::string::npos) {
 			std::string start = tokenCount.substr(0, dashPos);
 			std::string end = tokenCount.substr(dashPos + 1);
 			int startNum = std::stoi(start);
 			int endNum = std::stoi(end);
-			for (int i = startNum; i <= endNum; ++i) {
+			int step = (startNum <= endNum) ? 1 : -1;
+			for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
 				tokens.insert(std::to_string(i));
-				if (tokens.size() > maxThreads) {
+				if (tokens.size() >= maxThreads) {
 					break;
 				}
 			}
-        } else {
-            // Regular token
-            tokens.insert(tokenCount);
-            if (tokens.size() > maxThreads) {
-					break;
-				}
-        }
-    }
+		} else {
+			// Regular token
+			tokens.insert(tokenCount);
+			if (tokens.size() >= maxThreads) {
+				break;
+			}
+		}
+	}
 
     // Determine the number of threads to use, based on the number of ISO files and hardware concurrency
     unsigned int numThreads = std::min(static_cast<int>(tokens.size()), static_cast<int>(maxThreads));
@@ -463,8 +465,7 @@ std::string token;
             invalidInput = true;
             uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
         }
-    }std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-	std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    }
 }
 
 
