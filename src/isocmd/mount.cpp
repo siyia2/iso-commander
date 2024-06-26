@@ -331,7 +331,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     std::string tokenCount;
 	
 	// Selection size count
-	while (issCount >> tokenCount) {
+	while (issCount >> tokenCount && tokens.size() < maxThreads) {
 		size_t dashPos = tokenCount.find('-');
 		if (dashPos != std::string::npos) {
 			std::string start = tokenCount.substr(0, dashPos);
