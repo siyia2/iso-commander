@@ -326,7 +326,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     std::istringstream iss(input);  // Create an input string stream from the input string
 
     // Determine the number of threads to use, based on the number of ISO files and hardware concurrency
-    unsigned int numThreads = std::min(static_cast<int>(isoFiles.size()), static_cast<int>(std::thread::hardware_concurrency()));
+    unsigned int numThreads = std::min(static_cast<int>(isoFiles.size()), static_cast<int>(maxThreads));
 
     bool invalidInput = false;  // Flag to indicate invalid input
     std::set<int> processedIndices;  // Set to track processed indices
