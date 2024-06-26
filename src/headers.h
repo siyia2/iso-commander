@@ -19,6 +19,7 @@
 #include <mntent.h>
 #include <mutex>
 #include <queue>
+#include <random>
 #include <readline/readline.h>
 #include <readline/history.h>
 #include <set>
