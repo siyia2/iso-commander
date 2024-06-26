@@ -405,10 +405,6 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 			}
 		}
 	}
-	// If all input is invalid set numThreads to 1
-	if (tokens.size() == 0) {
-		tokens.insert("0");
-	}
 
     // Determine the number of threads to use, based on the number of ISO files and hardware concurrency
     unsigned int numThreads = std::min(static_cast<int>(tokens.size()), static_cast<int>(maxThreads));
@@ -967,6 +963,7 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
     // Check if the corresponding .iso file already exists
     std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
     if (fileExists(outputPath)) {
+		std::lock_guard<std::mutex> lowLock(Mutex4Low);
         std::string skipMessage = "\033[1;93mThe corresponding .iso file already exists for: \033[1;92m'" + directory + "/" + fileNameOnly + "'\033[1;93m. Skipped conversion.\033[0;1m";
         skippedOuts.insert(skipMessage);
         return;
@@ -985,6 +982,7 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
     } else if (!modeMdf) {
         conversionCommand = "ccd2iso " + escapedInputPath + " " + escapedOutputPath;
     } else {
+		std::lock_guard<std::mutex> lowLock(Mutex4Low);
         std::string failedMessage = "\033[1;91mUnsupported file format for \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m. Conversion failed.\033[0;1m";
         failedOuts.insert(failedMessage);
         return;
@@ -996,17 +994,21 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
     auto [outDirectory, outFileNameOnly] = extractDirectoryAndFilename(outputPath);
     // Check the result of the conversion
     if (conversionStatus == 0) {
+		std::lock_guard<std::mutex> lowLock(Mutex4Low);
         std::string successMessage = "\033[1mImage file converted to ISO:\033[0;1m \033[1;92m'" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m.\033[0;1m";
         successOuts.insert(successMessage);
     } else {
+		std::lock_guard<std::mutex> lowLock(Mutex4Low);
         std::string failedMessage = "\033[1;91mConversion of \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m failed.\033[0;1m";
         failedOuts.insert(failedMessage);
 
         // Delete the partially created ISO file
         if (std::remove(outputPath.c_str()) == 0) {
+			std::lock_guard<std::mutex> lowLock(Mutex4Low);
             std::string deletedMessage = "\033[1;92mDeleted incomplete ISO file:\033[1;91m '" + outDirectory + "/" + outFileNameOnly + "'\033[1;92m.\033[0;1m";
             deletedOuts.insert(deletedMessage);
         } else {
+			std::lock_guard<std::mutex> lowLock(Mutex4Low);
             std::string deletedMessage = "\033[1;91mFailed to delete partially created ISO file: \033[1;93m'" + outDirectory + "/" + outFileNameOnly + "'\033[1;91m.\033[0;1m";
             deletedOuts.insert(deletedMessage);
         }
