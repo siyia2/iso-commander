@@ -956,7 +956,9 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
     
     // Check if the input file exists
     if (!std::ifstream(inputPath)) {
-        std::cout << "\033[1;91mThe specified input file \033[1;93m'" << directory << "/" << fileNameOnly << "'\033[1;91m does not exist.\033[0;1m\n";
+		std::lock_guard<std::mutex> lowLock(Mutex4Low);
+        std::string failedMessage = "\033[1;91mThe specified input file \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m does not exist.\033[0;1m\n";
+        failedOuts.insert(failedMessage);
         return;
     }
 
