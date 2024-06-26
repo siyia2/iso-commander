@@ -66,7 +66,7 @@ void select_and_mount_files_by_number() {
 		bool verboseFiltered = false;
         clearScrollBuffer();
         std::cout << "\033[1;93m! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\033[0;1m\n";
-        std::cout << "\033[1;93m                 ! ROOT ACCESS IS PARAMOUNT FOR SUCCESSFUL MOUNTS !\n\033[0;1m";
+        std::cout << "\033[1;93m                ! ROOT ACCESS IS PARAMOUNT FOR SUCCESSFUL MOUNTS !\n\033[0;1m";
 
         // Remove non-existent paths from the cache after selection
         removeNonExistentPathsFromCache();
