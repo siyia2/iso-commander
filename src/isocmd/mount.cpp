@@ -362,7 +362,11 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
 			}
 		}
 	}
-
+	// If all input is invalid set numThreads to 1
+	if (tokens.size() == 0) {
+		tokens.insert("0");
+	}
+    
     // Determine the number of threads to use, based on the number of ISO files and hardware concurrency
     unsigned int numThreads = std::min(static_cast<int>(tokens.size()), static_cast<int>(maxThreads));
 
