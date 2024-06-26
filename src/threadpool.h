@@ -2,60 +2,74 @@
 #define THREAD_POOL_H
 #include "headers.h"
 
-// Define a macro for cache line size
-#define CACHE_LINE_SIZE 64
-
-// A global scalable lock-free thread pool for async tasks that includes work stealing
 template <typename T>
 class LockFreeQueue {
 private:
+    static constexpr size_t CACHE_LINE_SIZE = 64;
+
+    // Node structure for the queue
     struct Node {
         T data;
         std::atomic<Node*> next;
         Node(T value = T()) : data(std::move(value)), next(nullptr) {}
     };
 
-    // Aligned structure to avoid false sharing
+    // AlignedAtomicNode structure for aligned atomic operations
     struct alignas(CACHE_LINE_SIZE) AlignedAtomicNode {
         std::atomic<Node*> ptr;
         AlignedAtomicNode(Node* p = nullptr) : ptr(p) {}
-        // Implement copy and move operations if needed
     };
 
-    AlignedAtomicNode head;
-    AlignedAtomicNode tail;
+    // Pool size and node pool for memory management
+    size_t pool_size;
+    std::vector<Node> node_pool;
+    alignas(CACHE_LINE_SIZE) AlignedAtomicNode head;
+    alignas(CACHE_LINE_SIZE) AlignedAtomicNode tail;
+    std::atomic<size_t> pool_index; // Tracks next index in node_pool
 
-    static constexpr size_t POOL_SIZE = 4096;
-    std::array<Node, POOL_SIZE> node_pool;
-    alignas(CACHE_LINE_SIZE) std::atomic<size_t> pool_index{0};
+    // Calculate pool size based on number of threads
+    static size_t calculatePoolSize(size_t num_threads) {
+        if (num_threads <= 16) return 1024;
+        if (num_threads <= 32) return 2048;
+        if (num_threads <= 64) return 4092;
+        return 8192;
+    }
 
-    // Allocate a node from a preallocated pool or dynamically
+    // Allocate a node from the pool or dynamically
     Node* allocate_node(T value) {
         size_t index = pool_index.fetch_add(1, std::memory_order_relaxed);
-        if (index < POOL_SIZE) {
+        if (index < pool_size) {
             return new (&node_pool[index]) Node(std::move(value));
         } else {
             return new Node(std::move(value));
         }
     }
 
-    // Deallocate a node either from the pool or dynamically
+    // Deallocate a node
     void deallocate_node(Node* node) {
-        size_t index = node - node_pool.data();
-        if (index < POOL_SIZE) {
-            node->~Node();  // Placement new was used, so call destructor explicitly
+        ptrdiff_t index = node - &node_pool[0];
+        if (index >= 0 && index < static_cast<ptrdiff_t>(pool_size)) {
+            node->~Node();
         } else {
             delete node;
         }
     }
 
 public:
-    LockFreeQueue() {
+    // Constructor initializes the queue with a dummy node
+    explicit LockFreeQueue(size_t num_threads)
+        : pool_size(calculatePoolSize(num_threads)),
+          node_pool(pool_size),
+          head(nullptr),
+          tail(nullptr),
+          pool_index(0)
+    {
         Node* dummy = allocate_node(T());
         head.ptr.store(dummy, std::memory_order_relaxed);
         tail.ptr.store(dummy, std::memory_order_relaxed);
     }
-    
+
+    // Destructor cleans up all nodes in the queue
     ~LockFreeQueue() {
         Node* current = head.ptr.load(std::memory_order_acquire);
         while (current != nullptr) {
@@ -65,7 +79,7 @@ public:
         }
     }
 
-    // Enqueue operation
+    // Enqueue an item into the queue
     void enqueue(T value) {
         Node* newNode = allocate_node(std::move(value));
         while (true) {
@@ -88,7 +102,7 @@ public:
         }
     }
 
-    // Dequeue operation
+    // Dequeue an item from the queue
     bool dequeue(T& result) {
         while (true) {
             Node* oldHead = head.ptr.load(std::memory_order_acquire);
@@ -111,64 +125,35 @@ public:
         return head.ptr.load(std::memory_order_acquire)->next.load(std::memory_order_acquire) == nullptr;
     }
 
-    // Steal operation (for work stealing thread pool)
+    // Steal operation for work stealing
     bool steal(T& result) {
         return dequeue(result);
     }
 };
 
-// Thread pool implementation
 class ThreadPool {
 private:
-    struct alignas(CACHE_LINE_SIZE) AlignedAtomic {
+    // AlignedAtomic structure for aligned atomic operations
+    struct alignas(64) AlignedAtomic {
         std::atomic<bool> value;
         AlignedAtomic(bool initial = false) : value(initial) {}
     };
 
-    struct alignas(CACHE_LINE_SIZE) AlignedAtomicSize {
+    // AlignedAtomicSize structure for aligned atomic size operations
+    struct alignas(64) AlignedAtomicSize {
         std::atomic<size_t> value;
         AlignedAtomicSize(size_t initial = 0) : value(initial) {}
     };
 
-public:
-    explicit ThreadPool(size_t numThreads) 
-        : stop(false), next_queue(0), num_threads(numThreads) {
-        queues.reserve(numThreads);
-        for (size_t i = 0; i < numThreads; ++i) {
-            queues.emplace_back(std::make_unique<LockFreeQueue<std::function<void()>>>());
-        }
-        for (size_t i = 0; i < numThreads; ++i) {
-            workers.emplace_back(&ThreadPool::workerThread, this, i);
-        }
-    }
+    std::vector<std::thread> workers; // Worker threads
+    std::vector<std::unique_ptr<LockFreeQueue<std::function<void()>>>> queues; // Queues for tasks
+    std::mutex mutex; // Mutex for synchronization
+    std::condition_variable cv; // Condition variable for task waiting
+    AlignedAtomic stop; // Atomic flag to stop threads
+    AlignedAtomicSize next_queue; // Next queue index for task distribution
+    const size_t num_threads; // Number of threads
 
-    // Enqueue a task to be executed by the thread pool
-    template <class F, class... Args>
-    auto enqueue(F&& f, Args&&... args) -> std::future<decltype(f(args...))> {
-        using return_type = decltype(f(args...));
-        auto task = std::make_shared<std::packaged_task<return_type()>>(
-            std::bind(std::forward<F>(f), std::forward<Args>(args)...)
-        );
-        std::future<return_type> res = task->get_future();
-        
-        size_t index = selectQueue();
-        queues[index]->enqueue([task]() { (*task)(); });
-        
-        cv.notify_one();  // Notify one worker thread that a task is available
-        return res;
-    }
-
-    ~ThreadPool() {
-        stop.value.store(true, std::memory_order_release);
-        cv.notify_all();  // Notify all worker threads to stop
-
-        for (std::thread& worker : workers) {
-            worker.join();  // Join all worker threads
-        }
-    }
-
-private:
-    // Select a queue for task enqueueing
+    // Select a queue index for task distribution
     size_t selectQueue() {
         static thread_local std::mt19937 rng(std::random_device{}());
         std::uniform_int_distribution<size_t> dist(0, num_threads - 1);
@@ -186,7 +171,7 @@ private:
         while (true) {
             std::function<void()> task;
             bool gotTask = queues[id]->dequeue(task);
-            
+
             if (!gotTask) {
                 size_t steal_attempts = adaptiveStealAttempts();
                 for (size_t i = 0; i < steal_attempts; ++i) {
@@ -197,19 +182,17 @@ private:
                     }
                 }
             }
-            
+
             if (gotTask) {
-                task();  // Execute the task
+                task();
             } else {
-                // Wait for either stop or a non-empty queue
                 std::unique_lock<std::mutex> lock(mutex);
                 cv.wait_for(lock, std::chrono::milliseconds(1), [this] { 
                     return stop.value.load(std::memory_order_acquire) || 
                            std::any_of(queues.begin(), queues.end(), 
                                [](const auto& q) { return !q->isEmpty(); });
                 });
-                
-                // If all queues are empty and stop is true, exit the thread
+
                 if (stop.value.load(std::memory_order_acquire) && 
                     std::all_of(queues.begin(), queues.end(), 
                         [](const auto& q) { return q->isEmpty(); })) {
@@ -219,21 +202,53 @@ private:
         }
     }
 
-    // Determine the number of steal attempts based on the number of threads
+    // Calculate adaptive number of steal attempts
     size_t adaptiveStealAttempts() {
-        if (num_threads <= 4) return 1;
         if (num_threads <= 16) return num_threads / 2;
-        if (num_threads <= 64) return num_threads - 1;
-        return std::min(num_threads / 2, static_cast<size_t>(64));
+        if (num_threads <= 64) return num_threads / 4;
+        return std::min(num_threads / 8, static_cast<size_t>(24));
     }
 
-    std::vector<std::thread> workers;  // Worker threads
-    std::vector<std::unique_ptr<LockFreeQueue<std::function<void()>>>> queues;  // Task queues
-    std::mutex mutex;  // Mutex for condition variable
-    std::condition_variable cv;  // Condition variable for synchronization
-    AlignedAtomic stop;  // Atomic flag to signal threads to stop
-    AlignedAtomicSize next_queue;  // Atomic counter for queue selection
-    const size_t num_threads;  // Number of threads in the pool
+public:
+    // Constructor initializes the thread pool with queues and worker threads
+    explicit ThreadPool(size_t numThreads) 
+        : stop(false), next_queue(0), num_threads(numThreads) {
+        queues.reserve(numThreads);
+        for (size_t i = 0; i < numThreads; ++i) {
+            queues.emplace_back(std::make_unique<LockFreeQueue<std::function<void()>>>(numThreads));
+        }
+        for (size_t i = 0; i < numThreads; ++i) {
+            workers.emplace_back(&ThreadPool::workerThread, this, i);
+        }
+    }
+
+    // Enqueue a task into a selected queue
+    template <class F, class... Args>
+    auto enqueue(F&& f, Args&&... args) -> std::future<decltype(f(args...))> {
+        using return_type = decltype(f(args...));
+        auto task = std::make_shared<std::packaged_task<return_type()>>(
+            std::bind(std::forward<F>(f), std::forward<Args>(args)...)
+        );
+        std::future<return_type> res = task->get_future();
+
+        size_t index = selectQueue();
+        queues[index]->enqueue([task]() { (*task)(); });
+
+        cv.notify_one();
+        return res;
+    }
+
+    // Destructor stops threads and cleans up
+    ~ThreadPool() {
+        stop.value.store(true, std::memory_order_release);
+        cv.notify_all();
+
+        for (std::thread& worker : workers) {
+            worker.join();
+        }
+    }
 };
+
+
 
 #endif // THREAD_POOL_H
