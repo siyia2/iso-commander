@@ -379,7 +379,8 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     std::mutex MutexForProcessedIndices;  // Mutex for protecting access to processedIndices
     std::mutex MutexForValidIndices;      // Mutex for protecting access to validIndices
     std::mutex MutexForUniqueErrors;
-std::string token;
+	
+	std::string token;
     while (iss >> token) {  // Iterate through each token in the input
         if (token == "/") {  // Break the loop if a '/' is encountered
             break;
@@ -478,8 +479,7 @@ std::string token;
             invalidInput = true;
             uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
         }
-    }std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-	std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    }
 }
 
 
