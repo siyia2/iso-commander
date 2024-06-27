@@ -320,32 +320,30 @@ bool isNumeric(const std::string& str) {
 // Function to print ISO files with alternating colors for sequence numbers
 void printIsoFileList(const std::vector<std::string>& isoFiles) {
     // ANSI escape codes for text formatting
-    const std::string defaultColor = "\033[0m";
-    const std::string bold = "\033[1m";
-    const std::string red = "\033[31;1m";   // Red color
-    const std::string green = "\033[32;1m"; // Green color
-    const std::string magenta = "\033[95m";
-
-    bool useRedColor = true; // Start with red color
+    const char* defaultColor = "\033[0m";
+    const char* bold = "\033[1m";
+    const char* red = "\033[31;1m";
+    const char* green = "\033[32;1m";
+    const char* magenta = "\033[95m";
     
     size_t maxIndex = isoFiles.size();
     size_t numDigits = std::to_string(maxIndex).length();
+    
+    std::ostringstream output;
+    output.str().reserve(isoFiles.size() * 100); // Pre-allocate buffer for the internal string
 
     for (size_t i = 0; i < isoFiles.size(); ++i) {
-        // Determine sequence number
-        int sequenceNumber = i + 1;
+        const char* sequenceColor = (i % 2 == 0) ? red : green;
+        
+        output << '\n' << sequenceColor << std::right << std::setw(numDigits) 
+               << (i + 1) << ". " << defaultColor << bold;
 
-        // Determine color based on alternating pattern
-        std::string sequenceColor = (useRedColor) ? red : green;
-        useRedColor = !useRedColor; // Toggle between red and green
-
-        // Extract directory and filename
         auto [directory, filename] = extractDirectoryAndFilename(isoFiles[i]);
-
-        // Print the directory part in the default color
-        std::cout << "\n" << sequenceColor << std::right << std::setw(numDigits) << sequenceNumber << ". " << defaultColor << bold << directory << defaultColor << bold << "/" << magenta << filename << defaultColor;
-
+        
+        output << directory << defaultColor << bold << '/' << magenta << filename << defaultColor;
     }
+
+    std::cout << output.str();
 }
 
 //	SANITISATION AND STRING STUFF
@@ -376,69 +374,55 @@ std::string shell_escape(const std::string& s) {
 
 // Function to extract directory and filename from a given path
 std::pair<std::string, std::string> extractDirectoryAndFilename(const std::string& path) {
-    // Initialize variables to store directory and filename
-    std::string directory;
-    std::string filename;
-
-    // Find the position of the last slash to separate the directory and filename
-    std::size_t lastSlashPos = path.find_last_of("/\\");
-    
-    // If there is no slash, the entire path is considered as the filename
-    if (lastSlashPos == std::string::npos) {
-        return {"", path};
-    }
-
-    // Extract the directory part
-    directory = path.substr(0, lastSlashPos);
-
-    // Extract the filename part
-    filename = path.substr(lastSlashPos + 1);
-
-    // Process the directory to limit each component to 28 characters or until the first space or hyphen
-    std::size_t start = 0;
-    std::size_t end;
-    std::string processedDir;
-    while ((end = directory.find_first_of("/\\", start)) != std::string::npos) {
-        std::string component = directory.substr(start, end - start);
-
-        // Find the first space or hyphen in the component
-        std::size_t truncatePos = std::min(component.find(' '), component.find('-'));
-        if (truncatePos != std::string::npos && truncatePos <= 28) {
-            component = component.substr(0, truncatePos);
-        } else {
-            component = component.substr(0, 28);
-        }
-
-        processedDir += component + '/';
-        start = end + 1;
-    }
-    
-    // Add the last component of the directory
-    std::string component = directory.substr(start);
-    std::size_t truncatePos = std::min(component.find(' '), component.find('-'));
-    if (truncatePos != std::string::npos && truncatePos <= 28) {
-        component = component.substr(0, truncatePos);
-    } else {
-        component = component.substr(0, 28);
-    }
-    processedDir += component;
-
-    // Replace specific Linux standard directories with custom strings
-    std::unordered_map<std::string, std::string> replacements = {
+    static const std::unordered_map<std::string_view, std::string_view> replacements = {
         {"/home", "~"},
         {"/root", "/R"},
         // Add more replacements as needed
     };
 
+    size_t lastSlashPos = path.find_last_of("/\\");
+    if (lastSlashPos == std::string::npos) {
+        return {"", path};
+    }
+
+    std::string processedDir;
+    processedDir.reserve(path.length());  // Pre-allocate memory
+
+    size_t start = 0;
+    while (start < lastSlashPos) {
+        size_t end = path.find_first_of("/\\", start);
+        if (end == std::string::npos || end > lastSlashPos) {
+            end = lastSlashPos;
+        }
+
+        size_t componentLength = end - start;
+        size_t truncatePos = std::min({
+            componentLength,
+            path.find(' ', start) - start,
+            path.find('-', start) - start,
+            size_t(28)
+        });
+
+        processedDir.append(path, start, truncatePos);
+        processedDir.push_back('/');
+
+        start = end + 1;
+    }
+
+    if (!processedDir.empty()) {
+        processedDir.pop_back();  // Remove trailing slash
+    }
+
+    // Apply replacements
     for (const auto& [oldDir, newDir] : replacements) {
-        size_t pos = processedDir.find(oldDir);
-        if (pos != std::string::npos) {
+        size_t pos = 0;
+        while ((pos = processedDir.find(oldDir, pos)) != std::string::npos) {
             processedDir.replace(pos, oldDir.length(), newDir);
+            pos += newDir.length();
         }
     }
 
-    // Return the pair of processed directory and filename
-    return {processedDir, filename};
+    return {processedDir, path.substr(lastSlashPos + 1)};
 }
 
 
