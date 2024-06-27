@@ -204,9 +204,7 @@ private:
 
     // Calculate adaptive number of steal attempts
     size_t adaptiveStealAttempts() {
-        if (num_threads <= 16) return num_threads / 2;
-        if (num_threads <= 64) return num_threads / 4;
-        return std::min(num_threads / 6, static_cast<size_t>(32));
+        return std::min(num_threads / 2, static_cast<size_t>(64));
     }
 
 public:
