@@ -5,7 +5,6 @@
 // UMOUNT STUFF
 
 // Function to list mounted ISOs in the /mnt directory
-
 void listMountedISOs() {
     const char* isoPath = "/mnt";
     static std::mutex listMutex;
@@ -55,7 +54,7 @@ void listMountedISOs() {
 }
 
 
-//function to check if directory is empty for unmountISO
+// Function to check if directory is empty for unmountISO
 bool isDirectoryEmpty(const std::string& path) {
     namespace fs = std::filesystem;
 
