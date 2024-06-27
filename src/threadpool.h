@@ -45,13 +45,15 @@ private:
 
     // Deallocate a node
     void deallocate_node(Node* node) {
-        ptrdiff_t index = node - &node_pool[0];
-        if (index >= 0 && index < static_cast<ptrdiff_t>(pool_size)) {
-            node->~Node();
-        } else {
-            delete node;
-        }
-    }
+		// Check if the node belongs to the node_pool
+		auto pool_begin = &node_pool[0];
+		auto pool_end = pool_begin + pool_size;
+		if (node >= pool_begin && node < pool_end) {
+			node->~Node(); // Call the destructor explicitly
+		} else {
+			delete node; // If not in pool, delete normally
+		}
+	}
 
 public:
     // Constructor initializes the queue with a dummy node
