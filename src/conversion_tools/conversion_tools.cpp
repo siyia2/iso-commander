@@ -896,57 +896,47 @@ bool blacklist(const std::filesystem::path& entry, bool blacklistMdf) {
 
 // Function to print found BIN/IMG files with alternating colored sequence numbers
 void printFileList(const std::vector<std::string>& fileList) {
-    // ANSI escape codes for text formatting
-    const std::string bold = "\033[1m";
-    const std::string reset = "\033[0m";
-    const std::string red = "\033[31;1m"; // Red color
-    const std::string green = "\033[32;1m"; // Green color
-    const std::string orangeBold = "\033[1;38;5;208m";
-
-    // Toggle between red and green for sequence number coloring
-    bool useRedColor = true;
-
-    // Counter for line numbering
-    int lineNumber = 1;
+    const char* bold = "\033[1m";
+    const char* reset = "\033[0m";
+    const char* red = "\033[31;1m";
+    const char* green = "\033[32;1m";
+    const char* orangeBold = "\033[1;38;5;208m";
     
     size_t maxIndex = fileList.size();
     size_t numDigits = std::to_string(maxIndex).length();
+    
+    std::ostringstream output;
+    output.str().reserve(fileList.size() * 150);  // Pre-allocate buffer
 
-    // Apply formatting once before the loop
-    std::cout << std::right << std::setw(numDigits);
-
-    for (const auto& filename : fileList) {
-        // Extract directory and filename
+    for (size_t i = 0; i < fileList.size(); ++i) {
+        const auto& filename = fileList[i];
         auto [directory, fileNameOnly] = extractDirectoryAndFilename(filename);
-
-        const std::size_t dotPos = fileNameOnly.find_last_of('.');
-        std::string extension;
-
-        // Check if the file has a .bin, .img, or .mdf extension (case-insensitive)
+        
+        const size_t dotPos = fileNameOnly.find_last_of('.');
+        bool isSpecialExtension = false;
+        
         if (dotPos != std::string::npos) {
-            extension = fileNameOnly.substr(dotPos);
-            std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
-
-            if (extension == ".bin" || extension == ".img" || extension == ".mdf") {
-                // Determine color for sequence number based on toggle
-                std::string sequenceColor = (useRedColor) ? red : green;
-                useRedColor = !useRedColor; // Toggle between red and green
-
-                // Print sequence number in the determined color and the rest in default color
-                std::cout << sequenceColor << std::setw(numDigits) << std::right << lineNumber << ". " << reset;
-                std::cout << bold << directory << bold << "/" << orangeBold << fileNameOnly << reset << "\033[0;1m\n";
-            } else {
-                // Print entire path and filename with the default color
-                std::cout << std::setw(numDigits) << std::right << lineNumber << ". " << bold << filename << reset << "\033[0;1m\n";
-            }
-        } else {
-            // No extension found, print entire path and filename with the default color
-            std::cout << std::setw(numDigits) << std::right << lineNumber << ". " << bold << filename << reset << "\033[0;1m\n";
+            std::string extension = fileNameOnly.substr(dotPos);
+            std::transform(extension.begin(), extension.end(), extension.begin(), 
+                           [](unsigned char c){ return std::tolower(c); });
+            isSpecialExtension = (extension == ".bin" || extension == ".img" || extension == ".mdf");
         }
 
-        // Increment line number
-        lineNumber++;
+        const char* sequenceColor = (i % 2 == 0) ? red : green;
+        
+        output << (isSpecialExtension ? sequenceColor : "") 
+               << std::setw(numDigits) << std::right << (i + 1) << ". " << reset << bold;
+
+        if (isSpecialExtension) {
+            output << directory << '/' << orangeBold << fileNameOnly;
+        } else {
+            output << filename;
+        }
+
+        output << reset << "\033[0;1m\n";
     }
+
+    std::cout << output.str();
 }
 
 
