@@ -5,63 +5,53 @@
 // UMOUNT STUFF
 
 // Function to list mounted ISOs in the /mnt directory
+
 void listMountedISOs() {
-    // Path where ISO directories are expected to be mounted
-    const std::string isoPath = "/mnt";
-	
-	static std::mutex listMutex;
-	
-    // Vector to store names of mounted ISOs
+    const char* isoPath = "/mnt";
+    static std::mutex listMutex;
     std::vector<std::string> isoDirs;
-    
-    // Lock mutex for accessing shared resource
-    std::lock_guard<std::mutex> lock(listMutex);
+    isoDirs.reserve(100);  // Pre-allocate space for 100 entries
 
-    // Open the /mnt directory and find directories with names starting with "iso_"
-    DIR* dir;
-    struct dirent* entry;
+    {
+        std::lock_guard<std::mutex> lock(listMutex);
+        DIR* dir = opendir(isoPath);
+        if (dir == nullptr) {
+            std::cerr << "\033[1;91mError opening the /mnt directory.\033[0;1m\n";
+            return;
+        }
 
-    if ((dir = opendir(isoPath.c_str())) != NULL) {
-        while ((entry = readdir(dir)) != NULL) {
-            // Check if the entry is a directory and has a name starting with "iso_"
-            if (entry->d_type == DT_DIR && std::string(entry->d_name).find("iso_") == 0) {
-                // Build the full path and extract the ISO name
-                std::string fullDirPath = isoPath + "/" + entry->d_name;
-                std::string isoName = entry->d_name + 4; // Remove "/mnt/iso_" part
-                isoDirs.push_back(isoName);
+        struct dirent* entry;
+        while ((entry = readdir(dir)) != nullptr) {
+            if (entry->d_type == DT_DIR && strncmp(entry->d_name, "iso_", 4) == 0) {
+                isoDirs.emplace_back(entry->d_name + 4);
             }
         }
         closedir(dir);
-    } else {
-        // Print an error message if there is an issue opening the /mnt directory
-        std::cerr << "\033[1;91mError opening the /mnt directory.\033[0;1m\n";
+    }
+
+    if (isoDirs.empty()) {
         return;
     }
 
-    // Display a list of mounted ISOs with ISO names in bold and alternating colors
-    if (!isoDirs.empty()) {
-		sortFilesCaseInsensitive(isoDirs);
-		std::cout << "\033[1;93m! ROOT ACCESS IS PARAMOUNT FOR SUCCESSFUL UNMOUNTS !\n\033[0;1m";
-		std::cout << "\033[92;1m     // CHANGES ARE REFLECTED AUTOMATICALLY //\033[0;1m\n";
-        std::cout << " \n";
-        
-        size_t maxIndex = isoDirs.size();
-		size_t numDigits = std::to_string(maxIndex).length();
+    std::sort(isoDirs.begin(), isoDirs.end(), [](const std::string& a, const std::string& b) {
+        return strcasecmp(a.c_str(), b.c_str()) < 0;
+    });
 
-        bool useRedColor = true; // Start with red color for sequence numbers
+    std::ostringstream output;
+    output.str().reserve(isoDirs.size() * 100);  // Pre-allocate buffer
 
-        for (size_t i = 0; i < isoDirs.size(); ++i) {
-            // Determine color based on alternating pattern
-            std::string sequenceColor = (useRedColor) ? "\033[31;1m" : "\033[32;1m";
-            useRedColor = !useRedColor; // Toggle between red and green
+    output << "\033[1;93m! ROOT ACCESS IS PARAMOUNT FOR SUCCESSFUL UNMOUNTS !\n\033[0;1m"
+           << "\033[92;1m     // CHANGES ARE REFLECTED AUTOMATICALLY //\033[0;1m\n\n";
 
-            // Print sequence number with the determined color
-            std::cout << sequenceColor << std::setw(numDigits) << i + 1 << ". ";
+    size_t numDigits = std::to_string(isoDirs.size()).length();
 
-            // Print ISO directory path in bold and magenta
-            std::cout << "\033[0;1m/mnt/iso_\033[1m\033[95m" << isoDirs[i] << "\033[0;1m\n";
-        }
+    for (size_t i = 0; i < isoDirs.size(); ++i) {
+        const char* sequenceColor = (i % 2 == 0) ? "\033[31;1m" : "\033[32;1m";
+        output << sequenceColor << std::setw(numDigits) << (i + 1) << ". "
+               << "\033[0;1m/mnt/iso_\033[1m\033[95m" << isoDirs[i] << "\033[0;1m\n";
     }
+
+    std::cout << output.str();
 }
 
 
