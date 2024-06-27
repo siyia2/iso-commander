@@ -32,9 +32,7 @@ void listMountedISOs() {
         return;
     }
 
-    std::sort(isoDirs.begin(), isoDirs.end(), [](const std::string& a, const std::string& b) {
-        return strcasecmp(a.c_str(), b.c_str()) < 0;
-    });
+    sortFilesCaseInsensitive(isoDirs);
 
     std::ostringstream output;
     output.str().reserve(isoDirs.size() * 100);  // Pre-allocate buffer
