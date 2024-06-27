@@ -2,6 +2,7 @@
 #define THREAD_POOL_H
 #include "headers.h"
 
+// A global threadpool for async tasks with work-stealing scalable from 1 to 192 threads
 template <typename T>
 class LockFreeQueue {
 private:
@@ -29,10 +30,7 @@ private:
 
     // Calculate pool size based on number of threads
     static size_t calculatePoolSize(size_t num_threads) {
-        if (num_threads <= 16) return 1024;
-        if (num_threads <= 32) return 2048;
-        if (num_threads <= 64) return 4096;
-        return 8192;
+		return std::min(num_threads * 256, static_cast<size_t>(8192));
     }
 
     // Allocate a node from the pool or dynamically
@@ -133,27 +131,41 @@ public:
 
 class ThreadPool {
 private:
-    // AlignedAtomic structure for aligned atomic operations
+    // Struct for aligning atomic bool values to avoid false sharing
     struct alignas(64) AlignedAtomic {
         std::atomic<bool> value;
         AlignedAtomic(bool initial = false) : value(initial) {}
     };
 
-    // AlignedAtomicSize structure for aligned atomic size operations
+    // Struct for aligning atomic size_t values to avoid false sharing
     struct alignas(64) AlignedAtomicSize {
         std::atomic<size_t> value;
         AlignedAtomicSize(size_t initial = 0) : value(initial) {}
     };
 
-    std::vector<std::thread> workers; // Worker threads
-    std::vector<std::unique_ptr<LockFreeQueue<std::function<void()>>>> queues; // Queues for tasks
-    std::mutex mutex; // Mutex for synchronization
-    std::condition_variable cv; // Condition variable for task waiting
-    AlignedAtomic stop; // Atomic flag to stop threads
-    AlignedAtomicSize next_queue; // Next queue index for task distribution
-    const size_t num_threads; // Number of threads
+    // Vector of worker threads
+    std::vector<std::thread> workers;
 
-    // Select a queue index for task distribution
+    // Vector of queues (one for each worker thread)
+    std::vector<std::unique_ptr<LockFreeQueue<std::function<void()>>>> queues;
+
+    // Mutex and condition variable for synchronization
+    std::mutex mutex;
+    std::condition_variable cv;
+
+    // Atomic flag to signal threads to stop
+    AlignedAtomic stop;
+
+    // Atomic variable to select the next queue for task enqueueing
+    AlignedAtomicSize next_queue;
+
+    // Number of threads in the pool
+    const size_t num_threads;
+
+    // Atomic counter for tracking active tasks
+    std::atomic<size_t> active_tasks;
+
+    // Private method to select a queue index based on a random strategy
     size_t selectQueue() {
         static thread_local std::mt19937 rng(std::random_device{}());
         std::uniform_int_distribution<size_t> dist(0, num_threads - 1);
@@ -172,6 +184,7 @@ private:
             std::function<void()> task;
             bool gotTask = queues[id]->dequeue(task);
 
+            // Attempt to steal tasks if the current queue is empty
             if (!gotTask) {
                 size_t steal_attempts = adaptiveStealAttempts();
                 for (size_t i = 0; i < steal_attempts; ++i) {
@@ -183,9 +196,13 @@ private:
                 }
             }
 
+            // Execute the task if obtained, otherwise wait
             if (gotTask) {
+                ++active_tasks;
                 task();
+                --active_tasks;
             } else {
+                // Wait for a signal to wake up or terminate
                 std::unique_lock<std::mutex> lock(mutex);
                 cv.wait_for(lock, std::chrono::milliseconds(1), [this] { 
                     return stop.value.load(std::memory_order_acquire) || 
@@ -193,6 +210,7 @@ private:
                                [](const auto& q) { return !q->isEmpty(); });
                 });
 
+                // Exit the thread if signaled to stop and all queues are empty
                 if (stop.value.load(std::memory_order_acquire) && 
                     std::all_of(queues.begin(), queues.end(), 
                         [](const auto& q) { return q->isEmpty(); })) {
@@ -202,15 +220,16 @@ private:
         }
     }
 
-    // Calculate adaptive number of steal attempts
+    // Method to determine the number of steal attempts based on the number of threads
     size_t adaptiveStealAttempts() {
+        if (num_threads <= 2) return 1;
         return std::min(num_threads / 2, static_cast<size_t>(64));
     }
 
 public:
-    // Constructor initializes the thread pool with queues and worker threads
-    explicit ThreadPool(size_t numThreads) 
-        : stop(false), next_queue(0), num_threads(numThreads) {
+    // Constructor to initialize the thread pool with a specified number of threads
+    explicit ThreadPool(size_t numThreads)
+        : stop(false), next_queue(0), num_threads(numThreads), active_tasks(0) {
         queues.reserve(numThreads);
         for (size_t i = 0; i < numThreads; ++i) {
             queues.emplace_back(std::make_unique<LockFreeQueue<std::function<void()>>>(numThreads));
@@ -220,7 +239,7 @@ public:
         }
     }
 
-    // Enqueue a task into a selected queue
+    // Enqueue method to submit a task to the thread pool
     template <class F, class... Args>
     auto enqueue(F&& f, Args&&... args) -> std::future<decltype(f(args...))> {
         using return_type = decltype(f(args...));
@@ -236,7 +255,7 @@ public:
         return res;
     }
 
-    // Destructor stops threads and cleans up
+    // Destructor to stop all threads and clean up resources
     ~ThreadPool() {
         stop.value.store(true, std::memory_order_release);
         cv.notify_all();
@@ -245,7 +264,16 @@ public:
             worker.join();
         }
     }
-};
 
+    // Method to wait until all tasks are completed
+    void waitAllTasksCompleted() {
+        std::unique_lock<std::mutex> lock(mutex);
+        cv.wait(lock, [this] {
+            return active_tasks.load(std::memory_order_acquire) == 0 &&
+                   std::all_of(queues.begin(), queues.end(),
+                               [](const auto& q) { return q->isEmpty(); });
+        });
+    }
+};
 
 #endif // THREAD_POOL_H
