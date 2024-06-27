@@ -30,7 +30,7 @@ private:
 
     // Calculate pool size based on number of threads
     static size_t calculatePoolSize(size_t num_threads) {
-		return std::min(num_threads * 256, static_cast<size_t>(8192));
+		return std::min(num_threads * 64, static_cast<size_t>(12288));
     }
 
     // Allocate a node from the pool or dynamically
