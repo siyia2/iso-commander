@@ -288,7 +288,7 @@ void manualRefreshCache(const std::string& initialDir) {
 		loadHistory();
 		maxDepth = -1;
 		// Prompt the user to enter directory paths for manual cache refresh
-		std::string prompt = "\001\033[1;94m\002Directory path(s) ↵ to import \001\033[1;92m\002ISO\001\033[1;94m\002 file(s) into the persistent cache managed by \001\033[1;92m\002isocmd\001\033[1;94m\002 (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return:\n\001\033[0;1m\002";
+		std::string prompt = "\001\033[1;92m\002Directory path(s)\001\033[1;94m\002 ↵ to automatically import \001\033[1;92m\002ISO\001\033[1;94m\002 file(s) into the \001\033[1;92m\002persistent cache\001\033[1;94m\002 (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return:\n\001\033[0;1m\002";
 		char* inputCString = readline(prompt.c_str());
 		if (inputCString != nullptr) {
 			input = inputCString;
