@@ -9,6 +9,7 @@
 #include <csignal>
 #include <cstring>
 #include <dirent.h>
+#include <fcntl.h>
 #include <filesystem>
 #include <fstream>
 #include <functional>
