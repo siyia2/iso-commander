@@ -21,7 +21,7 @@ Features:
 * Support for BIN/IMG/MDF conversion to ISO by utilizing ccd2iso and mdf2iso.
 * Clean codebase in case someone decides to contribute in the future.
 
-Make dependencies for Debian based distros: `libmount-dev` `libreadline-dev`.
+`Make` dependencies for Debian based distros: `libmount-dev` `libreadline-dev`.
 
 Ways to Install:
 1) Download the binary executable from latest release.
