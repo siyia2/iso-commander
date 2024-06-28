@@ -80,33 +80,36 @@ void select_and_mount_files_by_number() {
 	isoFiles.reserve(100);
 	loadCache(isoFiles);
 
-    // Check if the cache is empty
-    if (isoFiles.empty()) {
-        clearScrollBuffer();
-        std::cout << "\033[1;93mISO Cache is empty. Import ISO from the Main Menu Options.\033[0;1m\n";
-        std::cout << " \n";
-        std::cout << "\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        return;
-    }
-
     // Set to track mounted ISO files
     std::vector<std::string> isoFilesToMount;
 
     // Main loop for selecting and mounting ISO files
     while (true) {
+		
+		// Remove non-existent paths from the cache after selection
+        removeNonExistentPathsFromCache();
+
+        // Load ISO files from cache
+        isoFiles.reserve(100);
+		loadCache(isoFiles);
+		
+		// Check if the cache is empty
+		if (isoFiles.empty()) {
+			clearScrollBuffer();
+			std::cout << "\033[1;93mISO Cache is empty. Import ISO from the Main Menu Options.\033[0;1m\n";
+			std::cout << " \n";
+			std::cout << "\033[1;32m↵ to continue...\033[0;1m";
+			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			break;
+		}
+		
 		std::vector<std::string> isoFilesToMount;
 		bool verboseFiltered = false;
         clearScrollBuffer();
         std::cout << "\033[1;93m! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\033[0;1m\n";
         std::cout << "\033[1;93m                ! ROOT ACCESS IS PARAMOUNT FOR SUCCESSFUL MOUNTS !\n\033[0;1m";
 
-        // Remove non-existent paths from the cache after selection
-        removeNonExistentPathsFromCache();
-
-        // Load ISO files from cache
-        isoFiles.reserve(100);
-		loadCache(isoFiles);
+        
         std::string searchQuery;
         std::vector<std::string> filteredFiles;
         sortFilesCaseInsensitive(isoFiles);

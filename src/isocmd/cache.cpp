@@ -115,12 +115,18 @@ std::string getHomeDirectory() {
 // Load cache
 void loadCache(std::vector<std::string>& isoFiles) {
     std::string cacheFilePath = getHomeDirectory() + "/.cache/iso_commander_cache.txt";
-
+    
     // Check if the cache file exists
     struct stat fileStat;
     if (stat(cacheFilePath.c_str(), &fileStat) == -1) {
         // File doesn't exist, handle error or just return
         return;
+    }
+    
+    // Check if the file is empty
+    if (fileStat.st_size == 0) {
+		isoFiles.clear();  // Clear the vector to ensure we don't retain old data
+        return;  // File is empty, no need to process
     }
 
     // Open the file for memory mapping
