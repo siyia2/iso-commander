@@ -55,16 +55,6 @@ void select_and_operate_files_by_number(const std::string& operation) {
 	isoFiles.reserve(100);
 	loadCache(isoFiles);
 
-    // If no ISO files are available, display a message and return
-    if (isoFiles.empty()) {
-        clearScrollBuffer();
-        std::cout << "\033[1;93mISO Cache is empty. Import ISO from the Main Menu Options.\033[0;1m\n";
-        std::cout << "\n";
-        std::cout << "\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        return;
-    }
-
     // Color code based on the operation
     std::string operationColor;
     if (operation == "rm") {
@@ -79,21 +69,34 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
     // Main loop for interacting with ISO files
     while (true) {
-        clearScrollBuffer();
+        
+        // Remove non-existent paths from the cache after selection
+        removeNonExistentPathsFromCache();
+		// Load ISO files from cache
+        isoFiles.reserve(100);
+		loadCache(isoFiles);
+		
+		clearScrollBuffer();
+        
+        if (isoFiles.empty()) {
+			clearScrollBuffer();
+			std::cout << "\033[1;93mISO Cache is empty. Import ISO from the Main Menu Options.\033[0;1m\n";
+			std::cout << "\n";
+			std::cout << "\033[1;32m↵ to continue...\033[0;1m";
+			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			break;
+		}
 
         // Display header message
         std::cout << "\033[1;93m! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\033[0;1m\n";
         std::cout << "\033[92;1m            // CHANGES TO CACHED ISOS ARE REFLECTED AUTOMATICALLY //\033[0;1m\n";
 
-        // Reload ISO files (in case the cache was updated)
-        removeNonExistentPathsFromCache();
-        isoFiles.reserve(100);
-		loadCache(isoFiles);
-
         std::string searchQuery;
         std::vector<std::string> filteredFiles = isoFiles;
         sortFilesCaseInsensitive(isoFiles);
         printIsoFileList(isoFiles);
+        
+        
 
         // Prompt user for input or filter
         char* input = readline(("\n\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + "\001\033[1;94m\002 (e.g., '1-3', '1 5'), / ↵ to filter, or ↵ to return:\001\033[0;1m\002 ").c_str());
