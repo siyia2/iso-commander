@@ -110,6 +110,7 @@ void printIsoFileList(const std::vector<std::string>& isoFiles);
 void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages,std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages);
 
 // Cache functions
+void loadCache(std::vector<std::string>& isoFiles);
 void manualRefreshCache(const std::string& initialDir = "");
 void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages);
 void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles, std::set<std::string>& uniqueErrorMessages);
