@@ -58,7 +58,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
     // If no ISO files are available, display a message and return
     if (isoFiles.empty()) {
         clearScrollBuffer();
-        std::cout << "\033[1;93mISO Cache is empty. Please refresh it from the main Menu Options.\033[0;1m\n";
+        std::cout << "\033[1;93mISO Cache is empty. Import ISO from the Main Menu Options.\033[0;1m\n";
         std::cout << "\n";
         std::cout << "\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
