@@ -113,22 +113,21 @@ std::string getHomeDirectory() {
 
 
 // Load cache
-std::vector<std::string> loadCache() {
-    std::vector<std::string> isoFiles;
+void loadCache(std::vector<std::string>& isoFiles) {
     std::string cacheFilePath = getHomeDirectory() + "/.cache/iso_commander_cache.txt";
 
     // Check if the cache file exists
     struct stat fileStat;
     if (stat(cacheFilePath.c_str(), &fileStat) == -1) {
-        // File doesn't exist, return an empty vector
-        return isoFiles;
+        // File doesn't exist, handle error or just return
+        return;
     }
 
     // Open the file for memory mapping
     int fd = open(cacheFilePath.c_str(), O_RDONLY);
     if (fd == -1) {
         // Handle error if unable to open the file
-        return isoFiles;
+        return;
     }
 
     // Get the file size
@@ -139,7 +138,7 @@ std::vector<std::string> loadCache() {
     if (mappedFile == MAP_FAILED) {
         // Handle error if unable to map the file
         close(fd);
-        return isoFiles;
+        return;
     }
 
     // Use a set to store unique lines
@@ -161,9 +160,8 @@ std::vector<std::string> loadCache() {
     munmap(mappedFile, fileSize);
     close(fd);
 
-    // Convert the set to a vector
+    // Convert the set to the vector reference
     isoFiles.assign(uniqueIsoFiles.begin(), uniqueIsoFiles.end());
-    return isoFiles;
 }
 
 
@@ -179,14 +177,14 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
     cachePath /= cacheFileName;
 
     // Check if cache directory exists
-    if (!exists(cacheDirectory) || !std::filesystem::is_directory(cacheDirectory)) {
-		std::cout << "\n";
+    if (!std::filesystem::exists(cacheDirectory) || !std::filesystem::is_directory(cacheDirectory)) {
         std::cerr << "\033[1;91mInvalid cache directory.\033[0;1m\n";
         return false;  // Cache save failed
     }
 
-    // Load the existing cache
-    std::vector<std::string> existingCache = loadCache();
+    // Load the existing cache into a local vector
+    std::vector<std::string> existingCache;
+    loadCache(existingCache);
 
     // Combine new and existing entries and remove duplicates
     std::set<std::string> combinedCache(existingCache.begin(), existingCache.end());
@@ -211,14 +209,12 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
             cacheFile.close();
             return true;  // Cache save successful
         } else {
-			std::cout << "\n";
             std::cerr << "\033[1;91mFailed to write to cache file.\033[0;1m\n";
             cacheFile.close();
             return false;  // Cache save failed
         }
     } else {
-		std::cout << "\n";
-        std::cerr << "\033[1;91mFailed to open ISO cache file: \033[1;93m'"<< cacheDirectory + "/" + cacheFileName <<"'\033[1;91m. Check read/write permissions.\033[0;1m\n";
+        std::cerr << "\033[1;91mFailed to open ISO cache file: \033[1;93m'" << cachePath.string() << "'\033[1;91m. Check read/write permissions.\033[0;1m\n";
         return false;  // Cache save failed
     }
 }

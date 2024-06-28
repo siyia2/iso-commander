@@ -45,7 +45,9 @@ void select_and_mount_files_by_number() {
     removeNonExistentPathsFromCache();
 
     // Load ISO files from cache
-    std::vector<std::string> isoFiles = loadCache();
+    std::vector<std::string> isoFiles;
+	isoFiles.reserve(100);
+	loadCache(isoFiles);
 
     // Check if the cache is empty
     if (isoFiles.empty()) {
@@ -72,7 +74,8 @@ void select_and_mount_files_by_number() {
         removeNonExistentPathsFromCache();
 
         // Load ISO files from cache
-        isoFiles = loadCache();
+        isoFiles.reserve(100);
+		loadCache(isoFiles);
         std::string searchQuery;
         std::vector<std::string> filteredFiles;
         sortFilesCaseInsensitive(isoFiles);
