@@ -83,7 +83,7 @@ void select_and_mount_files_by_number() {
     // Check if the cache is empty
     if (isoFiles.empty()) {
         clearScrollBuffer();
-        std::cout << "\033[1;93mISO Cache is empty. Please refresh it from the main Menu Options.\033[0;1m\n";
+        std::cout << "\033[1;93mISO Cache is empty. Import ISO from the Main Menu Options.\033[0;1m\n";
         std::cout << " \n";
         std::cout << "\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -272,6 +272,10 @@ void printMountedAndErrors( std::set<std::string>& mountedFiles, std::set<std::s
     if (!uniqueErrorMessages.empty()) {
         std::cout << "\n";
     }
+    
+    if (mountedFiles.empty() && mountedFails.empty() && skippedMessages.empty()) {
+		std::cout << "\n\033[1;91mNo mounts possible ensure that you have \033[1;92mROOT\033[1;91m access.\033[0;1m\n";
+	}
 
     // Clear the vectors after each iteration
     mountedFiles.clear();
