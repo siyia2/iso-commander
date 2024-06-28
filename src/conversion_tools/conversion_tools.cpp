@@ -65,6 +65,8 @@ void verboseFind(std::set<std::string> invalidDirectoryPaths) {
 void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     // Initialize variables
     std::vector<std::string> files;
+    files.reserve(100); // Reserve space for 100 elements for files
+    
     std::vector<std::string> directoryPaths;
     std::set<std::string> uniquePaths;
     // Set to track processed error messages to avoid duplicate error reporting
