@@ -330,7 +330,10 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
     size_t numDigits = std::to_string(maxIndex).length();
     
     std::ostringstream output;
-    output.str().reserve(isoFiles.size() * 100); // Pre-allocate buffer for the internal string
+    // Reserve estimated space for the string buffer
+    std::string buffer;
+    buffer.reserve(isoFiles.size() * 100);
+    output.str(std::move(buffer));
 
     for (size_t i = 0; i < isoFiles.size(); ++i) {
         const char* sequenceColor = (i % 2 == 0) ? red : green;
@@ -345,6 +348,7 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
 
     std::cout << output.str();
 }
+
 
 //	SANITISATION AND STRING STUFF
 

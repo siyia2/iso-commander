@@ -35,7 +35,10 @@ void listMountedISOs() {
     sortFilesCaseInsensitive(isoDirs);
 
     std::ostringstream output;
-    output.str().reserve(isoDirs.size() * 100);  // Pre-allocate buffer
+    // Reserve estimated space for the string buffer
+    std::string buffer;
+    buffer.reserve(isoDirs.size() * 100);
+    output.str(std::move(buffer));
 
     output << "\033[1;93m! ROOT ACCESS IS PARAMOUNT FOR SUCCESSFUL UNMOUNTS !\n\033[0;1m"
            << "\033[92;1m     // CHANGES ARE REFLECTED AUTOMATICALLY //\033[0;1m\n\n";
