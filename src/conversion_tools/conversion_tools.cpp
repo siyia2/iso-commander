@@ -115,7 +115,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     loadHistory();
     
     // Prompt user to input directory paths
-    std::string prompt = "\001\033[1;94m\002Directory path(s) ↵ (multi-path separator: \001\033[1;93m\002;\001\033[1;94m\002) to search for \001\033[1;92m\002" 
+    std::string prompt = "\001\033[1;92m\002Directory path(s)\001\033[1;94m ↵ (multi-path separator: \001\033[1;93m\002;\001\033[1;94m\002) to search for \001\033[1;92m\002" 
                         + fileExtension + " \001\033[1;94m\002files, \001\033[1;93m\002clr\001\033[1;94m\002 ↵ to clear \001\033[1;92m\002" + fileTypeName 
                         + " \001\033[1;94m\002RAM cache, or ↵ to return:\n\001\033[0;1m\002";
     
