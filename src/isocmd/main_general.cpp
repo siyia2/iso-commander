@@ -287,6 +287,7 @@ void clearScrollBuffer() {
     std::cout << "\033[3J";  // Clear the scrollback buffer
     std::cout << "\033[2J";  // Clear the screen
     std::cout << "\033[H";   // Move the cursor to the top-left corner
+    std::cout << "\033[0m";
     std::cout.flush();       // Ensure the output is flushed
 }
 
@@ -294,6 +295,7 @@ void clearScrollBuffer() {
 // Function to handle termination signals
 void signalHandler(int signum) {
     
+    clearScrollBuffer();
     // Perform cleanup before exiting
     if (lockFileDescriptor != -1) {
         close(lockFileDescriptor);
