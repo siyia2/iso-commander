@@ -720,10 +720,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
     for (const auto& iso : isoFiles) {
         // Extract directory and filename from the ISO file path
         auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(iso);
-
-        // Lock the low-level mutex to ensure thread safety
-        std::lock_guard<std::mutex> lowLock(Mutex4Low);
-
+		
         // Check if ISO file is present in the copy list
         auto it = std::find(isoFilesCopy.begin(), isoFilesCopy.end(), iso);
         if (it != isoFilesCopy.end()) {
@@ -732,17 +729,21 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                 // Add ISO file to the list of files to operate on
                 isoFilesToOperate.push_back(iso);
             } else {
-                // Print message if file not found
-                errorMessageInfo = "\033[1;35mFile not found: \033[0;1m'" + isoDirectory + "/" + isoFilename + "'\033[1;95m.\033[0;1m";
-                operationErrors.insert(errorMessageInfo);
-            }
+				if (isCopy) {
+					// Print message if file not found
+					errorMessageInfo = "\033[1;35mFile not found: \033[0;1m'" + isoDirectory + "/" + isoFilename + "'\033[1;95m.\033[0;1m";
+					operationErrors.insert(errorMessageInfo);
+				}
+			}
         } else {
-            // Print message if file not found in cache
-            errorMessageInfo = "\033[1;93mFile not found in cache: \033[0;1m'" + isoDirectory + "/" + isoFilename + "'\033[1;93m.\033[0;1m";
-            operationErrors.insert(errorMessageInfo);
+			if (isCopy) {
+				// Print message if file not found in cache
+				errorMessageInfo = "\033[1;93mFile not found in cache: \033[0;1m'" + isoDirectory + "/" + isoFilename + "'\033[1;93m.\033[0;1m";
+				operationErrors.insert(errorMessageInfo);
+			}
         }
     }
 
     // Execute the operation for all files in one go
-    executeOperation(isoFilesToOperate);
+	executeOperation(isoFilesToOperate);
 }
