@@ -236,6 +236,38 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     std::mutex MutexForProcessedIndices;
     
     std::mutex MutexForUniqueErrors;
+    
+     // Add progress tracking
+    std::atomic<int> totalTasks(0);
+    std::atomic<int> completedTasks(0);
+    std::mutex progressMutex;
+    bool isProcessingComplete = false;
+
+    // Create a lambda function for the progress bar
+    auto updateProgressBar = [&]() {
+        while (!isProcessingComplete) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            int total, completed;
+            {
+                std::lock_guard<std::mutex> lock(progressMutex);
+                total = totalTasks.load();
+                completed = completedTasks.load();
+            }
+            if (total > 0) {
+                float progress = static_cast<float>(completed) / total;
+                int barWidth = 50;
+                std::cout << "\r[";
+                int pos = barWidth * progress;
+                for (int i = 0; i < barWidth; ++i) {
+                    if (i < pos) std::cout << "=";
+                    else if (i == pos) std::cout << ">";
+                    else std::cout << " ";
+                }
+                std::cout << "] " << int(progress * 100.0) << "% (" << completed << "/" << total << ")" << std::flush;
+            }
+        }
+        std::cout << std::endl;  // Move to the next line when complete
+    };
 
     // Variables for tracking errors, processed indices, and valid indices
     bool invalidInput = false;
@@ -488,6 +520,9 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 	clearScrollBuffer();
     std::cout << "\033[1mPlease wait...\033[1m\n";
     std::mutex futuresMutex;
+    
+    // Start the progress bar thread
+    std::thread progressThread(updateProgressBar);
 
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
@@ -501,10 +536,31 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         std::lock_guard<std::mutex> lock(futuresMutex);
         futures.emplace_back(pool.enqueue(handleIsoFileOperation,isoFilesInChunk,std::ref(isoFiles),std::ref(operationIsos),std::ref(operationErrors),userDestDir,isMove,isCopy,isDelete));
     }
+	
+	totalTasks = processedIndices.size();  // Set total number of tasks
 
+    for (const auto& chunk : indexChunks) {
+        std::vector<std::string> isoFilesInChunk;
+        for (const auto& index : chunk) {
+            isoFilesInChunk.push_back(isoFiles[index - 1]);
+        }
+        std::lock_guard<std::mutex> lock(futuresMutex);
+        futures.emplace_back(pool.enqueue([&, isoFilesInChunk]() {
+            handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors, userDestDir, isMove, isCopy, isDelete);
+            // Update progress
+            {
+                std::lock_guard<std::mutex> lock(progressMutex);
+                completedTasks += isoFilesInChunk.size();
+            }
+        }));
+    }
+	
     for (auto& future : futures) {
         future.wait();
     }
+		// Signal that processing is complete and wait for the progress thread to finish
+		isProcessingComplete = true;
+		progressThread.join();
     
 		if (!isDelete) {
 			promptFlag = false;
@@ -659,7 +715,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
             }
         }
     };
-
+	std::string errorMessageInfo;
     // Iterate over each ISO file
     for (const auto& iso : isoFiles) {
         // Extract directory and filename from the ISO file path
@@ -677,11 +733,13 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                 isoFilesToOperate.push_back(iso);
             } else {
                 // Print message if file not found
-                std::cout << "\033[1;35mFile not found: \033[0;1m'" << isoDirectory << "/" << isoFilename << "'\033[1;95m.\033[0;1m\n";
+                errorMessageInfo = "\033[1;35mFile not found: \033[0;1m'" + isoDirectory + "/" + isoFilename + "'\033[1;95m.\033[0;1m";
+                operationErrors.insert(errorMessageInfo);
             }
         } else {
             // Print message if file not found in cache
-            std::cout << "\033[1;93mFile not found in cache: \033[0;1m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m.\033[0;1m\n";
+            errorMessageInfo = "\033[1;93mFile not found in cache: \033[0;1m'" + isoDirectory + "/" + isoFilename + "'\033[1;93m.\033[0;1m";
+            operationErrors.insert(errorMessageInfo);
         }
     }
 
