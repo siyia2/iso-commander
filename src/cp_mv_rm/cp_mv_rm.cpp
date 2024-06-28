@@ -732,15 +732,19 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                 // Add ISO file to the list of files to operate on
                 isoFilesToOperate.push_back(iso);
             } else {
-                // Print message if file not found
-                errorMessageInfo = "\033[1;35mFile not found: \033[0;1m'" + isoDirectory + "/" + isoFilename + "'\033[1;95m.\033[0;1m";
-                operationErrors.insert(errorMessageInfo);
-            }
+				if (isCopy) {
+					// Print message if file not found
+					errorMessageInfo = "\033[1;35mFile not found: \033[0;1m'" + isoDirectory + "/" + isoFilename + "'\033[1;95m.\033[0;1m";
+					operationErrors.insert(errorMessageInfo);
+				}
+			}
         } else {
-            // Print message if file not found in cache
-            errorMessageInfo = "\033[1;93mFile not found in cache: \033[0;1m'" + isoDirectory + "/" + isoFilename + "'\033[1;93m.\033[0;1m";
-            operationErrors.insert(errorMessageInfo);
-        }
+			if (isCopy) {
+				// Print message if file not found in cache
+				errorMessageInfo = "\033[1;93mFile not found in cache: \033[0;1m'" + isoDirectory + "/" + isoFilename + "'\033[1;93m.\033[0;1m";
+				operationErrors.insert(errorMessageInfo);
+			}
+		}
     }
 
     // Execute the operation for all files in one go
