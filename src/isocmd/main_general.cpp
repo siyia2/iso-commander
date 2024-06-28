@@ -268,13 +268,13 @@ void printMenu() {
     std::cout << "\033[1;32m+-------------------------+\n";
     std::cout << "\033[1;32m|       Menu Options       |\n";
     std::cout << "\033[1;32m+-------------------------+\n";
-    std::cout << "\033[1;32m|1. Manage ISO            |\n";
+    std::cout << "\033[1;32m|1. ManageISO             |\n";
     std::cout << "\033[1;32m+-------------------------+\n";
     std::cout << "\033[1;32m|2. Convert2ISO           |\n";
     std::cout << "\033[1;32m+-------------------------+\n";
-    std::cout << "\033[1;32m|3. Refresh ISO Cache     |\n";
+    std::cout << "\033[1;32m|3. ImportISO             |\n";
     std::cout << "\033[1;32m+-------------------------+\n";
-    std::cout << "\033[1;32m|4. Exit Program          |\n";
+    std::cout << "\033[1;32m|4. Exit                  |\n";
     std::cout << "\033[1;32m+-------------------------+\n";
     std::cout << " ";
 }
