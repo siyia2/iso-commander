@@ -1,6 +1,6 @@
 CXX = g++
 CXXFLAGS = -O3 -Wall -Wextra -flto -fmerge-all-constants -fdata-sections -ffunction-sections -fno-plt -fno-rtti
-LIBS = -lreadline
+LIBS = -lreadline -lmount
 LDFLAGS = -lreadline -lmount -flto -ffunction-sections -fdata-sections -fno-plt -Wl,--gc-sections -Wl,--strip-all -Wl,--as-needed -Wl,-z,relro -Wl,-z,now
 
 # Use the number of available processors from nproc
