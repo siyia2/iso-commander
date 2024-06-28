@@ -477,31 +477,62 @@ void unmountISOs() {
 
         // If there are selected ISOs, proceed to unmount them
         if (!selectedIsoDirs.empty()) {
-            std::vector<std::future<void>> futures;
-            unsigned int numThreads = std::min(static_cast<int>(selectedIsoDirs.size()), static_cast<int>(maxThreads));
-            ThreadPool pool(numThreads);
-            std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
+			std::vector<std::future<void>> futures;
+			unsigned int numThreads = std::min(static_cast<int>(selectedIsoDirs.size()), static_cast<int>(maxThreads));
+			ThreadPool pool(numThreads);
+			std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
+    
+			// Divide the selected ISOs into batches for parallel processing
+			size_t batchSize = (selectedIsoDirs.size() + maxThreads - 1) / maxThreads;
+			std::vector<std::vector<std::string>> batches;
+			for (size_t i = 0; i < selectedIsoDirs.size(); i += batchSize) {
+				batches.emplace_back(selectedIsoDirs.begin() + i, std::min(selectedIsoDirs.begin() + i + batchSize, selectedIsoDirs.end()));
+			}
+    
+			std::mutex futuresMutex;
+			std::atomic<int> completedIsos(0);
+			int totalIsos = selectedIsoDirs.size();
+			bool isComplete = false;
 
-            // Divide the selected ISOs into batches for parallel processing
-            size_t batchSize = (selectedIsoDirs.size() + maxThreads - 1) / maxThreads;
-            std::vector<std::vector<std::string>> batches;
-            for (size_t i = 0; i < selectedIsoDirs.size(); i += batchSize) {
-                batches.emplace_back(selectedIsoDirs.begin() + i, std::min(selectedIsoDirs.begin() + i + batchSize, selectedIsoDirs.end()));
-            }
-            std::mutex futuresMutex;
+			// Start a separate thread for updating the progress bar
+			std::thread progressThread([&completedIsos, totalIsos, &isComplete]() {
+				const int barWidth = 50;  // Reduced bar width to accommodate the count
+				while (!isComplete) {
+					int completed = completedIsos.load();
+					float progress = static_cast<float>(completed) / totalIsos;
+					int pos = barWidth * progress;
+					std::cout << "\r[";
+					for (int i = 0; i < barWidth; ++i) {
+						if (i < pos) std::cout << "=";
+						else if (i == pos) std::cout << ">";
+						else std::cout << " ";
+					}
+					std::cout << "] " << std::setw(3) << std::fixed << std::setprecision(1) 
+						<< (progress * 100.0) << "% (" << completed << "/" << totalIsos << ")";
+					std::cout.flush();
+					std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Update every 100ms
+				}
+			});
 
-            // Enqueue unmount tasks for each batch of ISOs
-            for (const auto& batch : batches) {
+			// Enqueue unmount tasks for each batch of ISOs
+			for (const auto& batch : batches) {
 				std::lock_guard<std::mutex> lock(futuresMutex);
-                futures.emplace_back(pool.enqueue([batch, &unmountedFiles, &unmountedErrors]() {
-                    unmountISO(batch, unmountedFiles, unmountedErrors);
-                }));
-            }
+				futures.emplace_back(pool.enqueue([batch, &unmountedFiles, &unmountedErrors, &completedIsos]() {
+					for (const auto& iso : batch) {
+						unmountISO({iso}, unmountedFiles, unmountedErrors);
+						++completedIsos;
+					}
+				}));
+			}
 
-            // Wait for all unmount tasks to complete
-            for (auto& future : futures) {
-                future.wait();
-            }
+			// Wait for all unmount tasks to complete
+			for (auto& future : futures) {
+				future.wait();
+			}
+
+			// Signal completion and wait for progress thread to finish
+			isComplete = true;
+			progressThread.join();
             
             printUnmountedAndErrors(invalidInput, unmountedFiles, unmountedErrors, errorMessages);
 
