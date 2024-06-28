@@ -30,7 +30,7 @@ int lockFileDescriptor = -1;
 int main(int argc, char *argv[]) {
 	
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
-        printVersionNumber("4.6.0");
+        printVersionNumber("4.6.1");
         return 0;
     }
 	
