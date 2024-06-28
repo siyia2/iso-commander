@@ -910,7 +910,7 @@ void printFileList(const std::vector<std::string>& fileList) {
     std::ostringstream output;
     // Reserve estimated space for the string buffer
     std::string buffer;
-    buffer.reserve(fileList.size() * 150);
+    buffer.reserve(fileList.size() * 100);
     output.str(std::move(buffer));
 
     for (size_t i = 0; i < fileList.size(); ++i) {
