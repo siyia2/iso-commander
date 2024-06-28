@@ -51,7 +51,9 @@ void select_and_operate_files_by_number(const std::string& operation) {
     removeNonExistentPathsFromCache();
 
     // Load ISO files from the cache
-    std::vector<std::string> isoFiles = loadCache();
+    std::vector<std::string> isoFiles;
+	isoFiles.reserve(100);
+	loadCache(isoFiles);
 
     // If no ISO files are available, display a message and return
     if (isoFiles.empty()) {
@@ -85,7 +87,8 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
         // Reload ISO files (in case the cache was updated)
         removeNonExistentPathsFromCache();
-        isoFiles = loadCache();
+        isoFiles.reserve(100);
+		loadCache(isoFiles);
 
         std::string searchQuery;
         std::vector<std::string> filteredFiles = isoFiles;
