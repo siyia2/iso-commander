@@ -239,7 +239,7 @@ void select_and_mount_files_by_number() {
 
 // Function to print mount verbose messages
 void printMountedAndErrors( std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages) {
-
+		
     // Print all mounted files
     for (const auto& mountedFile : mountedFiles) {
         std::cout << "\n" << mountedFile << "\033[0;1m";
@@ -267,6 +267,10 @@ void printMountedAndErrors( std::set<std::string>& mountedFiles, std::set<std::s
         std::cout << "\n";
     }
     
+    if (mountedFiles.empty() && mountedFails.empty() && skippedMessages.empty()) {
+		std::cout << "\n\033[1;91mNo mounts possible ensure that you have \033[1;92mROOT\033[1;91m access.\033[0;1m\n";
+	}
+	
     // Print all the stored error messages
     for (const auto& errorMessage : uniqueErrorMessages) {
         std::cerr << "\n" << errorMessage << "\033[0;1m";
@@ -275,10 +279,6 @@ void printMountedAndErrors( std::set<std::string>& mountedFiles, std::set<std::s
     if (!uniqueErrorMessages.empty()) {
         std::cout << "\n";
     }
-    
-    if (mountedFiles.empty() && mountedFails.empty() && skippedMessages.empty()) {
-		std::cout << "\n\033[1;91mNo mounts possible ensure that you have \033[1;92mROOT\033[1;91m access.\033[0;1m\n";
-	}
 
     // Clear the vectors after each iteration
     mountedFiles.clear();
