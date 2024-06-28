@@ -334,36 +334,36 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     
     // Selection size count
     while (issCount >> tokenCount && tokens.size() < maxThreads) {
-        size_t dashPos = tokenCount.find('-');
-        if (dashPos != std::string::npos) {
-            std::string start = tokenCount.substr(0, dashPos);
-            std::string end = tokenCount.substr(dashPos + 1);
-            if (std::all_of(start.begin(), start.end(), ::isdigit) && 
-                std::all_of(end.begin(), end.end(), ::isdigit)) {
-                int startNum = std::stoi(start);
-                int endNum = std::stoi(end);
-                if (!(startNum < 0 || endNum < 0 || 
-                static_cast<std::vector<std::string>::size_type>(startNum) > isoFiles.size() || 
-                static_cast<std::vector<std::string>::size_type>(endNum) > isoFiles.size())){
-                    int step = (startNum <= endNum) ? 1 : -1;
-                    for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
-                        tokens.insert(std::to_string(i));
-                        if (tokens.size() >= maxThreads) {
-                            break;
-                        }
-                    }
-                }
-            }
-        } else if (std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
-            int num = std::stoi(tokenCount);
-            if (!(num < 0 || static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size())) {
-                tokens.insert(tokenCount);
-                if (tokens.size() >= maxThreads) {
-                    break;
-                }
-            }
-        }
-    }
+		size_t dashPos = tokenCount.find('-');
+		if (dashPos != std::string::npos) {
+			std::string start = tokenCount.substr(0, dashPos);
+			std::string end = tokenCount.substr(dashPos + 1);
+			if (std::all_of(start.begin(), start.end(), ::isdigit) && 
+				std::all_of(end.begin(), end.end(), ::isdigit)) {
+				int startNum = std::stoi(start);
+				int endNum = std::stoi(end);
+				if (!(startNum < 0 || endNum < 0 || 
+				static_cast<std::vector<std::__cxx11::basic_string<char>>::size_type>(startNum) > isoFiles.size() || 
+				static_cast<std::vector<std::__cxx11::basic_string<char>>::size_type>(endNum) > isoFiles.size())){
+					int step = (startNum <= endNum) ? 1 : -1;
+					for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
+						tokens.insert(std::to_string(i));
+						if (tokens.size() >= maxThreads) {
+							break;
+						}
+					}
+				}
+			}
+		} else if (std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
+			int num = std::stoi(tokenCount);
+			if (!(num < 0 || static_cast<std::vector<std::__cxx11::basic_string<char>>::size_type>(num) > isoFiles.size())) {
+				tokens.insert(tokenCount);
+				if (tokens.size() >= maxThreads) {
+					break;
+				}
+			}
+		}
+	}
     
     unsigned int numThreads = std::min(static_cast<int>(tokens.size()), static_cast<int>(maxThreads));
 
