@@ -908,7 +908,10 @@ void printFileList(const std::vector<std::string>& fileList) {
     size_t numDigits = std::to_string(maxIndex).length();
     
     std::ostringstream output;
-    output.str().reserve(fileList.size() * 150);  // Pre-allocate buffer
+    // Reserve estimated space for the string buffer
+    std::string buffer;
+    buffer.reserve(fileList.size() * 150);
+    output.str(std::move(buffer));
 
     for (size_t i = 0; i < fileList.size(); ++i) {
         const auto& filename = fileList[i];
