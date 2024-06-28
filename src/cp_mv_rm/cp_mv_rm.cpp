@@ -155,7 +155,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 						printIsoFileList(filteredFiles); // Print the filtered list of ISO files
 
 						// Prompt user for input again with the filtered list
-						char* input = readline(("\n\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for " + operationColor + operation + "\001\033[1;94m\002 (e.g., '1-3', '1 5'), or ↵ to return:\001\033[0;1m\002 ").c_str());
+						char* input = readline(("\n\n\001\033[1;92m\002Filtered ISO(s)\001\033[1;94m\002 ↵ for " + operationColor + operation + "\001\033[1;94m\002 (e.g., '1-3', '1 5'), or ↵ to return:\001\033[0;1m\002 ").c_str());
                     
 						// Check if the user wants to return
 						if (std::isspace(input[0]) || input[0] == '\0') {
@@ -720,7 +720,10 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
     for (const auto& iso : isoFiles) {
         // Extract directory and filename from the ISO file path
         auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(iso);
-		
+
+        // Lock the low-level mutex to ensure thread safety
+        std::lock_guard<std::mutex> lowLock(Mutex4Low);
+
         // Check if ISO file is present in the copy list
         auto it = std::find(isoFilesCopy.begin(), isoFilesCopy.end(), iso);
         if (it != isoFilesCopy.end()) {
@@ -729,21 +732,17 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                 // Add ISO file to the list of files to operate on
                 isoFilesToOperate.push_back(iso);
             } else {
-				if (isCopy) {
-					// Print message if file not found
-					errorMessageInfo = "\033[1;35mFile not found: \033[0;1m'" + isoDirectory + "/" + isoFilename + "'\033[1;95m.\033[0;1m";
-					operationErrors.insert(errorMessageInfo);
-				}
-			}
+                // Print message if file not found
+                errorMessageInfo = "\033[1;35mFile not found: \033[0;1m'" + isoDirectory + "/" + isoFilename + "'\033[1;95m.\033[0;1m";
+                operationErrors.insert(errorMessageInfo);
+            }
         } else {
-			if (isCopy) {
-				// Print message if file not found in cache
-				errorMessageInfo = "\033[1;93mFile not found in cache: \033[0;1m'" + isoDirectory + "/" + isoFilename + "'\033[1;93m.\033[0;1m";
-				operationErrors.insert(errorMessageInfo);
-			}
+            // Print message if file not found in cache
+            errorMessageInfo = "\033[1;93mFile not found in cache: \033[0;1m'" + isoDirectory + "/" + isoFilename + "'\033[1;93m.\033[0;1m";
+            operationErrors.insert(errorMessageInfo);
         }
     }
 
     // Execute the operation for all files in one go
-	executeOperation(isoFilesToOperate);
+    executeOperation(isoFilesToOperate);
 }
