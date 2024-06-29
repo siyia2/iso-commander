@@ -93,7 +93,7 @@ void select_and_mount_files_by_number() {
 		// Check if the cache is empty
 		if (isoFiles.empty()) {
 			clearScrollBuffer();
-			std::cout << "\033[1;93mISO Cache is empty. Choose ImportISO from the Main Menu Options.\033[0;1m\n";
+			std::cout << "\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n";
 			std::cout << " \n";
 			std::cout << "\033[1;32m↵ to continue...\033[0;1m";
 			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -103,8 +103,6 @@ void select_and_mount_files_by_number() {
 		bool verboseFiltered = false;
         clearScrollBuffer();
         std::cout << "\033[1;93m! IF EXPECTED ISO FILES NOT ON THE LIST IMPORT THEM FROM THE MAIN MENU OPTIONS !\033[0;1m\n";
-        std::cout << "\033[1;93m              ! ROOT ACCESS IS PARAMOUNT FOR SUCCESSFUL MOUNTS !\n\033[0;1m";
-
         
         std::string searchQuery;
         std::vector<std::string> filteredFiles;
