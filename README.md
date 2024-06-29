@@ -2,9 +2,7 @@
 Port of bash shell program mounter_elite to C++ 
 https://github.com/siyia2/mounter_elite
 
-![2024-06-28-232205_grim](https://github.com/siyia2/iso-commander/assets/46220960/104b5d15-1318-456c-9abd-bde9a45dc0ff)
-
-
+![prog](https://github.com/siyia2/iso-commander/assets/46220960/33c9aba7-6568-4462-8420-f2926c710f10)
 
 State of the art secure and blazing fast terminal `ISO` manager written in C++. All paths are mounted under `/mnt/iso_*` format and conversions are stored in their respective source directories. `ROOT` access is essential for `mount&umount` operations.
 
