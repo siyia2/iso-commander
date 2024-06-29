@@ -88,8 +88,8 @@ void select_and_operate_files_by_number(const std::string& operation) {
 		}
 
         // Display header message
-        std::cout << "\033[1;93m! IF EXPECTED ISO FILES NOT ON THE LIST IMPORT THEM FROM THE MAIN MENU OPTIONS !\033[0;1m\n";
-        std::cout << "\033[92;1m                // CHANGES ARE REFLECTED AUTOMATICALLY //\033[0;1m\n";
+        std::cout << "\033[1;93m! IF EXPECTED ISO FILES ARE NOT ON THE LIST IMPORT THEM FROM THE MAIN MENU OPTIONS !\033[0;1m\n";
+        std::cout << "\033[92;1m                 // CHANGES ARE REFLECTED AUTOMATICALLY //\033[0;1m\n";
 
         std::string searchQuery;
         std::vector<std::string> filteredFiles = isoFiles;
