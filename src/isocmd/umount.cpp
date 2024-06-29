@@ -7,12 +7,9 @@
 // Function to list mounted ISOs in the /mnt directory
 void listMountedISOs() {
     const char* isoPath = "/mnt";
-    static std::mutex listMutex;
     std::vector<std::string> isoDirs;
     isoDirs.reserve(100);  // Pre-allocate space for 100 entries
 
-    {
-        std::lock_guard<std::mutex> lock(listMutex);
         DIR* dir = opendir(isoPath);
         if (dir == nullptr) {
             std::cerr << "\033[1;91mError opening the /mnt directory.\033[0;1m\n";
@@ -26,7 +23,6 @@ void listMountedISOs() {
             }
         }
         closedir(dir);
-    }
 
     if (isoDirs.empty()) {
         return;
