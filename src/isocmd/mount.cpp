@@ -263,7 +263,7 @@ void printMountedAndErrors( std::set<std::string>& mountedFiles, std::set<std::s
         std::cout << "\n";
     }
     
-    if (mountedFiles.empty() && mountedFails.empty() && skippedMessages.empty()) {
+    if (mountedFiles.empty() && mountedFails.empty() && skippedMessages.empty() && uniqueErrorMessages.empty()) {
 		std::cout << "\n\033[1;91mUnable to mount. Please ensure you have \033[1;92mROOT\033[1;91m privileges.\033[0m\n";
 	}
 	
