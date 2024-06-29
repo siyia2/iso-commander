@@ -687,10 +687,8 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         << isoDirectory << "/" << isoFilename << "'\033[0;1m";
                 }
                 std::string operationInfo = oss.str();
-                {
-                    std::lock_guard<std::mutex> lock(Mutex4Low);
+                
                     operationIsos.insert(operationInfo);
-                }
 
                 // Change ownership of the copied/moved file
                 if (!isDelete) {
@@ -712,7 +710,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                 }
                 errorMessageInfo = oss.str();
                 {
-                    std::lock_guard<std::mutex> lock(Mutex4Low);
                     operationErrors.insert(errorMessageInfo);
                 }
             }
