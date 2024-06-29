@@ -98,7 +98,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
     // Determine file extension and type name based on user input
     if (fileType == "bin" || fileType == "img") {
-        fileExtension = ".bin;.img";
+        fileExtension = ".bin/.img";
         fileTypeName = "BIN/IMG";
         modeMdf = false;
     } else if (fileType == "mdf") {
@@ -115,8 +115,8 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     loadHistory();
     
     // Prompt user to input directory paths
-    std::string prompt = "\001\033[1;92m\002Directory path(s)\001\033[1;94m ↵ (multi-path separator: \001\033[1;93m\002;\001\033[1;94m\002) to search for \001\033[1;92m\002" 
-                        + fileExtension + " \001\033[1;94m\002files, \001\033[1;93m\002clr\001\033[1;94m\002 ↵ to clear \001\033[1;92m\002" + fileTypeName 
+    std::string prompt = "\001\033[1;92m\002Directory path(s)\001\033[1;94m ↵ to scan for \001\033[1;92m\002" 
+                        + fileExtension + " \001\033[1;94m\002files (multi-path separator: \001\033[1;93m\002;\001\033[1;94m\002), \001\033[1;93m\002clr\001\033[1;94m\002 ↵ to clear \001\033[1;92m\002" + fileTypeName 
                         + " \001\033[1;94m\002RAM cache, or ↵ to return:\n\001\033[0;1m\002";
     
     char* input = readline(prompt.c_str());
@@ -230,7 +230,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     while (!noValid && !clr) {
         // Display file list and prompt user for input
         clearScrollBuffer();
-        std::cout << "\033[92;1m// SUCCESSFUL CONVERSIONS ARE AUTOMATICALLY ADDED INTO ISO CACHE //\033[0;1m\033[0;1m\n\n";
+        std::cout << "\033[92;1m// SUCCESSFUL CONVERSIONS ARE AUTOMATICALLY IMPORTED INTO ISO CACHE //\033[0;1m\033[0;1m\n\n";
         sortFilesCaseInsensitive(files);
         printFileList(files);
 
