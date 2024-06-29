@@ -1001,11 +1001,9 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
 
         // Delete the partially created ISO file
         if (std::remove(outputPath.c_str()) == 0) {
-			std::lock_guard<std::mutex> lowLock(Mutex4Low);
             std::string deletedMessage = "\033[1;92mDeleted incomplete ISO file:\033[1;91m '" + outDirectory + "/" + outFileNameOnly + "'\033[1;92m.\033[0;1m";
             deletedOuts.insert(deletedMessage);
         } else {
-			std::lock_guard<std::mutex> lowLock(Mutex4Low);
             std::string deletedMessage = "\033[1;91mFailed to delete partially created ISO file: \033[1;93m'" + outDirectory + "/" + outFileNameOnly + "'\033[1;91m.\033[0;1m";
             deletedOuts.insert(deletedMessage);
         }
