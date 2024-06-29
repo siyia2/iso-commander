@@ -268,7 +268,7 @@ void printMountedAndErrors( std::set<std::string>& mountedFiles, std::set<std::s
     }
     
     if (mountedFiles.empty() && mountedFails.empty() && skippedMessages.empty()) {
-		std::cout << "\n\033[1;91mNo mounts possible ensure that \033[1;92mROOT\033[1;91m access is aquired.\033[0;1m\n";
+		std::cout << "\n\033[1;91mUnable to mount. Please ensure you have \033[1;92mROOT\033[1;91m privileges.\033[0m\n";
 	}
 	
     // Print all the stored error messages
