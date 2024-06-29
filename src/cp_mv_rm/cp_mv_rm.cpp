@@ -80,7 +80,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
         
         if (isoFiles.empty()) {
 			clearScrollBuffer();
-			std::cout << "\033[1;93mISO Cache is empty. Import ISO from the Main Menu Options.\033[0;1m\n";
+			std::cout << "\033[1;93mISO Cache is empty. Choose ImportISO from the Main Menu Options.\033[0;1m\n";
 			std::cout << "\n";
 			std::cout << "\033[1;32m↵ to continue...\033[0;1m";
 			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -88,8 +88,8 @@ void select_and_operate_files_by_number(const std::string& operation) {
 		}
 
         // Display header message
-        std::cout << "\033[1;93m! IF EXPECTED ISO FILE(S) NOT ON THE LIST REFRESH ISO CACHE FROM THE MAIN MENU OPTIONS !\033[0;1m\n";
-        std::cout << "\033[92;1m            // CHANGES TO CACHED ISOS ARE REFLECTED AUTOMATICALLY //\033[0;1m\n";
+        std::cout << "\033[1;93m! IF EXPECTED ISO FILES NOT ON THE LIST IMPORT THEM FROM THE MAIN MENU OPTIONS !\033[0;1m\n";
+        std::cout << "\033[92;1m           // CHANGES TO CACHED ISOS ARE REFLECTED AUTOMATICALLY //\033[0;1m\n";
 
         std::string searchQuery;
         std::vector<std::string> filteredFiles = isoFiles;
