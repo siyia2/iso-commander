@@ -286,104 +286,88 @@ void printMountedAndErrors( std::set<std::string>& mountedFiles, std::set<std::s
 // Function to mount selected ISO files called from processAndMountIsoFiles
 void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
     namespace fs = std::filesystem;
-    std::vector<std::future<void>> futures;
-    for (const auto& isoFile : isoFilesToMount) {
-        futures.push_back(std::async(std::launch::async, [&isoFile, &mountedFiles, &skippedMessages, &mountedFails]() {
-            fs::path isoPath(isoFile);
-            std::string isoFileName = isoPath.stem().string();
-            std::string mountPoint = "/mnt/iso_" + isoFileName;
-            
-            auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
-            auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint);
-            
-            // Check for root privileges
-            if (geteuid() != 0) {
-                std::stringstream errorMessage;
-                errorMessage << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename 
-                             << "'\033[0;1m\033[1;91m. Root privileges are required.\033[0;1m";
-                std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                mountedFails.insert(errorMessage.str());
-                return;
-            }
-            
-            // Check and create the mount point directory
-            {
-                std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                if (!fs::exists(mountPoint)) {
-                    try {
-                        fs::create_directory(mountPoint);
-                    } catch (const fs::filesystem_error& e) {
-                        std::stringstream errorMessage;
-                        errorMessage << "\033[1;91mFailed to create mount point: \033[1;93m'" << mountPoint 
-                                     << "'\033[0;1m\033[1;91m. Error: " << e.what() << "\033[0;1m";
-                        mountedFails.insert(errorMessage.str());
-                        return;
-                    }
-                }
-            }
-            
-            // Initialize libmount context
-            struct libmnt_context* cxt = mnt_new_context();
-            if (!cxt) {
-                std::stringstream errorMessage;
-                errorMessage << "\033[1;91mFailed to initialize mount context for: \033[1;93m'" 
-                             << isoDirectory << "/" << isoFilename << "'\033[0;1m\033[1;91m.\033[0;1m";
-                std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                mountedFails.insert(errorMessage.str());
-                return;
-            }
-            
-            struct libmnt_fs* fs = mnt_new_fs();
-            if (!fs) {
-                std::stringstream errorMessage;
-                errorMessage << "\033[1;91mFailed to create new filesystem for: \033[1;93m'" 
-                             << isoDirectory << "/" << isoFilename << "'\033[0;1m\033[1;91m.\033[0;1m";
-                std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                mountedFails.insert(errorMessage.str());
-                mnt_free_context(cxt);
-                return;
-            }
-            
-            mnt_fs_set_source(fs, isoFile.c_str());
-            mnt_fs_set_target(fs, mountPoint.c_str());
-            mnt_fs_set_fstype(fs, "iso9660");
-            mnt_fs_set_options(fs, "loop");
-            mnt_context_set_fs(cxt, fs);
-            
-            int ret = mnt_context_mount(cxt);
-            
-            if (ret == -EBUSY) {
-                // Mount point is already in use, which means it's already mounted
-                std::stringstream skippedMessage;
-                skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename 
-                               << "'\033[1;93m already mounted at: \033[1;94m'" << mountisoDirectory 
-                               << "/" << mountisoFilename << "'\033[1;93m.\033[0;1m";
-                std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                skippedMessages.insert(skippedMessage.str());
-            } else if (ret != 0) {
-                // Mount failure
-                std::stringstream errorMessage;
-                errorMessage << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename 
-                             << "'\033[0;1m\033[1;91m. Error code: " << -ret << "\033[0;1m";
-                fs::remove(mountPoint);
-                std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                mountedFails.insert(errorMessage.str());
-            } else {
-                // Successfully mounted
-                std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0;1m"
-                                              + "\033[1m mounted at: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename + "'\033[0;1m\033[1m.\033[0;1m";
-                mountedFiles.insert(mountedFileInfo);
-            }
-            
-            mnt_free_fs(fs);
-            mnt_free_context(cxt);
-        }));
-    }
     
-    // Wait for all tasks to complete
-    for (auto& future : futures) {
-        future.wait();
+    for (const auto& isoFile : isoFilesToMount) {
+        fs::path isoPath(isoFile);
+        std::string isoFileName = isoPath.stem().string();
+        std::string mountPoint = "/mnt/iso_" + isoFileName;
+        
+        auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
+        auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint);
+        
+        // Check for root privileges
+        if (geteuid() != 0) {
+            std::stringstream errorMessage;
+            errorMessage << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename 
+                         << "'\033[0;1m\033[1;91m. Root privileges are required.\033[0;1m";
+            mountedFails.insert(errorMessage.str());
+            continue;
+        }
+        
+        // Check and create the mount point directory
+        if (!fs::exists(mountPoint)) {
+            try {
+                fs::create_directory(mountPoint);
+            } catch (const fs::filesystem_error& e) {
+                std::stringstream errorMessage;
+                errorMessage << "\033[1;91mFailed to create mount point: \033[1;93m'" << mountPoint 
+                             << "'\033[0;1m\033[1;91m. Error: " << e.what() << "\033[0;1m";
+                mountedFails.insert(errorMessage.str());
+                continue;
+            }
+        }
+        
+        // Initialize libmount context
+        struct libmnt_context* cxt = mnt_new_context();
+        if (!cxt) {
+            std::stringstream errorMessage;
+            errorMessage << "\033[1;91mFailed to initialize mount context for: \033[1;93m'" 
+                         << isoDirectory << "/" << isoFilename << "'\033[0;1m\033[1;91m.\033[0;1m";
+            mountedFails.insert(errorMessage.str());
+            continue;
+        }
+        
+        struct libmnt_fs* fs = mnt_new_fs();
+        if (!fs) {
+            std::stringstream errorMessage;
+            errorMessage << "\033[1;91mFailed to create new filesystem for: \033[1;93m'" 
+                         << isoDirectory << "/" << isoFilename << "'\033[0;1m\033[1;91m.\033[0;1m";
+            mountedFails.insert(errorMessage.str());
+            mnt_free_context(cxt);
+            continue;
+        }
+        
+        mnt_fs_set_source(fs, isoFile.c_str());
+        mnt_fs_set_target(fs, mountPoint.c_str());
+        mnt_fs_set_fstype(fs, "iso9660");
+        mnt_fs_set_options(fs, "loop");
+        mnt_context_set_fs(cxt, fs);
+        
+        int ret = mnt_context_mount(cxt);
+        
+        if (ret == -EBUSY) {
+            // Mount point is already in use, which means it's already mounted
+            std::stringstream skippedMessage;
+            skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename 
+                           << "'\033[1;93m already mounted at: \033[1;94m'" << mountisoDirectory 
+                           << "/" << mountisoFilename << "'\033[1;93m.\033[0;1m";
+            skippedMessages.insert(skippedMessage.str());
+        } else if (ret != 0) {
+            // Mount failure
+            std::stringstream errorMessage;
+            errorMessage << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename 
+                         << "'\033[0;1m\033[1;91m. Error code: " << -ret << "\033[0;1m";
+            fs::remove(mountPoint);
+            mountedFails.insert(errorMessage.str());
+        } else {
+            // Successfully mounted
+            std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0;1m"
+                                          + "\033[1m mounted at: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename + "'\033[0;1m\033[1m.\033[0;1m";
+            mountedFiles.insert(mountedFileInfo);
+        }
+        
+        mnt_free_fs(fs);
+        mnt_free_context(cxt);
     }
 }
 
