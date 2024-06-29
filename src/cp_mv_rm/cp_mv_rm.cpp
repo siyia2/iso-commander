@@ -80,7 +80,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
         
         if (isoFiles.empty()) {
 			clearScrollBuffer();
-			std::cout << "\033[1;93mISO Cache is empty. Choose ImportISO from the Main Menu Options.\033[0;1m\n";
+			std::cout << "\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n";
 			std::cout << "\n";
 			std::cout << "\033[1;32m↵ to continue...\033[0;1m";
 			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -89,7 +89,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
         // Display header message
         std::cout << "\033[1;93m! IF EXPECTED ISO FILES NOT ON THE LIST IMPORT THEM FROM THE MAIN MENU OPTIONS !\033[0;1m\n";
-        std::cout << "\033[92;1m           // CHANGES TO CACHED ISOS ARE REFLECTED AUTOMATICALLY //\033[0;1m\n";
+        std::cout << "\033[92;1m                // CHANGES ARE REFLECTED AUTOMATICALLY //\033[0;1m\n";
 
         std::string searchQuery;
         std::vector<std::string> filteredFiles = isoFiles;
@@ -723,9 +723,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
     for (const auto& iso : isoFiles) {
         // Extract directory and filename from the ISO file path
         auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(iso);
-
-        // Lock the low-level mutex to ensure thread safety
-        std::lock_guard<std::mutex> lowLock(Mutex4Low);
 
         // Check if ISO file is present in the copy list
         auto it = std::find(isoFilesCopy.begin(), isoFilesCopy.end(), iso);
