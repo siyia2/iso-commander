@@ -577,25 +577,3 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     isProcessingComplete = true;
     progressThread.join();
 }
-
-
-// Function to check if an ISO is already mounted
-bool isAlreadyMounted(const std::string& mountPoint) {
-    FILE* mountTable = setmntent("/proc/mounts", "r");
-    if (!mountTable) {
-        // Failed to open mount table
-        return false;
-    }
-
-    mntent* entry;
-    while ((entry = getmntent(mountTable)) != nullptr) {
-        if (std::strcmp(entry->mnt_dir, mountPoint.c_str()) == 0) {
-            // Found the mount point in the mount table
-            endmntent(mountTable);
-            return true;
-        }
-    }
-
-    endmntent(mountTable);
-    return false;
-}
