@@ -239,38 +239,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     std::mutex MutexForProcessedIndices;
     
     std::mutex MutexForUniqueErrors;
-    
-     // Add progress tracking
-    std::atomic<int> totalTasks(0);
-    std::atomic<int> completedTasks(0);
-    std::mutex progressMutex;
-    bool isProcessingComplete = false;
-
-    // Create a lambda function for the progress bar
-    auto updateProgressBar = [&]() {
-        while (!isProcessingComplete) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            int total, completed;
-            {
-                std::lock_guard<std::mutex> lock(progressMutex);
-                total = totalTasks.load();
-                completed = completedTasks.load();
-            }
-            if (total > 0) {
-                float progress = static_cast<float>(completed) / total;
-                int barWidth = 50;
-                std::cout << "\r[";
-                int pos = barWidth * progress;
-                for (int i = 0; i < barWidth; ++i) {
-                    if (i < pos) std::cout << "=";
-                    else if (i == pos) std::cout << ">";
-                    else std::cout << " ";
-                }
-                std::cout << "] " << int(progress * 100.0) << "% (" << completed << "/" << total << ")" << std::flush;
-            }
-        }
-        std::cout << std::endl;  // Move to the next line when complete
-    };
 
     // Variables for tracking errors, processed indices, and valid indices
     bool invalidInput = false;
@@ -519,43 +487,51 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         }
     }
 
-   // auto start_time = std::chrono::high_resolution_clock::now();
+	// auto start_time = std::chrono::high_resolution_clock::now();
 	clearScrollBuffer();
     std::cout << "\033[1mPlease wait...\033[1m\n";
     std::mutex futuresMutex;
     
-    // Start the progress bar thread
-    std::thread progressThread(updateProgressBar);
+	// Add progress tracking
+	std::atomic<int> totalTasks(0);
+	std::atomic<int> completedTasks(0);
+	std::mutex progressMutex;
+	std::atomic<bool> isProcessingComplete(false);
 
-    ThreadPool pool(numThreads);
-    std::vector<std::future<void>> futures;
-    futures.reserve(numThreads);
-	
-	totalTasks = processedIndices.size();  // Set total number of tasks
+	// Set total number of tasks
+	totalTasks.store(static_cast<int>(processedIndices.size()));
 
-    for (const auto& chunk : indexChunks) {
-        std::vector<std::string> isoFilesInChunk;
-        for (const auto& index : chunk) {
-            isoFilesInChunk.push_back(isoFiles[index - 1]);
-        }
-        
-        std::lock_guard<std::mutex> lock(futuresMutex);
-        futures.emplace_back(pool.enqueue([&, isoFilesInChunk]() {
-            handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors, userDestDir, isMove, isCopy, isDelete);
-            // Update progress
-            {
-                std::lock_guard<std::mutex> lock(progressMutex);
-                completedTasks += isoFilesInChunk.size();
-            }
-        }));
-    }
-	
-    for (auto& future : futures) {
-        future.wait();
-    }
-		// Signal that processing is complete and wait for the progress thread to finish
-		isProcessingComplete = true;
-		progressThread.join();
+	// Create a non-atomic int to hold the total tasks value
+	int totalTasksValue = totalTasks.load();
+
+	// Start the progress bar in a separate thread
+	std::thread progressThread(displayProgressBar, std::ref(completedTasks), std::cref(totalTasksValue), std::ref(isProcessingComplete));
+
+	ThreadPool pool(numThreads);
+	std::vector<std::future<void>> futures;
+	futures.reserve(numThreads);
+
+	for (const auto& chunk : indexChunks) {
+		std::vector<std::string> isoFilesInChunk;
+		for (const auto& index : chunk) {
+			isoFilesInChunk.push_back(isoFiles[index - 1]);
+		}
+    
+		std::lock_guard<std::mutex> lock(futuresMutex);
+		futures.emplace_back(pool.enqueue([&, isoFilesInChunk]() {
+			handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors, userDestDir, isMove, isCopy, isDelete);
+			// Update progress
+			completedTasks.fetch_add(static_cast<int>(isoFilesInChunk.size()), std::memory_order_relaxed);
+		}));
+	}
+
+	for (auto& future : futures) {
+		future.wait();
+	}
+
+	// Signal that processing is complete and wait for the progress thread to finish
+	isProcessingComplete.store(true);
+	progressThread.join();
     
 		if (!isDelete) {
 			promptFlag = false;
