@@ -53,14 +53,10 @@ void select_and_mount_files_by_number() {
 	std::set<std::string> mountedFails;
 	// Vector to store ISO unique input errors
 	std::set<std::string> uniqueErrorMessages;
-	
-    // Remove non-existent paths from the cache
-    removeNonExistentPathsFromCache();
 
     // Load ISO files from cache
     std::vector<std::string> isoFiles;
 	isoFiles.reserve(100);
-	loadCache(isoFiles);
 
     // Main loop for selecting and mounting ISO files
     while (true) {
