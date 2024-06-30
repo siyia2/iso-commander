@@ -22,21 +22,11 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::st
     // Process all ISO files asynchronously
     for (size_t i = 0; i < isoFiles.size(); ++i) {
         futures.push_back(pool.enqueue([i, &isoFiles, &mountedFiles, &skippedMessages, &mountedFails, &mountAllmutex, &completedIsos]() {
-            std::set<std::string> localMountedFiles;
-            std::set<std::string> localSkippedMessages;
-            std::set<std::string> localMountedFails;
-
-            // Process the ISO file without holding the global lock
-            mountIsoFile({ isoFiles[i] }, localMountedFiles, localSkippedMessages, localMountedFails);
-
-            // Acquire lock only to update shared data structures
             {
                 std::lock_guard<std::mutex> lock(mountAllmutex);
-                mountedFiles.insert(localMountedFiles.begin(), localMountedFiles.end());
-                skippedMessages.insert(localSkippedMessages.begin(), localSkippedMessages.end());
-                mountedFails.insert(localMountedFails.begin(), localMountedFails.end());
+                std::vector<std::string> isoFilesToMountLocal = { isoFiles[i] };
+                mountIsoFile(isoFilesToMountLocal, mountedFiles, skippedMessages, mountedFails);
             }
-
             ++completedIsos;
         }));
     }
@@ -50,6 +40,7 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::st
     isComplete = true;
     progressThread.join();
 }
+
 
 // Function to select and mount ISO files by number
 void select_and_mount_files_by_number() {
