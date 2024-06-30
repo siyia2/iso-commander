@@ -517,8 +517,8 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 			isoFilesInChunk.push_back(isoFiles[index - 1]);
 		}
     
-		std::lock_guard<std::mutex> lock(futuresMutex);
 		futures.emplace_back(pool.enqueue([&, isoFilesInChunk]() {
+			std::lock_guard<std::mutex> lock(futuresMutex);
 			handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors, userDestDir, isMove, isCopy, isDelete);
 			// Update progress
 			completedTasks.fetch_add(static_cast<int>(isoFilesInChunk.size()), std::memory_order_relaxed);
