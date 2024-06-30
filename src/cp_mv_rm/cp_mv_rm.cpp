@@ -530,15 +530,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
     futures.reserve(numThreads);
-
-    for (const auto& chunk : indexChunks) {
-        std::vector<std::string> isoFilesInChunk;
-        for (const auto& index : chunk) {
-            isoFilesInChunk.push_back(isoFiles[index - 1]);
-        }
-        std::lock_guard<std::mutex> lock(futuresMutex);
-        futures.emplace_back(pool.enqueue(handleIsoFileOperation,isoFilesInChunk,std::ref(isoFiles),std::ref(operationIsos),std::ref(operationErrors),userDestDir,isMove,isCopy,isDelete));
-    }
 	
 	totalTasks = processedIndices.size();  // Set total number of tasks
 
@@ -547,6 +538,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         for (const auto& index : chunk) {
             isoFilesInChunk.push_back(isoFiles[index - 1]);
         }
+        
         std::lock_guard<std::mutex> lock(futuresMutex);
         futures.emplace_back(pool.enqueue([&, isoFilesInChunk]() {
             handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors, userDestDir, isMove, isCopy, isDelete);
@@ -729,18 +721,14 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                 // Add ISO file to the list of files to operate on
                 isoFilesToOperate.push_back(iso);
             } else {
-				if (isCopy) {
 					// Print message if file not found
 					errorMessageInfo = "\033[1;35mFile not found: \033[0;1m'" + isoDirectory + "/" + isoFilename + "'\033[1;95m.\033[0;1m";
 					operationErrors.insert(errorMessageInfo);
-				}
 			}
         } else {
-			if (isCopy) {
 				// Print message if file not found in cache
 				errorMessageInfo = "\033[1;93mFile not found in cache: \033[0;1m'" + isoDirectory + "/" + isoFilename + "'\033[1;93m.\033[0;1m";
 				operationErrors.insert(errorMessageInfo);
-			}
 		}
     }
 
