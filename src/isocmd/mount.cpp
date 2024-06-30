@@ -367,10 +367,10 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
 void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages) {
     std::istringstream iss(input);
     std::istringstream issCount(input);
-
+    
     std::set<std::string> tokens;
     std::string tokenCount;
-
+    
     while (issCount >> tokenCount && tokens.size() < maxThreads) {
         if (tokenCount[0] == '-') continue;
 
@@ -378,11 +378,11 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
         if (dashPos != std::string::npos) {
             std::string start = tokenCount.substr(0, dashPos);
             std::string end = tokenCount.substr(dashPos + 1);
-            if (std::all_of(start.begin(), start.end(), ::isdigit) &&
+            if (std::all_of(start.begin(), start.end(), ::isdigit) && 
                 std::all_of(end.begin(), end.end(), ::isdigit)) {
                 int startNum = std::stoi(start);
                 int endNum = std::stoi(end);
-                if (static_cast<std::vector<std::string>::size_type>(startNum) <= isoFiles.size() &&
+                if (static_cast<std::vector<std::string>::size_type>(startNum) <= isoFiles.size() && 
                     static_cast<std::vector<std::string>::size_type>(endNum) <= isoFiles.size()) {
                     int step = (startNum <= endNum) ? 1 : -1;
                     for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
@@ -403,17 +403,17 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
             }
         }
     }
-	unsigned int numThreads = std::min(static_cast<int>(tokens.size()), static_cast<int>(maxThreads));
-
-
-    ThreadPool pool(numThreads);
     
+    unsigned int numThreads = std::min(static_cast<int>(tokens.size()), static_cast<int>(maxThreads));
+
     std::atomic<bool> invalidInput(false);
     std::mutex indicesMutex;
     std::set<int> processedIndices;
     std::set<int> validIndices;
     std::set<std::pair<int, int>> processedRanges;
 
+    ThreadPool pool(numThreads);
+    
     std::atomic<int> totalTasks(0);
     std::atomic<int> completedTasks(0);
     std::atomic<bool> isProcessingComplete(false);
@@ -424,8 +424,6 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
 
     std::mutex errorQueueMutex;
     std::queue<std::string> errorQueue;
-
-    std::vector<std::future<void>> futures;
 
     auto processTask = [&](int index) {
         bool shouldProcess = false;
@@ -460,13 +458,13 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
         }
 
         if (token != "00" && isAllZeros(token)) {
-            addError("\033[1;91mInvalid index: '0'.\033[0;1m");
+            addError("\033[1;91mInvalid index '0'.\033[0;1m");
             continue;
         }
 
         size_t dashPos = token.find('-');
         if (dashPos != std::string::npos) {
-            if (token.find('-', dashPos + 1) != std::string::npos ||
+            if (token.find('-', dashPos + 1) != std::string::npos || 
                 (dashPos == 0 || dashPos == token.size() - 1 || !std::isdigit(token[dashPos - 1]) || !std::isdigit(token[dashPos + 1]))) {
                 addError("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
                 continue;
@@ -503,7 +501,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                     if (shouldProcess) {
                         totalTasks.fetch_add(1, std::memory_order_relaxed);
                         activeTaskCount.fetch_add(1, std::memory_order_relaxed);
-                        futures.push_back(std::async(std::launch::async, processTask, i));
+                        pool.enqueue([&, i]() { processTask(i); });
                     }
                 }
             }
@@ -520,7 +518,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                 if (shouldProcess) {
                     totalTasks.fetch_add(1, std::memory_order_relaxed);
                     activeTaskCount.fetch_add(1, std::memory_order_relaxed);
-                    futures.push_back(std::async(std::launch::async, processTask, num));
+                    pool.enqueue([&, num]() { processTask(num); });
                 }
             } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
                 addError("\033[1;91mInvalid index '" + std::to_string(num) + "'.\033[0;1m");
@@ -545,9 +543,10 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     // Start the progress bar in a separate thread
     std::thread progressThread(displayProgressBar, std::ref(completedTasks), std::cref(totalTasksValue), std::ref(isProcessingComplete));
 
-    // Wait for all futures to complete
-    for (auto& future : futures) {
-        future.get();
+    // Wait for all tasks to complete
+    {
+        std::unique_lock<std::mutex> lock(taskCompletionMutex);
+        taskCompletionCV.wait(lock, [&]() { return activeTaskCount.load() == 0; });
     }
 
     // Signal that processing is complete and wait for the progress thread to finish
