@@ -420,7 +420,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 				free(input);
 				break;
 			} else if (isValidLinuxPathFormat(input) && std::string(input).back() != '/') {
-				std::cout << "\n\033[1;91mThe path must end with -> \033[0;1m'/'\033[1;91m.\033[0;1m\n";
+				std::cout << "\n\033[1;91mThe path must end with \033[0;1m'/'\033[1;91m.\033[0;1m\n";
 				free(input);
 			} else {
 				free(input);
