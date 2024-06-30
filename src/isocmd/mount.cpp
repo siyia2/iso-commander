@@ -365,90 +365,84 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     std::string tokenCount;
     
     while (issCount >> tokenCount && tokens.size() < maxThreads) {
-		// Skip if the token starts with a minus sign
-		if (tokenCount[0] == '-') continue;
+        if (tokenCount[0] == '-') continue;
 
-		size_t dashPos = tokenCount.find('-');
-		if (dashPos != std::string::npos) {
-			std::string start = tokenCount.substr(0, dashPos);
-			std::string end = tokenCount.substr(dashPos + 1);
-			if (std::all_of(start.begin(), start.end(), ::isdigit) && 
-				std::all_of(end.begin(), end.end(), ::isdigit)) {
-				int startNum = std::stoi(start);
-				int endNum = std::stoi(end);
-				if (static_cast<std::vector<std::__cxx11::basic_string<char>>::size_type>(startNum) <= isoFiles.size() && 
-					static_cast<std::vector<std::__cxx11::basic_string<char>>::size_type>(endNum) <= isoFiles.size()) {
-					int step = (startNum <= endNum) ? 1 : -1;
-					for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
-						tokens.insert(std::to_string(i));
-						if (tokens.size() >= maxThreads) {
-							break;
-						}
-					}
-				}
-			}
-		} else if (std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
-			int num = std::stoi(tokenCount);
-			if (static_cast<std::vector<std::__cxx11::basic_string<char>>::size_type>(num) <= isoFiles.size()) {
-				tokens.insert(tokenCount);
-				if (tokens.size() >= maxThreads) {
-					break;
-				}
-			}
-		}
-	}
+        size_t dashPos = tokenCount.find('-');
+        if (dashPos != std::string::npos) {
+            std::string start = tokenCount.substr(0, dashPos);
+            std::string end = tokenCount.substr(dashPos + 1);
+            if (std::all_of(start.begin(), start.end(), ::isdigit) && 
+                std::all_of(end.begin(), end.end(), ::isdigit)) {
+                int startNum = std::stoi(start);
+                int endNum = std::stoi(end);
+                if (static_cast<std::vector<std::string>::size_type>(startNum) <= isoFiles.size() && 
+                    static_cast<std::vector<std::string>::size_type>(endNum) <= isoFiles.size()) {
+                    int step = (startNum <= endNum) ? 1 : -1;
+                    for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
+                        tokens.insert(std::to_string(i));
+                        if (tokens.size() >= maxThreads) {
+                            break;
+                        }
+                    }
+                }
+            }
+        } else if (std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
+            int num = std::stoi(tokenCount);
+            if (static_cast<std::vector<std::string>::size_type>(num) <= isoFiles.size()) {
+                tokens.insert(tokenCount);
+                if (tokens.size() >= maxThreads) {
+                    break;
+                }
+            }
+        }
+    }
     
     unsigned int numThreads = std::min(static_cast<int>(tokens.size()), static_cast<int>(maxThreads));
 
-    bool invalidInput = false;
+    std::atomic<bool> invalidInput(false);
+    std::mutex indicesMutex;
     std::set<int> processedIndices;
     std::set<int> validIndices;
     std::set<std::pair<int, int>> processedRanges;
 
     ThreadPool pool(numThreads);
-    std::mutex MutexForProcessedIndices;
-    std::mutex MutexForValidIndices;
-    std::mutex MutexForUniqueErrors;
     
-    // Add progress tracking
     std::atomic<int> totalTasks(0);
     std::atomic<int> completedTasks(0);
     std::atomic<bool> isProcessingComplete(false);
-
-    std::mutex progressMutex;
-
-    // Add task completion tracking
     std::atomic<int> activeTaskCount(0);
+
     std::condition_variable taskCompletionCV;
     std::mutex taskCompletionMutex;
 
-    // Set total number of tasks
-    int totalTasksValue = 0;
+    std::mutex errorQueueMutex;
+    std::queue<std::string> errorQueue;
 
     auto processTask = [&](int index) {
-    std::vector<std::string> isoFilesToMount;
-		{
-			std::lock_guard<std::mutex> validLock(MutexForValidIndices);
-			if (validIndices.find(index) == validIndices.end()) {
-				validIndices.insert(index);
-				isoFilesToMount.push_back(isoFiles[index - 1]);
-			} else {
-				return; // Exit if the index is already processed
-			}
-		}
+        bool shouldProcess = false;
+        {
+            std::lock_guard<std::mutex> lock(indicesMutex);
+            if (validIndices.insert(index).second) {
+                shouldProcess = true;
+            }
+        }
 
-		// Perform the mounting operation outside the lock
-		mountIsoFile(isoFilesToMount, mountedFiles, skippedMessages, mountedFails);
+        if (shouldProcess) {
+            std::vector<std::string> isoFilesToMount = {isoFiles[index - 1]};
+            mountIsoFile(isoFilesToMount, mountedFiles, skippedMessages, mountedFails);
+        }
 
-		// Update progress
-		completedTasks.fetch_add(1, std::memory_order_relaxed);
+        completedTasks.fetch_add(1, std::memory_order_relaxed);
+        if (activeTaskCount.fetch_sub(1, std::memory_order_release) == 1) {
+            taskCompletionCV.notify_all();
+        }
+    };
 
-		// Decrement active task count and notify
-		int previousActiveCount = activeTaskCount.fetch_sub(1, std::memory_order_relaxed);
-		if (previousActiveCount == 1) {
-			taskCompletionCV.notify_all();
-		}
-	};
+    auto addError = [&](const std::string& error) {
+        std::lock_guard<std::mutex> lock(errorQueueMutex);
+        errorQueue.push(error);
+        invalidInput.store(true, std::memory_order_relaxed);
+    };
 
     std::string token;
     while (iss >> token) {
@@ -457,10 +451,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
         }
 
         if (token != "00" && isAllZeros(token)) {
-            if (!invalidInput) {
-                invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mInvalid index '0'.\033[0;1m");
-            }
+            addError("\033[1;91mInvalid index '0'.\033[0;1m");
             continue;
         }
 
@@ -468,9 +459,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
         if (dashPos != std::string::npos) {
             if (token.find('-', dashPos + 1) != std::string::npos || 
                 (dashPos == 0 || dashPos == token.size() - 1 || !std::isdigit(token[dashPos - 1]) || !std::isdigit(token[dashPos + 1]))) {
-                std::lock_guard<std::mutex> lock(MutexForUniqueErrors);
-                invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
+                addError("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
                 continue;
             }
 
@@ -479,61 +468,70 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                 start = std::stoi(token.substr(0, dashPos));
                 end = std::stoi(token.substr(dashPos + 1));
             } catch (const std::invalid_argument&) {
-                std::lock_guard<std::mutex> lock(MutexForUniqueErrors);
-                invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
+                addError("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
                 continue;
             } catch (const std::out_of_range&) {
-                std::lock_guard<std::mutex> lock(MutexForUniqueErrors);
-                invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + token + "'.\033[0;1m");
+                addError("\033[1;91mInvalid range: '" + token + "'.\033[0;1m");
                 continue;
             }
 
             if (start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) {
-                std::lock_guard<std::mutex> lock(MutexForUniqueErrors);
-                invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'.\033[0;1m");
+                addError("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'.\033[0;1m");
                 continue;
             }
 
             std::pair<int, int> range(start, end);
-            if (processedRanges.find(range) == processedRanges.end()) {
-                processedRanges.insert(range);
-
+            if (processedRanges.insert(range).second) {
                 int step = (start <= end) ? 1 : -1;
                 for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
-                    if (processedIndices.find(i) == processedIndices.end()) {
-                        std::lock_guard<std::mutex> lock(MutexForProcessedIndices);
-                        processedIndices.insert(i);
-                        totalTasks++;
-                        activeTaskCount++;
+                    bool shouldProcess = false;
+                    {
+                        std::lock_guard<std::mutex> lock(indicesMutex);
+                        if (processedIndices.insert(i).second) {
+                            shouldProcess = true;
+                        }
+                    }
+                    if (shouldProcess) {
+                        totalTasks.fetch_add(1, std::memory_order_relaxed);
+                        activeTaskCount.fetch_add(1, std::memory_order_relaxed);
                         pool.enqueue([&, i]() { processTask(i); });
                     }
                 }
             }
         } else if (isNumeric(token)) {
             int num = std::stoi(token);
-            if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && processedIndices.find(num) == processedIndices.end()) {
-                std::lock_guard<std::mutex> lock(MutexForProcessedIndices);
-                processedIndices.insert(num);
-                totalTasks++;
-                activeTaskCount++;
-                pool.enqueue([&, num]() { processTask(num); });
+            if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size()) {
+                bool shouldProcess = false;
+                {
+                    std::lock_guard<std::mutex> lock(indicesMutex);
+                    if (processedIndices.insert(num).second) {
+                        shouldProcess = true;
+                    }
+                }
+                if (shouldProcess) {
+                    totalTasks.fetch_add(1, std::memory_order_relaxed);
+                    activeTaskCount.fetch_add(1, std::memory_order_relaxed);
+                    pool.enqueue([&, num]() { processTask(num); });
+                }
             } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
-                std::lock_guard<std::mutex> lock(MutexForUniqueErrors);
-                invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mInvalid index '" + std::to_string(num) + "'.\033[0;1m");
+                addError("\033[1;91mInvalid index '" + std::to_string(num) + "'.\033[0;1m");
             }
         } else {
-            std::lock_guard<std::mutex> lock(MutexForUniqueErrors);
-            invalidInput = true;
-            uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
+            addError("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
+        }
+    }
+
+    // Process the error queue and add to uniqueErrorMessages
+    {
+        std::lock_guard<std::mutex> lock(errorQueueMutex);
+        while (!errorQueue.empty()) {
+            uniqueErrorMessages.insert(errorQueue.front());
+            errorQueue.pop();
         }
     }
 
     // Set the total number of tasks value
-    totalTasksValue = totalTasks.load();
+    int totalTasksValue = totalTasks.load();
 
     // Start the progress bar in a separate thread
     std::thread progressThread(displayProgressBar, std::ref(completedTasks), std::cref(totalTasksValue), std::ref(isProcessingComplete));
@@ -541,10 +539,10 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     // Wait for all tasks to complete
     {
         std::unique_lock<std::mutex> lock(taskCompletionMutex);
-        taskCompletionCV.wait(lock, [&]() { return activeTaskCount == 0; });
+        taskCompletionCV.wait(lock, [&]() { return activeTaskCount.load() == 0; });
     }
 
     // Signal that processing is complete and wait for the progress thread to finish
-    isProcessingComplete = true;
+    isProcessingComplete.store(true, std::memory_order_release);
     progressThread.join();
 }
