@@ -87,7 +87,6 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
             std::stringstream errorMessage;
             errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDirectory << "/" << isoFilename 
                          << "'\033[1;91m. Root privileges are required.\033[0m";
-            std::lock_guard<std::mutex> lock(Mutex4Low);
             unmountedErrors.insert(errorMessage.str());
         }
         return;
@@ -185,6 +184,7 @@ void printUnmountedAndErrors(bool invalidInput, std::set<std::string>& unmounted
 void unmountISOs() {
     // Initialize necessary variables
     std::vector<std::string> isoDirs;
+    isoDirs.reserve(100);
     std::mutex isoDirsMutex;
     
     // Vector to store ISO invalid input errors
