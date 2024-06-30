@@ -485,7 +485,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 	// auto start_time = std::chrono::high_resolution_clock::now();
 	clearScrollBuffer();
     std::cout << "\033[1mPlease wait...\033[1m\n";
-    std::mutex futuresMutex;
     
 	// Add progress tracking
 	std::atomic<int> totalTasks(0);
@@ -513,7 +512,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 		}
     
 		futures.emplace_back(pool.enqueue([&, isoFilesInChunk]() {
-			std::lock_guard<std::mutex> lock(futuresMutex);
 			handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors, userDestDir, isMove, isCopy, isDelete);
 			// Update progress
 			completedTasks.fetch_add(static_cast<int>(isoFilesInChunk.size()), std::memory_order_relaxed);
@@ -528,43 +526,42 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 	isProcessingComplete.store(true);
 	progressThread.join();
     
-		if (!isDelete) {
-			promptFlag = false;
-			maxDepth = 0;   
-			manualRefreshCache(userDestDir);
-		}
+	if (!isDelete) {
+		promptFlag = false;
+		maxDepth = 0;   
+		manualRefreshCache(userDestDir);
+	}
 
-		clearScrollBuffer();
+	clearScrollBuffer();
         
-        if (!operationIsos.empty()) {
-            std::cout << "\n";
-        }
-    
-        // Print all moved files
-        for (const auto& operationIso : operationIsos) {
-            std::cout << operationIso << "\n\033[0;1m";
-        }
-        
-        if (!operationErrors.empty()) {
-            std::cout << "\n";
-        }
-        
-        for (const auto& operationError : operationErrors) {
-            std::cout << operationError << "\n\033[0;1m";
-        }
-        
-        // Clear the vector after each iteration
-        operationIsos.clear();
-        operationErrors.clear();
-        userDestDir.clear();
-        clear_history();
-        
-        maxDepth = -1;
-        
+    if (!operationIsos.empty()) {
         std::cout << "\n";
-        std::cout << "\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+	}
+    
+    // Print all moved files
+    for (const auto& operationIso : operationIsos) {
+		std::cout << operationIso << "\n\033[0;1m";
+    }
         
+    if (!operationErrors.empty()) {
+		std::cout << "\n";
+    }
+        
+    for (const auto& operationError : operationErrors) {
+		std::cout << operationError << "\n\033[0;1m";
+    }
+        
+    // Clear the vector after each iteration
+    operationIsos.clear();
+    operationErrors.clear();
+    userDestDir.clear();
+    clear_history();
+        
+    maxDepth = -1;
+        
+    std::cout << "\n";
+    std::cout << "\033[1;32m↵ to continue...\033[0;1m";
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');    
 }
 
 // Function to check if directory exists
