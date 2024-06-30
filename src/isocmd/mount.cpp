@@ -102,7 +102,7 @@ void select_and_mount_files_by_number() {
 		
 		bool verboseFiltered = false;
         clearScrollBuffer();
-        std::cout << "\033[1;93m! IF EXPECTED ISO FILES NOT ON THE LIST IMPORT THEM FROM THE MAIN MENU OPTIONS !\033[0;1m\n";
+        std::cout << "\033[1;93m! IF EXPECTED ISO FILES ARE NOT ON THE LIST IMPORT THEM FROM THE MAIN MENU OPTIONS !\033[0;1m\n";
         
         std::string searchQuery;
         std::vector<std::string> filteredFiles;
