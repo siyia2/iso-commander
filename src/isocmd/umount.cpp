@@ -185,7 +185,6 @@ void unmountISOs() {
     // Initialize necessary variables
     std::vector<std::string> isoDirs;
     isoDirs.reserve(100);
-    std::mutex isoDirsMutex;
     
     // Vector to store ISO invalid input errors
 	std::set<std::string> errorMessages;
@@ -207,10 +206,6 @@ void unmountISOs() {
         errorMessages.clear();
         invalidInput = false;
 
-        {
-            // Lock the mutex to protect isoDirs from concurrent access
-            std::lock_guard<std::mutex> lock(isoDirsMutex);
-
             // Populate isoDirs with directories that match the "iso_" prefix
             for (const auto& entry : std::filesystem::directory_iterator(isoPath)) {
                 if (entry.is_directory() && entry.path().filename().string().find("iso_") == 0) {
@@ -219,7 +214,6 @@ void unmountISOs() {
             }
 
             sortFilesCaseInsensitive(isoDirs);
-        }
 
 
         // Check if there are no matching directories
@@ -308,7 +302,7 @@ void unmountISOs() {
 					size_t end = start + baseDirsPerThread + (i < remainder ? 1 : 0);
 
 					futures.push_back(std::async(std::launch::async, [&](size_t start, size_t end) {
-						filterMountPoints(isoDirs, filterPatterns, filteredIsoDirs, isoDirsMutex, start, end);
+						filterMountPoints(isoDirs, filterPatterns, filteredIsoDirs, start, end);
 					}, start, end));
 				}
 

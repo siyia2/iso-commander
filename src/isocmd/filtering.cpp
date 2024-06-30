@@ -157,8 +157,9 @@ size_t boyerMooreSearchMountPoints(const std::string& haystack, const std::strin
 
 
 // Function to filter mounted isoDirs using Boyer-Moore search
-void filterMountPoints(const std::vector<std::string>& isoDirs, std::vector<std::string>& filterPatterns, std::vector<std::string>& filteredIsoDirs, std::mutex& resultMutex, size_t start, size_t end) {
+void filterMountPoints(const std::vector<std::string>& isoDirs, std::vector<std::string>& filterPatterns, std::vector<std::string>& filteredIsoDirs, size_t start, size_t end) {
     // Iterate through the chunk of ISO directories
+    std::shared_mutex filterMutex;
     for (size_t i = start; i < end; ++i) {
         const std::string& dir = isoDirs[i];
         std::string dirLower = dir;
@@ -177,8 +178,8 @@ void filterMountPoints(const std::vector<std::string>& isoDirs, std::vector<std:
 
         // If a match is found, add the directory to the filtered list
         if (matchFound) {
-            // Lock access to the shared vector
-            std::lock_guard<std::mutex> lock(resultMutex);
+            // Lock to safely update shared filteredFiles vector
+			std::unique_lock<std::shared_mutex> lock(filterMutex);
             filteredIsoDirs.push_back(dir);
         }
     }
