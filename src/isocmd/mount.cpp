@@ -357,40 +357,40 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     
     // Selection size count
     while (issCount >> tokenCount && tokens.size() < maxThreads) {
-        size_t dashPos = tokenCount.find('-');
-        if (dashPos != std::string::npos) {
-            std::string start = tokenCount.substr(0, dashPos);
-            std::string end = tokenCount.substr(dashPos + 1);
-            if (std::all_of(start.begin(), start.end(), ::isdigit) && 
-                std::all_of(end.begin(), end.end(), ::isdigit)) {
-                int startNum = std::stoi(start);
-                int endNum = std::stoi(end);
-                if (!(startNum < 0 || endNum < 0 || 
-                    static_cast<std::vector<std::string>::size_type>(startNum) > isoFiles.size() || 
-                    static_cast<std::vector<std::string>::size_type>(endNum) > isoFiles.size())){
-                    int step = (startNum <= endNum) ? 1 : -1;
-                    for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
-                        tokens.insert(std::to_string(i));
-                        if (tokens.size() >= maxThreads) {
-                            break;
-                        }
-                    }
-                }
-            }
-        } else if (std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
-            int num = std::stoi(tokenCount);
-            if (!(num < 0 || static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size())) {
-                tokens.insert(tokenCount);
-                if (tokens.size() >= maxThreads) {
-                    break;
-                }
-            }
-        }
-    }
+		size_t dashPos = tokenCount.find('-');
+		if (dashPos != std::string::npos) {
+			std::string start = tokenCount.substr(0, dashPos);
+			std::string end = tokenCount.substr(dashPos + 1);
+			if (std::all_of(start.begin(), start.end(), ::isdigit) && 
+				std::all_of(end.begin(), end.end(), ::isdigit)) {
+				int startNum = std::stoi(start);
+				int endNum = std::stoi(end);
+				if (!(startNum < 0 || endNum < 0 || 
+				static_cast<std::vector<std::__cxx11::basic_string<char>>::size_type>(startNum) > isoFiles.size() || 
+				static_cast<std::vector<std::__cxx11::basic_string<char>>::size_type>(endNum) > isoFiles.size())){
+					int step = (startNum <= endNum) ? 1 : -1;
+					for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
+						tokens.insert(std::to_string(i));
+						if (tokens.size() >= maxThreads) {
+							break;
+						}
+					}
+				}
+			}
+		} else if (std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
+			int num = std::stoi(tokenCount);
+			if (!(num < 0 || static_cast<std::vector<std::__cxx11::basic_string<char>>::size_type>(num) > isoFiles.size())) {
+				tokens.insert(tokenCount);
+				if (tokens.size() >= maxThreads) {
+					break;
+				}
+			}
+		}
+	}
     
     unsigned int numThreads = std::min(static_cast<int>(tokens.size()), static_cast<int>(maxThreads));
 
-    std::atomic<bool> invalidInput(false);
+    bool invalidInput = false;
     std::set<int> processedIndices;
     std::set<int> validIndices;
     std::set<std::pair<int, int>> processedRanges;
@@ -405,6 +405,8 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     std::atomic<int> completedTasks(0);
     std::atomic<bool> isProcessingComplete(false);
 
+    std::mutex progressMutex;
+
     // Add task completion tracking
     std::atomic<int> activeTaskCount(0);
     std::condition_variable taskCompletionCV;
@@ -414,23 +416,21 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     int totalTasksValue = 0;
 
     auto processTask = [&](int index) {
-        {
-            std::lock_guard<std::mutex> validLock(MutexForValidIndices);
-            if (validIndices.find(index) == validIndices.end()) {
-                validIndices.insert(index);
-                std::vector<std::string> isoFilesToMount;
-                isoFilesToMount.push_back(isoFiles[index - 1]);
-                mountIsoFile(isoFilesToMount, mountedFiles, skippedMessages, mountedFails);
-            }
-        }
+        std::lock_guard<std::mutex> validLock(MutexForValidIndices);
+        if (validIndices.find(index) == validIndices.end()) {
+            validIndices.insert(index);
+            std::vector<std::string> isoFilesToMount;
+            isoFilesToMount.push_back(isoFiles[index - 1]);
+            mountIsoFile(isoFilesToMount, mountedFiles, skippedMessages, mountedFails);
         
-        // Update progress
-        completedTasks.fetch_add(1, std::memory_order_relaxed);
+            // Update progress
+            completedTasks.fetch_add(1, std::memory_order_relaxed);
 
-        // Decrement active task count and notify
-        int previousActiveCount = activeTaskCount.fetch_sub(1, std::memory_order_relaxed);
-        if (previousActiveCount == 1) {
-            taskCompletionCV.notify_all();
+            // Decrement active task count and notify
+            int previousActiveCount = activeTaskCount.fetch_sub(1, std::memory_order_relaxed);
+            if (previousActiveCount == 1) {
+                taskCompletionCV.notify_all();
+            }
         }
     };
 
@@ -487,26 +487,20 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
 
                 int step = (start <= end) ? 1 : -1;
                 for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
-                    {
+                    if (processedIndices.find(i) == processedIndices.end()) {
                         std::lock_guard<std::mutex> lock(MutexForProcessedIndices);
-                        if (processedIndices.find(i) == processedIndices.end()) {
-                            processedIndices.insert(i);
-                        }
+                        processedIndices.insert(i);
+                        totalTasks++;
+                        activeTaskCount++;
+                        pool.enqueue([&, i]() { processTask(i); });
                     }
-                    totalTasks++;
-                    activeTaskCount++;
-                    pool.enqueue([&, i]() { processTask(i); });
                 }
             }
         } else if (isNumeric(token)) {
             int num = std::stoi(token);
-            if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size()) {
-                {
-                    std::lock_guard<std::mutex> lock(MutexForProcessedIndices);
-                    if (processedIndices.find(num) == processedIndices.end()) {
-                        processedIndices.insert(num);
-                    }
-                }
+            if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && processedIndices.find(num) == processedIndices.end()) {
+                std::lock_guard<std::mutex> lock(MutexForProcessedIndices);
+                processedIndices.insert(num);
                 totalTasks++;
                 activeTaskCount++;
                 pool.enqueue([&, num]() { processTask(num); });
