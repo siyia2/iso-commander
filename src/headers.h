@@ -114,7 +114,7 @@ void removeNonExistentPathsFromCache();
 
 // Filter functions
 void sortFilesCaseInsensitive(std::vector<std::string>& files);
-void filterMountPoints(const std::vector<std::string>& isoDirs, std::vector<std::string>& filterPatterns, std::vector<std::string>& filteredIsoDirs, std::mutex& resultMutex, size_t start, size_t end);
+void filterMountPoints(const std::vector<std::string>& isoDirs, std::vector<std::string>& filterPatterns, std::vector<std::string>& filteredIsoDirs, size_t start, size_t end);
 size_t boyerMooreSearchMountPoints(const std::string& haystack, const std::string& needle);
 
 // Unmount functions
