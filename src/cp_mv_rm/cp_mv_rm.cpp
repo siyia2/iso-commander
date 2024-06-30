@@ -84,7 +84,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
         // Display header message
         std::cout << "\033[1;93m! IF EXPECTED ISO FILES ARE NOT ON THE LIST IMPORT THEM FROM THE MAIN MENU OPTIONS !\033[0;1m\n";
-        std::cout << "\033[92;1m                 // CHANGES ARE REFLECTED AUTOMATICALLY //\033[0;1m\n";
+        std::cout << "\033[92;1m                  // CHANGES ARE REFLECTED AUTOMATICALLY //\033[0;1m\n";
 
         std::string searchQuery;
         std::vector<std::string> filteredFiles = isoFiles;
@@ -229,11 +229,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 	std::string userDestDir;
 
     // Create an input string stream to tokenize the user input
-    std::istringstream iss(input);
-    
-    std::mutex MutexForProcessedIndices;
-    
-    std::mutex MutexForUniqueErrors;
+    std::istringstream iss(input);    
 
     // Variables for tracking errors, processed indices, and valid indices
     bool invalidInput = false;
@@ -292,15 +288,11 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
                 start = std::stoi(token.substr(0, dashPos));
                 end = std::stoi(token.substr(dashPos + 1));
             } catch (const std::invalid_argument& e) {
-				// Lock to ensure thread safety in a multi-threaded environment
-                std::lock_guard<std::mutex> lock(MutexForUniqueErrors);
                 // Handle the exception for invalid input
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
                 continue;
             } catch (const std::out_of_range& e) {
-				// Lock to ensure thread safety in a multi-threaded environment
-                std::lock_guard<std::mutex> lock(MutexForUniqueErrors);
                 // Handle the exception for out-of-range input
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + token + "'.\033[0;1m");
@@ -310,8 +302,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             // Check for validity of the specified range
             if ((start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) ||
                 (start == 0 || end == 0)) {
-				// Lock to ensure thread safety in a multi-threaded environment
-                std::lock_guard<std::mutex> lock(MutexForUniqueErrors);
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'.\033[0;1m");
                 continue;
@@ -321,12 +311,8 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             int step = (start <= end) ? 1 : -1;
             for (int i = start; ((start <= end) && (i <= end)) || ((start > end) && (i >= end)); i += step) {
                 if ((i >= 1) && (i <= static_cast<int>(isoFiles.size())) && std::find(processedIndices.begin(), processedIndices.end(), i) == processedIndices.end()) {
-					// Lock to ensure thread safety in a multi-threaded environment
-                std::lock_guard<std::mutex> highLock(MutexForProcessedIndices);
                     processedIndices.push_back(i); // Mark as processed
                 } else if ((i < 1) || (i > static_cast<int>(isoFiles.size()))) {
-					// Lock to ensure thread safety in a multi-threaded environment
-					std::lock_guard<std::mutex> lock(MutexForUniqueErrors);
                     invalidInput = true;
                     uniqueErrorMessages.insert("\033[1;91mInvalid index '" + std::to_string(i) + "'.\033[0;1m");
                 }
@@ -335,18 +321,12 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             // Process single numeric indices
             int num = std::stoi(token);
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && std::find(processedIndices.begin(), processedIndices.end(), num) == processedIndices.end()) {
-				// Lock to ensure thread safety in a multi-threaded environment
-                std::lock_guard<std::mutex> lock(MutexForProcessedIndices);
                 processedIndices.push_back(num); // Mark index as processed
             } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
-				// Lock to ensure thread safety in a multi-threaded environment
-                std::lock_guard<std::mutex> lock(MutexForUniqueErrors);
                 invalidInput = true;
                 uniqueErrorMessages.insert("\033[1;91mInvalid index '" + std::to_string(num) + "'.\033[0;1m");
             }
         } else {
-			// Lock to ensure thread safety in a multi-threaded environment
-            std::lock_guard<std::mutex> lock(MutexForUniqueErrors);
             invalidInput = true;
             uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
         }
