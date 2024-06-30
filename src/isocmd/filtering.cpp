@@ -75,13 +75,16 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
         // Iterate through files in the specified range
         for (size_t i = start; i < end; ++i) {
             const std::string& file = files[i];
-            std::string fileName = file;
-            std::transform(fileName.begin(), fileName.end(), fileName.begin(), ::tolower);  // Convert filename to lowercase
+            std::string lowerFile = file;
+            std::transform(lowerFile.begin(), lowerFile.end(), lowerFile.begin(), ::tolower);  // Convert full path to lowercase
+            
+            // Extract the filename from the path
+            std::string fileName = lowerFile.substr(lowerFile.find_last_of("/\\") + 1);
             
             bool matchFound = false;
-            // Check each query token against the lowercase filename using Boyer-Moore search
+            // Check each query token against both the lowercase full path and filename using Boyer-Moore search
             for (const std::string& queryToken : queryTokens) {
-                if (!boyerMooreSearch(queryToken, fileName).empty()) {  // Use Boyer-Moore search function
+                if (!boyerMooreSearch(queryToken, lowerFile).empty() || !boyerMooreSearch(queryToken, fileName).empty()) {
                     matchFound = true;
                     break;
                 }
