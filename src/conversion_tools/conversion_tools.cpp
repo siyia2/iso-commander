@@ -5,9 +5,6 @@
 static std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles here
 static std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
 
-// Mutex for convertISO
-std::mutex mutexConvertIso;
-
 // GENERAL
 
 // Function to check if a file already exists
@@ -920,7 +917,7 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
     
     // Check if the input file exists
     if (!std::ifstream(inputPath)) {
-		std::lock_guard<std::mutex> lowLock(mutexConvertIso);
+		std::lock_guard<std::mutex> lowLock(Mutex4Low);
         std::string failedMessage = "\033[1;91mThe specified input file \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m does not exist.\033[0;1m\n";
         failedOuts.insert(failedMessage);
         return;
@@ -929,7 +926,7 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
     // Check if the corresponding .iso file already exists
     std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
     if (fileExists(outputPath)) {
-		std::lock_guard<std::mutex> lowLock(mutexConvertIso);
+		std::lock_guard<std::mutex> lowLock(Mutex4Low);
         std::string skipMessage = "\033[1;93mThe corresponding .iso file already exists for: \033[1;92m'" + directory + "/" + fileNameOnly + "'\033[1;93m. Skipped conversion.\033[0;1m";
         skippedOuts.insert(skipMessage);
         return;
@@ -948,7 +945,7 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
     } else if (!modeMdf) {
         conversionCommand = "ccd2iso " + escapedInputPath + " " + escapedOutputPath;
     } else {
-		std::lock_guard<std::mutex> lowLock(mutexConvertIso);
+		std::lock_guard<std::mutex> lowLock(Mutex4Low);
         std::string failedMessage = "\033[1;91mUnsupported file format for \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m. Conversion failed.\033[0;1m";
         failedOuts.insert(failedMessage);
         return;
@@ -960,11 +957,11 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
     auto [outDirectory, outFileNameOnly] = extractDirectoryAndFilename(outputPath);
     // Check the result of the conversion
     if (conversionStatus == 0) {
-		std::lock_guard<std::mutex> lowLock(mutexConvertIso);
+		std::lock_guard<std::mutex> lowLock(Mutex4Low);
         std::string successMessage = "\033[1mImage file converted to ISO:\033[0;1m \033[1;92m'" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m.\033[0;1m";
         successOuts.insert(successMessage);
     } else {
-		std::lock_guard<std::mutex> lowLock(mutexConvertIso);
+		std::lock_guard<std::mutex> lowLock(Mutex4Low);
         std::string failedMessage = "\033[1;91mConversion of \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m failed.\033[0;1m";
         failedOuts.insert(failedMessage);
 
