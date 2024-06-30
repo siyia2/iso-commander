@@ -460,7 +460,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
         }
 
         if (token != "00" && isAllZeros(token)) {
-            addError("\033[1;91mInvalid index '0'.\033[0;1m");
+            addError("\033[1;91mInvalid index: '0'.\033[0;1m");
             continue;
         }
 
