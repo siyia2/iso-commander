@@ -497,7 +497,6 @@ void unmountISOs() {
 				batches.emplace_back(selectedIsoDirs.begin() + i, std::min(selectedIsoDirs.begin() + i + batchSize, selectedIsoDirs.end()));
 			}
     
-			std::mutex futuresMutex;
 			std::atomic<int> completedIsos(0);
 			int totalIsos = static_cast<int>(selectedIsoDirs.size());
 			std::atomic<bool> isComplete(false);
@@ -507,7 +506,6 @@ void unmountISOs() {
 
 			// Enqueue unmount tasks for each batch of ISOs
 			for (const auto& batch : batches) {
-				std::lock_guard<std::mutex> lock(futuresMutex);
 				futures.emplace_back(pool.enqueue([batch, &unmountedFiles, &unmountedErrors, &completedIsos]() {
 					for (const auto& iso : batch) {
 						unmountISO({iso}, unmountedFiles, unmountedErrors);
