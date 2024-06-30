@@ -1025,7 +1025,7 @@ bool isProgramInstalled(const std::string& type) {
 	} else {
 		program = "ccd2iso";
 	}
-    std::string command = "which " + program;
+    std::string command = "which " + shell_escape(program);
 
     // Execute the command and check the result
     if (std::system((command + " > /dev/null 2>&1").c_str()) == 0) {
