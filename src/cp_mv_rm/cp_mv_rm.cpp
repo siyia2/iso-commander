@@ -46,14 +46,10 @@ void select_and_operate_files_by_number(const std::string& operation) {
 	std::set<std::string> operationErrors;
 	// Vector to store ISO unique input errors
 	std::set<std::string> uniqueErrorMessages;
-	
-    // Remove non-existent paths from the cache
-    removeNonExistentPathsFromCache();
 
     // Load ISO files from the cache
     std::vector<std::string> isoFiles;
 	isoFiles.reserve(100);
-	loadCache(isoFiles);
 
     // Color code based on the operation
     std::string operationColor;
