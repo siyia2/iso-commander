@@ -22,11 +22,21 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::st
     // Process all ISO files asynchronously
     for (size_t i = 0; i < isoFiles.size(); ++i) {
         futures.push_back(pool.enqueue([i, &isoFiles, &mountedFiles, &skippedMessages, &mountedFails, &mountAllmutex, &completedIsos]() {
+            std::set<std::string> localMountedFiles;
+            std::set<std::string> localSkippedMessages;
+            std::set<std::string> localMountedFails;
+
+            // Process the ISO file without holding the global lock
+            mountIsoFile({ isoFiles[i] }, localMountedFiles, localSkippedMessages, localMountedFails);
+
+            // Acquire lock only to update shared data structures
             {
                 std::lock_guard<std::mutex> lock(mountAllmutex);
-                std::vector<std::string> isoFilesToMountLocal = { isoFiles[i] };
-                mountIsoFile(isoFilesToMountLocal, mountedFiles, skippedMessages, mountedFails);
+                mountedFiles.insert(localMountedFiles.begin(), localMountedFiles.end());
+                skippedMessages.insert(localSkippedMessages.begin(), localSkippedMessages.end());
+                mountedFails.insert(localMountedFails.begin(), localMountedFails.end());
             }
+
             ++completedIsos;
         }));
     }
@@ -40,7 +50,6 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::st
     isComplete = true;
     progressThread.join();
 }
-
 
 // Function to select and mount ISO files by number
 void select_and_mount_files_by_number() {
@@ -355,8 +364,10 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     std::set<std::string> tokens;
     std::string tokenCount;
     
-    // Selection size count
     while (issCount >> tokenCount && tokens.size() < maxThreads) {
+		// Skip if the token starts with a minus sign
+		if (tokenCount[0] == '-') continue;
+
 		size_t dashPos = tokenCount.find('-');
 		if (dashPos != std::string::npos) {
 			std::string start = tokenCount.substr(0, dashPos);
@@ -365,9 +376,8 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
 				std::all_of(end.begin(), end.end(), ::isdigit)) {
 				int startNum = std::stoi(start);
 				int endNum = std::stoi(end);
-				if (!(startNum < 0 || endNum < 0 || 
-				static_cast<std::vector<std::__cxx11::basic_string<char>>::size_type>(startNum) > isoFiles.size() || 
-				static_cast<std::vector<std::__cxx11::basic_string<char>>::size_type>(endNum) > isoFiles.size())){
+				if (static_cast<std::vector<std::__cxx11::basic_string<char>>::size_type>(startNum) <= isoFiles.size() && 
+					static_cast<std::vector<std::__cxx11::basic_string<char>>::size_type>(endNum) <= isoFiles.size()) {
 					int step = (startNum <= endNum) ? 1 : -1;
 					for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
 						tokens.insert(std::to_string(i));
@@ -379,7 +389,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
 			}
 		} else if (std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
 			int num = std::stoi(tokenCount);
-			if (!(num < 0 || static_cast<std::vector<std::__cxx11::basic_string<char>>::size_type>(num) > isoFiles.size())) {
+			if (static_cast<std::vector<std::__cxx11::basic_string<char>>::size_type>(num) <= isoFiles.size()) {
 				tokens.insert(tokenCount);
 				if (tokens.size() >= maxThreads) {
 					break;
@@ -416,23 +426,29 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     int totalTasksValue = 0;
 
     auto processTask = [&](int index) {
-        std::lock_guard<std::mutex> validLock(MutexForValidIndices);
-        if (validIndices.find(index) == validIndices.end()) {
-            validIndices.insert(index);
-            std::vector<std::string> isoFilesToMount;
-            isoFilesToMount.push_back(isoFiles[index - 1]);
-            mountIsoFile(isoFilesToMount, mountedFiles, skippedMessages, mountedFails);
-        
-            // Update progress
-            completedTasks.fetch_add(1, std::memory_order_relaxed);
+    std::vector<std::string> isoFilesToMount;
+		{
+			std::lock_guard<std::mutex> validLock(MutexForValidIndices);
+			if (validIndices.find(index) == validIndices.end()) {
+				validIndices.insert(index);
+				isoFilesToMount.push_back(isoFiles[index - 1]);
+			} else {
+				return; // Exit if the index is already processed
+			}
+		}
 
-            // Decrement active task count and notify
-            int previousActiveCount = activeTaskCount.fetch_sub(1, std::memory_order_relaxed);
-            if (previousActiveCount == 1) {
-                taskCompletionCV.notify_all();
-            }
-        }
-    };
+		// Perform the mounting operation outside the lock
+		mountIsoFile(isoFilesToMount, mountedFiles, skippedMessages, mountedFails);
+
+		// Update progress
+		completedTasks.fetch_add(1, std::memory_order_relaxed);
+
+		// Decrement active task count and notify
+		int previousActiveCount = activeTaskCount.fetch_sub(1, std::memory_order_relaxed);
+		if (previousActiveCount == 1) {
+			taskCompletionCV.notify_all();
+		}
+	};
 
     std::string token;
     while (iss >> token) {
