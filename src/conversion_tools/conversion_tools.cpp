@@ -362,64 +362,45 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
 // Function to process user input and convert selected BIN/MDF files to ISO format
 void processInput(const std::string& input, const std::vector<std::string>& fileList, bool modeMdf, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts) {
-
-    // Mutexes for thread safety
     std::mutex futuresMutex;
     std::mutex errorsMutex;
-    
-    // Set to keep track of processed indices
     std::set<int> processedIndices;
-    
-    // Vector to hold futures for asynchronous tasks
     std::vector<std::future<void>> futures;
-    
-    std::istringstream issCount(input); // Create an input string stream from the input string for counting selections
-    
-    std::set<std::string> tokens;  // Vector to store tokens extracted from input
+
+    // Step 1: Tokenize the input to determine the number of threads to use
+    std::istringstream issCount(input);
+    std::set<std::string> tokens;
     std::string tokenCount;
     
-    // Selection size count
     while (issCount >> tokenCount && tokens.size() < maxThreads) {
-		// Skip if the token starts with a minus sign
-		if (tokenCount[0] == '-') continue;
+        if (tokenCount[0] == '-') continue;
+        size_t dashPos = tokenCount.find('-');
+        if (dashPos != std::string::npos) {
+            std::string start = tokenCount.substr(0, dashPos);
+            std::string end = tokenCount.substr(dashPos + 1);
+            if (std::all_of(start.begin(), start.end(), ::isdigit) && std::all_of(end.begin(), end.end(), ::isdigit)) {
+                int startNum = std::stoi(start);
+                int endNum = std::stoi(end);
+                if (static_cast<size_t>(startNum) <= fileList.size() && static_cast<size_t>(endNum) <= fileList.size()) {
+                    int step = (startNum <= endNum) ? 1 : -1;
+                    for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
+                        tokens.insert(std::to_string(i));
+                        if (tokens.size() >= maxThreads) break;
+                    }
+                }
+            }
+        } else if (std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
+            int num = std::stoi(tokenCount);
+            if (static_cast<size_t>(num) <= fileList.size()) {
+                tokens.insert(tokenCount);
+                if (tokens.size() >= maxThreads) break;
+            }
+        }
+    }
 
-		size_t dashPos = tokenCount.find('-');
-		if (dashPos != std::string::npos) {
-			std::string start = tokenCount.substr(0, dashPos);
-			std::string end = tokenCount.substr(dashPos + 1);
-			if (std::all_of(start.begin(), start.end(), ::isdigit) && 
-				std::all_of(end.begin(), end.end(), ::isdigit)) {
-				int startNum = std::stoi(start);
-				int endNum = std::stoi(end);
-				if (static_cast<std::vector<std::__cxx11::basic_string<char>>::size_type>(startNum) <= fileList.size() && 
-					static_cast<std::vector<std::__cxx11::basic_string<char>>::size_type>(endNum) <= fileList.size()) {
-					int step = (startNum <= endNum) ? 1 : -1;
-					for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
-						tokens.insert(std::to_string(i));
-						if (tokens.size() >= maxThreads) {
-							break;
-						}
-					}
-				}
-			}
-		} else if (std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
-			int num = std::stoi(tokenCount);
-			if (static_cast<std::vector<std::__cxx11::basic_string<char>>::size_type>(num) <= fileList.size()) {
-				tokens.insert(tokenCount);
-				if (tokens.size() >= maxThreads) {
-					break;
-				}
-			}
-		}
-	}
-
-    // Determine the number of threads to use, based on the number of ISO files and hardware concurrency
     unsigned int numThreads = std::min(static_cast<int>(tokens.size()), static_cast<int>(maxThreads));
-    
-    // ThreadPool for concurrent execution
     ThreadPool pool(numThreads);
 
-    // Get current user and group
     char* current_user = getlogin();
     if (current_user == nullptr) {
         std::cerr << "Error getting current user: " << strerror(errno) << "\n";
@@ -431,89 +412,62 @@ void processInput(const std::string& input, const std::vector<std::string>& file
         return;
     }
 
-    // Convert user and group to strings
     std::string user_str(current_user);
     std::string group_str = std::to_string(static_cast<unsigned int>(current_group));
 
-	// Use set to store unique paths of selected files in order
-	std::set<std::string> selectedFilePaths;
-	// String to store the concatenated file paths
-	std::string concatenatedFilePaths;
-	// Lambda function for asynchronously converting BIN to ISO
-	auto asyncConvertToISO = [&](const std::string& selectedFile) {
-		// Get the path of the selected file
-		std::size_t found = selectedFile.find_last_of("/\\");
-		std::string filePath = selectedFile.substr(0, found);
-		// Store the file path in the set if it doesn't already exist
-		selectedFilePaths.insert(filePath);
-		// Convert to ISO
-		convertToISO(selectedFile, successOuts, skippedOuts, failedOuts, deletedOuts, modeMdf);
-		// Concatenate the file paths
-		concatenatedFilePaths.clear();
-		for (const auto& path : selectedFilePaths) {
-			concatenatedFilePaths += path + ";";
-		}
-		if (!concatenatedFilePaths.empty()) {
-			concatenatedFilePaths.pop_back(); // Remove the trailing semicolon
-		}
-	};
+    std::set<std::string> selectedFilePaths;
+    std::string concatenatedFilePaths;
+    auto asyncConvertToISO = [&](const std::string& selectedFile) {
+        std::size_t found = selectedFile.find_last_of("/\\");
+        std::string filePath = selectedFile.substr(0, found);
+        {
+            std::lock_guard<std::mutex> lock(futuresMutex);
+            selectedFilePaths.insert(filePath);
+        }
+        convertToISO(selectedFile, successOuts, skippedOuts, failedOuts, deletedOuts, modeMdf);
+    };
 
-    // Tokenize the input string
     std::istringstream iss(input);
     std::string token;
 
-    // Process each token
     while (iss >> token) {
         std::istringstream tokenStream(token);
         int start, end;
         char dash;
 
-        // Check if the token is a number
         if (tokenStream >> start) {
-            // Check for a dash to indicate a range
-            if (tokenStream >> dash) {
-                // Check if the dash is valid
-                if (dash == '-') {
-                    // Read the end of the range
-                    if (tokenStream >> end) {
-                        // Check for valid range and process files
-                        if (start > 0 && end > 0 && start <= static_cast<int>(fileList.size()) && end <= static_cast<int>(fileList.size())) {
-                            int step = (start <= end) ? 1 : -1;
-                            for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
-                                int selectedIndex = i - 1;
-                                if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-                                    std::string selectedFile = fileList[selectedIndex];
-                                    {
-                                        std::lock_guard<std::mutex> lock(futuresMutex);
-                                            futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));
-                                    
-										processedIndices.insert(selectedIndex);
-									}
+            if (tokenStream >> dash && dash == '-') {
+                if (tokenStream >> end) {
+                    if (start > 0 && end > 0 && start <= static_cast<int>(fileList.size()) && end <= static_cast<int>(fileList.size())) {
+                        int step = (start <= end) ? 1 : -1;
+                        for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
+                            int selectedIndex = i - 1;
+                            if (processedIndices.find(selectedIndex) == processedIndices.end()) {
+                                std::string selectedFile = fileList[selectedIndex];
+                                {
+                                    std::lock_guard<std::mutex> lock(futuresMutex);
+                                    futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));
+                                    processedIndices.insert(selectedIndex);
                                 }
                             }
-                        } else {
-                            std::lock_guard<std::mutex> lock(errorsMutex);
-                            processedErrors.insert("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'.\033[1;0m");
                         }
                     } else {
                         std::lock_guard<std::mutex> lock(errorsMutex);
-                        processedErrors.insert("\033[1;91mInvalid range: '" + token + "'.\033[1;0m");
+                        processedErrors.insert("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'.\033[1;0m");
                     }
                 } else {
                     std::lock_guard<std::mutex> lock(errorsMutex);
-                    processedErrors.insert("\033[1;91mInvalid character after dash in range: '" + token + "'.\033[1;0m");
+                    processedErrors.insert("\033[1;91mInvalid range: '" + token + "'.\033[1;0m");
                 }
             } else if (start >= 1 && static_cast<size_t>(start) <= fileList.size()) {
-                // Process single index
                 int selectedIndex = start - 1;
                 if (processedIndices.find(selectedIndex) == processedIndices.end()) {
                     std::string selectedFile = fileList[selectedIndex];
                     {
                         std::lock_guard<std::mutex> lock(futuresMutex);
-                            futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));
-                    
-						processedIndices.insert(selectedIndex);
-					}
+                        futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));
+                        processedIndices.insert(selectedIndex);
+                    }
                 }
             } else {
                 std::lock_guard<std::mutex> lock(errorsMutex);
@@ -525,19 +479,27 @@ void processInput(const std::string& input, const std::vector<std::string>& file
         }
     }
 
-    // Wait for all asynchronous tasks to complete
     for (auto& future : futures) {
         future.wait();
     }
 
-    // Update promptFlag
+    {
+        std::lock_guard<std::mutex> lock(futuresMutex);
+        concatenatedFilePaths.clear();
+        for (const auto& path : selectedFilePaths) {
+            concatenatedFilePaths += path + ";";
+        }
+        if (!concatenatedFilePaths.empty()) {
+            concatenatedFilePaths.pop_back();
+        }
+    }
+
     promptFlag = false;
-    if (!processedIndices.empty()){
-		maxDepth = 0;
-		// Manual cache refresh based on flag   
-		manualRefreshCache(concatenatedFilePaths);
-	}
-	maxDepth = -1;
+    if (!processedIndices.empty()) {
+        maxDepth = 0;
+        manualRefreshCache(concatenatedFilePaths);
+    }
+    maxDepth = -1;
 }
 
 
