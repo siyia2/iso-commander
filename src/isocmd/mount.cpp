@@ -14,10 +14,7 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::st
     std::atomic<bool> isComplete(false);
 
     // Create progress thread
-    std::thread progressThread(displayProgressBar, 
-                           std::ref(completedIsos), 
-                           std::cref(totalIsos), 
-                           std::ref(isComplete));
+    std::thread progressThread(displayProgressBar, std::ref(completedIsos), std::cref(totalIsos), std::ref(isComplete));
 
     // Vector to store futures
     std::vector<std::future<void>> futures;
