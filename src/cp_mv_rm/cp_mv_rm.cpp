@@ -69,7 +69,6 @@ void select_and_operate_files_by_number(const std::string& operation) {
         // Remove non-existent paths from the cache after selection
         removeNonExistentPathsFromCache();
 		// Load ISO files from cache
-        isoFiles.reserve(100);
 		loadCache(isoFiles);
 		
 		clearScrollBuffer();
