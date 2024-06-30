@@ -356,7 +356,6 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 }
 
 
-
 // Function to process user input and convert selected BIN/MDF files to ISO format
 void processInput(const std::string& input, const std::vector<std::string>& fileList, bool modeMdf, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts) {
     std::mutex futuresMutex;
