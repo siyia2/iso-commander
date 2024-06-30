@@ -65,7 +65,6 @@ void select_and_mount_files_by_number() {
         removeNonExistentPathsFromCache();
 
         // Load ISO files from cache
-        isoFiles.reserve(100);
 		loadCache(isoFiles);
 		
 		// Check if the cache is empty
