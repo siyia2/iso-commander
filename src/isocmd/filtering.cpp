@@ -12,41 +12,50 @@ void sortFilesCaseInsensitive(std::vector<std::string>& files) {
 }
 
 
-// Boyer-Moore string search implementation for mount
+// Boyer-Moore string search implementation for files
 std::vector<size_t> boyerMooreSearch(const std::string& pattern, const std::string& text) {
-    // Precompute lowercase pattern for case-insensitive comparison
-    std::string lowerPattern = pattern;
-    std::transform(lowerPattern.begin(), lowerPattern.end(), lowerPattern.begin(),
-                   [](unsigned char c){ return std::tolower(c); });
+    // Helper lambda to convert a string to lowercase
+    auto toLower = [](const std::string& str) {
+        std::string lowerStr = str;
+        std::transform(lowerStr.begin(), lowerStr.end(), lowerStr.begin(),
+                       [](unsigned char c){ return std::tolower(c); });
+        return lowerStr;
+    };
 
+    std::string lowerPattern = toLower(pattern);
+    std::string lowerText = toLower(text);
+
+    std::vector<size_t> shifts(256, lowerPattern.length());
     std::vector<size_t> matches;
-    
-    size_t patternLen = pattern.length();
-    size_t textLen = text.length();
 
-    // Compute the bad character shift table
-    std::vector<size_t> shifts(256, patternLen);
-    for (size_t i = 0; i < patternLen - 1; ++i) {
-        shifts[static_cast<unsigned char>(tolower(pattern[i]))] = patternLen - i - 1;
+    for (size_t i = 0; i < lowerPattern.length() - 1; i++) {
+        shifts[static_cast<unsigned char>(lowerPattern[i])] = lowerPattern.length() - i - 1;
     }
+
+    size_t patternLen = lowerPattern.length();
+    size_t textLen = lowerText.length();
 
     size_t i = 0; // Start at the beginning of the text
 
     while (i <= textLen - patternLen) {
-        int j = patternLen - 1;
+        size_t skip = 0;
         
         // Match pattern from end to start
-        while (j >= 0 && tolower(text[i + j]) == lowerPattern[j]) {
-            --j;
+        while (skip < patternLen && lowerPattern[patternLen - 1 - skip] == lowerText[i + patternLen - 1 - skip]) {
+            skip++;
         }
         
         // If the whole pattern was found, record the match
-        if (j < 0) {
+        if (skip == patternLen) {
             matches.push_back(i);
         }
 
         // Move the pattern based on the last character of the current window in the text
-        i += shifts[static_cast<unsigned char>(tolower(text[i + patternLen - 1]))];
+        if (i + patternLen < textLen) {
+            i += shifts[static_cast<unsigned char>(lowerText[i + patternLen - 1])];
+        } else {
+            break;
+        }
     }
 
     return matches;
@@ -55,10 +64,9 @@ std::vector<size_t> boyerMooreSearch(const std::string& pattern, const std::stri
 
 // Function to filter cached ISO files based on search query (case-insensitive)
 std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query) {
-    std::vector<std::string> filteredFiles;  // Resultant vector of filtered files
-    std::set<std::string> queryTokens;  // Set to store unique query tokens
-
-    // Tokenize query by ';' and convert tokens to lowercase
+    std::vector<std::string> filteredFiles;
+    std::set<std::string> queryTokens;
+    
     std::stringstream ss(query);
     std::string token;
     while (std::getline(ss, token, ';')) {
@@ -66,64 +74,51 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
         queryTokens.insert(token);
     }
 
-    std::shared_mutex filterMutex;  // Shared mutex for thread-safe access to filteredFiles
-
-    // Task function to filter files within a range [start, end)
+    std::shared_mutex filterMutex;
+    
     auto filterTask = [&](size_t start, size_t end) {
-        std::vector<std::string> localFilteredFiles;  // Local storage for filtered files
-
-        // Iterate through files in the specified range
+        std::vector<std::string> localFilteredFiles;
         for (size_t i = start; i < end; ++i) {
             const std::string& file = files[i];
-            std::string lowerFile = file;
-            std::transform(lowerFile.begin(), lowerFile.end(), lowerFile.begin(), ::tolower);  // Convert full path to lowercase
-            
-            // Extract the filename from the path
-            std::string fileName = lowerFile.substr(lowerFile.find_last_of("/\\") + 1);
+            std::string fileName = file;
+            std::transform(fileName.begin(), fileName.end(), fileName.begin(), ::tolower);
             
             bool matchFound = false;
-            // Check each query token against both the lowercase full path and filename using Boyer-Moore search
             for (const std::string& queryToken : queryTokens) {
-                if (!boyerMooreSearch(queryToken, lowerFile).empty() || !boyerMooreSearch(queryToken, fileName).empty()) {
+                if (!boyerMooreSearch(queryToken, fileName).empty()) {
                     matchFound = true;
                     break;
                 }
             }
-
-            // If any query token matches, add the file to localFilteredFiles
+            
             if (matchFound) {
                 localFilteredFiles.push_back(file);
             }
         }
-
-        // Lock to safely update shared filteredFiles vector
+        
         std::unique_lock<std::shared_mutex> lock(filterMutex);
         filteredFiles.insert(filteredFiles.end(), localFilteredFiles.begin(), localFilteredFiles.end());
     };
 
     size_t numFiles = files.size();
-    int maxThreads = std::thread::hardware_concurrency();  // Maximum number of concurrent threads supported
-    size_t numThreads = std::min(static_cast<size_t>(maxThreads), numFiles);  // Determine number of threads to use
-    size_t filesPerThread = numFiles / numThreads;  // Number of files each thread will process
-
-    std::vector<std::future<void>> futures;  // Vector to hold futures for threads
-
-    // Create async tasks for each thread (except the last one)
+    size_t numThreads = std::min(static_cast<size_t>(maxThreads), numFiles);
+    size_t filesPerThread = numFiles / numThreads;
+    
+    std::vector<std::future<void>> futures;
+    
     for (size_t i = 0; i < numThreads - 1; ++i) {
         size_t start = i * filesPerThread;
         size_t end = start + filesPerThread;
         futures.emplace_back(std::async(std::launch::async, filterTask, start, end));
     }
-
-    // Handle filtering for the last segment (handles any remaining files)
+    
     filterTask((numThreads - 1) * filesPerThread, numFiles);
-
-    // Wait for all threads to complete
+    
     for (auto& future : futures) {
         future.wait();
     }
 
-    return filteredFiles;  // Return the vector of filtered files
+    return filteredFiles;
 }
 
 
