@@ -37,6 +37,9 @@
 // Get max available CPU cores for global use
 extern unsigned int maxThreads;
 
+// Mutex for LowLevel functions
+extern std::mutex Mutex4Low;
+
 // For cache directory creation
 extern bool gapPrinted; // for cache refresh for directory function
 extern bool promptFlag; // for cache refresh for directory function
