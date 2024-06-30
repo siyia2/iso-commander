@@ -7,32 +7,17 @@
 // Function to mount all ISOs indiscriminately
 void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
     std::mutex mountAllmutex;
-    unsigned int numThreads = std::min(static_cast<int>(isoFiles.size()), static_cast<int>(maxThreads));
+    unsigned int numThreads = std::min(static_cast<unsigned int>(isoFiles.size()), static_cast<unsigned int>(maxThreads));
     ThreadPool pool(numThreads);
-
     std::atomic<int> completedIsos(0);
-    int totalIsos = isoFiles.size();
-    bool isComplete = false;
+    int totalIsos = static_cast<int>(isoFiles.size());
+    std::atomic<bool> isComplete(false);
 
-    // Start a separate thread for updating the progress bar
-    std::thread progressThread([&completedIsos, totalIsos, &isComplete]() {
-        const int barWidth = 50;
-        while (!isComplete) {
-            int completed = completedIsos.load();
-            float progress = static_cast<float>(completed) / totalIsos;
-            int pos = barWidth * progress;
-            std::cout << "\r[";
-            for (int i = 0; i < barWidth; ++i) {
-                if (i < pos) std::cout << "=";
-                else if (i == pos) std::cout << ">";
-                else std::cout << " ";
-            }
-            std::cout << "] " << std::setw(3) << std::fixed << std::setprecision(1) 
-                      << (progress * 100.0) << "% (" << completed << "/" << totalIsos << ")";
-            std::cout.flush();
-            std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Update every 100ms
-        }
-    });
+    // Create progress thread
+    std::thread progressThread(displayProgressBar, 
+                           std::ref(completedIsos), 
+                           std::cref(totalIsos), 
+                           std::ref(isComplete));
 
     // Vector to store futures
     std::vector<std::future<void>> futures;
@@ -380,36 +365,36 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     
     // Selection size count
     while (issCount >> tokenCount && tokens.size() < maxThreads) {
-		size_t dashPos = tokenCount.find('-');
-		if (dashPos != std::string::npos) {
-			std::string start = tokenCount.substr(0, dashPos);
-			std::string end = tokenCount.substr(dashPos + 1);
-			if (std::all_of(start.begin(), start.end(), ::isdigit) && 
-				std::all_of(end.begin(), end.end(), ::isdigit)) {
-				int startNum = std::stoi(start);
-				int endNum = std::stoi(end);
-				if (!(startNum < 0 || endNum < 0 || 
-				static_cast<std::vector<std::__cxx11::basic_string<char>>::size_type>(startNum) > isoFiles.size() || 
-				static_cast<std::vector<std::__cxx11::basic_string<char>>::size_type>(endNum) > isoFiles.size())){
-					int step = (startNum <= endNum) ? 1 : -1;
-					for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
-						tokens.insert(std::to_string(i));
-						if (tokens.size() >= maxThreads) {
-							break;
-						}
-					}
-				}
-			}
-		} else if (std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
-			int num = std::stoi(tokenCount);
-			if (!(num < 0 || static_cast<std::vector<std::__cxx11::basic_string<char>>::size_type>(num) > isoFiles.size())) {
-				tokens.insert(tokenCount);
-				if (tokens.size() >= maxThreads) {
-					break;
-				}
-			}
-		}
-	}
+        size_t dashPos = tokenCount.find('-');
+        if (dashPos != std::string::npos) {
+            std::string start = tokenCount.substr(0, dashPos);
+            std::string end = tokenCount.substr(dashPos + 1);
+            if (std::all_of(start.begin(), start.end(), ::isdigit) && 
+                std::all_of(end.begin(), end.end(), ::isdigit)) {
+                int startNum = std::stoi(start);
+                int endNum = std::stoi(end);
+                if (!(startNum < 0 || endNum < 0 || 
+                static_cast<std::vector<std::string>::size_type>(startNum) > isoFiles.size() || 
+                static_cast<std::vector<std::string>::size_type>(endNum) > isoFiles.size())){
+                    int step = (startNum <= endNum) ? 1 : -1;
+                    for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
+                        tokens.insert(std::to_string(i));
+                        if (tokens.size() >= maxThreads) {
+                            break;
+                        }
+                    }
+                }
+            }
+        } else if (std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
+            int num = std::stoi(tokenCount);
+            if (!(num < 0 || static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size())) {
+                tokens.insert(tokenCount);
+                if (tokens.size() >= maxThreads) {
+                    break;
+                }
+            }
+        }
+    }
     
     unsigned int numThreads = std::min(static_cast<int>(tokens.size()), static_cast<int>(maxThreads));
 
@@ -426,42 +411,17 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     // Add progress tracking
     std::atomic<int> totalTasks(0);
     std::atomic<int> completedTasks(0);
+    std::atomic<bool> isProcessingComplete(false);
+
     std::mutex progressMutex;
-    bool isProcessingComplete = false;
 
     // Add task completion tracking
     std::atomic<int> activeTaskCount(0);
     std::condition_variable taskCompletionCV;
     std::mutex taskCompletionMutex;
 
-    // Create a lambda function for the progress bar
-    auto updateProgressBar = [&]() {
-        while (!isProcessingComplete) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            int total, completed;
-            {
-                std::lock_guard<std::mutex> lock(progressMutex);
-                total = totalTasks.load();
-                completed = completedTasks.load();
-            }
-            if (total > 0) {
-                float progress = static_cast<float>(completed) / total;
-                int barWidth = 50;
-                std::cout << "\r[";
-                int pos = barWidth * progress;
-                for (int i = 0; i < barWidth; ++i) {
-                    if (i < pos) std::cout << "=";
-                    else if (i == pos) std::cout << ">";
-                    else std::cout << " ";
-                }
-                std::cout << "] " << int(progress * 100.0) << "% (" << completed << "/" << total << ")" << std::flush;
-            }
-        }
-        std::cout << std::endl;  // Move to the next line when complete
-    };
-
-    // Start the progress bar thread
-    std::thread progressThread(updateProgressBar);
+    // Set total number of tasks
+    int totalTasksValue = 0;
 
     auto processTask = [&](int index) {
         std::lock_guard<std::mutex> validLock(MutexForValidIndices);
@@ -470,19 +430,15 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
             std::vector<std::string> isoFilesToMount;
             isoFilesToMount.push_back(isoFiles[index - 1]);
             mountIsoFile(isoFilesToMount, mountedFiles, skippedMessages, mountedFails);
-            
+        
             // Update progress
-            {
-                std::lock_guard<std::mutex> lock(progressMutex);
-                completedTasks++;
-            }
+            completedTasks.fetch_add(1, std::memory_order_relaxed);
 
             // Decrement active task count and notify
-            {
-                std::lock_guard<std::mutex> lock(taskCompletionMutex);
-                activeTaskCount--;
+            int previousActiveCount = activeTaskCount.fetch_sub(1, std::memory_order_relaxed);
+            if (previousActiveCount == 1) {
+                taskCompletionCV.notify_all();
             }
-            taskCompletionCV.notify_one();
         }
     };
 
@@ -542,14 +498,8 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                     if (processedIndices.find(i) == processedIndices.end()) {
                         std::lock_guard<std::mutex> lock(MutexForProcessedIndices);
                         processedIndices.insert(i);
-                        {
-                            std::lock_guard<std::mutex> lock(progressMutex);
-                            totalTasks++;
-                        }
-                        {
-                            std::lock_guard<std::mutex> lock(taskCompletionMutex);
-                            activeTaskCount++;
-                        }
+                        totalTasks++;
+                        activeTaskCount++;
                         pool.enqueue([&, i]() { processTask(i); });
                     }
                 }
@@ -557,15 +507,10 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
         } else if (isNumeric(token)) {
             int num = std::stoi(token);
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && processedIndices.find(num) == processedIndices.end()) {
+                std::lock_guard<std::mutex> lock(MutexForProcessedIndices);
                 processedIndices.insert(num);
-                {
-                    std::lock_guard<std::mutex> lock(progressMutex);
-                    totalTasks++;
-                }
-                {
-                    std::lock_guard<std::mutex> lock(taskCompletionMutex);
-                    activeTaskCount++;
-                }
+                totalTasks++;
+                activeTaskCount++;
                 pool.enqueue([&, num]() { processTask(num); });
             } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
                 std::lock_guard<std::mutex> lock(MutexForUniqueErrors);
@@ -578,6 +523,12 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
             uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
         }
     }
+
+    // Set the total number of tasks value
+    totalTasksValue = totalTasks.load();
+
+    // Start the progress bar in a separate thread
+    std::thread progressThread(displayProgressBar, std::ref(completedTasks), std::cref(totalTasksValue), std::ref(isProcessingComplete));
 
     // Wait for all tasks to complete
     {

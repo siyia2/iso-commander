@@ -236,7 +236,7 @@ void unmountISOs() {
         
 
         if (input[0] != '/' || (!(std::isspace(input[0]) || input[0] == '\0'))) {
-            std::cout << "Please wait...\n";
+            std::cout << "\033[0;1mPlease wait...\n";
         }
 
         // Check if the user wants to return to the main menu
@@ -500,28 +500,11 @@ void unmountISOs() {
     
 			std::mutex futuresMutex;
 			std::atomic<int> completedIsos(0);
-			int totalIsos = selectedIsoDirs.size();
-			bool isComplete = false;
+			int totalIsos = static_cast<int>(selectedIsoDirs.size());
+			std::atomic<bool> isComplete(false);
 
-			// Start a separate thread for updating the progress bar
-			std::thread progressThread([&completedIsos, totalIsos, &isComplete]() {
-				const int barWidth = 50;  // Reduced bar width to accommodate the count
-				while (!isComplete) {
-					int completed = completedIsos.load();
-					float progress = static_cast<float>(completed) / totalIsos;
-					int pos = barWidth * progress;
-					std::cout << "\r[";
-					for (int i = 0; i < barWidth; ++i) {
-						if (i < pos) std::cout << "=";
-						else if (i == pos) std::cout << ">";
-						else std::cout << " ";
-					}
-					std::cout << "] " << std::setw(3) << std::fixed << std::setprecision(1) 
-						<< (progress * 100.0) << "% (" << completed << "/" << totalIsos << ")";
-					std::cout.flush();
-					std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Update every 100ms
-				}
-			});
+			// Start the progress bar in a separate thread
+			std::thread progressThread(displayProgressBar, std::ref(completedIsos), std::cref(totalIsos), std::ref(isComplete));
 
 			// Enqueue unmount tasks for each batch of ISOs
 			for (const auto& batch : batches) {
@@ -529,7 +512,7 @@ void unmountISOs() {
 				futures.emplace_back(pool.enqueue([batch, &unmountedFiles, &unmountedErrors, &completedIsos]() {
 					for (const auto& iso : batch) {
 						unmountISO({iso}, unmountedFiles, unmountedErrors);
-						++completedIsos;
+						completedIsos.fetch_add(1, std::memory_order_relaxed);
 					}
 				}));
 			}
@@ -540,7 +523,7 @@ void unmountISOs() {
 			}
 
 			// Signal completion and wait for progress thread to finish
-			isComplete = true;
+			isComplete.store(true);
 			progressThread.join();
             
             printUnmountedAndErrors(invalidInput, unmountedFiles, unmountedErrors, errorMessages);

@@ -316,6 +316,31 @@ bool isNumeric(const std::string& str) {
     });
 }
 
+// Function to display progress bar for native operations
+void displayProgressBar(const std::atomic<int>& completed, const int& total, std::atomic<bool>& isComplete) {
+    const int barWidth = 50;
+    while (!isComplete.load()) {
+        int completedValue = completed.load();
+        float progress = static_cast<float>(completedValue) / total;
+        int pos = barWidth * progress;
+        
+        std::cout << "\r[";
+        for (int i = 0; i < barWidth; ++i) {
+            if (i < pos) std::cout << "=";
+            else if (i == pos) std::cout << ">";
+            else std::cout << " ";
+        }
+        std::cout << "] " << std::setw(3) << std::fixed << std::setprecision(1) 
+                  << (progress * 100.0) << "% (" << completedValue << "/" << total << ")";
+        std::cout.flush();
+        
+        std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Update every 100ms
+    }
+    
+    // Print a newline after completion
+    std::cout << std::endl;
+}
+
 
 // Function to print ISO files with alternating colors for sequence numbers
 void printIsoFileList(const std::vector<std::string>& isoFiles) {
