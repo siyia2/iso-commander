@@ -28,7 +28,7 @@ int lockFileDescriptor = -1;
 int main(int argc, char *argv[]) {
 	
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
-        printVersionNumber("4.6.3");
+        printVersionNumber("4.6.4");
         return 0;
     }
 	
@@ -315,6 +315,7 @@ bool isNumeric(const std::string& str) {
         return std::isdigit(c);
     });
 }
+
 
 // Function to display progress bar for native operations
 void displayProgressBar(const std::atomic<int>& completed, const int& total, std::atomic<bool>& isComplete) {
