@@ -131,38 +131,36 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
 size_t boyerMooreSearchMountPoints(const std::string& haystack, const std::string& needle) {
     size_t m = needle.length();
     size_t n = haystack.length();
-    
-    if (m == 0) return 0;  // Edge case: empty needle
-    if (n < m) return std::string::npos;  // Early return if haystack is shorter than needle
+    if (m == 0) return 0;
+    if (n == 0 || n < m) return std::string::npos;
 
     // Construct the bad character heuristic table
     std::vector<int> badChar(256, -1);
     for (size_t i = 0; i < m; ++i) {
-        badChar[static_cast<unsigned char>(needle[i])] = static_cast<int>(i);
+        badChar[needle[i]] = i;
     }
 
     // Start searching
     size_t shift = 0;
     while (shift <= n - m) {
-        int j = static_cast<int>(m - 1);
+        int j = m - 1;
         while (j >= 0 && needle[j] == haystack[shift + j]) {
-            --j;
+            j--;
         }
         if (j < 0) {
             return shift; // Match found
         } else {
-            shift += std::max<size_t>(1, static_cast<size_t>(j - badChar[static_cast<unsigned char>(haystack[shift + j])]));
+            shift += std::max(1, static_cast<int>(j - badChar[haystack[shift + j]]));
         }
     }
-    
     return std::string::npos; // No match found
 }
 
 
 // Function to filter mounted isoDirs using Boyer-Moore search
 void filterMountPoints(const std::vector<std::string>& isoDirs, std::vector<std::string>& filterPatterns, std::vector<std::string>& filteredIsoDirs, size_t start, size_t end) {
+	std::shared_mutex filterMutex;  // Shared mutex for thread-safe access to filteredFiles
     // Iterate through the chunk of ISO directories
-    std::shared_mutex filterMutex;
     for (size_t i = start; i < end; ++i) {
         const std::string& dir = isoDirs[i];
         std::string dirLower = dir;
@@ -181,8 +179,8 @@ void filterMountPoints(const std::vector<std::string>& isoDirs, std::vector<std:
 
         // If a match is found, add the directory to the filtered list
         if (matchFound) {
-            // Lock to safely update shared filteredFiles vector
-			std::unique_lock<std::shared_mutex> lock(filterMutex);
+            // Lock access to the shared vector
+            std::unique_lock<std::shared_mutex> lock(filterMutex);
             filteredIsoDirs.push_back(dir);
         }
     }
