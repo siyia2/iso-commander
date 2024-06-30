@@ -489,7 +489,6 @@ void unmountISOs() {
 			std::vector<std::future<void>> futures;
 			unsigned int numThreads = std::min(static_cast<int>(selectedIsoDirs.size()), static_cast<int>(maxThreads));
 			ThreadPool pool(numThreads);
-			std::lock_guard<std::mutex> isoDirsLock(isoDirsMutex);
     
 			// Divide the selected ISOs into batches for parallel processing
 			size_t batchSize = (selectedIsoDirs.size() + maxThreads - 1) / maxThreads;
