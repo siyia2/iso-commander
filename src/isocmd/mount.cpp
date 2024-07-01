@@ -377,7 +377,9 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                     static_cast<std::vector<std::string>::size_type>(endNum) <= isoFiles.size()) {
                     int step = (startNum <= endNum) ? 1 : -1;
                     for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
-                        tokens.insert(std::to_string(i));
+                        if (i != 0) {
+							tokens.insert(std::to_string(i));
+						}
                         if (tokens.size() >= maxThreads) {
                             break;
                         }
@@ -543,5 +545,4 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     // Signal that processing is complete and wait for the progress thread to finish
     isProcessingComplete.store(true, std::memory_order_release);
     progressThread.join();
-    
 }
