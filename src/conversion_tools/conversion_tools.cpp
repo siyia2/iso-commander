@@ -32,7 +32,7 @@ void verboseConversion(std::set<std::string>& processedErrors, std::set<std::str
     printWithNewline(processedErrors); // Print error messages
     
     if (!successOuts.empty() || !skippedOuts.empty()){
-		std::cout << "\033[0;1mTime Elapsed: " << end_time_str;
+		std::cout << "\033[0;1mTime Elapsed: " << end_time_str << "\n\n";
 	}
     
     // Clear all sets after printing
