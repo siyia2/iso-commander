@@ -323,10 +323,17 @@ bool isNumeric(const std::string& str) {
 // Function to display progress bar for native operations
 void displayProgressBar(const std::atomic<int>& completed, const int& total, std::atomic<bool>& isComplete) {
     const int barWidth = 50;
-    while (!isComplete.load()) {
+    bool enterPressed = false;
+    auto startTime = std::chrono::high_resolution_clock::now();
+    
+    while (!isComplete.load() || !enterPressed) {
         int completedValue = completed.load();
         float progress = static_cast<float>(completedValue) / total;
         int pos = barWidth * progress;
+        
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime);
+        float elapsedSeconds = elapsedTime.count() / 1000.0f;
         
         std::cout << "\r[";
         for (int i = 0; i < barWidth; ++i) {
@@ -335,10 +342,17 @@ void displayProgressBar(const std::atomic<int>& completed, const int& total, std
             else std::cout << " ";
         }
         std::cout << "] " << std::setw(3) << std::fixed << std::setprecision(1) 
-                  << (progress * 100.0) << "% (" << completedValue << "/" << total << ")";
-        std::cout.flush();
+                  << (progress * 100.0) << "% (" << completedValue << "/" << total << ") "
+                  << "Time Elapsed: "<< std::setprecision(1) << elapsedSeconds << "s";
         
-        std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Update every 100ms
+        if (completedValue == total && !enterPressed) {
+            std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            enterPressed = true;
+        } else {
+            std::cout.flush();
+            std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Update every 100ms
+        }
     }
     
     // Print a newline after completion
