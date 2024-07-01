@@ -13,7 +13,7 @@ bool fileExists(const std::string& fullPath) {
 }
 
 // Function to print verbose conversion messages
-void verboseConversion(std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts) {
+void verboseConversion(std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, std::string& end_time_str) {
     // Lambda function to print each element in a set followed by a newline
     auto printWithNewline = [](const std::set<std::string>& outs) {
         for (const auto& out : outs) {
@@ -30,6 +30,10 @@ void verboseConversion(std::set<std::string>& processedErrors, std::set<std::str
     printWithNewline(failedOuts);	 // Print failed messages
     printWithNewline(deletedOuts);   // Print deleted messages
     printWithNewline(processedErrors); // Print error messages
+    
+    if (!successOuts.empty() || !skippedOuts.empty()){
+		std::cout << "\033[0;1mTime Elapsed: " << end_time_str;
+	}
     
     // Clear all sets after printing
     successOuts.clear();   // Clear the set of success messages
@@ -323,13 +327,23 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 						if (isFiltered) {
 							clearScrollBuffer(); // Clear scroll buffer
 							std::cout << "\033[1mPlease wait...\n\033[1m\n"; // Inform user to wait
+							auto start_time = std::chrono::steady_clock::now();
 							processInput(filterInput, filteredFiles, modeMdf, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts); // Process user input
 							free(filterInput);
 							
 							clearScrollBuffer(); // Clear scroll buffer
 							std::cout << "\n"; // Print newline
-			
-							verboseConversion(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts);
+							auto end_time = std::chrono::steady_clock::now();
+    
+							// Calculate elapsed time in seconds with one decimal place
+							auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+							double elapsed_seconds = duration.count() / 1000.0;
+    
+							// Format the elapsed time as a string with one decimal place
+							std::ostringstream ss;
+							ss << std::fixed << std::setprecision(1) << elapsed_seconds;
+							std::string elapsed_time_str = ss.str();
+							verboseConversion(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, elapsed_time_str);
 
 							std::cout << "\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
 							std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -341,16 +355,27 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 			// If input is not "/", process the input
 			clearScrollBuffer(); // Clear scroll buffer
 			std::cout << "\033[1mPlease wait...\n\033[1m\n"; // Inform user to wait
+			auto start_time = std::chrono::steady_clock::now();
 			processInput(input, files, modeMdf, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts); // Process input
 			free(input);
-			
+    
 			clearScrollBuffer(); // Clear scroll buffer
 			std::cout << "\n"; // Print newline
-			
-			verboseConversion(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts);
-			
-		std::cout << "\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
-		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			auto end_time = std::chrono::steady_clock::now();
+    
+			// Calculate elapsed time in seconds with one decimal place
+			auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+			double elapsed_seconds = duration.count() / 1000.0;
+    
+			// Format the elapsed time as a string with one decimal place
+			std::ostringstream ss;
+			ss << std::fixed << std::setprecision(1) << elapsed_seconds;
+			std::string elapsed_time_str = ss.str();
+
+			verboseConversion(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, elapsed_time_str);
+	
+			std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
+			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 		}
 	}
 }
@@ -984,10 +1009,14 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
         // Delete the partially created ISO file
         if (std::remove(outputPath.c_str()) == 0) {
             std::string deletedMessage = "\033[1;92mDeleted incomplete ISO file:\033[1;91m '" + outDirectory + "/" + outFileNameOnly + "'\033[1;92m.\033[0;1m";
-            deletedOuts.insert(deletedMessage);
+            {	std::lock_guard<std::mutex> lowLock(Mutex4Low);
+				deletedOuts.insert(deletedMessage);
+			}
         } else {
             std::string deletedMessage = "\033[1;91mFailed to delete partially created ISO file: \033[1;93m'" + outDirectory + "/" + outFileNameOnly + "'\033[1;91m.\033[0;1m";
-            deletedOuts.insert(deletedMessage);
+            {	std::lock_guard<std::mutex> lowLock(Mutex4Low);
+				deletedOuts.insert(deletedMessage);
+			}
         }
     }
 }
