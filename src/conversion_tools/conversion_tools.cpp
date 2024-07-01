@@ -359,7 +359,6 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 // Function to process user input and convert selected BIN/MDF files to ISO format
 void processInput(const std::string& input, const std::vector<std::string>& fileList, bool modeMdf, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts) {
     std::mutex futuresMutex;
-    std::mutex errorsMutex;
     std::set<int> processedIndices;
     std::vector<std::future<void>> futures;
 
@@ -370,28 +369,35 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     
     while (issCount >> tokenCount && tokens.size() < maxThreads) {
         if (tokenCount[0] == '-') continue;
+
         size_t dashPos = tokenCount.find('-');
         if (dashPos != std::string::npos) {
             std::string start = tokenCount.substr(0, dashPos);
             std::string end = tokenCount.substr(dashPos + 1);
-            if (std::all_of(start.begin(), start.end(), ::isdigit) && std::all_of(end.begin(), end.end(), ::isdigit)) {
+            if (std::all_of(start.begin(), start.end(), ::isdigit) && 
+                std::all_of(end.begin(), end.end(), ::isdigit)) {
                 int startNum = std::stoi(start);
                 int endNum = std::stoi(end);
-                if (static_cast<size_t>(startNum) <= fileList.size() && static_cast<size_t>(endNum) <= fileList.size()) {
+                if (static_cast<std::vector<std::string>::size_type>(startNum) <= fileList.size() && 
+                    static_cast<std::vector<std::string>::size_type>(endNum) <= fileList.size()) {
                     int step = (startNum <= endNum) ? 1 : -1;
                     for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
-						if (i != 0) {
+                        if (i != 0) {
 							tokens.insert(std::to_string(i));
 						}
-                        if (tokens.size() >= maxThreads) break;
+                        if (tokens.size() >= maxThreads) {
+                            break;
+                        }
                     }
                 }
             }
         } else if (std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
             int num = std::stoi(tokenCount);
-            if (num > 0 && static_cast<size_t>(num) <= fileList.size()) {
+            if (num > 0 && static_cast<std::vector<std::string>::size_type>(num) <= fileList.size()) {
                 tokens.insert(tokenCount);
-                if (tokens.size() >= maxThreads) break;
+                if (tokens.size() >= maxThreads) {
+                    break;
+                }
             }
         }
     }
@@ -436,30 +442,40 @@ void processInput(const std::string& input, const std::vector<std::string>& file
         if (tokenStream >> start) {
             if (tokenStream >> dash && dash == '-') {
                 if (tokenStream >> end) {
-                    if (start > 0 && end > 0 && start <= static_cast<int>(fileList.size()) && end <= static_cast<int>(fileList.size())) {
+                    char extraChar;
+                    if (tokenStream >> extraChar) {
+                        // Extra characters found after the range, treat as invalid
+                        processedErrors.insert("\033[1;91mInvalid range: '" + token + "'.\033[1;0m");
+                    } else if (start > 0 && end > 0 && start <= static_cast<int>(fileList.size()) && end <= static_cast<int>(fileList.size())) {
                         int step = (start <= end) ? 1 : -1;
                         for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
                             int selectedIndex = i - 1;
-                            if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-                                std::string selectedFile = fileList[selectedIndex];
-                                    futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));
+                            {	
+								std::lock_guard<std::mutex> lock(futuresMutex);
+								if (processedIndices.find(selectedIndex) == processedIndices.end()) {
+									std::string selectedFile = fileList[selectedIndex];
+									futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));
+                                    
                                     processedIndices.insert(selectedIndex);
+                                }
                             }
                         }
                     } else {
-                        std::lock_guard<std::mutex> lock(errorsMutex);
                         processedErrors.insert("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'.\033[1;0m");
                     }
                 } else {
-                    std::lock_guard<std::mutex> lock(errorsMutex);
                     processedErrors.insert("\033[1;91mInvalid range: '" + token + "'.\033[1;0m");
                 }
             } else if (start >= 1 && static_cast<size_t>(start) <= fileList.size()) {
                 int selectedIndex = start - 1;
-                if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-                    std::string selectedFile = fileList[selectedIndex];
-                        futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));
+                {
+					std::lock_guard<std::mutex> lock(futuresMutex);
+					if (processedIndices.find(selectedIndex) == processedIndices.end()) {
+						std::string selectedFile = fileList[selectedIndex];
+						futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));   
+                        
                         processedIndices.insert(selectedIndex);
+                    }
                 }
             } else {
                 processedErrors.insert("\033[1;91mInvalid index: '" + std::to_string(start) + "'.\033[1;0m");
