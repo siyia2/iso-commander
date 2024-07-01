@@ -386,7 +386,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
             }
         } else if (std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
             int num = std::stoi(tokenCount);
-            if (static_cast<std::vector<std::string>::size_type>(num) <= isoFiles.size()) {
+            if (num > 0 && static_cast<std::vector<std::string>::size_type>(num) <= isoFiles.size()) {
                 tokens.insert(tokenCount);
                 if (tokens.size() >= maxThreads) {
                     break;
@@ -543,4 +543,5 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     // Signal that processing is complete and wait for the progress thread to finish
     isProcessingComplete.store(true, std::memory_order_release);
     progressThread.join();
+    
 }
