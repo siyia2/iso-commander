@@ -19,17 +19,20 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::st
     // Vector to store futures
     std::vector<std::future<void>> futures;
 
-    // Process all ISO files asynchronously
-    for (size_t i = 0; i < isoFiles.size(); ++i) {
-        futures.push_back(pool.enqueue([i, &isoFiles, &mountedFiles, &skippedMessages, &mountedFails, &mountAllmutex, &completedIsos]() {
-            {
-                std::lock_guard<std::mutex> lock(mountAllmutex);
-                std::vector<std::string> isoFilesToMountLocal = { isoFiles[i] };
-                mountIsoFile(isoFilesToMountLocal, mountedFiles, skippedMessages, mountedFails);
-            }
-            ++completedIsos;
-        }));
-    }
+	// Process all ISO files asynchronously
+	for (size_t i = 0; i < isoFiles.size(); ++i) {
+		std::vector<std::string> isoFilesToMountLocal;
+    
+		{
+			std::lock_guard<std::mutex> lock(mountAllmutex);
+			isoFilesToMountLocal = { isoFiles[i] };
+		}
+    
+		futures.push_back(pool.enqueue([isoFilesToMountLocal, &mountedFiles, &skippedMessages, &mountedFails, &completedIsos]() {
+			mountIsoFile(isoFilesToMountLocal, mountedFiles, skippedMessages, mountedFails);
+			++completedIsos;
+		}));
+	}
 
     // Wait for all tasks to complete
     for (auto& future : futures) {
