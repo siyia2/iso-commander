@@ -18,11 +18,20 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::st
     
     // Process all ISO files asynchronously
     std::vector<std::future<void>> futures;
-    std::lock_guard<std::mutex> lock(futuresMutex);
     for (const auto& isoFile : isoFiles) {
-        futures.push_back(pool.enqueue([&isoFile, &mountedFiles, &skippedMessages, &mountedFails, &completedIsos]() {
-            mountIsoFile({isoFile}, mountedFiles, skippedMessages, mountedFails);
-            ++completedIsos;
+        futures.push_back(pool.enqueue([&isoFile, &mountedFiles, &skippedMessages, &mountedFails, &completedIsos, &futuresMutex]() {
+            try {
+                mountIsoFile({isoFile}, mountedFiles, skippedMessages, mountedFails);
+                {
+                    std::lock_guard<std::mutex> lock(futuresMutex);
+                    ++completedIsos;
+                }
+            } catch (const std::exception& e) {
+                // Handle exceptions if necessary
+                // For example: store exception messages
+                std::lock_guard<std::mutex> lock(futuresMutex);
+                skippedMessages.insert(isoFile + ": " + e.what());
+            }
         }));
     }
     
@@ -39,7 +48,6 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::st
         progressThread.join();
     }
 }
-
 
 // Function to select and mount ISO files by number
 void select_and_mount_files_by_number() {
@@ -148,16 +156,16 @@ void select_and_mount_files_by_number() {
 						printIsoFileList(filteredFiles); // Print the filtered list of ISO files
 					
 						// Prompt user for input again with the filtered list
-						char* input = readline("\n\n\001\033[1;92m\002Filtered ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., '1-3', '1 5', '00' for all), or ↵ to return:\001\033[0;1m\002 ");
+						char* inputFiltered = readline("\n\n\001\033[1;92m\002Filtered ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., '1-3', '1 5', '00' for all), or ↵ to return:\001\033[0;1m\002 ");
 					
 						// Check if the user wants to return
-						if (std::isspace(input[0]) || input[0] == '\0') {
-							free(input);
+						if (std::isspace(inputFiltered[0]) || inputFiltered[0] == '\0') {
+							free(inputFiltered);
 							historyPattern = false;
 							break;
 						}
 					
-						if (std::strcmp(input, "00") == 0) {
+						if (std::strcmp(inputFiltered, "00") == 0) {
 							clearScrollBuffer();
 							std::cout << "\033[1mPlease wait...\033[1m\n";
 							// Restore the original list of ISO files
@@ -166,13 +174,13 @@ void select_and_mount_files_by_number() {
 							mountAllIsoFiles(isoFiles, mountedFiles, skippedMessages, mountedFails);
 							clearScrollBuffer();
 							printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
-						} else if (input[0] != '\0' && (strcmp(input, "/") != 0)) { // Check if the user provided input
+						} else if (inputFiltered[0] != '\0' && (strcmp(inputFiltered, "/") != 0)) { // Check if the user provided input
 							clearScrollBuffer();
 							std::cout << "\033[1mPlease wait...\033[1m\n";
 
 							// Process the user input with the filtered list
-							processAndMountIsoFiles(input, filteredFiles, mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
-							free(input);
+							processAndMountIsoFiles(inputFiltered, filteredFiles, mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
+							free(inputFiltered);
 						
 							clearScrollBuffer();
 
