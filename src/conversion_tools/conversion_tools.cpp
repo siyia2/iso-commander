@@ -387,7 +387,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
             }
         } else if (std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
             int num = std::stoi(tokenCount);
-            if (static_cast<size_t>(num) <= fileList.size()) {
+            if (num > 0 && static_cast<size_t>(num) <= fileList.size()) {
                 tokens.insert(tokenCount);
                 if (tokens.size() >= maxThreads) break;
             }
