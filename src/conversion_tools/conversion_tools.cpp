@@ -442,11 +442,8 @@ void processInput(const std::string& input, const std::vector<std::string>& file
                             int selectedIndex = i - 1;
                             if (processedIndices.find(selectedIndex) == processedIndices.end()) {
                                 std::string selectedFile = fileList[selectedIndex];
-                                {
-                                    std::lock_guard<std::mutex> lock(futuresMutex);
                                     futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));
                                     processedIndices.insert(selectedIndex);
-                                }
                             }
                         }
                     } else {
@@ -461,18 +458,13 @@ void processInput(const std::string& input, const std::vector<std::string>& file
                 int selectedIndex = start - 1;
                 if (processedIndices.find(selectedIndex) == processedIndices.end()) {
                     std::string selectedFile = fileList[selectedIndex];
-                    {
-                        std::lock_guard<std::mutex> lock(futuresMutex);
                         futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));
                         processedIndices.insert(selectedIndex);
-                    }
                 }
             } else {
-                std::lock_guard<std::mutex> lock(errorsMutex);
                 processedErrors.insert("\033[1;91mInvalid index: '" + std::to_string(start) + "'.\033[1;0m");
             }
         } else {
-            std::lock_guard<std::mutex> lock(errorsMutex);
             processedErrors.insert("\033[1;91mInvalid input: '" + token + "'.\033[1;0m");
         }
     }
@@ -481,8 +473,6 @@ void processInput(const std::string& input, const std::vector<std::string>& file
         future.wait();
     }
 
-    {
-        std::lock_guard<std::mutex> lock(futuresMutex);
         concatenatedFilePaths.clear();
         for (const auto& path : selectedFilePaths) {
             concatenatedFilePaths += path + ";";
@@ -490,7 +480,6 @@ void processInput(const std::string& input, const std::vector<std::string>& file
         if (!concatenatedFilePaths.empty()) {
             concatenatedFilePaths.pop_back();
         }
-    }
 
     promptFlag = false;
     if (!processedIndices.empty()) {
