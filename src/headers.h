@@ -29,6 +29,7 @@
 #include <sys/mount.h>
 #include <thread>
 #include <vector>
+#include <sys/file.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
