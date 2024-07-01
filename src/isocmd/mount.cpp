@@ -1,12 +1,12 @@
 #include "../headers.h"
 #include "../threadpool.h"
 
-
 //	MOUNT STUFF
 
 // Function to mount all ISOs indiscriminately
 void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
     std::atomic<int> completedIsos(0);
+    std::mutex futuresMutex;
     std::atomic<bool> isComplete(false);
     unsigned int numThreads = std::min(static_cast<unsigned int>(isoFiles.size()), static_cast<unsigned int>(maxThreads));
     ThreadPool pool(numThreads);
@@ -18,6 +18,7 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::st
     
     // Process all ISO files asynchronously
     std::vector<std::future<void>> futures;
+    std::lock_guard<std::mutex> lock(futuresMutex);
     for (const auto& isoFile : isoFiles) {
         futures.push_back(pool.enqueue([&isoFile, &mountedFiles, &skippedMessages, &mountedFails, &completedIsos]() {
             mountIsoFile({isoFile}, mountedFiles, skippedMessages, mountedFails);
@@ -163,6 +164,8 @@ void select_and_mount_files_by_number() {
 							isoFiles = filteredFiles;
 							verboseFiltered = false;
 							mountAllIsoFiles(isoFiles, mountedFiles, skippedMessages, mountedFails);
+							clearScrollBuffer();
+							printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
 						} else if (input[0] != '\0' && (strcmp(input, "/") != 0)) { // Check if the user provided input
 							clearScrollBuffer();
 							std::cout << "\033[1mPlease wait...\033[1m\n";
@@ -191,6 +194,8 @@ void select_and_mount_files_by_number() {
         // Check if the user wants to mount all ISO files
 		if (std::strcmp(input, "00") == 0) {
 			mountAllIsoFiles(isoFiles, mountedFiles, skippedMessages, mountedFails);
+			clearScrollBuffer();
+			printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
 		} else if (input[0] != '\0' && (strcmp(input, "/") != 0) && !verboseFiltered) {
             // Process user input to select and mount specific ISO files
             processAndMountIsoFiles(input, isoFiles, mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
