@@ -450,32 +450,36 @@ void processInput(const std::string& input, const std::vector<std::string>& file
                         int step = (start <= end) ? 1 : -1;
                         for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
                             int selectedIndex = i - 1;
-                            {	
-								std::lock_guard<std::mutex> lock(futuresMutex);
 								if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-									std::string selectedFile = fileList[selectedIndex];
-									futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));
+									{
+										std::lock_guard<std::mutex> lock(futuresMutex);
+										std::string selectedFile = fileList[selectedIndex];
+										futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));
                                     
                                     processedIndices.insert(selectedIndex);
                                 }
                             }
                         }
                     } else {
-                        processedErrors.insert("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'.\033[1;0m");
+						if (start < 0) {
+							processedErrors.insert("\033[1;91mInvalid input: '" + std::to_string(start) + "-" + std::to_string(end) + "'.\033[1;0m");
+						} else {
+							processedErrors.insert("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'.\033[1;0m");
+						}
                     }
                 } else {
                     processedErrors.insert("\033[1;91mInvalid range: '" + token + "'.\033[1;0m");
                 }
             } else if (start >= 1 && static_cast<size_t>(start) <= fileList.size()) {
                 int selectedIndex = start - 1;
-                {
-					std::lock_guard<std::mutex> lock(futuresMutex);
 					if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-						std::string selectedFile = fileList[selectedIndex];
-						futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));   
+						{
+							std::lock_guard<std::mutex> lock(futuresMutex);
+							std::string selectedFile = fileList[selectedIndex];
+							futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));   
                         
-                        processedIndices.insert(selectedIndex);
-                    }
+							processedIndices.insert(selectedIndex);
+						}
                 }
             } else {
                 processedErrors.insert("\033[1;91mInvalid index: '" + std::to_string(start) + "'.\033[1;0m");
