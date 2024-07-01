@@ -375,7 +375,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
 			verboseConversion(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, elapsed_time_str);
 	
-			std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
+			std::cout << "\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
 			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 		}
 	}
@@ -394,39 +394,45 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     std::string tokenCount;
     
     while (issCount >> tokenCount && tokens.size() < maxThreads) {
-        if (tokenCount[0] == '-') continue;
-
-        size_t dashPos = tokenCount.find('-');
-        if (dashPos != std::string::npos) {
-            std::string start = tokenCount.substr(0, dashPos);
-            std::string end = tokenCount.substr(dashPos + 1);
-            if (std::all_of(start.begin(), start.end(), ::isdigit) && 
-                std::all_of(end.begin(), end.end(), ::isdigit)) {
-                int startNum = std::stoi(start);
-                int endNum = std::stoi(end);
-                if (static_cast<std::vector<std::string>::size_type>(startNum) <= fileList.size() && 
-                    static_cast<std::vector<std::string>::size_type>(endNum) <= fileList.size()) {
-                    int step = (startNum <= endNum) ? 1 : -1;
-                    for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
-                        if (i != 0) {
-							tokens.insert(std::to_string(i));
-						}
-                        if (tokens.size() >= maxThreads) {
-                            break;
-                        }
+    if (tokenCount[0] == '-') continue;
+    
+    // Count the number of hyphens
+    size_t hyphenCount = std::count(tokenCount.begin(), tokenCount.end(), '-');
+    
+    // Skip if there's more than one hyphen
+    if (hyphenCount > 1) continue;
+    
+    size_t dashPos = tokenCount.find('-');
+    if (dashPos != std::string::npos) {
+        std::string start = tokenCount.substr(0, dashPos);
+        std::string end = tokenCount.substr(dashPos + 1);
+        if (std::all_of(start.begin(), start.end(), ::isdigit) && 
+            std::all_of(end.begin(), end.end(), ::isdigit)) {
+            int startNum = std::stoi(start);
+            int endNum = std::stoi(end);
+            if (static_cast<std::vector<std::string>::size_type>(startNum) <= fileList.size() && 
+                static_cast<std::vector<std::string>::size_type>(endNum) <= fileList.size()) {
+                int step = (startNum <= endNum) ? 1 : -1;
+                for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
+                    if (i != 0) {
+                        tokens.insert(std::to_string(i));
+                    }
+                    if (tokens.size() >= maxThreads) {
+                        break;
                     }
                 }
             }
-        } else if (std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
-            int num = std::stoi(tokenCount);
-            if (num > 0 && static_cast<std::vector<std::string>::size_type>(num) <= fileList.size()) {
-                tokens.insert(tokenCount);
-                if (tokens.size() >= maxThreads) {
-                    break;
-                }
-            }
         }
-    }
+    } else if (std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
+			int num = std::stoi(tokenCount);
+			if (num > 0 && static_cast<std::vector<std::string>::size_type>(num) <= fileList.size()) {
+				tokens.insert(tokenCount);
+				if (tokens.size() >= maxThreads) {
+					break;
+				}
+			}
+		}
+	}
 
     unsigned int numThreads = std::min(static_cast<int>(tokens.size()), static_cast<int>(maxThreads));
     ThreadPool pool(numThreads);
