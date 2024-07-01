@@ -631,8 +631,10 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         << isoDirectory << "/" << isoFilename << "'\033[0;1m";
                 }
                 std::string operationInfo = oss.str();
-                
+                {
+					std::lock_guard<std::mutex> lowLock(Mutex4Low);
                     operationIsos.insert(operationInfo);
+				}
 
                 // Change ownership of the copied/moved file
                 if (!isDelete) {
@@ -653,7 +655,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         << isoDir << "/" << isoFilename << "'\033[0;1m";
                 }
                 errorMessageInfo = oss.str();
-                {
+                {	std::lock_guard<std::mutex> lowLock(Mutex4Low);
                     operationErrors.insert(errorMessageInfo);
                 }
             }
@@ -675,12 +677,16 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
             } else {
 				// Print message if file not found
 				errorMessageInfo = "\033[1;35mFile not found: \033[0;1m'" + isoDirectory + "/" + isoFilename + "'\033[1;95m.\033[0;1m";
-				operationErrors.insert(errorMessageInfo);
+				{	std::lock_guard<std::mutex> lowLock(Mutex4Low);
+					operationErrors.insert(errorMessageInfo);
+				}
 			}
         } else {
 			// Print message if file not found in cache
 			errorMessageInfo = "\033[1;93mFile not found in cache: \033[0;1m'" + isoDirectory + "/" + isoFilename + "'\033[1;93m.\033[0;1m";
-			operationErrors.insert(errorMessageInfo);
+			{	std::lock_guard<std::mutex> lowLock(Mutex4Low);
+				operationErrors.insert(errorMessageInfo);
+			}
 		}
     }
 
