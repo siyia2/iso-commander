@@ -14,7 +14,8 @@ int maxDepth = -1;
 // Function to remove non-existent paths from cache
 void removeNonExistentPathsFromCache() {
     const std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/iso_commander_cache.txt";
-
+	
+	std::mutex pathCheckMutex;
     // Open the cache file for reading
     int fd = open(cacheFilePath.c_str(), O_RDONLY);
     if (fd == -1) {
@@ -75,9 +76,10 @@ void removeNonExistentPathsFromCache() {
     for (size_t i = 0; i < cache.size(); i += batchSize) {
         auto begin = cache.begin() + i;
         auto end = std::min(begin + batchSize, cache.end());
-        futures.push_back(std::async(std::launch::async, [begin, end]() {
+            futures.push_back(std::async(std::launch::async, [begin, end, &pathCheckMutex]() {
             std::vector<std::string> result;
             for (auto it = begin; it != end; ++it) {
+				std::lock_guard<std::mutex> lock(pathCheckMutex);
                 if (std::filesystem::exists(*it)) {
                     result.push_back(*it);
                 }
