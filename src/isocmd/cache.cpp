@@ -5,7 +5,7 @@
 // Cache Variables
 
 const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.cache"; // Construct the full path to the cache directory
-const std::string cacheFileName = "iso_commander_cache.txt";;
+const std::string cacheFileName = "iso_commander_cache.txt";
 const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
 int maxDepth = -1;
@@ -203,7 +203,6 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
 
     // Check if cache directory exists
     if (!std::filesystem::exists(cacheDirectory) || !std::filesystem::is_directory(cacheDirectory)) {
-        std::cerr << "\033[1;91mInvalid cache directory.\033[0;1m\n";
         return false;  // Cache save failed
     }
 
@@ -234,12 +233,10 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
             cacheFile.close();
             return true;  // Cache save successful
         } else {
-            std::cerr << "\033[1;91mFailed to write to cache file.\033[0;1m\n";
             cacheFile.close();
             return false;  // Cache save failed
         }
     } else {
-        std::cerr << "\033[1;91mFailed to open ISO cache file: \033[1;93m'" << cachePath.string() << "'\033[1;91m. Check read/write permissions.\033[0;1m\n";
         return false;  // Cache save failed
     }
 }
