@@ -19,13 +19,11 @@ void removeNonExistentPathsFromCache() {
     // Open the cache file for reading
     int fd = open(cacheFilePath.c_str(), O_RDONLY);
     if (fd == -1) {
-        perror("Failed to open cache file");
         return;
     }
 
     // Lock the file to prevent concurrent access
     if (flock(fd, LOCK_EX) == -1) {
-        perror("Failed to lock cache file");
         close(fd);
         return;
     }
@@ -33,7 +31,6 @@ void removeNonExistentPathsFromCache() {
     // Get the file size
     struct stat sb;
     if (fstat(fd, &sb) == -1) {
-        perror("Failed to get file size");
         flock(fd, LOCK_UN);
         close(fd);
         return;
@@ -44,7 +41,6 @@ void removeNonExistentPathsFromCache() {
     // Memory map the file
     char* mappedFile = static_cast<char*>(mmap(nullptr, fileSize, PROT_READ, MAP_PRIVATE, fd, 0));
     if (mappedFile == MAP_FAILED) {
-        perror("Failed to map cache file");
         flock(fd, LOCK_UN);
         close(fd);
         return;
@@ -98,13 +94,11 @@ void removeNonExistentPathsFromCache() {
     // Open the cache file for writing
     fd = open(cacheFilePath.c_str(), O_WRONLY);
     if (fd == -1) {
-        perror("Failed to open cache file for writing");
         return;
     }
 
     // Lock the file to prevent concurrent access
     if (flock(fd, LOCK_EX) == -1) {
-        perror("Failed to lock cache file for writing");
         close(fd);
         return;
     }
@@ -112,7 +106,6 @@ void removeNonExistentPathsFromCache() {
     // Write the retained paths to the updated cache file
     std::ofstream updatedCacheFile(cacheFilePath, std::ios::out | std::ios::trunc);
     if (!updatedCacheFile.is_open()) {
-        perror("Failed to open cache file for writing");
         flock(fd, LOCK_UN);
         close(fd);
         return;
