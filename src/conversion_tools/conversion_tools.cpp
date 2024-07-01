@@ -456,7 +456,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 										std::string selectedFile = fileList[selectedIndex];
 										futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));
                                     
-                                    processedIndices.insert(selectedIndex);
+										processedIndices.insert(selectedIndex);
                                 }
                             }
                         }
