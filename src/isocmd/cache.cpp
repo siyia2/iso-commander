@@ -71,7 +71,7 @@ void removeNonExistentPathsFromCache() {
     for (size_t i = 0; i < cache.size(); i += batchSize) {
         auto begin = cache.begin() + i;
         auto end = std::min(begin + batchSize, cache.end());
-            futures.push_back(std::async(std::launch::async, [begin, end, &pathCheckMutex]() {
+            futures.push_back(std::async(std::launch::async, [begin, end]() {
             std::vector<std::string> result;
             for (auto it = begin; it != end; ++it) {
                 if (std::filesystem::exists(*it)) {
