@@ -11,38 +11,45 @@ const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 int maxDepth = -1;
 
 
-// Function to remove non-existent paths from cache asynchronously with basic thread control
+// Function to remove non-existent paths from cache
 void removeNonExistentPathsFromCache() {
-    // Define the path to the cache file
     const std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/iso_commander_cache.txt";
 
     // Open the cache file for reading
-    std::ifstream cacheFile(cacheFilePath, std::ios::in | std::ios::binary);
-    if (!cacheFile.is_open()) {
-        // Handle error if unable to open cache file
-        return;
-    }
-
-    // Get the file size
-    const auto fileSize = cacheFile.seekg(0, std::ios::end).tellg();
-    cacheFile.seekg(0, std::ios::beg);
-
-    // Open the file for memory mapping
     int fd = open(cacheFilePath.c_str(), O_RDONLY);
     if (fd == -1) {
-        // Handle error if unable to open the file
+        perror("Failed to open cache file");
         return;
     }
 
-    // Memory map the file
-    char* mappedFile = static_cast<char*>(mmap(nullptr, fileSize, PROT_READ, MAP_PRIVATE, fd, 0));
-    if (mappedFile == MAP_FAILED) {
-        // Handle error if unable to map the file
+    // Lock the file to prevent concurrent access
+    if (flock(fd, LOCK_EX) == -1) {
+        perror("Failed to lock cache file");
         close(fd);
         return;
     }
 
-    // Process the memory-mapped file
+    // Get the file size
+    struct stat sb;
+    if (fstat(fd, &sb) == -1) {
+        perror("Failed to get file size");
+        flock(fd, LOCK_UN);
+        close(fd);
+        return;
+    }
+
+    size_t fileSize = sb.st_size;
+
+    // Memory map the file
+    char* mappedFile = static_cast<char*>(mmap(nullptr, fileSize, PROT_READ, MAP_PRIVATE, fd, 0));
+    if (mappedFile == MAP_FAILED) {
+        perror("Failed to map cache file");
+        flock(fd, LOCK_UN);
+        close(fd);
+        return;
+    }
+
+    // Read the file into a vector of strings
     std::vector<std::string> cache;
     char* start = mappedFile;
     char* end = mappedFile + fileSize;
@@ -52,18 +59,19 @@ void removeNonExistentPathsFromCache() {
         start = lineEnd + 1;
     }
 
-    // Unmap the file
+    // Unmap and close the file
     munmap(mappedFile, fileSize);
+    flock(fd, LOCK_UN);
     close(fd);
 
-    // Calculate dynamic batch size based on the number of available processor cores
-    const size_t batchSize = std::max(cache.size() / maxThreads + 1, static_cast<std::size_t>(2));
+    // Determine batch size
+    const size_t maxThreads = std::thread::hardware_concurrency();
+    const size_t batchSize = std::max(cache.size() / maxThreads + 1, static_cast<size_t>(2));
 
-    // Create a vector to hold futures for asynchronous tasks
+    // Create a vector to hold futures
     std::vector<std::future<std::vector<std::string>>> futures;
-    futures.reserve(cache.size() / batchSize + 1); // Reserve memory for futures
 
-    // Process paths in dynamic batches
+    // Process paths in batches
     for (size_t i = 0; i < cache.size(); i += batchSize) {
         auto begin = cache.begin() + i;
         auto end = std::min(begin + batchSize, cache.end());
@@ -78,27 +86,43 @@ void removeNonExistentPathsFromCache() {
         }));
     }
 
-    // Wait for all asynchronous tasks to complete and collect the results
+    // Collect results
     std::vector<std::string> retainedPaths;
-    retainedPaths.reserve(cache.size()); // Reserve memory for retained paths
     for (auto& future : futures) {
         auto result = future.get();
         retainedPaths.insert(retainedPaths.end(), std::make_move_iterator(result.begin()), std::make_move_iterator(result.end()));
     }
 
     // Open the cache file for writing
-    std::ofstream updatedCacheFile(cacheFilePath);
-    if (!updatedCacheFile.is_open()) {
-        // Handle error if unable to open cache file for writing
+    fd = open(cacheFilePath.c_str(), O_WRONLY);
+    if (fd == -1) {
+        perror("Failed to open cache file for writing");
+        return;
+    }
+
+    // Lock the file to prevent concurrent access
+    if (flock(fd, LOCK_EX) == -1) {
+        perror("Failed to lock cache file for writing");
+        close(fd);
         return;
     }
 
     // Write the retained paths to the updated cache file
+    std::ofstream updatedCacheFile(cacheFilePath, std::ios::out | std::ios::trunc);
+    if (!updatedCacheFile.is_open()) {
+        perror("Failed to open cache file for writing");
+        flock(fd, LOCK_UN);
+        close(fd);
+        return;
+    }
+
     for (const std::string& path : retainedPaths) {
         updatedCacheFile << path << '\n';
     }
 
-    // RAII: Close the updated cache file automatically when it goes out of scope
+    // RAII: Close the file and release the lock
+    flock(fd, LOCK_UN);
+    close(fd);
 }
 
 
