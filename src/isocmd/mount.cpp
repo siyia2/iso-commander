@@ -474,7 +474,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
             break;
         }
 
-        if (token != "00" && isAllZeros(token)) {
+        if (isAllZeros(token)) {
             addError("\033[1;91mInvalid index: '0'.\033[0;1m");
             continue;
         }
@@ -553,10 +553,9 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
             errorQueue.pop();
         }
     }
-
+	if ( !processedIndices.empty()){
     // Set the total number of tasks value
     int totalTasksValue = totalTasks.load();
-
     // Start the progress bar in a separate thread
     std::thread progressThread(displayProgressBar, std::ref(completedTasks), std::cref(totalTasksValue), std::ref(isProcessingComplete));
 
@@ -569,4 +568,5 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     // Signal that processing is complete and wait for the progress thread to finish
     isProcessingComplete.store(true, std::memory_order_release);
     progressThread.join();
+	}
 }
