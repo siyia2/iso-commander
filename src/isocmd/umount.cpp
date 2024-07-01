@@ -87,7 +87,10 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
             std::stringstream errorMessage;
             errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDirectory << "/" << isoFilename 
                          << "'\033[1;91m. Root privileges are required.\033[0m";
-            unmountedErrors.insert(errorMessage.str());
+            {
+				std::lock_guard<std::mutex> lowLock(Mutex4Low);
+				unmountedErrors.insert(errorMessage.str());
+			}
         }
         return;
     }
@@ -108,7 +111,10 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
             if (!isDirectoryEmpty(isoDir)) {
                 errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;91m. Probably not an ISO mountpoint.\033[0m";
                 if (unmountedErrors.find(errorMessage.str()) == unmountedErrors.end()) {
-                    unmountedErrors.insert(errorMessage.str());
+					{
+						std::lock_guard<std::mutex> lowLock(Mutex4Low);
+						unmountedErrors.insert(errorMessage.str());
+					}
                 }
             }
         }
@@ -132,17 +138,23 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
         }
 
         if (removeDirResult == 0) {
-            for (const auto& dir : directoriesToRemove) {
+            for (const auto& dir : directoriesToRemove) {	
                 auto [directory, filename] = extractDirectoryAndFilename(dir);
                 std::string removedDirInfo = "\033[1mUnmounted: \033[1;92m'" + directory + "/" + filename + "'\033[0m.";
-                unmountedFiles.insert(removedDirInfo);
+                {
+					std::lock_guard<std::mutex> lowLock(Mutex4Low);
+					unmountedFiles.insert(removedDirInfo);
+				}
             }
         } else {
             for (const auto& isoDir : directoriesToRemove) {
                 std::stringstream errorMessage;
                 errorMessage << "\033[1;91mFailed to remove directory: \033[1;93m'" << isoDir << "'\033[1;91m.\033[0m";
                 if (unmountedErrors.find(errorMessage.str()) == unmountedErrors.end()) {
-                    unmountedErrors.insert(errorMessage.str());
+					{
+						std::lock_guard<std::mutex> lowLock(Mutex4Low);
+						unmountedErrors.insert(errorMessage.str());
+					}
                 }
             }
         }
