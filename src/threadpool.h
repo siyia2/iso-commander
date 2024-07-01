@@ -104,24 +104,21 @@ public:
 
     // Dequeue an item from the queue
     bool dequeue(T& result) {
-    while (true) {
-        Node* oldHead = head.ptr.load(std::memory_order_acquire);
-		Node* next = oldHead->next.load(std::memory_order_acquire);
-		if (next == nullptr) {
-			return false;
-		}
-		if (head.ptr.compare_exchange_weak(oldHead, next,
-                                           std::memory_order_release,
-                                           std::memory_order_relaxed)) {
-				result = std::move(next->data);
-				// Ensure oldHead is not deallocated if it's reused in 'next'
-				if (oldHead != next) {
-					deallocate_node(oldHead);
-				}
-				return true;
-			}
-		}
-	}
+        while (true) {
+            Node* oldHead = head.ptr.load(std::memory_order_acquire);
+            Node* next = oldHead->next.load(std::memory_order_acquire);
+            if (next == nullptr) {
+                return false;
+            }
+            if (head.ptr.compare_exchange_weak(oldHead, next,
+                                               std::memory_order_release,
+                                               std::memory_order_relaxed)) {
+                result = std::move(next->data);
+                deallocate_node(oldHead);
+                return true;
+            }
+        }
+    }
 
     // Check if the queue is empty
     bool isEmpty() const {
