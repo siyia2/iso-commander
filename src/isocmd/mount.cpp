@@ -465,7 +465,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
         }
 
         if (token != "00" && isAllZeros(token)) {
-            addError("\033[1;91mInvalid index '0'.\033[0;1m");
+            addError("\033[1;91mInvalid index: '0'.\033[0;1m");
             continue;
         }
 
@@ -528,7 +528,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                     pool.enqueue([&, num]() { processTask(num); });
                 }
             } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
-                addError("\033[1;91mInvalid index '" + std::to_string(num) + "'.\033[0;1m");
+                addError("\033[1;91mInvalid index: '" + std::to_string(num) + "'.\033[0;1m");
             }
         } else {
             addError("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
