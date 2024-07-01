@@ -380,7 +380,9 @@ void processInput(const std::string& input, const std::vector<std::string>& file
                 if (static_cast<size_t>(startNum) <= fileList.size() && static_cast<size_t>(endNum) <= fileList.size()) {
                     int step = (startNum <= endNum) ? 1 : -1;
                     for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
-                        tokens.insert(std::to_string(i));
+						if (i != 0) {
+							tokens.insert(std::to_string(i));
+						}
                         if (tokens.size() >= maxThreads) break;
                     }
                 }
