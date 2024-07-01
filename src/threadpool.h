@@ -49,7 +49,7 @@ private:
 		auto pool_begin = &node_pool[0];
 		auto pool_end = pool_begin + pool_size;
 		if (node >= pool_begin && node < pool_end) {
-			node->~Node(); // Call the destructor explicitly
+			node->~Node(); // Call the destructor explicitly, but don't free memory
 		} else {
 			delete node; // If not in pool, delete normally
 		}
@@ -71,13 +71,17 @@ public:
 
     // Destructor cleans up all nodes in the queue
     ~LockFreeQueue() {
-        Node* current = head.ptr.load(std::memory_order_acquire);
-        while (current != nullptr) {
-            Node* next = current->next.load(std::memory_order_relaxed);
-            deallocate_node(current);
-            current = next;
-        }
+    Node* current = head.ptr.load(std::memory_order_acquire);
+    while (current != nullptr) {
+        Node* next = current->next.load(std::memory_order_relaxed);
+        deallocate_node(current);
+        current = next;
     }
+    // Explicitly destroy all nodes in the pool
+    for (size_t i = 0; i < pool_size; ++i) {
+        node_pool[i].~Node();
+		}
+	}
 
     // Enqueue an item into the queue
     void enqueue(T value) {
