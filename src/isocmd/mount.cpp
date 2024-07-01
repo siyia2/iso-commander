@@ -6,42 +6,37 @@
 
 // Function to mount all ISOs indiscriminately
 void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
-    std::mutex mountAllmutex;
+    std::atomic<int> completedIsos(0);
+    std::atomic<bool> isComplete(false);
     unsigned int numThreads = std::min(static_cast<unsigned int>(isoFiles.size()), static_cast<unsigned int>(maxThreads));
     ThreadPool pool(numThreads);
-    std::atomic<int> completedIsos(0);
+    
     int totalIsos = static_cast<int>(isoFiles.size());
-    std::atomic<bool> isComplete(false);
-
+    
     // Create progress thread
     std::thread progressThread(displayProgressBar, std::ref(completedIsos), std::cref(totalIsos), std::ref(isComplete));
-
-    // Vector to store futures
+    
+    // Process all ISO files asynchronously
     std::vector<std::future<void>> futures;
-
-	// Process all ISO files asynchronously
-	for (size_t i = 0; i < isoFiles.size(); ++i) {
-		std::vector<std::string> isoFilesToMountLocal;
+    for (const auto& isoFile : isoFiles) {
+        futures.push_back(pool.enqueue([&isoFile, &mountedFiles, &skippedMessages, &mountedFails, &completedIsos]() {
+            mountIsoFile({isoFile}, mountedFiles, skippedMessages, mountedFails);
+            ++completedIsos;
+        }));
+    }
     
-		{
-			std::lock_guard<std::mutex> lock(mountAllmutex);
-			isoFilesToMountLocal = { isoFiles[i] };
-		}
-    
-		futures.push_back(pool.enqueue([isoFilesToMountLocal, &mountedFiles, &skippedMessages, &mountedFails, &completedIsos]() {
-			mountIsoFile(isoFilesToMountLocal, mountedFiles, skippedMessages, mountedFails);
-			++completedIsos;
-		}));
-	}
-
     // Wait for all tasks to complete
     for (auto& future : futures) {
         future.wait();
     }
-
-    // Signal completion and wait for progress thread to finish
-    isComplete = true;
-    progressThread.join();
+    
+    // Signal completion
+    isComplete.store(true);
+    
+    // Wait for progress thread to finish
+    if (progressThread.joinable()) {
+        progressThread.join();
+    }
 }
 
 
@@ -168,10 +163,7 @@ void select_and_mount_files_by_number() {
 							isoFiles = filteredFiles;
 							verboseFiltered = false;
 							mountAllIsoFiles(isoFiles, mountedFiles, skippedMessages, mountedFails);
-						}
-
-						// Check if the user provided input
-						if (input[0] != '\0' && (strcmp(input, "/") != 0)) {
+						} else if (input[0] != '\0' && (strcmp(input, "/") != 0)) { // Check if the user provided input
 							clearScrollBuffer();
 							std::cout << "\033[1mPlease wait...\033[1m\n";
 
@@ -199,8 +191,7 @@ void select_and_mount_files_by_number() {
         // Check if the user wants to mount all ISO files
 		if (std::strcmp(input, "00") == 0) {
 			mountAllIsoFiles(isoFiles, mountedFiles, skippedMessages, mountedFails);
-		}
-        if (input[0] != '\0' && (strcmp(input, "/") != 0) && !verboseFiltered) {
+		} else if (input[0] != '\0' && (strcmp(input, "/") != 0) && !verboseFiltered) {
             // Process user input to select and mount specific ISO files
             processAndMountIsoFiles(input, isoFiles, mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
             clearScrollBuffer();
