@@ -38,6 +38,7 @@ void verboseConversion(std::set<std::string>& processedErrors, std::set<std::str
     // Clear all sets after printing
     successOuts.clear();   // Clear the set of success messages
     skippedOuts.clear();   // Clear the set of skipped messages
+    failedOuts.clear();
     deletedOuts.clear();   // Clear the set of deleted messages
     processedErrors.clear(); // Clear the set of error messages
 }
