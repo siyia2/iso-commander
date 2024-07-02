@@ -349,7 +349,7 @@ void displayProgressBar(const std::atomic<int>& completed, const int& total, std
         if (completedValue == total && !enterPressed) {
 			enterPressed = true;
             std::string confirmation;
-            std::cout << "\n\n\033[1;92mTask(s) completed!!! Display verbose output? (y/n):\033[0;1m ";
+            std::cout << "\n\n\033[1;92mDisplay verbose output? (y/n):\033[0;1m ";
             std::getline(std::cin, confirmation);
             if ((confirmation == "y" || confirmation == "Y")) {
 				verbose = true;
