@@ -77,6 +77,9 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 bool iequals(const std::string_view& a, const std::string_view& b);
 bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize);
 
+// Mount functions
+bool isAlreadyMounted(const std::string& mountPoint);
+
 // Unmount functions
 bool isDirectoryEmpty(const std::string& path);
 
