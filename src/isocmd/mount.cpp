@@ -318,7 +318,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
     }
     
     // Create a unique identifier using the filename and the short hash
-    std::string uniqueId = isoFileName + "_" + shortHash;
+    std::string uniqueId = "\033[1;94m" + shortHash + "_\033[1;95m" + isoFileName;
     
     std::string mountPoint = "/mnt/iso_" + uniqueId;
 

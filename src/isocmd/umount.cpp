@@ -43,7 +43,7 @@ void listMountedISOs() {
     for (size_t i = 0; i < isoDirs.size(); ++i) {
         const char* sequenceColor = (i % 2 == 0) ? "\033[31;1m" : "\033[32;1m";
         output << sequenceColor << std::setw(numDigits) << (i + 1) << ". "
-               << "\033[0;1m/mnt/iso_\033[1m\033[95m" << isoDirs[i] << "\033[0;1m\n";
+               << "\033[1;94m/mnt/iso_" << isoDirs[i] << "\033[0;1m\n";
     }
 
     std::cout << output.str();
