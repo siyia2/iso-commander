@@ -538,13 +538,10 @@ void unmountISOs() {
 				
 
             // Prompt the user to press Enter to continue
-            if (!skipEnter) {
-				if (verbose) {
-					std::cout << "\n";
-				
-					std::cout << "\n\033[1;32m↵ to continue...";
-					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-				}
+            if (!skipEnter && verbose) {
+				std::cout << "\n\n\033[1;32m↵ to continue...";
+				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
             }
             clearScrollBuffer();
             skipEnter = false;
