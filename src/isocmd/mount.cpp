@@ -363,13 +363,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
             auto moduleIt = fsTypeToModule.find(fsType);
             if (moduleIt != fsTypeToModule.end()) {
                 if (!loadKernelModule(moduleIt->second)) {
-					std::stringstream errorMessage;
-                    errorMessage << "Warning: Failed to load kernel module: " << moduleIt->second << " for filesystem: " << fsType;
-                    {
-						std::lock_guard<std::mutex> lowLock(Mutex4Low);
-						mountedFails.insert(errorMessage.str());
-					}
-                    
+                    std::cerr << "Warning: Failed to load kernel module: " << moduleIt->second << " for filesystem: " << fsType << std::endl;
                 }
             }
 
