@@ -394,7 +394,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
                 // Successfully mounted
                 std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m"
                                               + "\033[1m mounted at: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename 
-                                              + "'\033[0;1m | " + fsType + ".\033[0m";
+                                              + "'\033[0;1m. {" + fsType + "}\033[0m";
                 {
                     std::lock_guard<std::mutex> lowLock(Mutex4Low);
                     mountedFiles.insert(mountedFileInfo);
@@ -412,7 +412,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
             // Mount failure after trying all filesystem types
             std::stringstream errorMessage;
             errorMessage << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename 
-                         << "'\033[0;1m | badFS.";
+                         << "'.\033[0;1m {badFS}";
             fs::remove(mountPoint);
             {
                 std::lock_guard<std::mutex> lowLock(Mutex4Low);
