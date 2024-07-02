@@ -277,7 +277,7 @@ bool isAlreadyMounted(const std::string& mountPoint) {
 }
 
 
-// Function to load appropriate kernel modules for mount
+// Function to load appropriate kernel modules for mountIsoFile
 bool loadKernelModule(const std::string& moduleName) {
     std::string escapedModuleName = shell_escape(moduleName);
     std::string command = "modprobe " + escapedModuleName + " 2>/dev/null";
