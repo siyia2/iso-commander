@@ -31,6 +31,9 @@ void verboseConversion(std::set<std::string>& processedErrors, std::set<std::str
     printWithNewline(deletedOuts);   // Print deleted messages
     printWithNewline(processedErrors); // Print error messages
     
+    std::cout << "\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
+	std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    
     // Clear all sets after printing
     successOuts.clear();   // Clear the set of success messages
     skippedOuts.clear();   // Clear the set of skipped messages
@@ -229,6 +232,11 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
     // Main loop for file selection and conversion
     while (!noValid && !clr) {
+		successOuts.clear();   // Clear the set of success messages
+		skippedOuts.clear();   // Clear the set of skipped messages
+		failedOuts.clear();		// Clear the set of failed messages
+		deletedOuts.clear();   // Clear the set of deleted messages
+		processedErrors.clear(); // Clear the set of error messages
         // Display file list and prompt user for input
         clearScrollBuffer();
         std::cout << "\033[92;1m// SUCCESSFUL CONVERSIONS ARE AUTOMATICALLY IMPORTED INTO ISO CACHE //\033[0;1m\033[0;1m\n\n";
@@ -331,8 +339,12 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 							std::cout << "\n"; // Print newline
 							if (verbose) {
 								verboseConversion(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts);
-
-								std::cout << "\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
+							}
+							if (!processedErrors.empty() && successOuts.empty() && skippedOuts.empty() && failedOuts.empty() && deletedOuts.empty()){
+								clearScrollBuffer();
+								processedErrors.clear();
+								std::cout << "\n\033[1;91mNo valid input provided for conversion.\033[0;1m";
+								std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
 								std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 							}
 						}
@@ -351,7 +363,12 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 			if (verbose) {
 				verboseConversion(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts);
 	
-				std::cout << "\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
+			}
+			if (!processedErrors.empty() && successOuts.empty() && skippedOuts.empty() && failedOuts.empty() && deletedOuts.empty()){
+				clearScrollBuffer();
+				processedErrors.clear();
+				std::cout << "\n\033[1;91mNo valid input provided for conversion.\033[0;1m";
+				std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
 				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 			}
 		}
@@ -514,16 +531,11 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 
     // Join the progress bar thread
     progressThread.join();
-} else {
-    // No need to display progress bar or wait for futures
-    isComplete = true;
-}
-    if (processedIndices.empty()){
-		clearScrollBuffer();
-		std::cout << "\n\033[1;91mNo valid input provided for conversion.\033[0;1m";
-		std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
-		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+	} else {
+		// No need to display progress bar or wait for futures
+		isComplete = true;
 	}
+    
     concatenatedFilePaths.clear();
     for (const auto& path : selectedFilePaths) {
 		concatenatedFilePaths += path + ";";
