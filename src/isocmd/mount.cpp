@@ -274,6 +274,7 @@ bool isAlreadyMounted(const std::string& mountPoint) {
 }
 
 
+// Function to mount selected ISO files called from processAndMountIsoFiles
 void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
     namespace fs = std::filesystem;
     
@@ -339,24 +340,11 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
             continue;
         }
         
-        struct libmnt_fs* fs = mnt_new_fs();
-        if (!fs) {
-            std::stringstream errorMessage;
-            errorMessage << "\033[1;91mFailed to create new filesystem for: \033[1;93m'" 
-                         << isoDirectory << "/" << isoFilename << "'\033[0;1m\033[1;91m.\033[0;1m";
-            {
-                std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                mountedFails.insert(errorMessage.str());
-            }
-            mnt_free_context(cxt);
-            continue;
-        }
-        
-        mnt_fs_set_source(fs, isoFile.c_str());
-        mnt_fs_set_target(fs, mountPoint.c_str());
-        mnt_fs_set_fstype(fs, "iso9660");
-        mnt_fs_set_options(fs, "loop");
-        mnt_context_set_fs(cxt, fs);
+        // Set mount options directly on the context
+        mnt_context_set_source(cxt, isoFile.c_str());
+        mnt_context_set_target(cxt, mountPoint.c_str());
+        mnt_context_set_fstype(cxt, "iso9660");
+        mnt_context_set_options(cxt, "loop");
         
         // Attempt to mount
         int ret = mnt_context_mount(cxt);
@@ -382,7 +370,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
             }
         }
         
-        mnt_free_fs(fs);
+        // Free the context
         mnt_free_context(cxt);
     }
 }
