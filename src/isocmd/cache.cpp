@@ -517,11 +517,6 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
             const auto& filePath = entry.path();
             const auto extension = filePath.extension();
             
-            // Skip files with a ".bin" extension
-            if (iequals(extension.string(), ".bin")) {
-                continue;
-            }
-            
             // Skip files that do not have a ".iso" extension
             if (!iequals(extension.string(), ".iso")) {
                 continue;
