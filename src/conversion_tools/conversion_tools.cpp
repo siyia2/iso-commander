@@ -618,12 +618,12 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
 		}
 		
 		if (!processedErrors.empty()) {
-			std::cout << "\n";
+			std::cout << "\n\n";
 			for (const auto& processedError : processedErrors) {
 				std::cout << processedError << std::endl;
 			}
 			processedErrors.clear();
-			std::chrono::seconds duration(2);
+			std::chrono::seconds duration(3);
 			std::this_thread::sleep_for(duration);
 		}
         
@@ -788,8 +788,6 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
 
     // Print success message if files were found
     if (!fileNames.empty()) {
-		
-		
     
         // Stop the timer after completing the mounting process
         auto end_time = std::chrono::high_resolution_clock::now();
