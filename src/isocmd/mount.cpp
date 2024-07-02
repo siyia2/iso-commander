@@ -57,7 +57,10 @@ void select_and_mount_files_by_number() {
 
     // Main loop for selecting and mounting ISO files
     while (true) {
-		
+		mountedFiles.clear();
+		skippedMessages.clear();
+		mountedFails.clear();
+		uniqueErrorMessages.clear();
 		// Remove non-existent paths from the cache after selection
         removeNonExistentPathsFromCache();
 
@@ -140,6 +143,10 @@ void select_and_mount_files_by_number() {
 					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 				} else {
 					while (true) {
+						mountedFiles.clear();
+						skippedMessages.clear();
+						mountedFails.clear();
+						uniqueErrorMessages.clear();
 						clearScrollBuffer();
 						sortFilesCaseInsensitive(filteredFiles);
 						std::cout << "\033[1mFiltered results:\033[0;1m\n";
@@ -173,15 +180,14 @@ void select_and_mount_files_by_number() {
 
 							// Process the user input with the filtered list
 							processAndMountIsoFiles(inputFiltered, filteredFiles, mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
-							if (!uniqueErrorMessages.empty() && mountedFiles.empty() && skippedMessages.empty()) {
-								clearScrollBuffer();
-								std::cout << "\n\033[1;91mNo valid input provided for mount.\033[0;1m";
-								std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
-								std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-							}
 							free(inputFiltered);
 						
 							clearScrollBuffer();
+							if (!uniqueErrorMessages.empty() && mountedFiles.empty() && skippedMessages.empty() && mountedFails.empty()) {
+								std::cout << "\n\033[1;91mNo valid input provided for mount\033[0;1m\n";
+								std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+								std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+							}
 
 							if (verbose) {
 								printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
@@ -211,17 +217,17 @@ void select_and_mount_files_by_number() {
 		} else if (input[0] != '\0' && (strcmp(input, "/") != 0) && !verboseFiltered) {
             // Process user input to select and mount specific ISO files
             processAndMountIsoFiles(input, isoFiles, mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
-            if (!uniqueErrorMessages.empty() && mountedFiles.empty() && skippedMessages.empty()) {
-				clearScrollBuffer();
-				std::cout << "\n\033[1;91mNo valid input provided for mount.\033[0;1m";
-				std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
-				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-			}
             clearScrollBuffer();
+            if (!uniqueErrorMessages.empty() && mountedFiles.empty() && skippedMessages.empty() && mountedFails.empty()) {
+				    std::cout << "\n\033[1;91mNo valid input provided for mount\033[0;1m\n";
+				    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			}
+				    
+
             if (verbose) {
 				printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
 			}
-				
             free(input);
         }          
     }
@@ -454,63 +460,20 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
 
 
 // Function to process input and mount ISO files asynchronously
-void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages) {
+void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, 
+                             std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, 
+                             std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages) {
     std::istringstream iss(input);
-    std::istringstream issCount(input);
     
-    std::set<std::string> tokens;
-    std::string tokenCount;
-    
-    while (issCount >> tokenCount && tokens.size() < maxThreads) {
-    if (tokenCount[0] == '-') continue;
-    
-    // Count the number of hyphens
-    size_t hyphenCount = std::count(tokenCount.begin(), tokenCount.end(), '-');
-    
-    // Skip if there's more than one hyphen
-    if (hyphenCount > 1) continue;
-    
-    size_t dashPos = tokenCount.find('-');
-    if (dashPos != std::string::npos) {
-        std::string start = tokenCount.substr(0, dashPos);
-        std::string end = tokenCount.substr(dashPos + 1);
-        if (std::all_of(start.begin(), start.end(), ::isdigit) && 
-            std::all_of(end.begin(), end.end(), ::isdigit)) {
-            int startNum = std::stoi(start);
-            int endNum = std::stoi(end);
-            if (static_cast<std::vector<std::string>::size_type>(startNum) <= isoFiles.size() && 
-                static_cast<std::vector<std::string>::size_type>(endNum) <= isoFiles.size()) {
-                int step = (startNum <= endNum) ? 1 : -1;
-                for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
-                    if (i != 0) {
-                        tokens.insert(std::to_string(i));
-                    }
-                    if (tokens.size() >= maxThreads) {
-                        break;
-                    }
-                }
-            }
-        }
-	} else if (std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
-			int num = std::stoi(tokenCount);
-			if (num > 0 && static_cast<std::vector<std::string>::size_type>(num) <= isoFiles.size()) {
-				tokens.insert(tokenCount);
-				if (tokens.size() >= maxThreads) {
-					break;
-				}
-			}
-		}
-	}
-    
-    unsigned int numThreads = std::min(static_cast<int>(tokens.size()), static_cast<int>(maxThreads));
-
     std::atomic<bool> invalidInput(false);
     std::mutex indicesMutex;
     std::set<int> processedIndices;
+    std::shared_mutex validIndicesMutex;
     std::set<int> validIndices;
+    std::shared_mutex processedRangesMutex;
     std::set<std::pair<int, int>> processedRanges;
 
-    ThreadPool pool(numThreads);
+    ThreadPool pool(std::min(static_cast<unsigned int>(std::thread::hardware_concurrency()), maxThreads));
     
     std::atomic<int> totalTasks(0);
     std::atomic<int> completedTasks(0);
@@ -526,9 +489,11 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     auto processTask = [&](int index) {
         bool shouldProcess = false;
         {
-            std::lock_guard<std::mutex> lock(indicesMutex);
-            if (validIndices.insert(index).second) {
-                shouldProcess = true;
+            std::shared_lock readLock(validIndicesMutex);
+            if (validIndices.find(index) == validIndices.end()) {
+                readLock.unlock();
+                std::unique_lock writeLock(validIndicesMutex);
+                shouldProcess = validIndices.insert(index).second;
             }
         }
 
@@ -586,7 +551,17 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
             }
 
             std::pair<int, int> range(start, end);
-            if (processedRanges.insert(range).second) {
+            bool shouldProcessRange = false;
+            {
+                std::shared_lock readLock(processedRangesMutex);
+                if (processedRanges.find(range) == processedRanges.end()) {
+                    readLock.unlock();
+                    std::unique_lock writeLock(processedRangesMutex);
+                    shouldProcessRange = processedRanges.insert(range).second;
+                }
+            }
+
+            if (shouldProcessRange) {
                 int step = (start <= end) ? 1 : -1;
                 for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
                     bool shouldProcess = false;
@@ -634,20 +609,17 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
             errorQueue.pop();
         }
     }
-	if ( !processedIndices.empty()){
-    // Set the total number of tasks value
-    int totalTasksValue = totalTasks.load();
-    // Start the progress bar in a separate thread
-    std::thread progressThread(displayProgressBar, std::ref(completedTasks), std::cref(totalTasksValue), std::ref(isProcessingComplete));
 
-    // Wait for all tasks to complete
-    {
-        std::unique_lock<std::mutex> lock(taskCompletionMutex);
-        taskCompletionCV.wait(lock, [&]() { return activeTaskCount.load() == 0; });
+    if (!processedIndices.empty()) {
+        int totalTasksValue = totalTasks.load();
+        std::thread progressThread(displayProgressBar, std::ref(completedTasks), std::cref(totalTasksValue), std::ref(isProcessingComplete));
+
+        {
+            std::unique_lock<std::mutex> lock(taskCompletionMutex);
+            taskCompletionCV.wait(lock, [&]() { return activeTaskCount.load() == 0; });
+        }
+
+        isProcessingComplete.store(true, std::memory_order_release);
+        progressThread.join();
     }
-
-    // Signal that processing is complete and wait for the progress thread to finish
-    isProcessingComplete.store(true, std::memory_order_release);
-    progressThread.join();
-	}
 }
