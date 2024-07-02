@@ -284,8 +284,28 @@ bool isAlreadyMounted(const std::string& mountPoint) {
 
 
 // Function to mount selected ISO files called from processAndMountIsoFiles
+bool loadKernelModule(const std::string& moduleName) {
+    std::string escapedModuleName = shell_escape(moduleName);
+    std::string command = "modprobe " + escapedModuleName + " 2>/dev/null";
+    int result = system(command.c_str());
+    return (result == 0);
+}
+
+
 void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
     namespace fs = std::filesystem;
+    
+    // Map filesystem types to their corresponding kernel modules
+    const std::unordered_map<std::string, std::string> fsTypeToModule = {
+        {"iso9660", "isofs"},
+        {"udf", "udf"},
+        {"hfsplus", "hfsplus"},
+        {"isofs", "isofs"}
+    };
+
+    const std::vector<std::string> fsTypes = {
+        "iso9660", "udf", "hfsplus", "rockridge", "joliet", "isofs", "auto"
+    };
     
     for (const auto& isoFile : isoFilesToMount) {
         fs::path isoPath(isoFile);
@@ -300,7 +320,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
             std::stringstream skippedMessage;
             skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename 
                            << "'\033[1;93m already mounted at: \033[1;94m'" << mountisoDirectory 
-                           << "/" << mountisoFilename << "'\033[1;93m.\033[0;1m";
+                           << "/" << mountisoFilename << "'\033[1;93m.\033[0m";
             {
                 std::lock_guard<std::mutex> lowLock(Mutex4Low);
                 skippedMessages.insert(skippedMessage.str());
@@ -312,7 +332,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
         if (geteuid() != 0) {
             std::stringstream errorMessage;
             errorMessage << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename 
-                         << "'\033[0;1m\033[1;91m. Root privileges are required.\033[0;1m";
+                         << "'\033[0m\033[1;91m. Root privileges are required.\033[0m";
             {
                 std::lock_guard<std::mutex> lowLock(Mutex4Low);
                 mountedFails.insert(errorMessage.str());
@@ -327,7 +347,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
             } catch (const fs::filesystem_error& e) {
                 std::stringstream errorMessage;
                 errorMessage << "\033[1;91mFailed to create mount point: \033[1;93m'" << mountPoint 
-                             << "'\033[0;1m\033[1;91m. Error: " << e.what() << "\033[0;1m";
+                             << "'\033[0m\033[1;91m. Error: " << e.what() << "\033[0m";
                 {
                     std::lock_guard<std::mutex> lowLock(Mutex4Low);
                     mountedFails.insert(errorMessage.str());
@@ -336,51 +356,75 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
             }
         }
         
-        // Initialize libmount context
-        struct libmnt_context* cxt = mnt_new_context();
-        if (!cxt) {
-            std::stringstream errorMessage;
-            errorMessage << "\033[1;91mFailed to initialize mount context for: \033[1;93m'" 
-                         << isoDirectory << "/" << isoFilename << "'\033[0;1m\033[1;91m.\033[0;1m";
-            {
-                std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                mountedFails.insert(errorMessage.str());
+        bool mountSuccess = false;
+        
+        for (const auto& fsType : fsTypes) {
+            // Attempt to load the corresponding kernel module if it exists
+            auto moduleIt = fsTypeToModule.find(fsType);
+            if (moduleIt != fsTypeToModule.end()) {
+                if (!loadKernelModule(moduleIt->second)) {
+					std::stringstream errorMessage;
+                    errorMessage << "Warning: Failed to load kernel module: " << moduleIt->second << " for filesystem: " << fsType;
+                    {
+						std::lock_guard<std::mutex> lowLock(Mutex4Low);
+						mountedFails.insert(errorMessage.str());
+					}
+                    
+                }
             }
-            continue;
+
+            // Initialize libmount context
+            struct libmnt_context* cxt = mnt_new_context();
+            if (!cxt) {
+                std::stringstream errorMessage;
+                errorMessage << "\033[1;91mFailed to initialize mount context for: \033[1;93m'" 
+                             << isoDirectory << "/" << isoFilename << "'\033[0m\033[1;91m.\033[0m";
+                {
+                    std::lock_guard<std::mutex> lowLock(Mutex4Low);
+                    mountedFails.insert(errorMessage.str());
+                }
+                break;
+            }
+            
+            // Set mount options directly on the context
+            mnt_context_set_source(cxt, isoFile.c_str());
+            mnt_context_set_target(cxt, mountPoint.c_str());
+            mnt_context_set_fstype(cxt, fsType.c_str());
+            mnt_context_set_options(cxt, "loop,ro");
+            
+            // Attempt to mount
+            int ret = mnt_context_mount(cxt);
+            
+            // Check if mount was successful
+            if (ret == 0) {
+                // Successfully mounted
+                std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m"
+                                              + "\033[1m mounted at: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename 
+                                              + "'\033[0m\033[1m | " + fsType + ".\033[0m";
+                {
+                    std::lock_guard<std::mutex> lowLock(Mutex4Low);
+                    mountedFiles.insert(mountedFileInfo);
+                }
+                mountSuccess = true;
+                mnt_free_context(cxt);
+                break;
+            }
+            
+            // Free the context
+            mnt_free_context(cxt);
         }
         
-        // Set mount options directly on the context
-        mnt_context_set_source(cxt, isoFile.c_str());
-        mnt_context_set_target(cxt, mountPoint.c_str());
-        mnt_context_set_fstype(cxt, "iso9660");
-        mnt_context_set_options(cxt, "loop");
-        
-        // Attempt to mount
-        int ret = mnt_context_mount(cxt);
-        
-        // Check if mount was successful
-        if (ret != 0) {
-            // Mount failure
+        if (!mountSuccess) {
+            // Mount failure after trying all filesystem types
             std::stringstream errorMessage;
             errorMessage << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename 
-                         << "'\033[0;1m\033[1;91m. Error code: " << -ret << "\033[0;1m";
+                         << "'\033[0m\033[1;91m | BadFS.\033[0m";
             fs::remove(mountPoint);
             {
                 std::lock_guard<std::mutex> lowLock(Mutex4Low);
                 mountedFails.insert(errorMessage.str());
             }
-        } else {
-            // Successfully mounted
-            std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0;1m"
-                                          + "\033[1m mounted at: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename + "'\033[0;1m\033[1m.\033[0;1m";
-            {
-                std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                mountedFiles.insert(mountedFileInfo);
-            }
         }
-        
-        // Free the context
-        mnt_free_context(cxt);
     }
 }
 
