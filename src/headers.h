@@ -79,6 +79,7 @@ bool iequals(const std::string_view& a, const std::string_view& b);
 bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize);
 
 // Mount functions
+bool loadKernelModule(const std::string& moduleName);
 bool isAlreadyMounted(const std::string& mountPoint);
 
 // Unmount functions
