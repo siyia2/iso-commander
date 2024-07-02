@@ -456,10 +456,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     auto asyncConvertToISO = [&](const std::string& selectedFile) {
         std::size_t found = selectedFile.find_last_of("/\\");
         std::string filePath = selectedFile.substr(0, found);
-        {
-            std::lock_guard<std::mutex> lock(futuresMutex);
-            selectedFilePaths.insert(filePath);
-        }
+        selectedFilePaths.insert(filePath);
         convertToISO(selectedFile, successOuts, skippedOuts, failedOuts, deletedOuts, modeMdf);
     };
 
@@ -483,13 +480,10 @@ void processInput(const std::string& input, const std::vector<std::string>& file
                         for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
                             int selectedIndex = i - 1;
 								if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-									{
-										std::lock_guard<std::mutex> lock(futuresMutex);
 										std::string selectedFile = fileList[selectedIndex];
 										futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));
                                     
 										processedIndices.insert(selectedIndex);
-                                }
                             }
                         }
                     } else {
@@ -505,13 +499,10 @@ void processInput(const std::string& input, const std::vector<std::string>& file
             } else if (start >= 1 && static_cast<size_t>(start) <= fileList.size()) {
                 int selectedIndex = start - 1;
 					if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-						{
-							std::lock_guard<std::mutex> lock(futuresMutex);
 							std::string selectedFile = fileList[selectedIndex];
 							futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));   
                         
 							processedIndices.insert(selectedIndex);
-						}
                 }
             } else {
                 processedErrors.insert("\033[1;91mInvalid index: '" + std::to_string(start) + "'.\033[1;0m");
