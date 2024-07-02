@@ -267,19 +267,13 @@ void printMountedAndErrors( std::set<std::string>& mountedFiles, std::set<std::s
 
 // Function to mount selected ISO files called from processAndMountIsoFiles
 bool isAlreadyMounted(const std::string& mountPoint) {
-	namespace fs = std::filesystem;
-    struct stat mountStat;
-    if (stat(mountPoint.c_str(), &mountStat) == 0) {
-        // Check if it's a directory and if it's a mount point
-        if (S_ISDIR(mountStat.st_mode)) {
-            struct stat parentStat;
-            std::string parentDir = fs::path(mountPoint).parent_path().string();
-            if (stat(parentDir.c_str(), &parentStat) == 0 && mountStat.st_dev != parentStat.st_dev) {
-                return true; // It's a mount point
-            }
-        }
+    struct statvfs vfs;
+    if (statvfs(mountPoint.c_str(), &vfs) != 0) {
+        return false; // Error or doesn't exist
     }
-    return false;
+
+    // Check if it's a mount point
+    return (vfs.f_flag & ST_NODEV) == 0;
 }
 
 
@@ -308,12 +302,29 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
     };
     
     for (const auto& isoFile : isoFilesToMount) {
-        fs::path isoPath(isoFile);
-        std::string isoFileName = isoPath.stem().string();
-        std::string mountPoint = "/mnt/iso_" + isoFileName;
-        
+    fs::path isoPath(isoFile);
+    std::string isoFileName = isoPath.stem().string();
+    
+    // Create a hash of the full path
+    std::hash<std::string> hasher;
+    size_t hashValue = hasher(isoFile);
+    
+    // Convert hash to a base36 string (using digits 0-9 and letters a-z)
+    const std::string base36Chars = "0123456789abcdefghijklmnopqrstuvwxyz";
+    std::string shortHash;
+    for (int i = 0; i < 4; ++i) {  // Use 4 characters for the short hash
+        shortHash += base36Chars[hashValue % 36];
+        hashValue /= 36;
+    }
+    
+    // Create a unique identifier using the filename and the short hash
+    std::string uniqueId = isoFileName + "_" + shortHash;
+    
+    std::string mountPoint = "/mnt/iso_" + uniqueId;
+
         auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
         auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint);
+
         
         // Check if mount point is already mounted
         if (isAlreadyMounted(mountPoint)) {
