@@ -432,11 +432,6 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 	// Create atomic flag for completion status
     std::atomic<bool> isComplete(false);
 
-    // Launch progress bar display in a separate thread
-    int totalTasks = tokens.size();  // Total number of tasks to complete
-    std::thread progressThread(displayProgressBar, std::ref(completedTasks), totalTasks, std::ref(isComplete));
-
-	
     std::set<std::string> selectedFilePaths;
     std::string concatenatedFilePaths;
     auto asyncConvertToISO = [&](const std::string& selectedFile) {
@@ -506,15 +501,29 @@ void processInput(const std::string& input, const std::vector<std::string>& file
         }
     }
 
+    if (!processedIndices.empty()) {
+    // Launch progress bar display in a separate thread
+    int totalTasks = processedIndices.size();  // Total number of tasks to complete
+    std::thread progressThread(displayProgressBar, std::ref(completedTasks), totalTasks, std::ref(isComplete));
+
     for (auto& future : futures) {
         future.wait();
     }
-		// Signal the progress bar thread to stop
+    // Signal the progress bar thread to stop
     isComplete = true;
 
     // Join the progress bar thread
     progressThread.join();
-    
+} else {
+    // No need to display progress bar or wait for futures
+    isComplete = true;
+}
+    if (processedIndices.empty()){
+		clearScrollBuffer();
+		std::cout << "\n\033[1;91mNo valid input provided for conversion.\033[0;1m";
+		std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
+		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+	}
     concatenatedFilePaths.clear();
     for (const auto& path : selectedFilePaths) {
 		concatenatedFilePaths += path + ";";
