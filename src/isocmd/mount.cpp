@@ -4,9 +4,9 @@
 //	MOUNT STUFF
 
 // Function to mount all ISOs indiscriminately
+// Function to mount all ISOs indiscriminately
 void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
     std::atomic<int> completedIsos(0);
-    std::mutex futuresMutex;
     std::atomic<bool> isComplete(false);
     unsigned int numThreads = std::min(static_cast<unsigned int>(isoFiles.size()), static_cast<unsigned int>(maxThreads));
     ThreadPool pool(numThreads);
@@ -19,19 +19,9 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::st
     // Process all ISO files asynchronously
     std::vector<std::future<void>> futures;
     for (const auto& isoFile : isoFiles) {
-        futures.push_back(pool.enqueue([&isoFile, &mountedFiles, &skippedMessages, &mountedFails, &completedIsos, &futuresMutex]() {
-            try {
-                mountIsoFile({isoFile}, mountedFiles, skippedMessages, mountedFails);
-                {
-                    std::lock_guard<std::mutex> lock(futuresMutex);
-                    ++completedIsos;
-                }
-            } catch (const std::exception& e) {
-                // Handle exceptions if necessary
-                // For example: store exception messages
-                std::lock_guard<std::mutex> lock(futuresMutex);
-                skippedMessages.insert(isoFile + ": " + e.what());
-            }
+        futures.push_back(pool.enqueue([&isoFile, &mountedFiles, &skippedMessages, &mountedFails, &completedIsos]() {
+            mountIsoFile({isoFile}, mountedFiles, skippedMessages, mountedFails);
+            ++completedIsos;
         }));
     }
     
