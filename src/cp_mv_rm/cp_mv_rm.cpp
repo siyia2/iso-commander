@@ -368,14 +368,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         while (true) {
 			clearScrollBuffer();
 			
-			if (!uniqueErrorMessages.empty()) {
-            std::cout << "\n";
-			}
-            
-            for (const auto& uniqueErrorMessage : uniqueErrorMessages) {
-            std::cout << uniqueErrorMessage << "\033[0;1m\n";
-			}
-			
 			if (processedIndices.empty()) {
 			clearScrollBuffer();
 			mvDelBreak=false;
@@ -432,12 +424,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 		}
     } else {
 		clearScrollBuffer();	
-		if (!uniqueErrorMessages.empty()) {
-            std::cout << "\n";
-		}
-        for (const auto& uniqueErrorMessage : uniqueErrorMessages) {
-            std::cout << uniqueErrorMessage << "\033[0;1m\n";
-		}
 		
         std::cout << "\n\033[1;94mThe following ISO(s) will be "<< operationColor + operationDescription << "\033[1;94m:\n\033[0;1m\n";
         for (const auto& chunk : indexChunks) {
@@ -515,25 +501,33 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 		maxDepth = 0;   
 		manualRefreshCache(userDestDir);
 	}
-
-	clearScrollBuffer();
+	if (verbose) {
+		clearScrollBuffer();
         
-    if (!operationIsos.empty()) {
-        std::cout << "\n";
-	}
+		if (!operationIsos.empty()) {
+			std::cout << "\n";
+		}
     
-    // Print all moved files
-    for (const auto& operationIso : operationIsos) {
-		std::cout << operationIso << "\n\033[0;1m";
-    }
+		// Print all moved files
+		for (const auto& operationIso : operationIsos) {
+			std::cout << operationIso << "\n\033[0;1m";
+		}
         
-    if (!operationErrors.empty()) {
-		std::cout << "\n";
-    }
+		if (!operationErrors.empty()) {
+			std::cout << "\n";
+		}
         
-    for (const auto& operationError : operationErrors) {
-		std::cout << operationError << "\n\033[0;1m";
-    }
+		for (const auto& operationError : operationErrors) {
+			std::cout << operationError << "\n\033[0;1m";
+		}
+		
+		if (!uniqueErrorMessages.empty()) {
+            std::cout << "\n";
+		}
+        for (const auto& uniqueErrorMessage : uniqueErrorMessages) {
+            std::cout << uniqueErrorMessage << "\033[0;1m\n";
+		}
+	}
         
     // Clear the vector after each iteration
     operationIsos.clear();
@@ -542,10 +536,10 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     clear_history();
         
     maxDepth = -1;
-        
-    std::cout << "\n";
-    std::cout << "\033[1;32m↵ to continue...\033[0;1m";
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');    
+    if (verbose) {
+		std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+	}  
 }
 
 // Function to check if directory exists
