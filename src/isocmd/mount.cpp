@@ -312,7 +312,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
     // Convert hash to a base36 string (using digits 0-9 and letters a-z)
     const std::string base36Chars = "0123456789abcdefghijklmnopqrstuvwxyz";
     std::string shortHash;
-    for (int i = 0; i < 4; ++i) {  // Use 4 characters for the short hash
+    for (int i = 0; i < 5; ++i) {  // Use 5 characters for the short hash
         shortHash += base36Chars[hashValue % 36];
         hashValue /= 36;
     }
