@@ -13,7 +13,7 @@ bool fileExists(const std::string& fullPath) {
 }
 
 // Function to print verbose conversion messages
-void verboseConversion(std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, std::string& end_time_str) {
+void verboseConversion(std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts) {
     // Lambda function to print each element in a set followed by a newline
     auto printWithNewline = [](const std::set<std::string>& outs) {
         for (const auto& out : outs) {
@@ -30,10 +30,6 @@ void verboseConversion(std::set<std::string>& processedErrors, std::set<std::str
     printWithNewline(failedOuts);	 // Print failed messages
     printWithNewline(deletedOuts);   // Print deleted messages
     printWithNewline(processedErrors); // Print error messages
-    
-    if (!successOuts.empty() || !skippedOuts.empty()){
-		std::cout << "\033[0;1mTime Elapsed: " << end_time_str << "\n\n";
-	}
     
     // Clear all sets after printing
     successOuts.clear();   // Clear the set of success messages
@@ -327,27 +323,18 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 						
 						if (isFiltered) {
 							clearScrollBuffer(); // Clear scroll buffer
-							std::cout << "\033[1mPlease wait...\n\033[1m\n"; // Inform user to wait
-							auto start_time = std::chrono::steady_clock::now();
+							std::cout << "\033[1mPlease wait..." << std::endl; // Inform user to wait
 							processInput(filterInput, filteredFiles, modeMdf, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts); // Process user input
 							free(filterInput);
 							
 							clearScrollBuffer(); // Clear scroll buffer
 							std::cout << "\n"; // Print newline
-							auto end_time = std::chrono::steady_clock::now();
-    
-							// Calculate elapsed time in seconds with one decimal place
-							auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-							double elapsed_seconds = duration.count() / 1000.0;
-    
-							// Format the elapsed time as a string with one decimal place
-							std::ostringstream ss;
-							ss << std::fixed << std::setprecision(1) << elapsed_seconds;
-							std::string elapsed_time_str = ss.str();
-							verboseConversion(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, elapsed_time_str);
+							if (verbose) {
+								verboseConversion(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts);
 
-							std::cout << "\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
-							std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+								std::cout << "\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
+								std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+							}
 						}
 					}
 				}
@@ -355,28 +342,18 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 		} else {
 			// If input is not "/", process the input
 			clearScrollBuffer(); // Clear scroll buffer
-			std::cout << "\033[1mPlease wait...\n\033[1m\n"; // Inform user to wait
-			auto start_time = std::chrono::steady_clock::now();
+			std::cout << "\033[1mPlease wait..." << std::endl; // Inform user to wait
 			processInput(input, files, modeMdf, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts); // Process input
 			free(input);
     
 			clearScrollBuffer(); // Clear scroll buffer
 			std::cout << "\n"; // Print newline
-			auto end_time = std::chrono::steady_clock::now();
-    
-			// Calculate elapsed time in seconds with one decimal place
-			auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-			double elapsed_seconds = duration.count() / 1000.0;
-    
-			// Format the elapsed time as a string with one decimal place
-			std::ostringstream ss;
-			ss << std::fixed << std::setprecision(1) << elapsed_seconds;
-			std::string elapsed_time_str = ss.str();
-
-			verboseConversion(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, elapsed_time_str);
+			if (verbose) {
+				verboseConversion(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts);
 	
-			std::cout << "\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
-			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+				std::cout << "\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
+				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			}
 		}
 	}
 }
@@ -450,7 +427,16 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 
     std::string user_str(current_user);
     std::string group_str = std::to_string(static_cast<unsigned int>(current_group));
+	
+	std::atomic<int> completedTasks(0);
+	// Create atomic flag for completion status
+    std::atomic<bool> isComplete(false);
 
+    // Launch progress bar display in a separate thread
+    int totalTasks = tokens.size();  // Total number of tasks to complete
+    std::thread progressThread(displayProgressBar, std::ref(completedTasks), totalTasks, std::ref(isComplete));
+
+	
     std::set<std::string> selectedFilePaths;
     std::string concatenatedFilePaths;
     auto asyncConvertToISO = [&](const std::string& selectedFile) {
@@ -458,6 +444,8 @@ void processInput(const std::string& input, const std::vector<std::string>& file
         std::string filePath = selectedFile.substr(0, found);
         selectedFilePaths.insert(filePath);
         convertToISO(selectedFile, successOuts, skippedOuts, failedOuts, deletedOuts, modeMdf);
+        // Increment completedTasks when conversion is done
+        ++completedTasks;
     };
 
     std::istringstream iss(input);
@@ -515,14 +503,19 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     for (auto& future : futures) {
         future.wait();
     }
+		// Signal the progress bar thread to stop
+    isComplete = true;
 
-        concatenatedFilePaths.clear();
-        for (const auto& path : selectedFilePaths) {
-            concatenatedFilePaths += path + ";";
-        }
-        if (!concatenatedFilePaths.empty()) {
-            concatenatedFilePaths.pop_back();
-        }
+    // Join the progress bar thread
+    progressThread.join();
+    
+    concatenatedFilePaths.clear();
+    for (const auto& path : selectedFilePaths) {
+		concatenatedFilePaths += path + ";";
+    }
+    if (!concatenatedFilePaths.empty()) {
+		concatenatedFilePaths.pop_back();
+    }
 
     promptFlag = false;
     if (!processedIndices.empty()) {
@@ -978,8 +971,10 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
     std::string conversionCommand;
     if (modeMdf) {
         conversionCommand = "mdf2iso " + escapedInputPath + " " + escapedOutputPath;
+        conversionCommand += " > /dev/null 2>&1";
     } else if (!modeMdf) {
         conversionCommand = "ccd2iso " + escapedInputPath + " " + escapedOutputPath;
+        conversionCommand += " > /dev/null 2>&1";
     } else {
         std::string failedMessage = "\033[1;91mUnsupported file format for \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m. Conversion failed.\033[0;1m";
         {	std::lock_guard<std::mutex> lowLock(Mutex4Low);
