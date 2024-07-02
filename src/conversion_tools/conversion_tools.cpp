@@ -469,9 +469,12 @@ void processInput(const std::string& input, const std::vector<std::string>& file
                             int selectedIndex = i - 1;
 								if (processedIndices.find(selectedIndex) == processedIndices.end()) {
 										std::string selectedFile = fileList[selectedIndex];
-										futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));
+										{
+											std::lock_guard<std::mutex> lock(futuresMutex);
+											futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));
                                     
-										processedIndices.insert(selectedIndex);
+											processedIndices.insert(selectedIndex);
+										}
                             }
                         }
                     } else {
@@ -488,9 +491,12 @@ void processInput(const std::string& input, const std::vector<std::string>& file
                 int selectedIndex = start - 1;
 					if (processedIndices.find(selectedIndex) == processedIndices.end()) {
 							std::string selectedFile = fileList[selectedIndex];
-							futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));   
+							{
+								std::lock_guard<std::mutex> lock(futuresMutex);
+								futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));   
                         
-							processedIndices.insert(selectedIndex);
+								processedIndices.insert(selectedIndex);
+							}
                 }
             } else {
                 processedErrors.insert("\033[1;91mInvalid index: '" + std::to_string(start) + "'.\033[1;0m");
