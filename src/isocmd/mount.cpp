@@ -265,7 +265,7 @@ void printMountedAndErrors( std::set<std::string>& mountedFiles, std::set<std::s
 }
 
 
-// Function to mount selected ISO files called from processAndMountIsoFiles
+// Function to check if a mountpoint isAlreadyMounted
 bool isAlreadyMounted(const std::string& mountPoint) {
     struct statvfs vfs;
     if (statvfs(mountPoint.c_str(), &vfs) != 0) {
@@ -277,7 +277,7 @@ bool isAlreadyMounted(const std::string& mountPoint) {
 }
 
 
-// Function to mount selected ISO files called from processAndMountIsoFiles
+// Function to load appropriate kernel modules for mount
 bool loadKernelModule(const std::string& moduleName) {
     std::string escapedModuleName = shell_escape(moduleName);
     std::string command = "modprobe " + escapedModuleName + " 2>/dev/null";
@@ -285,7 +285,7 @@ bool loadKernelModule(const std::string& moduleName) {
     return (result == 0);
 }
 
-
+// Function to mount selected ISO files called from processAndMountIsoFiles
 void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
     namespace fs = std::filesystem;
     
