@@ -286,7 +286,7 @@ bool isAlreadyMounted(const std::string& mountPoint) {
 // Function to mount selected ISO files called from processAndMountIsoFiles
 bool loadKernelModule(const std::string& moduleName) {
     std::string escapedModuleName = shell_escape(moduleName);
-    std::string command = "sudo modprobe " + escapedModuleName + " 2>/dev/null";
+    std::string command = "modprobe " + escapedModuleName + " 2>/dev/null";
     int result = system(command.c_str());
     return (result == 0);
 }
