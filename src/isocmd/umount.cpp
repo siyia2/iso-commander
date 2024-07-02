@@ -140,7 +140,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
         if (removeDirResult == 0) {
             for (const auto& dir : directoriesToRemove) {	
                 auto [directory, filename] = extractDirectoryAndFilename(dir);
-                std::string removedDirInfo = "\033[1mUnmounted: \033[1;92m'" + directory + "/" + filename + "'\033[0m.";
+                std::string removedDirInfo = "\033[1mUnmounted: \033[1;94m'" + directory + "/" + filename + "'\033[0m.";
                 {
 					std::lock_guard<std::mutex> lowLock(Mutex4Low);
 					unmountedFiles.insert(removedDirInfo);
