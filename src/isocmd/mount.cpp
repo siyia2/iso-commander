@@ -38,6 +38,7 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::st
     }
 }
 
+
 // Function to select and mount ISO files by number
 void select_and_mount_files_by_number() {
 	
@@ -163,7 +164,9 @@ void select_and_mount_files_by_number() {
 							mountAllIsoFiles(isoFiles, mountedFiles, skippedMessages, mountedFails);
 							free(inputFiltered);
 							clearScrollBuffer();
-							printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
+							if (verbose) {
+								printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
+							}
 						} else if (inputFiltered[0] != '\0' && (strcmp(inputFiltered, "/") != 0)) { // Check if the user provided input
 							clearScrollBuffer();
 							std::cout << "\033[1mPlease wait...\033[1m\n";
@@ -174,7 +177,9 @@ void select_and_mount_files_by_number() {
 						
 							clearScrollBuffer();
 
-							printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
+							if (verbose) {
+								printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
+							}
 						}
 					}
 				}	
@@ -194,12 +199,16 @@ void select_and_mount_files_by_number() {
 			mountAllIsoFiles(isoFiles, mountedFiles, skippedMessages, mountedFails);
 			free(input);
 			clearScrollBuffer();
-			printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
+			if (verbose) {
+				printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
+			}
 		} else if (input[0] != '\0' && (strcmp(input, "/") != 0) && !verboseFiltered) {
             // Process user input to select and mount specific ISO files
             processAndMountIsoFiles(input, isoFiles, mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
             clearScrollBuffer();
-            printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
+            if (verbose) {
+				printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
+			}
             free(input);
         }          
     }

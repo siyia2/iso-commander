@@ -10,6 +10,7 @@ std::mutex Mutex4Low;
 // For cache directory creation
 bool gapPrinted = false;
 bool promptFlag = true;
+bool verbose = false;
 
 // For saving history to a differrent cache for FilterPatterns
 bool historyPattern = false;
@@ -346,9 +347,16 @@ void displayProgressBar(const std::atomic<int>& completed, const int& total, std
                   << "Time Elapsed: "<< std::setprecision(1) << elapsedSeconds << "s";
         
         if (completedValue == total && !enterPressed) {
-            std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            enterPressed = true;
+			enterPressed = true;
+            std::string confirmation;
+            std::cout << "\n\n\033[1;92mTask(s) completed!!! Display verbose output? (y/n):\033[0;1m ";
+            std::getline(std::cin, confirmation);
+            if ((confirmation == "y" || confirmation == "Y")) {
+				verbose = true;
+			} else {
+				verbose =false;
+			}
+            
         } else {
             std::cout.flush();
             std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Update every 100ms

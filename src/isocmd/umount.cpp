@@ -528,13 +528,23 @@ void unmountISOs() {
 			// Signal completion and wait for progress thread to finish
 			isComplete.store(true);
 			progressThread.join();
-            
-            printUnmountedAndErrors(invalidInput, unmountedFiles, unmountedErrors, errorMessages);
+            if (verbose) {
+				printUnmountedAndErrors(invalidInput, unmountedFiles, unmountedErrors, errorMessages);
+			} else {
+				unmountedFiles.clear();
+				unmountedErrors.clear();
+				errorMessages.clear();
+			}
+				
 
             // Prompt the user to press Enter to continue
             if (!skipEnter) {
-                std::cout << "\n\n\033[1;32m↵ to continue...";
-                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+				if (verbose) {
+					std::cout << "\n";
+				
+					std::cout << "\n\033[1;32m↵ to continue...";
+					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+				}
             }
             clearScrollBuffer();
             skipEnter = false;
