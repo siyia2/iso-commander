@@ -267,13 +267,19 @@ void printMountedAndErrors( std::set<std::string>& mountedFiles, std::set<std::s
 
 // Function to check if a mountpoint isAlreadyMounted
 bool isAlreadyMounted(const std::string& mountPoint) {
-    struct statvfs vfs;
-    if (statvfs(mountPoint.c_str(), &vfs) != 0) {
-        return false; // Error or doesn't exist
+	namespace fs = std::filesystem;
+    struct stat mountStat;
+    if (stat(mountPoint.c_str(), &mountStat) == 0) {
+        // Check if it's a directory and if it's a mount point
+        if (S_ISDIR(mountStat.st_mode)) {
+            struct stat parentStat;
+            std::string parentDir = fs::path(mountPoint).parent_path().string();
+            if (stat(parentDir.c_str(), &parentStat) == 0 && mountStat.st_dev != parentStat.st_dev) {
+                return true; // It's a mount point
+            }
+        }
     }
-
-    // Check if it's a mount point
-    return (vfs.f_flag & ST_NODEV) == 0;
+    return false;
 }
 
 
