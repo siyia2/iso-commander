@@ -65,7 +65,10 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
     // Main loop for interacting with ISO files
     while (true) {
-        
+        // Clear the vector after each iteration
+		operationIsos.clear();
+		operationErrors.clear();
+		uniqueErrorMessages.clear();
         // Remove non-existent paths from the cache after selection
         removeNonExistentPathsFromCache();
 		// Load ISO files from cache
@@ -147,6 +150,11 @@ void select_and_operate_files_by_number(const std::string& operation) {
 					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 } else {
 					while (!mvDelBreak) {
+						// Clear the vector after each iteration
+						operationIsos.clear();
+						operationErrors.clear();
+						uniqueErrorMessages.clear();
+						
 						clearScrollBuffer();
 						sortFilesCaseInsensitive(filteredFiles);
 						std::cout << "\033[1mFiltered results:\033[0;1m\n";
@@ -390,6 +398,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             
             // Load history from file
 			loadHistory();
+			userDestDir.clear();
 
             // Ask for the destination directory
             std::string prompt = "\n\001\033[1;94m\002Destination directory ↵ for selected ISO file(s), or ↵ to cancel:\n\001\033[0;1m\002";
@@ -533,6 +542,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     operationIsos.clear();
     operationErrors.clear();
     userDestDir.clear();
+    uniqueErrorMessages.clear();
     clear_history();
         
     maxDepth = -1;
