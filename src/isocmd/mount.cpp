@@ -173,6 +173,12 @@ void select_and_mount_files_by_number() {
 
 							// Process the user input with the filtered list
 							processAndMountIsoFiles(inputFiltered, filteredFiles, mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
+							if (!uniqueErrorMessages.empty() && mountedFiles.empty() && skippedMessages.empty()) {
+								clearScrollBuffer();
+								std::cout << "\n\033[1;91mNo valid input provided for mount.\033[0;1m";
+								std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
+								std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+							}
 							free(inputFiltered);
 						
 							clearScrollBuffer();
@@ -205,10 +211,17 @@ void select_and_mount_files_by_number() {
 		} else if (input[0] != '\0' && (strcmp(input, "/") != 0) && !verboseFiltered) {
             // Process user input to select and mount specific ISO files
             processAndMountIsoFiles(input, isoFiles, mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
+            if (!uniqueErrorMessages.empty() && mountedFiles.empty() && skippedMessages.empty()) {
+				clearScrollBuffer();
+				std::cout << "\n\033[1;91mNo valid input provided for mount.\033[0;1m";
+				std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
+				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			}
             clearScrollBuffer();
             if (verbose) {
 				printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
 			}
+				
             free(input);
         }          
     }
