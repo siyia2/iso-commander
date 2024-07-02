@@ -330,7 +330,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
         if (isAlreadyMounted(mountPoint)) {
             std::stringstream skippedMessage;
             skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename 
-                           << "'\033[1;93m already mounted at: \033[1;94m'" << mountisoDirectory 
+                           << "'\033[1;93m already M@: \033[1;94m'" << mountisoDirectory 
                            << "/" << mountisoFilename << "'\033[1;93m.\033[0m";
             {
                 std::lock_guard<std::mutex> lowLock(Mutex4Low);
@@ -404,7 +404,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
             if (ret == 0) {
                 // Successfully mounted
                 std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m"
-                                              + "\033[1m mounted at: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename 
+                                              + "\033[1m M@: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename 
                                               + "'\033[0;1m. {" + fsType + "}\033[0m";
                 {
                     std::lock_guard<std::mutex> lowLock(Mutex4Low);
