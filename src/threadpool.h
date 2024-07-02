@@ -2,6 +2,7 @@
 #define THREAD_POOL_H
 #include "headers.h"
 
+
 // A global threadpool for async tasks with work-stealing scalable from 1 to 192 threads
 template <typename T>
 class LockFreeQueue {
@@ -9,12 +10,12 @@ private:
     static constexpr size_t CACHE_LINE_SIZE = 64;
 
     // Node structure for the queue
-    struct Node {
-        T data;
-        std::atomic<Node*> next;
-        Node(T value = T()) : data(std::move(value)), next(nullptr) {}
-    };
-
+	struct Node {
+		T data;
+		std::atomic<Node*> next;
+		std::atomic<uint64_t> timestamp; // Timestamp for ABA prevention
+		Node(T value = T()) : data(std::move(value)), next(nullptr), timestamp(0) {}
+	};
     // AlignedAtomicNode structure for aligned atomic operations
     struct alignas(CACHE_LINE_SIZE) AlignedAtomicNode {
         std::atomic<Node*> ptr;
@@ -35,21 +36,27 @@ private:
 
     // Allocate a node from the pool or dynamically
     Node* allocate_node(T value) {
-        size_t index = pool_index.fetch_add(1, std::memory_order_relaxed);
-        if (index < pool_size) {
-            return new (&node_pool[index]) Node(std::move(value));
-        } else {
-            return new Node(std::move(value));
-        }
-    }
+		size_t index = pool_index.fetch_add(1, std::memory_order_relaxed);
+		if (index < pool_size) {
+			Node* node = new (&node_pool[index]) Node(std::move(value));
+			node->timestamp.store(1, std::memory_order_relaxed); // Initial timestamp
+			return node;
+		} else {
+			Node* node = new Node(std::move(value));
+			node->timestamp.store(1, std::memory_order_relaxed); // Initial timestamp
+			return node;
+		}
+	}
+
 
     // Deallocate a node
     void deallocate_node(Node* node) {
-		// Check if the node belongs to the node_pool
-		auto pool_begin = &node_pool[0];
-		auto pool_end = pool_begin + pool_size;
-		if (node >= pool_begin && node < pool_end) {
-			node->~Node(); // Call the destructor explicitly, but don't free memory
+    // Check if the node belongs to the node_pool
+    auto pool_begin = &node_pool[0];
+    auto pool_end = pool_begin + pool_size;
+    if (node >= pool_begin && node < pool_end) {
+        node->~Node(); // Call the destructor explicitly, but don't free memory
+        node->timestamp.fetch_add(1, std::memory_order_relaxed); // Increment timestamp to prevent ABA
 		} else {
 			delete node; // If not in pool, delete normally
 		}
@@ -85,44 +92,48 @@ public:
 
     // Enqueue an item into the queue
     void enqueue(T value) {
-        Node* newNode = allocate_node(std::move(value));
-        while (true) {
-            Node* oldTail = tail.ptr.load(std::memory_order_acquire);
-            Node* next = oldTail->next.load(std::memory_order_acquire);
-            if (next == nullptr) {
-                if (oldTail->next.compare_exchange_weak(next, newNode,
-                                                        std::memory_order_release,
-                                                        std::memory_order_relaxed)) {
-                    tail.ptr.compare_exchange_strong(oldTail, newNode,
-                                                     std::memory_order_release,
-                                                     std::memory_order_relaxed);
-                    return;
-                }
-            } else {
-                tail.ptr.compare_exchange_strong(oldTail, next,
+    Node* newNode = allocate_node(std::move(value));
+    while (true) {
+        Node* oldTail = tail.ptr.load(std::memory_order_acquire);
+        Node* next = oldTail->next.load(std::memory_order_acquire);
+        uint64_t timestamp = oldTail->timestamp.load(std::memory_order_relaxed);
+        if (next == nullptr) {
+            if (oldTail->next.compare_exchange_weak(next, newNode,
+                                                    std::memory_order_release,
+                                                    std::memory_order_relaxed) &&
+                oldTail->timestamp.compare_exchange_weak(timestamp, timestamp + 1,
+                                                          std::memory_order_release,
+                                                          std::memory_order_relaxed)) {
+                tail.ptr.compare_exchange_strong(oldTail, newNode,
                                                  std::memory_order_release,
                                                  std::memory_order_relaxed);
-            }
-        }
-    }
+					return;
+				}
+			} else {
+            tail.ptr.compare_exchange_strong(oldTail, next,
+                                             std::memory_order_release,
+                                             std::memory_order_relaxed);
+			}
+		}
+	}
 
-    // Dequeue an item from the queue
-    bool dequeue(T& result) {
-        while (true) {
-            Node* oldHead = head.ptr.load(std::memory_order_acquire);
-            Node* next = oldHead->next.load(std::memory_order_acquire);
-            if (next == nullptr) {
-                return false;
-            }
-            if (head.ptr.compare_exchange_weak(oldHead, next,
-                                               std::memory_order_release,
-                                               std::memory_order_relaxed)) {
-                result = std::move(next->data);
-                deallocate_node(oldHead);
-                return true;
-            }
+
+bool dequeue(T& result) {
+    while (true) {
+        Node* oldHead = head.ptr.load(std::memory_order_acquire);
+        Node* next = oldHead->next.load(std::memory_order_acquire);
+        if (next == nullptr) {
+            return false;
+        }
+        if (head.ptr.compare_exchange_weak(oldHead, next,
+                                           std::memory_order_release,
+                                           std::memory_order_relaxed)) {
+            result = std::move(next->data);
+            deallocate_node(oldHead);
+            return true;
         }
     }
+}
 
     // Check if the queue is empty
     bool isEmpty() const {
