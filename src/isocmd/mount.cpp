@@ -161,6 +161,7 @@ void select_and_mount_files_by_number() {
 							isoFiles = filteredFiles;
 							verboseFiltered = false;
 							mountAllIsoFiles(isoFiles, mountedFiles, skippedMessages, mountedFails);
+							free(inputFiltered);
 							clearScrollBuffer();
 							printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
 						} else if (inputFiltered[0] != '\0' && (strcmp(inputFiltered, "/") != 0)) { // Check if the user provided input
@@ -191,6 +192,7 @@ void select_and_mount_files_by_number() {
         // Check if the user wants to mount all ISO files
 		if (std::strcmp(input, "00") == 0) {
 			mountAllIsoFiles(isoFiles, mountedFiles, skippedMessages, mountedFails);
+			free(input);
 			clearScrollBuffer();
 			printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
 		} else if (input[0] != '\0' && (strcmp(input, "/") != 0) && !verboseFiltered) {
