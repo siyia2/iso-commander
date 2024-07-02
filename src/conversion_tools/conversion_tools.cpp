@@ -128,7 +128,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     
     if (!(input == nullptr) && !(std::strcmp(input, "clr") == 0) && !onlySpaces) {
         // Save search history if input paths are provided
-        std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
+        std::cout << "\033[1mPlease wait...\033[1m\n" << std::endl;
         add_history(input);
         saveHistory();
     }
@@ -601,6 +601,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
 				for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
 					if (entry.is_regular_file()) {
 						totalFiles++;
+						std::cout << "\rTotal files processed: " << totalFiles << std::flush;
 					}
 				}
 			} catch (const std::filesystem::filesystem_error& e) {
