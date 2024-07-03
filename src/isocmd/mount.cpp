@@ -531,26 +531,24 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     std::mutex errorQueueMutex;
     std::queue<std::string> errorQueue;
 
-    std::mutex sharedStateMutex; // New mutex for protecting shared state
-
     auto processTask = [&](int index) {
-        bool shouldProcess = false;
-        {
-            std::lock_guard<std::mutex> lock(validIndicesMutex);
-            shouldProcess = validIndices.insert(index).second;
-        }
+		bool shouldProcess = false;
+		{
+			std::lock_guard<std::mutex> lock(validIndicesMutex);
+			shouldProcess = validIndices.insert(index).second;
+		}
 
-        if (shouldProcess) {
-            std::vector<std::string> isoFilesToMount = {isoFiles[index - 1]};
-            std::lock_guard<std::mutex> lock(sharedStateMutex);
-            mountIsoFile(isoFilesToMount, mountedFiles, skippedMessages, mountedFails);
-        }
+		if (shouldProcess) {
+			std::vector<std::string> isoFilesToMount = {isoFiles[index - 1]};
+			// No need for sharedStateMutex here since protection is handled inside mountIsoFile
+			mountIsoFile(isoFilesToMount, mountedFiles, skippedMessages, mountedFails);
+		}
 
-        completedTasks.fetch_add(1, std::memory_order_relaxed);
-        if (activeTaskCount.fetch_sub(1, std::memory_order_release) == 1) {
-            taskCompletionCV.notify_all();
-        }
-    };
+		completedTasks.fetch_add(1, std::memory_order_relaxed);
+		if (activeTaskCount.fetch_sub(1, std::memory_order_release) == 1) {
+			taskCompletionCV.notify_all();
+		}
+	};
 
     auto addError = [&](const std::string& error) {
         std::lock_guard<std::mutex> lock(errorQueueMutex);
