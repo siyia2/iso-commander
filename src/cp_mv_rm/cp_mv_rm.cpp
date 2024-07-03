@@ -379,6 +379,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 			if (processedIndices.empty()) {
 			clearScrollBuffer();
 			mvDelBreak=false;
+			verbose = false;
 			std::cout << "\n\033[1;91mNo valid input to be " << operationDescription << ".\033[1;91m\n";
 			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -445,6 +446,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         if (!uniqueErrorMessages.empty() && indexChunks.empty()) {
 			clearScrollBuffer();
 			mvDelBreak=false;
+			verbose = false;
             std::cout << "\n\033[1;91mNo valid input for deletion.\033[0;1m\n";
         } else {
             std::string confirmation;
