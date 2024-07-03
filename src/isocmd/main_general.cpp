@@ -4,6 +4,9 @@
 // Get max available CPU cores for global use, fallback is 2 cores
 unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
+// Mutex for HighLevel functions
+std::mutex Mutex4High;
+
 // Mutex for LowLevel functions
 std::mutex Mutex4Low;
 
@@ -32,7 +35,7 @@ int lockFileDescriptor = -1;
 int main(int argc, char *argv[]) {
 	
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
-        printVersionNumber("4.7.5");
+        printVersionNumber("4.7.6");
         return 0;
     }
 	
