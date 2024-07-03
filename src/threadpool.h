@@ -122,18 +122,34 @@ bool dequeue(T& result) {
     while (true) {
         Node* oldHead = head.ptr.load(std::memory_order_acquire);
         Node* next = oldHead->next.load(std::memory_order_acquire);
+        uint64_t oldHeadTimestamp = oldHead->timestamp.load(std::memory_order_relaxed);
+
         if (next == nullptr) {
             return false;
         }
-        if (head.ptr.compare_exchange_weak(oldHead, next,
-                                           std::memory_order_release,
-                                           std::memory_order_relaxed)) {
-            result = std::move(next->data);
-            deallocate_node(oldHead);
-            return true;
-        }
-    }
-}
+
+        uint64_t nextTimestamp = next->timestamp.load(std::memory_order_relaxed);
+
+        if (head.ptr.load(std::memory_order_relaxed) == oldHead &&
+            oldHead->timestamp.load(std::memory_order_relaxed) == oldHeadTimestamp) {
+            
+            if (head.ptr.compare_exchange_weak(oldHead, next,
+                                               std::memory_order_release,
+                                               std::memory_order_relaxed) &&
+                oldHead->timestamp.compare_exchange_weak(oldHeadTimestamp, oldHeadTimestamp + 1,
+                                                         std::memory_order_release,
+                                                         std::memory_order_relaxed) &&
+                next->timestamp.compare_exchange_weak(nextTimestamp, nextTimestamp + 1,
+                                                      std::memory_order_release,
+                                                      std::memory_order_relaxed)) {
+                
+					result = std::move(next->data);
+					deallocate_node(oldHead);
+					return true;
+				}
+			}
+		}
+	}
 
     // Check if the queue is empty
     bool isEmpty() const {
