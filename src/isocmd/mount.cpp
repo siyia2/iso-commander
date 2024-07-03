@@ -344,7 +344,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
     }
     
     // Create a unique identifier using the filename and the short hash
-    std::string uniqueId = "\033[1;94m" + shortHash + "_\033[1;95m" + isoFileName;
+    std::string uniqueId =  "\033[1;95m" + isoFileName + "\033[38;5;245m-" + shortHash;
     
     std::string mountPoint = "/mnt/iso_" + uniqueId;
 
@@ -478,45 +478,45 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     std::string tokenCount;
     
     while (issCount >> tokenCount && tokens.size() < maxThreads) {
-        if (tokenCount[0] == '-') continue;
-        
-        // Count the number of hyphens
-        size_t hyphenCount = std::count(tokenCount.begin(), tokenCount.end(), '-');
-        
-        // Skip if there's more than one hyphen
-        if (hyphenCount > 1) continue;
-        
-        size_t dashPos = tokenCount.find('-');
-        if (dashPos != std::string::npos) {
-            std::string start = tokenCount.substr(0, dashPos);
-            std::string end = tokenCount.substr(dashPos + 1);
-            if (std::all_of(start.begin(), start.end(), ::isdigit) && 
-                std::all_of(end.begin(), end.end(), ::isdigit)) {
-                int startNum = std::stoi(start);
-                int endNum = std::stoi(end);
-                if (static_cast<std::vector<std::string>::size_type>(startNum) <= isoFiles.size() && 
-                    static_cast<std::vector<std::string>::size_type>(endNum) <= isoFiles.size()) {
-                    int step = (startNum <= endNum) ? 1 : -1;
-                    for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
-                        if (i != 0) {
-                            tokens.insert(std::to_string(i));
-                        }
-                        if (tokens.size() >= maxThreads) {
-                            break;
-                        }
+    if (tokenCount[0] == '-') continue;
+    
+    // Count the number of hyphens
+    size_t hyphenCount = std::count(tokenCount.begin(), tokenCount.end(), '-');
+    
+    // Skip if there's more than one hyphen
+    if (hyphenCount > 1) continue;
+    
+    size_t dashPos = tokenCount.find('-');
+    if (dashPos != std::string::npos) {
+        std::string start = tokenCount.substr(0, dashPos);
+        std::string end = tokenCount.substr(dashPos + 1);
+        if (std::all_of(start.begin(), start.end(), ::isdigit) && 
+            std::all_of(end.begin(), end.end(), ::isdigit)) {
+            int startNum = std::stoi(start);
+            int endNum = std::stoi(end);
+            if (static_cast<std::vector<std::string>::size_type>(startNum) <= isoFiles.size() && 
+                static_cast<std::vector<std::string>::size_type>(endNum) <= isoFiles.size()) {
+                int step = (startNum <= endNum) ? 1 : -1;
+                for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
+                    if (i != 0) {
+                        tokens.insert(std::to_string(i));
+                    }
+                    if (tokens.size() >= maxThreads) {
+                        break;
                     }
                 }
             }
-        } else if (std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
-            int num = std::stoi(tokenCount);
-            if (num > 0 && static_cast<std::vector<std::string>::size_type>(num) <= isoFiles.size()) {
-                tokens.insert(tokenCount);
-                if (tokens.size() >= maxThreads) {
-                    break;
-                }
-            }
         }
-    }
+    } else if (std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
+			int num = std::stoi(tokenCount);
+			if (num > 0 && static_cast<std::vector<std::string>::size_type>(num) <= isoFiles.size()) {
+				tokens.insert(tokenCount);
+				if (tokens.size() >= maxThreads) {
+					break;
+				}
+			}
+		}
+	}
     unsigned int numThreads = std::min(static_cast<int>(tokens.size()), static_cast<int>(maxThreads));
     ThreadPool pool(numThreads);
     
@@ -569,11 +569,11 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
 
         size_t dashPos = token.find('-');
         if (dashPos != std::string::npos) {
-            if (token.find('-', dashPos + 1) != std::string::npos || 
-                (dashPos == 0 || dashPos == token.size() - 1 || !std::isdigit(token[dashPos - 1]) || !std::isdigit(token[dashPos + 1]))) {
-                addError("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
-                continue;
-            }
+            if (dashPos == std::string::npos ||token.find('-', dashPos + 1) != std::string::npos || dashPos == 0 || dashPos == token.size() - 1 || !std::isdigit(token[dashPos - 1]) || !std::isdigit(token[dashPos + 1]) || !std::all_of(token.begin(), token.begin() + dashPos, ::isdigit) || !std::all_of(token.begin() + dashPos + 1, token.end(), ::isdigit)) {
+    
+				addError("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
+				continue;
+			}
 
             int start, end;
             try {
