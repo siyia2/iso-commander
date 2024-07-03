@@ -187,6 +187,7 @@ void select_and_mount_files_by_number() {
 						
 							clearScrollBuffer();
 							if (!uniqueErrorMessages.empty() && mountedFiles.empty() && skippedMessages.empty() && mountedFails.empty()) {
+								verbose = false;
 								std::cout << "\n\033[1;91mNo valid input provided for mount\033[0;1m\n";
 								std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 								std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -222,12 +223,12 @@ void select_and_mount_files_by_number() {
             processAndMountIsoFiles(input, isoFiles, mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
             clearScrollBuffer();
             if (!uniqueErrorMessages.empty() && mountedFiles.empty() && skippedMessages.empty() && mountedFails.empty()) {
+				    verbose = false;
 				    std::cout << "\n\033[1;91mNo valid input provided for mount\033[0;1m\n";
 				    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 			}
 				    
-
             if (verbose) {
 				printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
 			}

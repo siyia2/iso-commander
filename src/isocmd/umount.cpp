@@ -424,6 +424,7 @@ void unmountISOs() {
                             break; // Exit filter loop to process unmount
                         } else {
                             clearScrollBuffer();
+                            verbose = false;
                             std::cerr << "\n\033[1;91mNo valid input provided for umount.\n";
                             std::cout << "\n\033[1;32m↵ to continue...";
                             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -486,6 +487,7 @@ void unmountISOs() {
             } else {
                 clearScrollBuffer();
                 if (noValid) {
+					verbose = false;
                     std::cerr << "\n\033[1;91mNo valid input provided for umount.\n";
                     std::cout << "\n\033[1;32m↵ to continue...";
                     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
