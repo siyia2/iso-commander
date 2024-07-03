@@ -43,7 +43,7 @@ void listMountedISOs() {
     for (size_t i = 0; i < isoDirs.size(); ++i) {
         const char* sequenceColor = (i % 2 == 0) ? "\033[31;1m" : "\033[32;1m";
         output << sequenceColor << std::setw(numDigits) << (i + 1) << ". "
-               << "\033[1;94m/mnt/iso_" << isoDirs[i] << "\033[0;1m\n";
+               << "\033[94;1m/mnt/iso_" << isoDirs[i] << "\033[0;1m\n";
     }
 
     std::cout << output.str();
@@ -140,7 +140,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
         if (removeDirResult == 0) {
             for (const auto& dir : directoriesToRemove) {	
                 auto [directory, filename] = extractDirectoryAndFilename(dir);
-                std::string removedDirInfo = "\033[1mUnmounted: \033[1;94m'" + directory + "/" + filename + "'\033[0m.";
+                std::string removedDirInfo = "\033[0;1mUnmounted: \033[1;94m'" + directory + "/" + filename + "'\033[0m.";
                 {
 					std::lock_guard<std::mutex> lowLock(Mutex4Low);
 					unmountedFiles.insert(removedDirInfo);
