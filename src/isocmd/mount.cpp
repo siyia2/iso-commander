@@ -17,7 +17,8 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::st
     
     // Process all ISO files asynchronously
     std::vector<std::future<void>> futures;
-    {	std::lock_guard<std::mutex> highLock(Mutex4High);
+    {	
+		std::lock_guard<std::mutex> highLock(Mutex4High);
 		for (const auto& isoFile : isoFiles) {
 			futures.push_back(pool.enqueue([&isoFile, &mountedFiles, &skippedMessages, &mountedFails, &completedIsos]() {
 				mountIsoFile({isoFile}, mountedFiles, skippedMessages, mountedFails);
@@ -297,7 +298,6 @@ bool isAlreadyMounted(const std::string& mountPoint) {
     return (vfs.f_flag & ST_NODEV) == 0;
 }
 
-
 // Function to mount selected ISO files called from processAndMountIsoFiles
 void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
     namespace fs = std::filesystem;
@@ -361,9 +361,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
                 continue;
             }
         }
-
-        bool mountSuccess = false;
-
+        
 			std::string mountCommand = "mount -o loop,ro "  + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
 			int ret = std::system(mountCommand.c_str());
     
@@ -375,8 +373,6 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
                     std::lock_guard<std::mutex> lowLock(Mutex4Low);
                     mountedFiles.insert(mountedFileInfo);
                 }
-                mountSuccess = true;
-                break;
             }
         
 
@@ -392,7 +388,6 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
         }
     }
 }
-
 
 // Function to process input and mount ISO files asynchronously
 void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages) {
