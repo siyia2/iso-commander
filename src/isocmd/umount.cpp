@@ -516,14 +516,16 @@ void unmountISOs() {
 
 			// Enqueue unmount tasks for each batch of ISOs
 			for (const auto& batch : batches) {
-				futures.emplace_back(pool.enqueue([batch, &unmountedFiles, &unmountedErrors, &completedIsos]() {
-					for (const auto& iso : batch) {
-						unmountISO({iso}, unmountedFiles, unmountedErrors);
-						completedIsos.fetch_add(1, std::memory_order_relaxed);
-					}
-				}));
+				{
+					std::lock_guard<std::mutex> highLock(Mutex4High);
+					futures.emplace_back(pool.enqueue([batch, &unmountedFiles, &unmountedErrors, &completedIsos]() {
+						for (const auto& iso : batch) {
+							unmountISO({iso}, unmountedFiles, unmountedErrors);
+							completedIsos.fetch_add(1, std::memory_order_relaxed);
+						}
+					}));
+				}
 			}
-
 			// Wait for all unmount tasks to complete
 			for (auto& future : futures) {
 				future.wait();
