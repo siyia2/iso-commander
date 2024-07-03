@@ -361,7 +361,9 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
                 continue;
             }
         }
-        
+
+        bool mountSuccess = false;
+
 			std::string mountCommand = "mount -o loop,ro "  + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
 			int ret = std::system(mountCommand.c_str());
     
@@ -373,6 +375,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
                     std::lock_guard<std::mutex> lowLock(Mutex4Low);
                     mountedFiles.insert(mountedFileInfo);
                 }
+                mountSuccess = true;
             }
         
 
