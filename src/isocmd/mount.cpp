@@ -322,7 +322,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
             hashValue /= 36;
         }
 
-        std::string uniqueId = "\033[1;95m" + isoFileName + "\033[38;5;245m-" + shortHash;
+        std::string uniqueId = "\033[1;95m" + isoFileName + "\033[38;5;245m~" + shortHash;
         std::string mountPoint = "/mnt/iso_" + uniqueId;
 
         auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
