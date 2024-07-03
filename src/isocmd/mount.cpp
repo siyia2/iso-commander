@@ -10,6 +10,8 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::st
     unsigned int numThreads = std::min(static_cast<unsigned int>(isoFiles.size()), static_cast<unsigned int>(maxThreads));
     ThreadPool pool(numThreads);
     
+    std::mutex Mutex4CompletedIsos; // Mutex for completedIsos
+    
     int totalIsos = static_cast<int>(isoFiles.size());
     
     // Create progress thread
@@ -17,15 +19,16 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::st
     
     // Process all ISO files asynchronously
     std::vector<std::future<void>> futures;
-    {	
-		std::lock_guard<std::mutex> highLock(Mutex4High);
-		for (const auto& isoFile : isoFiles) {
-			futures.push_back(pool.enqueue([&isoFile, &mountedFiles, &skippedMessages, &mountedFails, &completedIsos]() {
-				mountIsoFile({isoFile}, mountedFiles, skippedMessages, mountedFails);
-				++completedIsos;
-			}));
-		}
-	}
+        for (const auto& isoFile : isoFiles) {
+            futures.push_back(pool.enqueue([&isoFile, &mountedFiles, &skippedMessages, &mountedFails, &completedIsos]() {
+                // Protect increment of completedIsos with a mutex
+                {
+                    std::lock_guard<std::mutex> guard(Mutex4CompletedIsos);
+                    mountIsoFile({isoFile}, mountedFiles, skippedMessages, mountedFails);
+                    ++completedIsos;
+                }
+            }));
+        }
     
     // Wait for all tasks to complete
     for (auto& future : futures) {
