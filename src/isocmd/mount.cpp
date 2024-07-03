@@ -57,6 +57,7 @@ void select_and_mount_files_by_number() {
 
     // Main loop for selecting and mounting ISO files
     while (true) {
+		verbose = false;
 		mountedFiles.clear();
 		skippedMessages.clear();
 		mountedFails.clear();
@@ -355,7 +356,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
         if (isAlreadyMounted(mountPoint)) {
             std::stringstream skippedMessage;
             skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename 
-                           << "'\033[1;93m already M@: \033[1;94m'" << mountisoDirectory 
+                           << "'\033[1;93m already mnt@: \033[1;94m'" << mountisoDirectory 
                            << "/" << mountisoFilename << "'\033[1;93m.\033[0m";
             {
                 std::lock_guard<std::mutex> lowLock(Mutex4Low);
@@ -429,7 +430,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
             if (ret == 0) {
                 // Successfully mounted
                 std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m"
-                                              + "\033[1m M@: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename 
+                                              + "\033[1m mnt@: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename 
                                               + "'\033[0;1m. {" + fsType + "}\033[0m";
                 {
                     std::lock_guard<std::mutex> lowLock(Mutex4Low);
@@ -466,9 +467,9 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     std::atomic<bool> invalidInput(false);
     std::mutex indicesMutex;
     std::set<int> processedIndices;
-    std::shared_mutex validIndicesMutex;
+    std::mutex validIndicesMutex;
     std::set<int> validIndices;
-    std::shared_mutex processedRangesMutex;
+    std::mutex processedRangesMutex;
     std::set<std::pair<int, int>> processedRanges;
     
     // Step 1: Tokenize the input to determine the number of threads to use
@@ -477,46 +478,46 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     std::string tokenCount;
     
     while (issCount >> tokenCount && tokens.size() < maxThreads) {
-    if (tokenCount[0] == '-') continue;
-    
-    // Count the number of hyphens
-    size_t hyphenCount = std::count(tokenCount.begin(), tokenCount.end(), '-');
-    
-    // Skip if there's more than one hyphen
-    if (hyphenCount > 1) continue;
-    
-    size_t dashPos = tokenCount.find('-');
-    if (dashPos != std::string::npos) {
-        std::string start = tokenCount.substr(0, dashPos);
-        std::string end = tokenCount.substr(dashPos + 1);
-        if (std::all_of(start.begin(), start.end(), ::isdigit) && 
-            std::all_of(end.begin(), end.end(), ::isdigit)) {
-            int startNum = std::stoi(start);
-            int endNum = std::stoi(end);
-            if (static_cast<std::vector<std::string>::size_type>(startNum) <= isoFiles.size() && 
-                static_cast<std::vector<std::string>::size_type>(endNum) <= isoFiles.size()) {
-                int step = (startNum <= endNum) ? 1 : -1;
-                for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
-                    if (i != 0) {
-                        tokens.insert(std::to_string(i));
-                    }
-                    if (tokens.size() >= maxThreads) {
-                        break;
+        if (tokenCount[0] == '-') continue;
+        
+        // Count the number of hyphens
+        size_t hyphenCount = std::count(tokenCount.begin(), tokenCount.end(), '-');
+        
+        // Skip if there's more than one hyphen
+        if (hyphenCount > 1) continue;
+        
+        size_t dashPos = tokenCount.find('-');
+        if (dashPos != std::string::npos) {
+            std::string start = tokenCount.substr(0, dashPos);
+            std::string end = tokenCount.substr(dashPos + 1);
+            if (std::all_of(start.begin(), start.end(), ::isdigit) && 
+                std::all_of(end.begin(), end.end(), ::isdigit)) {
+                int startNum = std::stoi(start);
+                int endNum = std::stoi(end);
+                if (static_cast<std::vector<std::string>::size_type>(startNum) <= isoFiles.size() && 
+                    static_cast<std::vector<std::string>::size_type>(endNum) <= isoFiles.size()) {
+                    int step = (startNum <= endNum) ? 1 : -1;
+                    for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
+                        if (i != 0) {
+                            tokens.insert(std::to_string(i));
+                        }
+                        if (tokens.size() >= maxThreads) {
+                            break;
+                        }
                     }
                 }
             }
+        } else if (std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
+            int num = std::stoi(tokenCount);
+            if (num > 0 && static_cast<std::vector<std::string>::size_type>(num) <= isoFiles.size()) {
+                tokens.insert(tokenCount);
+                if (tokens.size() >= maxThreads) {
+                    break;
+                }
+            }
         }
-    } else if (std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
-			int num = std::stoi(tokenCount);
-			if (num > 0 && static_cast<std::vector<std::string>::size_type>(num) <= isoFiles.size()) {
-				tokens.insert(tokenCount);
-				if (tokens.size() >= maxThreads) {
-					break;
-				}
-			}
-		}
-	}
-	unsigned int numThreads = std::min(static_cast<int>(tokens.size()), static_cast<int>(maxThreads));
+    }
+    unsigned int numThreads = std::min(static_cast<int>(tokens.size()), static_cast<int>(maxThreads));
     ThreadPool pool(numThreads);
     
     std::atomic<int> totalTasks(0);
@@ -530,19 +531,18 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     std::mutex errorQueueMutex;
     std::queue<std::string> errorQueue;
 
+    std::mutex sharedStateMutex; // New mutex for protecting shared state
+
     auto processTask = [&](int index) {
         bool shouldProcess = false;
         {
-            std::shared_lock readLock(validIndicesMutex);
-            if (validIndices.find(index) == validIndices.end()) {
-                readLock.unlock();
-                std::unique_lock writeLock(validIndicesMutex);
-                shouldProcess = validIndices.insert(index).second;
-            }
+            std::lock_guard<std::mutex> lock(validIndicesMutex);
+            shouldProcess = validIndices.insert(index).second;
         }
 
         if (shouldProcess) {
             std::vector<std::string> isoFilesToMount = {isoFiles[index - 1]};
+            std::lock_guard<std::mutex> lock(sharedStateMutex);
             mountIsoFile(isoFilesToMount, mountedFiles, skippedMessages, mountedFails);
         }
 
@@ -555,7 +555,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     auto addError = [&](const std::string& error) {
         std::lock_guard<std::mutex> lock(errorQueueMutex);
         errorQueue.push(error);
-        invalidInput.store(true, std::memory_order_relaxed);
+        invalidInput.store(true, std::memory_order_release);
     };
 
     std::string token;
@@ -597,12 +597,8 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
             std::pair<int, int> range(start, end);
             bool shouldProcessRange = false;
             {
-                std::shared_lock readLock(processedRangesMutex);
-                if (processedRanges.find(range) == processedRanges.end()) {
-                    readLock.unlock();
-                    std::unique_lock writeLock(processedRangesMutex);
-                    shouldProcessRange = processedRanges.insert(range).second;
-                }
+                std::lock_guard<std::mutex> lock(processedRangesMutex);
+                shouldProcessRange = processedRanges.insert(range).second;
             }
 
             if (shouldProcessRange) {
