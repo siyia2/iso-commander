@@ -489,12 +489,13 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 		for (const auto& index : chunk) {
 			isoFilesInChunk.push_back(isoFiles[index - 1]);
 		}
-    
-		futures.emplace_back(pool.enqueue([&, isoFilesInChunk]() {
-			handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors, userDestDir, isMove, isCopy, isDelete);
-			// Update progress
-			completedTasks.fetch_add(static_cast<int>(isoFilesInChunk.size()), std::memory_order_relaxed);
-		}));
+		{	std::lock_guard<std::mutex> highLock(Mutex4High);
+			futures.emplace_back(pool.enqueue([&, isoFilesInChunk]() {
+				handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors, userDestDir, isMove, isCopy, isDelete);
+				// Update progress
+				completedTasks.fetch_add(static_cast<int>(isoFilesInChunk.size()), std::memory_order_relaxed);
+			}));
+		}
 	}
 
 	for (auto& future : futures) {
