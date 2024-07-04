@@ -52,29 +52,23 @@ void listMountedISOs() {
 
 // Function to check if directory is empty for unmountISO
 bool isDirectoryEmpty(const std::string& path) {
-    namespace fs = std::filesystem;
-
-    // Create a path object from the given string
-    fs::path dirPath(path);
-
-    // Check if the path exists and is a directory
-    if (!fs::exists(dirPath) || !fs::is_directory(dirPath)) {
-        // Handle the case when the path is invalid or not a directory
-        return false;
+    DIR* dir = opendir(path.c_str());
+    if (dir == nullptr) {
+        return false;  // Unable to open directory
     }
 
-    // Iterate over the directory entries at the surface level
-    auto dirIter = fs::directory_iterator(dirPath);
-    auto end = fs::directory_iterator(); // Default constructor gives the "end" iterator
-
-    // Check if there are any entries in the directory
-    if (dirIter != end) {
-        // If we find any entry (file or subdirectory) in the directory, it's not empty
-        return false;
+    errno = 0;
+    struct dirent* entry;
+    int count = 0;
+    while ((entry = readdir(dir)) != nullptr) {
+        if (++count > 2) {
+            closedir(dir);
+            return false;  // Directory not empty
+        }
     }
 
-    // If we reach here, it means the directory is empty
-    return true;
+    closedir(dir);
+    return errno == 0 && count <= 2;  // Empty if only "." and ".." entries and no errors
 }
 
 
