@@ -267,13 +267,15 @@ void unmountISOs() {
                 
                 if (filterPattern && filterPattern[0] != '\0') {
 					std::cout << "\033[1mPlease wait...\033[1m\n";
-					add_history(filterPattern); // Add the search query to the history
-					saveHistory();
+					if (strcmp(filterPattern, "/") != 0){
+						add_history(filterPattern); // Add the search query to the history
+						saveHistory();
+					}
 				}
 
 				clear_history();
 
-				if (std::isspace(filterPattern[0]) || filterPattern[0] == '\0' || strcmp(filterPattern, "/") == 0) {
+				if (filterPattern[0] == '\0' || strcmp(filterPattern, "/") == 0) {
 					free(filterPattern);
 					skipEnter = false;
 					isFiltered = false;
