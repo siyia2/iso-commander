@@ -287,7 +287,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 				}
 				clear_history(); // Clear history for fresh start
 
-				if (std::isspace(searchQuery[0]) || searchQuery[0] == '\0') { // Check if the search query is empty or contains only spaces
+				if (std::isspace(searchQuery[0]) || searchQuery[0] == '\0' || strcmp(searchQuery, "/") == 0) { // Check if the search query is empty or contains only spaces
 					free(searchQuery); // Free memory allocated for search query
 					historyPattern = false; // Set history pattern to false
 					isFiltered = false;
