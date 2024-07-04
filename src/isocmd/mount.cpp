@@ -302,9 +302,15 @@ bool isAlreadyMounted(const std::string& mountPoint) {
     return (vfs.f_flag & ST_NODEV) == 0;
 }
 
+
 // Function to mount selected ISO files called from processAndMountIsoFiles
 void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
     namespace fs = std::filesystem;
+    
+    // Declare fsTypes inside the function
+    const std::vector<std::string> fsTypes = {
+        "iso9660", "udf", "hfsplus", "rockridge", "joliet", "isofs", "auto"
+    };
 
     for (const auto& isoFile : isoFilesToMount) {
         fs::path isoPath(isoFile);
@@ -368,19 +374,47 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
 
         bool mountSuccess = false;
 
-			std::string mountCommand = "mount -o loop,ro "  + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
+	// Attempt to mount using sudo mount command
+	for (const auto& fsType : fsTypes) {
+		std::string mountOptions = "loop,ro";
+		if (fsType == "auto") {
+			// For "auto", we don't specify a file system type
+			mountOptions += ",auto";
+			std::string mountCommand = "mount -o " + mountOptions + " " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
 			int ret = std::system(mountCommand.c_str());
-    
-            if (ret == 0) {
-                std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m"
-                                              + "\033[1m mnt@: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename
-                                              + "'\033[0;1m.\033[0m";
-                {
-                    std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                    mountedFiles.insert(mountedFileInfo);
-                }
-                mountSuccess = true;
-            }
+        
+			if (ret == 0) {
+					// Mount successful
+					std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m"
+												+ "\033[1m mounted at: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename
+												+ "'\033[0;1m.\033[0m";
+					{
+						std::lock_guard<std::mutex> lowLock(Mutex4Low);
+						mountedFiles.insert(mountedFileInfo);
+					}
+					mountSuccess = true;
+					break;
+			}
+		
+			} else {
+				// For specific file systems, we include the type in the mount command
+				std::string mountCommand = "mount -t " + fsType + " -o " + mountOptions + " " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
+				int ret = std::system(mountCommand.c_str());
+        
+				if (ret == 0) {
+					// Mount successful
+					std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m"
+												+ "\033[1m mounted at: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename
+												+ "'\033[0;1m (Type: " + fsType + ").\033[0m";
+					{
+						std::lock_guard<std::mutex> lowLock(Mutex4Low);
+						mountedFiles.insert(mountedFileInfo);
+					}
+					mountSuccess = true;
+					break;
+				}
+			}
+		}
         
 
         if (!mountSuccess) {
@@ -395,6 +429,7 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
         }
     }
 }
+
 
 // Function to process input and mount ISO files asynchronously
 void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages) {
