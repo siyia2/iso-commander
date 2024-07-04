@@ -121,7 +121,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 			std::string prompt;
 			
             // User pressed '/', start the filtering process
-            prompt = "\n\001\033[1;92m\002SearchQuery\001\033[1;94m\002 ↵ to filter \001" + operationColor + "\002" + operation + "\001" + "\002\001\033[1;94m\002 list (case-insensitive, multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return: \001\033[0;1m\002";
+            prompt = "\n\001\033[1;92m\002Term(s)\001\033[1;94m\002 ↵ to filter \001" + operationColor + "\002" + operation + "\001" + "\002\001\033[1;94m\002 list (case-insensitive, multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return: \001\033[0;1m\002";
             
             char* searchQuery = readline(prompt.c_str());
             clearScrollBuffer();
