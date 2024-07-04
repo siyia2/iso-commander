@@ -125,7 +125,7 @@ void select_and_mount_files_by_number() {
 			clearScrollBuffer();
 			
 			
-			if (searchQuery && searchQuery[0] != '\0' && strcmp(searchQuery, "/") != 0) {
+			if (searchQuery && searchQuery[0] != '\0') {
 				std::cout << "\033[1mPlease wait...\033[1m\n";
 				add_history(searchQuery); // Add the search query to the history
 				saveHistory();
