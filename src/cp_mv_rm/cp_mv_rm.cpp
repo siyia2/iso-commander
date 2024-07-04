@@ -450,7 +450,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             std::cout << "\n\033[1;91mNo valid input for deletion.\033[0;1m\n";
         } else {
             std::string confirmation;
-            std::cout << "\n\033[1;94mThe specified ISO file(s) will be " << operationColor + operationDescription << "\033[1;94m, do you wish to proceed? (y/n):\033[0;1m ";
+            std::cout << "\n\033[1;94mThe selected ISO file(s) will be " << operationColor + operationDescription << "\033[1;94m, do you wish to proceed? (y/n):\033[0;1m ";
             std::getline(std::cin, confirmation);
 
             if (!(confirmation == "y" || confirmation == "Y")) {
