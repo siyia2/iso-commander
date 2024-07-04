@@ -83,7 +83,7 @@ void select_and_mount_files_by_number() {
 			break;
 		}
 		
-		bool verboseFiltered = false;
+		bool isFiltered = false;
         clearScrollBuffer();
         std::cout << "\033[1;93m! IF EXPECTED ISO FILES ARE NOT ON THE LIST IMPORT THEM FROM THE MAIN MENU OPTIONS !\033[0;1m\n";
         
@@ -110,7 +110,7 @@ void select_and_mount_files_by_number() {
 
 		if (strcmp(input, "/") == 0) {
 			free(input);
-			verboseFiltered = true;
+			isFiltered = true;
 			
 			while (true) {
 			
@@ -173,7 +173,7 @@ void select_and_mount_files_by_number() {
 							std::cout << "\033[1mPlease wait...\033[1m\n";
 							// Restore the original list of ISO files
 							isoFiles = filteredFiles;
-							verboseFiltered = false;
+							isFiltered = false;
 							mountAllIsoFiles(isoFiles, mountedFiles, skippedMessages, mountedFails);
 							free(inputFiltered);
 							clearScrollBuffer();
@@ -206,7 +206,7 @@ void select_and_mount_files_by_number() {
 				} else {
 					free(searchQuery);
 					historyPattern = false;
-					verboseFiltered = true;
+					isFiltered = true;
 					isoFiles = originalIsoFiles; // Revert to the original cache list
 					break;
 			}
@@ -221,7 +221,7 @@ void select_and_mount_files_by_number() {
 			if (verbose) {
 				printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
 			}
-		} else if (input[0] != '\0' && (strcmp(input, "/") != 0) && !verboseFiltered) {
+		} else if (input[0] != '\0' && (strcmp(input, "/") != 0) && !isFiltered) {
             // Process user input to select and mount specific ISO files
             processAndMountIsoFiles(input, isoFiles, mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
             clearScrollBuffer();
