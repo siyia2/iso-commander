@@ -404,8 +404,8 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
 				if (ret == 0) {
 					// Mount successful
 					std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m"
-												+ "\033[1m mounted at: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename
-												+ "'\033[0;1m (Type: " + fsType + ").\033[0m";
+												+ "\033[1m mnt@: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename
+												+ "'\033[0;1m. {" + fsType + "}\033[0m";
 					{
 						std::lock_guard<std::mutex> lowLock(Mutex4Low);
 						mountedFiles.insert(mountedFileInfo);
