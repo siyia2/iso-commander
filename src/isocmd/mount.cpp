@@ -135,7 +135,7 @@ void select_and_mount_files_by_number() {
 			// Store the original isoFiles vector
 			std::vector<std::string> originalIsoFiles = isoFiles;
 			// Check if the user wants to return
-			if (!(std::isspace(searchQuery[0]) || searchQuery[0] == '\0')) {
+			if (!(std::isspace(searchQuery[0]) || searchQuery[0] == '\0'|| strcmp(searchQuery, "/") == 0)) {
         
 
 			if (searchQuery != nullptr) {

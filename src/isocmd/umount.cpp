@@ -273,7 +273,7 @@ void unmountISOs() {
 
 				clear_history();
 
-				if (std::isspace(filterPattern[0]) || filterPattern[0] == '\0') {
+				if (std::isspace(filterPattern[0]) || filterPattern[0] == '\0' || strcmp(filterPattern, "/") == 0) {
 					free(filterPattern);
 					skipEnter = false;
 					isFiltered = false;
