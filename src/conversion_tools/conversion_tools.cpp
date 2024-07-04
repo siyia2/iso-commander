@@ -280,7 +280,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
 				clearScrollBuffer(); // Clear scroll buffer to prepare for new content
 
-				if (searchQuery != nullptr && searchQuery[0] != '\0' && strcmp(searchQuery, "/") != 0) { // Check if the search query is not empty
+				if (searchQuery != nullptr && searchQuery[0] != '\0') { // Check if the search query is not empty
 					std::cout << "\033[1mPlease wait...\033[1m\n"; // Inform user to wait
 					add_history(searchQuery); // Add the search query to the history
 					saveHistory(); // Save the history
