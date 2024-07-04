@@ -80,7 +80,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
             auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoDir);
             std::stringstream errorMessage;
             errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDirectory << "/" << isoFilename 
-                         << "'\033[1;91m. Root privileges are required.\033[0m";
+                         << "\033[1;93m'\033[1;91m. Root privileges are required.\033[0m";
             {
 				std::lock_guard<std::mutex> lowLock(Mutex4Low);
 				unmountedErrors.insert(errorMessage.str());
@@ -103,7 +103,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
             auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoDir);
             std::stringstream errorMessage;
             if (!isDirectoryEmpty(isoDir)) {
-                errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[1;91m. Probably not an ISO mountpoint.\033[0m";
+                errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "\033[1;93m'\033[1;91m. Probably not an ISO mountpoint.\033[0m";
                 if (unmountedErrors.find(errorMessage.str()) == unmountedErrors.end()) {
 					{
 						std::lock_guard<std::mutex> lowLock(Mutex4Low);
@@ -134,7 +134,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
         if (removeDirResult == 0) {
             for (const auto& dir : directoriesToRemove) {	
                 auto [directory, filename] = extractDirectoryAndFilename(dir);
-                std::string removedDirInfo = "\033[0;1mUnmounted: \033[1;92m'" + directory + "/" + filename + "'\033[0m.";
+                std::string removedDirInfo = "\033[0;1mUnmounted: \033[1;92m'" + directory + "/" + filename + "\033[1;92m'\033[0m.";
                 {
 					std::lock_guard<std::mutex> lowLock(Mutex4Low);
 					unmountedFiles.insert(removedDirInfo);
