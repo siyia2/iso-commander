@@ -265,7 +265,7 @@ void unmountISOs() {
                 char* filterPattern = readline(prompt.c_str());
                 clearScrollBuffer();
                 
-                if (filterPattern && filterPattern[0] != '\0') {
+                if (filterPattern && filterPattern[0] != '\0' && strcmp(filterPattern, "/") != 0) {
 					std::cout << "\033[1mPlease wait...\033[1m\n";
 					add_history(filterPattern); // Add the search query to the history
 					saveHistory();
