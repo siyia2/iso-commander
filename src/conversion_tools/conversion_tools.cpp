@@ -280,14 +280,16 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
 				clearScrollBuffer(); // Clear scroll buffer to prepare for new content
 
-				if (searchQuery != nullptr && searchQuery[0] != '\0') { // Check if the search query is not empty
-					std::cout << "\033[1mPlease wait...\033[1m\n"; // Inform user to wait
-					add_history(searchQuery); // Add the search query to the history
-					saveHistory(); // Save the history
+				if (searchQuery && searchQuery[0] != '\0') {
+					std::cout << "\033[1mPlease wait...\033[1m\n";
+					if (strcmp(searchQuery, "/") != 0) {
+						add_history(searchQuery); // Add the search query to the history
+						saveHistory();
+					}
 				}
 				clear_history(); // Clear history for fresh start
 
-				if (std::isspace(searchQuery[0]) || searchQuery[0] == '\0' || strcmp(searchQuery, "/") == 0) { // Check if the search query is empty or contains only spaces
+				if (searchQuery[0] == '\0' || strcmp(searchQuery, "/") == 0) { // Check if the search query is empty or contains only spaces
 					free(searchQuery); // Free memory allocated for search query
 					historyPattern = false; // Set history pattern to false
 					isFiltered = false;
