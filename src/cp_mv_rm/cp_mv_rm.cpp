@@ -137,7 +137,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
             // Store the original isoFiles vector
             std::vector<std::string> originalIsoFiles = isoFiles;
             
-            if (!(std::isspace(searchQuery[0]) || searchQuery[0] == '\0')) {
+            if (!(std::isspace(searchQuery[0]) || searchQuery[0] == '\0' || strcmp(searchQuery, "/") == 0)) {
 
             if (searchQuery != nullptr) {
                 std::vector<std::string> filteredFiles = filterFiles(isoFiles, searchQuery);
