@@ -244,6 +244,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     // Variables for tracking errors, processed indices, and valid indices
     bool invalidInput = false;
     std::vector<int> processedIndices; // Vector to keep track of processed indices
+    processedIndices.reserve(maxThreads);
     
     bool isDelete = (process == "rm");
     bool isMove = (process == "mv");
