@@ -78,7 +78,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
         
         if (isoFiles.empty()) {
 			clearScrollBuffer();
-			std::cout << "\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n";
+			std::cout << "\n\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n";
 			std::cout << "\n";
 			std::cout << "\033[1;32m↵ to continue...\033[0;1m";
 			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -97,7 +97,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
         
 
         // Prompt user for input or filter
-        char* input = readline(("\n\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + "\001\033[1;94m\002 (e.g., '1-3', '1 5'), / ↵ to filter, or ↵ to return:\001\033[0;1m\002 ").c_str());
+        char* input = readline(("\n\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + "\001\033[1;94m\002 (e.g., 1-3,1 5), / ↵ filter, ↵ return:\001\033[0;1m\002 ").c_str());
         clearScrollBuffer();
         
         if (strcmp(input, "/") != 0 || (!(std::isspace(input[0]) || input[0] == '\0'))) {
@@ -163,7 +163,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 						printIsoFileList(filteredFiles); // Print the filtered list of ISO files
 
 						// Prompt user for input again with the filtered list
-						char* input = readline(("\n\n\001\033[1;92m\002Filtered ISO(s)\001\033[1;94m\002 ↵ for " + operationColor + operation + "\001\033[1;94m\002 (e.g., '1-3', '1 5'), or ↵ to return:\001\033[0;1m\002 ").c_str());
+						char* input = readline(("\n\n\001\033[1;92m\002Filtered ISO(s)\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + "\001\033[1;94m\002 (e.g., 1-3,1 5), ↵ return:\001\033[0;1m\002 ").c_str());
                     
 						// Check if the user wants to return
 						if (std::isspace(input[0]) || input[0] == '\0') {
@@ -221,8 +221,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
         // If ISO files become empty after operation, display a message and return
         if (isoFiles.empty()) {
-            std::cout << "\n";
-            std::cout << "\033[1;93mNo ISO(s) available for " << operation << ".\033[0;1m\n";
+            std::cout << "\n\033[1;93mNo ISO(s) available for " << operation << ".\033[0;1m\n";
             std::cout << "\n";
             std::cout << "↵ to continue...\n";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
