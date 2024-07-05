@@ -120,7 +120,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     
     // Prompt user to input directory paths
     std::string prompt = "\001\033[1;92m\002Directory path(s)\001\033[1;94m ↵ to scan for and import \001\033[1;38;5;208m\002" 
-                        + fileExtension + " \001\033[1;94m\002files into \001\033[1;93mRAM\001\033[1;94m cache (multi-path separator: \001\033[1;93m\002;\001\033[1;94m\002), \001\033[1;93m\002clr\001\033[1;94m\002 ↵ to clear \001\033[1;38;5;208m\002" + fileExtension 
+                        + fileExtension + " \001\033[1;94m\002files into \001\033[1;93mRAM\001\033[1;94m cache (multi-path separator: \001\033[1;93m\002;\001\033[1;94m\002), \001\033[1;93m\002clr\001\033[1;94m\002 ↵ to clear \001\033[1;38;5;208m\002" + fileTypeName 
                         + " \001\033[1;93m\002RAM\001\033[1;94m cache, or ↵ to return:\n\001\033[0;1m\002";
     
     char* input = readline(prompt.c_str());
