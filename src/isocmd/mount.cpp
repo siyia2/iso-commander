@@ -170,6 +170,7 @@ void select_and_mount_files_by_number() {
 					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 				} else {
 					while (true) {
+						bool noProcessing = false;
 						mountedFiles.clear();
 						skippedMessages.clear();
 						mountedFails.clear();
