@@ -297,12 +297,14 @@ void unmountISOs() {
 				// Filter the list of ISO directories based on the filter pattern
 				filteredIsoDirs.clear();
 
-				// Vector to store futures for tracking tasks' completion
-				std::vector<std::future<void>> futures;
+				
 
 				// Calculate the number of directories per thread
 				size_t numDirs = isoDirs.size();
 				unsigned int numThreads = std::min(static_cast<unsigned int>(numDirs), maxThreads);
+				// Vector to store futures for tracking tasks' completion
+				std::vector<std::future<void>> futuresFilter;
+				futuresFilter.reserve(numThreads);
 				size_t baseDirsPerThread = numDirs / numThreads;
 				size_t remainder = numDirs % numThreads;
 
@@ -311,13 +313,13 @@ void unmountISOs() {
 					size_t start = i * baseDirsPerThread + std::min(i, remainder);
 					size_t end = start + baseDirsPerThread + (i < remainder ? 1 : 0);
 
-					futures.push_back(std::async(std::launch::async, [&](size_t start, size_t end) {
+					futuresFilter.push_back(std::async(std::launch::async, [&](size_t start, size_t end) {
 						filterMountPoints(isoDirs, filterPatterns, filteredIsoDirs, start, end);
 					}, start, end));
 				}
 
 				// Wait for all filter tasks to complete
-				for (auto& future : futures) {
+				for (auto& future : futuresFilter) {
 					future.get();
 				}
 
@@ -494,9 +496,10 @@ void unmountISOs() {
 
         // If there are selected ISOs, proceed to unmount them
         if (!selectedIsoDirs.empty()) {
-			std::vector<std::future<void>> futures;
 			unsigned int numThreads = std::min(static_cast<int>(selectedIsoDirs.size()), static_cast<int>(maxThreads));
 			ThreadPool pool(numThreads);
+			std::vector<std::future<void>> futuresUmount;
+			futuresUmount.reserve(numThreads);
     
 			// Divide the selected ISOs into batches for parallel processing
 			size_t batchSize = (selectedIsoDirs.size() + maxThreads - 1) / maxThreads;
@@ -516,7 +519,7 @@ void unmountISOs() {
 			for (const auto& batch : batches) {
 				{
 					std::lock_guard<std::mutex> highLock(Mutex4High);
-					futures.emplace_back(pool.enqueue([batch, &unmountedFiles, &unmountedErrors, &completedIsos]() {
+					futuresUmount.emplace_back(pool.enqueue([batch, &unmountedFiles, &unmountedErrors, &completedIsos]() {
 						for (const auto& iso : batch) {
 							unmountISO({iso}, unmountedFiles, unmountedErrors);
 							completedIsos.fetch_add(1, std::memory_order_relaxed);
@@ -525,7 +528,7 @@ void unmountISOs() {
 				}
 			}
 			// Wait for all unmount tasks to complete
-			for (auto& future : futures) {
+			for (auto& future : futuresUmount) {
 				future.wait();
 			}
 
