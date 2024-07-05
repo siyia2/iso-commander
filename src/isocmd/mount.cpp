@@ -335,7 +335,7 @@ bool isAlreadyMounted(const std::string& mountPoint) {
     return (vfs.f_flag & ST_NODEV) == 0;
 }
 
-
+// Function to mount a single ISO file
 void mountIsoFile(const std::vector<std::string>& isoFilesToMount,std::set<std::string>& mountedFiles,std::set<std::string>& skippedMessages,std::set<std::string>& mountedFails) {
 		namespace fs = std::filesystem;
     
@@ -496,7 +496,6 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount,std::set<std::
         }
     }
 }
-
 
 
 // Function to process input and mount ISO files asynchronously
