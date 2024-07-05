@@ -244,7 +244,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
         clear_history();
 
-        std::string prompt = "\n\001\033[1;38;5;208m\002" + fileTypeName + " \001\033[1;94m\002file(s) ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 (e.g., 1-3,1 5), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+        std::string prompt = "\n\001\033[1;38;5;208m\002" + fileTypeName + " \001\033[1;94m\002file(s) ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion (e.g., 1-3,1 5), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
         char* input = readline(prompt.c_str());
 
         // Check if user wants to return
@@ -320,9 +320,9 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
 						std::string filterPrompt; // Define a string variable for filter prompt
 						if (fileType == "bin" || fileType == "img") {
-							filterPrompt = "\n\001\033[1;94m\033[1;38;5;208m\002Filtered BIN/IMG\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 (e.g., 1-3,1 5), ↵ return:\001\033[0;1m\002 ";
+							filterPrompt = "\n\001\033[1;94m\033[1;38;5;208m\002Filtered BIN/IMG\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion (e.g., 1-3,1 5), ↵ return:\001\033[0;1m\002 ";
 						} else if (fileType == "mdf") {
-							filterPrompt = "\n\001\033[1;94m\033[1;38;5;208m\002Filtered MDF\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 (e.g., 1-3,1 5), ↵ return:\001\033[0;1m\002 ";
+							filterPrompt = "\n\001\033[1;94m\033[1;38;5;208m\002Filtered MDF\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion (e.g., 1-3,1 5), ↵ return:\001\033[0;1m\002 ";
 						}
 						char* filterInput = readline(filterPrompt.c_str()); // Get input for file conversion
 
