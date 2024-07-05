@@ -96,9 +96,8 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
     std::string fileExtension;
     std::string fileTypeName;
+    std::string fileType = fileTypeChoice;
     
-    // Convert the first character of fileTypeChoice to lowercase
-    std::string fileType = std::string(1, std::tolower(fileTypeChoice[0])) + fileTypeChoice.substr(1);
 
     // Determine file extension and type name based on user input
     if (fileType == "bin" || fileType == "img") {
@@ -868,9 +867,7 @@ bool blacklist(const std::filesystem::path& entry, bool blacklistMdf) {
 
     // Convert the extension to lowercase for case-insensitive comparison
     std::string extLower = ext;
-    std::transform(extLower.begin(), extLower.end(), extLower.begin(), [](char c) {
-        return std::tolower(c);
-    });
+    toLowerInPlace(extLower);
 
     // Combine extension checks
     if (!blacklistMdf) {
@@ -905,10 +902,7 @@ bool blacklist(const std::filesystem::path& entry, bool blacklistMdf) {
 
     // Convert the filename to lowercase for additional case-insensitive comparisons
     std::string filenameLowerNoExt = filenameLower;
-    filenameLowerNoExt.erase(filenameLowerNoExt.size() - ext.size()); // Remove extension
-    std::transform(filenameLowerNoExt.begin(), filenameLowerNoExt.end(), filenameLowerNoExt.begin(), [](char c) {
-        return std::tolower(c);
-    });
+	filenameLowerNoExt.erase(filenameLowerNoExt.size() - ext.size());
 
     // Check if any blacklisted word is present in the filename
     for (const auto& keyword : blacklistKeywords) {
@@ -946,11 +940,10 @@ void printFileList(const std::vector<std::string>& fileList) {
         bool isSpecialExtension = false;
         
         if (dotPos != std::string::npos) {
-            std::string extension = fileNameOnly.substr(dotPos);
-            std::transform(extension.begin(), extension.end(), extension.begin(), 
-                           [](unsigned char c){ return std::tolower(c); });
-            isSpecialExtension = (extension == ".bin" || extension == ".img" || extension == ".mdf");
-        }
+			std::string extension = fileNameOnly.substr(dotPos);
+			toLowerInPlace(extension);
+			isSpecialExtension = (extension == ".bin" || extension == ".img" || extension == ".mdf");
+		}
 
         const char* sequenceColor = (i % 2 == 0) ? red : green;
         
