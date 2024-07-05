@@ -12,13 +12,19 @@ void sortFilesCaseInsensitive(std::vector<std::string>& files) {
 }
 
 
+// Conver string s to lowercase efficiently
+void toLowerInPlace(std::string& str) {
+    for (char& c : str) {
+        c = std::tolower(static_cast<unsigned char>(c));
+    }
+}
+
 // Boyer-Moore string search implementation for files
 std::vector<size_t> boyerMooreSearch(const std::string& pattern, const std::string& text) {
     // Helper lambda to convert a string to lowercase
     auto toLower = [](const std::string& str) {
         std::string lowerStr = str;
-        std::transform(lowerStr.begin(), lowerStr.end(), lowerStr.begin(),
-                       [](unsigned char c){ return std::tolower(c); });
+        toLowerInPlace(lowerStr);
         return lowerStr;
     };
 
@@ -70,9 +76,9 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
     std::stringstream ss(query);
     std::string token;
     while (std::getline(ss, token, ';')) {
-        std::transform(token.begin(), token.end(), token.begin(), ::tolower);
-        queryTokens.insert(token);
-    }
+		toLowerInPlace(token);
+		queryTokens.insert(token);
+	}
 
     std::shared_mutex filterMutex;
     
@@ -81,7 +87,7 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
         for (size_t i = start; i < end; ++i) {
             const std::string& file = files[i];
             std::string fileName = file;
-            std::transform(fileName.begin(), fileName.end(), fileName.begin(), ::tolower);
+			toLowerInPlace(fileName);
             
             bool matchFound = false;
             for (const std::string& queryToken : queryTokens) {
@@ -159,7 +165,7 @@ std::shared_mutex filterMutex;  // Shared mutex for thread-safe access to filter
     for (size_t i = start; i < end; ++i) {
         const std::string& dir = isoDirs[i];
         std::string dirLower = dir;
-        std::transform(dirLower.begin(), dirLower.end(), dirLower.begin(), ::tolower);
+        toLowerInPlace(dirLower);
         bool matchFound = false;
         for (const std::string& pattern : filterPatterns) {
             if (boyerMooreSearchMountPoints(dirLower, pattern) != std::string::npos) {

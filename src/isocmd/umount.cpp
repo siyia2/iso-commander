@@ -290,7 +290,7 @@ void unmountISOs() {
 				std::string token;
 				while (std::getline(ss, token, ';')) {
 					filterPatterns.push_back(token);
-					std::transform(filterPatterns.back().begin(), filterPatterns.back().end(), filterPatterns.back().begin(), ::tolower);
+					toLowerInPlace(filterPatterns.back());
 				}
 				free(filterPattern);
 

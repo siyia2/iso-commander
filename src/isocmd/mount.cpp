@@ -19,6 +19,7 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::st
     
     // Process all ISO files asynchronously
     std::vector<std::future<void>> futures;
+    futures.reserve(isoFiles.size());
         for (const auto& isoFile : isoFiles) {
             futures.push_back(pool.enqueue([&isoFile, &mountedFiles, &skippedMessages, &mountedFails, &completedIsos, &Mutex4CompletedIsos]() {
                 // Protect increment of completedIsos with a mutex
