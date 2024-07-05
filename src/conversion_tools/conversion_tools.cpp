@@ -387,6 +387,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     std::mutex futuresMutex;
     std::set<int> processedIndices;
     std::vector<std::future<void>> futures;
+    futures.reserve(100);
 
     // Step 1: Tokenize the input to determine the number of threads to use
     std::istringstream issCount(input);
