@@ -358,8 +358,8 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount,std::set<std::
 		if (isInFailedSet) {
 			// Skip this ISO file if it's in the global failed set
 			std::stringstream skippedMessage;
-			skippedMessage << "\033[1;91mCorrupted ISO: \033[1;93m'" << isoDirectory << "/" << isoFilename 
-						   << "'\033[1;93m (skipped), clr ↵ in mount selection to reset status.\033[0m";
+			skippedMessage << "\033[1;93mISO: \033[1;91m'" << isoDirectory << "/" << isoFilename 
+						   << "'\033[1;93m skipped (prev mnt fail), clr ↵ clears status.\033[0m";
 
 			{
 				std::lock_guard<std::mutex> lowLock(Mutex4Low);
