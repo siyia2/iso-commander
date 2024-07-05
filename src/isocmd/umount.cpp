@@ -205,6 +205,9 @@ void unmountISOs() {
     while (true) {
         // Initialize variables for each loop iteration
         std::vector<std::string> filteredIsoDirs, selectedIsoDirs, selectedIsoDirsFiltered;
+        filteredIsoDirs.reserve(100);
+		selectedIsoDirs.reserve(maxThreads);
+		selectedIsoDirsFiltered.reserve(maxThreads);
         
         clearScrollBuffer();
         listMountedISOs();
@@ -214,14 +217,14 @@ void unmountISOs() {
 		errorMessages.clear();
         invalidInput = false;
 
-            // Populate isoDirs with directories that match the "iso_" prefix
-            for (const auto& entry : std::filesystem::directory_iterator(isoPath)) {
-                if (entry.is_directory() && entry.path().filename().string().find("iso_") == 0) {
-                    isoDirs.push_back(entry.path().string());
-                }
+        // Populate isoDirs with directories that match the "iso_" prefix
+        for (const auto& entry : std::filesystem::directory_iterator(isoPath)) {
+			if (entry.is_directory() && entry.path().filename().string().find("iso_") == 0) {
+				isoDirs.push_back(entry.path().string());
             }
+        }
 
-            sortFilesCaseInsensitive(isoDirs);
+        sortFilesCaseInsensitive(isoDirs);
 
 
         // Check if there are no matching directories
