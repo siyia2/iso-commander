@@ -491,8 +491,10 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
 			}
 		}
 	}
-        unsigned int numThreads = std::min(static_cast<int>(tokens.size()), static_cast<int>(maxThreads));
-    ThreadPool pool(numThreads);
+    unsigned int numThreads = std::min(static_cast<int>(tokens.size()), static_cast<int>(maxThreads));
+    std::vector<int> indicesToAdd;
+	indicesToAdd.reserve(numThreads);
+	ThreadPool pool(numThreads);
     
     std::atomic<int> totalTasks(0);
     std::atomic<int> completedTasks(0);
@@ -505,115 +507,117 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     std::mutex errorMutex;
 
     auto processTask = [&](int index) {
-        bool shouldProcess = false;
-        {
-            std::lock_guard<std::mutex> lock(validIndicesMutex);
-            shouldProcess = validIndices.insert(index).second;
-        }
-
-        if (shouldProcess) {
-            std::vector<std::string> isoFilesToMount = {isoFiles[index - 1]};
-            mountIsoFile(isoFilesToMount, mountedFiles, skippedMessages, mountedFails);
-        }
-
-        completedTasks.fetch_add(1, std::memory_order_relaxed);
-        if (activeTaskCount.fetch_sub(1, std::memory_order_release) == 1) {
-            taskCompletionCV.notify_all();
-        }
-    };
-
-    auto addError = [&](const std::string& error) {
-        std::lock_guard<std::mutex> lock(errorMutex);
-        uniqueErrorMessages.insert(error);
-        invalidInput.store(true, std::memory_order_release);
-    };
-
-    std::string token;
-    while (iss >> token) {
-        if (token == "/") break;
-
-        if (isAllZeros(token)) {
-            addError("\033[1;91mInvalid index: '0'.\033[0;1m");
-            continue;
-        }
-
-        size_t dashPos = token.find('-');
-        if (dashPos != std::string::npos) {
-            if (dashPos == 0 || dashPos == token.size() - 1 || 
-                !std::all_of(token.begin(), token.begin() + dashPos, ::isdigit) || 
-                !std::all_of(token.begin() + dashPos + 1, token.end(), ::isdigit)) {
-                addError("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
-                continue;
-            }
-
-            int start, end;
-            try {
-                start = std::stoi(token.substr(0, dashPos));
-                end = std::stoi(token.substr(dashPos + 1));
-            } catch (const std::exception&) {
-                addError("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
-                continue;
-            }
-
-            if (start < 1 || static_cast<size_t>(start) > isoFiles.size() || 
-                end < 1 || static_cast<size_t>(end) > isoFiles.size()) {
-                addError("\033[1;91mInvalid range: '" + token + "'.\033[0;1m");
-                continue;
-            }
-
-            std::pair<int, int> range(start, end);
-            bool shouldProcessRange = false;
-            {
-                std::lock_guard<std::mutex> lock(processedRangesMutex);
-                shouldProcessRange = processedRanges.insert(range).second;
-            }
-
-            if (shouldProcessRange) {
-                int step = (start <= end) ? 1 : -1;
-                for (int i = start; (step > 0) ? (i <= end) : (i >= end); i += step) {
-                    bool shouldProcess = false;
-                    {
-                        std::lock_guard<std::mutex> lock(indicesMutex);
-                        shouldProcess = processedIndices.insert(i).second;
-                    }
-                    if (shouldProcess) {
-                        totalTasks.fetch_add(1, std::memory_order_relaxed);
-                        activeTaskCount.fetch_add(1, std::memory_order_relaxed);
-                        pool.enqueue([&, i]() { processTask(i); });
-                    }
-                }
-            }
-        } else if (isNumeric(token)) {
-            int num = std::stoi(token);
-            if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size()) {
-                bool shouldProcess = false;
-                {
-                    std::lock_guard<std::mutex> lock(indicesMutex);
-                    shouldProcess = processedIndices.insert(num).second;
-                }
-                if (shouldProcess) {
-                    totalTasks.fetch_add(1, std::memory_order_relaxed);
-                    activeTaskCount.fetch_add(1, std::memory_order_relaxed);
-                    pool.enqueue([&, num]() { processTask(num); });
-                }
-            } else {
-                addError("\033[1;91mInvalid index: '" + token + "'.\033[0;1m");
-            }
-        } else {
-            addError("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
-        }
+    bool shouldProcess = false;
+    {
+        std::lock_guard<std::mutex> lock(validIndicesMutex);
+        shouldProcess = validIndices.insert(index).second;
     }
 
-    if (!processedIndices.empty()) {
-        int totalTasksValue = totalTasks.load();
-        std::thread progressThread(displayProgressBar, std::ref(completedTasks), std::cref(totalTasksValue), std::ref(isProcessingComplete));
-
-        {
-            std::unique_lock<std::mutex> lock(taskCompletionMutex);
-            taskCompletionCV.wait(lock, [&]() { return activeTaskCount.load() == 0; });
-        }
-
-        isProcessingComplete.store(true, std::memory_order_release);
-        progressThread.join();
+    if (shouldProcess) {
+        std::vector<std::string> isoFilesToMount = {isoFiles[index - 1]};
+        mountIsoFile(isoFilesToMount, mountedFiles, skippedMessages, mountedFails);
     }
+
+	completedTasks.fetch_add(1, std::memory_order_relaxed);
+	if (activeTaskCount.fetch_sub(1, std::memory_order_release) == 1) {
+			taskCompletionCV.notify_all();
+		}
+	};
+
+	auto addError = [&](const std::string& error) {
+		std::lock_guard<std::mutex> lock(errorMutex);
+		uniqueErrorMessages.insert(error);
+		invalidInput.store(true, std::memory_order_release);
+	};
+
+
+	std::string token;
+	while (iss >> token) {
+		if (token == "/") break;
+
+		if (isAllZeros(token)) {
+			addError("\033[1;91mInvalid index: '0'.\033[0;1m");
+			continue;
+		}
+
+		size_t dashPos = token.find('-');
+		if (dashPos != std::string::npos) {
+			if (dashPos == 0 || dashPos == token.size() - 1 || 
+				!std::all_of(token.begin(), token.begin() + dashPos, ::isdigit) || 
+				!std::all_of(token.begin() + dashPos + 1, token.end(), ::isdigit)) {
+				addError("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
+				continue;
+			}
+
+			int start, end;
+			try {
+				start = std::stoi(token.substr(0, dashPos));
+				end = std::stoi(token.substr(dashPos + 1));
+			} catch (const std::exception&) {
+				addError("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
+				continue;
+			}
+
+			if (start < 1 || static_cast<size_t>(start) > isoFiles.size() || 
+				end < 1 || static_cast<size_t>(end) > isoFiles.size()) {
+				addError("\033[1;91mInvalid range: '" + token + "'.\033[0;1m");
+				continue;
+			}
+
+			std::pair<int, int> range(start, end);
+			bool shouldProcessRange = false;
+			{
+				std::lock_guard<std::mutex> lock(processedRangesMutex);
+				shouldProcessRange = processedRanges.insert(range).second;
+			}
+
+			if (shouldProcessRange) {
+				int step = (start <= end) ? 1 : -1;
+				for (int i = start; (step > 0) ? (i <= end) : (i >= end); i += step) {
+					{
+						std::lock_guard<std::mutex> lock(indicesMutex);
+						indicesToAdd.push_back(i);
+					}
+				}
+			}
+		} else if (isNumeric(token)) {
+			int num = std::stoi(token);
+			if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size()) {
+				{
+					std::lock_guard<std::mutex> lock(indicesMutex);
+					indicesToAdd.push_back(num);
+				}
+			} else {
+				addError("\033[1;91mInvalid index: '" + token + "'.\033[0;1m");
+			}
+		} else {
+			addError("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
+		}
+	}
+
+	// Batch insert into processedIndices
+	{
+		std::lock_guard<std::mutex> lock(indicesMutex);
+		for (int num : indicesToAdd) {
+			bool shouldProcess = processedIndices.insert(num).second;
+			if (shouldProcess) {
+				totalTasks.fetch_add(1, std::memory_order_relaxed);
+				activeTaskCount.fetch_add(1, std::memory_order_relaxed);
+				pool.enqueue([&, num]() { processTask(num); });
+			}
+		}
+	}
+
+	if (!processedIndices.empty()) {
+		int totalTasksValue = totalTasks.load();
+		std::thread progressThread(displayProgressBar, std::ref(completedTasks), std::cref(totalTasksValue), std::ref(isProcessingComplete));
+
+		{
+			std::unique_lock<std::mutex> lock(taskCompletionMutex);
+			taskCompletionCV.wait(lock, [&]() { return activeTaskCount.load() == 0; });
+		}
+
+		isProcessingComplete.store(true, std::memory_order_release);
+		progressThread.join();
+	}
 }
