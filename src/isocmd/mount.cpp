@@ -3,6 +3,13 @@
 
 //	MOUNT STUFF
 
+// Global variable to store failed ISO files
+std::set<std::string> globalFailedISOs;
+
+//Global mutex for failed ISO files
+std::mutex globalFailedISOMutex;
+
+
 // Function to mount all ISOs indiscriminately
 void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
     std::atomic<int> completedIsos(0);
@@ -85,6 +92,7 @@ void select_and_mount_files_by_number() {
 		}
 		
 		bool isFiltered = false;
+		bool noProcessing = false;
         clearScrollBuffer();
         std::cout << "\033[1;93m! IF EXPECTED ISO FILES ARE NOT ON THE LIST IMPORT THEM FROM THE MAIN MENU OPTIONS !\033[0;1m\n";
         
@@ -98,6 +106,16 @@ void select_and_mount_files_by_number() {
         "\n\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., '1-3', '1 5', '00' for all), / ↵ to filter, or ↵ to return:\001\033[0;1m\002 "
 		);
         clearScrollBuffer();
+        if (strcmp(input, "clr") == 0) {
+			clearScrollBuffer();
+			free(input);
+			noProcessing = true;
+			globalFailedISOs.clear();
+			std::cout << "\n\033[1;93mMount failure status for ISO(s) got reset.\033[0;1m\n";
+			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+		}
+
         
         if (strcmp(input, "/") != 0 || (!(std::isspace(input[0]) || input[0] == '\0'))) {
 			std::cout << "\033[1mPlease wait...\033[1m\n";
@@ -163,6 +181,17 @@ void select_and_mount_files_by_number() {
 					
 						// Prompt user for input again with the filtered list
 						char* inputFiltered = readline("\n\n\001\033[1;92m\002Filtered ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., '1-3', '1 5', '00' for all), or ↵ to return:\001\033[0;1m\002 ");
+						
+						if (strcmp(inputFiltered, "clr") == 0) {
+							clearScrollBuffer();
+							free(inputFiltered);
+							noProcessing = true;
+							globalFailedISOs.clear();
+							std::cout << "\n\033[1;93mMount failure status for ISO(s) got reset.\033[0;1m\n";
+							std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+							std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+					
+						}
 					
 						// Check if the user wants to return
 						if (std::isspace(inputFiltered[0]) || inputFiltered[0] == '\0') {
@@ -183,7 +212,7 @@ void select_and_mount_files_by_number() {
 							if (verbose) {
 								printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
 							}
-						} else if (inputFiltered[0] != '\0' && (strcmp(inputFiltered, "/") != 0)) { // Check if the user provided input
+						} else if (inputFiltered[0] != '\0' && (strcmp(inputFiltered, "/") != 0) && !noProcessing) { // Check if the user provided input
 							clearScrollBuffer();
 							std::cout << "\033[1mPlease wait...\033[1m\n";
 
@@ -224,7 +253,7 @@ void select_and_mount_files_by_number() {
 			if (verbose) {
 				printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
 			}
-		} else if (input[0] != '\0' && (strcmp(input, "/") != 0) && !isFiltered) {
+		} else if (input[0] != '\0' && (strcmp(input, "/") != 0) && !isFiltered && !noProcessing) {
             // Process user input to select and mount specific ISO files
             processAndMountIsoFiles(input, isoFiles, mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
             clearScrollBuffer();
@@ -306,37 +335,56 @@ bool isAlreadyMounted(const std::string& mountPoint) {
 }
 
 
-// Function to mount selected ISO files called from processAndMountIsoFiles
-void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
-    namespace fs = std::filesystem;
+void mountIsoFile(const std::vector<std::string>& isoFilesToMount,std::set<std::string>& mountedFiles,std::set<std::string>& skippedMessages,std::set<std::string>& mountedFails) {
+	namespace fs = std::filesystem;
     
-    // Declare fsTypes inside the function
     const std::vector<std::string> fsTypes = {
         "iso9660", "udf", "hfsplus", "rockridge", "joliet", "isofs", "auto"
     };
 
     for (const auto& isoFile : isoFilesToMount) {
+        // Extract directory and filename from isoFile
+        auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
+
+        // Check if this ISO file is in the global failed set
+        {
+            std::lock_guard<std::mutex> lock(globalFailedISOMutex);
+            if (globalFailedISOs.find(isoFile) != globalFailedISOs.end()) {
+                // Skip this ISO file if it's in the global failed set
+                std::stringstream skippedMessage;
+                skippedMessage << "\033[1;93mISO: \033[1;91m'" << isoDirectory << "/" << isoFilename 
+                               << "'\033[1;93m skipped due to previous mount failure {badFS}. To clear status 'clr' ↵ in selection for mount.\033[0m";
+                {
+                    std::lock_guard<std::mutex> lowLock(Mutex4Low);
+                    mountedFails.insert(skippedMessage.str());
+                }
+                continue;
+            }
+        }
+
+        // Construct unique mount point based on isoFile
         fs::path isoPath(isoFile);
         std::string isoFileName = isoPath.stem().string();
-
+        
         // Create a hash of the full path
         std::hash<std::string> hasher;
         size_t hashValue = hasher(isoFile);
-
-        // Convert hash to a base36 string (using digits 0-9 and letters a-z)
+        
+        // Convert hash to a base36 string
         const std::string base36Chars = "0123456789abcdefghijklmnopqrstuvwxyz";
         std::string shortHash;
-        for (int i = 0; i < 5; ++i) {  // Use 5 characters for the short hash
+        for (int i = 0; i < 5; ++i) {
             shortHash += base36Chars[hashValue % 36];
             hashValue /= 36;
         }
-
+        
+        // Create a unique identifier
         std::string uniqueId = isoFileName + "\033[38;5;245m~" + shortHash + "\033[1;94m";
         std::string mountPoint = "/mnt/iso_" + uniqueId;
 
-        auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
         auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint);
 
+        // Check if mount point is already mounted
         if (isAlreadyMounted(mountPoint)) {
             std::stringstream skippedMessage;
             skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename
@@ -348,10 +396,11 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
             }
             continue;
         }
-
+        
+        // Check for root privileges (unchanged)
         if (geteuid() != 0) {
             std::stringstream errorMessage;
-            errorMessage << "\033[1;91mFailed to mnt: \033[1;93m'" << isoDirectory << "/" << isoFilename
+            errorMessage << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename 
                          << "'\033[0m\033[1;91m. Root privileges are required.\033[0m";
             {
                 std::lock_guard<std::mutex> lowLock(Mutex4Low);
@@ -359,13 +408,14 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
             }
             continue;
         }
-
+        
+        // Check and create the mount point directory
         if (!fs::exists(mountPoint)) {
             try {
                 fs::create_directory(mountPoint);
             } catch (const fs::filesystem_error& e) {
                 std::stringstream errorMessage;
-                errorMessage << "\033[1;91mFailed to create mount point: \033[1;93m'" << mountPoint
+                errorMessage << "\033[1;91mFailed to create mount point: \033[1;93m'" << mountPoint 
                              << "'\033[0m\033[1;91m. Error: " << e.what() << "\033[0m";
                 {
                     std::lock_guard<std::mutex> lowLock(Mutex4Low);
@@ -374,53 +424,53 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
                 continue;
             }
         }
-
+        
         bool mountSuccess = false;
-
-	// Attempt to mount using sudo mount command
-	for (const auto& fsType : fsTypes) {
-		std::string mountOptions = "loop,ro";
-		if (fsType == "auto") {
-			// For "auto", we don't specify a file system type
-			mountOptions += ",auto";
-			std::string mountCommand = "mount -o " + mountOptions + " " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
-			int ret = std::system(mountCommand.c_str());
         
-			if (ret == 0) {
-					// Mount successful
-					std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m"
-												+ "\033[1m mnt@: \033[1;94m'" + mountisoDirectory + "\033[1;94m/" + mountisoFilename
-												+ "'\033[0;1m.\033[0m";
-					{
-						std::lock_guard<std::mutex> lowLock(Mutex4Low);
-						mountedFiles.insert(mountedFileInfo);
-					}
-					mountSuccess = true;
-					break;
-			}
-		
-			} else {
-				// For specific file systems, we include the type in the mount command
-				std::string mountCommand = "mount -t " + fsType + " -o " + mountOptions + " " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
-				int ret = std::system(mountCommand.c_str());
-        
-				if (ret == 0) {
-					// Mount successful
-					std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m"
+        for (const auto& fsType : fsTypes) {
+            // Initialize libmount context
+            struct libmnt_context* cxt = mnt_new_context();
+            if (!cxt) {
+                std::stringstream errorMessage;
+                errorMessage << "\033[1;91mFailed to initialize mount context for: \033[1;93m'" 
+                             << isoDirectory << "/" << isoFilename << "'\033[0m\033[1;91m.\033[0m";
+                {
+                    std::lock_guard<std::mutex> lowLock(Mutex4Low);
+                    mountedFails.insert(errorMessage.str());
+                }
+                break;
+            }
+            
+            // Set mount options directly on the context
+            mnt_context_set_source(cxt, isoFile.c_str());
+            mnt_context_set_target(cxt, mountPoint.c_str());
+            mnt_context_set_fstype(cxt, fsType.c_str());  // Ensure fsType is a valid filesystem type
+            mnt_context_set_options(cxt, "loop,ro");
+            
+            // Attempt to mount (unchanged)
+            int ret = mnt_context_mount(cxt);
+            
+            // Check if mount was successful
+            if (ret == 0) {
+                // Successfully mounted
+                std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m"
 												+ "\033[1m mnt@: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename
 												+ "'\033[0;1m. {" + fsType + "}\033[0m";
-					{
-						std::lock_guard<std::mutex> lowLock(Mutex4Low);
-						mountedFiles.insert(mountedFileInfo);
-					}
-					mountSuccess = true;
-					break;
-				}
-			}
-		}
+                {
+                    std::lock_guard<std::mutex> lowLock(Mutex4Low);
+                    mountedFiles.insert(mountedFileInfo);
+                }
+                mountSuccess = true;
+                mnt_free_context(cxt);
+                break;
+            }
+            
+            // Free the context
+            mnt_free_context(cxt);
+        }
         
-
         if (!mountSuccess) {
+            // Mount failure after trying all filesystem types
             std::stringstream errorMessage;
             errorMessage << "\033[1;91mFailed to mnt: \033[1;93m'" << isoDirectory << "/" << isoFilename
                          << "'\033[1;91m.\033[0;1m {badFS}";
@@ -429,9 +479,16 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
                 std::lock_guard<std::mutex> lowLock(Mutex4Low);
                 mountedFails.insert(errorMessage.str());
             }
+
+            // Store the failed ISO file in the global set
+            {
+                std::lock_guard<std::mutex> lock(globalFailedISOMutex);
+                globalFailedISOs.insert(isoFile);
+            }
         }
     }
 }
+
 
 
 // Function to process input and mount ISO files asynchronously
