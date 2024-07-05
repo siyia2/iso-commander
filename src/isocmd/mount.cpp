@@ -84,7 +84,7 @@ void select_and_mount_files_by_number() {
 		// Check if the cache is empty
 		if (isoFiles.empty()) {
 			clearScrollBuffer();
-			std::cout << "\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n";
+			std::cout << "\n\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n";
 			std::cout << " \n";
 			std::cout << "\033[1;32m↵ to continue...\033[0;1m";
 			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -102,16 +102,14 @@ void select_and_mount_files_by_number() {
         printIsoFileList(isoFiles);
 		
         // Prompt user for input
-        char* input = readline(
-        "\n\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., '1-3', '1 5', '00' for all), / ↵ to filter, or ↵ to return:\001\033[0;1m\002 "
-		);
+        char* input = readline("\n\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), clr ↵ clearStatus, / ↵ filter, ↵ return:\001\033[0;1m\002 ");
         clearScrollBuffer();
         if (strcmp(input, "clr") == 0) {
 			clearScrollBuffer();
 			free(input);
 			noProcessing = true;
 			globalFailedISOs.clear();
-			std::cout << "\n\033[1;93mMount failure status for ISO(s) got reset.\033[0;1m\n";
+			std::cout << "\n\033[1;93mMount failure status for ISO(s) has been cleared.\033[0;1m\n";
 			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 		}
@@ -181,14 +179,14 @@ void select_and_mount_files_by_number() {
 						printIsoFileList(filteredFiles); // Print the filtered list of ISO files
 					
 						// Prompt user for input again with the filtered list
-						char* inputFiltered = readline("\n\n\001\033[1;92m\002Filtered ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., '1-3', '1 5', '00' for all), or ↵ to return:\001\033[0;1m\002 ");
+						char* inputFiltered = readline("\n\n\001\033[1;92m\002Filtered ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), clr ↵ clearStatus, ↵ return:\001\033[0;1m\002 ");
 						
 						if (strcmp(inputFiltered, "clr") == 0) {
 							clearScrollBuffer();
 							free(inputFiltered);
 							noProcessing = true;
 							globalFailedISOs.clear();
-							std::cout << "\n\033[1;93mMount failure status for ISO(s) got reset.\033[0;1m\n";
+							std::cout << "\n\033[1;93mMount failure status for ISO(s) has been cleared.\033[0;1m\n";
 							std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 							std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 					
@@ -360,8 +358,8 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount,std::set<std::
 		if (isInFailedSet) {
 			// Skip this ISO file if it's in the global failed set
 			std::stringstream skippedMessage;
-			skippedMessage << "\033[1;93mISO: \033[1;91m'" << isoDirectory << "/" << isoFilename 
-						   << "'\033[1;93m skipped (prev mnt fail), clr ↵ to reset status.\033[0m";
+			skippedMessage << "\033[1;91mCorrupted ISO: \033[1;93m'" << isoDirectory << "/" << isoFilename 
+						   << "'\033[1;93m (skipped), clr ↵ in mount selection to reset status.\033[0m";
 
 			{
 				std::lock_guard<std::mutex> lowLock(Mutex4Low);
