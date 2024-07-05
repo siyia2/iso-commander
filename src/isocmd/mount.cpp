@@ -104,27 +104,22 @@ void select_and_mount_files_by_number() {
         // Prompt user for input
         char* input = readline("\n\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), clr ↵ clearStatus, / ↵ filter, ↵ return:\001\033[0;1m\002 ");
         clearScrollBuffer();
+        if (strcmp(input, "/") != 0 || (!(std::isspace(input[0]) || input[0] == '\0'))) {
+			std::cout << "\033[1mPlease wait...\033[1m\n";
+		}
+		
         if (strcmp(input, "clr") == 0) {
 			clearScrollBuffer();
 			noProcessing = true;
+			free(input);
 			globalFailedISOs.clear();
 			std::cout << "\n\033[1;93mMount failure status for ISO(s) has been cleared.\033[0;1m\n";
 			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-		}
-
-        
-        if (strcmp(input, "/") != 0 || (!(std::isspace(input[0]) || input[0] == '\0'))) {
-			std::cout << "\033[1mPlease wait...\033[1m\n";
-		}
-
-        // Check if the user wants to return
-        if (std::isspace(input[0]) || input[0] == '\0') {
+		} else if (std::isspace(input[0]) || input[0] == '\0') {
 			free(input);
             break;
-        }
-
-		if (strcmp(input, "/") == 0) {
+        } else if (strcmp(input, "/") == 0) {
 			free(input);
 			isFiltered = true;
 			
@@ -183,21 +178,17 @@ void select_and_mount_files_by_number() {
 						if (strcmp(inputFiltered, "clr") == 0) {
 							clearScrollBuffer();
 							noProcessing = true;
+							free(inputFiltered);
 							globalFailedISOs.clear();
 							std::cout << "\n\033[1;93mMount failure status for ISO(s) has been cleared.\033[0;1m\n";
 							std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 							std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 					
-						}
-					
-						// Check if the user wants to return
-						if (std::isspace(inputFiltered[0]) || inputFiltered[0] == '\0') {
+						} else if (std::isspace(inputFiltered[0]) || inputFiltered[0] == '\0') {
 							free(inputFiltered);
 							historyPattern = false;
 							break;
-						}
-					
-						if (std::strcmp(inputFiltered, "00") == 0) {
+						} else if (std::strcmp(inputFiltered, "00") == 0) {
 							clearScrollBuffer();
 							std::cout << "\033[1mPlease wait...\033[1m\n";
 							// Restore the original list of ISO files
@@ -253,6 +244,7 @@ void select_and_mount_files_by_number() {
 		} else if (input[0] != '\0' && (strcmp(input, "/") != 0) && !isFiltered && !noProcessing) {
             // Process user input to select and mount specific ISO files
             processAndMountIsoFiles(input, isoFiles, mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
+            free(input);
             clearScrollBuffer();
             if (!uniqueErrorMessages.empty() && mountedFiles.empty() && skippedMessages.empty() && mountedFails.empty()) {
 				    verbose = false;
@@ -264,7 +256,6 @@ void select_and_mount_files_by_number() {
             if (verbose) {
 				printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
 			}
-            free(input);
         }          
     }
 }
