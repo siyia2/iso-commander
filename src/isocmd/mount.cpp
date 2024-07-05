@@ -106,7 +106,6 @@ void select_and_mount_files_by_number() {
         clearScrollBuffer();
         if (strcmp(input, "clr") == 0) {
 			clearScrollBuffer();
-			free(input);
 			noProcessing = true;
 			globalFailedISOs.clear();
 			std::cout << "\n\033[1;93mMount failure status for ISO(s) has been cleared.\033[0;1m\n";
@@ -183,7 +182,6 @@ void select_and_mount_files_by_number() {
 						
 						if (strcmp(inputFiltered, "clr") == 0) {
 							clearScrollBuffer();
-							free(inputFiltered);
 							noProcessing = true;
 							globalFailedISOs.clear();
 							std::cout << "\n\033[1;93mMount failure status for ISO(s) has been cleared.\033[0;1m\n";
