@@ -337,31 +337,38 @@ bool isAlreadyMounted(const std::string& mountPoint) {
 
 
 void mountIsoFile(const std::vector<std::string>& isoFilesToMount,std::set<std::string>& mountedFiles,std::set<std::string>& skippedMessages,std::set<std::string>& mountedFails) {
-	namespace fs = std::filesystem;
+		namespace fs = std::filesystem;
     
-    const std::vector<std::string> fsTypes = {
-        "iso9660", "udf", "hfsplus", "rockridge", "joliet", "isofs", "auto"
-    };
+		const std::vector<std::string> fsTypes = {
+			"iso9660", "udf", "hfsplus", "rockridge", "joliet", "isofs", "auto"
+		};
 
-    for (const auto& isoFile : isoFilesToMount) {
-        // Extract directory and filename from isoFile
-        auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
+		for (const auto& isoFile : isoFilesToMount) {
+		// Extract directory and filename from isoFile
+		auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
 
-        // Check if this ISO file is in the global failed set
-        {
-            std::lock_guard<std::mutex> lock(globalFailedISOMutex);
-            if (globalFailedISOs.find(isoFile) != globalFailedISOs.end()) {
-                // Skip this ISO file if it's in the global failed set
-                std::stringstream skippedMessage;
-                skippedMessage << "\033[1;93mISO: \033[1;91m'" << isoDirectory << "/" << isoFilename 
-                               << "'\033[1;93m skipped due to previous mount failure {badFS}. To clear status 'clr' ↵ in selection for mount.\033[0m";
-                {
-                    std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                    mountedFails.insert(skippedMessage.str());
-                }
-                continue;
-            }
-        }
+		bool isInFailedSet = false;
+
+		// Check if this ISO file is in the global failed set
+		{
+			std::lock_guard<std::mutex> lock(globalFailedISOMutex);
+			if (globalFailedISOs.find(isoFile) != globalFailedISOs.end()) {
+				isInFailedSet = true;
+			}
+		}
+
+		if (isInFailedSet) {
+			// Skip this ISO file if it's in the global failed set
+			std::stringstream skippedMessage;
+			skippedMessage << "\033[1;93mISO: \033[1;91m'" << isoDirectory << "/" << isoFilename 
+						   << "'\033[1;93m skipped due to previous mnt failure. To clear status 'clr' ↵ in mount selection.\033[0m";
+
+			{
+				std::lock_guard<std::mutex> lowLock(Mutex4Low);
+				mountedFails.insert(skippedMessage.str());
+			}
+			continue;
+		}
 
         // Construct unique mount point based on isoFile
         fs::path isoPath(isoFile);
