@@ -386,8 +386,6 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 void processInput(const std::string& input, const std::vector<std::string>& fileList, bool modeMdf, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts) {
     std::mutex futuresMutex;
     std::set<int> processedIndices;
-    std::vector<std::future<void>> futures;
-    futures.reserve(100);
 
     // Step 1: Tokenize the input to determine the number of threads to use
     std::istringstream issCount(input);
@@ -436,6 +434,8 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 	}
 
     unsigned int numThreads = std::min(static_cast<int>(tokens.size()), static_cast<int>(maxThreads));
+    std::vector<std::future<void>> futures;
+    futures.reserve(numThreads);
     ThreadPool pool(numThreads);
 
     char* current_user = getlogin();
