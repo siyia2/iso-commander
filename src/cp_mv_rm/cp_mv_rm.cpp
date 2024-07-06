@@ -414,30 +414,30 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 			userDestDir.clear();
 
             // Ask for the destination directory
-            std::string prompt = ("\n\001\033[1;92m\002Destination directory\001\033[1;94m\002 ↵ for selected ISO(s) to be " + operationColor + operationDescription + "\001\033[1;94m\002 into, or ↵ to abort:\n\001\033[0;1m\002");
-            char* input = readline(prompt.c_str());
+            std::string prompt = "\n\001\033[1;92m\002Destination directory\001\033[1;94m\002 ↵ for selected ISO(s) to be " + operationColor + operationDescription + "\001\033[1;94m\002 into, or ↵ to abort:\n\001\033[0;1m\002";
+            
+			// Use std::unique_ptr to manage memory for input
+			std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
+		
+			std::string mainInputString(input.get());
 
             // Check if the user canceled
-            if (input[0] == '\0') {
-				free(input);
+            if (input.get()[0] == '\0') {
 				mvDelBreak=false;
 				clear_history();
                 return;
             }
 
             // Check if the entered path is valid
-			if (isValidLinuxPathFormat(input) && std::string(input).back() == '/') {
-				userDestDir = input;
-				add_history(input);
+			if (isValidLinuxPathFormat(mainInputString) && std::string(mainInputString).back() == '/') {
+				userDestDir = mainInputString;
+				add_history(input.get());
 				saveHistory();
 				clear_history();
-				free(input);
 				break;
-			} else if (isValidLinuxPathFormat(input) && std::string(input).back() != '/') {
+			} else if (isValidLinuxPathFormat(mainInputString) && std::string(mainInputString).back() != '/') {
 				std::cout << "\n\033[1;91mThe path must end with \033[0;1m'/'\033[1;91m.\033[0;1m\n";
-				free(input);
 			} else {
-				free(input);
 				std::cout << "\n\033[1;91mInvalid paths and/or multiple paths are excluded from \033[1;92mcp\033[1;91m and \033[1;93mmv\033[1;91m operations.\033[0;1m\n";
 			}
 
