@@ -279,7 +279,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         if (isAllZeros(token)) {
             if (!invalidInput) {
                 invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mInvalid index '0'.\033[0;1m");
+                uniqueErrorMessages.emplace("\033[1;91mInvalid index '0'.\033[0;1m");
             }
         }
 
@@ -287,14 +287,14 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         if (token == "0") {
             if (!invalidInput) {
                 invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mInvalid index '0'.\033[0;1m");
+                uniqueErrorMessages.emplace("\033[1;91mInvalid index '0'.\033[0;1m");
             }
         }
         
         // Check if there is more than one hyphen in the token
         if (std::count(token.begin(), token.end(), '-') > 1) {
             invalidInput = true;
-            uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
+            uniqueErrorMessages.emplace("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
             continue;
         }
 
@@ -310,12 +310,12 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             } catch (const std::invalid_argument& e) {
                 // Handle the exception for invalid input
                 invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
+                uniqueErrorMessages.emplace("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
                 continue;
             } catch (const std::out_of_range& e) {
                 // Handle the exception for out-of-range input
                 invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + token + "'.\033[0;1m");
+                uniqueErrorMessages.emplace("\033[1;91mInvalid range: '" + token + "'.\033[0;1m");
                 continue;
             }
             
@@ -323,7 +323,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             if ((start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) ||
                 (start == 0 || end == 0)) {
                 invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'.\033[0;1m");
+                uniqueErrorMessages.emplace("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'.\033[0;1m");
                 continue;
             }
 
@@ -334,7 +334,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
                     processedIndices.push_back(i); // Mark as processed
                 } else if ((i < 1) || (i > static_cast<int>(isoFiles.size()))) {
                     invalidInput = true;
-                    uniqueErrorMessages.insert("\033[1;91mInvalid index '" + std::to_string(i) + "'.\033[0;1m");
+                    uniqueErrorMessages.emplace("\033[1;91mInvalid index '" + std::to_string(i) + "'.\033[0;1m");
                 }
             }
         } else if (isNumeric(token)) {
@@ -344,11 +344,11 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
                 processedIndices.push_back(num); // Mark index as processed
             } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
                 invalidInput = true;
-                uniqueErrorMessages.insert("\033[1;91mInvalid index '" + std::to_string(num) + "'.\033[0;1m");
+                uniqueErrorMessages.emplace("\033[1;91mInvalid index '" + std::to_string(num) + "'.\033[0;1m");
             }
         } else {
             invalidInput = true;
-            uniqueErrorMessages.insert("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
+            uniqueErrorMessages.emplace("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
         }
     }
     
@@ -654,7 +654,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                 std::string operationInfo = oss.str();
                 {
 					std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                    operationIsos.insert(operationInfo);
+                    operationIsos.emplace(operationInfo);
 				}
 
                 // Change ownership of the copied/moved file
@@ -677,7 +677,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                 }
                 errorMessageInfo = oss.str();
                 {	std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                    operationErrors.insert(errorMessageInfo);
+                    operationErrors.emplace(errorMessageInfo);
                 }
             }
         }
@@ -699,14 +699,14 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 				// Print message if file not found
 				errorMessageInfo = "\033[1;35mFile not found: \033[0;1m'" + isoDirectory + "/" + isoFilename + "'\033[1;95m.\033[0;1m";
 				{	std::lock_guard<std::mutex> lowLock(Mutex4Low);
-					operationErrors.insert(errorMessageInfo);
+					operationErrors.emplace(errorMessageInfo);
 				}
 			}
         } else {
 			// Print message if file not found in cache
 			errorMessageInfo = "\033[1;93mFile not found in cache: \033[0;1m'" + isoDirectory + "/" + isoFilename + "'\033[1;93m.\033[0;1m";
 			{	std::lock_guard<std::mutex> lowLock(Mutex4Low);
-				operationErrors.insert(errorMessageInfo);
+				operationErrors.emplace(errorMessageInfo);
 			}
 		}
     }
