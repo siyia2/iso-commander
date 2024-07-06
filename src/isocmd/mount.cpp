@@ -17,20 +17,23 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::st
     
     // Create progress thread
     std::thread progressThread(displayProgressBar, std::ref(completedIsos), std::cref(totalIsos), std::ref(isComplete));
-    
-    // Process all ISO files asynchronously
     std::vector<std::future<void>> futures;
-    futures.reserve(100);
-        for (const auto& isoFile : isoFiles) {
-            futures.push_back(pool.enqueue([&isoFile, &mountedFiles, &skippedMessages, &mountedFails, &completedIsos, &Mutex4CompletedIsos]() {
-                // Protect increment of completedIsos with a mutex
-                {
-                    std::lock_guard<std::mutex> guard(Mutex4CompletedIsos);
-                    mountIsoFile({isoFile}, mountedFiles, skippedMessages, mountedFails);
-                    ++completedIsos;
-                }
-            }));
-        }
+	futures.reserve(100);
+
+	for (const auto& isoFile : isoFiles) {
+		futures.push_back(pool.enqueue([isoFile, &mountedFiles, &skippedMessages, &mountedFails, &completedIsos, &Mutex4CompletedIsos]() {
+			{
+				// Capture isoFile by reference and pass to mountIsoFile
+				mountIsoFile({isoFile}, mountedFiles, skippedMessages, mountedFails);
+            
+				{
+					std::lock_guard<std::mutex> guard(Mutex4CompletedIsos);
+					++completedIsos;
+				}
+			}
+		}));
+	}
+
     
     // Wait for all tasks to complete
     for (auto& future : futures) {
