@@ -3,7 +3,6 @@
 
 //	MOUNT STUFF
 
-
 // Function to mount all ISOs indiscriminately
 void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
     std::atomic<int> completedIsos(0);
