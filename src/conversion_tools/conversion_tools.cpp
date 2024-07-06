@@ -116,11 +116,12 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
     // Load search history
     loadHistory();
+    bool list = false;
     
     // Prompt user to input directory paths
-	std::string prompt = "\n\001\033[1;92m\002Directory path(s)\001\033[1;94m ↵ to scan for and import \001\033[1;38;5;208m\002" 
-						+ fileExtension + " \001\033[1;94m\002files into \001\033[1;93mRAM\001\033[1;94m cache (multi-path separator: \001\033[1;93m\002;\001\033[1;94m\002), \001\033[1;93m\002clr\001\033[1;94m\002 ↵ to clear \001\033[1;38;5;208m\002" 
-						+ fileTypeName + " \001\033[1;93m\002RAM\001\033[1;94m cache, or ↵ to return:\n\001\033[0;1m\002";
+	std::string prompt = "\n\001\033[1;92m\002Folder path(s)\001\033[1;94m ↵ to scan for \001\033[1;38;5;208m\002" + fileExtension + 
+                     "\001\033[1;94m files (sep: \001\033[1;93m\002;\001\033[1;94m\002), \001\033[1;92m\002list\001\033[1;94m\002 to open cache, " 
+                     "\001\033[1;93m\002clr\001\033[1;94m\002 to clear, or ↵ to return:\n\001\033[0;1m\002";
 
 	// Prompt user for input
 	char* rawinput = readline(prompt.c_str());
@@ -130,11 +131,15 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
 	std::string inputSearch(mainSearch.get());
 	clearScrollBuffer();
+	
+	if (inputSearch == "list"){
+		list =true;
+	}
 
 	// Check if inputSearch is empty or contains only spaces
 	bool onlySpaces = inputSearch.find_first_not_of(" \t") == std::string::npos;
 
-	if (!inputSearch.empty() && inputSearch != "clr" && !onlySpaces) {
+	if (!inputSearch.empty() && inputSearch != "clr" && inputSearch != "list" && !onlySpaces) {
 		// Save search history if input paths are provided
 		std::cout << "\033[1mPlease wait...\033[1m\n" << std::endl;
 		add_history(mainSearch.get());
@@ -148,7 +153,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     auto start_time = std::chrono::high_resolution_clock::now();
     
     // Split inputPaths into individual directory paths
-    if (!onlySpaces || !(mainSearch.get() == nullptr)) {
+    if ((!onlySpaces || !(mainSearch.get() == nullptr)) && !list) {
 		std::istringstream iss(inputSearch);
 		std::string path;
 		while (std::getline(iss, path, ';')) {
@@ -156,7 +161,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 		size_t end = path.find_last_not_of(" \t");
 			if (start != std::string::npos && end != std::string::npos) {
 				std::string cleanedPath = path.substr(start, end - start + 1);
-				if (cleanedPath == "clr" && uniquePaths.empty()) {
+				if ((cleanedPath == "clr" && uniquePaths.empty())) {
 					clr = true;
 					// If the cleaned path is "clr" and uniquePaths is empty (i.e., it's the only input)
 					directoryPaths.push_back(cleanedPath);
@@ -183,7 +188,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         noValid = true;
         
-    } else if ((directoryPaths.empty() && !clr) || (onlySpaces)) {
+    } else if (((directoryPaths.empty() && !clr) || (onlySpaces)) && !list) {
 		return;
 		
 	}
@@ -204,7 +209,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 	}
 
     // Display message if no new files are found
-    if (!newFilesFound && !files.empty() && !noValid && !clr) {
+    if (!newFilesFound && !files.empty() && !noValid && !clr && !list) {
         clearScrollBuffer();
         verboseFind(invalidDirectoryPaths);
         std::cout << "\n";
@@ -219,7 +224,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     }
 
     // Display message if no files are found
-    if (files.empty() && !noValid && !clr) {
+    if (files.empty() && !noValid && !clr && !list) {
         clearScrollBuffer();
         verboseFind(invalidDirectoryPaths);
         std::cout << "\n";
@@ -235,7 +240,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     }
 
     // Main loop for file selection and conversion
-    while (!noValid && !clr) {
+    while ((!noValid && !clr) || list) {
 		successOuts.clear();   // Clear the set of success messages
 		skippedOuts.clear();   // Clear the set of skipped messages
 		failedOuts.clear();		// Clear the set of failed messages
@@ -243,6 +248,22 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 		processedErrors.clear(); // Clear the set of error messages
         // Display file list and prompt user for input
         clearScrollBuffer();
+        if (files.empty() && fileType == "mdf"){
+			std::cout << "\n\033[1;93mNo .mdf files stored in RAM cache for conversion.\033[1m\n";
+			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			clearScrollBuffer();
+			select_and_convert_files_to_iso(fileTypeChoice);
+			break;
+		} else if (files.empty() && fileType == "bin") {
+			std::cout << "\n\033[1;93mNo .bin/.img files stored in RAM cache for conversion.\033[1m\n";
+			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			clearScrollBuffer();
+			select_and_convert_files_to_iso(fileTypeChoice);
+			break;
+		}
+		
         std::cout << "\033[92;1m// SUCCESSFUL CONVERSIONS ARE AUTOMATICALLY IMPORTED INTO ISO CACHE //\033[0;1m\033[0;1m\n\n";
         sortFilesCaseInsensitive(files);
         printFileList(files);
@@ -615,7 +636,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         // Return an empty vector since there are no files to search
         return std::vector<std::string>();
     }
-    
+
     std::mutex fileCheckMutex;
     
     bool blacklistMdf =false;
