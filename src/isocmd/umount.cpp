@@ -268,7 +268,7 @@ void unmountISOs() {
                 historyPattern = true;
                 loadHistory();
                 // Define the prompt string
-				char* rawInputFiltered = readline("\n\001\033[1;92m\002Term(s)\001\033[1;94m\002 ↵ to filter \001\033[1;93m\002umount\001\033[1;94m\002 list (case-insensitive, multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return: \001\033[0m\033[1m\002");
+				char* rawInputFiltered = readline("\n\001\033[1;92m\002Term(s)\001\033[1;94m\002 ↵ to filter \001\033[1;93m\002umount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return: \001\033[0m\033[1m\002");
 
 				// Use std::unique_ptr to manage memory for rawInput
 				std::unique_ptr<char, decltype(&std::free)> inputFiltered(rawInputFiltered, &std::free);
