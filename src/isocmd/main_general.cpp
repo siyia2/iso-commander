@@ -255,7 +255,7 @@ void submenu2() {
 				if (isProgramInstalled(operation)) {
 					select_and_convert_files_to_iso(operation);
 				} else {
-					std::cout << "\033[1;91mccd2iso is not installed.\033[0;1m\n";
+					std::cout << "\n\033[1;91m'ccd2iso' is not installed.\033[0;1m\n";
 					std::cout << "\n\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
 					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 				}
@@ -267,7 +267,7 @@ void submenu2() {
                 if (isProgramInstalled(operation)) {
 					select_and_convert_files_to_iso(operation);
 				} else {
-					std::cout << "\033[1;91mmdf2iso is not installed.\033[0;1m\n";
+					std::cout << "\n\033[1;91m'mdf2iso' is not installed.\033[0;1m\n";
 					std::cout << "\n\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
 					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 				}
