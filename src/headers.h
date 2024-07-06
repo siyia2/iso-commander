@@ -15,7 +15,7 @@
 #include <functional>
 #include <future>
 #include <iostream>
-#include <libmount/libmount.h>
+#include <linux/loop.h>
 #include <memory>
 #include <mntent.h>
 #include <mutex>
@@ -48,9 +48,6 @@ extern std::mutex Mutex4Low;
 // For cache directory creation
 extern bool gapPrinted; // for cache refresh for directory function
 extern bool promptFlag; // for cache refresh for directory function
-
-// Global variable to store failed ISO files
-extern std::set<std::string> globalFailedISOs;
 
 // Global variable to control recursion depth
 extern int maxDepth;
@@ -86,6 +83,7 @@ bool iequals(const std::string_view& a, const std::string_view& b);
 bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize);
 
 // Mount functions
+bool setupLoopDevice(const std::string& isoFile, std::string& loopDevice);
 bool isAlreadyMounted(const std::string& mountPoint);
 
 // Unmount functions
