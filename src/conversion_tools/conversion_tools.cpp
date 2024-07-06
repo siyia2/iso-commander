@@ -895,9 +895,9 @@ bool blacklist(const std::filesystem::path& entry, bool blacklistMdf) {
 
     // Use a set for blacklisted keywords
     std::set<std::string> blacklistKeywords = {
-        "block", "list", "sdcard", "index", "data", "shader", "navmesh",
-        "obj", "terrain", "script", "history", "system", "vendor", "flora",
-        "cache", "dictionary", "initramfs", "map", "setup", "encrypt"
+      //  "block", "list", "sdcard", "index", "data", "shader", "navmesh",
+      //  "obj", "terrain", "script", "history", "system", "vendor", "flora",
+     //   "cache", "dictionary", "initramfs", "map", "setup", "encrypt"
     };
 
     // Add blacklisted keywords for .mdf extension
