@@ -455,10 +455,11 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
         std::string loopDevice;
         
         for (const auto& fsType : fsTypes) {
+			std::lock_guard<std::mutex> lowLock(Mutex4Low);
             if (!setupLoopDevice(isoFile, loopDevice)) {
                 errorMessage = "\033[1;91mFailed to setup loop device for: \033[1;93m'" + 
                                isoDirectory + "/" + isoFilename + "'\033[0m\033[1;91m.\033[0m";
-                std::lock_guard<std::mutex> lowLock(Mutex4Low);
+                
                 mountedFails.emplace(std::move(errorMessage));
                 break;
             }
@@ -468,7 +469,6 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std:
                                               isoFilename + "'\033[0m\033[1m mnt@: \033[1;94m'" + 
                                               mountisoDirectory + "/" + mountisoFilename + 
                                               "'\033[0;1m. {" + fsType + "}\033[0m";
-                std::lock_guard<std::mutex> lowLock(Mutex4Low);
                 mountedFiles.emplace(std::move(mountedFileInfo));
                 mountSuccess = true;
                 break;
