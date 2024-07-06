@@ -277,10 +277,10 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 				std::string prompt; // Define a string variable for the input prompt
 				if (fileType == "bin" || fileType == "img") { // Check the file type
 				// Prompt for BIN/IMG files
-					prompt = "\n\001\033[1;92m\002Term(s)\001\033[1;94m\002 ↵ to filter \001\033[1;38;5;208m\002BIN/IMG\001\033[1;94m\002 list (case-insensitive, multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return: \001\033[0;1m\002";
+					prompt = "\n\001\033[1;92m\002Term(s)\001\033[1;94m\002 ↵ to filter \001\033[1;38;5;208m\002BIN/IMG\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return: \001\033[0;1m\002";
 				} else if (fileType == "mdf") {
 				// Prompt for MDF files
-					prompt = "\n\001\033[1;92m\002Term(s)\001\033[1;94m\002 ↵ to filter \001\033[1;38;5;208m\002MDF\001\033[1;94m\002 list (case-insensitive, multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return: \001\033[0;1m\002";
+					prompt = "\n\001\033[1;92m\002Term(s)\001\033[1;94m\002 ↵ to filter \001\033[1;38;5;208m\002MDF\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return: \001\033[0;1m\002";
 				}
 				char* rawSearchQuery = readline(prompt.c_str());
 				std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
