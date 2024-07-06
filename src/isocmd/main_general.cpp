@@ -77,13 +77,18 @@ int main(int argc, char *argv[]) {
         clear_history();
 
         // Prompt for the main menu choice
-        char* input = readline("\n\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
-        if (!input) {
+        char* rawInput = readline("\n\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
+        
+        std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
+        
+        std::string mainInputString(input.get());
+        
+        if (!input.get()) {
             break; // Exit the program if readline returns NULL (e.g., on EOF or Ctrl+D)
         }
+        
 
-        std::string choice(input);
-        free(input); // Free the allocated memory by readline
+        std::string choice(mainInputString);
 
         if (choice == "1") {
             submenu1();
@@ -165,15 +170,18 @@ void submenu1() {
         std::cout << "\033[1;32m|5. Copy                  |\n";
         std::cout << "\033[1;32m+-------------------------+\n";
         std::cout << " ";
-        char* submenu_input = readline("\n\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
+        char* rawInput = readline("\n\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
+        
+        // Use std::unique_ptr to manage memory for input
+		std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
+        
+        std::string mainInputString(input.get());
 
-        if (!submenu_input || std::strlen(submenu_input) == 0) {
-			free(submenu_input);
+        if (!input.get() || std::strlen(input.get()) == 0) {
 			break; // Exit the submenu if input is empty or NULL
 		}
 					
-          std::string submenu_choice(submenu_input);
-          free(submenu_input);
+          std::string submenu_choice(mainInputString);
          // Check if the input length is exactly 1
         if (submenu_choice.empty() || submenu_choice.length() == 1) {
 		std::string operation;
@@ -224,16 +232,19 @@ void submenu2() {
         std::cout << "\033[1;32m|2. MDF2ISO               |\n";
         std::cout << "\033[1;32m+-------------------------+\n";
         std::cout << " ";
-        char* submenu_input = readline("\n\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
+        char* rawInput = readline("\n\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
+        
+        // Use std::unique_ptr to manage memory for input
+		std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
+        
+        std::string mainInputString(input.get());
         
 
-        if (!submenu_input || std::strlen(submenu_input) == 0) {
-			free(submenu_input);
+        if (!input.get() || std::strlen(input.get()) == 0) {
 			break; // Exit the submenu if input is empty or NULL
 		}
 					
-          std::string submenu_choice(submenu_input);
-          free(submenu_input);
+          std::string submenu_choice(mainInputString);
           std::string operation;
          // Check if the input length is exactly 1
 		 if (submenu_choice.empty() || submenu_choice.length() == 1){
