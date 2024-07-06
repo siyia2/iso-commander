@@ -83,7 +83,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
                          << "\033[1;93m'\033[1;91m. Root privileges are required.\033[0m";
             {
 				std::lock_guard<std::mutex> lowLock(Mutex4Low);
-				unmountedErrors.insert(errorMessage.str());
+				unmountedErrors.emplace(errorMessage.str());
 			}
         }
         return;
@@ -107,7 +107,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
                 if (unmountedErrors.find(errorMessage.str()) == unmountedErrors.end()) {
 					{
 						std::lock_guard<std::mutex> lowLock(Mutex4Low);
-						unmountedErrors.insert(errorMessage.str());
+						unmountedErrors.emplace(errorMessage.str());
 					}
                 }
             }
@@ -137,7 +137,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
                 std::string removedDirInfo = "\033[0;1mUnmounted: \033[1;92m'" + directory + "/" + filename + "\033[1;92m'\033[0m.";
                 {
 					std::lock_guard<std::mutex> lowLock(Mutex4Low);
-					unmountedFiles.insert(removedDirInfo);
+					unmountedFiles.emplace(removedDirInfo);
 				}
             }
         } else {
@@ -147,7 +147,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
                 if (unmountedErrors.find(errorMessage.str()) == unmountedErrors.end()) {
 					{
 						std::lock_guard<std::mutex> lowLock(Mutex4Low);
-						unmountedErrors.insert(errorMessage.str());
+						unmountedErrors.emplace(errorMessage.str());
 					}
                 }
             }
@@ -401,23 +401,23 @@ void unmountISOs() {
                                     size_t end = std::stoi(token.substr(dashPos + 1)) - 1;
                                     if (start < filteredIsoDirs.size() && end < filteredIsoDirs.size()) {
                                         for (size_t i = std::min(start, end); i <= std::max(start, end); ++i) {
-                                            selectedIndices.insert(i);
+                                            selectedIndices.emplace(i);
                                         }
                                     } else {
-                                        errorMessages.insert("Invalid range: '" + token + "'.");
+                                        errorMessages.emplace("Invalid range: '" + token + "'.");
                                         invalidInput = true;
                                     }
                                 } else {
                                     size_t index = std::stoi(token) - 1;
                                     if (index < filteredIsoDirs.size()) {
-                                        selectedIndices.insert(index);
+                                        selectedIndices.emplace(index);
                                     } else {
-                                        errorMessages.insert("Invalid index: '" + token + "'.");
+                                        errorMessages.emplace("Invalid index: '" + token + "'.");
                                         invalidInput = true;
                                     }
                                 }
                             } catch (const std::invalid_argument&) {
-									errorMessages.insert("Invalid input: '" + token + "'.");
+									errorMessages.emplace("Invalid input: '" + token + "'.");
 									invalidInput = true;
                             }
                         }               
@@ -468,23 +468,23 @@ void unmountISOs() {
                         size_t end = std::stoi(token.substr(dashPos + 1)) - 1;
                         if (start < isoDirs.size() && end < isoDirs.size()) {
                             for (size_t i = std::min(start, end); i <= std::max(start, end); ++i) {
-                                selectedIndices.insert(i);
+                                selectedIndices.emplace(i);
                             }
                         } else {
-                            errorMessages.insert("Invalid range: '" + token + "'.");
+                            errorMessages.emplace("Invalid range: '" + token + "'.");
                             invalidInput = true;
                         }
                     } else {
                         size_t index = std::stoi(token) - 1;
                         if (index < isoDirs.size()) {
-                            selectedIndices.insert(index);
+                            selectedIndices.emplace(index);
                         } else {
-                            errorMessages.insert("Invalid index: '" + token + "'.");
+                            errorMessages.emplace("Invalid index: '" + token + "'.");
                             invalidInput = true;
                         }
                     }
                 } catch (const std::invalid_argument&) {
-                    errorMessages.insert("Invalid input: '" + token + "'.");
+                    errorMessages.emplace("Invalid input: '" + token + "'.");
                     invalidInput = true;
                 }
             }
