@@ -305,11 +305,16 @@ void manualRefreshCache(const std::string& initialDir) {
 		maxDepth = -1;
 		// Prompt the user to enter directory paths for manual cache refresh
 		std::string prompt = "\001\033[1;92m\002Directory path(s)\001\033[1;94m\002 ↵ to scan for and import \001\033[1;92m\002.iso\001\033[1;94m\002 files into \001\033[1;92m\002on-disk\001\033[1;94m\002 cache (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return:\n\001\033[0;1m\002";
-		char* inputCString = readline(prompt.c_str());
-		if (inputCString != nullptr) {
-			input = inputCString;
-			add_history(inputCString); // Add to history
-			free(inputCString); // Free readline allocated memory
+		// Prompt user for input
+		char* rawSearchQuery = readline(prompt.c_str());
+
+		// Use std::unique_ptr to manage memory for rawSearchQuery
+		std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
+		std::string inputSearch(searchQuery.get());
+		
+		if (!inputSearch.empty()) {
+			input = inputSearch;
+			add_history(searchQuery.get()); // Add to history
 		}
 	}
 
