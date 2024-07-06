@@ -244,18 +244,21 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
         clear_history();
 
-        std::string prompt = "\n\001\033[1;38;5;208m\002" + fileTypeName + " \001\033[1;94m\002file(s) ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion (e.g., 1-3,1 5), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
-        char* input = readline(prompt.c_str());
+        // Construct the prompt as a std::string
+		std::string prompt = "\n\001\033[1;38;5;208m\002" + fileTypeName + " \001\033[1;94m\002file(s) ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion (e.g., 1-3,1 5), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+
+		// Use std::unique_ptr to manage memory for readline
+		std::unique_ptr<char, decltype(&free)> input(readline(prompt.c_str()), &free);
+        
+        std::string mainInputString(input.get());
 
         // Check if user wants to return
-        if (std::isspace(input[0]) || input[0] == '\0') {
-            free(input);
+        if (std::isspace(input.get()[0]) || input.get()[0] == '\0') {
             clearScrollBuffer();
             break;
         }
 			bool isFiltered = false;
-			if (strcmp(input, "/") == 0) { // Check if the input is "/"
-				free(input);
+			if (strcmp(input.get(), "/") == 0) { // Check if the input is "/"
 				isFiltered = true;
 				while (true) { // Enter an infinite loop for handling input
 				// Clear history for a fresh start
@@ -274,30 +277,30 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 				// Prompt for MDF files
 					prompt = "\n\001\033[1;92m\002Term(s)\001\033[1;94m\002 ↵ to filter \001\033[1;38;5;208m\002MDF\001\033[1;94m\002 list (case-insensitive, multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return: \001\033[0;1m\002";
 				}
-
-				char* searchQuery = readline(prompt.c_str()); // Get input from the user
+				char* rawSearchQuery = readline(prompt.c_str());
+				std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
+        
+				std::string inputSearch(searchQuery.get());
 
 				clearScrollBuffer(); // Clear scroll buffer to prepare for new content
 
-				if (searchQuery && searchQuery[0] != '\0') {
+				if (searchQuery && searchQuery.get()[0] != '\0') {
 					std::cout << "\033[1mPlease wait...\033[1m\n";
-					if (strcmp(searchQuery, "/") != 0) {
-						add_history(searchQuery); // Add the search query to the history
+					if (strcmp(searchQuery.get(), "/") != 0) {
+						add_history(searchQuery.get()); // Add the search query to the history
 						saveHistory();
 					}
 				}
 				clear_history(); // Clear history for fresh start
 
-				if (searchQuery[0] == '\0' || strcmp(searchQuery, "/") == 0) { // Check if the search query is empty or contains only spaces
-					free(searchQuery); // Free memory allocated for search query
+				if (searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) { // Check if the search query is empty or contains only spaces
 					historyPattern = false; // Set history pattern to false
 					isFiltered = false;
 					break; // Exit the loop
 				}
 
 				// Filter files based on the search query
-				std::vector<std::string> filteredFiles = filterFiles(files, searchQuery);
-				free(searchQuery); // Free memory allocated for search query
+				std::vector<std::string> filteredFiles = filterFiles(files, inputSearch);
 
 				if (filteredFiles.empty()) { // Check if no files match the search query
 					clearScrollBuffer(); // Clear scroll buffer
@@ -324,10 +327,13 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 						} else if (fileType == "mdf") {
 							filterPrompt = "\n\001\033[1;94m\033[1;38;5;208m\002Filtered MDF\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion (e.g., 1-3,1 5), ↵ return:\001\033[0;1m\002 ";
 						}
-						char* filterInput = readline(filterPrompt.c_str()); // Get input for file conversion
+						
+						char* rawSearchQuery = readline(prompt.c_str());
+						std::unique_ptr<char, decltype(&std::free)> filterInput(rawSearchQuery, &std::free);
+						
+						std::string filterInputString(filterInput.get());
 
-						if (std::isspace(filterInput[0]) || filterInput[0] == '\0') { // Check if filter input is empty or contains only spaces
-							free(filterInput); // Free memory allocated for filter input
+						if (std::isspace(filterInput.get()[0]) || filterInput.get()[0] == '\0') { // Check if filter input is empty or contains only spaces
 							historyPattern = false; // Set history pattern to false
 							isFiltered = false;
 							break; // Exit the loop
@@ -336,8 +342,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 						if (isFiltered) {
 							clearScrollBuffer(); // Clear scroll buffer
 							std::cout << "\033[1mPlease wait..." << std::endl; // Inform user to wait
-							processInput(filterInput, filteredFiles, modeMdf, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts); // Process user input
-							free(filterInput);
+							processInput(filterInputString, filteredFiles, modeMdf, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts); // Process user input
 							
 							clearScrollBuffer(); // Clear scroll buffer
 							std::cout << "\n"; // Print newline
@@ -359,8 +364,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 			// If input is not "/", process the input
 			clearScrollBuffer(); // Clear scroll buffer
 			std::cout << "\033[1mPlease wait..." << std::endl; // Inform user to wait
-			processInput(input, files, modeMdf, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts); // Process input
-			free(input);
+			processInput(mainInputString, files, modeMdf, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts); // Process input
     
 			clearScrollBuffer(); // Clear scroll buffer
 			std::cout << "\n"; // Print newline
