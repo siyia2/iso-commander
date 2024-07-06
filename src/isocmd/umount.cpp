@@ -236,22 +236,27 @@ void unmountISOs() {
         }
 		
         // Prompt the user for input
-        char* input = readline("\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0m\002\001\033[1m\002 ");
-        clearScrollBuffer();
-        
+		char* rawInput = readline("\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0m\002\001\033[1m\002 ");
+		clearScrollBuffer();
 
-        if (input[0] != '/' || (!(std::isspace(input[0]) || input[0] == '\0'))) {
-            std::cout << "\033[0;1mPlease wait...\n";
-        }
+		// Use std::unique_ptr to manage memory for rawInput
+		std::unique_ptr<char, decltype(&std::free)> input(rawInput, &std::free);
+				
+		std::string inputString(input.get());
+		
+
+		// Check if input is not '/' or whitespace
+		if (input.get()[0] != '/' || (!(std::isspace(input.get()[0]) || input.get()[0] == '\0'))) {
+			std::cout << "\033[0;1mPlease wait...\n";
+		}
 
         // Check if the user wants to return to the main menu
-        if (std::isspace(input[0]) || input[0] == '\0') {
-			free(input);
+        if (std::isspace(input.get()[0]) || input.get()[0] == '\0') {
             break;
         }
 
         // Check if the user wants to filter the list of ISOs
-        if (strcmp(input, "/") == 0) {
+        if (strcmp(input.get(), "/") == 0) {
 			bool breakOuterLoop = false;
             while (true) {
 				if (breakOuterLoop) {
@@ -262,24 +267,28 @@ void unmountISOs() {
                 isFiltered = true;
                 historyPattern = true;
                 loadHistory();
-                std::string prompt;
-                prompt = "\n\001\033[1;92m\002Term(s)\001\033[1;94m\002 ↵ to filter \001\033[1;93m\002umount\001\033[1;94m\002 list (case-insensitive, multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return: \001\033[0m\033[1m\002";
-                
-                char* filterPattern = readline(prompt.c_str());
+                // Define the prompt string
+				char* rawInputFiltered = readline("\n\001\033[1;92m\002Term(s)\001\033[1;94m\002 ↵ to filter \001\033[1;93m\002umount\001\033[1;94m\002 list (case-insensitive, multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return: \001\033[0m\033[1m\002");
+
+				// Use std::unique_ptr to manage memory for rawInput
+				std::unique_ptr<char, decltype(&std::free)> inputFiltered(rawInputFiltered, &std::free);
+				
+				std::string inputStringFiltered(inputFiltered.get());
+
+				
                 clearScrollBuffer();
                 
-                if (filterPattern && filterPattern[0] != '\0') {
+                if (inputFiltered && inputFiltered.get()[0] != '\0') {
 					std::cout << "\033[1mPlease wait...\033[1m\n";
-					if (strcmp(filterPattern, "/") != 0){
-						add_history(filterPattern); // Add the search query to the history
+					if (strcmp(inputFiltered.get(), "/") != 0){
+						add_history(inputFiltered.get());
 						saveHistory();
 					}
 				}
 
 				clear_history();
 
-				if (filterPattern[0] == '\0' || strcmp(filterPattern, "/") == 0) {
-					free(filterPattern);
+				if (inputFiltered.get()[0] == '\0' || strcmp(inputFiltered.get(), "/") == 0) {
 					skipEnter = false;
 					isFiltered = false;
 					noValid = false;
@@ -289,13 +298,12 @@ void unmountISOs() {
 
 				// Split the filterPattern string into tokens using the delimiter ';'
 				std::vector<std::string> filterPatterns;
-				std::stringstream ss(filterPattern);
+				std::stringstream ss(inputStringFiltered);
 				std::string token;
 				while (std::getline(ss, token, ';')) {
 					filterPatterns.push_back(token);
 					toLowerInPlace(filterPatterns.back());
 				}
-				free(filterPattern);
 
 				// Filter the list of ISO directories based on the filter pattern
 				filteredIsoDirs.clear();
@@ -357,18 +365,21 @@ void unmountISOs() {
 						}
 
                         // Prompt the user for the list of ISOs to unmount
-                        char* chosenNumbers = readline("\n\001\033[1;92m\002Filtered ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), ↵ return:\001\033[0m\002\001\033[1m\002 ");
+						char* rawChosen = readline("\n\001\033[1;92m\002Filtered ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), ↵ return:\001\033[0m\002\001\033[1m\002");
 
-                        if (std::isspace(chosenNumbers[0]) || chosenNumbers[0] == '\0') {
-							free(chosenNumbers);
+						// Use std::unique_ptr to manage memory for rawInput
+						std::unique_ptr<char, decltype(&std::free)> chosenNumbers(rawChosen, &std::free);
+						std::string inputChosenString(chosenNumbers.get());
+						
+
+                        if (std::isspace(chosenNumbers.get()[0]) || chosenNumbers.get()[0] == '\0') {
                             noValid = false;
                             skipEnter = true;
                             historyPattern = false;
                             break;
                         }
 
-                        if (std::strcmp(chosenNumbers, "00") == 0) {
-							free(chosenNumbers);
+                        if (std::strcmp(chosenNumbers.get(), "00") == 0) {
 							clearScrollBuffer();
 							std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
                             selectedIsoDirs = filteredIsoDirs;
@@ -381,8 +392,7 @@ void unmountISOs() {
 
                         // Parse the user input to determine which ISOs to unmount
                         std::set<size_t> selectedIndices;
-                        std::istringstream iss(chosenNumbers);
-                        free(chosenNumbers);
+                        std::istringstream iss(inputChosenString);
                         for (std::string token; iss >> token;) {
                             try {
                                 size_t dashPos = token.find('-');
@@ -444,14 +454,12 @@ void unmountISOs() {
         }
 
         // Check if the user wants to unmount all ISOs
-        if (std::strcmp(input, "00") == 0) {
-			free(input);
+        if (std::strcmp(input.get(), "00") == 0) {
             selectedIsoDirs = isoDirs;
         } else if (!isFiltered) {
             // Parse the user input to determine which ISOs to unmount
             std::set<size_t> selectedIndices;
-            std::istringstream iss(input);
-            free(input);
+            std::istringstream iss(inputString);
             for (std::string token; iss >> token;) {
                 try {
                     size_t dashPos = token.find('-');
