@@ -25,4 +25,4 @@ Ways to Install:
 2) Download and compile from source with `make`.
 3) If on arch or on an arch based distro, install with `yay -S iso-commander`.
 
-`Make` dependencies for Debian based distros: `libreadline-dev` `libmount-dev`.
+`Make` dependencies for Debian based distros: `libreadline-dev`.
