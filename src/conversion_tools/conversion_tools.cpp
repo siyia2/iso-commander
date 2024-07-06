@@ -421,7 +421,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
                 int step = (startNum <= endNum) ? 1 : -1;
                 for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
                     if (i != 0) {
-                        tokens.insert(std::to_string(i));
+                        tokens.emplace(std::to_string(i));
                     }
                     if (tokens.size() >= maxThreads) {
                         break;
@@ -432,7 +432,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     } else if (std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
 			int num = std::stoi(tokenCount);
 			if (num > 0 && static_cast<std::vector<std::string>::size_type>(num) <= fileList.size()) {
-				tokens.insert(tokenCount);
+				tokens.emplace(tokenCount);
 				if (tokens.size() >= maxThreads) {
 					break;
 				}
@@ -468,7 +468,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     auto asyncConvertToISO = [&](const std::string& selectedFile) {
         std::size_t found = selectedFile.find_last_of("/\\");
         std::string filePath = selectedFile.substr(0, found);
-        selectedFilePaths.insert(filePath);
+        selectedFilePaths.emplace(filePath);
         convertToISO(selectedFile, successOuts, skippedOuts, failedOuts, deletedOuts, modeMdf);
         // Increment completedTasks when conversion is done
         ++completedTasks;
@@ -488,7 +488,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
                     char extraChar;
                     if (tokenStream >> extraChar) {
                         // Extra characters found after the range, treat as invalid
-                        processedErrors.insert("\033[1;91mInvalid range: '" + token + "'.\033[1;0m");
+                        processedErrors.emplace("\033[1;91mInvalid range: '" + token + "'.\033[1;0m");
                     } else if (start > 0 && end > 0 && start <= static_cast<int>(fileList.size()) && end <= static_cast<int>(fileList.size())) {
                         int step = (start <= end) ? 1 : -1;
                         for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
@@ -499,19 +499,19 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 											std::lock_guard<std::mutex> lock(futuresMutex);
 											futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));
                                     
-											processedIndices.insert(selectedIndex);
+											processedIndices.emplace(selectedIndex);
 										}
                             }
                         }
                     } else {
 						if (start < 0) {
-							processedErrors.insert("\033[1;91mInvalid input: '" + std::to_string(start) + "-" + std::to_string(end) + "'.\033[1;0m");
+							processedErrors.emplace("\033[1;91mInvalid input: '" + std::to_string(start) + "-" + std::to_string(end) + "'.\033[1;0m");
 						} else {
-							processedErrors.insert("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'.\033[1;0m");
+							processedErrors.emplace("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'.\033[1;0m");
 						}
                     }
                 } else {
-                    processedErrors.insert("\033[1;91mInvalid range: '" + token + "'.\033[1;0m");
+                    processedErrors.emplace("\033[1;91mInvalid range: '" + token + "'.\033[1;0m");
                 }
             } else if (start >= 1 && static_cast<size_t>(start) <= fileList.size()) {
                 int selectedIndex = start - 1;
@@ -521,14 +521,14 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 								std::lock_guard<std::mutex> lock(futuresMutex);
 								futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));   
                         
-								processedIndices.insert(selectedIndex);
+								processedIndices.emplace(selectedIndex);
 							}
                 }
             } else {
-                processedErrors.insert("\033[1;91mInvalid index: '" + std::to_string(start) + "'.\033[1;0m");
+                processedErrors.emplace("\033[1;91mInvalid index: '" + std::to_string(start) + "'.\033[1;0m");
             }
         } else {
-            processedErrors.insert("\033[1;91mInvalid input: '" + token + "'.\033[1;0m");
+            processedErrors.emplace("\033[1;91mInvalid input: '" + token + "'.\033[1;0m");
         }
     }
 
