@@ -15,7 +15,6 @@
 #include <functional>
 #include <future>
 #include <iostream>
-#include <linux/loop.h>
 #include <memory>
 #include <mntent.h>
 #include <mutex>
