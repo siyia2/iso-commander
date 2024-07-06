@@ -332,42 +332,74 @@ bool isAlreadyMounted(const std::string& mountPoint) {
     return (vfs.f_flag & ST_NODEV) == 0;
 }
 
-// Function to mount a single ISO file
-void mountIsoFile(const std::vector<std::string>& isoFilesToMount,std::set<std::string>& mountedFiles,std::set<std::string>& skippedMessages,std::set<std::string>& mountedFails) {
-		namespace fs = std::filesystem;
-    
-		const std::vector<std::string> fsTypes = {
-			"iso9660", "udf", "hfsplus", "rockridge", "joliet", "isofs", "auto"
-		};
 
-		for (const auto& isoFile : isoFilesToMount) {
-		// Extract directory and filename from isoFile
-		auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
+// Helper function to set up a loop device
+bool setupLoopDevice(const std::string& isoFile, std::string& loopDevice) {
+    int isoFd = open(isoFile.c_str(), O_RDONLY);
+    if (isoFd < 0) {
+        std::cerr << "Failed to open ISO file: " << isoFile << ": " << strerror(errno) << std::endl;
+        return false;
+    }
 
-		bool isInFailedSet = false;
+    int controlFd = open("/dev/loop-control", O_RDWR);
+    if (controlFd < 0) {
+        std::cerr << "Failed to open loop-control: " << strerror(errno) << std::endl;
+        close(isoFd);
+        return false;
+    }
 
-		// Check if this ISO file is in the global failed set
-		{
-			std::lock_guard<std::mutex> lock(globalFailedISOMutex);
-			if (globalFailedISOs.find(isoFile) != globalFailedISOs.end()) {
-				isInFailedSet = true;
-			}
-		}
+    int loopNum = ioctl(controlFd, LOOP_CTL_GET_FREE);
+    close(controlFd);
+    if (loopNum < 0) {
+        std::cerr << "Failed to get free loop device: " << strerror(errno) << std::endl;
+        close(isoFd);
+        return false;
+    }
 
-		if (isInFailedSet) {
-			// Skip this ISO file if it's in the global failed set
-			std::stringstream skippedMessage;
-			skippedMessage << "\033[1;93mISO: \033[1;91m'" << isoDirectory << "/" << isoFilename 
-						   << "'\033[1;93m skipped (prev mnt fail), clr ↵ clears status.\033[0m";
+    loopDevice = "/dev/loop" + std::to_string(loopNum);
+    int loopFd = open(loopDevice.c_str(), O_RDWR);
+    if (loopFd < 0) {
+        std::cerr << "Failed to open loop device " << loopDevice << ": " << strerror(errno) << std::endl;
+        close(isoFd);
+        return false;
+    }
 
-			{
-				std::lock_guard<std::mutex> lowLock(Mutex4Low);
-				mountedFails.insert(skippedMessage.str());
-			}
-			continue;
-		}
+    if (ioctl(loopFd, LOOP_SET_FD, isoFd) < 0) {
+        std::cerr << "Failed to set loop device: " << strerror(errno) << std::endl;
+        close(loopFd);
+        close(isoFd);
+        return false;
+    }
 
-        // Construct unique mount point based on isoFile
+    close(loopFd);
+    close(isoFd);
+    return true;
+}
+
+
+void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
+    namespace fs = std::filesystem;
+
+    static const std::vector<std::string> fsTypes = {
+        "iso9660", "udf", "hfsplus", "rockridge", "joliet", "isofs", "auto"
+    };
+
+    std::string errorMessage;
+
+    for (const auto& isoFile : isoFilesToMount) {
+        auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
+
+        {
+            std::lock_guard<std::mutex> lock(globalFailedISOMutex);
+            if (globalFailedISOs.find(isoFile) != globalFailedISOs.end()) {
+                errorMessage = "\033[1;93mISO: \033[1;91m'" + isoDirectory + "/" + 
+                               isoFilename + "'\033[1;93m skipped (prev mnt fail), clr ↵ clears status.\033[0m";
+                std::lock_guard<std::mutex> lowLock(Mutex4Low);
+                mountedFails.emplace(std::move(errorMessage));
+                continue;
+            }
+        }
+
         fs::path isoPath(isoFile);
         std::string isoFileName = isoPath.stem().string();
         
@@ -387,108 +419,73 @@ void mountIsoFile(const std::vector<std::string>& isoFilesToMount,std::set<std::
         std::string uniqueId = isoFileName + "\033[38;5;245m~" + shortHash + "\033[1;94m";
         std::string mountPoint = "/mnt/iso_" + uniqueId;
 
+
         auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint);
 
-        // Check if mount point is already mounted
         if (isAlreadyMounted(mountPoint)) {
-            std::stringstream skippedMessage;
-            skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename
-                           << "'\033[1;93m already mnt@: \033[1;94m'" << mountisoDirectory
-                           << "/" << mountisoFilename << "'\033[1;93m.\033[0m";
-            {
-                std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                skippedMessages.insert(skippedMessage.str());
-            }
+            errorMessage = "\033[1;93mISO: \033[1;92m'" + isoDirectory + "/" + 
+                           isoFilename + "'\033[1;93m already mnt@: \033[1;94m'" + 
+                           mountisoDirectory + "/" + mountisoFilename + "'\033[1;93m.\033[0m";
+            std::lock_guard<std::mutex> lowLock(Mutex4Low);
+            skippedMessages.emplace(std::move(errorMessage));
             continue;
         }
         
-        // Check for root privileges (unchanged)
         if (geteuid() != 0) {
-            std::stringstream errorMessage;
-            errorMessage << "\033[1;91mFailed to mount: \033[1;93m'" << isoDirectory << "/" << isoFilename 
-                         << "'\033[0m\033[1;91m. Root privileges are required.\033[0m";
-            {
-                std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                mountedFails.insert(errorMessage.str());
-            }
+            errorMessage = "\033[1;91mFailed to mount: \033[1;93m'" + isoDirectory + "/" + 
+                           isoFilename + "'\033[0m\033[1;91m. Root privileges are required.\033[0m";
+            std::lock_guard<std::mutex> lowLock(Mutex4Low);
+            mountedFails.emplace(std::move(errorMessage));
             continue;
         }
         
-        // Check and create the mount point directory
         if (!fs::exists(mountPoint)) {
             try {
                 fs::create_directory(mountPoint);
             } catch (const fs::filesystem_error& e) {
-                std::stringstream errorMessage;
-                errorMessage << "\033[1;91mFailed to create mount point: \033[1;93m'" << mountPoint 
-                             << "'\033[0m\033[1;91m. Error: " << e.what() << "\033[0m";
-                {
-                    std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                    mountedFails.insert(errorMessage.str());
-                }
+                errorMessage = "\033[1;91mFailed to create mount point: \033[1;93m'" + mountPoint + 
+                               "'\033[0m\033[1;91m. Error: " + e.what() + "\033[0m";
+                std::lock_guard<std::mutex> lowLock(Mutex4Low);
+                mountedFails.emplace(std::move(errorMessage));
                 continue;
             }
         }
         
         bool mountSuccess = false;
+        std::string loopDevice;
         
         for (const auto& fsType : fsTypes) {
-            // Initialize libmount context
-            struct libmnt_context* cxt = mnt_new_context();
-            if (!cxt) {
-                std::stringstream errorMessage;
-                errorMessage << "\033[1;91mFailed to initialize mount context for: \033[1;93m'" 
-                             << isoDirectory << "/" << isoFilename << "'\033[0m\033[1;91m.\033[0m";
-                {
-                    std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                    mountedFails.insert(errorMessage.str());
-                }
+            if (!setupLoopDevice(isoFile, loopDevice)) {
+                errorMessage = "\033[1;91mFailed to setup loop device for: \033[1;93m'" + 
+                               isoDirectory + "/" + isoFilename + "'\033[0m\033[1;91m.\033[0m";
+                std::lock_guard<std::mutex> lowLock(Mutex4Low);
+                mountedFails.emplace(std::move(errorMessage));
                 break;
             }
             
-            // Set mount options directly on the context
-            mnt_context_set_source(cxt, isoFile.c_str());
-            mnt_context_set_target(cxt, mountPoint.c_str());
-            mnt_context_set_fstype(cxt, fsType.c_str());  // Ensure fsType is a valid filesystem type
-            mnt_context_set_options(cxt, "loop,ro");
-            
-            // Attempt to mount (unchanged)
-            int ret = mnt_context_mount(cxt);
-            
-            // Check if mount was successful
-            if (ret == 0) {
-                // Successfully mounted
-                std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m"
-												+ "\033[1m mnt@: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename
-												+ "'\033[0;1m. {" + fsType + "}\033[0m";
-                {
-                    std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                    mountedFiles.insert(mountedFileInfo);
-                }
+            if (mount(loopDevice.c_str(), mountPoint.c_str(), fsType.c_str(), MS_RDONLY, nullptr) == 0) {
+                std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + 
+                                              isoFilename + "'\033[0m\033[1m mnt@: \033[1;94m'" + 
+                                              mountisoDirectory + "/" + mountisoFilename + 
+                                              "'\033[0;1m. {" + fsType + "}\033[0m";
+                std::lock_guard<std::mutex> lowLock(Mutex4Low);
+                mountedFiles.emplace(std::move(mountedFileInfo));
                 mountSuccess = true;
-                mnt_free_context(cxt);
                 break;
             }
-            
-            // Free the context
-            mnt_free_context(cxt);
         }
         
         if (!mountSuccess) {
-            // Mount failure after trying all filesystem types
-            std::stringstream errorMessage;
-            errorMessage << "\033[1;91mFailed to mnt: \033[1;93m'" << isoDirectory << "/" << isoFilename
-                         << "'\033[1;91m.\033[0;1m {badFS}";
+            errorMessage = "\033[1;91mFailed to mnt: \033[1;93m'" + isoDirectory + "/" + 
+                           isoFilename + "'\033[1;91m.\033[0;1m {badFS}";
             fs::remove(mountPoint);
             {
                 std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                mountedFails.insert(errorMessage.str());
+                mountedFails.emplace(std::move(errorMessage));
             }
-
-            // Store the failed ISO file in the global set
             {
                 std::lock_guard<std::mutex> lock(globalFailedISOMutex);
-                globalFailedISOs.insert(isoFile);
+                globalFailedISOs.emplace(isoFile);
             }
         }
     }
@@ -534,7 +531,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                 int step = (startNum <= endNum) ? 1 : -1;
                 for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
                     if (i != 0) {
-                        tokens.insert(std::to_string(i));
+                        tokens.emplace(std::to_string(i));
                     }
                     if (tokens.size() >= maxThreads) {
                         break;
@@ -545,7 +542,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     } else if (std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
 			int num = std::stoi(tokenCount);
 			if (num > 0 && static_cast<std::vector<std::string>::size_type>(num) <= isoFiles.size()) {
-				tokens.insert(tokenCount);
+				tokens.emplace(tokenCount);
 				if (tokens.size() >= maxThreads) {
 					break;
 				}
@@ -571,7 +568,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     bool shouldProcess = false;
     {
         std::lock_guard<std::mutex> lock(validIndicesMutex);
-        shouldProcess = validIndices.insert(index).second;
+        shouldProcess = validIndices.emplace(index).second;
     }
 
     if (shouldProcess) {
@@ -587,7 +584,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
 
 	auto addError = [&](const std::string& error) {
 		std::lock_guard<std::mutex> lock(errorMutex);
-		uniqueErrorMessages.insert(error);
+		uniqueErrorMessages.emplace(error);
 		invalidInput.store(true, std::memory_order_release);
 	};
 
@@ -629,7 +626,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
 			bool shouldProcessRange = false;
 			{
 				std::lock_guard<std::mutex> lock(processedRangesMutex);
-				shouldProcessRange = processedRanges.insert(range).second;
+				shouldProcessRange = processedRanges.emplace(range).second;
 			}
 
 			if (shouldProcessRange) {
@@ -660,7 +657,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
 	{
 		std::lock_guard<std::mutex> lock(indicesMutex);
 		for (int num : indicesToAdd) {
-			bool shouldProcess = processedIndices.insert(num).second;
+			bool shouldProcess = processedIndices.emplace(num).second;
 			if (shouldProcess) {
 				totalTasks.fetch_add(1, std::memory_order_relaxed);
 				activeTaskCount.fetch_add(1, std::memory_order_relaxed);
