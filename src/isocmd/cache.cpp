@@ -315,10 +315,10 @@ void manualRefreshCache(const std::string& initialDir) {
 		if (inputSearch == "clr") {
 			clearScrollBuffer();
 			if (std::remove(cacheFilePath.c_str()) != 0) {
-				std::cerr << "\n\001\033[1;91mError deleting file: '" << cacheFilePath << "'. File does not exist or inaccessible." << std::endl;
+				std::cerr << "\n\001\033[1;91mError deleting file: '" << cacheFilePath << "'. File does not exist." << std::endl;
 				std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-				manualRefreshCache();
+				manualRefreshCache("");
         } else {
 			std::cout << "\n\001\033[1;92mFile deleted successfully: '" << cacheFilePath <<"'." << std::endl;
 			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
