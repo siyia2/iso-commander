@@ -88,6 +88,7 @@ void select_and_mount_files_by_number() {
 		}
 		
 		bool isFiltered = false;
+		bool search = true;
         clearScrollBuffer();
         std::cout << "\033[1;93m! IF EXPECTED ISO FILES ARE NOT ON THE LIST IMPORT THEM FROM THE MAIN MENU OPTIONS !\033[0;1m\n";
         
@@ -114,7 +115,7 @@ void select_and_mount_files_by_number() {
         } else if (strcmp(input.get(), "/") == 0) {
 			isFiltered = true;
 			
-			while (true) {
+			while (search) {
 			
 			clearScrollBuffer();
 			historyPattern = true;
@@ -169,7 +170,7 @@ void select_and_mount_files_by_number() {
 						printIsoFileList(filteredFiles); // Print the filtered list of ISO files
 					
 						// Prompt user for input again with the filtered list
-						std::string prompt = "\n\n\001\033[1;92m\002Filtered ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), ↵ return:\001\033[0;1m\002 ";
+						std::string prompt = "\n\n\001\033[1;92m\002Filtered ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
 
 						// Prompt user for input
 						char* rawInputFiltered = readline(prompt.c_str());
@@ -179,7 +180,13 @@ void select_and_mount_files_by_number() {
 						
 						std::string inputFilteredString(inputFiltered.get());
 						
+						if (inputFiltered.get()[0] == '/') {
+							search = true;
+							break;
+						}
+						
 						if (std::isspace(inputFiltered.get()[0]) || inputFiltered.get()[0] == '\0') {
+							search = false;
 							historyPattern = false;
 							break;
 						} else if (std::strcmp(inputFiltered.get(), "00") == 0) {
