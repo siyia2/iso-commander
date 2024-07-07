@@ -93,7 +93,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
         std::vector<std::string> filteredFiles = isoFiles;
         sortFilesCaseInsensitive(isoFiles);
         printIsoFileList(isoFiles);
-        
+        bool search = true;
         
 
         // Construct the prompt string
@@ -116,7 +116,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
         }
 		mvDelBreak=false;
         if (strcmp(input.get(), "/") == 0) {
-			while (!mvDelBreak) {
+			while (!mvDelBreak && search) {
             clearScrollBuffer();
 			
 			historyPattern = true;
@@ -171,17 +171,23 @@ void select_and_operate_files_by_number(const std::string& operation) {
 						printIsoFileList(filteredFiles); // Print the filtered list of ISO files
 
 						// Construct the prompt string
-						std::string prompt = "\n\n\001\033[1;92m\002Filtered ISO(s)\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + "\001\033[1;94m\002 (e.g., 1-3,1 5), ↵ return:\001\033[0;1m\002 ";
+						std::string prompt = "\n\n\001\033[1;92m\002Filtered ISO(s)\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + "\001\033[1;94m\002 (e.g., 1-3,1 5), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
 
 						// Use std::unique_ptr to manage memory for input
 						std::unique_ptr<char, decltype(&std::free)> inputFiltered(readline(prompt.c_str()), &std::free);
 						
 						std::string InputStringFiltered(inputFiltered.get());
+						
+						if (inputFiltered.get()[0] == '/') {
+							search = true;
+							break;
+						}
 
                     
 						// Check if the user wants to return
 						if (std::isspace(inputFiltered.get()[0]) || inputFiltered.get()[0] == '\0') {
 							historyPattern = false;
+							search =false;
 							break;
 						}
 
