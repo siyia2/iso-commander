@@ -5,6 +5,7 @@
 // Cache Variables
 
 const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.cache"; // Construct the full path to the cache directory
+const std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/iso_commander_cache.txt";
 const std::string cacheFileName = "iso_commander_cache.txt";
 const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
@@ -13,7 +14,6 @@ int maxDepth = -1;
 
 // Function to remove non-existent paths from cache
 void removeNonExistentPathsFromCache() {
-    const std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/iso_commander_cache.txt";
 	
     // Open the cache file for reading
     int fd = open(cacheFilePath.c_str(), O_RDONLY);
@@ -304,7 +304,7 @@ void manualRefreshCache(const std::string& initialDir) {
 		loadHistory();
 		maxDepth = -1;
 		// Prompt the user to enter directory paths for manual cache refresh
-		std::string prompt = "\001\033[1;92m\002Folder path(s)\001\033[1;94m\002 ↵ to scan for \001\033[1;92m\002.iso\001\033[1;94m\002 files and import into \001\033[1;92m\002on-disk\001\033[1;94m\002 cache (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return:\n\001\033[0;1m\002";
+		std::string prompt = "\001\033[1;92m\002Folder path(s)\001\033[1;94m\002 ↵ to scan for \001\033[1;92m\002.iso\001\033[1;94m\002 files and import into \001\033[1;92m\002on-disk\001\033[1;94m\002 cache (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002),\001\033[1;93m\002 clr\001\033[1;94m\002 to clear cache, or ↵ to return:\n\001\033[0;1m\002";
 		// Prompt user for input
 		char* rawSearchQuery = readline(prompt.c_str());
 
@@ -312,7 +312,19 @@ void manualRefreshCache(const std::string& initialDir) {
 		std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
 		std::string inputSearch(searchQuery.get());
 		
-		if (!inputSearch.empty()) {
+		if (inputSearch == "clr") {
+			clearScrollBuffer();
+			if (std::remove(cacheFilePath.c_str()) != 0) {
+				std::cerr << "\n\001\033[1;91mError deleting file: '" << cacheFilePath << "'. File does not exist or inaccessible." << std::endl;
+				std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        } else {
+			std::cout << "\n\001\033[1;92mFile deleted successfully: '" << cacheFilePath <<"'." << std::endl;
+			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        }
+			
+		} else if (!inputSearch.empty()) {
 			input = inputSearch;
 			add_history(searchQuery.get()); // Add to history
 		}
