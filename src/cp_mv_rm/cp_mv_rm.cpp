@@ -39,206 +39,208 @@ bool isValidLinuxPathFormat(const std::string& path) {
 
 // Main function to select and operate on files by number
 void select_and_operate_files_by_number(const std::string& operation) {
-	
-	// Vector to store operation ISOs
-	std::set<std::string> operationIsos;
-	// Vector to store errors for operation ISOs
-	std::set<std::string> operationErrors;
-	// Vector to store ISO unique input errors
-	std::set<std::string> uniqueErrorMessages;
+    initscr();
+    start_color();
+    cbreak();
+    noecho();
+    keypad(stdscr, TRUE);
 
-    // Load ISO files from the cache
-    std::vector<std::string> isoFiles;
-	isoFiles.reserve(100);
+    // Initialize color pairs
+    init_pair(1, COLOR_RED, COLOR_BLACK);
+    init_pair(2, COLOR_GREEN, COLOR_BLACK);
+    init_pair(3, COLOR_MAGENTA, COLOR_BLACK);
+    init_pair(4, COLOR_YELLOW, COLOR_BLACK);
 
-    // Color code based on the operation
-    std::string operationColor;
-    if (operation == "rm") {
-        operationColor = "\033[1;91m"; // Red for 'rm'
-    } else if (operation == "cp") {
-        operationColor = "\033[1;92m"; // Green for 'cp'
-    } else {
-        operationColor = "\033[1;93m"; // Yellow for other operations
-    }
+    std::vector<std::string> originalIsoFiles;
+    std::vector<std::string> filteredIsoFiles;
+    std::set<std::string> operationIsos, operationErrors, uniqueErrorMessages;
+    std::vector<bool> selectedFiles;
+    std::string filterInput;
 
-    std::string process;
-
-    // Main loop for interacting with ISO files
     while (true) {
-        // Clear the vector after each iteration
-		operationIsos.clear();
-		operationErrors.clear();
-		uniqueErrorMessages.clear();
-        // Remove non-existent paths from the cache after selection
+        clear();
         removeNonExistentPathsFromCache();
-		// Load ISO files from cache
-		loadCache(isoFiles);
-		
-		clearScrollBuffer();
-        
-        if (isoFiles.empty()) {
-			clearScrollBuffer();
-			std::cout << "\n\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n";
-			std::cout << "\n";
-			std::cout << "\033[1;32m↵ to continue...\033[0;1m";
-			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-			break;
-		}
+        loadCache(originalIsoFiles);
+        sortFilesCaseInsensitive(originalIsoFiles);
 
-        // Display header message
-        std::cout << "\033[1;93m! IF EXPECTED ISO FILES ARE NOT ON THE LIST IMPORT THEM FROM THE MAIN MENU OPTIONS !\033[0;1m\n";
-        std::cout << "\033[92;1m                  // CHANGES ARE REFLECTED AUTOMATICALLY //\033[0;1m\n";
-
-        std::string searchQuery;
-        std::vector<std::string> filteredFiles = isoFiles;
-        sortFilesCaseInsensitive(isoFiles);
-        printIsoFileList(isoFiles);
-        
-        
-
-        // Construct the prompt string
-		std::string prompt = "\n\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + "\001\033[1;94m\002 (e.g., 1-3,1 5), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
-
-		// Use std::unique_ptr to manage memory for input
-		std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
-		
-		std::string mainInputString(input.get());
-		
-        clearScrollBuffer();
-        
-        if (strcmp(input.get(), "/") != 0 || (!(std::isspace(input.get()[0]) || input.get()[0] == '\0'))) {
-			std::cout << "\033[1mPlease wait...\033[1m\n";
-		}
-
-        // Check if the user wants to return
-        if (std::isspace(input.get()[0]) || input.get()[0] == '\0') {
+        if (originalIsoFiles.empty()) {
+            attron(COLOR_PAIR(4) | A_BOLD);
+            mvprintw(0, 0, "ISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.");
+            mvprintw(2, 0, "Press any key to continue...");
+            attroff(COLOR_PAIR(4) | A_BOLD);
+            getch();
             break;
         }
-		mvDelBreak=false;
-        if (strcmp(input.get(), "/") == 0) {
-			while (!mvDelBreak) {
-            clearScrollBuffer();
-			
-			historyPattern = true;
-			loadHistory();
-						
-            // User pressed '/', start the filtering process
-			std::string prompt = "\n\001\033[1;92m\002Term(s)\001\033[1;94m\002 ↵ to filter \001" + operationColor + "\002" + operation + " \001\033[1;94m\002list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return: \001\033[0;1m\002";
 
-			// Prompt user for input
-			char* rawSearchQuery = readline(prompt.c_str());
+        filteredIsoFiles = originalIsoFiles;
+        selectedFiles.resize(filteredIsoFiles.size(), false);
 
-			// Use std::unique_ptr to manage memory for rawSearchQuery
-			std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
-			
-			std::string inputSearch(searchQuery.get());
+        int maxY, maxX;
+        getmaxyx(stdscr, maxY, maxX);
+        int startY = 4;
+        int pageSize = maxY - 7;
+        int currentPage = 0;
+        int currentSelection = 0;
+        std::string numberInput;
 
-            clearScrollBuffer();
-            
-            if (searchQuery && searchQuery.get()[0] != '\0') {
-				std::cout << "\033[1mPlease wait...\033[1m\n";
-				if (strcmp(searchQuery.get(), "/") != 0) {
-					add_history(searchQuery.get()); // Add the search query to the history
-					saveHistory();
-				}
-			}
-            clear_history();
-            
+        while (true) {
+            clear();
+            attron(COLOR_PAIR(4) | A_BOLD);
+            mvprintw(0, 0, "ISO File Selection (Page %d/%ld)", currentPage + 1, (long)(filteredIsoFiles.size() + pageSize - 1) / pageSize);
+            mvprintw(1, 0, "Use UP/DOWN to navigate, SPACE to select, ENTER to %s, F to toggle filter mode, Q to quit", operation.c_str());
+            mvprintw(2, 0, "Type a number to jump to that entry");
+            mvprintw(3, 0, "Filter: %s", filterInput.c_str());
+            attroff(COLOR_PAIR(4) | A_BOLD);
 
-            // Store the original isoFiles vector
-            std::vector<std::string> originalIsoFiles = isoFiles;
-            
-            if (!(searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0)) {
+            size_t maxIndex = filteredIsoFiles.size();
+            size_t numDigits = std::to_string(maxIndex).length();
 
-            if (searchQuery != nullptr) {
-                std::vector<std::string> filteredFiles = filterFiles(isoFiles, inputSearch);
+            size_t start = currentPage * pageSize;
+            size_t end = std::min(start + pageSize, filteredIsoFiles.size());
 
-                if (filteredFiles.empty()) {
-					clearScrollBuffer();
-                    std::cout << "\033[1;91mNo ISO(s) match the search query.\033[0;1m\n";
-					std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                } else {
-					while (!mvDelBreak) {
-						// Clear the vector after each iteration
-						operationIsos.clear();
-						operationErrors.clear();
-						uniqueErrorMessages.clear();
-						
-						clearScrollBuffer();
-						sortFilesCaseInsensitive(filteredFiles);
-						std::cout << "\033[1mFiltered results:\033[0;1m\n";
-						printIsoFileList(filteredFiles); // Print the filtered list of ISO files
+            for (size_t i = start; i < end; ++i) {
+                int color_pair = (i % 2 == 0) ? 1 : 2;
+                attron(COLOR_PAIR(color_pair) | A_BOLD);
+                mvprintw(startY + static_cast<int>(i - start), 0, "%c %*ld. ", 
+                         selectedFiles[i] ? '*' : ' ', static_cast<int>(numDigits), i + 1);
+                attroff(COLOR_PAIR(color_pair) | A_BOLD);
 
-						// Construct the prompt string
-						std::string prompt = "\n\n\001\033[1;92m\002Filtered ISO(s)\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + "\001\033[1;94m\002 (e.g., 1-3,1 5), ↵ return:\001\033[0;1m\002 ";
+                auto [directory, filename] = extractDirectoryAndFilename(filteredIsoFiles[i]);
+                
+                attron(A_BOLD);
+                addstr(directory.c_str());
+                addch('/');
+                attroff(A_BOLD);
 
-						// Use std::unique_ptr to manage memory for input
-						std::unique_ptr<char, decltype(&std::free)> inputFiltered(readline(prompt.c_str()), &std::free);
-						
-						std::string InputStringFiltered(inputFiltered.get());
-
-                    
-						// Check if the user wants to return
-						if (std::isspace(inputFiltered.get()[0]) || inputFiltered.get()[0] == '\0') {
-							historyPattern = false;
-							break;
-						}
-
-						// Check if the user provided input
-						if (inputFiltered.get()[0] != '\0' && (strcmp(inputFiltered.get(), "/") != 0)) {
-							clearScrollBuffer();
-							historyPattern = false;
-
-							// Process the user input with the filtered list
-							if (operation == "rm") {
-								process = "rm";
-								mvDelBreak=true;
-								processOperationInput(InputStringFiltered, filteredFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
-							} else if (operation == "mv") {
-								process = "mv";
-								mvDelBreak=true;
-								processOperationInput(InputStringFiltered, filteredFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
-							} else if (operation == "cp") {
-								process = "cp";
-								mvDelBreak=false;
-								processOperationInput(InputStringFiltered, filteredFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
-								}
-							}
-						}
-					}
-				}
-			} else {
-					isoFiles = originalIsoFiles; // Revert to the original cache list
-					historyPattern = false;
-					break;
-				}
-			}
-			
-        } else {
-            // Process the user input with the original list
-            if (operation == "rm") {
-                process = "rm";
-                processOperationInput(mainInputString, isoFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
-            } else if (operation == "mv") {
-                process = "mv";
-                processOperationInput(mainInputString, isoFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
-            } else if (operation == "cp") {
-                process = "cp";
-                processOperationInput(mainInputString, isoFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
+                attron(COLOR_PAIR(3) | A_BOLD);
+                addstr(filename.c_str());
+                attroff(COLOR_PAIR(3) | A_BOLD);
             }
-        }
 
-        // If ISO files become empty after operation, display a message and return
-        if (isoFiles.empty()) {
-            std::cout << "\n\033[1;93mNo ISO(s) available for " << operation << ".\033[0;1m\n";
-            std::cout << "\n";
-            std::cout << "↵ to continue...\n";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            break;
+            mvchgat(startY + currentSelection, 0, -1, A_REVERSE, 0, NULL);
+            
+            attron(COLOR_PAIR(4) | A_BOLD);
+            mvprintw(maxY - 1, 0, "Jump to: %s", numberInput.c_str());
+            attroff(COLOR_PAIR(4) | A_BOLD);
+            
+            refresh();
+
+            int ch = getch();
+            if (ch >= '0' && ch <= '9') {
+                numberInput += static_cast<char>(ch);
+                continue;
+            }
+
+            switch (ch) {
+                case KEY_UP:
+                    if (currentSelection > 0) {
+                        currentSelection--;
+                    } else if (currentPage > 0) {
+                        currentPage--;
+                        currentSelection = pageSize - 1;
+                    }
+                    break;
+                case KEY_DOWN:
+                    if (currentSelection < static_cast<int>(end - start) - 1) {
+                        currentSelection++;
+                    } else if (end < filteredIsoFiles.size()) {
+                        currentPage++;
+                        currentSelection = 0;
+                    }
+                    break;
+                case KEY_NPAGE:
+                    if (static_cast<size_t>(currentPage) < (filteredIsoFiles.size() + pageSize - 1) / pageSize - 1) {
+                        currentPage++;
+                        currentSelection = 0;
+                    }
+                    break;
+                case KEY_PPAGE:
+                    if (currentPage > 0) {
+                        currentPage--;
+                        currentSelection = 0;
+                    }
+                    break;
+                case ' ': // Spacebar
+                    {
+                        size_t selectedIndex = start + currentSelection;
+                        selectedFiles[selectedIndex] = !selectedFiles[selectedIndex];
+                    }
+                    break;
+                case 10: // Enter key
+                    if (!numberInput.empty()) {
+                        int jumpTo = std::stoi(numberInput) - 1; // Convert to 0-based index
+                        if (jumpTo >= 0 && jumpTo < static_cast<int>(filteredIsoFiles.size())) {
+                            currentPage = jumpTo / pageSize;
+                            currentSelection = jumpTo % pageSize;
+                        }
+                        numberInput.clear();
+                    } else {
+                        std::vector<std::string> filesToOperate;
+                        for (size_t i = 0; i < filteredIsoFiles.size(); ++i) {
+                            if (selectedFiles[i]) {
+                                filesToOperate.push_back(filteredIsoFiles[i]);
+                            }
+                        }
+                        if (!filesToOperate.empty()) {
+                            processOperationInput(numberInput, filteredIsoFiles, operation, operationIsos, operationErrors, uniqueErrorMessages);
+                            clear();
+                            attron(COLOR_PAIR(4) | A_BOLD);
+                            mvprintw(0, 0, "Processed %ld ISO(s) with %s operation", filesToOperate.size(), operation.c_str());
+                            mvprintw(2, 0, "Press any key to continue...");
+                            attroff(COLOR_PAIR(4) | A_BOLD);
+                            getch();
+                            goto exit_loop; // Exit after operation
+                        } else {
+                            attron(COLOR_PAIR(4) | A_BOLD);
+                            mvprintw(maxY - 1, 0, "No ISOs selected. Press any key to continue...");
+                            attroff(COLOR_PAIR(4) | A_BOLD);
+                            getch();
+                        }
+                    }
+                    break;
+                case KEY_BACKSPACE:
+                case 127: // Delete key
+                    if (!numberInput.empty()) {
+                        numberInput.pop_back();
+                    } else if (!filterInput.empty()) {
+                        filterInput.pop_back();
+                        filteredIsoFiles = filterFiles(originalIsoFiles, filterInput);
+                        selectedFiles.resize(filteredIsoFiles.size(), false);
+                        currentPage = 0;
+                        currentSelection = 0;
+                    }
+                    break;
+                case 'f':
+                case 'F':
+                    // Toggle filter mode
+                    filterInput.clear();
+                    filteredIsoFiles = originalIsoFiles;
+                    selectedFiles.resize(filteredIsoFiles.size(), false);
+                    currentPage = 0;
+                    currentSelection = 0;
+                    break;
+                case 'q':
+                case 'Q':
+                    goto exit_loop;
+                default:
+                    if (isprint(ch)) {
+                        filterInput += static_cast<char>(ch);
+                        filteredIsoFiles = filterFiles(originalIsoFiles, filterInput);
+                        selectedFiles.resize(filteredIsoFiles.size(), false);
+                        currentPage = 0;
+                        currentSelection = 0;
+                    }
+                    break;
+            }
+            numberInput.clear(); // Clear number input after each non-digit key press
         }
+exit_loop:
+        break;
     }
+
+    endwin();
 }
+
 
 
 // Function to process either mv or cp indices
