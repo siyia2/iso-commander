@@ -216,6 +216,7 @@ void unmountISOs() {
 		unmountedErrors.clear();
 		errorMessages.clear();
         invalidInput = false;
+        bool search =true;
 
         // Populate isoDirs with directories that match the "iso_" prefix
         for (const auto& entry : std::filesystem::directory_iterator(isoPath)) {
@@ -258,7 +259,7 @@ void unmountISOs() {
         // Check if the user wants to filter the list of ISOs
         if (strcmp(input.get(), "/") == 0) {
 			bool breakOuterLoop = false;
-            while (true) {
+            while (search) {
 				if (breakOuterLoop) {
 					historyPattern = false;
 					break;
@@ -365,15 +366,21 @@ void unmountISOs() {
 						}
 
                         // Prompt the user for the list of ISOs to unmount
-						char* rawChosen = readline("\n\001\033[1;92m\002Filtered ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), ↵ return:\001\033[0m\002\001\033[1m\002");
+						char* rawChosen = readline("\n\001\033[1;92m\002Filtered ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0m\002\001\033[1m\002");
 
 						// Use std::unique_ptr to manage memory for rawInput
 						std::unique_ptr<char, decltype(&std::free)> chosenNumbers(rawChosen, &std::free);
 						std::string inputChosenString(chosenNumbers.get());
 						
+						if (chosenNumbers.get()[0] == '/') {
+							search = true;
+							break;
+						}
+						
 
                         if (std::isspace(chosenNumbers.get()[0]) || chosenNumbers.get()[0] == '\0') {
                             noValid = false;
+                            search = false;
                             skipEnter = true;
                             historyPattern = false;
                             break;
