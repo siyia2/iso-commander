@@ -50,12 +50,14 @@ void select_and_operate_files_by_number(const std::string& operation) {
     init_pair(2, COLOR_GREEN, COLOR_BLACK);
     init_pair(3, COLOR_MAGENTA, COLOR_BLACK);
     init_pair(4, COLOR_YELLOW, COLOR_BLACK);
+    init_pair(5, COLOR_BLUE, COLOR_BLACK);  // Color pair for filter input
 
     std::vector<std::string> originalIsoFiles;
     std::vector<std::string> filteredIsoFiles;
     std::set<std::string> operationIsos, operationErrors, uniqueErrorMessages;
     std::vector<bool> selectedFiles;
     std::string filterInput;
+    bool filterMode = false; // Track the filter mode state
 
     while (true) {
         clear();
@@ -89,8 +91,24 @@ void select_and_operate_files_by_number(const std::string& operation) {
             mvprintw(0, 0, "ISO File Selection (Page %d/%ld)", currentPage + 1, (long)(filteredIsoFiles.size() + pageSize - 1) / pageSize);
             mvprintw(1, 0, "Use UP/DOWN to navigate, SPACE to select, ENTER to %s, F to toggle filter mode, Q to quit", operation.c_str());
             mvprintw(2, 0, "Type a number to jump to that entry");
-            mvprintw(3, 0, "Filter: %s", filterInput.c_str());
             attroff(COLOR_PAIR(4) | A_BOLD);
+
+            if (filterMode) {
+                attron(COLOR_PAIR(5) | A_BOLD);  // Blue color for filter input
+                mvprintw(3, 0, "Filter: ");
+                
+                // Print ':' in white bold
+                attroff(COLOR_PAIR(5) | A_BOLD);
+                attron(COLOR_PAIR(4) | A_BOLD);  // White color for colon
+                attroff(COLOR_PAIR(4) | A_BOLD);
+
+                // Print filterInput in blue
+                attron(COLOR_PAIR(5) | A_BOLD);
+                addstr(filterInput.c_str());
+                attroff(COLOR_PAIR(5) | A_BOLD);
+            } else {
+                mvprintw(3, 0, "Filter: %s", filterInput.c_str());
+            }
 
             size_t maxIndex = filteredIsoFiles.size();
             size_t numDigits = std::to_string(maxIndex).length();
@@ -213,17 +231,26 @@ void select_and_operate_files_by_number(const std::string& operation) {
                 case 'f':
                 case 'F':
                     // Toggle filter mode
-                    filterInput.clear();
-                    filteredIsoFiles = originalIsoFiles;
-                    selectedFiles.resize(filteredIsoFiles.size(), false);
-                    currentPage = 0;
-                    currentSelection = 0;
+                    filterMode = !filterMode; // Toggle filter mode state
+                    
+                    if (filterMode) {
+                        filterInput.clear();
+                        filteredIsoFiles = originalIsoFiles;
+                        selectedFiles.resize(filteredIsoFiles.size(), false);
+                        currentPage = 0;
+                        currentSelection = 0;
+                    } else {
+                        // Revert the filter color to default (white)
+                        attron(COLOR_PAIR(4) | A_BOLD);  // White color for default text
+                        mvprintw(3, 0, "Filter: %s", filterInput.c_str());
+                        attroff(COLOR_PAIR(4) | A_BOLD);
+                    }
                     break;
                 case 'q':
                 case 'Q':
                     goto exit_loop;
                 default:
-                    if (isprint(ch)) {
+                    if (filterMode && isprint(ch)) {
                         filterInput += static_cast<char>(ch);
                         filteredIsoFiles = filterFiles(originalIsoFiles, filterInput);
                         selectedFiles.resize(filteredIsoFiles.size(), false);
@@ -232,14 +259,12 @@ void select_and_operate_files_by_number(const std::string& operation) {
                     }
                     break;
             }
-            numberInput.clear(); // Clear number input after each non-digit key press
         }
-exit_loop:
-        break;
     }
-
+exit_loop:
     endwin();
 }
+
 
 
 
