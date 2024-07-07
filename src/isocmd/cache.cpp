@@ -323,7 +323,7 @@ void manualRefreshCache(const std::string& initialDir) {
 			std::cout << "\n\001\033[1;92mFile deleted successfully: '" << cacheFilePath <<"'." << std::endl;
 			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-			manualRefreshCache();
+			manualRefreshCache("");
         }
 			
 		} else if (!inputSearch.empty()) {
