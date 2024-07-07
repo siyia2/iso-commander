@@ -269,6 +269,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         printFileList(files);
 
         clear_history();
+        bool search = true;
 
         // Construct the prompt as a std::string
 		std::string prompt = "\n\001\033[1;38;5;208m\002" + fileTypeName + " \001\033[1;94m\002file(s) ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion (e.g., 1-3,1 5), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
@@ -286,7 +287,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 			bool isFiltered = false;
 			if (strcmp(input.get(), "/") == 0) { // Check if the input is "/"
 				isFiltered = true;
-				while (true) { // Enter an infinite loop for handling input
+				while (search) { // Enter an infinite loop for handling input
 				// Clear history for a fresh start
 				clear_history();
 
@@ -349,19 +350,25 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
 						std::string filterPrompt; // Define a string variable for filter prompt
 						if (fileType == "bin" || fileType == "img") {
-							filterPrompt = "\n\001\033[1;94m\033[1;38;5;208m\002Filtered BIN/IMG\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion (e.g., 1-3,1 5), ↵ return:\001\033[0;1m\002 ";
+							filterPrompt = "\n\001\033[1;94m\033[1;38;5;208m\002Filtered BIN/IMG\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion (e.g., 1-3,1 5), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
 						} else if (fileType == "mdf") {
-							filterPrompt = "\n\001\033[1;94m\033[1;38;5;208m\002Filtered MDF\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion (e.g., 1-3,1 5), ↵ return:\001\033[0;1m\002 ";
+							filterPrompt = "\n\001\033[1;94m\033[1;38;5;208m\002Filtered MDF\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion (e.g., 1-3,1 5), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
 						}
 						
 						char* rawSearchQuery = readline(prompt.c_str());
 						std::unique_ptr<char, decltype(&std::free)> filterInput(rawSearchQuery, &std::free);
 						
 						std::string filterInputString(filterInput.get());
+						
+						if (filterInput.get()[0] == '/') {
+							search=true;
+							break;
+						}
 
 						if (std::isspace(filterInput.get()[0]) || filterInput.get()[0] == '\0') { // Check if filter input is empty or contains only spaces
 							historyPattern = false; // Set history pattern to false
 							isFiltered = false;
+							search = false;
 							break; // Exit the loop
 						}
 						
