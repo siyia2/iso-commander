@@ -111,10 +111,10 @@ void clearScrollBuffer();
 // Mount functions
 void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages,std::set<std::string>& mountedFails);
 void printMountedAndErrors(std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages);
-void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails);
+void mountIsoFile(const std::string& isoFile, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails);
 void select_and_mount_files_by_number();
 void printIsoFileList(const std::vector<std::string>& isoFiles);
-void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFilesIn, std::set<std::string>& mountedFiles,std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages);
+void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages);
 
 // Cache functions
 void loadCache(std::vector<std::string>& isoFiles);
