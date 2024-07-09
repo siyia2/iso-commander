@@ -3,8 +3,6 @@
 
 //	MOUNT STUFF
 
-std::vector<std::string> failedMounts;
-
 // Function to mount all ISOs indiscriminately
 void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
     std::atomic<int> completedIsos(0);
@@ -91,7 +89,6 @@ void select_and_mount_files_by_number() {
 		
 		bool isFiltered = false;
 		bool search = true;
-		bool noProcessing = false;
         clearScrollBuffer();
         std::cout << "\033[1;93m! IF EXPECTED ISO FILES ARE NOT ON THE LIST IMPORT THEM FROM THE MAIN MENU OPTIONS !\033[0;1m\n";
         
@@ -101,21 +98,12 @@ void select_and_mount_files_by_number() {
         printIsoFileList(isoFiles);
 		
         // Prompt user for input
-       char* rawInput = readline("\n\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), clr ↵ clrFailed, / ↵ filter, ↵ return:\001\033[0;1m\002 ");
+       char* rawInput = readline("\n\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 ");
 
 		// Use std::unique_ptr to manage memory for input
 		std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
         
         std::string mainInputString(input.get());
-        if (mainInputString == "clr") {
-			noProcessing = true;
-			clearScrollBuffer();
-			failedMounts.clear();
-			std::cout << "\n\033[1;93mCleared current status of failed mounts.\033[0;1m\n";
-			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-		}
-			
         
         clearScrollBuffer();
         if (strcmp(input.get(), "/") != 0 || (!(std::isspace(input.get()[0]) || input.get()[0] == '\0'))) {
@@ -177,13 +165,12 @@ void select_and_mount_files_by_number() {
 						mountedFails.clear();
 						uniqueErrorMessages.clear();
 						clearScrollBuffer();
-						noProcessing = false;
 						sortFilesCaseInsensitive(filteredFiles);
 						std::cout << "\033[1mFiltered results:\033[0;1m\n";
 						printIsoFileList(filteredFiles); // Print the filtered list of ISO files
 					
 						// Prompt user for input again with the filtered list
-						std::string prompt = "\n\n\001\033[1;92m\002Filtered ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), clr ↵ clrFailed, / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+						std::string prompt = "\n\n\001\033[1;92m\002Filtered ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
 
 						// Prompt user for input
 						char* rawInputFiltered = readline(prompt.c_str());
@@ -192,15 +179,6 @@ void select_and_mount_files_by_number() {
 						std::unique_ptr<char, decltype(&std::free)> inputFiltered(rawInputFiltered, &std::free);
 						
 						std::string inputFilteredString(inputFiltered.get());
-						
-						if (inputFilteredString == "clr") {
-							noProcessing = true;
-							clearScrollBuffer();
-							failedMounts.clear();
-							std::cout << "\n\033[1;93mCleared current status of failed mounts.\033[0;1m\n";
-							std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-							std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-						}
 						
 						if (inputFiltered.get()[0] == '/') {
 							search = true;
@@ -222,7 +200,7 @@ void select_and_mount_files_by_number() {
 							if (verbose) {
 								printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
 							}
-						} else if (inputFiltered.get()[0] != '\0' && (strcmp(inputFiltered.get(), "/") != 0) && !noProcessing) { // Check if the user provided input
+						} else if (inputFiltered.get()[0] != '\0' && (strcmp(inputFiltered.get(), "/") != 0)) { // Check if the user provided input
 							clearScrollBuffer();
 							std::cout << "\033[1mPlease wait...\033[1m\n";
 
@@ -260,7 +238,7 @@ void select_and_mount_files_by_number() {
 			if (verbose) {
 				printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
 			}
-		} else if (input.get()[0] != '\0' && (strcmp(input.get(), "/") != 0) && !isFiltered && !noProcessing) {
+		} else if (input.get()[0] != '\0' && (strcmp(input.get(), "/") != 0) && !isFiltered) {
             // Process user input to select and mount specific ISO files
             processAndMountIsoFiles(mainInputString, isoFiles, mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
             clearScrollBuffer();
@@ -342,154 +320,129 @@ bool isAlreadyMounted(const std::string& mountPoint) {
 
 
 // Function to mount selected ISO files called from processAndMountIsoFiles
-void mountIsoFile(const std::string& isoFile, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
+void mountIsoFile(const std::vector<std::string>& isoFilesToMount, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
     namespace fs = std::filesystem;
     
+    // Declare fsTypes inside the function
     const std::vector<std::string> fsTypes = {
         "iso9660", "udf", "hfsplus", "rockridge", "joliet", "isofs", "auto"
     };
 
-    fs::path isoPath(isoFile);
-    std::string isoFileName = isoPath.stem().string();
+    for (const auto& isoFile : isoFilesToMount) {
+        fs::path isoPath(isoFile);
+        std::string isoFileName = isoPath.stem().string();
 
-    std::hash<std::string> hasher;
-    size_t hashValue = hasher(isoFile);
+        // Create a hash of the full path
+        std::hash<std::string> hasher;
+        size_t hashValue = hasher(isoFile);
 
-    const std::string base36Chars = "0123456789abcdefghijklmnopqrstuvwxyz";
-    std::string shortHash;
-    for (int i = 0; i < 5; ++i) {
-        shortHash += base36Chars[hashValue % 36];
-        hashValue /= 36;
-    }
-
-    std::string uniqueId = isoFileName + "\033[38;5;245m~" + shortHash + "\033[1;94m";
-    std::string mountPoint = "/mnt/iso_" + uniqueId;
-    
-    auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
-    auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint);
-    
-    if (isAlreadyMounted(mountPoint)) {
-        std::stringstream skippedMessage;
-        skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename
-                       << "'\033[1;93m already mnt@: \033[1;94m'" << mountisoDirectory
-                       << "/" << mountisoFilename << "'\033[1;93m.\033[0m";
-        {
-            std::lock_guard<std::mutex> lowLock(Mutex4Low);
-            skippedMessages.insert(skippedMessage.str());
+        // Convert hash to a base36 string (using digits 0-9 and letters a-z)
+        const std::string base36Chars = "0123456789abcdefghijklmnopqrstuvwxyz";
+        std::string shortHash;
+        for (int i = 0; i < 5; ++i) {  // Use 5 characters for the short hash
+            shortHash += base36Chars[hashValue % 36];
+            hashValue /= 36;
         }
-        return;
-    }
-    
-    if (geteuid() != 0) {
-        std::stringstream errorMessage;
-        errorMessage << "\033[1;91mFailed to mnt: \033[1;93m'" << isoDirectory << "/" << isoFilename
-                     << "'\033[0m\033[1;91m. Root privileges are required.\033[0m";
-        {
-            std::lock_guard<std::mutex> lowLock(Mutex4Low);
-            mountedFails.insert(errorMessage.str());
-        }
-        return;
-    }
-    
-    // Check if this ISO is in the failed mounts list
-    if (std::find(failedMounts.begin(), failedMounts.end(), isoFile) != failedMounts.end()) {
-        std::stringstream skippedMessage;
-        skippedMessage << "\033[1;93mSkipped previously failed ISO: \033[1;91m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m.\033[0m";
-        {
-            std::lock_guard<std::mutex> lowLock(Mutex4Low);
-            mountedFails.insert(skippedMessage.str());
-        }
-        return;
-    }
 
+        std::string uniqueId = isoFileName + "\033[38;5;245m~" + shortHash + "\033[1;94m";
+        std::string mountPoint = "/mnt/iso_" + uniqueId;
 
-    if (!fs::exists(mountPoint)) {
-        try {
-            fs::create_directory(mountPoint);
-        } catch (const fs::filesystem_error& e) {
+        auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
+        auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint);
+
+        if (isAlreadyMounted(mountPoint)) {
+            std::stringstream skippedMessage;
+            skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename
+                           << "'\033[1;93m already mnt@: \033[1;94m'" << mountisoDirectory
+                           << "/" << mountisoFilename << "'\033[1;93m.\033[0m";
+            {
+                std::lock_guard<std::mutex> lowLock(Mutex4Low);
+                skippedMessages.insert(skippedMessage.str());
+            }
+            continue;
+        }
+
+        if (geteuid() != 0) {
             std::stringstream errorMessage;
-            errorMessage << "\033[1;91mFailed to create mount point: \033[1;93m'" << mountPoint
-                         << "'\033[0m\033[1;91m. Error: " << e.what() << "\033[0m";
+            errorMessage << "\033[1;91mFailed to mnt: \033[1;93m'" << isoDirectory << "/" << isoFilename
+                         << "'\033[0m\033[1;91m. Root privileges are required.\033[0m";
             {
                 std::lock_guard<std::mutex> lowLock(Mutex4Low);
                 mountedFails.insert(errorMessage.str());
             }
-            return;
+            continue;
         }
-    }
-	
-    // Create a libmount context
-    struct libmnt_context *ctx = mnt_new_context();
-    if (!ctx) {
-        std::stringstream errorMessage;
-        errorMessage << "\033[1;91mFailed to create mount context for: \033[1;93m'" << isoFile << "'\033[0m";
-        mountedFails.insert(errorMessage.str());
-        return;
-    }
 
-    // Set common mount options
-    mnt_context_set_source(ctx, isoFile.c_str());
-    mnt_context_set_target(ctx, mountPoint.c_str());
-    mnt_context_set_options(ctx, "loop,ro");
-
-    bool mountSuccess = false;
-    std::string successfulFsType;
-
-    for (const auto& fsType : fsTypes) {
-    // Set filesystem type, NULL for "auto"
-    if (fsType != "auto") {
-        mnt_context_set_fstype(ctx, fsType.c_str());
-    } else {
-        mnt_context_set_fstype(ctx, NULL);
-    }
-    int ret = mnt_context_mount(ctx);
-    if (ret == 0) {
-        mountSuccess = true;
-        successfulFsType = fsType;
-        break;
-    }
-    // Instead of resetting, we'll recreate the context for the next attempt
-    mnt_free_context(ctx);
-    ctx = mnt_new_context();
-    if (!ctx) {
-        // Handle context creation failure
-        std::stringstream errorMessage;
-        errorMessage << "\033[1;91mFailed to recreate mount context for: \033[1;93m'" << isoFile << "'\033[0m";
-        mountedFails.insert(errorMessage.str());
-        return;
-    }
-		mnt_context_set_source(ctx, isoFile.c_str());
-		mnt_context_set_target(ctx, mountPoint.c_str());
-		mnt_context_set_options(ctx, "loop,ro");
-	}
-
-	// Clean up the context
-	mnt_free_context(ctx);
-
-    if (mountSuccess) {
-        std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m"
-                                    + "\033[1m mnt@: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename
-                                    + "'\033[0;1m.";
-        if (successfulFsType != "auto") {
-            mountedFileInfo += " {" + successfulFsType + "}";
+        if (!fs::exists(mountPoint)) {
+            try {
+                fs::create_directory(mountPoint);
+            } catch (const fs::filesystem_error& e) {
+                std::stringstream errorMessage;
+                errorMessage << "\033[1;91mFailed to create mount point: \033[1;93m'" << mountPoint
+                             << "'\033[0m\033[1;91m. Error: " << e.what() << "\033[0m";
+                {
+                    std::lock_guard<std::mutex> lowLock(Mutex4Low);
+                    mountedFails.insert(errorMessage.str());
+                }
+                continue;
+            }
         }
-        mountedFileInfo += "\033[0m";
-        {
-            std::lock_guard<std::mutex> lowLock(Mutex4Low);
-            mountedFiles.insert(mountedFileInfo);
+
+        bool mountSuccess = false;
+
+	// Attempt to mount using sudo mount command
+	for (const auto& fsType : fsTypes) {
+		std::string mountOptions = "loop,ro";
+		if (fsType == "auto") {
+			// For "auto", we don't specify a file system type
+			mountOptions += ",auto";
+			std::string mountCommand = "mount -o " + mountOptions + " " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
+			int ret = std::system(mountCommand.c_str());
+        
+			if (ret == 0) {
+					// Mount successful
+					std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m"
+												+ "\033[1m mnt@: \033[1;94m'" + mountisoDirectory + "\033[1;94m/" + mountisoFilename
+												+ "'\033[0;1m.\033[0m";
+					{
+						std::lock_guard<std::mutex> lowLock(Mutex4Low);
+						mountedFiles.insert(mountedFileInfo);
+					}
+					mountSuccess = true;
+					break;
+			}
+		
+			} else {
+				// For specific file systems, we include the type in the mount command
+				std::string mountCommand = "mount -t " + fsType + " -o " + mountOptions + " " + shell_escape(isoFile) + " " + shell_escape(mountPoint) + " > /dev/null 2>&1";
+				int ret = std::system(mountCommand.c_str());
+        
+				if (ret == 0) {
+					// Mount successful
+					std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m"
+												+ "\033[1m mnt@: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename
+												+ "'\033[0;1m. {" + fsType + "}\033[0m";
+					{
+						std::lock_guard<std::mutex> lowLock(Mutex4Low);
+						mountedFiles.insert(mountedFileInfo);
+					}
+					mountSuccess = true;
+					break;
+				}
+			}
+		}
+        
+
+        if (!mountSuccess) {
+            std::stringstream errorMessage;
+            errorMessage << "\033[1;91mFailed to mnt: \033[1;93m'" << isoDirectory << "/" << isoFilename
+                         << "'\033[1;91m.\033[0;1m {badFS}";
+            fs::remove(mountPoint);
+            {
+                std::lock_guard<std::mutex> lowLock(Mutex4Low);
+                mountedFails.insert(errorMessage.str());
+            }
         }
-        return;
-    } else {
-        std::stringstream errorMessage;
-        errorMessage << "\033[1;91mFailed to mnt: \033[1;93m'" << isoDirectory << "/" << isoFilename
-                     << "'\033[1;91m.\033[0;1m {badFS}";
-        fs::remove(mountPoint);
-        {
-            std::lock_guard<std::mutex> lowLock(Mutex4Low);
-            mountedFails.insert(errorMessage.str());
-        }
-        failedMounts.push_back(isoFile);
-        return;
     }
 }
 
@@ -512,49 +465,49 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     std::string tokenCount;
     
     while (issCount >> tokenCount && tokens.size() < maxThreads) {
-        if (tokenCount[0] == '-') continue;
-        
-        // Count the number of hyphens
-        size_t hyphenCount = std::count(tokenCount.begin(), tokenCount.end(), '-');
-        
-        // Skip if there's more than one hyphen
-        if (hyphenCount > 1) continue;
-        
-        size_t dashPos = tokenCount.find('-');
-        if (dashPos != std::string::npos) {
-            std::string start = tokenCount.substr(0, dashPos);
-            std::string end = tokenCount.substr(dashPos + 1);
-            if (std::all_of(start.begin(), start.end(), ::isdigit) && 
-                std::all_of(end.begin(), end.end(), ::isdigit)) {
-                int startNum = std::stoi(start);
-                int endNum = std::stoi(end);
-                if (static_cast<std::vector<std::string>::size_type>(startNum) <= isoFiles.size() && 
-                    static_cast<std::vector<std::string>::size_type>(endNum) <= isoFiles.size()) {
-                    int step = (startNum <= endNum) ? 1 : -1;
-                    for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
-                        if (i != 0) {
-                            tokens.emplace(std::to_string(i));
-                        }
-                        if (tokens.size() >= maxThreads) {
-                            break;
-                        }
+    if (tokenCount[0] == '-') continue;
+    
+    // Count the number of hyphens
+    size_t hyphenCount = std::count(tokenCount.begin(), tokenCount.end(), '-');
+    
+    // Skip if there's more than one hyphen
+    if (hyphenCount > 1) continue;
+    
+    size_t dashPos = tokenCount.find('-');
+    if (dashPos != std::string::npos) {
+        std::string start = tokenCount.substr(0, dashPos);
+        std::string end = tokenCount.substr(dashPos + 1);
+        if (std::all_of(start.begin(), start.end(), ::isdigit) && 
+            std::all_of(end.begin(), end.end(), ::isdigit)) {
+            int startNum = std::stoi(start);
+            int endNum = std::stoi(end);
+            if (static_cast<std::vector<std::string>::size_type>(startNum) <= isoFiles.size() && 
+                static_cast<std::vector<std::string>::size_type>(endNum) <= isoFiles.size()) {
+                int step = (startNum <= endNum) ? 1 : -1;
+                for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
+                    if (i != 0) {
+                        tokens.emplace(std::to_string(i));
+                    }
+                    if (tokens.size() >= maxThreads) {
+                        break;
                     }
                 }
             }
-        } else if (std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
-            int num = std::stoi(tokenCount);
-            if (num > 0 && static_cast<std::vector<std::string>::size_type>(num) <= isoFiles.size()) {
-                tokens.emplace(tokenCount);
-                if (tokens.size() >= maxThreads) {
-                    break;
-                }
-            }
         }
-    }
+    } else if (std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
+			int num = std::stoi(tokenCount);
+			if (num > 0 && static_cast<std::vector<std::string>::size_type>(num) <= isoFiles.size()) {
+				tokens.emplace(tokenCount);
+				if (tokens.size() >= maxThreads) {
+					break;
+				}
+			}
+		}
+	}
     unsigned int numThreads = std::min(static_cast<int>(tokens.size()), static_cast<int>(maxThreads));
     std::vector<int> indicesToAdd;
-    indicesToAdd.reserve(numThreads);
-    ThreadPool pool(numThreads);
+	indicesToAdd.reserve(numThreads);
+	ThreadPool pool(numThreads);
     
     std::atomic<int> totalTasks(0);
     std::atomic<int> completedTasks(0);
@@ -567,115 +520,117 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     std::mutex errorMutex;
 
     auto processTask = [&](int index) {
-        bool shouldProcess = false;
-        {
-            std::lock_guard<std::mutex> lock(validIndicesMutex);
-            shouldProcess = validIndices.emplace(index).second;
-        }
-
-        if (shouldProcess) {
-            mountIsoFile(isoFiles[index - 1], mountedFiles, skippedMessages, mountedFails);
-        }
-
-        completedTasks.fetch_add(1, std::memory_order_relaxed);
-        if (activeTaskCount.fetch_sub(1, std::memory_order_release) == 1) {
-            taskCompletionCV.notify_all();
-        }
-    };
-
-    auto addError = [&](const std::string& error) {
-        std::lock_guard<std::mutex> lock(errorMutex);
-        uniqueErrorMessages.emplace(error);
-        invalidInput.store(true, std::memory_order_release);
-    };
-
-    std::string token;
-    while (iss >> token) {
-        if (token == "/") break;
-
-        if (isAllZeros(token)) {
-            addError("\033[1;91mInvalid index: '0'.\033[0;1m");
-            continue;
-        }
-
-        size_t dashPos = token.find('-');
-        if (dashPos != std::string::npos) {
-            if (dashPos == 0 || dashPos == token.size() - 1 || 
-                !std::all_of(token.begin(), token.begin() + dashPos, ::isdigit) || 
-                !std::all_of(token.begin() + dashPos + 1, token.end(), ::isdigit)) {
-                addError("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
-                continue;
-            }
-
-            int start, end;
-            try {
-                start = std::stoi(token.substr(0, dashPos));
-                end = std::stoi(token.substr(dashPos + 1));
-            } catch (const std::exception&) {
-                addError("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
-                continue;
-            }
-
-            if (start < 1 || static_cast<size_t>(start) > isoFiles.size() || 
-                end < 1 || static_cast<size_t>(end) > isoFiles.size()) {
-                addError("\033[1;91mInvalid range: '" + token + "'.\033[0;1m");
-                continue;
-            }
-
-            std::pair<int, int> range(start, end);
-            bool shouldProcessRange = false;
-            {
-                std::lock_guard<std::mutex> lock(processedRangesMutex);
-                shouldProcessRange = processedRanges.emplace(range).second;
-            }
-
-            if (shouldProcessRange) {
-                int step = (start <= end) ? 1 : -1;
-                for (int i = start; (step > 0) ? (i <= end) : (i >= end); i += step) {
-                    {
-                        std::lock_guard<std::mutex> lock(indicesMutex);
-                        indicesToAdd.push_back(i);
-                    }
-                }
-            }
-        } else if (isNumeric(token)) {
-            int num = std::stoi(token);
-            if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size()) {
-                {
-                    std::lock_guard<std::mutex> lock(indicesMutex);
-                    indicesToAdd.push_back(num);
-                }
-            } else {
-                addError("\033[1;91mInvalid index: '" + token + "'.\033[0;1m");
-            }
-        } else {
-            addError("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
-        }
-    }
-
-    // Batch insert into processedIndices
+    bool shouldProcess = false;
     {
-        std::lock_guard<std::mutex> lock(indicesMutex);
-        for (int num : indicesToAdd) {
-            bool shouldProcess = processedIndices.emplace(num).second;
-            if (shouldProcess) {
-                totalTasks.fetch_add(1, std::memory_order_relaxed);
-                activeTaskCount.fetch_add(1, std::memory_order_relaxed);
-                pool.enqueue([&, num]() { processTask(num); });
-            }
-        }
+        std::lock_guard<std::mutex> lock(validIndicesMutex);
+        shouldProcess = validIndices.emplace(index).second;
     }
 
-    if (!processedIndices.empty()) {
-        int totalTasksValue = totalTasks.load();
-        std::thread progressThread(displayProgressBar, std::ref(completedTasks), std::cref(totalTasksValue), std::ref(isProcessingComplete));
-
-        {
-            std::unique_lock<std::mutex> lock(taskCompletionMutex);
-            taskCompletionCV.wait(lock, [&]() { return activeTaskCount.load() == 0; });
-        }
-
-        isProcessingComplete.store(true, std::memory_order_release);
-        progressThread.join();
+    if (shouldProcess) {
+        std::vector<std::string> isoFilesToMount = {isoFiles[index - 1]};
+        mountIsoFile(isoFilesToMount, mountedFiles, skippedMessages, mountedFails);
     }
+
+	completedTasks.fetch_add(1, std::memory_order_relaxed);
+	if (activeTaskCount.fetch_sub(1, std::memory_order_release) == 1) {
+			taskCompletionCV.notify_all();
+		}
+	};
+
+	auto addError = [&](const std::string& error) {
+		std::lock_guard<std::mutex> lock(errorMutex);
+		uniqueErrorMessages.emplace(error);
+		invalidInput.store(true, std::memory_order_release);
+	};
+
+
+	std::string token;
+	while (iss >> token) {
+		if (token == "/") break;
+
+		if (isAllZeros(token)) {
+			addError("\033[1;91mInvalid index: '0'.\033[0;1m");
+			continue;
+		}
+
+		size_t dashPos = token.find('-');
+		if (dashPos != std::string::npos) {
+			if (dashPos == 0 || dashPos == token.size() - 1 || 
+				!std::all_of(token.begin(), token.begin() + dashPos, ::isdigit) || 
+				!std::all_of(token.begin() + dashPos + 1, token.end(), ::isdigit)) {
+				addError("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
+				continue;
+			}
+
+			int start, end;
+			try {
+				start = std::stoi(token.substr(0, dashPos));
+				end = std::stoi(token.substr(dashPos + 1));
+			} catch (const std::exception&) {
+				addError("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
+				continue;
+			}
+
+			if (start < 1 || static_cast<size_t>(start) > isoFiles.size() || 
+				end < 1 || static_cast<size_t>(end) > isoFiles.size()) {
+				addError("\033[1;91mInvalid range: '" + token + "'.\033[0;1m");
+				continue;
+			}
+
+			std::pair<int, int> range(start, end);
+			bool shouldProcessRange = false;
+			{
+				std::lock_guard<std::mutex> lock(processedRangesMutex);
+				shouldProcessRange = processedRanges.emplace(range).second;
+			}
+
+			if (shouldProcessRange) {
+				int step = (start <= end) ? 1 : -1;
+				for (int i = start; (step > 0) ? (i <= end) : (i >= end); i += step) {
+					{
+						std::lock_guard<std::mutex> lock(indicesMutex);
+						indicesToAdd.push_back(i);
+					}
+				}
+			}
+		} else if (isNumeric(token)) {
+			int num = std::stoi(token);
+			if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size()) {
+				{
+					std::lock_guard<std::mutex> lock(indicesMutex);
+					indicesToAdd.push_back(num);
+				}
+			} else {
+				addError("\033[1;91mInvalid index: '" + token + "'.\033[0;1m");
+			}
+		} else {
+			addError("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
+		}
+	}
+
+	// Batch insert into processedIndices
+	{
+		std::lock_guard<std::mutex> lock(indicesMutex);
+		for (int num : indicesToAdd) {
+			bool shouldProcess = processedIndices.emplace(num).second;
+			if (shouldProcess) {
+				totalTasks.fetch_add(1, std::memory_order_relaxed);
+				activeTaskCount.fetch_add(1, std::memory_order_relaxed);
+				pool.enqueue([&, num]() { processTask(num); });
+			}
+		}
+	}
+
+	if (!processedIndices.empty()) {
+		int totalTasksValue = totalTasks.load();
+		std::thread progressThread(displayProgressBar, std::ref(completedTasks), std::cref(totalTasksValue), std::ref(isProcessingComplete));
+
+		{
+			std::unique_lock<std::mutex> lock(taskCompletionMutex);
+			taskCompletionCV.wait(lock, [&]() { return activeTaskCount.load() == 0; });
+		}
+
+		isProcessingComplete.store(true, std::memory_order_release);
+		progressThread.join();
+	}
 }
