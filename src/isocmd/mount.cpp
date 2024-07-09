@@ -3,8 +3,6 @@
 
 //	MOUNT STUFF
 
-std::vector<std::string> failedMounts;
-
 // Function to mount all ISOs indiscriminately
 void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
     std::atomic<int> completedIsos(0);
@@ -91,7 +89,6 @@ void select_and_mount_files_by_number() {
 		
 		bool isFiltered = false;
 		bool search = true;
-		bool noProcessing = false;
         clearScrollBuffer();
         std::cout << "\033[1;93m! IF EXPECTED ISO FILES ARE NOT ON THE LIST IMPORT THEM FROM THE MAIN MENU OPTIONS !\033[0;1m\n";
         
@@ -101,20 +98,12 @@ void select_and_mount_files_by_number() {
         printIsoFileList(isoFiles);
 		
         // Prompt user for input
-       char* rawInput = readline("\n\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), clr ↵ clrFailed, / ↵ filter, ↵ return:\001\033[0;1m\002 ");
+       char* rawInput = readline("\n\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 ");
 
 		// Use std::unique_ptr to manage memory for input
 		std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
         
         std::string mainInputString(input.get());
-        if (mainInputString == "clr") {
-			noProcessing = true;
-			clearScrollBuffer();
-			failedMounts.clear();
-			std::cout << "\n\033[1;93mCleared current status of failed mounts.\033[0;1m\n";
-			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-		}
 			
         
         clearScrollBuffer();
@@ -177,13 +166,12 @@ void select_and_mount_files_by_number() {
 						mountedFails.clear();
 						uniqueErrorMessages.clear();
 						clearScrollBuffer();
-						noProcessing = false;
 						sortFilesCaseInsensitive(filteredFiles);
 						std::cout << "\033[1mFiltered results:\033[0;1m\n";
 						printIsoFileList(filteredFiles); // Print the filtered list of ISO files
 					
 						// Prompt user for input again with the filtered list
-						std::string prompt = "\n\n\001\033[1;92m\002Filtered ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), clr ↵ clrFailed, / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+						std::string prompt = "\n\n\001\033[1;92m\002Filtered ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
 
 						// Prompt user for input
 						char* rawInputFiltered = readline(prompt.c_str());
@@ -193,14 +181,6 @@ void select_and_mount_files_by_number() {
 						
 						std::string inputFilteredString(inputFiltered.get());
 						
-						if (inputFilteredString == "clr") {
-							noProcessing = true;
-							clearScrollBuffer();
-							failedMounts.clear();
-							std::cout << "\n\033[1;93mCleared current status of failed mounts.\033[0;1m\n";
-							std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-							std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-						}
 						
 						if (inputFiltered.get()[0] == '/') {
 							search = true;
@@ -222,7 +202,7 @@ void select_and_mount_files_by_number() {
 							if (verbose) {
 								printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
 							}
-						} else if (inputFiltered.get()[0] != '\0' && (strcmp(inputFiltered.get(), "/") != 0) && !noProcessing) { // Check if the user provided input
+						} else if (inputFiltered.get()[0] != '\0' && (strcmp(inputFiltered.get(), "/") != 0)) { // Check if the user provided input
 							clearScrollBuffer();
 							std::cout << "\033[1mPlease wait...\033[1m\n";
 
@@ -260,7 +240,7 @@ void select_and_mount_files_by_number() {
 			if (verbose) {
 				printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
 			}
-		} else if (input.get()[0] != '\0' && (strcmp(input.get(), "/") != 0) && !isFiltered && !noProcessing) {
+		} else if (input.get()[0] != '\0' && (strcmp(input.get(), "/") != 0) && !isFiltered) {
             // Process user input to select and mount specific ISO files
             processAndMountIsoFiles(mainInputString, isoFiles, mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
             clearScrollBuffer();
@@ -390,18 +370,6 @@ void mountIsoFile(const std::string& isoFile, std::set<std::string>& mountedFile
         }
         return;
     }
-    
-    // Check if this ISO is in the failed mounts list
-    if (std::find(failedMounts.begin(), failedMounts.end(), isoFile) != failedMounts.end()) {
-        std::stringstream skippedMessage;
-        skippedMessage << "\033[1;93mSkipped previously failed ISO: \033[1;91m'" << isoDirectory << "/" << isoFilename << "'\033[1;93m.\033[0m";
-        {
-            std::lock_guard<std::mutex> lowLock(Mutex4Low);
-            mountedFails.insert(skippedMessage.str());
-        }
-        return;
-    }
-
 
     if (!fs::exists(mountPoint)) {
         try {
@@ -436,29 +404,35 @@ void mountIsoFile(const std::string& isoFile, std::set<std::string>& mountedFile
     std::string successfulFsType;
 
     for (const auto& fsType : fsTypes) {
-        // Set filesystem type, NULL for "auto"
-        if (fsType != "auto") {
-            mnt_context_set_fstype(ctx, fsType.c_str());
-        } else {
-            mnt_context_set_fstype(ctx, NULL);
-        }
-
-        int ret = mnt_context_mount(ctx);
-        if (ret == 0) {
-            mountSuccess = true;
-            successfulFsType = fsType;
-            break;
-        }
-
-        // Reset the context for the next attempt
-        mnt_reset_context(ctx);
-        mnt_context_set_source(ctx, isoFile.c_str());
-        mnt_context_set_target(ctx, mountPoint.c_str());
-        mnt_context_set_options(ctx, "loop,ro");
+    // Set filesystem type, NULL for "auto"
+    if (fsType != "auto") {
+        mnt_context_set_fstype(ctx, fsType.c_str());
+    } else {
+        mnt_context_set_fstype(ctx, NULL);
     }
+    int ret = mnt_context_mount(ctx);
+    if (ret == 0) {
+        mountSuccess = true;
+        successfulFsType = fsType;
+        break;
+    }
+	
+	mnt_free_context(ctx);
+    ctx = mnt_new_context();
+    if (!ctx) {
+        // Handle context creation failure
+        std::stringstream errorMessage;
+        errorMessage << "\033[1;91mFailed to recreate mount context for: \033[1;93m'" << isoFile << "'\033[0m";
+        mountedFails.insert(errorMessage.str());
+        return;
+    }
+		mnt_context_set_source(ctx, isoFile.c_str());
+		mnt_context_set_target(ctx, mountPoint.c_str());
+		mnt_context_set_options(ctx, "loop,ro");
+	}
 
-    // Clean up the context
-    mnt_free_context(ctx);
+	// Clean up the context
+	mnt_free_context(ctx);
 
     if (mountSuccess) {
         std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m"
