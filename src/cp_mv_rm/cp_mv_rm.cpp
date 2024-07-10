@@ -192,7 +192,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     std::istringstream iss(input);    
 
     // Variables for tracking errors, processed indices, and valid indices
-    bool invalidInput = false;
     std::vector<int> processedIndices; // Vector to keep track of processed indices
     processedIndices.reserve(maxThreads);
     
@@ -218,23 +217,20 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         
         // Check if the token consists only of zeros and treat it as a non-existent index
         if (isAllZeros(token)) {
-            if (!invalidInput) {
-                invalidInput = true;
+            if (uniqueErrorMessages.empty()) {
                 uniqueErrorMessages.emplace("\033[1;91mInvalid index '0'.\033[0;1m");
             }
         }
 
         // Check if the token is '0' and treat it as a non-existent index
         if (token == "0") {
-            if (!invalidInput) {
-                invalidInput = true;
+            if (uniqueErrorMessages.empty()) {
                 uniqueErrorMessages.emplace("\033[1;91mInvalid index '0'.\033[0;1m");
             }
         }
         
         // Check if there is more than one hyphen in the token
         if (std::count(token.begin(), token.end(), '-') > 1) {
-            invalidInput = true;
             uniqueErrorMessages.emplace("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
             continue;
         }
@@ -250,12 +246,10 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
                 end = std::stoi(token.substr(dashPos + 1));
             } catch (const std::invalid_argument& e) {
                 // Handle the exception for invalid input
-                invalidInput = true;
                 uniqueErrorMessages.emplace("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
                 continue;
             } catch (const std::out_of_range& e) {
                 // Handle the exception for out-of-range input
-                invalidInput = true;
                 uniqueErrorMessages.emplace("\033[1;91mInvalid range: '" + token + "'.\033[0;1m");
                 continue;
             }
@@ -263,7 +257,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             // Check for validity of the specified range
             if ((start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) ||
                 (start == 0 || end == 0)) {
-                invalidInput = true;
                 uniqueErrorMessages.emplace("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'.\033[0;1m");
                 continue;
             }
@@ -274,7 +267,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
                 if ((i >= 1) && (i <= static_cast<int>(isoFiles.size())) && std::find(processedIndices.begin(), processedIndices.end(), i) == processedIndices.end()) {
                     processedIndices.push_back(i); // Mark as processed
                 } else if ((i < 1) || (i > static_cast<int>(isoFiles.size()))) {
-                    invalidInput = true;
                     uniqueErrorMessages.emplace("\033[1;91mInvalid index '" + std::to_string(i) + "'.\033[0;1m");
                 }
             }
@@ -284,11 +276,9 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && std::find(processedIndices.begin(), processedIndices.end(), num) == processedIndices.end()) {
                 processedIndices.push_back(num); // Mark index as processed
             } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
-                invalidInput = true;
                 uniqueErrorMessages.emplace("\033[1;91mInvalid index '" + std::to_string(num) + "'.\033[0;1m");
             }
         } else {
-            invalidInput = true;
             uniqueErrorMessages.emplace("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
         }
     }
@@ -298,13 +288,13 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     }
 
     // Display unique errors at the end
-    if (invalidInput) {
+    if (!uniqueErrorMessages.empty()) {
         for (const auto& errorMsg : uniqueErrorMessages) {
             std::cerr << "\033[1;93m" << errorMsg << "\033[0;1m\n";
         }
     }
 
-    if (invalidInput && !processedIndices.empty()) {
+    if (!uniqueErrorMessages.empty() && !processedIndices.empty()) {
         std::cout << "\n";
     }
 
