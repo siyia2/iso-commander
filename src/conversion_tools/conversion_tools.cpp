@@ -266,7 +266,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
                         std::cout << "\033[1mFiltered results:\n\033[0;1m\n";
                         printFileList(filteredFiles);
 
-                        std::string filterPrompt = "\n\001\033[1;94m\033[1;38;5;208m\002Filtered " + fileTypeName + "\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion (e.g., 1-3,1 5), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+                        std::string filterPrompt = "\n\001\033[1;94m\033[1;38;5;208m\002Filtered " + fileTypeName + "\001\033[1;94m\002 file(s) ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion (e.g., 1-3,1 5), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
                         char* rawfilterPrompt = readline(filterPrompt.c_str());
 						std::unique_ptr<char, decltype(&std::free)> filterInput(rawfilterPrompt, &std::free);
 						
