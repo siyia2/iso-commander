@@ -451,55 +451,9 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     std::mutex processedRangesMutex;
     std::set<std::pair<int, int>> processedRanges;
     
-    // Step 1: Tokenize the input to determine the number of threads to use
-    std::istringstream issCount(input);
-    std::set<std::string> tokens;
-    std::string tokenCount;
     
-    while (issCount >> tokenCount && tokens.size() < maxThreads) {
-    if (tokenCount[0] == '-') continue;
-    
-    // Count the number of hyphens
-    size_t hyphenCount = std::count(tokenCount.begin(), tokenCount.end(), '-');
-    
-    // Skip if there's more than one hyphen
-    if (hyphenCount > 1) continue;
-    
-    size_t dashPos = tokenCount.find('-');
-    if (dashPos != std::string::npos) {
-        std::string start = tokenCount.substr(0, dashPos);
-        std::string end = tokenCount.substr(dashPos + 1);
-        if (std::all_of(start.begin(), start.end(), ::isdigit) && 
-            std::all_of(end.begin(), end.end(), ::isdigit)) {
-            int startNum = std::stoi(start);
-            int endNum = std::stoi(end);
-            if (static_cast<std::vector<std::string>::size_type>(startNum) <= isoFiles.size() && 
-                static_cast<std::vector<std::string>::size_type>(endNum) <= isoFiles.size()) {
-                int step = (startNum <= endNum) ? 1 : -1;
-                for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
-                    if (i != 0) {
-                        tokens.emplace(std::to_string(i));
-                    }
-                    if (tokens.size() >= maxThreads) {
-                        break;
-                    }
-                }
-            }
-        }
-    } else if (std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
-			int num = std::stoi(tokenCount);
-			if (num > 0 && static_cast<std::vector<std::string>::size_type>(num) <= isoFiles.size()) {
-				tokens.emplace(tokenCount);
-				if (tokens.size() >= maxThreads) {
-					break;
-				}
-			}
-		}
-	}
-    unsigned int numThreads = std::min(static_cast<int>(tokens.size()), static_cast<int>(maxThreads));
     std::vector<int> indicesToAdd;
-    indicesToAdd.reserve(numThreads);
-    ThreadPool pool(numThreads);
+    indicesToAdd.reserve(maxThreads);
     
     std::atomic<int> totalTasks(0);
     std::atomic<int> completedTasks(0);
@@ -601,6 +555,9 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
         addError("\033[1;91mNo valid indices to process.\033[0;1m");
         return;  // Exit the function early
     }
+    
+    unsigned int numThreads = std::min(static_cast<int>(indicesToProcess.size()), static_cast<int>(maxThreads));
+    ThreadPool pool(numThreads);
 
     size_t chunkSize = std::max(1UL, (indicesToProcess.size() + maxThreads - 1) / maxThreads);
     totalTasks.store(indicesToProcess.size(), std::memory_order_relaxed);
