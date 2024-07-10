@@ -10,7 +10,7 @@ For best experience execute with: `sudo isocmd`.
 
 Features:
 * Cached ISO management for reduced disk thrashing.
-* Utilizes GNU/Linux utilities: rm,rmdir,cp,mv,mount,umount.
+* Utilizes GNU/Linux utilities: rm,rmdir,cp,mv,libmount,umount.
 * Tab completion and history support.
 * Sanitized shell commands for improved security.
 * Ultra lightweight with no reliance on ncurses or any other external libraries for terminal control.
@@ -25,4 +25,4 @@ Ways to Install:
 2) Download and compile from source with `make`.
 3) If on arch or on an arch based distro, install with `yay -S iso-commander`.
 
-`Make` dependencies for Debian based distros: `libreadline-dev`.
+`Make` dependencies for Debian based distros: `libreadline-dev` `libmount-dev`.
