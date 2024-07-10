@@ -177,7 +177,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
 
 
 // Function to print unmounted ISOs and errors
-void printUnmountedAndErrors(bool invalidInput, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors, std::set<std::string>& errorMessages) {
+void printUnmountedAndErrors(std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors, std::set<std::string>& errorMessages) {
 	clearScrollBuffer();
 	
     // Print unmounted files
@@ -193,7 +193,7 @@ void printUnmountedAndErrors(bool invalidInput, std::set<std::string>& unmounted
         std::cout << "\n" << unmountedError;
     }
     
-    if (invalidInput) {
+    if (!errorMessages.empty()) {
 				std::cout << "\n";
 			}
 	unmountedFiles.clear();
@@ -220,7 +220,7 @@ void unmountISOs() {
 	std::set<std::string> unmountedErrors;
 	
     const std::string isoPath = "/mnt";
-    bool invalidInput = false, skipEnter = false, isFiltered = false, noValid = true;
+    bool skipEnter = false, isFiltered = false, noValid = true;
 
     while (true) {
         // Initialize variables for each loop iteration
@@ -235,7 +235,6 @@ void unmountISOs() {
         unmountedFiles.clear();
 		unmountedErrors.clear();
 		errorMessages.clear();
-        invalidInput = false;
         bool search =true;
 
         // Populate isoDirs with directories that match the "iso_" prefix
@@ -369,7 +368,6 @@ void unmountISOs() {
                         unmountedFiles.clear();
 						unmountedErrors.clear();
 						errorMessages.clear();
-                        invalidInput = false;
                         sortFilesCaseInsensitive(filteredIsoDirs);
                         std::cout << "\033[1mFiltered results:\n\033[0m\033[1m" << std::endl;
                         size_t maxIndex = filteredIsoDirs.size();
@@ -433,7 +431,6 @@ void unmountISOs() {
                                         }
                                     } else {
                                         errorMessages.emplace("Invalid range: '" + token + "'.");
-                                        invalidInput = true;
                                     }
                                 } else {
                                     size_t index = std::stoi(token) - 1;
@@ -441,12 +438,10 @@ void unmountISOs() {
                                         selectedIndices.emplace(index);
                                     } else {
                                         errorMessages.emplace("Invalid index: '" + token + "'.");
-                                        invalidInput = true;
                                     }
                                 }
                             } catch (const std::invalid_argument&) {
 									errorMessages.emplace("Invalid input: '" + token + "'.");
-									invalidInput = true;
                             }
                         }               
 
@@ -500,7 +495,6 @@ void unmountISOs() {
                             }
                         } else {
                             errorMessages.emplace("Invalid range: '" + token + "'.");
-                            invalidInput = true;
                         }
                     } else {
                         size_t index = std::stoi(token) - 1;
@@ -508,12 +502,10 @@ void unmountISOs() {
                             selectedIndices.emplace(index);
                         } else {
                             errorMessages.emplace("Invalid index: '" + token + "'.");
-                            invalidInput = true;
                         }
                     }
                 } catch (const std::invalid_argument&) {
                     errorMessages.emplace("Invalid input: '" + token + "'.");
-                    invalidInput = true;
                 }
             }
 
@@ -575,7 +567,7 @@ void unmountISOs() {
 			isComplete.store(true);
 			progressThread.join();
             if (verbose) {
-				printUnmountedAndErrors(invalidInput, unmountedFiles, unmountedErrors, errorMessages);
+				printUnmountedAndErrors(unmountedFiles, unmountedErrors, errorMessages);
 			} else {
 				unmountedFiles.clear();
 				unmountedErrors.clear();
