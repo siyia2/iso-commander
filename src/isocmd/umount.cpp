@@ -358,7 +358,7 @@ void unmountISOs() {
                 // Check if any directories matched the filter
                 if (filteredIsoDirs.empty()) {
                     clearScrollBuffer();
-                    std::cout << "\033[1;91mNo ISO mountpoint(s) match the filter pattern.\033[0m\033[1m\n";
+                    std::cout << "\n\033[1;91mNo matches found.\033[0m\033[1m\n";
                     std::cout << "\n\033[1;32m↵ to continue...";
                     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                     clearScrollBuffer();

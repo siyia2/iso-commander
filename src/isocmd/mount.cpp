@@ -153,7 +153,7 @@ void select_and_mount_files_by_number() {
 
 				if (filteredFiles.empty()) {
 					clearScrollBuffer();
-					std::cout << "\033[1;91mNo ISO(s) match the search query.\033[0;1m\n";
+					std::cout << "\n\033[1;91mNo matches found.\033[0;1m\n";
 					std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 				} else {
