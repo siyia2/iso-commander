@@ -14,7 +14,7 @@ Features:
 * Tab completion and history support.
 * Sanitized shell commands for improved security.
 * Ultra lightweight with no reliance on ncurses or any other external libraries for terminal control.
-* Multithreaded asynchronous operations based on unique valid indices and max available system cores.
+* Multithreaded asynchronous tasks leveraging state-of-the-art concurrent practices.
 * Capable of seamlessly handling anywhere from 1 to an astonishing 100,000 ISO files.
 * Supports most ISO filesystem types: iso9660, UDF, HFSPlus, Rock Ridge, Joliet, and ISOFs.
 * Supports BIN/IMG/MDF conversion to ISO by utilizing ccd2iso and mdf2iso.
