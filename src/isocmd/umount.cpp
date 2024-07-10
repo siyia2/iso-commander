@@ -402,6 +402,7 @@ void unmountISOs() {
                             noValid = false;
                             search = false;
                             skipEnter = true;
+                            isFiltered = false;
                             historyPattern = false;
                             break;
                         }
