@@ -84,7 +84,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     
     auto clearAndPrintWait = []() {
         clearScrollBuffer();
-        std::cout << "\033[1mPlease wait...\033[0;1m\n";
+        std::cout << "\033[1mPlease wait...\033[0;1m\n\n";
     };
 
     auto handleEmptyFiles = [&](const std::string& message) {
@@ -161,7 +161,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         std::cout << "\n" << message << "\n";
         auto end_time = std::chrono::high_resolution_clock::now();
         auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-        std::cout << "\033[1mTime Elapsed: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n";
+        std::cout << "\n\033[1mTime Elapsed: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n";
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     };
