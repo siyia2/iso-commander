@@ -397,7 +397,9 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 				std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 return;
-            }
+            } else {
+				mvDelBreak=true;
+			}
         }
     }
 
@@ -542,7 +544,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
         if (isMove) {
             operationCommand += "mv ";
         } else if (isCopy) {
-            operationCommand += "cp -f ";
+            operationCommand += "cp --reflink=auto -f ";
         } else if (isDelete) {
             operationCommand = "rm -f ";
         } else {
