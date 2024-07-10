@@ -217,16 +217,12 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         
         // Check if the token consists only of zeros and treat it as a non-existent index
         if (isAllZeros(token)) {
-            if (uniqueErrorMessages.empty()) {
-                uniqueErrorMessages.emplace("\033[1;91mInvalid index '0'.\033[0;1m");
-            }
+			uniqueErrorMessages.emplace("\033[1;91mInvalid index: '0'.\033[0;1m");  
         }
 
         // Check if the token is '0' and treat it as a non-existent index
         if (token == "0") {
-            if (uniqueErrorMessages.empty()) {
-                uniqueErrorMessages.emplace("\033[1;91mInvalid index '0'.\033[0;1m");
-            }
+			uniqueErrorMessages.emplace("\033[1;91mInvalid index: '0'.\033[0;1m");   
         }
         
         // Check if there is more than one hyphen in the token
