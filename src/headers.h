@@ -131,7 +131,7 @@ void filterMountPoints(const std::vector<std::string>& isoDirs, std::vector<std:
 size_t boyerMooreSearchMountPoints(const std::string& haystack, const std::string& needle);
 
 // Unmount functions
-void printUnmountedAndErrors(bool invalidInput, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors);
+void printUnmountedAndErrors(std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors);
 void listMountedISOs();
 void unmountISOs();
 void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors);
