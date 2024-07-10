@@ -331,7 +331,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
 				if (filteredFiles.empty()) { // Check if no files match the search query
 					clearScrollBuffer(); // Clear scroll buffer
-					std::cout << "\033[1;91mNo file(s) match the search query.\033[0;1m\n"; // Inform user
+					std::cout << "\n\033[1;91mNo matches found.\033[0;1m\n"; // Inform user
 					std::cout << "\n\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
 					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 				} else {
