@@ -70,6 +70,7 @@ void select_and_mount_files_by_number() {
         skippedMessages.clear();
         mountedFails.clear();
         uniqueErrorMessages.clear();
+        clear_history();
         removeNonExistentPathsFromCache();
         loadCache(isoFiles);
 
@@ -103,30 +104,45 @@ void select_and_mount_files_by_number() {
         std::cout << "\033[1;93m! IF EXPECTED ISO FILES ARE NOT ON THE LIST IMPORT THEM FROM THE MAIN MENU OPTIONS !\033[0;1m\n";
         printIsoFileList(isoFiles);
 
-        std::string input = readline("\n\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 ");
+        // Prompt user for input
+       char* rawInput = readline("\n\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 ");
 
-        if (input.empty()) break;
-        if (input == "/") {
+		// Use std::unique_ptr to manage memory for input
+		std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
+        
+        std::string mainInputString(input.get());	
+
+        if (mainInputString.empty()) break;
+        if (mainInputString == "/") {
             bool search = true;
             while (search) {
                 clearScrollBuffer();
                 historyPattern = true;
                 loadHistory();
 
-                std::string searchQuery = readline("\n\001\033[1;92m\002Term(s)\001\033[1;94m\002 ↵ to filter \001\033[1;92m\002mount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return: \001\033[0;1m\002");
+				// User pressed '/', start the filtering process
+				std::string prompt = "\n\001\033[1;92m\002Term(s)\001\033[1;94m\002 ↵ to filter \001\033[1;92m\002mount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return: \001\033[0;1m\002";
 
-                if (searchQuery.empty() || searchQuery == "/") {
+				// Prompt user for input
+				char* rawSearchQuery = readline(prompt.c_str());
+
+				// Use std::unique_ptr to manage memory for rawSearchQuery
+				std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
+			
+				std::string inputSearch(searchQuery.get());
+
+                if (inputSearch.empty() || inputSearch == "/") {
                     search = false;
                     historyPattern = false;
                     break;
                 }
 
                 clearAndPrintWait();
-                add_history(searchQuery.c_str());
+                add_history(searchQuery.get());
                 saveHistory();
                 clear_history();
 
-                std::vector<std::string> filteredFiles = filterFiles(isoFiles, searchQuery);
+                std::vector<std::string> filteredFiles = filterFiles(isoFiles, inputSearch);
 
                 if (filteredFiles.empty()) {
                     clearScrollBuffer();
@@ -135,29 +151,43 @@ void select_and_mount_files_by_number() {
                     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 } else {
                     while (true) {
+						mountedFiles.clear();
+						skippedMessages.clear();
+						mountedFails.clear();
+						uniqueErrorMessages.clear();
                         clearScrollBuffer();
+                        clear_history();
                         sortFilesCaseInsensitive(filteredFiles);
                         std::cout << "\033[1mFiltered results:\033[0;1m\n";
                         printIsoFileList(filteredFiles);
 
-                        std::string filteredInput = readline("\n\n\001\033[1;92m\002Filtered ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 ");
+                        // Prompt user for input again with the filtered list
+						std::string prompt = "\n\n\001\033[1;92m\002Filtered ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
 
-                        if (filteredInput == "/") {
+						// Prompt user for input
+						char* rawInputFiltered = readline(prompt.c_str());
+
+						// Use std::unique_ptr to manage memory for rawInputFiltered
+						std::unique_ptr<char, decltype(&std::free)> inputFiltered(rawInputFiltered, &std::free);
+						
+						std::string inputFilteredString(inputFiltered.get());
+						
+                        if (inputFilteredString == "/") {
                             search = true;
                             break;
                         }
-                        if (filteredInput.empty()) {
+                        if (inputFilteredString.empty()) {
                             search = false;
                             historyPattern = false;
                             break;
                         }
                         
-                        processInput(filteredInput, filteredFiles);
+                        processInput(inputFilteredString, filteredFiles);
                     }
                 }
             }
         } else {
-            processInput(input, isoFiles);
+            processInput(mainInputString, isoFiles);
         }
     }
 }
@@ -461,7 +491,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
 	
 	// Check if we have any valid indices to process
     if (indicesToProcess.empty()) {
-        addError("\033[1;91mNo valid indices to process.\033[0;1m");
+        addError("\033[1;91mNo valid indices to process for mount.\033[0;1m");
         return;  // Exit the function early
     }
     
