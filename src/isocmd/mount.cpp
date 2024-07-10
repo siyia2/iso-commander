@@ -564,13 +564,18 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     activeTaskCount.store((indicesToProcess.size() + chunkSize - 1) / chunkSize, std::memory_order_relaxed);
 
     for (size_t i = 0; i < indicesToProcess.size(); i += chunkSize) {
-        std::vector<std::string> filesToMount;
-        size_t end = std::min(i + chunkSize, indicesToProcess.size());
-        for (size_t j = i; j < end; ++j) {
-            filesToMount.push_back(isoFiles[indicesToProcess[j] - 1]);
-        }
-        pool.enqueue([&, filesToMount]() { processTask(filesToMount); });
-    }
+		std::vector<std::string> filesToMount;
+		size_t end = std::min(i + chunkSize, indicesToProcess.size());
+		for (size_t j = i; j < end; ++j) {
+			std::string isoFile;
+			{
+				std::lock_guard<std::mutex> lock(Mutex4High);
+				isoFile = isoFiles[indicesToProcess[j] - 1];
+			}
+			filesToMount.push_back(isoFile);
+		}
+		pool.enqueue([&, filesToMount]() { processTask(filesToMount); });
+	}
 
     if (!indicesToProcess.empty()) {
         int totalTasksValue = totalTasks.load();
