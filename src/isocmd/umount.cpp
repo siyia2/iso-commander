@@ -384,7 +384,7 @@ void unmountISOs() {
 						}
 
                         // Prompt the user for the list of ISOs to unmount
-						char* rawChosen = readline("\n\001\033[1;92m\002Filtered ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return: \001\033[0m\002\001\033[1m\002");
+						char* rawChosen = readline("\n\001\033[1;92m\002Filtered ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0m\002\001\033[1m\002");
 
 						// Use std::unique_ptr to manage memory for rawInput
 						std::unique_ptr<char, decltype(&std::free)> chosenNumbers(rawChosen, &std::free);
