@@ -17,18 +17,20 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::st
     
     // Create progress thread
     std::thread progressThread(displayProgressBar, std::ref(completedIsos), std::cref(totalIsos), std::ref(isComplete));
-    
     std::vector<std::future<void>> futures;
+    futures.reserve(100);
     for (size_t i = 0; i < isoFiles.size(); i += chunkSize) {
-        futures.push_back(pool.enqueue([&isoFiles, &mountedFiles, &skippedMessages, &mountedFails, &completedIsos, i, chunkSize, totalIsos]() {
-            std::vector<std::string> chunkFiles;
-            for (size_t j = i; j < std::min(i + chunkSize, isoFiles.size()); ++j) {
-                chunkFiles.push_back(isoFiles[j]);
-            }
-            mountIsoFiles(chunkFiles, mountedFiles, skippedMessages, mountedFails);
-            completedIsos.fetch_add(chunkFiles.size(), std::memory_order_relaxed);
-        }));
-    }
+		futures.push_back(pool.enqueue([&isoFiles, &mountedFiles, &skippedMessages, &mountedFails, &completedIsos, i, chunkSize, totalIsos]() {
+			std::vector<std::string> chunkFiles;
+			for (size_t j = i; j < std::min(i + chunkSize, isoFiles.size()); ++j) {
+				chunkFiles.push_back(isoFiles[j]);
+				}
+
+			// Directly call function assuming downstream mutex ensures thread safety
+			mountIsoFiles(chunkFiles, mountedFiles, skippedMessages, mountedFails);
+			completedIsos.fetch_add(chunkFiles.size(), std::memory_order_relaxed);
+		}));
+	}
     
     // Wait for all tasks to complete
     for (auto& future : futures) {
