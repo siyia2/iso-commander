@@ -98,8 +98,8 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
     // Prompt user to input directory paths
 	std::string prompt = "\001\033[1;92m\002Folder path(s)\001\033[1;94m ↵ to scan for \001\033[1;38;5;208m\002" + fileExtension + 
-                     "\001\033[1;94m files and import into \001\033[1;93m\002RAM\001\033[1;94m\002 cache (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002), \001\033[1;92m\002list \001\033[1;94m\002↵ to use cache, " 
-                     "\001\033[1;93m\002clr\001\033[1;94m\002 ↵ to clear, or ↵ to return:\n\001\033[0;1m\002";
+                     "\001\033[1;94m files and import into \001\033[1;93m\002RAM\001\033[1;94m\002 cache (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002), \001\033[1;92m\002list \001\033[1;94m\002↵ open cache, " 
+                     "\001\033[1;93m\002clr\001\033[1;94m\002 ↵ clear cache, ↵ return:\n\001\033[0;1m\002";
 
 	// Prompt user for input
 	char* rawinput = readline(prompt.c_str());
@@ -220,7 +220,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
                 loadHistory();
                 clearScrollBuffer();
 
-                std::string prompt = "\n\001\033[1;92m\002Term(s)\001\033[1;94m\002 ↵ to filter \001\033[1;38;5;208m\002" + fileTypeName + "\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return: \001\033[0;1m\002";
+                std::string prompt = "\n\001\033[1;92m\002Term(s)\001\033[1;94m\002 ↵ to filter \001\033[1;38;5;208m\002" + fileTypeName + "\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
                 // Prompt user for input
 				char* rawSearchQuery = readline(prompt.c_str());
 
