@@ -147,6 +147,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
                         processOperation(filteredInput, filteredFiles);
                         if (operation != "cp" && mvDelBreak) {
 							search = false;
+							historyPattern = false;
 							break;
 						}
                     }
