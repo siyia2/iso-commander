@@ -343,18 +343,6 @@ void mountIsoFile(const std::string& isoFile, std::set<std::string>& mountedFile
     auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
     auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint);
     
-    if (isAlreadyMounted(mountPoint)) {
-        std::stringstream skippedMessage;
-        skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename
-                       << "'\033[1;93m already mnt@: \033[1;94m'" << mountisoDirectory
-                       << "/" << mountisoFilename << "'\033[1;93m.\033[0m";
-        {
-            std::lock_guard<std::mutex> lowLock(Mutex4Low);
-            skippedMessages.insert(skippedMessage.str());
-        }
-        return;
-    }
-    
     if (geteuid() != 0) {
         std::stringstream errorMessage;
         errorMessage << "\033[1;91mFailed to mnt: \033[1;93m'" << isoDirectory << "/" << isoFilename
@@ -366,6 +354,17 @@ void mountIsoFile(const std::string& isoFile, std::set<std::string>& mountedFile
         return;
     }
     
+    if (isAlreadyMounted(mountPoint)) {
+        std::stringstream skippedMessage;
+        skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename
+                       << "'\033[1;93m already mnt@: \033[1;94m'" << mountisoDirectory
+                       << "/" << mountisoFilename << "'\033[1;93m.\033[0m";
+        {
+            std::lock_guard<std::mutex> lowLock(Mutex4Low);
+            skippedMessages.insert(skippedMessage.str());
+        }
+        return;
+    }
 
     if (!fs::exists(mountPoint)) {
         try {
