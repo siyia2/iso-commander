@@ -249,14 +249,14 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         // Display file list and prompt user for input
         clearScrollBuffer();
         if (files.empty() && fileType == "mdf"){
-			std::cout << "\n\033[1;93mNo .mdf files stored in RAM cache for conversion.\033[1m\n";
+			std::cout << "\n\033[1;93mNo .mdf files stored in RAM cache for potential conversion.\033[1m\n";
 			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 			clearScrollBuffer();
 			select_and_convert_files_to_iso(fileTypeChoice);
 			break;
 		} else if (files.empty() && fileType == "bin") {
-			std::cout << "\n\033[1;93mNo .bin/.img files stored in RAM cache for conversion.\033[1m\n";
+			std::cout << "\n\033[1;93mNo .bin/.img files stored in RAM cache for potential conversion.\033[1m\n";
 			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 			clearScrollBuffer();
