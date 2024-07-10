@@ -491,7 +491,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
 	
 	// Check if we have any valid indices to process
     if (indicesToProcess.empty()) {
-        addError("\033[1;91mNo valid indices to process for mount.\033[0;1m");
+        addError("\033[1;91mNo valid input provided for mount.\033[0;1m");
         return;  // Exit the function early
     }
     
