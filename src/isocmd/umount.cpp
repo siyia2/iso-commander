@@ -388,19 +388,22 @@ void unmountISOs() {
 						if (chosenNumbers.get()[0] == '/') {
 							search = true;
 							break;
-						} else if (std::isspace(chosenNumbers.get()[0]) || chosenNumbers.get()[0] == '\0') {
+						}
+						 if (std::isspace(chosenNumbers.get()[0]) || chosenNumbers.get()[0] == '\0') {
                             skipEnter = false;
 							isFiltered = false;
 							search=false;
 							noValid = false;
 							historyPattern = false;
                             break;
-                        } else if (std::strcmp(chosenNumbers.get(), "00") == 0) {
+                        } 
+                        if (std::strcmp(chosenNumbers.get(), "00") == 0) {
 							clearScrollBuffer();
 							std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
                             selectedIsoDirs = filteredIsoDirs;
                             isFiltered = true;
                             historyPattern = false;
+                            search=false;
                             skipEnter= false;
                             break;
                         }
