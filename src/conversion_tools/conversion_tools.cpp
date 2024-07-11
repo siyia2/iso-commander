@@ -215,7 +215,6 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
         if (mainInputString == "/") {
             while (search) {
-                clear_history();
                 historyPattern = true;
                 loadHistory();
                 clearScrollBuffer();
