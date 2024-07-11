@@ -478,20 +478,6 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     futures.reserve(numThreads);
     ThreadPool pool(numThreads);
 
-    char* current_user = getlogin();
-    if (current_user == nullptr) {
-        std::cerr << "Error getting current user: " << strerror(errno) << "\n";
-        return;
-    }
-    gid_t current_group = getegid();
-    if (current_group == static_cast<unsigned int>(-1)) {
-        std::cerr << "Error getting current group: " << strerror(errno) << "\n";
-        return;
-    }
-
-    std::string user_str(current_user);
-    std::string group_str = std::to_string(static_cast<unsigned int>(current_group));
-
 	std::atomic<int> completedTasks(0);
 	// Create atomic flag for completion status
     std::atomic<bool> isComplete(false);
@@ -1009,34 +995,42 @@ void printFileList(const std::vector<std::string>& fileList) {
 
 // Function to convert a BIN/IMG/MDF file to ISO format
 void convertToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool modeMdf) {
-    auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath);
-
-    // Check if the input file exists
-    if (!std::ifstream(inputPath)) {
-
-        std::string failedMessage = "\033[1;91mThe specified input file \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m does not exist.\033[0;1m\n";
-        {	std::lock_guard<std::mutex> lowLock(Mutex4Low);
-			failedOuts.insert(failedMessage);
-		}
+    // Get current user and group
+    char* current_user = getlogin();
+    if (current_user == nullptr) {
+        std::cerr << "\nError getting current user: " << strerror(errno) << "\033[0;1m";
         return;
     }
+    gid_t current_group = getegid();
+    if (current_group == static_cast<unsigned int>(-1)) {
+        std::cerr << "\n\033[1;91mError getting current group:\033[0;1m " << strerror(errno) << "\033[0;1m";
+        return;
+    }
+    std::string user_str(current_user);
+    std::string group_str = std::to_string(static_cast<unsigned int>(current_group));
 
+    auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath);
+    // Check if the input file exists
+    if (!std::ifstream(inputPath)) {
+        std::string failedMessage = "\033[1;91mThe specified input file \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m does not exist.\033[0;1m\n";
+        {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
+            failedOuts.insert(failedMessage);
+        }
+        return;
+    }
     // Check if the corresponding .iso file already exists
     std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
     if (fileExists(outputPath)) {
         std::string skipMessage = "\033[1;93mThe corresponding .iso file already exists for: \033[1;92m'" + directory + "/" + fileNameOnly + "'\033[1;93m. Skipped conversion.\033[0;1m";
-        {	std::lock_guard<std::mutex> lowLock(Mutex4Low);
-			skippedOuts.insert(skipMessage);
-		}
+        {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
+            skippedOuts.insert(skipMessage);
+        }
         return;
     }
-
     // Escape the inputPath before using it in shell commands
     std::string escapedInputPath = shell_escape(inputPath);
-
     // Escape the outputPath before using it in shell commands
     std::string escapedOutputPath = shell_escape(outputPath);
-
     // Determine the appropriate conversion command
     std::string conversionCommand;
     if (modeMdf) {
@@ -1047,39 +1041,40 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
         conversionCommand += " > /dev/null 2>&1";
     } else {
         std::string failedMessage = "\033[1;91mUnsupported file format for \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m. Conversion failed.\033[0;1m";
-        {	std::lock_guard<std::mutex> lowLock(Mutex4Low);
-			failedOuts.insert(failedMessage);
-		}
+        {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
+            failedOuts.insert(failedMessage);
+        }
         return;
     }
-
     // Execute the conversion command
     int conversionStatus = std::system(conversionCommand.c_str());
-
     auto [outDirectory, outFileNameOnly] = extractDirectoryAndFilename(outputPath);
     // Check the result of the conversion
     if (conversionStatus == 0) {
+        // Change ownership of the created ISO file
+        std::string chownCommand = "chown " + user_str + ":" + group_str + " " + escapedOutputPath;
+        system(chownCommand.c_str());
+
         std::string successMessage = "\033[1mImage file converted to ISO:\033[0;1m \033[1;92m'" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m.\033[0;1m";
-        {	std::lock_guard<std::mutex> lowLock(Mutex4Low);
-			successOuts.insert(successMessage);
-		}
+        {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
+            successOuts.insert(successMessage);
+        }
     } else {
         std::string failedMessage = "\033[1;91mConversion of \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m failed.\033[0;1m";
-        {	std::lock_guard<std::mutex> lowLock(Mutex4Low);
-			failedOuts.insert(failedMessage);
-		}
-
+        {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
+            failedOuts.insert(failedMessage);
+        }
         // Delete the partially created ISO file
         if (std::remove(outputPath.c_str()) == 0) {
             std::string deletedMessage = "\033[1;92mDeleted incomplete ISO file:\033[1;91m '" + outDirectory + "/" + outFileNameOnly + "'\033[1;92m.\033[0;1m";
-            {	std::lock_guard<std::mutex> lowLock(Mutex4Low);
-				deletedOuts.insert(deletedMessage);
-			}
+            {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
+                deletedOuts.insert(deletedMessage);
+            }
         } else {
             std::string deletedMessage = "\033[1;91mFailed to delete partially created ISO file: \033[1;93m'" + outDirectory + "/" + outFileNameOnly + "'\033[1;91m.\033[0;1m";
-            {	std::lock_guard<std::mutex> lowLock(Mutex4Low);
-				deletedOuts.insert(deletedMessage);
-			}
+            {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
+                deletedOuts.insert(deletedMessage);
+            }
         }
     }
 }
