@@ -52,124 +52,125 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::st
 
 // Function to select and mount ISO files by number
 void select_and_mount_files_by_number() {
-    std::set<std::string> mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages;
+	
+	// Vector to store ISO mounts
+	std::set<std::string> mountedFiles;
+	// Vector to store skipped ISO mounts
+	std::set<std::string> skippedMessages;
+	// Vector to store failed ISO mounts
+	std::set<std::string> mountedFails;
+	// Vector to store ISO unique input errors
+	std::set<std::string> uniqueErrorMessages;
+
+    // Load ISO files from cache
     std::vector<std::string> isoFiles;
-    isoFiles.reserve(100);
+	isoFiles.reserve(100);
 
-    auto clearAndPrintWait = []() {
-        clearScrollBuffer();
-        std::cout << "\033[1mPlease wait...\033[0;1m\n";
-    };
-
-    auto handleEmptyCache = []() {
-        clearScrollBuffer();
-        std::cout << "\n\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n\n";
-        std::cout << "\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-    };
-
+    // Main loop for selecting and mounting ISO files
     while (true) {
-        mountedFiles.clear();
-        skippedMessages.clear();
-        mountedFails.clear();
-        uniqueErrorMessages.clear();
-        clear_history();
+		mountedFiles.clear();
+		skippedMessages.clear();
+		mountedFails.clear();
+		uniqueErrorMessages.clear();
+		// Remove non-existent paths from the cache after selection
         removeNonExistentPathsFromCache();
-        loadCache(isoFiles);
 
-        if (isoFiles.empty()) {
-            handleEmptyCache();
-            break;
-        }
-
-        sortFilesCaseInsensitive(isoFiles);
-        
-        auto processInput = [&](const std::string& input, const std::vector<std::string>& files) {
-            if (input == "00") {
-				clearAndPrintWait();
-				mountAllIsoFiles(files, mountedFiles, skippedMessages, mountedFails);
-			} else if (!input.empty() && input.find("00") != std::string::npos) {
-				clearScrollBuffer();
-				std::cout << "\n\033[1;91mNo valid input provided for mount\033[0;1m\n\n";
-                std::cout << "\033[1;32m↵ to continue...\033[0;1m";
-                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-			} else if (!input.empty() && input != "/") {
-				clearAndPrintWait();
-				processAndMountIsoFiles(input, files, mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
-			}
-            
-            clearScrollBuffer();
-            if (verbose) {
-                printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
-            } else if (!uniqueErrorMessages.empty() && mountedFiles.empty() && skippedMessages.empty() && mountedFails.empty()) {
-				clearScrollBuffer();
-                std::cout << "\n\033[1;91mNo valid input provided for mount\033[0;1m\n\n";
-                std::cout << "\033[1;32m↵ to continue...\033[0;1m";
-                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            }
-        };
-
+        // Load ISO files from cache
+		loadCache(isoFiles);
+		
+		// Check if the cache is empty
+		if (isoFiles.empty()) {
+			clearScrollBuffer();
+			std::cout << "\n\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n";
+			std::cout << " \n";
+			std::cout << "\033[1;32m↵ to continue...\033[0;1m";
+			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			break;
+		}
+		
+		bool isFiltered = false;
+		bool search = true;
         clearScrollBuffer();
         std::cout << "\033[1;93m! IF EXPECTED ISO FILES ARE NOT ON THE LIST IMPORT THEM FROM THE MAIN MENU OPTIONS !\033[0;1m\n";
+        
+        std::string searchQuery;
+        std::vector<std::string> filteredFiles;
+        sortFilesCaseInsensitive(isoFiles);
         printIsoFileList(isoFiles);
-
+		
         // Prompt user for input
        char* rawInput = readline("\n\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 ");
 
 		// Use std::unique_ptr to manage memory for input
 		std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
         
-        std::string mainInputString(input.get());	
-
-        if (mainInputString.empty()) break;
-        if (mainInputString == "/") {
-            bool search = true;
-            while (search) {
-                clearScrollBuffer();
-                historyPattern = true;
-                loadHistory();
-
-				// User pressed '/', start the filtering process
-				std::string prompt = "\n\001\033[1;92m\002Term(s)\001\033[1;94m\002 ↵ to filter \001\033[1;92m\002mount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
-
-				// Prompt user for input
-				char* rawSearchQuery = readline(prompt.c_str());
-
-				// Use std::unique_ptr to manage memory for rawSearchQuery
-				std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
+        std::string mainInputString(input.get());		
+        
+        clearScrollBuffer();
+        if (strcmp(input.get(), "/") != 0 || (!(std::isspace(input.get()[0]) || input.get()[0] == '\0'))) {
+			std::cout << "\033[1mPlease wait...\033[1m\n";
+		}
+		
+        if (std::isspace(input.get()[0]) || input.get()[0] == '\0') {
+            break;
+        } else if (strcmp(input.get(), "/") == 0) {
+			isFiltered = true;
 			
-				std::string inputSearch(searchQuery.get());
+			while (search) {
+			
+			clearScrollBuffer();
+			historyPattern = true;
+			loadHistory();
+			
+			// User pressed '/', start the filtering process
+			std::string prompt = "\n\001\033[1;92m\002Term(s)\001\033[1;94m\002 ↵ to filter \001\033[1;92m\002mount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return: \001\033[0;1m\002";
 
-                if (inputSearch.empty() || inputSearch == "/") {
-                    search = false;
-                    historyPattern = false;
-                    break;
-                }
+			// Prompt user for input
+			char* rawSearchQuery = readline(prompt.c_str());
 
-                clearAndPrintWait();
-                add_history(searchQuery.get());
-                saveHistory();
+			// Use std::unique_ptr to manage memory for rawSearchQuery
+			std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
+			
+			std::string inputSearch(searchQuery.get());
 
-                std::vector<std::string> filteredFiles = filterFiles(isoFiles, inputSearch);
+			clearScrollBuffer();
+			
+			
+			if (searchQuery && searchQuery.get()[0] != '\0') {
+				std::cout << "\033[1mPlease wait...\033[1m\n";
+				if (strcmp(searchQuery.get(), "/") != 0) {
+					add_history(searchQuery.get());
+					saveHistory();
+				}
+			}
+			clear_history();
+			
+			// Store the original isoFiles vector
+			std::vector<std::string> originalIsoFiles = isoFiles;
+			// Check if the user wants to return
+			if (searchQuery && !(searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0)) {
+        
 
-                if (filteredFiles.empty()) {
-                    clearScrollBuffer();
-                    std::cout << "\n\033[1;91mNo matches found.\033[0;1m\n\n";
-                    std::cout << "\033[1;32m↵ to continue...\033[0;1m";
-                    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                } else {
-                    while (true) {
+			if (searchQuery != nullptr) {
+				std::vector<std::string> filteredFiles = filterFiles(isoFiles, inputSearch);
+
+				if (filteredFiles.empty()) {
+					clearScrollBuffer();
+					std::cout << "\n\033[1;91mNo matches found.\033[0;1m\n";
+					std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+				} else {
+					while (true) {
 						mountedFiles.clear();
 						skippedMessages.clear();
 						mountedFails.clear();
 						uniqueErrorMessages.clear();
-                        clearScrollBuffer();
-                        clear_history();
-                        sortFilesCaseInsensitive(filteredFiles);
-                        std::cout << "\033[1mFiltered results:\033[0;1m\n";
-                        printIsoFileList(filteredFiles);
-
-                        // Prompt user for input again with the filtered list
+						clearScrollBuffer();
+						sortFilesCaseInsensitive(filteredFiles);
+						std::cout << "\033[1mFiltered results:\033[0;1m\n";
+						printIsoFileList(filteredFiles); // Print the filtered list of ISO files
+					
+						// Prompt user for input again with the filtered list
 						std::string prompt = "\n\n\001\033[1;92m\002Filtered ISO(s)\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
 
 						// Prompt user for input
@@ -180,23 +181,80 @@ void select_and_mount_files_by_number() {
 						
 						std::string inputFilteredString(inputFiltered.get());
 						
-                        if (inputFilteredString == "/") {
-                            search = true;
-                            break;
-                        }
-                        if (inputFilteredString.empty()) {
-                            search = false;
-                            historyPattern = false;
-                            break;
-                        }
-                        
-                        processInput(inputFilteredString, filteredFiles);
-                    }
-                }
-            }
-        } else {
-            processInput(mainInputString, isoFiles);
-        }
+						
+						if (inputFiltered.get()[0] == '/') {
+							search = true;
+							break;
+						}
+						
+						if (std::isspace(inputFiltered.get()[0]) || inputFiltered.get()[0] == '\0') {
+							search = false;
+							historyPattern = false;
+							break;
+						} else if (std::strcmp(inputFiltered.get(), "00") == 0) {
+							clearScrollBuffer();
+							std::cout << "\033[1mPlease wait...\033[1m\n";
+							// Restore the original list of ISO files
+							isoFiles = filteredFiles;
+							isFiltered = false;
+							mountAllIsoFiles(isoFiles, mountedFiles, skippedMessages, mountedFails);
+							clearScrollBuffer();
+							if (verbose) {
+								printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
+							}
+						} else if (inputFiltered.get()[0] != '\0' && (strcmp(inputFiltered.get(), "/") != 0)) { // Check if the user provided input
+							clearScrollBuffer();
+							std::cout << "\033[1mPlease wait...\033[1m\n";
+
+							// Process the user input with the filtered list
+							processAndMountIsoFiles(inputFilteredString, filteredFiles, mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
+						
+							clearScrollBuffer();
+							if (!uniqueErrorMessages.empty() && mountedFiles.empty() && skippedMessages.empty() && mountedFails.empty()) {
+								verbose = false;
+								std::cout << "\n\033[1;91mNo valid input provided for mount\033[0;1m\n";
+								std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+								std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+							}
+
+							if (verbose) {
+								printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
+							}
+						}
+					}
+				}	
+			} 
+				} else {
+					historyPattern = false;
+					isFiltered = true;
+					isoFiles = originalIsoFiles; // Revert to the original cache list
+					break;
+			}
+		}
+	}
+
+        // Check if the user wants to mount all ISO files
+		if (std::strcmp(input.get(), "00") == 0) {
+			mountAllIsoFiles(isoFiles, mountedFiles, skippedMessages, mountedFails);
+			clearScrollBuffer();
+			if (verbose) {
+				printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
+			}
+		} else if (input.get()[0] != '\0' && (strcmp(input.get(), "/") != 0) && !isFiltered) {
+            // Process user input to select and mount specific ISO files
+            processAndMountIsoFiles(mainInputString, isoFiles, mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
+            clearScrollBuffer();
+            if (!uniqueErrorMessages.empty() && mountedFiles.empty() && skippedMessages.empty() && mountedFails.empty()) {
+				    verbose = false;
+				    std::cout << "\n\033[1;91mNo valid input provided for mount\033[0;1m\n";
+				    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			}
+				    
+            if (verbose) {
+				printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
+			}
+        }          
     }
 }
 
