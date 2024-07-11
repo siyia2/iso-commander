@@ -132,7 +132,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 	std::string inputSearch(mainSearch.get());
 	clearScrollBuffer();
 	
-	if (inputSearch == "list"){
+	if (inputSearch == "ls"){
 		list =true;
 	}
 
