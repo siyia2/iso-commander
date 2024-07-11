@@ -237,7 +237,6 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
                         saveHistory();
                     }
                 }
-                clear_history();
 
                 if (inputSearch.empty() || inputSearch == "/") {
                     historyPattern = false;
