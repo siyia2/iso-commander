@@ -67,6 +67,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
         operationIsos.clear();
         operationErrors.clear();
         uniqueErrorMessages.clear();
+        clear_history();
         removeNonExistentPathsFromCache();
         loadCache(isoFiles);
 
@@ -120,7 +121,6 @@ void select_and_operate_files_by_number(const std::string& operation) {
                         saveHistory();
                     }
                 }
-                clear_history();
 
                 if (inputSearch.empty() || inputSearch == "/") {
                     historyPattern = false;
@@ -136,6 +136,10 @@ void select_and_operate_files_by_number(const std::string& operation) {
                     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 } else {
                     while (true) {
+						operationIsos.clear();
+						operationErrors.clear();
+						uniqueErrorMessages.clear();
+						clear_history();
                         clearScrollBuffer();
                         sortFilesCaseInsensitive(filteredFiles);
                         std::cout << "\033[1mFiltered results:\033[0;1m\n";
