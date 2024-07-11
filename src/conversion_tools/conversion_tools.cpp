@@ -186,8 +186,10 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         failedOuts.clear();
         deletedOuts.clear();
         processedErrors.clear();
-
+		
+		clear_history();
         clearScrollBuffer();
+        
         if (files.empty()) {
             handleEmptyFiles("No " + fileExtension + " files stored in RAM cache for potential conversions.");
             break;
@@ -197,7 +199,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         sortFilesCaseInsensitive(files);
         printFileList(files);
 
-        clear_history();
+        
         bool search = true;
 		
 		// Construct the prompt as a std::string
@@ -260,6 +262,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
                         clearScrollBuffer();
                         clear_history();
+                        
                         sortFilesCaseInsensitive(filteredFiles);
                         std::cout << "\033[1mFiltered results:\n\033[0;1m\n";
                         printFileList(filteredFiles);
