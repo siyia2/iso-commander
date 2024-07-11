@@ -407,6 +407,10 @@ void unmountISOs() {
                         std::set<size_t> selectedIndices;
                         std::istringstream iss(inputChosenString);
                         for (std::string token; iss >> token;) {
+							if (isAllZeros(token)) {
+								errorMessages.emplace("\033[1;91mInvalid index: '0'.\033[0;1m");
+								continue;
+							}
                             try {
                                 size_t dashPos = token.find('-');
                                 if (dashPos != std::string::npos) {
@@ -470,6 +474,10 @@ void unmountISOs() {
             std::set<size_t> selectedIndices;
             std::istringstream iss(inputString);
             for (std::string token; iss >> token;) {
+				if (isAllZeros(token)) {
+					errorMessages.emplace("\033[1;91mInvalid index: '0'.\033[0;1m");
+					continue;
+				}
                 try {
                     size_t dashPos = token.find('-');
                     if (dashPos != std::string::npos) {
