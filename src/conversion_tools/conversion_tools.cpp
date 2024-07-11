@@ -139,7 +139,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 	// Check if inputSearch is empty or contains only spaces
 	bool onlySpaces = inputSearch.find_first_not_of(" \t") == std::string::npos;
 
-	if (!inputSearch.empty() && inputSearch != "clr" && inputSearch != "list" && !onlySpaces) {
+	if (!inputSearch.empty() && inputSearch != "clr" && inputSearch != "ls" && !onlySpaces) {
 		// Save search history if input paths are provided
 		std::cout << "\033[1mPlease wait...\033[1m\n" << std::endl;
 		add_history(mainSearch.get());
