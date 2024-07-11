@@ -313,7 +313,6 @@ void manualRefreshCache(const std::string& initialDir) {
 		std::string inputSearch(searchQuery.get());
 		
 		if (inputSearch == "clr") {
-			clearScrollBuffer();
 			if (std::remove(cacheFilePath.c_str()) != 0) {
 				std::cerr << "\n\001\033[1;91mError deleting file: '" << cacheFilePath << "'. File does not exist or inaccessible." << std::endl;
 				std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
