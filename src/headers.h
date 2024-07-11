@@ -168,7 +168,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
 
 // voids
 void convertToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool modeMdf);
-void verboseFind(std::set<std::string> invalidDirectoryPaths);
+void verboseFind(std::set<std::string>& invalidDirectoryPaths);
 void verboseConversion(std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts);
 void select_and_convert_files_to_iso(const std::string& fileTypeChoice);
 void processInput(const std::string& input, const std::vector<std::string>& fileList, bool modeMdf, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts);
