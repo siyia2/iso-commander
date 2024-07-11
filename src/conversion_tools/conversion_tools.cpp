@@ -44,13 +44,9 @@ void verboseConversion(std::set<std::string>& processedErrors, std::set<std::str
 
 
 // Function to print invalid directory paths from search
-void verboseFind(std::set<std::string> invalidDirectoryPaths, std::set<std::string> processedErrors) {
+void verboseFind(std::set<std::string> invalidDirectoryPaths) {
 	if (!invalidDirectoryPaths.empty()) {
-		if (!processedErrors.empty()) {
-			std::cout << "\n";
-		}
-		
-		std::cout << "\033[0;1mInvalid path(s) omitted from search: \033[1:91m";
+		std::cout << "\n\033[0;1mInvalid path(s) omitted from search: \033[1:91m";
 		for (auto it = invalidDirectoryPaths.begin(); it != invalidDirectoryPaths.end(); ++it) {
         if (it == invalidDirectoryPaths.begin()) {
             std::cerr << "\033[31m'"; // Red color for the first quote
@@ -62,7 +58,7 @@ void verboseFind(std::set<std::string> invalidDirectoryPaths, std::set<std::stri
         if (std::next(it) != invalidDirectoryPaths.end()) {
             std::cerr << " ";
         }
-    }	
+    }
 		std::cerr << "\033[0;1m.\n"; // Print a newline at the end
 		invalidDirectoryPaths.clear();
 	}
@@ -134,6 +130,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 	std::unique_ptr<char, decltype(&std::free)> mainSearch(rawinput, &std::free);
 
 	std::string inputSearch(mainSearch.get());
+	clearScrollBuffer();
 
 	if (inputSearch == "ls"){
 		list =true;
@@ -144,7 +141,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
 	if (!inputSearch.empty() && inputSearch != "clr" && inputSearch != "ls" && !onlySpaces) {
 		// Save search history if input paths are provided
-		std::cout << "\n\033[1mPlease wait...\033[1m\n" << std::endl;
+		std::cout << "\033[1mPlease wait...\033[1m\n" << std::endl;
 		add_history(mainSearch.get());
 		saveHistory();
 	}
@@ -184,8 +181,9 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 	bool noValid= false;
 	// Return if no directory paths are provided
     if (directoryPaths.empty() && !invalidDirectoryPaths.empty()) {
+		clearScrollBuffer();
 		invalidDirectoryPaths.clear();
-		std::cout << "\033[1;91mNo valid path(s) provided.\033[0;1m\n";
+		std::cout << "\n\033[1;91mNo valid path(s) provided.\033[0;1m\n";
 		std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         clearScrollBuffer();
@@ -214,13 +212,10 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
     // Display message if no new files are found
     if (!newFilesFound && !files.empty() && !noValid && !clr && !list) {
-		std::cout << "\n";		
-        verboseFind(invalidDirectoryPaths, processedErrors);
+        clearScrollBuffer();
+        verboseFind(invalidDirectoryPaths);
+        std::cout << "\n";
         auto end_time = std::chrono::high_resolution_clock::now();
-        if (!invalidDirectoryPaths.empty()) {
-			std::cout << "\n";
-		}
-			
         std::cout << "\033[1;91mNo new " << fileExtension << " file(s) over 5MB found. \033[1;92m" << files.size() << " file(s) are cached in RAM from previous searches.\033[0;1m\n";
         std::cout << "\n";
         auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
@@ -232,12 +227,10 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
     // Display message if no files are found
     if (files.empty() && !noValid && !clr && !list) {
-		std::cout << "\n";
-        verboseFind(invalidDirectoryPaths, processedErrors);
+        clearScrollBuffer();
+        verboseFind(invalidDirectoryPaths);
+        std::cout << "\n";
         auto end_time = std::chrono::high_resolution_clock::now();
-         if (!invalidDirectoryPaths.empty()) {
-			std::cout << "\n";
-		}
         std::cout << "\033[1;91mNo " << fileExtension << " file(s) over 5MB found in the specified path(s) or cached in RAM.\n\033[0;1m";
         std::cout << "\n";
         auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
@@ -259,6 +252,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 		deletedOuts.clear();   // Clear the set of deleted messages
 		processedErrors.clear(); // Clear the set of error messages
         // Display file list and prompt user for input
+        clearScrollBuffer();
         if (files.empty() && fileType == "mdf"){
 			std::cout << "\n\033[1;93mNo .mdf files stored in RAM cache for potential conversions.\033[1m\n";
 			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
@@ -274,8 +268,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 			select_and_convert_files_to_iso(fileTypeChoice);
 			break;
 		}
-		
-		clearScrollBuffer();
+
         std::cout << "\033[92;1m// SUCCESSFUL CONVERSIONS ARE AUTOMATICALLY IMPORTED INTO ISO CACHE //\033[0;1m\033[0;1m\n\n";
         sortFilesCaseInsensitive(files);
         printFileList(files);
@@ -655,6 +648,8 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     // Clear the cachedInvalidPaths before processing a new set of paths
     cachedInvalidPaths.clear();
 
+    bool printedEmptyLine = false;  // Flag to track if an empty line has been printed
+
     // Mutex to ensure thread safety
     std::mutex mutex4search;
 
@@ -685,6 +680,8 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
 				std::cout << processedError << std::endl;
 			}
 			processedErrors.clear();
+			std::chrono::seconds duration(3);
+			std::this_thread::sleep_for(duration);
 		}
 
         std::vector<std::future<void>> futures;
@@ -817,17 +814,30 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                 if (ec == std::errc::permission_denied) {
                     // Check if the path is unique
                     if (uniqueInvalidPaths.insert(path).second) {
+                        // If it's a new path, print an empty line before printing the error (only once)
+                        if (!printedEmptyLine) {
+                            std::cout << "\n";
+                            printedEmptyLine = true;
+                        }
 
                     }
                 } else if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
+                    if (!printedEmptyLine) {
+                        // Print an empty line before starting to print invalid paths (only once)
+                        std::cout << "\n";
+                        printedEmptyLine = true;
+                    }
                     cachedInvalidPaths.push_back(path);
-                    
                 }
             }
         }
 
     } catch (const std::filesystem::filesystem_error& e) {
-        
+        if (!printedEmptyLine) {
+            // Print an empty line before starting to print invalid paths (only once)
+            std::cout << "\n";
+            printedEmptyLine = true;
+        }
         // Handle filesystem errors for the overall operation
        // std::cerr << "\033[1;91m" << e.what() << ".\033[0;1m\n";
     }
@@ -838,15 +848,14 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
 
         // Stop the timer after completing the mounting process
         auto end_time = std::chrono::high_resolution_clock::now();
-        if (!uniqueInvalidPaths.empty()) {
-			std::cout << "\n";
-		}
+        std::cout << "\n";
         if (mode == "bin") {
-			verboseFind(invalidDirectoryPaths, processedErrors);
+			clearScrollBuffer();
+			verboseFind(invalidDirectoryPaths);
 			std::cout << "\n\033[1;92mFound " << fileNames.size() << " matching file(s)" << ".\033[1;93m " << binImgFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0;1m\n";
 		} else {
-			
-			verboseFind(invalidDirectoryPaths, processedErrors);
+			clearScrollBuffer();
+			verboseFind(invalidDirectoryPaths);
 			std::cout << "\n\033[1;92mFound " << fileNames.size() << " matching file(s)" << ".\033[1;93m " << mdfMdsFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0;1m\n";
 		}
         // Calculate and print the elapsed time
