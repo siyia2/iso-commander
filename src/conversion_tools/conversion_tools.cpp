@@ -30,10 +30,10 @@ void verboseConversion(std::set<std::string>& processedErrors, std::set<std::str
     printWithNewline(failedOuts);	 // Print failed messages
     printWithNewline(deletedOuts);   // Print deleted messages
     printWithNewline(processedErrors); // Print error messages
-    
+
     std::cout << "\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
 	std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-    
+
     // Clear all sets after printing
     successOuts.clear();   // Clear the set of success messages
     skippedOuts.clear();   // Clear the set of skipped messages
@@ -70,7 +70,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     // Initialize variables
     std::vector<std::string> files;
     files.reserve(100); // Reserve space for 100 elements for files
-    
+
     std::vector<std::string> directoryPaths;
     std::set<std::string> uniquePaths;
     // Set to track processed error messages to avoid duplicate error reporting
@@ -90,14 +90,14 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
 	// Set to hold invalid paths for search
 	std::set<std::string> invalidDirectoryPaths;
-	
+
     bool modeMdf;
     bool clr = false;
 
     std::string fileExtension;
     std::string fileTypeName;
     std::string fileType = fileTypeChoice;
-    
+
 
     // Determine file extension and type name based on user input
     if (fileType == "bin" || fileType == "img") {
@@ -117,10 +117,10 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     // Load search history
     loadHistory();
     bool list = false;
-    
+
     // Prompt user to input directory paths
-	std::string prompt = "\001\033[1;92m\002Folder path(s)\001\033[1;94m ↵ to scan for \001\033[1;38;5;208m\002" + fileExtension + 
-                     "\001\033[1;94m files and import into \001\033[1;93m\002RAM\001\033[1;94m\002 cache (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002), \001\033[1;92m\002ls \001\033[1;94m\002↵ open \001\033[1;93m\002RAM\001\033[1;94m\002 cache, " 
+	std::string prompt = "\001\033[1;92m\002Folder path(s)\001\033[1;94m ↵ to scan for \001\033[1;38;5;208m\002" + fileExtension +
+                     "\001\033[1;94m files and import into \001\033[1;93m\002RAM\001\033[1;94m\002 cache (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002), \001\033[1;92m\002ls \001\033[1;94m\002↵ open \001\033[1;93m\002RAM\001\033[1;94m\002 cache, "
                      "\001\033[1;93m\002clr\001\033[1;94m\002 ↵ clear \001\033[1;93m\002RAM\001\033[1;94m\002 cache, ↵ return:\n\001\033[0;1m\002";
 
 	// Prompt user for input
@@ -131,7 +131,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
 	std::string inputSearch(mainSearch.get());
 	clearScrollBuffer();
-	
+
 	if (inputSearch == "ls"){
 		list =true;
 	}
@@ -151,7 +151,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
     // Record start time for performance measurement
     auto start_time = std::chrono::high_resolution_clock::now();
-    
+
     // Split inputPaths into individual directory paths
     if ((!onlySpaces || !(mainSearch.get() == nullptr)) && !list) {
 		std::istringstream iss(inputSearch);
@@ -186,11 +186,13 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 		std::cout << "\n\033[1;91mNo valid path(s) provided.\033[0;1m\n";
 		std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        clearScrollBuffer();
+        select_and_convert_files_to_iso(fileTypeChoice);
         noValid = true;
-        
+
     } else if (((directoryPaths.empty() && !clr) || (onlySpaces)) && !list) {
 		return;
-		
+
 	}
 
     // Search for files based on file type
@@ -200,7 +202,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 			modeMdf = false;
 			newFilesFound = true;
 		}, invalidDirectoryPaths, processedErrors);
-	
+
 	} else if (fileType == "mdf") {
 		files = findFiles(directoryPaths, "mdf", [&](const std::string&, const std::string&) {
 			modeMdf = true;
@@ -263,7 +265,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 			select_and_convert_files_to_iso(fileTypeChoice);
 			break;
 		}
-		
+
         std::cout << "\033[92;1m// SUCCESSFUL CONVERSIONS ARE AUTOMATICALLY IMPORTED INTO ISO CACHE //\033[0;1m\033[0;1m\n\n";
         sortFilesCaseInsensitive(files);
         printFileList(files);
@@ -276,7 +278,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
 		// Use std::unique_ptr to manage memory for readline
 		std::unique_ptr<char, decltype(&free)> input(readline(prompt.c_str()), &free);
-        
+
         std::string mainInputString(input.get());
 
         // Check if user wants to return
@@ -306,7 +308,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 				}
 				char* rawSearchQuery = readline(prompt.c_str());
 				std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
-        
+
 				std::string inputSearch(searchQuery.get());
 
 				clearScrollBuffer(); // Clear scroll buffer to prepare for new content
@@ -354,12 +356,12 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 						} else if (fileType == "mdf") {
 							filterPrompt = "\n\001\033[1;94m\033[1;38;5;208m\002Filtered MDF\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion (e.g., 1-3,1 5), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
 						}
-						
+
 						char* rawfilterPrompt = readline(filterPrompt.c_str());
 						std::unique_ptr<char, decltype(&std::free)> filterInput(rawfilterPrompt, &std::free);
-						
+
 						std::string filterInputString(filterInput.get());
-						
+
 						if (filterInput.get()[0] == '/') {
 							search=true;
 							break;
@@ -371,12 +373,12 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 							search = false;
 							break; // Exit the loop
 						}
-						
+
 						if (isFiltered) {
 							clearScrollBuffer(); // Clear scroll buffer
 							std::cout << "\033[1mPlease wait..." << std::endl; // Inform user to wait
 							processInput(filterInputString, filteredFiles, modeMdf, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts); // Process user input
-							
+
 							clearScrollBuffer(); // Clear scroll buffer
 							std::cout << "\n"; // Print newline
 							if (verbose) {
@@ -398,12 +400,12 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 			clearScrollBuffer(); // Clear scroll buffer
 			std::cout << "\033[1mPlease wait..." << std::endl; // Inform user to wait
 			processInput(mainInputString, files, modeMdf, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts); // Process input
-    
+
 			clearScrollBuffer(); // Clear scroll buffer
 			std::cout << "\n"; // Print newline
 			if (verbose) {
 				verboseConversion(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts);
-	
+
 			}
 			if (!processedErrors.empty() && successOuts.empty() && skippedOuts.empty() && failedOuts.empty() && deletedOuts.empty()){
 				clearScrollBuffer();
@@ -426,25 +428,25 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     std::istringstream issCount(input);
     std::set<std::string> tokens;
     std::string tokenCount;
-    
+
     while (issCount >> tokenCount && tokens.size() < maxThreads) {
     if (tokenCount[0] == '-') continue;
-    
+
     // Count the number of hyphens
     size_t hyphenCount = std::count(tokenCount.begin(), tokenCount.end(), '-');
-    
+
     // Skip if there's more than one hyphen
     if (hyphenCount > 1) continue;
-    
+
     size_t dashPos = tokenCount.find('-');
     if (dashPos != std::string::npos) {
         std::string start = tokenCount.substr(0, dashPos);
         std::string end = tokenCount.substr(dashPos + 1);
-        if (std::all_of(start.begin(), start.end(), ::isdigit) && 
+        if (std::all_of(start.begin(), start.end(), ::isdigit) &&
             std::all_of(end.begin(), end.end(), ::isdigit)) {
             int startNum = std::stoi(start);
             int endNum = std::stoi(end);
-            if (static_cast<std::vector<std::string>::size_type>(startNum) <= fileList.size() && 
+            if (static_cast<std::vector<std::string>::size_type>(startNum) <= fileList.size() &&
                 static_cast<std::vector<std::string>::size_type>(endNum) <= fileList.size()) {
                 int step = (startNum <= endNum) ? 1 : -1;
                 for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
@@ -486,7 +488,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 
     std::string user_str(current_user);
     std::string group_str = std::to_string(static_cast<unsigned int>(current_group));
-	
+
 	std::atomic<int> completedTasks(0);
 	// Create atomic flag for completion status
     std::atomic<bool> isComplete(false);
@@ -526,7 +528,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 										{
 											std::lock_guard<std::mutex> lock(futuresMutex);
 											futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));
-                                    
+
 											processedIndices.emplace(selectedIndex);
 										}
                             }
@@ -547,8 +549,8 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 							std::string selectedFile = fileList[selectedIndex];
 							{
 								std::lock_guard<std::mutex> lock(futuresMutex);
-								futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));   
-                        
+								futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));
+
 								processedIndices.emplace(selectedIndex);
 							}
                 }
@@ -577,7 +579,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 		// No need to display progress bar or wait for futures
 		isComplete = true;
 	}
-    
+
     concatenatedFilePaths.clear();
     for (const auto& path : selectedFilePaths) {
 		concatenatedFilePaths += path + ";";
@@ -599,22 +601,22 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 std::vector<std::string> findFiles(const std::vector<std::string>& paths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrors) {
     // Vector to store cached invalid paths
     static std::vector<std::string> cachedInvalidPaths;
-            
+
     // Vector to store permission errors
     std::set<std::string> uniqueInvalidPaths;
 
     // Static variables to cache results for reuse
     static std::vector<std::string> binImgFilesCache;
-    
+
     // Static variables to cache results for reuse
     static std::vector<std::string> mdfMdsFilesCache;
-    
+
     // Set to store processed paths
     static std::vector<std::string> processedPathsMdf;
-    
+
     // Set to store processed paths
     static std::vector<std::string> processedPathsBin;
-    
+
     // Check if the paths vector has only one element and it is "clr"
     if (paths.size() == 1 && paths[0] == "clr") {
         // Clear the static variables used for caching and processed paths
@@ -623,18 +625,18 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         binImgFilesCache.clear();
         clearScrollBuffer(); // Clear scroll buffer
         std::cout << "\n\033[1;92mBIN/IMG RAM cache cleared.\033[0;1m\n";
-        
+
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
 		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 		clearScrollBuffer(); // Clear scroll buffer
 		select_and_convert_files_to_iso(mode);
-        
+
 		} else {
         mdfMdsFilesCache.clear();
         processedPathsMdf.clear();
         clearScrollBuffer(); // Clear scroll buffer
         std::cout << "\n\033[1;92mMDF RAM cache cleared.\033[0;1m\n";
-        
+
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
 		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 		clearScrollBuffer(); // Clear scroll buffer
@@ -645,7 +647,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     }
 
     std::mutex fileCheckMutex;
-    
+
     bool blacklistMdf =false;
 
     // Vector to store file names that match the criteria
@@ -655,10 +657,10 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     cachedInvalidPaths.clear();
 
     bool printedEmptyLine = false;  // Flag to track if an empty line has been printed
-    
+
     // Mutex to ensure thread safety
     std::mutex mutex4search;
-    
+
     // Start the timer
    auto start_time = std::chrono::high_resolution_clock::now();
 
@@ -679,7 +681,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
 				uniqueInvalidPaths.insert(path);
 			}
 		}
-		
+
 		if (!processedErrors.empty()) {
 			std::cout << "\n\n";
 			for (const auto& processedError : processedErrors) {
@@ -689,10 +691,10 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
 			std::chrono::seconds duration(3);
 			std::this_thread::sleep_for(duration);
 		}
-        
+
         std::vector<std::future<void>> futures;
         futures.reserve(totalFiles);
-		
+
         // Counter to track the number of ongoing tasks
         unsigned int numOngoingTasks = 0;
 
@@ -765,12 +767,12 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                         }
                         processedPathsBin.push_back(path);
                     }
-                } else {                    
+                } else {
                     blacklistMdf = true;
-                    
+
                     // Iterate through files in the given directory and its subdirectories
                     for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
-                        if (entry.is_regular_file()) { 
+                        if (entry.is_regular_file()) {
                             if (blacklist(entry, blacklistMdf)) {
                                 // Check if the file is already present in the cache to avoid duplicates
                                 std::string fileName = entry.path().string();
@@ -808,7 +810,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                             future.get();
                         }
                     }
-                    
+
                     // Add the processed path to the set
                     processedPathsMdf.push_back(path);
                 }
@@ -825,7 +827,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                             std::cout << "\n";
                             printedEmptyLine = true;
                         }
-                        
+
                     }
                 } else if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
                     if (!printedEmptyLine) {
@@ -847,11 +849,11 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         // Handle filesystem errors for the overall operation
        // std::cerr << "\033[1;91m" << e.what() << ".\033[0;1m\n";
     }
-    
+
 
     // Print success message if files were found
     if (!fileNames.empty()) {
-    
+
         // Stop the timer after completing the mounting process
         auto end_time = std::chrono::high_resolution_clock::now();
         std::cout << "\n";
@@ -873,7 +875,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         std::cout << "\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     }
-    
+
     std::lock_guard<std::mutex> lock(mutex4search);
     if (mode == "bin") {
         // Update the cache by appending fileNames to binImgFilesCache
@@ -882,11 +884,11 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         // Return the combined results
         return binImgFilesCache;
     }
-    
+
     if (mode == "mdf") {
         // Update the cache by appending fileNames to mdfMdsFilesCache
         mdfMdsFilesCache.insert(mdfMdsFilesCache.end(), fileNames.begin(), fileNames.end());
-        
+
         // Return the combined results
         return mdfMdsFilesCache;
     }
@@ -958,10 +960,10 @@ void printFileList(const std::vector<std::string>& fileList) {
     const char* red = "\033[31;1m";
     const char* green = "\033[32;1m";
     const char* orangeBold = "\033[1;38;5;208m";
-    
+
     size_t maxIndex = fileList.size();
     size_t numDigits = std::to_string(maxIndex).length();
-    
+
     std::ostringstream output;
     // Reserve estimated space for the string buffer
     std::string buffer;
@@ -971,10 +973,10 @@ void printFileList(const std::vector<std::string>& fileList) {
     for (size_t i = 0; i < fileList.size(); ++i) {
         const auto& filename = fileList[i];
         auto [directory, fileNameOnly] = extractDirectoryAndFilename(filename);
-        
+
         const size_t dotPos = fileNameOnly.find_last_of('.');
         bool isSpecialExtension = false;
-        
+
         if (dotPos != std::string::npos) {
 			std::string extension = fileNameOnly.substr(dotPos);
 			toLowerInPlace(extension);
@@ -982,8 +984,8 @@ void printFileList(const std::vector<std::string>& fileList) {
 		}
 
         const char* sequenceColor = (i % 2 == 0) ? red : green;
-        
-        output << (isSpecialExtension ? sequenceColor : "") 
+
+        output << (isSpecialExtension ? sequenceColor : "")
                << std::setw(numDigits) << std::right << (i + 1) << ". " << reset << bold;
 
         if (isSpecialExtension) {
@@ -1002,10 +1004,10 @@ void printFileList(const std::vector<std::string>& fileList) {
 // Function to convert a BIN/IMG/MDF file to ISO format
 void convertToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool modeMdf) {
     auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath);
-    
+
     // Check if the input file exists
     if (!std::ifstream(inputPath)) {
-		
+
         std::string failedMessage = "\033[1;91mThe specified input file \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m does not exist.\033[0;1m\n";
         {	std::lock_guard<std::mutex> lowLock(Mutex4Low);
 			failedOuts.insert(failedMessage);
