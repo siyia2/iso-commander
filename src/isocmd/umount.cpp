@@ -220,7 +220,7 @@ void unmountISOs() {
 	std::set<std::string> unmountedErrors;
 	
     const std::string isoPath = "/mnt";
-    bool skipEnter = false, isFiltered = false, noValid = true;
+    bool isFiltered = false, noValid = true;
 
     while (true) {
         // Initialize variables for each loop iteration
@@ -304,7 +304,6 @@ void unmountISOs() {
 				clear_history();
 
 				if (inputFiltered.get()[0] == '\0' || strcmp(inputFiltered.get(), "/") == 0) {
-					skipEnter = false;
 					isFiltered = false;
 					noValid = false;
 					historyPattern = false;
@@ -390,7 +389,6 @@ void unmountISOs() {
 							break;
 						}
 						 if (std::isspace(chosenNumbers.get()[0]) || chosenNumbers.get()[0] == '\0') {
-                            skipEnter = false;
 							isFiltered = false;
 							search=false;
 							noValid = false;
@@ -404,7 +402,6 @@ void unmountISOs() {
                             isFiltered = true;
                             historyPattern = false;
                             search=false;
-                            skipEnter= false;
                             break;
                         }
 
@@ -444,7 +441,6 @@ void unmountISOs() {
 
                         if (!selectedIsoDirsFiltered.empty()) {
                             selectedIsoDirs = selectedIsoDirsFiltered;
-                            skipEnter = false;
                             isFiltered = true;
                             historyPattern = false;
                             break; // Exit filter loop to process unmount
@@ -568,13 +564,12 @@ void unmountISOs() {
 				
 
             // Prompt the user to press Enter to continue
-            if (!skipEnter && verbose) {
+            if (verbose) {
 				std::cout << "\n\n\033[1;32m↵ to continue...";
 				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
             }
             clearScrollBuffer();
-            skipEnter = false;
             isFiltered = false;
         }
     }
