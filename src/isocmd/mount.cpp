@@ -9,37 +9,40 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::st
     std::atomic<bool> isComplete(false);
     unsigned int numThreads = std::min(static_cast<unsigned int>(isoFiles.size()), static_cast<unsigned int>(maxThreads));
     ThreadPool pool(numThreads);
-    
+
     int totalIsos = static_cast<int>(isoFiles.size());
-    
+
     // Calculate chunk size
     size_t chunkSize = (totalIsos + numThreads - 1) / numThreads;
-    
-    // Create progress thread
-    std::thread progressThread(displayProgressBar, std::ref(completedIsos), std::cref(totalIsos), std::ref(isComplete));
-    std::vector<std::future<void>> futures;
-    futures.reserve(100);
-    for (size_t i = 0; i < isoFiles.size(); i += chunkSize) {
-		futures.push_back(pool.enqueue([&isoFiles, &mountedFiles, &skippedMessages, &mountedFails, &completedIsos, i, chunkSize, totalIsos]() {
-			std::vector<std::string> chunkFiles;
-			for (size_t j = i; j < std::min(i + chunkSize, isoFiles.size()); ++j) {
-				chunkFiles.push_back(isoFiles[j]);
-				}
 
-			// Directly call function assuming downstream mutex ensures thread safety
-			mountIsoFiles(chunkFiles, mountedFiles, skippedMessages, mountedFails);
-			completedIsos.fetch_add(chunkFiles.size(), std::memory_order_relaxed);
-		}));
-	}
-    
+    // Create progress thread
+    std::thread progressThread(displayProgressBar, std::ref(completedIsos), totalIsos, std::ref(isComplete));
+    std::vector<std::future<void>> futures;
+    futures.reserve(numThreads);
+
+    for (size_t i = 0; i < isoFiles.size(); i += chunkSize) {
+        futures.push_back(pool.enqueue([&, i, chunkSize]() {
+            std::vector<std::string> chunkFiles;
+            chunkFiles.reserve(chunkSize);
+
+            for (size_t j = i; j < std::min(i + chunkSize, isoFiles.size()); ++j) {
+                chunkFiles.push_back(isoFiles[j]);
+            }
+
+            // Directly call function assuming downstream mutex ensures thread safety
+            mountIsoFiles(chunkFiles, mountedFiles, skippedMessages, mountedFails);
+            completedIsos.fetch_add(chunkFiles.size(), std::memory_order_relaxed);
+        }));
+    }
+
     // Wait for all tasks to complete
     for (auto& future : futures) {
         future.wait();
     }
-    
+
     // Signal completion
     isComplete.store(true);
-    
+
     // Wait for progress thread to finish
     if (progressThread.joinable()) {
         progressThread.join();
@@ -502,18 +505,16 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     activeTaskCount.store((indicesToProcess.size() + chunkSize - 1) / chunkSize, std::memory_order_relaxed);
 
     for (size_t i = 0; i < indicesToProcess.size(); i += chunkSize) {
-		std::vector<std::string> filesToMount;
-		size_t end = std::min(i + chunkSize, indicesToProcess.size());
-		for (size_t j = i; j < end; ++j) {
-			std::string isoFile;
-			{
-				std::lock_guard<std::mutex> lock(Mutex4High);
-				isoFile = isoFiles[indicesToProcess[j] - 1];
-			}
-			filesToMount.push_back(isoFile);
-		}
-		pool.enqueue([&, filesToMount]() { processTask(filesToMount); });
-	}
+        size_t end = std::min(i + chunkSize, indicesToProcess.size());
+        pool.enqueue([&, i, end]() {
+            std::vector<std::string> filesToMount;
+            filesToMount.reserve(end - i);
+            for (size_t j = i; j < end; ++j) {
+                filesToMount.push_back(isoFiles[indicesToProcess[j] - 1]);
+            }
+            processTask(filesToMount);
+        });
+    }
 
     if (!indicesToProcess.empty()) {
         int totalTasksValue = totalTasks.load();
