@@ -98,8 +98,8 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
     // Prompt user to input directory paths
 	std::string prompt = "\001\033[1;92m\002Folder path(s)\001\033[1;94m ↵ to scan for \001\033[1;38;5;208m\002" + fileExtension + 
-                     "\001\033[1;94m files and import into \001\033[1;93m\002RAM\001\033[1;94m\002 cache (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002), \001\033[1;92m\002list \001\033[1;94m\002↵ open cache, " 
-                     "\001\033[1;93m\002clr\001\033[1;94m\002 ↵ clear cache, ↵ return:\n\001\033[0;1m\002";
+                     "\001\033[1;94m files and import into \001\033[1;93m\002RAM\001\033[1;94m\002 cache (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002), \001\033[1;92m\002ls \001\033[1;94m\002↵ open \001\033[1;93m\002RAM\001\033[1;94m\002 cache, " 
+                     "\001\033[1;93m\002clr\001\033[1;94m\002 ↵ clear \001\033[1;93m\002RAM\001\033[1;94m\002 cache, ↵ return:\n\001\033[0;1m\002";
 
 	// Prompt user for input
 	char* rawinput = readline(prompt.c_str());
@@ -110,7 +110,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 	std::string inputSearch(mainSearch.get());
     clearScrollBuffer();
     
-    list = (inputSearch == "list");
+    list = (inputSearch == "ls");
     bool onlySpaces = inputSearch.find_first_not_of(" \t") == std::string::npos;
 
     if (!inputSearch.empty() && inputSearch != "clr" && !list && !onlySpaces) {
