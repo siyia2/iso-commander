@@ -86,17 +86,23 @@ void select_and_mount_files_by_number() {
         
         auto processInput = [&](const std::string& input, const std::vector<std::string>& files) {
             if (input == "00") {
-                clearAndPrintWait();
-                mountAllIsoFiles(files, mountedFiles, skippedMessages, mountedFails);
-            } else if (!input.empty() && input != "/") {
-                clearAndPrintWait();
-                processAndMountIsoFiles(input, files, mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
-            }
+				clearAndPrintWait();
+				mountAllIsoFiles(files, mountedFiles, skippedMessages, mountedFails);
+			} else if (!input.empty() && input.find("00") != std::string::npos) {
+				clearScrollBuffer();
+				std::cout << "\n\033[1;91mNo valid input provided for mount\033[0;1m\n\n";
+                std::cout << "\033[1;32m↵ to continue...\033[0;1m";
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			} else if (!input.empty() && input != "/") {
+				clearAndPrintWait();
+				processAndMountIsoFiles(input, files, mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
+			}
             
             clearScrollBuffer();
             if (verbose) {
                 printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
             } else if (!uniqueErrorMessages.empty() && mountedFiles.empty() && skippedMessages.empty() && mountedFails.empty()) {
+				clearScrollBuffer();
                 std::cout << "\n\033[1;91mNo valid input provided for mount\033[0;1m\n\n";
                 std::cout << "\033[1;32m↵ to continue...\033[0;1m";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
