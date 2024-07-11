@@ -321,9 +321,9 @@ void signalHandler(int signum) {
 }
 
 
-// Function to check if a string consists only of zeros
-bool isAllZeros(const std::string& str) {
-    return str.find_first_not_of('0') == std::string::npos;
+// Function to check if a string starts with '0'
+bool startsWithZero(const std::string& str) {
+    return !str.empty() && str[0] == '0';
 }
 
 
