@@ -337,7 +337,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && std::find(processedIndices.begin(), processedIndices.end(), num) == processedIndices.end()) {
                 processedIndices.push_back(num); // Mark index as processed
             } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
-                uniqueErrorMessages.emplace("\033[1;91mInvalid index '" + std::to_string(num) + "'.\033[0;1m");
+                uniqueErrorMessages.emplace("\033[1;91mInvalid index: '" + std::to_string(num) + "'.\033[0;1m");
             }
         } else {
             uniqueErrorMessages.emplace("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
