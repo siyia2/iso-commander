@@ -140,7 +140,6 @@ void select_and_mount_files_by_number() {
                 clearAndPrintWait();
                 add_history(searchQuery.get());
                 saveHistory();
-                clear_history();
 
                 std::vector<std::string> filteredFiles = filterFiles(isoFiles, inputSearch);
 
