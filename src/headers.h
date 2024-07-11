@@ -89,7 +89,8 @@ bool isAlreadyMounted(const std::string& mountPoint);
 bool isDirectoryEmpty(const std::string& path);
 
 // General functions
-bool isAllZeros(const std::string& str);
+// Function to check if a string starts with '0'
+bool startsWithZero(const std::string& str);
 bool isNumeric(const std::string& str);
 
 
