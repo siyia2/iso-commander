@@ -277,12 +277,7 @@ void unmountISOs() {
 
         // Check if the user wants to filter the list of ISOs
         if (strcmp(input.get(), "/") == 0) {
-			bool breakOuterLoop = false;
             while (search) {
-				if (breakOuterLoop) {
-					historyPattern = false;
-					break;
-				}
                 clearScrollBuffer();
                 isFiltered = true;
                 historyPattern = true;
@@ -393,24 +388,18 @@ void unmountISOs() {
 						if (chosenNumbers.get()[0] == '/') {
 							search = true;
 							break;
-						}
-						
-
-                        if (std::isspace(chosenNumbers.get()[0]) || chosenNumbers.get()[0] == '\0') {
-                            noValid = false;
-                            search = false;
-                            skipEnter = true;
-                            isFiltered = false;
-                            historyPattern = false;
+						} else if (std::isspace(chosenNumbers.get()[0]) || chosenNumbers.get()[0] == '\0') {
+                            skipEnter = false;
+							isFiltered = false;
+							search=false;
+							noValid = false;
+							historyPattern = false;
                             break;
-                        }
-
-                        if (std::strcmp(chosenNumbers.get(), "00") == 0) {
+                        } else if (std::strcmp(chosenNumbers.get(), "00") == 0) {
 							clearScrollBuffer();
 							std::cout << "\033[1mPlease wait...\033[1m" << std::endl;
                             selectedIsoDirs = filteredIsoDirs;
                             isFiltered = true;
-                            breakOuterLoop = true;
                             historyPattern = false;
                             skipEnter= false;
                             break;
