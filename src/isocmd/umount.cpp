@@ -220,7 +220,7 @@ void unmountISOs() {
 	std::set<std::string> unmountedErrors;
 	
     const std::string isoPath = "/mnt";
-    bool isFiltered = false, noValid = true;
+    bool isFiltered = false;
 
     while (true) {
         // Initialize variables for each loop iteration
@@ -305,7 +305,6 @@ void unmountISOs() {
 
 				if (inputFiltered.get()[0] == '\0' || strcmp(inputFiltered.get(), "/") == 0) {
 					isFiltered = false;
-					noValid = false;
 					historyPattern = false;
 					break;
 				}
@@ -391,7 +390,6 @@ void unmountISOs() {
 						 if (std::isspace(chosenNumbers.get()[0]) || chosenNumbers.get()[0] == '\0') {
 							isFiltered = false;
 							search=false;
-							noValid = false;
 							historyPattern = false;
                             break;
                         } 
@@ -467,7 +465,7 @@ void unmountISOs() {
         // Check if the user wants to unmount all ISOs
         if (std::strcmp(input.get(), "00") == 0) {
             selectedIsoDirs = isoDirs;
-        } else if (!isFiltered) {
+        } else if (!isFiltered && !inputString.empty() && inputString != "/") {
             // Parse the user input to determine which ISOs to unmount
             std::set<size_t> selectedIndices;
             std::istringstream iss(inputString);
@@ -503,14 +501,11 @@ void unmountISOs() {
                 }
             } else {
                 clearScrollBuffer();
-                if (noValid) {
-					verbose = false;
-                    std::cerr << "\n\033[1;91mNo valid input provided for umount.\n";
-                    std::cout << "\n\033[1;32m↵ to continue...";
-                    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                }
-                noValid = true;
-            }
+				verbose = false;
+                std::cerr << "\n\033[1;91mNo valid input provided for umount.\n";
+                std::cout << "\n\033[1;32m↵ to continue...";
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			}
         }
 
         // If there are selected ISOs, proceed to unmount them
