@@ -382,7 +382,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 			
 			if (processedIndices.empty()) {
 			clearScrollBuffer();
-			mvDelBreak=false;
 			verbose = false;
 			std::cout << "\n\033[1;91mNo valid input to be " << operationDescription << ".\033[1;91m\n";
 			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
@@ -400,7 +399,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
                     std::cout << "\033[1m" << isoDirectory << "/\033[1;95m" << isoFilename << "\033[0;1m\n";
                 }
             }
-            historyPattern = false;
             // Load history from file
 			loadHistory();
 			userDestDir.clear();
@@ -423,7 +421,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             // Check if the entered path is valid
 			if (isValidLinuxPathFormat(mainInputString) && std::string(mainInputString).back() == '/') {
 				userDestDir = mainInputString;
-				mvDelBreak=true;
 				add_history(input.get());
 				saveHistory();
 				clear_history();
@@ -450,7 +447,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
         if (!uniqueErrorMessages.empty() && indexChunks.empty()) {
 			clearScrollBuffer();
-			mvDelBreak=false;
 			verbose = false;
             std::cout << "\n\033[1;91mNo valid input for deletion.\033[0;1m\n";
         } else {
@@ -464,9 +460,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 				std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 return;
-            } else {
-				mvDelBreak=true;
-			}
+            }
         }
     }
 
