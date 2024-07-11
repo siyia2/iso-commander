@@ -220,7 +220,7 @@ void unmountISOs() {
 	std::set<std::string> unmountedErrors;
 	
     const std::string isoPath = "/mnt";
-    bool isFiltered = false;
+    bool isFiltered = false, noValid = true;
 
     while (true) {
         // Initialize variables for each loop iteration
@@ -305,6 +305,7 @@ void unmountISOs() {
 
 				if (inputFiltered.get()[0] == '\0' || strcmp(inputFiltered.get(), "/") == 0) {
 					isFiltered = false;
+					noValid = false;
 					historyPattern = false;
 					break;
 				}
@@ -337,9 +338,9 @@ void unmountISOs() {
 					size_t start = i * baseDirsPerThread + std::min(i, remainder);
 					size_t end = start + baseDirsPerThread + (i < remainder ? 1 : 0);
 
-					futuresFilter.push_back(std::async(std::launch::async, [&](size_t start, size_t end) {
+					futuresFilter.push_back(std::async(std::launch::async, [&, start, end] {
 						filterMountPoints(isoDirs, filterPatterns, filteredIsoDirs, start, end);
-					}, start, end));
+					}));
 				}
 
 				// Wait for all filter tasks to complete
@@ -390,6 +391,7 @@ void unmountISOs() {
 						 if (std::isspace(chosenNumbers.get()[0]) || chosenNumbers.get()[0] == '\0') {
 							isFiltered = false;
 							search=false;
+							noValid = false;
 							historyPattern = false;
                             break;
                         } 
@@ -501,12 +503,13 @@ void unmountISOs() {
                 }
             } else {
                 clearScrollBuffer();
-                if (selectedIndices.empty()) {
+                if (noValid) {
 					verbose = false;
                     std::cerr << "\n\033[1;91mNo valid input provided for umount.\n";
                     std::cout << "\n\033[1;32m↵ to continue...";
                     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 }
+                noValid = true;
             }
         }
 
@@ -532,10 +535,10 @@ void unmountISOs() {
 			std::thread progressThread(displayProgressBar, std::ref(completedIsos), std::cref(totalIsos), std::ref(isComplete));
 
 			// Enqueue unmount tasks for each batch of ISOs
-			for (const auto& batch : batches) {
+			for (auto& batch : batches) {
 				{
 					std::lock_guard<std::mutex> highLock(Mutex4High);
-					futuresUmount.emplace_back(pool.enqueue([batch, &unmountedFiles, &unmountedErrors, &completedIsos]() {
+					futuresUmount.emplace_back(pool.enqueue([batch = std::move(batch), &unmountedFiles, &unmountedErrors, &completedIsos]() {
 						for (const auto& iso : batch) {
 							unmountISO({iso}, unmountedFiles, unmountedErrors);
 							completedIsos.fetch_add(1, std::memory_order_relaxed);
