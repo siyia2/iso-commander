@@ -220,7 +220,7 @@ void unmountISOs() {
 	std::set<std::string> unmountedErrors;
 	
     const std::string isoPath = "/mnt";
-    bool isFiltered = false, noValid = true;
+    bool isFiltered = false;
 
     while (true) {
         // Initialize variables for each loop iteration
@@ -305,7 +305,6 @@ void unmountISOs() {
 
 				if (inputFiltered.get()[0] == '\0' || strcmp(inputFiltered.get(), "/") == 0) {
 					isFiltered = false;
-					noValid = false;
 					historyPattern = false;
 					break;
 				}
@@ -391,7 +390,6 @@ void unmountISOs() {
 						 if (std::isspace(chosenNumbers.get()[0]) || chosenNumbers.get()[0] == '\0') {
 							isFiltered = false;
 							search=false;
-							noValid = false;
 							historyPattern = false;
                             break;
                         } 
@@ -503,13 +501,12 @@ void unmountISOs() {
                 }
             } else {
                 clearScrollBuffer();
-                if (noValid) {
+                if (selectedIndices.empty()) {
 					verbose = false;
                     std::cerr << "\n\033[1;91mNo valid input provided for umount.\n";
                     std::cout << "\n\033[1;32m↵ to continue...";
                     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 }
-                noValid = true;
             }
         }
 
