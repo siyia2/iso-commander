@@ -551,7 +551,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
         }
 
         if (isMove) {
-            operationCommand += "mv ";
+            operationCommand += "mv -f ";
         } else if (isCopy) {
             operationCommand += "cp --reflink=auto -f ";
         } else if (isDelete) {
