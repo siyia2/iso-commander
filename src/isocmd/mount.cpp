@@ -489,7 +489,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     while (iss >> token) {
         if (token == "/") break;
 
-        if (isAllZeros(token)) {
+        if (startsWithZero(token)) {
             addError("\033[1;91mInvalid index: '0'.\033[0;1m");
             continue;
         }

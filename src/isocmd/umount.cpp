@@ -407,7 +407,7 @@ void unmountISOs() {
                         std::set<size_t> selectedIndices;
                         std::istringstream iss(inputChosenString);
                         for (std::string token; iss >> token;) {
-							if (isAllZeros(token)) {
+							if (startsWithZero(token)) {
 								errorMessages.emplace("\033[1;91mInvalid index: '0'.\033[0;1m");
 								continue;
 							}
@@ -474,7 +474,7 @@ void unmountISOs() {
             std::set<size_t> selectedIndices;
             std::istringstream iss(inputString);
             for (std::string token; iss >> token;) {
-				if (isAllZeros(token)) {
+				if (startsWithZero(token)) {
 					errorMessages.emplace("\033[1;91mInvalid index: '0'.\033[0;1m");
 					continue;
 				}
