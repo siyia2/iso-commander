@@ -433,7 +433,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     std::string tokenCount;
 
     while (issCount >> tokenCount && tokens.size() < maxThreads) {
-    if (tokenCount[0] == '-') continue;
+		if (tokenCount[0] == '-' || startsWithZero(tokenCount)) continue;
 
     // Count the number of hyphens
     size_t hyphenCount = std::count(tokenCount.begin(), tokenCount.end(), '-');
@@ -462,10 +462,10 @@ void processInput(const std::string& input, const std::vector<std::string>& file
                 }
             }
         }
-    } else if (std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
-			int num = std::stoi(tokenCount);
-			if (num > 0 && static_cast<std::vector<std::string>::size_type>(num) <= fileList.size()) {
-				tokens.emplace(tokenCount);
+    } else if (!tokenCount.empty() && std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
+		int num = std::stoi(tokenCount);
+        if (num > 0 && static_cast<std::vector<std::string>::size_type>(num) <= fileList.size()) {
+            tokens.emplace(tokenCount);
 				if (tokens.size() >= maxThreads) {
 					break;
 				}
@@ -511,10 +511,13 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     std::string token;
 
     while (iss >> token) {
+		if (startsWithZero(token)) {
+			processedErrors.emplace("\033[1;91mInvalid index: '0'.\033[0;1m"); 
+			continue; 
+        }
         std::istringstream tokenStream(token);
         int start, end;
         char dash;
-
         if (tokenStream >> start) {
             if (tokenStream >> dash && dash == '-') {
                 if (tokenStream >> end) {
