@@ -274,7 +274,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     }
 
     auto displaySelectedIsos = [&]() {
-        std::cout << "\n\033[1;94mThe following ISO(s) will be " << operationColor << operationDescription << "\033[1;94m" << (isDelete ? ":" : " to ?\033[1;93m" + userDestDir) << "\033[1;94m\033[0;1m\n\n";
+        std::cout << "\n\033[1;94mThe following ISO(s) will be " << operationColor << operationDescription << "\033[1;94m" << (isDelete ? ":" : " to ?:\033[1;93m" + userDestDir) << "\033[1;94m\033[0;1m\n\n";
         for (const auto& chunk : indexChunks) {
             for (const auto& index : chunk) {
                 auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFiles[index - 1]);
