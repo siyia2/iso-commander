@@ -195,15 +195,9 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
 // Function to process either mv or cp indices
 void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages) {
-	
-	// variable for user specified destination
-	std::string userDestDir;
-
-    // Create an input string stream to tokenize the user input
-    std::istringstream iss(input);    
-
-    // Variables for tracking errors, processed indices, and valid indices
-    std::vector<int> processedIndices; // Vector to keep track of processed indices
+    std::string userDestDir;
+    std::istringstream iss(input);
+    std::vector<int> processedIndices;
     processedIndices.reserve(maxThreads);
     
     bool isDelete = (process == "rm");
@@ -211,75 +205,43 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     bool isCopy = (process == "cp");
     std::string operationDescription = isDelete ? "*PERMANENTLY DELETED*" : (isMove ? "*MOVED*" : "*COPIED*");
     
-    // Color code based on the operation
-    std::string operationColor;
-    if (process == "rm") {
-        operationColor = "\033[1;91m"; // Red for 'rm'
-    } else if (process == "cp") {
-        operationColor = "\033[1;92m"; // Green for 'cp'
-    } else {
-        operationColor = "\033[1;93m"; // Yellow for other operations
-    }
+    std::string operationColor = isDelete ? "\033[1;91m" : (isCopy ? "\033[1;92m" : "\033[1;93m");
 
     std::string token;
-
-    // Tokenize the input string
     while (iss >> token) {
-        
-        // Check if the token starts wit zero and treat it as a non-existent index
-        if (startsWithZero(token)) {
-			uniqueErrorMessages.emplace("\033[1;91mInvalid index: '0'.\033[0;1m");
-			continue;  
-        }
-
-        // Check if there is more than one hyphen in the token
-        if (std::count(token.begin(), token.end(), '-') > 1) {
+        if (startsWithZero(token) || std::count(token.begin(), token.end(), '-') > 1) {
             uniqueErrorMessages.emplace("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
             continue;
         }
 
-        // Process ranges specified with hyphens
         size_t dashPos = token.find('-');
         if (dashPos != std::string::npos) {
             int start, end;
-
             try {
-                
                 start = std::stoi(token.substr(0, dashPos));
                 end = std::stoi(token.substr(dashPos + 1));
-            } catch (const std::invalid_argument& e) {
-                // Handle the exception for invalid input
+            } catch (const std::exception& e) {
                 uniqueErrorMessages.emplace("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
-                continue;
-            } catch (const std::out_of_range& e) {
-                // Handle the exception for out-of-range input
-                uniqueErrorMessages.emplace("\033[1;91mInvalid range: '" + token + "'.\033[0;1m");
                 continue;
             }
             
-            // Check for validity of the specified range
-            if ((start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) ||
-                (start == 0 || end == 0)) {
-                uniqueErrorMessages.emplace("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'.\033[0;1m");
+            if (start < 1 || end < 1 || static_cast<size_t>(std::max(start, end)) > isoFiles.size()) {
+                uniqueErrorMessages.emplace("\033[1;91mInvalid range: '" + token + "'.\033[0;1m");
                 continue;
             }
 
-            // Mark indices within the specified range as valid
             int step = (start <= end) ? 1 : -1;
-            for (int i = start; ((start <= end) && (i <= end)) || ((start > end) && (i >= end)); i += step) {
-                if ((i >= 1) && (i <= static_cast<int>(isoFiles.size())) && std::find(processedIndices.begin(), processedIndices.end(), i) == processedIndices.end()) {
-                    processedIndices.push_back(i); // Mark as processed
-                } else if ((i < 1) || (i > static_cast<int>(isoFiles.size()))) {
-                    uniqueErrorMessages.emplace("\033[1;91mInvalid index: '" + std::to_string(i) + "'.\033[0;1m");
+            for (int i = start; ((step > 0 && i <= end) || (step < 0 && i >= end)); i += step) {
+                if (std::find(processedIndices.begin(), processedIndices.end(), i) == processedIndices.end()) {
+                    processedIndices.push_back(i);
                 }
             }
         } else if (isNumeric(token)) {
-            // Process single numeric indices
             int num = std::stoi(token);
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && std::find(processedIndices.begin(), processedIndices.end(), num) == processedIndices.end()) {
-                processedIndices.push_back(num); // Mark index as processed
-            } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
-                uniqueErrorMessages.emplace("\033[1;91mInvalid index: '" + std::to_string(num) + "'.\033[0;1m");
+                processedIndices.push_back(num);
+            } else {
+                uniqueErrorMessages.emplace("\033[1;91mInvalid index: '" + token + "'.\033[0;1m");
             }
         } else {
             uniqueErrorMessages.emplace("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
@@ -288,22 +250,15 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     
     if (!uniqueErrorMessages.empty()) {
         std::cout << "\n";
-    }
-
-    // Display unique errors at the end
-    if (!uniqueErrorMessages.empty()) {
         for (const auto& errorMsg : uniqueErrorMessages) {
             std::cerr << "\033[1;93m" << errorMsg << "\033[0;1m\n";
         }
-    }
-
-    if (!uniqueErrorMessages.empty() && !processedIndices.empty()) {
-        std::cout << "\n";
+        if (!processedIndices.empty()) std::cout << "\n";
     }
 
     if (processedIndices.empty()) {
-		clearScrollBuffer();
-		mvDelBreak=false;
+        clearScrollBuffer();
+        mvDelBreak = false;
         std::cout << "\n\033[1;91mNo valid input to be " << operationDescription << ".\033[1;91m\n";
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -318,158 +273,117 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         indexChunks.emplace_back(processedIndices.begin() + i, std::min(processedIndices.begin() + i + chunkSize, processedIndices.end()));
     }
 
-    if (!isDelete) {
-        while (true) {
-			clearScrollBuffer();
-			
-			if (processedIndices.empty()) {
-			clearScrollBuffer();
-			verbose = false;
-			std::cout << "\n\033[1;91mNo valid input to be " << operationDescription << ".\033[1;91m\n";
-			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            clear_history();
-            return;
-			}
-				
-
-            // Display selected operations
-            std::cout << "\n\033[1;94mThe following ISO(s) will be " << operationColor + operationDescription << " \033[1;94mto ?\033[1;93m" << userDestDir << "\033[1;94m:\n\033[0;1m\n";
-            for (const auto& chunk : indexChunks) {
-                for (const auto& index : chunk) {
-                    auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFiles[index - 1]);
-                    std::cout << "\033[1m" << isoDirectory << "/\033[1;95m" << isoFilename << "\033[0;1m\n";
-                }
-            }
-            historyPattern= false;
-            // Load history from file
-			loadHistory();
-			userDestDir.clear();
-
-            // Ask for the destination directory
-            std::string prompt = "\n\001\033[1;92m\002Destination directory\001\033[1;94m\002 ↵ for selected ISO(s) to be " + operationColor + operationDescription + "\001\033[1;94m\002 into, or ↵ to abort:\n\001\033[0;1m\002";
-            
-			// Use std::unique_ptr to manage memory for input
-			std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
-		
-			std::string mainInputString(input.get());
-
-            // Check if the user canceled
-            if (input.get()[0] == '\0') {
-				mvDelBreak=false;
-				clear_history();
-                return;
-            }
-
-            // Check if the entered path is valid
-			if (isValidLinuxPathFormat(mainInputString) && std::string(mainInputString).back() == '/') {
-				userDestDir = mainInputString;
-				add_history(input.get());
-				saveHistory();
-				clear_history();
-				break;
-			} else if (isValidLinuxPathFormat(mainInputString) && std::string(mainInputString).back() != '/') {
-				std::cout << "\n\033[1;91mThe path must end with \033[0;1m'/'\033[1;91m.\033[0;1m\n";
-			} else {
-				std::cout << "\n\033[1;91mInvalid paths and/or multiple paths are excluded from \033[1;92mcp\033[1;91m and \033[1;93mmv\033[1;91m operations.\033[0;1m\n";
-			}
-
-			std::cout << "\n\033[1;32m↵ to try again...\033[0;1m";
-			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-		}
-    } else {
-		clearScrollBuffer();	
-		
-        std::cout << "\n\033[1;94mThe following ISO(s) will be "<< operationColor + operationDescription << "\033[1;94m:\n\033[0;1m\n";
+    auto displaySelectedIsos = [&]() {
+        std::cout << "\n\033[1;94mThe following ISO(s) will be " << operationColor << operationDescription << "\033[1;94m" << (isDelete ? ":" : " to ?\033[1;93m" + userDestDir) << "\033[1;94m\033[0;1m\n\n";
         for (const auto& chunk : indexChunks) {
             for (const auto& index : chunk) {
                 auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFiles[index - 1]);
-                std::cout << "\033[1;93m'" << isoDirectory << "/" << isoFilename << "'\033[0;1m\n";
+                std::cout << "\033[1m" << isoDirectory << "/\033[1;95m" << isoFilename << "\033[0;1m\n";
             }
         }
+    };
 
-        if (!uniqueErrorMessages.empty() && indexChunks.empty()) {
-			clearScrollBuffer();
-			verbose = false;
-            std::cout << "\n\033[1;91mNo valid input for deletion.\033[0;1m\n";
-        } else {
-            std::string confirmation;
-            std::cout << "\n\033[1;94mThe selected ISO(s) will be \033[1;91m*PERMANENTLY DELETED FROM DISK*\033[1;94m. Proceed? (y/n):\033[0;1m ";
-            std::getline(std::cin, confirmation);
+    if (!isDelete) {
+        while (true) {
+            clearScrollBuffer();
+            displaySelectedIsos();
+            historyPattern = false;
+            loadHistory();
+            userDestDir.clear();
 
-            if (!(confirmation == "y" || confirmation == "Y")) {
-				mvDelBreak=false;
-                std::cout << "\n\033[1;93mDelete operation aborted by user.\033[0;1m\n";
-				std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            std::string prompt = "\n\001\033[1;92m\002Destination directory\001\033[1;94m\002 ↵ for selected ISO(s) to be " + operationColor + operationDescription + "\001\033[1;94m\002 into, or ↵ to abort:\n\001\033[0;1m\002";
+            std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
+            std::string mainInputString(input.get());
+
+            if (mainInputString.empty()) {
+                mvDelBreak = false;
+                clear_history();
                 return;
+            }
+
+            if (isValidLinuxPathFormat(mainInputString)) {
+                if (mainInputString.back() == '/') {
+                    userDestDir = mainInputString;
+                    add_history(input.get());
+                    saveHistory();
+                    clear_history();
+                    break;
+                } else {
+                    std::cout << "\n\033[1;91mThe path must end with \033[0;1m'/'\033[1;91m.\033[0;1m\n";
+                }
             } else {
-				mvDelBreak=true;
-			}
+                std::cout << "\n\033[1;91mInvalid paths and/or multiple paths are excluded from \033[1;92mcp\033[1;91m and \033[1;93mmv\033[1;91m operations.\033[0;1m\n";
+            }
+
+            std::cout << "\n\033[1;32m↵ to try again...\033[0;1m";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        }
+    } else {
+        clearScrollBuffer();
+        displaySelectedIsos();
+
+        std::string confirmation;
+        std::cout << "\n\033[1;94mThe selected ISO(s) will be \033[1;91m*PERMANENTLY DELETED FROM DISK*\033[1;94m. Proceed? (y/n):\033[0;1m ";
+        std::getline(std::cin, confirmation);
+
+        if (!(confirmation == "y" || confirmation == "Y")) {
+            mvDelBreak = false;
+            std::cout << "\n\033[1;93mDelete operation aborted by user.\033[0;1m\n";
+            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            return;
+        }
+        mvDelBreak = true;
+    }
+
+    clearScrollBuffer();
+    std::cout << "\033[1mPlease wait...\033[1m\n";
+    
+    std::atomic<int> totalTasks(static_cast<int>(processedIndices.size()));
+    std::atomic<int> completedTasks(0);
+    std::atomic<bool> isProcessingComplete(false);
+
+    int totalTasksValue = totalTasks.load();
+    std::thread progressThread(displayProgressBar, std::ref(completedTasks), std::cref(totalTasksValue), std::ref(isProcessingComplete));
+
+    ThreadPool pool(numThreads);
+    std::vector<std::future<void>> futures;
+    futures.reserve(numThreads);
+
+    for (const auto& chunk : indexChunks) {
+        std::vector<std::string> isoFilesInChunk;
+        isoFilesInChunk.reserve(chunk.size());
+        for (const auto& index : chunk) {
+            isoFilesInChunk.push_back(isoFiles[index - 1]);
+        }
+
+        {
+            std::lock_guard<std::mutex> highLock(Mutex4High);
+            futures.emplace_back(pool.enqueue([isoFilesInChunk = std::move(isoFilesInChunk), &isoFiles, &operationIsos, &operationErrors, &userDestDir, isMove, isCopy, isDelete, &completedTasks]() {
+                handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors, userDestDir, isMove, isCopy, isDelete);
+                completedTasks.fetch_add(static_cast<int>(isoFilesInChunk.size()), std::memory_order_relaxed);
+            }));
         }
     }
 
-	// auto start_time = std::chrono::high_resolution_clock::now();
-	clearScrollBuffer();
-    std::cout << "\033[1mPlease wait...\033[1m\n";
+    for (auto& future : futures) {
+        future.wait();
+    }
+
+    isProcessingComplete.store(true);
+    progressThread.join();
     
-	// Add progress tracking
-	std::atomic<int> totalTasks(0);
-	std::atomic<int> completedTasks(0);
-	std::mutex progressMutex;
-	std::atomic<bool> isProcessingComplete(false);
-
-	// Set total number of tasks
-	totalTasks.store(static_cast<int>(processedIndices.size()));
-
-	// Create a non-atomic int to hold the total tasks value
-	int totalTasksValue = totalTasks.load();
-
-	// Start the progress bar in a separate thread
-	std::thread progressThread(displayProgressBar, std::ref(completedTasks), std::cref(totalTasksValue), std::ref(isProcessingComplete));
-
-	ThreadPool pool(numThreads);
-	std::vector<std::future<void>> futures;
-	futures.reserve(numThreads);
-
-	for (const auto& chunk : indexChunks) {
-		// Prepare the chunk of ISO files
-		std::vector<std::string> isoFilesInChunk;
-		isoFilesInChunk.reserve(chunk.size());
-		for (const auto& index : chunk) {
-			isoFilesInChunk.push_back(isoFiles[index - 1]);
-		}
-
-		{
-			std::lock_guard<std::mutex> highLock(Mutex4High);
-			futures.emplace_back(pool.enqueue([isoFilesInChunk = std::move(isoFilesInChunk), &isoFiles, &operationIsos, &operationErrors, &userDestDir, isMove, isCopy, isDelete, &completedTasks]() {
-				handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors, userDestDir, isMove, isCopy, isDelete);
-				// Update progress
-				completedTasks.fetch_add(static_cast<int>(isoFilesInChunk.size()), std::memory_order_relaxed);
-			}));
-		}
-	}
-
-
-	for (auto& future : futures) {
-		future.wait();
-	}
-
-	// Signal that processing is complete and wait for the progress thread to finish
-	isProcessingComplete.store(true);
-	progressThread.join();
-    
-	if (!isDelete) {
-		promptFlag = false;
-		maxDepth = 0;   
-		manualRefreshCache(userDestDir);
-	}
-		
+    if (!isDelete) {
+        promptFlag = false;
+        maxDepth = 0;   
+        manualRefreshCache(userDestDir);
+    }
+        
     clear_history();
     userDestDir.clear();
-        
     maxDepth = -1;
 }
+
 
 // Function to check if directory exists
 bool directoryExists(const std::string& path) {
