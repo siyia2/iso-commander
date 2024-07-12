@@ -103,13 +103,11 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 	// Set to hold invalid paths for search
 	std::set<std::string> invalidDirectoryPaths;
 
-    bool modeMdf;
-    bool clr = false;
-
     std::string fileExtension;
     std::string fileTypeName;
     std::string fileType = fileTypeChoice;
-
+	
+	bool modeMdf;
 
     // Determine file extension and type name based on user input
     if (fileType == "bin" || fileType == "img") {
@@ -127,8 +125,9 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     }
 
     
-    bool list = false;
 	while (true) {
+		bool list = false;
+		bool clr = false;
 		successOuts.clear();   // Clear the set of success messages
 		skippedOuts.clear();   // Clear the set of skipped messages
 		failedOuts.clear();		// Clear the set of failed messages
@@ -307,7 +306,6 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 			// Check if user wants to return
 			if (std::isspace(input.get()[0]) || input.get()[0] == '\0') {
 				clearScrollBuffer();
-				list = false;
 				break;
 			}
 				bool isFiltered = false;
