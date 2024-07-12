@@ -7,7 +7,7 @@ static std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles h
 
 // Boolean flags for verbose beautification
 bool gapSet = true;
-bool gapFlag= false;
+bool gapUniqueErrors = false;
 
 // GENERAL
 
@@ -51,7 +51,7 @@ void verboseConversion(std::set<std::string>& processedErrors, std::set<std::str
 // Function to print invalid directory paths from search
 void verboseFind(std::set<std::string>& invalidDirectoryPaths) {
 	if (!invalidDirectoryPaths.empty()) {
-		if ((gapFlag && gapSet)) {
+		if (gapSet) {
 			std::cout << "\n";
 		}
 		if (gapSet) {
@@ -71,6 +71,7 @@ void verboseFind(std::set<std::string>& invalidDirectoryPaths) {
             std::cerr << " ";
         }
     }	
+		
 		std::cerr << "\033[0;1m.\n"; // Print a newline at the end
 		invalidDirectoryPaths.clear();
 	}
@@ -190,7 +191,13 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
             std::cout << "\n";
             verboseFind(invalidDirectoryPaths);
             auto end_time = std::chrono::high_resolution_clock::now();
-            std::cout << "\n\033[1;91mNo new " << fileExtension << " file(s) over 5MB found. \033[1;92m" << files.size() << " file(s) are cached in RAM from previous searches.\033[0;1m\n\n";
+            if (gapSet) {
+				std::cout << "\n";
+			}
+			if (gapUniqueErrors && !gapSet) {
+				std::cout << "\n";
+			}
+            std::cout << "\033[1;91mNo new " << fileExtension << " file(s) over 5MB found. \033[1;92m" << files.size() << " file(s) are cached in RAM from previous searches.\033[0;1m\n\n";
             auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
             std::cout << "\033[1mTime Elapsed: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n\n";
             std::cout << "\033[1;32m↵ to continue...\033[0;1m";
@@ -201,7 +208,13 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
             std::cout << "\n";
             verboseFind(invalidDirectoryPaths);
             auto end_time = std::chrono::high_resolution_clock::now();
-            std::cout << "\n\033[1;91mNo " << fileExtension << " file(s) over 5MB found in the specified path(s) or cached in RAM.\n\033[0;1m\n";
+            if (gapSet) {
+				std::cout << "\n";
+			}
+			if (gapUniqueErrors && !gapSet) {
+				std::cout << "\n";
+			}
+            std::cout << "\033[1;91mNo " << fileExtension << " file(s) over 5MB found in the specified path(s) or cached in RAM.\n\033[0;1m\n";
             auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
             std::cout << "\033[1mTime Elapsed: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n\n";
             std::cout << "\033[1;32m↵ to continue...\033[0;1m";
@@ -550,7 +563,6 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
 				}
 			} catch (const std::filesystem::filesystem_error& e) {
 				std::string exception = "\033[1;91mError accessing path: " + path + " - " + e.what() + "\033[0;1m";
-				gapFlag = false;
 				gapSet = false;
 				processedErrors.insert(exception);
 				uniqueInvalidPaths.insert(path);
@@ -708,7 +720,9 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
        // std::cerr << "\033[1;91m" << e.what() << ".\033[0;1m\n";
     }
 
-
+	if (!uniqueInvalidPaths.empty()) {
+		gapUniqueErrors = true;
+	}
     // Print success message if files were found
     if (!fileNames.empty()) {
 
@@ -717,11 +731,23 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
 			std::cout << "\n";
         if (mode == "bin") {
 			verboseFind(invalidDirectoryPaths);
-			std::cout << "\n\033[1;92mFound " << fileNames.size() << " matching file(s)" << ".\033[1;93m " << binImgFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0;1m\n";
+			if (gapSet) {
+				std::cout << "\n";
+			}
+			if (!uniqueInvalidPaths.empty() && !gapSet) {
+				std::cout << "\n";
+			}
+			std::cout << "\033[1;92mFound " << fileNames.size() << " matching file(s)" << ".\033[1;93m " << binImgFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0;1m\n";
 		} else {
 			
 			verboseFind(invalidDirectoryPaths);
-			std::cout << "\n\033[1;92mFound " << fileNames.size() << " matching file(s)" << ".\033[1;93m " << mdfMdsFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0;1m\n";
+			if (gapSet) {
+				std::cout << "\n";
+			}
+			if (!uniqueInvalidPaths.empty() && !gapSet) {
+				std::cout << "\n";
+			}
+			std::cout << "\033[1;92mFound " << fileNames.size() << " matching file(s)" << ".\033[1;93m " << mdfMdsFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0;1m\n";
 		}
         // Calculate and print the elapsed time
 		std::cout << "\n";
