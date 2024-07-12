@@ -216,13 +216,13 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 			files = findFiles(directoryPaths, "bin", [&](const std::string&, const std::string&) {
 				modeMdf = false;
 				newFilesFound = true;
-			}, invalidDirectoryPaths, processedErrors);
+			}, invalidDirectoryPaths, processedErrors, list);
 
 		} else if (fileType == "mdf") {
 			files = findFiles(directoryPaths, "mdf", [&](const std::string&, const std::string&) {
 				modeMdf = true;
 				newFilesFound = true;
-			}, invalidDirectoryPaths, processedErrors);
+			}, invalidDirectoryPaths, processedErrors, list);
 		}
 
 		// Display message if no new files are found
@@ -611,24 +611,24 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 
 
 // Function to search for .bin and .img files over 5MB
-std::vector<std::string> findFiles(const std::vector<std::string>& paths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrors) {
-    // Vector to store cached invalid paths
-    static std::vector<std::string> cachedInvalidPaths;
+std::vector<std::string> findFiles(const std::vector<std::string>& paths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrors, bool list) {
+	
 
     // Vector to store permission errors
     std::set<std::string> uniqueInvalidPaths;
-
-    // Static variables to cache results for reuse
-    static std::vector<std::string> binImgFilesCache;
-
-    // Static variables to cache results for reuse
-    static std::vector<std::string> mdfMdsFilesCache;
 
     // Set to store processed paths
     static std::vector<std::string> processedPathsMdf;
 
     // Set to store processed paths
     static std::vector<std::string> processedPathsBin;
+    
+    // Return early if list mode is enabled
+    if (list && mode == "bin") {
+		return binImgFilesCache;
+	} else if (list && mode == "mdf") {
+		return mdfMdsFilesCache;
+	}
 
     // Check if the paths vector has only one element and it is "clr"
     if (paths.size() == 1 && paths[0] == "clr") {
