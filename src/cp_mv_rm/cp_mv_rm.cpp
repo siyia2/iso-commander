@@ -111,7 +111,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
         printIsoFileList(isFiltered ? filteredFiles : isoFiles);
 
-        std::string prompt = std::string(isFiltered ? "\n\n\001\033[1;92m\002Filtered ISO(s)" : "\n\n\001\033[1;92m\002ISO(s)")
+        std::string prompt = std::string(isFiltered ? "\n\n\001\033[1;92m\002Filtered ISO" : "\n\n\001\033[1;92m\002ISO")
             + "\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation 
             + "\001\033[1;94m\002 (e.g., 1-3,1 5), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
 
