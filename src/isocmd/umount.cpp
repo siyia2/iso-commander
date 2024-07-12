@@ -349,7 +349,7 @@ void unmountISOs() {
 
             if (inputString == "00") {
                 selectedIsoDirs = currentDirs;
-            } else if (!isFiltered && !inputString.empty() && inputString != "/") {
+            } else {
                 std::set<size_t> selectedIndices;
                 std::istringstream iss(inputString);
                 for (std::string token; iss >> token;) {
