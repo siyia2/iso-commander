@@ -261,7 +261,7 @@ void unmountISOs() {
             return;
         }
 
-        std::string prompt = std::string(isFiltered ? "\n\033[1;92mFiltered ISO(s)" : "\n\033[1;92mISO(s)")
+        std::string prompt = std::string(isFiltered ? "\n\033[1;92mFiltered ISO" : "\n\033[1;92mISO")
             + "\033[1;94m ↵ for \033[1;93mumount\033[1;94m (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\033[0;1m ";
 
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
