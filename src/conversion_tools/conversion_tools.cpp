@@ -102,6 +102,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     while (true) {
         bool list = false, clr = false;
         successOuts.clear(); skippedOuts.clear(); failedOuts.clear(); deletedOuts.clear(); processedErrors.clear();
+        historyPattern = false;
         loadHistory();
 
         std::string prompt = "\001\033[1;92m\002Folder path(s)\001\033[1;94m ↵ to scan for \001\033[1;38;5;208m\002" + fileExtension +
@@ -305,6 +306,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
                             if (std::isspace(filterInput.get()[0]) || filterInput.get()[0] == '\0') {
 								search = false;
+								historyPattern =false;
                                 break;
                             }
 
