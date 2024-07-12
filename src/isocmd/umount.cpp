@@ -281,6 +281,7 @@ void unmountISOs() {
         } else if (inputString == "/") {
             historyPattern = true;
             loadHistory();
+            inputString.clear();
 
             while (true) {
                 clearScrollBuffer();
@@ -348,7 +349,7 @@ void unmountISOs() {
 
             if (inputString == "00") {
                 selectedIsoDirs = currentDirs;
-            } else {
+            } else if (!isFiltered && !inputString.empty() && inputString != "/") {
                 std::set<size_t> selectedIndices;
                 std::istringstream iss(inputString);
                 for (std::string token; iss >> token;) {
