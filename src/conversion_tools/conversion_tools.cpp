@@ -51,7 +51,11 @@ void verboseConversion(std::set<std::string>& processedErrors, std::set<std::str
 // Function to print invalid directory paths from search
 void verboseFind(std::set<std::string>& invalidDirectoryPaths) {
 	if (!invalidDirectoryPaths.empty()) {
+		if (gapSet) {
+			std::cout << "\n";
+		}
 		std::cout << "\033[0;1mInvalid path(s) omitted from search: \033[1:91m";
+		
 		for (auto it = invalidDirectoryPaths.begin(); it != invalidDirectoryPaths.end(); ++it) {
         if (it == invalidDirectoryPaths.begin()) {
             std::cerr << "\033[31m'"; // Red color for the first quote
@@ -188,7 +192,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
             if (gapSet) {
 				std::cout << "\n";
 			}
-			if (gapUniqueErrors && !gapSet) {
+			if (!gapSet) {
 				std::cout << "\n";
 			}
             std::cout << "\033[1;91mNo new " << fileExtension << " file(s) over 5MB found. \033[1;92m" << files.size() << " file(s) are cached in RAM from previous searches.\033[0;1m\n\n";
@@ -540,6 +544,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                 }
             }
         } catch (const std::filesystem::filesystem_error& e) {
+			gapSet = false;
             std::string errorMessage = "Error accessing path: " + path + " - " + e.what();
             processedErrors.insert(errorMessage);
             invalidPaths.insert(path);
