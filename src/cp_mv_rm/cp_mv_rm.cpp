@@ -549,6 +549,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     userDestDir.clear();
     uniqueErrorMessages.clear();
     clear_history();
+    verbose = false;
         
     maxDepth = -1;
     if (verbose) {
