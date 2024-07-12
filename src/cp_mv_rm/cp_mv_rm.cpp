@@ -38,7 +38,7 @@ bool isValidLinuxPathFormat(const std::string& path) {
 
 
 // Print verbose output for cp_mv_rm
-void verbose_cp_mv_rm(std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages) {
+void verbose_cp_mv_rm(std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages , bool& verbose) {
     clearScrollBuffer();
     
     if (!operationIsos.empty()) {
@@ -67,7 +67,7 @@ void verbose_cp_mv_rm(std::set<std::string>& operationIsos, std::set<std::string
     operationIsos.clear();
     operationErrors.clear();
     uniqueErrorMessages.clear();
-    
+	verbose = false;
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
@@ -174,7 +174,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
             processOperationInput(inputString, currentFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
             
             if (verbose) {
-                verbose_cp_mv_rm(operationIsos, operationErrors, uniqueErrorMessages);
+                verbose_cp_mv_rm(operationIsos, operationErrors, uniqueErrorMessages, verbose);
             }
             
             if (process !="cp" && isFiltered && mvDelBreak) {
