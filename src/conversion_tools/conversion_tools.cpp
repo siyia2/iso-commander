@@ -224,13 +224,19 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         while (true) {
             successOuts.clear(); skippedOuts.clear(); failedOuts.clear(); deletedOuts.clear(); processedErrors.clear();
 
-            if (files.empty()) {
+            if (binImgFilesCache.empty() && !modeMdf) {
                 std::cout << "\n\033[1;93mNo " << fileExtension << " files stored in RAM cache for potential conversions.\033[1m\n";
                 std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 clearScrollBuffer();
                 break;
-            }
+            } else if (mdfMdsFilesCache.empty() && modeMdf) {
+                std::cout << "\n\033[1;93mNo " << fileExtension << " files stored in RAM cache for potential conversions.\033[1m\n";
+                std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                clearScrollBuffer();
+                break;
+			}
 
             clearScrollBuffer();
             std::cout << "\033[92;1m// SUCCESSFUL CONVERSIONS ARE AUTOMATICALLY IMPORTED INTO ISO CACHE //\033[0;1m\033[0;1m\n\n";
