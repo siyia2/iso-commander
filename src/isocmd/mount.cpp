@@ -60,6 +60,7 @@ void select_and_mount_files_by_number() {
     while (true) {
         removeNonExistentPathsFromCache();
         loadCache(isoFiles);
+        		clearScrollBuffer();
 
         if (isoFiles.empty()) {
             clearScrollBuffer();
@@ -74,14 +75,12 @@ void select_and_mount_files_by_number() {
         skippedMessages.clear();
         mountedFails.clear();
         uniqueErrorMessages.clear();
-        clearScrollBuffer();
 
         if (!isFiltered) {
             std::cout << "\033[1;93m! IF EXPECTED ISO FILES ARE NOT ON THE LIST IMPORT THEM FROM THE MAIN MENU OPTIONS !\033[0;1m\n";
         } else {
             std::cout << "\033[0;1mFiltered results:\033[0;1m\n";
         }
-
         printIsoFileList(isFiltered ? filteredFiles : isoFiles);
 
         std::string prompt = std::string(isFiltered ? "\n\n\001\033[1;92m\002Filtered ISO(s)" : "\n\n\001\033[1;92m\002ISO(s)")
