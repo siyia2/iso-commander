@@ -525,13 +525,6 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
 
     // Vector to store permission errors
     std::set<std::string> uniqueInvalidPaths;
-
-    // Set to store processed paths
-    std::vector<std::string> processedPathsMdf;
-
-    // Set to store processed paths
-    std::vector<std::string> processedPathsBin;
-    
     
     // Return early if list mode is enabled
     if (list && mode == "bin") {
@@ -590,17 +583,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
 
         // Iterate through input paths
 		for (const auto& path : paths) {
-			if (mode == "bin") {
-				// Check if the path has already been processed in "bin" mode
-				if (std::find(processedPathsBin.begin(), processedPathsBin.end(), path) != processedPathsBin.end()) {
-					continue; // Skip already processed paths
-				}
-			} else if (mode == "mdf") {
-				// Check if the path has already been processed in "mdf" mode
-				if (std::find(processedPathsMdf.begin(), processedPathsMdf.end(), path) != processedPathsMdf.end()) {
-					continue; // Skip already processed paths
-				}
-			}
+			
 
             try {
                 // Use a lambda function to process files asynchronously
@@ -655,7 +638,6 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                                 }
                             }
                         }
-                        processedPathsBin.push_back(path);
                     }
                 } else {
                     blacklistMdf = true;
@@ -700,9 +682,6 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                             future.get();
                         }
                     }
-
-                    // Add the processed path to the set
-                    processedPathsMdf.push_back(path);
                 }
             } catch (const std::filesystem::filesystem_error& e) {
                 std::lock_guard<std::mutex> lock(mutex4search);
