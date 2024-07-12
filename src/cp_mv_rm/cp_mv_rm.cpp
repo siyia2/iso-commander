@@ -73,7 +73,6 @@ void verbose_cp_mv_rm(std::set<std::string>& operationIsos, std::set<std::string
 }
 
 
-
 // Main function to select and operate on files by number
 void select_and_operate_files_by_number(const std::string& operation) {
     std::set<std::string> operationIsos, operationErrors, uniqueErrorMessages;
@@ -107,7 +106,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
             std::cout << "\033[1;93m! IF EXPECTED ISO FILES ARE NOT ON THE LIST IMPORT THEM FROM THE MAIN MENU OPTIONS !\033[0;1m\n";
             std::cout << "\033[92;1m                  // CHANGES ARE REFLECTED AUTOMATICALLY //\033[0;1m\n";
         } else {
-            std::cout << "\033[0;1mFiltered results\033[0;1m\n";
+            std::cout << "\033[0;1mFiltered results:\033[0;1m\n";
         }
 
         printIsoFileList(isFiltered ? filteredFiles : isoFiles);
@@ -171,10 +170,17 @@ void select_and_operate_files_by_number(const std::string& operation) {
             clear_history();
         } else {
             std::vector<std::string>& currentFiles = isFiltered ? filteredFiles : isoFiles;
+            
             processOperationInput(inputString, currentFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
+            
             if (verbose) {
                 verbose_cp_mv_rm(operationIsos, operationErrors, uniqueErrorMessages, verbose);
             }
+            
+            if (process !="cp" && isFiltered && mvDelBreak) {
+				historyPattern = false;
+				isFiltered =false;
+			}
 
             if (currentFiles.empty()) {
                 std::cout << "\n\033[1;93mNo ISO(s) available for " << operation << ".\033[0m\n\n";
@@ -264,7 +270,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
                 if ((i >= 1) && (i <= static_cast<int>(isoFiles.size())) && std::find(processedIndices.begin(), processedIndices.end(), i) == processedIndices.end()) {
                     processedIndices.push_back(i); // Mark as processed
                 } else if ((i < 1) || (i > static_cast<int>(isoFiles.size()))) {
-                    uniqueErrorMessages.emplace("\033[1;91mInvalid index '" + std::to_string(i) + "'.\033[0;1m");
+                    uniqueErrorMessages.emplace("\033[1;91mInvalid index: '" + std::to_string(i) + "'.\033[0;1m");
                 }
             }
         } else if (isNumeric(token)) {
@@ -397,7 +403,9 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 				std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 return;
-            }
+            } else {
+				mvDelBreak=true;
+			}
         }
     }
 
