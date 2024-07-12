@@ -15,6 +15,7 @@ bool fileExists(const std::string& fullPath) {
         return std::filesystem::exists(fullPath);
 }
 
+
 // Function to print verbose conversion messages
 void verboseConversion(std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts) {
     // Lambda function to print each element in a set followed by a newline
