@@ -56,15 +56,11 @@ void select_and_mount_files_by_number() {
     std::vector<std::string> isoFiles, filteredFiles;
     isoFiles.reserve(100);
     bool isFiltered = false;
-
+    
     while (true) {
-        mountedFiles.clear();
-        skippedMessages.clear();
-        mountedFails.clear();
-        uniqueErrorMessages.clear();
         removeNonExistentPathsFromCache();
         loadCache(isoFiles);
-        
+
         if (isoFiles.empty()) {
             clearScrollBuffer();
             std::cout << "\n\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n \n\033[1;32m↵ to continue...\033[0;1m";
@@ -73,81 +69,89 @@ void select_and_mount_files_by_number() {
         }
         
         sortFilesCaseInsensitive(isoFiles);
-        
-        while (true) {
-            clearScrollBuffer();
+
+        mountedFiles.clear();
+        skippedMessages.clear();
+        mountedFails.clear();
+        uniqueErrorMessages.clear();
+        clearScrollBuffer();
+
+        if (!isFiltered) {
             std::cout << "\033[1;93m! IF EXPECTED ISO FILES ARE NOT ON THE LIST IMPORT THEM FROM THE MAIN MENU OPTIONS !\033[0;1m\n";
-            printIsoFileList(isFiltered ? filteredFiles : isoFiles);
-            
-            std::string prompt = std::string(isFiltered ? "\n\n\001\033[1;92m\002Filtered ISO(s)" : "\n\n\001\033[1;92m\002ISO(s)")
-                + "\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+        } else {
+            std::cout << "\033[0;1mFiltered results:\033[0;1m\n";
+        }
 
-            std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
-            std::string inputString(input.get());
+        printIsoFileList(isFiltered ? filteredFiles : isoFiles);
 
-            clearScrollBuffer();
-            if (!inputString.empty() && inputString != "/") {
+        std::string prompt = std::string(isFiltered ? "\n\n\001\033[1;92m\002Filtered ISO(s)" : "\n\n\001\033[1;92m\002ISO(s)")
+            + "\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+
+        std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
+        std::string inputString(input.get());
+
+        clearScrollBuffer();
+        if (!inputString.empty() && inputString != "/") {
+            std::cout << "\033[1mPlease wait...\033[1m\n";
+        }
+
+        if (inputString.empty()) {
+            if (isFiltered) {
+                isFiltered = false;
+                continue;  // Return to the original list
+            } else {
+                return;  // Exit the function only if we're already on the original list
+            }
+        } else if (inputString == "/") {
+            historyPattern = true;
+            loadHistory();
+
+            while (true) {
+                clearScrollBuffer();
+                std::string filterPrompt = "\n\001\033[1;92m\002Term(s)\001\033[1;94m\002 ↵ to filter \001\033[1;92m\002mount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
+                std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
+                
+                if (!searchQuery || searchQuery.get()[0] == '\0') {
+                    historyPattern = false;
+                    isFiltered = false;
+                    break;
+                }
+
+                std::string inputSearch(searchQuery.get());
+                clearScrollBuffer();
                 std::cout << "\033[1mPlease wait...\033[1m\n";
+                
+                if (strcmp(searchQuery.get(), "/") != 0) {
+                    add_history(searchQuery.get());
+                    saveHistory();
+                }
+                
+                filteredFiles = filterFiles(isoFiles, inputSearch);
+
+                if (filteredFiles.empty()) {
+                    clearScrollBuffer();
+                    std::cout << "\n\033[1;91mNo matches found.\033[0;1m\n\n\033[1;32m↵ to continue...\033[0;1m";
+                    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                } else {
+                    isFiltered = true;
+                    break;
+                }
+            }
+            clear_history();
+        } else {
+            std::vector<std::string>& currentFiles = isFiltered ? filteredFiles : isoFiles;
+            if (inputString == "00") {
+                mountAllIsoFiles(currentFiles, mountedFiles, skippedMessages, mountedFails);
+            } else {
+                processAndMountIsoFiles(inputString, currentFiles, mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
             }
 
-            if (inputString.empty()) {
-                if (isFiltered) {
-                    isFiltered = false;
-                    continue;  // Return to the original list
-                } else {
-                    return;  // Exit the function only if we're already on the original list
-                }
-            } else if (inputString == "/") {
-                historyPattern = true;
-                loadHistory();
-
-                while (true) {
-                    clearScrollBuffer();
-                    std::string filterPrompt = "\n\001\033[1;92m\002Term(s)\001\033[1;94m\002 ↵ to filter \001\033[1;92m\002mount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
-                    std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
-                    
-                    if (!searchQuery || searchQuery.get()[0] == '\0') {
-                        historyPattern = false;
-                        isFiltered = false;
-                        break;
-                    }
-
-                    std::string inputSearch(searchQuery.get());
-                    clearScrollBuffer();
-                    std::cout << "\033[1mPlease wait...\033[1m\n";
-                    
-                    if (strcmp(searchQuery.get(), "/") != 0) {
-                        add_history(searchQuery.get());
-                        saveHistory();
-                    }
-                    
-                    filteredFiles = filterFiles(isoFiles, inputSearch);
-
-                    if (filteredFiles.empty()) {
-                        clearScrollBuffer();
-                        std::cout << "\n\033[1;91mNo matches found.\033[0;1m\n\n\033[1;32m↵ to continue...\033[0;1m";
-                        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                    } else {
-                        isFiltered = true;
-                        break;
-                    }
-                }
-                clear_history();
-            } else {
-                std::vector<std::string>& currentFiles = isFiltered ? filteredFiles : isoFiles;
-                if (inputString == "00") {
-                    mountAllIsoFiles(currentFiles, mountedFiles, skippedMessages, mountedFails);
-                } else {
-                    processAndMountIsoFiles(inputString, currentFiles, mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
-                }
-
-                clearScrollBuffer();
-                if (!uniqueErrorMessages.empty() && mountedFiles.empty() && skippedMessages.empty() && mountedFails.empty()) {
-                    std::cout << "\n\033[1;91mNo valid input provided for mount\033[0;1m\n\n\033[1;32m↵ to continue...\033[0;1m";
-                    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                } else if (verbose) {
-                    printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
-                }
+            clearScrollBuffer();
+            if (!uniqueErrorMessages.empty() && mountedFiles.empty() && skippedMessages.empty() && mountedFails.empty()) {
+                std::cout << "\n\033[1;91mNo valid input provided for mount\033[0;1m\n\n\033[1;32m↵ to continue...\033[0;1m";
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            } else if (verbose) {
+                printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
             }
         }
     }
