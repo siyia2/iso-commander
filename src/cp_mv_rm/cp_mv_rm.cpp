@@ -37,6 +37,7 @@ bool isValidLinuxPathFormat(const std::string& path) {
 }
 
 
+// Print verbose output for cp_mv_rm
 void verbose_cp_mv_rm(std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages , bool& verbose) {
     clearScrollBuffer();
     
