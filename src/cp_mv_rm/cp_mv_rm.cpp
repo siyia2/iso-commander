@@ -37,211 +37,151 @@ bool isValidLinuxPathFormat(const std::string& path) {
 }
 
 
+void verbose_cp_mv_rm(std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages , bool& verbose) {
+    clearScrollBuffer();
+    
+    if (!operationIsos.empty()) {
+        std::cout << "\n";
+    }
+    for (const auto& operationIso : operationIsos) {
+        std::cout << operationIso << "\n\033[0;1m";
+    }
+    
+    if (!operationErrors.empty()) {
+        std::cout << "\n";
+    }
+    
+    for (const auto& operationError : operationErrors) {
+        std::cout << operationError << "\n\033[0;1m";
+    }
+    
+    if (!uniqueErrorMessages.empty()) {
+        std::cout << "\n";
+    }
+    for (const auto& uniqueErrorMessage : uniqueErrorMessages) {
+        std::cout << uniqueErrorMessage << "\033[0;1m\n";
+    }
+    
+    // Clear the vector after each iteration
+    operationIsos.clear();
+    operationErrors.clear();
+    uniqueErrorMessages.clear();
+    verbose = false;
+    
+    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+}
+
+
+
 // Main function to select and operate on files by number
 void select_and_operate_files_by_number(const std::string& operation) {
-	
-	// Vector to store operation ISOs
-	std::set<std::string> operationIsos;
-	// Vector to store errors for operation ISOs
-	std::set<std::string> operationErrors;
-	// Vector to store ISO unique input errors
-	std::set<std::string> uniqueErrorMessages;
+    std::set<std::string> operationIsos, operationErrors, uniqueErrorMessages;
+    std::vector<std::string> isoFiles, filteredFiles;
+    isoFiles.reserve(100);
+    bool isFiltered = false;
 
-    // Load ISO files from the cache
-    std::vector<std::string> isoFiles;
-	isoFiles.reserve(100);
+    std::string operationColor = (operation == "rm") ? "\033[1;91m" : 
+                                 (operation == "cp") ? "\033[1;92m" : "\033[1;93m";
 
-    // Color code based on the operation
-    std::string operationColor;
-    if (operation == "rm") {
-        operationColor = "\033[1;91m"; // Red for 'rm'
-    } else if (operation == "cp") {
-        operationColor = "\033[1;92m"; // Green for 'cp'
-    } else {
-        operationColor = "\033[1;93m"; // Yellow for other operations
-    }
+    std::string process = operation;
 
-    std::string process;
-
-    // Main loop for interacting with ISO files
     while (true) {
-        // Clear the vector after each iteration
-		operationIsos.clear();
-		operationErrors.clear();
-		uniqueErrorMessages.clear();
-        // Remove non-existent paths from the cache after selection
         removeNonExistentPathsFromCache();
-		// Load ISO files from cache
-		loadCache(isoFiles);
-		
-		clearScrollBuffer();
-        
+        loadCache(isoFiles);
+
         if (isoFiles.empty()) {
-			clearScrollBuffer();
-			std::cout << "\n\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n";
-			std::cout << "\n";
-			std::cout << "\033[1;32m↵ to continue...\033[0;1m";
-			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-			break;
-		}
-
-        // Display header message
-        std::cout << "\033[1;93m! IF EXPECTED ISO FILES ARE NOT ON THE LIST IMPORT THEM FROM THE MAIN MENU OPTIONS !\033[0;1m\n";
-        std::cout << "\033[92;1m                  // CHANGES ARE REFLECTED AUTOMATICALLY //\033[0;1m\n";
-
-        std::string searchQuery;
-        std::vector<std::string> filteredFiles = isoFiles;
-        sortFilesCaseInsensitive(isoFiles);
-        printIsoFileList(isoFiles);
-        bool search = true;
-        
-
-        // Construct the prompt string
-		std::string prompt = "\n\n\001\033[1;92m\002ISO(s)\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + "\001\033[1;94m\002 (e.g., 1-3,1 5), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
-
-		// Use std::unique_ptr to manage memory for input
-		std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
-		
-		std::string mainInputString(input.get());
-		
-        clearScrollBuffer();
-        
-        if (strcmp(input.get(), "/") != 0 || (!(std::isspace(input.get()[0]) || input.get()[0] == '\0'))) {
-			std::cout << "\033[1mPlease wait...\033[1m\n";
-		}
-
-        // Check if the user wants to return
-        if (std::isspace(input.get()[0]) || input.get()[0] == '\0') {
-            break;
-        }
-		mvDelBreak=false;
-        if (strcmp(input.get(), "/") == 0) {
-			while (!mvDelBreak && search) {
             clearScrollBuffer();
-			
-			historyPattern = true;
-			loadHistory();
-						
-            // User pressed '/', start the filtering process
-			std::string prompt = "\n\001\033[1;92m\002Term(s)\001\033[1;94m\002 ↵ to filter \001" + operationColor + "\002" + operation + " \001\033[1;94m\002list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
-
-			// Prompt user for input
-			char* rawSearchQuery = readline(prompt.c_str());
-
-			// Use std::unique_ptr to manage memory for rawSearchQuery
-			std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
-			
-			std::string inputSearch(searchQuery.get());
-
-            clearScrollBuffer();
-            
-            if (searchQuery && searchQuery.get()[0] != '\0') {
-				std::cout << "\033[1mPlease wait...\033[1m\n";
-				if (strcmp(searchQuery.get(), "/") != 0) {
-					add_history(searchQuery.get()); // Add the search query to the history
-					saveHistory();
-				}
-			}
-            clear_history();
-            
-
-            // Store the original isoFiles vector
-            std::vector<std::string> originalIsoFiles = isoFiles;
-            
-            if (!(searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0)) {
-
-            if (searchQuery != nullptr) {
-                std::vector<std::string> filteredFiles = filterFiles(isoFiles, inputSearch);
-
-                if (filteredFiles.empty()) {
-					clearScrollBuffer();
-                    std::cout << "\n\033[1;91mNo matches found.\033[0;1m\n";
-					std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                } else {
-					while (!mvDelBreak) {
-						// Clear the vector after each iteration
-						operationIsos.clear();
-						operationErrors.clear();
-						uniqueErrorMessages.clear();
-						
-						clearScrollBuffer();
-						sortFilesCaseInsensitive(filteredFiles);
-						std::cout << "\033[1mFiltered results:\033[0;1m\n";
-						printIsoFileList(filteredFiles); // Print the filtered list of ISO files
-
-						// Construct the prompt string
-						std::string prompt = "\n\n\001\033[1;92m\002Filtered ISO(s)\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + "\001\033[1;94m\002 (e.g., 1-3,1 5), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
-
-						// Use std::unique_ptr to manage memory for input
-						std::unique_ptr<char, decltype(&std::free)> inputFiltered(readline(prompt.c_str()), &std::free);
-						
-						std::string InputStringFiltered(inputFiltered.get());
-						
-						if (inputFiltered.get()[0] == '/') {
-							search = true;
-							break;
-						}
-
-                    
-						// Check if the user wants to return
-						if (std::isspace(inputFiltered.get()[0]) || inputFiltered.get()[0] == '\0') {
-							historyPattern = false;
-							search =false;
-							break;
-						}
-
-						// Check if the user provided input
-						if (inputFiltered.get()[0] != '\0' && (strcmp(inputFiltered.get(), "/") != 0)) {
-							clearScrollBuffer();
-							historyPattern = false;
-
-							// Process the user input with the filtered list
-							if (operation == "rm") {
-								process = "rm";
-								mvDelBreak=true;
-								processOperationInput(InputStringFiltered, filteredFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
-							} else if (operation == "mv") {
-								process = "mv";
-								mvDelBreak=true;
-								processOperationInput(InputStringFiltered, filteredFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
-							} else if (operation == "cp") {
-								process = "cp";
-								mvDelBreak=false;
-								processOperationInput(InputStringFiltered, filteredFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
-								}
-							}
-						}
-					}
-				}
-			} else {
-					isoFiles = originalIsoFiles; // Revert to the original cache list
-					historyPattern = false;
-					break;
-				}
-			}
-			
-        } else {
-            // Process the user input with the original list
-            if (operation == "rm") {
-                process = "rm";
-                processOperationInput(mainInputString, isoFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
-            } else if (operation == "mv") {
-                process = "mv";
-                processOperationInput(mainInputString, isoFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
-            } else if (operation == "cp") {
-                process = "cp";
-                processOperationInput(mainInputString, isoFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
-            }
-        }
-
-        // If ISO files become empty after operation, display a message and return
-        if (isoFiles.empty()) {
-            std::cout << "\n\033[1;93mNo ISO(s) available for " << operation << ".\033[0;1m\n";
-            std::cout << "\n";
-            std::cout << "↵ to continue...\n";
+            std::cout << "\n\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n";
+            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             break;
+        }
+
+        sortFilesCaseInsensitive(isoFiles);
+        operationIsos.clear();
+        operationErrors.clear();
+        uniqueErrorMessages.clear();
+        clearScrollBuffer();
+        if (!isFiltered) {
+            std::cout << "\033[1;93m! IF EXPECTED ISO FILES ARE NOT ON THE LIST IMPORT THEM FROM THE MAIN MENU OPTIONS !\033[0;1m\n";
+            std::cout << "\033[92;1m                  // CHANGES ARE REFLECTED AUTOMATICALLY //\033[0;1m\n";
+        } else {
+            std::cout << "\033[0;1mFiltered results\033[0;1m\n";
+        }
+
+        printIsoFileList(isFiltered ? filteredFiles : isoFiles);
+
+        std::string prompt = std::string(isFiltered ? "\n\n\001\033[1;92m\002Filtered ISO(s)" : "\n\n\001\033[1;92m\002ISO(s)")
+            + "\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation 
+            + "\001\033[1;94m\002 (e.g., 1-3,1 5), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+
+        std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
+        std::string inputString(input.get());
+
+        clearScrollBuffer();
+        if (!inputString.empty() && inputString != "/") {
+            std::cout << "\033[1mPlease wait...\033[1m\n";
+        }
+
+        if (inputString.empty()) {
+            if (isFiltered) {
+                isFiltered = false;
+                continue;  // Return to the original list
+            } else {
+                return;  // Exit the function only if we're already on the original list
+            }
+        } else if (inputString == "/") {
+            historyPattern = true;
+            loadHistory();
+
+            while (true) {
+                clearScrollBuffer();
+                std::string filterPrompt = "\n\001\033[1;92m\002Term(s)\001\033[1;94m\002 ↵ to filter \001" + operationColor + "\002" + operation 
+                    + " \001\033[1;94m\002list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
+                std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
+                
+                if (!searchQuery || searchQuery.get()[0] == '\0') {
+                    historyPattern = false;
+                    isFiltered = false;
+                    break;
+                }
+
+                std::string inputSearch(searchQuery.get());
+                clearScrollBuffer();
+                std::cout << "\033[1mPlease wait...\033[1m\n";
+                
+                if (strcmp(searchQuery.get(), "/") != 0) {
+                    add_history(searchQuery.get());
+                    saveHistory();
+                }
+                
+                filteredFiles = filterFiles(isoFiles, inputSearch);
+
+                if (filteredFiles.empty()) {
+                    clearScrollBuffer();
+                    std::cout << "\n\033[1;91mNo matches found.\033[0;1m\n";
+                    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+                    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                } else {
+                    isFiltered = true;
+                    break;
+                }
+            }
+            clear_history();
+        } else {
+            std::vector<std::string>& currentFiles = isFiltered ? filteredFiles : isoFiles;
+            processOperationInput(inputString, currentFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
+            if (verbose) {
+                verbose_cp_mv_rm(operationIsos, operationErrors, uniqueErrorMessages, verbose);
+            }
+
+            if (currentFiles.empty()) {
+                std::cout << "\n\033[1;93mNo ISO(s) available for " << operation << ".\033[0m\n\n";
+                std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                return;
+            }
         }
     }
 }
@@ -395,6 +335,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
                     std::cout << "\033[1m" << isoDirectory << "/\033[1;95m" << isoFilename << "\033[0;1m\n";
                 }
             }
+            historyPattern= false;
             // Load history from file
 			loadHistory();
 			userDestDir.clear();
@@ -515,47 +456,11 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 		maxDepth = 0;   
 		manualRefreshCache(userDestDir);
 	}
-	if (verbose) {
-		clearScrollBuffer();
-        
-		if (!operationIsos.empty()) {
-			std::cout << "\n";
-		}
-    
-		// Print all moved files
-		for (const auto& operationIso : operationIsos) {
-			std::cout << operationIso << "\n\033[0;1m";
-		}
-        
-		if (!operationErrors.empty()) {
-			std::cout << "\n";
-		}
-        
-		for (const auto& operationError : operationErrors) {
-			std::cout << operationError << "\n\033[0;1m";
-		}
 		
-		if (!uniqueErrorMessages.empty()) {
-            std::cout << "\n";
-		}
-        for (const auto& uniqueErrorMessage : uniqueErrorMessages) {
-            std::cout << uniqueErrorMessage << "\033[0;1m\n";
-		}
-	}
-        
-    // Clear the vector after each iteration
-    operationIsos.clear();
-    operationErrors.clear();
-    userDestDir.clear();
-    uniqueErrorMessages.clear();
     clear_history();
-    verbose = false;
+    userDestDir.clear();
         
     maxDepth = -1;
-    if (verbose) {
-		std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-	}  
 }
 
 // Function to check if directory exists
