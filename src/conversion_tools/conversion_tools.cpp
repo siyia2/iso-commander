@@ -157,24 +157,24 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 		
 		if (clr) {
 			// Clear the static variables used for caching and processed paths
-        if (!modeMdf){
-        binImgFilesCache.clear();
-        std::cout << "\n\033[1;92mBIN/IMG RAM cache cleared.\033[0;1m\n";
+			if (!modeMdf){
+			binImgFilesCache.clear();
+			std::cout << "\n\033[1;92mBIN/IMG RAM cache cleared.\033[0;1m\n";
 
-        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
-		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-		clearScrollBuffer(); // Clear scroll buffer
+			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
+			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			clearScrollBuffer(); // Clear scroll buffer
 
 		} else {
-        mdfMdsFilesCache.clear();
-        std::cout << "\n\033[1;92mMDF RAM cache cleared.\033[0;1m\n";
+			mdfMdsFilesCache.clear();
+			std::cout << "\n\033[1;92mMDF RAM cache cleared.\033[0;1m\n";
 
-        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
-		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-		clearScrollBuffer(); // Clear scroll buffer
+			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
+			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			clearScrollBuffer(); // Clear scroll buffer
+			}
+			continue;
 		}
-		continue;
-	}
 
 		// Check if inputSearch is empty or contains only spaces
 		bool onlySpaces = inputSearch.find_first_not_of(" \t") == std::string::npos;
@@ -221,8 +221,8 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 			clearScrollBuffer();
-			select_and_convert_files_to_iso(fileTypeChoice);
 			noValid = true;
+			continue;
 
 		} else if (((directoryPaths.empty() && !clr) || (onlySpaces)) && !list) {
 			break;
@@ -625,6 +625,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     }
     maxDepth = -1;
 }
+
 
 // Function to search for .bin and .img files over 5MB
 std::vector<std::string> findFiles(const std::vector<std::string>& paths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrors, bool list) {
