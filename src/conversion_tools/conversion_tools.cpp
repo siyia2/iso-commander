@@ -5,7 +5,7 @@
 static std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles here
 static std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
 
-// Boolean flags for verbose beautification
+// Boolean flag for verbose beautification
 bool gapSet = true;
 
 // GENERAL
@@ -231,13 +231,13 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
             successOuts.clear(); skippedOuts.clear(); failedOuts.clear(); deletedOuts.clear(); processedErrors.clear();
 
             if (binImgFilesCache.empty() && !modeMdf) {
-                std::cout << "\n\033[1;93mNo " << fileExtension << " files stored in RAM cache for potential conversions.\033[1m\n";
+                std::cout << "\n\033[1;93mNo " << fileExtension << " files stored in RAM cache for potential ISO conversions.\033[1m\n";
                 std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 clearScrollBuffer();
                 break;
             } else if (mdfMdsFilesCache.empty() && modeMdf) {
-                std::cout << "\n\033[1;93mNo " << fileExtension << " files stored in RAM cache for potential conversions.\033[1m\n";
+                std::cout << "\n\033[1;93mNo " << fileExtension << " files stored in RAM cache for potential ISO conversions.\033[1m\n";
                 std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 clearScrollBuffer();
