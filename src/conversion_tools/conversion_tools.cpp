@@ -126,10 +126,16 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         return;
     }
 
-    // Load search history
-    loadHistory();
+    
     bool list = false;
 	while (true) {
+		successOuts.clear();   // Clear the set of success messages
+		skippedOuts.clear();   // Clear the set of skipped messages
+		failedOuts.clear();		// Clear the set of failed messages
+		deletedOuts.clear();   // Clear the set of deleted messages
+		processedErrors.clear(); // Clear the set of error messages
+		// Load search history
+		loadHistory();
 		// Prompt user to input directory paths
 		std::string prompt = "\001\033[1;92m\002Folder path(s)\001\033[1;94m ↵ to scan for \001\033[1;38;5;208m\002" + fileExtension +
 						"\001\033[1;94m files and import into \001\033[1;93m\002RAM\001\033[1;94m\002 cache (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002), \001\033[1;92m\002ls \001\033[1;94m\002↵ open \001\033[1;93m\002RAM\001\033[1;94m\002 cache, "
@@ -222,10 +228,10 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 		// Display message if no new files are found
 		if (!newFilesFound && !files.empty() && !noValid && !clr && !list) {
 			if (invalidDirectoryPaths.empty()) {
-			gapFlag = true;
-		} else {
-			gapFlag = false;
-		}
+				gapFlag = true;
+			} else {
+				gapFlag = false;
+			}
 			std::cout << "\n";		
 			verboseFind(invalidDirectoryPaths);
 			auto end_time = std::chrono::high_resolution_clock::now();
@@ -301,6 +307,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 			// Check if user wants to return
 			if (std::isspace(input.get()[0]) || input.get()[0] == '\0') {
 				clearScrollBuffer();
+				list = false;
 				break;
 			}
 				bool isFiltered = false;
