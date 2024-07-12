@@ -136,6 +136,13 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
             clearScrollBuffer();
             continue;
         }
+        
+        // Return early if list mode is enabled
+		if (list && !modeMdf) {
+			files = binImgFilesCache;
+		} else if (list && modeMdf) {
+			files = mdfMdsFilesCache;
+		}
 
         if (!inputSearch.empty() && !list && !clr) {
             std::cout << " " << std::endl;
@@ -182,7 +189,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         if (!list) {
             files = findFiles(directoryPaths, fileType, [&](const std::string&, const std::string&) {
                 newFilesFound = true;
-            }, invalidDirectoryPaths, processedErrors, list);
+            }, invalidDirectoryPaths, processedErrors);
         }
 
         if (!newFilesFound && !files.empty() && !list) {
@@ -523,13 +530,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 
 
 // Function to search for .bin and .img files over 5MB
-std::vector<std::string> findFiles(const std::vector<std::string>& paths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrors, bool list) {
-    // Return early if list mode is enabled
-    if (list && mode == "bin") {
-        return binImgFilesCache;
-    } else if (list && mode == "mdf") {
-        return mdfMdsFilesCache;
-    }
+std::vector<std::string> findFiles(const std::vector<std::string>& paths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrors) {
 
     std::mutex fileCheckMutex;
     bool blacklistMdf = false;
