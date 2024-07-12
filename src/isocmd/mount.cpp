@@ -202,7 +202,6 @@ void printMountedAndErrors( std::set<std::string>& mountedFiles, std::set<std::s
     skippedMessages.clear();
     mountedFails.clear();
     uniqueErrorMessages.clear();
-    verbose = false;
     
 	std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 	std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');

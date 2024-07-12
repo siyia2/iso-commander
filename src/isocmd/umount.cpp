@@ -203,7 +203,6 @@ void printUnmountedAndErrors(std::set<std::string>& unmountedFiles, std::set<std
             std::cerr << "\n\033[1;91m" << errorMessage << "\033[0m\033[1m";
         }
     errorMessages.clear();
-    verbose = false;
 }
 
 
