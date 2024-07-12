@@ -249,9 +249,9 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
                 clearScrollBuffer();
                 break;
             }
-
+			bool search = true;
             if (strcmp(input.get(), "/") == 0) {
-                while (true) {
+                while (search) {
 					historyPattern = true;
                     clear_history();
                     loadHistory();
@@ -299,10 +299,12 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
                             std::string filterInputString(filterInput.get());
 
                             if (filterInput.get()[0] == '/') {
+								search = true;
                                 break;
                             }
 
                             if (std::isspace(filterInput.get()[0]) || filterInput.get()[0] == '\0') {
+								search = false;
                                 break;
                             }
 
