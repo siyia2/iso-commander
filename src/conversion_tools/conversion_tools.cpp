@@ -194,27 +194,26 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 		auto start_time = std::chrono::high_resolution_clock::now();
 
 		// Split inputPaths into individual directory paths
-		// Split inputPaths into individual directory paths
-if ((!onlySpaces || !(mainSearch.get() == nullptr)) && !list) {
-    std::istringstream iss(inputSearch);
-    std::string path;
-    while (std::getline(iss, path, ';')) {
-        size_t start = path.find_first_not_of(" \t");
-        size_t end = path.find_last_not_of(" \t");
-        if (start != std::string::npos && end != std::string::npos) {
-            std::string cleanedPath = path.substr(start, end - start + 1);
-            if (uniquePaths.find(cleanedPath) == uniquePaths.end()) {
-                if (directoryExists(cleanedPath)) {
-                    directoryPaths.push_back(cleanedPath);
-                    uniquePaths.insert(cleanedPath);
-                } else {
-                    std::string invalid = "\033[1;91m" + cleanedPath;
-                    invalidDirectoryPaths.insert(invalid);
-                }
-            }
-        }
-    }
-}
+		if ((!onlySpaces || !(mainSearch.get() == nullptr)) && !list) {
+			std::istringstream iss(inputSearch);
+			std::string path;
+			while (std::getline(iss, path, ';')) {
+				size_t start = path.find_first_not_of(" \t");
+				size_t end = path.find_last_not_of(" \t");
+				if (start != std::string::npos && end != std::string::npos) {
+					std::string cleanedPath = path.substr(start, end - start + 1);
+					if (uniquePaths.find(cleanedPath) == uniquePaths.end()) {
+						if (directoryExists(cleanedPath)) {
+							directoryPaths.push_back(cleanedPath);
+							uniquePaths.insert(cleanedPath);
+						} else {
+							std::string invalid = "\033[1;91m" + cleanedPath;
+							invalidDirectoryPaths.insert(invalid);
+						}
+					}
+				}
+			}
+		}
 		bool noValid= false;
 		// Return if no directory paths are provided
 		if (directoryPaths.empty() && !invalidDirectoryPaths.empty()) {
