@@ -4,7 +4,6 @@
 
 static std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles here
 static std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
-static std::vector<std::string> cachedInvalidPaths; // Memory cached invalidPaths here
 
 // Boolean flags for verbose beautification
 bool gapSet = true;
@@ -635,10 +634,11 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     std::set<std::string> uniqueInvalidPaths;
 
     // Set to store processed paths
-    static std::vector<std::string> processedPathsMdf;
+    std::vector<std::string> processedPathsMdf;
 
     // Set to store processed paths
-    static std::vector<std::string> processedPathsBin;
+    std::vector<std::string> processedPathsBin;
+    
     
     // Return early if list mode is enabled
     if (list && mode == "bin") {
@@ -654,9 +654,6 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
 
     // Vector to store file names that match the criteria
     std::set<std::string> fileNames;
-
-    // Clear the cachedInvalidPaths before processing a new set of paths
-    cachedInvalidPaths.clear();
 
     // Mutex to ensure thread safety
     std::mutex mutex4search;
@@ -825,9 +822,6 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                     if (uniqueInvalidPaths.insert(path).second) {
 
                     }
-                } else if (std::find(cachedInvalidPaths.begin(), cachedInvalidPaths.end(), path) == cachedInvalidPaths.end()) {
-                    cachedInvalidPaths.push_back(path);
-                    
                 }
             }
         }
