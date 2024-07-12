@@ -218,10 +218,12 @@ void unmountISOs() {
     while (true) {
         std::vector<std::string> selectedIsoDirs;
         selectedIsoDirs.reserve(maxThreads);
-
+		
         clearScrollBuffer();
         listMountedISOs();
-        isoDirs.clear();
+        if (!isFiltered) {
+			isoDirs.clear();
+		}
         unmountedFiles.clear();
         unmountedErrors.clear();
         errorMessages.clear();
@@ -279,11 +281,13 @@ void unmountISOs() {
                 return;
             }
         } else if (inputString == "/") {
+			filteredIsoDirs.clear();
             historyPattern = true;
             loadHistory();
             inputString.clear();
 
             while (true) {
+				
                 clearScrollBuffer();
                 std::string filterPrompt = "\n\033[1;92mTerm(s)\033[1;94m ↵ to filter \033[1;93mumount\033[1;94m list (multi-term separator: \033[1;93m;\033[1;94m), ↵ return: \033[0;1m";
                 std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
@@ -313,7 +317,6 @@ void unmountISOs() {
                     toLowerInPlace(filterPatterns.back());
                 }
 
-                filteredIsoDirs.clear();
                 size_t numDirs = isoDirs.size();
                 unsigned int numThreads = std::min(static_cast<unsigned int>(numDirs), maxThreads);
                 std::vector<std::future<void>> futuresFilter;
@@ -424,7 +427,7 @@ void unmountISOs() {
 
                 if (verbose) {
                     printUnmountedAndErrors(unmountedFiles, unmountedErrors, errorMessages);
-                    std::cout << "\n\n\033[1;32m↵ to continue...";
+                    std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
                     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 } else {
                     unmountedFiles.clear();
@@ -435,7 +438,9 @@ void unmountISOs() {
                 clearScrollBuffer();
                 isFiltered = false;
             } else {
-                std::cerr << "\n\033[1;91mNo valid ISO selected.\033[0;1m\n\033[1;32m↵ to continue...\033[0;1m";
+                clearScrollBuffer();
+                std::cerr << "\n\033[1;91mNo valid input provided for umount.\n";
+                std::cout << "\n\033[1;32m↵ to continue...";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             }
         }
