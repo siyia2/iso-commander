@@ -128,6 +128,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 	while (true) {
 		bool list = false;
 		bool clr = false;
+		verbose = false;
 		successOuts.clear();   // Clear the set of success messages
 		skippedOuts.clear();   // Clear the set of skipped messages
 		failedOuts.clear();		// Clear the set of failed messages
@@ -265,6 +266,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
 		// Main loop for file selection and conversion
 		while ((!noValid && !clr) || list) {
+			verbose = false;
 			successOuts.clear();   // Clear the set of success messages
 			skippedOuts.clear();   // Clear the set of skipped messages
 			failedOuts.clear();		// Clear the set of failed messages
@@ -360,6 +362,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 						std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 					} else {
 						while (true) { // Enter another loop for handling filtered results
+							verbose = false;
 							successOuts.clear();   // Clear the set of success messages
 							skippedOuts.clear();   // Clear the set of skipped messages
 							failedOuts.clear();		// Clear the set of failed messages
