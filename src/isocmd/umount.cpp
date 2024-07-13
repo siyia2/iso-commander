@@ -36,7 +36,7 @@ void listMountedISOs() {
     buffer.reserve(isoDirs.size() * 100);
     output.str(std::move(buffer));
 
-    output << "\033[92;1m// CHANGES ARE REFLECTED AUTOMATICALLY //\033[0;1m\n\n";
+    output << "\n";
 
     size_t numDigits = std::to_string(isoDirs.size()).length();
 
