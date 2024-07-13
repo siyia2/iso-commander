@@ -209,27 +209,24 @@ void printUnmountedAndErrors(std::set<std::string>& unmountedFiles, std::set<std
 // Main function for unmounting ISOs
 void unmountISOs() {
     std::vector<std::string> isoDirs;
-    std::set<std::string> errorMessages, unmountedFiles, unmountedErrors;
-    const std::string isoPath = "/mnt";
-    bool isFiltered = false;
     std::vector<std::string> filteredIsoDirs;
     filteredIsoDirs.reserve(100);
+    bool isFiltered = false;
 
+    std::set<std::string> unmountedFiles;
+    std::set<std::string> unmountedErrors;
+    std::set<std::string> errorMessages;
+    
     while (true) {
         std::vector<std::string> selectedIsoDirs;
         selectedIsoDirs.reserve(maxThreads);
-		
+        
         clearScrollBuffer();
         listMountedISOs();
-        if (!isFiltered) {
-			isoDirs.clear();
-		}
-        unmountedFiles.clear();
-        unmountedErrors.clear();
-        errorMessages.clear();
 
         if (!isFiltered) {
-            for (const auto& entry : std::filesystem::directory_iterator(isoPath)) {
+            isoDirs.clear();
+            for (const auto& entry : std::filesystem::directory_iterator("/mnt")) {
                 if (entry.is_directory() && entry.path().filename().string().find("iso_") == 0) {
                     isoDirs.push_back(entry.path().string());
                 }
@@ -237,7 +234,7 @@ void unmountISOs() {
 
             sortFilesCaseInsensitive(isoDirs);
         } else {
-			clearScrollBuffer();
+            clearScrollBuffer();
             sortFilesCaseInsensitive(filteredIsoDirs);
             std::cout << "\n";
             size_t maxIndex = filteredIsoDirs.size();
@@ -249,7 +246,7 @@ void unmountISOs() {
                 std::string color = (i % 2 == 0) ? "\033[1;31m" : "\033[1;32m"; // Red if even, Green if odd
 
                 std::cout << color << "\033[1m"
-                          << std::setw(numDigits) << std::setfill(' ') << (i + 1) << ".\033[0;1m /mnt/iso_"
+                          << std::setw(numDigits) << std::setfill(' ') << (i + 1) << ".\033[1;94m /mnt/iso_"
                           << "\033[1;95m" << afterUnderscore << "\033[0;1m\n";
             }
         }
@@ -261,14 +258,14 @@ void unmountISOs() {
             return;
         }
 
+        // Prompt for input
         std::string prompt = std::string(isFiltered ? "\n\033[1;92mFiltered ISO" : "\n\033[1;92mISO")
             + "\033[1;94m ↵ for \033[1;93mumount\033[1;94m (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\033[0;1m ";
-
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         std::string inputString(input.get());
 
         if (!inputString.empty() && inputString != "/") {
-			clearScrollBuffer();
+            clearScrollBuffer();
             std::cout << "\033[1m\n";
         }
 
@@ -280,68 +277,79 @@ void unmountISOs() {
             } else {
                 return;
             }
-        } else if (inputString == "/") {
-			while (true) {	
-				historyPattern = true;
-				loadHistory();			
-				std::string filterPrompt = "\033[1A\033[K\033[1A\033[K\n\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \033[1;93mumount\033[1;94m list (multi-term separator: \033[1;93m;\033[1;94m), ↵ return: \033[0;1m";
-				std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
-				std::string terms(searchQuery.get());
-				
-				if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
-					historyPattern = false;
-					isFiltered = false;  // Ensure we're not in filtered mode
-					filteredIsoDirs.clear(); // Clear the filtered list when exiting filter mode
-					break;
-				}
-				std::string inputSearch(searchQuery.get());
-				std::cout << "\033[1m\n";
-				if (strcmp(searchQuery.get(), "/") != 0) {
-					add_history(searchQuery.get());
-					saveHistory();
-				}
-				
+     } else if (inputString == "/") {
+		// Handle filtering
+		while (true) {
+			historyPattern = true;
+			clear_history();
+			loadHistory();
+        
+			std::string filterPrompt = "\033[1A\033[K\033[1A\033[K\n\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \033[1;93mumount\033[1;94m list (multi-term separator: \033[1;93m;\033[1;94m), ↵ return: \033[0;1m";
+			std::unique_ptr<char[], decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
+			std::string terms(searchQuery.get());
+
+			if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
 				historyPattern = false;
 				clear_history();
-        
-				std::vector<std::string> filterPatterns;
-				std::stringstream ss(terms);
-				std::string token;
-				while (std::getline(ss, token, ';')) {
-					filterPatterns.push_back(token);
-					toLowerInPlace(filterPatterns.back());
-				}
-        
-				filteredIsoDirs.clear();
-				size_t numDirs = isoDirs.size();
-				unsigned int numThreads = std::min(static_cast<unsigned int>(numDirs), maxThreads);
-				std::vector<std::future<void>> futuresFilter;
-				futuresFilter.reserve(numThreads);
-				size_t baseDirsPerThread = numDirs / numThreads;
-				size_t remainder = numDirs % numThreads;
-				for (size_t i = 0; i < numThreads; ++i) {
-					size_t start = i * baseDirsPerThread + std::min(i, remainder);
-					size_t end = start + baseDirsPerThread + (i < remainder ? 1 : 0);
-					futuresFilter.push_back(std::async(std::launch::async, [&, start, end] {
-						filterMountPoints(isoDirs, filterPatterns, filteredIsoDirs, start, end);
-					}));
-				}
-				for (auto& future : futuresFilter) {
-					future.get();
-				}
-        
-				if (filteredIsoDirs.empty()) {
-					std::cout << "\033[1A\033[K";
-					continue;
-				// If user presses Enter, the loop will continue and prompt for new filter terms
-				} else {
-					clearScrollBuffer();
-					isFiltered = true;
-					break;
-				}
+				isFiltered = true;  // Ensure we're in filtered mode
+				break;
+			}
+
+			std::string inputSearch(searchQuery.get());
+			if (strcmp(searchQuery.get(), "/") != 0) {
+				add_history(searchQuery.get());
+				saveHistory();
+			}
+
+			historyPattern = false;
+			clear_history();
+
+			std::vector<std::string> filterPatterns;
+			std::stringstream ss(terms);
+			std::string token;
+			while (std::getline(ss, token, ';')) {
+				filterPatterns.push_back(token);
+				toLowerInPlace(filterPatterns.back());
+			}
+
+			std::vector<std::string> tempFilteredIsoDirs;  // Temporary vector to hold new matches
+			size_t numDirs = isoDirs.size();
+			unsigned int numThreads = std::min(static_cast<unsigned int>(numDirs), maxThreads);
+			std::vector<std::future<void>> futuresFilter;
+			futuresFilter.reserve(numThreads);
+			size_t baseDirsPerThread = numDirs / numThreads;
+			size_t remainder = numDirs % numThreads;
+			for (size_t i = 0; i < numThreads; ++i) {
+				size_t start = i * baseDirsPerThread + std::min(i, remainder);
+				size_t end = start + baseDirsPerThread + (i < remainder ? 1 : 0);
+				futuresFilter.push_back(std::async(std::launch::async, [&, start, end] {
+					filterMountPoints(isoDirs, filterPatterns, tempFilteredIsoDirs, start, end);
+				}));
 			}
 			
+			for (auto& future : futuresFilter) {
+				future.get();
+			}
+
+			if (tempFilteredIsoDirs.empty() || tempFilteredIsoDirs == isoDirs) {
+				std::cout << "\033[1;94m";
+            // No new matches or matches same as original, continue with original isoDirs
+            if (filteredIsoDirs.empty()) {
+                filteredIsoDirs = isoDirs;
+            }
         } else {
+			
+            // Update filteredIsoDirs with new matches
+            filteredIsoDirs = std::move(tempFilteredIsoDirs);
+        }
+
+        clearScrollBuffer();
+        isFiltered = true;
+        break;
+    }
+
+
+	} else {
             std::vector<std::string>& currentDirs = isFiltered ? filteredIsoDirs : isoDirs;
 
             if (inputString == "00") {
@@ -351,31 +359,32 @@ void unmountISOs() {
                 std::istringstream iss(inputString);
                 for (std::string token; iss >> token;) {
                     if (startsWithZero(token)) {
-                        errorMessages.emplace("\033[1;91mInvalid index: '0'.\033[0;1m");
-                        continue;
-                    }
-                    try {
-                        size_t dashPos = token.find('-');
-                        if (dashPos != std::string::npos) {
-                            size_t start = std::stoi(token.substr(0, dashPos)) - 1;
-                            size_t end = std::stoi(token.substr(dashPos + 1)) - 1;
-                            if (start < currentDirs.size() && end < currentDirs.size()) {
-                                for (size_t i = std::min(start, end); i <= std::max(start, end); ++i) {
-                                    selectedIndices.emplace(i);
-                                }
-                            } else {
-                                errorMessages.emplace("Invalid range: '" + token + "'.");
-                            }
+                        if (token == "00") {
+                            selectedIsoDirs = currentDirs;
+                            break;
                         } else {
-                            size_t index = std::stoi(token) - 1;
-                            if (index < currentDirs.size()) {
-                                selectedIndices.emplace(index);
-                            } else {
-                                errorMessages.emplace("Invalid index: '" + token + "'.");
+                            try {
+                                size_t index = std::stoul(token) - 1;
+                                if (index < currentDirs.size()) {
+                                    selectedIndices.insert(index);
+                                } else {
+                                    std::cerr << "Invalid index: '" + token + "'.\n";
+                                }
+                            } catch (const std::invalid_argument&) {
+                                std::cerr << "Invalid input: '" + token + "'.\n";
                             }
                         }
-                    } catch (const std::invalid_argument&) {
-                        errorMessages.emplace("Invalid input: '" + token + "'.");
+                    } else {
+                        try {
+                            size_t index = std::stoul(token) - 1;
+                            if (index < currentDirs.size()) {
+                                selectedIndices.insert(index);
+                            } else {
+                                std::cerr << "Invalid index: '" + token + "'.\n";
+                            }
+                        } catch (const std::invalid_argument&) {
+                            std::cerr << "Invalid input: '" + token + "'.\n";
+                        }
                     }
                 }
 
@@ -403,7 +412,6 @@ void unmountISOs() {
                 std::thread progressThread(displayProgressBar, std::ref(completedIsos), std::cref(totalIsos), std::ref(isComplete));
 
                 for (auto& batch : batches) {
-                    std::lock_guard<std::mutex> highLock(Mutex4High);
                     futuresUmount.emplace_back(pool.enqueue([batch = std::move(batch), &unmountedFiles, &unmountedErrors, &completedIsos]() {
                         for (const auto& iso : batch) {
                             unmountISO({iso}, unmountedFiles, unmountedErrors);
