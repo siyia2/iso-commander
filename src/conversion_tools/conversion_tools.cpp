@@ -330,7 +330,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 				if (verbose) {
 					verboseConversion(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts);
 				}
-				if (processedErrors.empty() && successOuts.empty() && skippedOuts.empty() && failedOuts.empty() && deletedOuts.empty()) {
+				if (!processedErrors.empty() && successOuts.empty() && skippedOuts.empty() && failedOuts.empty() && deletedOuts.empty()) {
 					clearScrollBuffer();
 					verbose = false;
 					std::cout << "\n\033[1;91mNo valid input provided for ISO conversion.\033[0;1m";
