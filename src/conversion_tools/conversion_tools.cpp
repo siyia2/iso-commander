@@ -245,7 +245,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 			}
 
             clearScrollBuffer();
-            std::cout << "\033[92;1m// SUCCESSFUL CONVERSIONS ARE AUTOMATICALLY IMPORTED INTO ISO CACHE //\033[0;1m\033[0;1m\n\n";
+            std::cout << "\n";
             sortFilesCaseInsensitive(files);
             printFileList(files);
 
@@ -300,7 +300,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
                             clearScrollBuffer();
                             clear_history();
                             sortFilesCaseInsensitive(filteredFiles);
-                            std::cout << "\033[1mFiltered results:\n\033[0;1m\n";
+                            std::cout << "\n";
                             printFileList(filteredFiles);
 
                             std::string filterPrompt = "\n\001\033[1;94m\033[1;38;5;208m\002Filtered " + fileTypeName + "\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion (e.g., 1-3,1 5), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
