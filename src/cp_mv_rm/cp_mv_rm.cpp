@@ -102,12 +102,6 @@ void select_and_operate_files_by_number(const std::string& operation) {
         operationErrors.clear();
         uniqueErrorMessages.clear();
         clearScrollBuffer();
-        if (!isFiltered) {
-            std::cout << "\033[1;93m! IF EXPECTED ISO FILES ARE NOT ON THE LIST IMPORT THEM FROM THE MAIN MENU OPTIONS !\033[0;1m\n";
-            std::cout << "\033[92;1m                  // CHANGES ARE REFLECTED AUTOMATICALLY //\033[0;1m\n";
-        } else {
-            std::cout << "\033[0;1mFiltered results:\033[0;1m\n";
-        }
 
         printIsoFileList(isFiltered ? filteredFiles : isoFiles);
 
@@ -274,7 +268,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     }
 
     auto displaySelectedIsos = [&]() {
-        std::cout << "\n\033[1;94mThe following ISO(s) will be " << operationColor << operationDescription << "\033[1;94m" << (isDelete ? ":" : " to ?:\033[1;93m" + userDestDir) << "\033[1;94m\033[0;1m\n\n";
+        std::cout << "\n";
         for (const auto& chunk : indexChunks) {
             for (const auto& index : chunk) {
                 auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFiles[index - 1]);
@@ -291,7 +285,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             loadHistory();
             userDestDir.clear();
 
-            std::string prompt = "\n\001\033[1;92m\002Destination directory\001\033[1;94m\002 ↵ for selected ISO(s) to be " + operationColor + operationDescription + "\001\033[1;94m\002 into, or ↵ to abort:\n\001\033[0;1m\002";
+            std::string prompt = "\n\001\033[1;92m\002Destination directory\001\033[1;94m\002 ↵ for selected ISO to be " + operationColor + operationDescription + "\001\033[1;94m\002 into, or ↵ to abort:\n\001\033[0;1m\002";
             std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
             std::string mainInputString(input.get());
 
@@ -323,7 +317,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         displaySelectedIsos();
 
         std::string confirmation;
-        std::cout << "\n\033[1;94mThe selected ISO(s) will be \033[1;91m*PERMANENTLY DELETED FROM DISK*\033[1;94m. Proceed? (y/n):\033[0;1m ";
+        std::cout << "\n\033[1;94mThe selected ISO will be \033[1;91m*PERMANENTLY DELETED FROM DISK*\033[1;94m. Proceed? (y/n):\033[0;1m ";
         std::getline(std::cin, confirmation);
 
         if (!(confirmation == "y" || confirmation == "Y")) {
