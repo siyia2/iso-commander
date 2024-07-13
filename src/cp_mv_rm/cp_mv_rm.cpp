@@ -132,9 +132,9 @@ void select_and_operate_files_by_number(const std::string& operation) {
                     + " \001\033[1;94m\002list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
                 std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
                 
-                if (!searchQuery || searchQuery.get()[0] == '\0') {
+                if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
                     historyPattern = false;
-                    isFiltered = false;
+                    isFiltered = true;
                     break;
                 }
 
