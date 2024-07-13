@@ -75,7 +75,7 @@ void verboseFind(std::set<std::string>& invalidDirectoryPaths) {
 }
 
 
-// Function to apply input filtering to select_and_convert_files_to_iso
+// Function to apply input filtering
 void applyFilter(std::vector<std::string>& files, const std::vector<std::string>& originalFiles, const std::string& fileTypeName) {
     while (true) {
         historyPattern = true;
