@@ -82,7 +82,7 @@ void applyFilter(std::vector<std::string>& files, const std::string& fileTypeNam
         clear_history();
         loadHistory();
 
-        std::string filterPrompt = "\033[1A\033[K\033[1A\033[K\n\001\033[1;92m\002Term\001\033[1;94m\002 ↵ to filter \001\033[1;38;5;208m\002" + fileTypeName + "\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
+        std::string filterPrompt = "\033[1A\033[K\033[1A\033[K\n\001\033[1;92m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;38;5;208m\002" + fileTypeName + "\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
         std::unique_ptr<char, decltype(&std::free)> rawSearchQuery(readline(filterPrompt.c_str()), &std::free);
         std::string inputSearch(rawSearchQuery.get());
 
@@ -90,7 +90,7 @@ void applyFilter(std::vector<std::string>& files, const std::string& fileTypeNam
             add_history(rawSearchQuery.get());
             saveHistory();
         }
-
+		historyPattern = false;
         clear_history();
 
         if (inputSearch.empty() || inputSearch == "/") {
