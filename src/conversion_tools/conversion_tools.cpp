@@ -44,6 +44,7 @@ void verboseConversion(std::set<std::string>& processedErrors, std::set<std::str
     failedOuts.clear();		// Clear the set of failed messages
     deletedOuts.clear();   // Clear the set of deleted messages
     processedErrors.clear(); // Clear the set of error messages
+    verbose = false;
 }
 
 
