@@ -218,6 +218,10 @@ void unmountISOs() {
     std::set<std::string> errorMessages;
     
     while (true) {
+		unmountedFiles.clear();
+        unmountedErrors.clear();
+        errorMessages.clear();
+        
         std::vector<std::string> selectedIsoDirs;
         selectedIsoDirs.reserve(maxThreads);
         
@@ -280,6 +284,10 @@ void unmountISOs() {
      } else if (inputString == "/") {
 		// Handle filtering
 		while (true) {
+			unmountedFiles.clear();
+			unmountedErrors.clear();
+			errorMessages.clear();
+        
 			historyPattern = true;
 			clear_history();
 			loadHistory();

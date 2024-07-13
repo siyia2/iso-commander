@@ -98,6 +98,11 @@ void select_and_mount_files_by_number() {
             }
         } else if (inputString == "/") {
 			while (true) {
+				mountedFiles.clear();
+				skippedMessages.clear();
+				mountedFails.clear();
+				uniqueErrorMessages.clear();
+        
 				historyPattern = true;
 				loadHistory();
 				std::string filterPrompt = "\033[1A\033[K\033[1A\033[K\n\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
@@ -105,6 +110,7 @@ void select_and_mount_files_by_number() {
         
 				if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
 					historyPattern = false;
+					clear_history();
 					isFiltered = false;  // Exit filter mode
 					filteredFiles.clear();  // Clear any existing filtered results
 					break;
