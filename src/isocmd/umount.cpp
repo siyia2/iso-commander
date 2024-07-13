@@ -289,7 +289,7 @@ void unmountISOs() {
                 std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
                 std::string terms(searchQuery.get());
 
-                if (!searchQuery || searchQuery.get()[0] == '\0') {
+                if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
                     historyPattern = false;
                     //isFiltered = false;
                     //filteredIsoDirs.clear(); // Clear the filtered list when exiting filter mode
