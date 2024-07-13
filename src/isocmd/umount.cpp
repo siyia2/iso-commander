@@ -293,8 +293,7 @@ void unmountISOs() {
 				
 				if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
 					historyPattern = false;
-					isFiltered = false;  // Ensure we're not in filtered mode
-					filteredIsoDirs.clear(); // Clear the filtered list when exiting filter mode
+					
 					break;
 				}
 				std::string inputSearch(searchQuery.get());
