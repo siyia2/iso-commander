@@ -100,7 +100,7 @@ void applyFilter(std::vector<std::string>& files, const std::string& fileTypeNam
         std::vector<std::string> filteredFiles = filterFiles(files, inputSearch);
 
         if (filteredFiles.empty()) {
-            std::cout << "\033[1A\033[K";
+            std::cout << "\033[K";  // Clear the previous input line
             continue;
         }
 
@@ -257,7 +257,8 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
             clearScrollBuffer();
             continue;
         }
-		bool returnedToOriginalList = false;
+		bool isFiltered = false;
+		bool isFilteredButUnchanged = false;
         while (true) {
             successOuts.clear(); skippedOuts.clear(); failedOuts.clear(); deletedOuts.clear(); processedErrors.clear();
 
@@ -281,46 +282,53 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
             printFileList(files);
 
             clear_history();
-            std::string prompt = "\n\001\033[1;38;5;208m\002" + fileTypeName + "\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion (e.g., 1-3,1 5), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
-            std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
-            std::string mainInputString(rawInput.get());
+           std::string prompt = "\n\001\033[1;38;5;208m\002" + fileTypeName + "\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion (e.g., 1-3,1 5), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+			std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
+			std::string mainInputString(rawInput.get());
 
-            if (std::isspace(rawInput.get()[0]) || rawInput.get()[0] == '\0') {
+			if (std::isspace(rawInput.get()[0]) || rawInput.get()[0] == '\0') {
 				clearScrollBuffer();
-				if (returnedToOriginalList) {
-					break; // Exit the loop if enter is pressed twice
-				}
-				// Reset the files vector to the original list
-				if (!modeMdf) {
-					files = binImgFilesCache;
+				if (isFiltered && !isFilteredButUnchanged) {
+					// Reset to unfiltered list
+					if (!modeMdf) {
+						files = binImgFilesCache;
+					} else {
+						files = mdfMdsFilesCache;
+					}
+					isFiltered = false;
+					isFilteredButUnchanged = false;
+					continue;  // Continue to show unfiltered list
 				} else {
-					files = mdfMdsFilesCache;
-				}
-				returnedToOriginalList = true;
-				continue; // Continue the loop to display the original list
+					break;  // Exit the function
+				}		
 			}
 
-			returnedToOriginalList = false; // reset flag
-
-            if (strcmp(rawInput.get(), "/") == 0) {
-                applyFilter(files, fileTypeName);
-            } else {
-                clearScrollBuffer();
-                std::cout << "\033[1m" << std::endl;
-                processInput(mainInputString, files, modeMdf, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts);
-
-                clearScrollBuffer();
-                std::cout << "\n";
-                if (verbose) {
-                    verboseConversion(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts);
-                }
-                if (processedErrors.empty() && successOuts.empty() && skippedOuts.empty() && failedOuts.empty() && deletedOuts.empty()) {
-                    clearScrollBuffer();
-                    verbose = false;
-                    std::cout << "\n\033[1;91mNo valid input provided for ISO conversion.\033[0;1m";
-                    std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
-                    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                }
+			if (strcmp(rawInput.get(), "/") == 0) {
+				std::vector<std::string> originalFiles = files;
+				applyFilter(files, fileTypeName);
+        
+				if (files == originalFiles) {
+					isFilteredButUnchanged = true;
+				} else {
+					isFiltered = true;
+					isFilteredButUnchanged = false;
+				}
+			} else {
+				clearScrollBuffer();
+				std::cout << "\033[1m" << std::endl;
+				processInput(mainInputString, files, modeMdf, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts);
+				clearScrollBuffer();
+				std::cout << "\n";
+				if (verbose) {
+					verboseConversion(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts);
+				}
+				if (processedErrors.empty() && successOuts.empty() && skippedOuts.empty() && failedOuts.empty() && deletedOuts.empty()) {
+					clearScrollBuffer();
+					verbose = false;
+					std::cout << "\n\033[1;91mNo valid input provided for ISO conversion.\033[0;1m";
+					std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
+					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+				}
             }
         }
     }
