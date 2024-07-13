@@ -284,7 +284,7 @@ void unmountISOs() {
 			while (true) {	
 				historyPattern = true;
 				loadHistory();			
-				std::string filterPrompt = "\033[1A\033[K\033[1A\033[K\n\001\033[1;92m\002FilterTerms\001\033[1;94m\002 ↵ for \033[1;93mumount\033[1;94m list (multi-term separator: \033[1;93m;\033[1;94m), ↵ return: \033[0;1m";
+				std::string filterPrompt = "\033[1A\033[K\033[1A\033[K\n\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \033[1;93mumount\033[1;94m list (multi-term separator: \033[1;93m;\033[1;94m), ↵ return: \033[0;1m";
 				std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
 				std::string terms(searchQuery.get());
 				
