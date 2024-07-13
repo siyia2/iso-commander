@@ -251,7 +251,11 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
             clearScrollBuffer();
             continue;
         }
-        originalFiles = files; // Save the original list
+        if (!modeMdf) {
+			originalFiles = binImgFilesCache;
+        } else {
+			originalFiles = mdfMdsFilesCache;
+		}
 		bool isFiltered = false;
 		bool isFilteredButUnchanged = false;
         while (true) {
