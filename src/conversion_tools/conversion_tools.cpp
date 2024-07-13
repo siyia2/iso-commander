@@ -756,19 +756,36 @@ void printFileList(const std::vector<std::string>& fileList) {
 
 // Function to convert a BIN/IMG/MDF file to ISO format
 void convertToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool modeMdf) {
-    // Get current user and group
-    char* current_user = getlogin();
-    if (current_user == nullptr) {
-        std::cerr << "\nError getting current user: " << strerror(errno) << "\033[0;1m";
+    // Get the real user ID and group ID (of the user who invoked sudo)
+    uid_t real_uid;
+    gid_t real_gid;
+    const char* sudo_uid = std::getenv("SUDO_UID");
+    const char* sudo_gid = std::getenv("SUDO_GID");
+    
+    if (sudo_uid && sudo_gid) {
+        real_uid = std::stoul(sudo_uid);
+        real_gid = std::stoul(sudo_gid);
+    } else {
+        // Fallback to current effective user if not running with sudo
+        real_uid = geteuid();
+        real_gid = getegid();
+    }
+
+    // Get real user's name
+    struct passwd *pw = getpwuid(real_uid);
+    if (pw == nullptr) {
+        std::cerr << "\nError getting user information: " << strerror(errno) << "\033[0;1m";
         return;
     }
-    gid_t current_group = getegid();
-    if (current_group == static_cast<unsigned int>(-1)) {
-        std::cerr << "\n\033[1;91mError getting current group:\033[0;1m " << strerror(errno) << "\033[0;1m";
+    std::string real_username(pw->pw_name);
+
+    // Get real group name
+    struct group *gr = getgrgid(real_gid);
+    if (gr == nullptr) {
+        std::cerr << "\nError getting group information: " << strerror(errno) << "\033[0;1m";
         return;
     }
-    std::string user_str(current_user);
-    std::string group_str = std::to_string(static_cast<unsigned int>(current_group));
+    std::string real_groupname(gr->gr_name);
 
     auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath);
     // Check if the input file exists
@@ -813,8 +830,23 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
     // Check the result of the conversion
     if (conversionStatus == 0) {
         // Change ownership of the created ISO file
-        std::string chownCommand = "chown " + user_str + ":" + group_str + " " + escapedOutputPath;
-        system(chownCommand.c_str());
+        struct stat file_stat;
+        if (stat(outputPath.c_str(), &file_stat) == 0) {
+            // Only change ownership if it's different from the current user
+            if (file_stat.st_uid != real_uid || file_stat.st_gid != real_gid) {
+                if (chown(outputPath.c_str(), real_uid, real_gid) != 0) {
+                    std::string errorMessage = "\033[1;91mFailed to change ownership of \033[1;93m'" + outDirectory + "/" + outFileNameOnly + "'\033[1;91m: " + strerror(errno) + "\033[0;1m";
+                    {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
+                        failedOuts.insert(errorMessage);
+                    }
+                }
+            }
+        } else {
+            std::string errorMessage = "\033[1;91mFailed to get file information for \033[1;93m'" + outDirectory + "/" + outFileNameOnly + "'\033[1;91m: " + strerror(errno) + "\033[0;1m";
+            {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
+                failedOuts.insert(errorMessage);
+            }
+        }
 
         std::string successMessage = "\033[1mImage file converted to ISO:\033[0;1m \033[1;92m'" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m.\033[0;1m";
         {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
