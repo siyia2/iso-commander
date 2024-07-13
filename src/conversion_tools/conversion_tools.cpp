@@ -136,7 +136,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
             continue;
         }
         
-        // Return early if list mode is enabled
+        // Return static cache if input=ls
 		if (list && !modeMdf) {
 			files = binImgFilesCache;
 		} else if (list && modeMdf) {
@@ -195,10 +195,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
             std::cout << "\n";
             verboseFind(invalidDirectoryPaths);
             auto end_time = std::chrono::high_resolution_clock::now();
-            if (gapSet) {
-				std::cout << "\n";
-			}
-			if (!gapSet) {
+            if (gapSet || !gapSet) {
 				std::cout << "\n";
 			}
             std::cout << "\033[1;91mNo new " << fileExtension << " file(s) over 5MB found. \033[1;92m" << files.size() << " file(s) are cached in RAM from previous searches.\033[0;1m\n\n";
@@ -212,10 +209,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
             std::cout << "\n";
             verboseFind(invalidDirectoryPaths);
             auto end_time = std::chrono::high_resolution_clock::now();
-            if (gapSet) {
-				std::cout << "\n";
-			}
-			if (!gapSet) {
+            if (gapSet || !gapSet) {
 				std::cout << "\n";
 			}
             std::cout << "\033[1;91mNo " << fileExtension << " file(s) over 5MB found in the specified path(s) or cached in RAM.\n\033[0;1m\n";
