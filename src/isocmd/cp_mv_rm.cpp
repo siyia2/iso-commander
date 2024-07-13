@@ -503,8 +503,8 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 
                 // Store operation success info
                 std::string operationInfo = "\033[1m" + std::string(isDelete ? "Deleted" : (isCopy ? "Copied" : "Moved")) +
-                    ": \033[1;92m'" + srcPath.string() + "'\033[0;1m" +
-                    (isDelete ? "" : " to \033[1;94m'" + destPath.string() + "'\033[0;1m");
+                    ": \033[1;92m'" + srcPath.string() + "'" + std::string(isDelete ? "\033[1m\033[0;1m." : "\033[1m\033[0;1m") +
+                    (isDelete ? "" : " to \033[1;94m'" + destPath.string() + "'\033[0;1m.");
                 {
                     std::lock_guard<std::mutex> lowLock(Mutex4Low);
                     operationIsos.emplace(operationInfo);
@@ -515,7 +515,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     std::string(isDelete ? "deleting" : (isCopy ? "copying" : "moving")) +
                     ": \033[1;93m'" + srcPath.string() + "'\033[1;91m" +
                     (isDelete ? "" : " to '" + userDestDir + "'") +
-                    ": " + e.what() + "\033[0;1m";
+                    ": " + e.what() + "\033[1;91m.\033[0;1m";
                 {
                     std::lock_guard<std::mutex> lowLock(Mutex4Low);
                     operationErrors.emplace(errorMessageInfo);
@@ -537,7 +537,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
             } else {
                 // Print message if file not found
                 std::string errorMessageInfo = "\033[1;35mFile not found: \033[0;1m'" + 
-                    isoPath.string() + "'\033[1;95m.\033[0;1m";
+                    isoPath.string() + "'\033[1;35m.\033[0;1m";
                 {
                     std::lock_guard<std::mutex> lowLock(Mutex4Low);
                     operationErrors.emplace(errorMessageInfo);
