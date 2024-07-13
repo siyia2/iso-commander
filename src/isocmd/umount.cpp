@@ -358,32 +358,31 @@ void unmountISOs() {
                 std::istringstream iss(inputString);
                 for (std::string token; iss >> token;) {
                     if (startsWithZero(token)) {
-                        if (token == "00") {
-                            selectedIsoDirs = currentDirs;
-                            break;
-                        } else {
-                            try {
-                                size_t index = std::stoul(token) - 1;
-                                if (index < currentDirs.size()) {
-                                    selectedIndices.insert(index);
-                                } else {
-                                    std::cerr << "Invalid index: '" + token + "'.\n";
+                        errorMessages.emplace("\033[1;91mInvalid index: '0'.\033[0;1m");
+                        continue;
+                    }
+                    try {
+                        size_t dashPos = token.find('-');
+                        if (dashPos != std::string::npos) {
+                            size_t start = std::stoi(token.substr(0, dashPos)) - 1;
+                            size_t end = std::stoi(token.substr(dashPos + 1)) - 1;
+                            if (start < currentDirs.size() && end < currentDirs.size()) {
+                                for (size_t i = std::min(start, end); i <= std::max(start, end); ++i) {
+                                    selectedIndices.emplace(i);
                                 }
-                            } catch (const std::invalid_argument&) {
-                                std::cerr << "Invalid input: '" + token + "'.\n";
-                            }
-                        }
-                    } else {
-                        try {
-                            size_t index = std::stoul(token) - 1;
-                            if (index < currentDirs.size()) {
-                                selectedIndices.insert(index);
                             } else {
-                                std::cerr << "Invalid index: '" + token + "'.\n";
+                                errorMessages.emplace("Invalid range: '" + token + "'.");
                             }
-                        } catch (const std::invalid_argument&) {
-                            std::cerr << "Invalid input: '" + token + "'.\n";
+                        } else {
+                            size_t index = std::stoi(token) - 1;
+                            if (index < currentDirs.size()) {
+                                selectedIndices.emplace(index);
+                            } else {
+                                errorMessages.emplace("Invalid index: '" + token + "'.");
+                            }
                         }
+                    } catch (const std::invalid_argument&) {
+                        errorMessages.emplace("Invalid input: '" + token + "'.");
                     }
                 }
 
@@ -411,6 +410,7 @@ void unmountISOs() {
                 std::thread progressThread(displayProgressBar, std::ref(completedIsos), std::cref(totalIsos), std::ref(isComplete));
 
                 for (auto& batch : batches) {
+                    std::lock_guard<std::mutex> highLock(Mutex4High);
                     futuresUmount.emplace_back(pool.enqueue([batch = std::move(batch), &unmountedFiles, &unmountedErrors, &completedIsos]() {
                         for (const auto& iso : batch) {
                             unmountISO({iso}, unmountedFiles, unmountedErrors);
