@@ -75,6 +75,42 @@ void verboseFind(std::set<std::string>& invalidDirectoryPaths) {
 }
 
 
+// Function to apply input filtering to select_and_convert_files_to_iso
+void applyFilter(std::vector<std::string>& files, const std::string& fileTypeName) {
+    while (true) {
+        historyPattern = true;
+        clear_history();
+        loadHistory();
+
+        std::string filterPrompt = "\033[1A\033[K\033[1A\033[K\n\001\033[1;92m\002Term\001\033[1;94m\002 ↵ to filter \001\033[1;38;5;208m\002" + fileTypeName + "\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
+        std::unique_ptr<char, decltype(&std::free)> rawSearchQuery(readline(filterPrompt.c_str()), &std::free);
+        std::string inputSearch(rawSearchQuery.get());
+
+        if (!inputSearch.empty() && inputSearch != "/") {
+            add_history(rawSearchQuery.get());
+            saveHistory();
+        }
+
+        clear_history();
+
+        if (inputSearch.empty() || inputSearch == "/") {
+            break;
+        }
+
+        std::vector<std::string> filteredFiles = filterFiles(files, inputSearch);
+
+        if (filteredFiles.empty()) {
+            std::cout << "\033[1A\033[K";
+            continue;
+        }
+
+        files = filteredFiles;
+        clearScrollBuffer();
+        break;
+    }
+}
+
+
 // Function to select and convert files based on user's choice of file type
 void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     std::vector<std::string> files;
@@ -237,7 +273,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 clearScrollBuffer();
                 break;
-			}
+            }
 
             clearScrollBuffer();
             std::cout << "\n";
@@ -246,88 +282,16 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
             clear_history();
             std::string prompt = "\n\001\033[1;38;5;208m\002" + fileTypeName + "\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion (e.g., 1-3,1 5), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
-            char* rawInput = readline(prompt.c_str());
-            std::unique_ptr<char, decltype(&std::free)> input(rawInput, &std::free);
-            std::string mainInputString(input.get());
+            std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
+            std::string mainInputString(rawInput.get());
 
-            if (std::isspace(input.get()[0]) || input.get()[0] == '\0') {
+            if (std::isspace(rawInput.get()[0]) || rawInput.get()[0] == '\0') {
                 clearScrollBuffer();
                 break;
             }
-			bool search = true;
-            if (strcmp(input.get(), "/") == 0) {
-                while (search) {
-					historyPattern = true;
-                    clear_history();
-                    loadHistory();
-                    std::string filterPrompt = "\033[1A\033[K\033[1A\033[K\n\001\033[1;92m\002Term\001\033[1;94m\002 ↵ to filter \001\033[1;38;5;208m\002" + fileTypeName + "\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
-                    char* rawSearchQuery = readline(filterPrompt.c_str());
-                    std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
-                    std::string inputSearch(searchQuery.get());
-					
-                    if (searchQuery && searchQuery.get()[0] != '\0') {
-                        std::cout << "\033[1m\n";
-                        if (strcmp(searchQuery.get(), "/") != 0) {
-                            add_history(searchQuery.get());
-                            saveHistory();
-                        }
-                    }
-                    clear_history();
 
-                    if (searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
-                        break;
-                    }
-
-                    std::vector<std::string> filteredFiles = filterFiles(files, inputSearch);
-
-                    if (filteredFiles.empty()) {
-						std::cout << "\033[1A\033[K";
-						continue;
-                    } else {
-						clearScrollBuffer();
-                        while (true) {
-                            successOuts.clear(); skippedOuts.clear(); failedOuts.clear(); deletedOuts.clear(); processedErrors.clear();
-                            clearScrollBuffer();
-                            clear_history();
-                            sortFilesCaseInsensitive(filteredFiles);
-                            std::cout << "\n";
-                            printFileList(filteredFiles);
-
-                            std::string filterPrompt = "\n\001\033[1;94m\033[1;38;5;208m\002Filtered " + fileTypeName + "\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion (e.g., 1-3,1 5), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
-                            char* rawfilterPrompt = readline(filterPrompt.c_str());
-                            std::unique_ptr<char, decltype(&std::free)> filterInput(rawfilterPrompt, &std::free);
-                            std::string filterInputString(filterInput.get());
-
-                            if (filterInput.get()[0] == '/') {
-								search = true;
-                                break;
-                            }
-
-                            if (std::isspace(filterInput.get()[0]) || filterInput.get()[0] == '\0') {
-								search = false;
-								historyPattern =false;
-                                break;
-                            }
-
-                            clearScrollBuffer();
-                            std::cout << "\033[1m" << std::endl;
-                            processInput(filterInputString, filteredFiles, modeMdf, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts);
-
-                            clearScrollBuffer();
-                            std::cout << "\n";
-                            if (verbose) {
-                                verboseConversion(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts);
-                            }
-                            if (!processedErrors.empty() && successOuts.empty() && skippedOuts.empty() && failedOuts.empty() && deletedOuts.empty()) {
-                                clearScrollBuffer();
-                                verbose = false;
-                                std::cout << "\n\033[1;91mNo valid input provided for ISO conversion.\033[0;1m";
-                                std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
-                                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                            }
-                        }
-                    }
-                }
+            if (strcmp(rawInput.get(), "/") == 0) {
+                applyFilter(files, fileTypeName);
             } else {
                 clearScrollBuffer();
                 std::cout << "\033[1m" << std::endl;
@@ -338,7 +302,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
                 if (verbose) {
                     verboseConversion(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts);
                 }
-                if (!processedErrors.empty() && successOuts.empty() && skippedOuts.empty() && failedOuts.empty() && deletedOuts.empty()) {
+                if (processedErrors.empty() && successOuts.empty() && skippedOuts.empty() && failedOuts.empty() && deletedOuts.empty()) {
                     clearScrollBuffer();
                     verbose = false;
                     std::cout << "\n\033[1;91mNo valid input provided for ISO conversion.\033[0;1m";
