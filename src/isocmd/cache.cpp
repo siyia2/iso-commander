@@ -304,7 +304,7 @@ void manualRefreshCache(const std::string& initialDir) {
 		loadHistory();
 		maxDepth = -1;
 		// Prompt the user to enter directory paths for manual cache refresh
-		std::string prompt = "\001\033[1;92m\002Folder path(s)\001\033[1;94m\002 ↵ to scan for \001\033[1;92m\002.iso\001\033[1;94m\002 files and import into \001\033[1;92m\002on-disk\001\033[1;94m\002 cache (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002),\001\033[1;93m\002 clr\001\033[1;94m\002 ↵ clear \001\033[1m\002\001\033[1;92m\002on-disk\001\033[1m\002\001\033[1;94m\002 cache, ↵ return:\n\001\033[0;1m\002";
+		std::string prompt = "\001\033[1;92m\002Folder paths\001\033[1;94m\002 ↵ to scan for \001\033[1;92m\002.iso\001\033[1;94m\002 files and import into \001\033[1;92m\002on-disk\001\033[1;94m\002 cache (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002),\001\033[1;93m\002 clr\001\033[1;94m\002 ↵ clear \001\033[1m\002\001\033[1;92m\002on-disk\001\033[1m\002\001\033[1;94m\002 cache, ↵ return:\n\001\033[0;1m\002";
 		// Prompt user for input
 		char* rawSearchQuery = readline(prompt.c_str());
 
