@@ -267,9 +267,9 @@ void unmountISOs() {
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         std::string inputString(input.get());
 
-        clearScrollBuffer();
         if (!inputString.empty() && inputString != "/") {
-            std::cout << "\033[1mPlease wait...\033[1m\n";
+			clearScrollBuffer();
+            std::cout << "\033[1m\n";
         }
 
         if (inputString.empty()) {
@@ -286,10 +286,8 @@ void unmountISOs() {
             loadHistory();
             inputString.clear();
 
-            while (true) {
-				
-                clearScrollBuffer();
-                std::string filterPrompt = "\n\033[1;92mTerm(s)\033[1;94m ↵ to filter \033[1;93mumount\033[1;94m list (multi-term separator: \033[1;93m;\033[1;94m), ↵ return: \033[0;1m";
+            while (true) {				
+                std::string filterPrompt = "\033[1A\033[K\033[1A\033[K\n\001\033[1;92m\002Terms\001\033[1;94m\002 ↵ to filter \033[1;93mumount\033[1;94m list (multi-term separator: \033[1;93m;\033[1;94m), ↵ return: \033[0;1m";
                 std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
                 std::string terms(searchQuery.get());
 
@@ -301,8 +299,7 @@ void unmountISOs() {
                 }
 
                 std::string inputSearch(searchQuery.get());
-                clearScrollBuffer();
-                std::cout << "\033[1mPlease wait...\033[1m\n";
+                std::cout << "\033[1m\n";
 
                 if (strcmp(searchQuery.get(), "/") != 0) {
                     add_history(searchQuery.get());
@@ -336,12 +333,12 @@ void unmountISOs() {
                 for (auto& future : futuresFilter) {
                     future.get();
                 }
-
+				
                 if (filteredIsoDirs.empty()) {
-                    clearScrollBuffer();
-                    std::cout << "\n\033[1;91mNo matches found.\033[0;1m\n\n\033[1;32m↵ to continue...\033[0;1m";
-                    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                    std::cout << "\033[1A\033[K";
+					continue;
                 } else {
+					clearScrollBuffer();
                     isFiltered = true;
                     break;
                 }

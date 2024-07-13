@@ -83,11 +83,11 @@ void select_and_mount_files_by_number() {
 
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         std::string inputString(input.get());
-
-        clearScrollBuffer();
+        
         if (!inputString.empty() && inputString != "/") {
-            std::cout << "\033[1mPlease wait...\033[1m\n";
-        }
+			clearScrollBuffer();
+			std::cout << "\n\033[0;1m";
+		}
 
         if (inputString.empty()) {
             if (isFiltered) {
@@ -101,8 +101,7 @@ void select_and_mount_files_by_number() {
             loadHistory();
 
             while (true) {
-                clearScrollBuffer();
-                std::string filterPrompt = "\n\001\033[1;92m\002Term(s)\001\033[1;94m\002 ↵ to filter \001\033[1;92m\002mount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
+                std::string filterPrompt = "\033[1A\033[K\033[1A\033[K\n\001\033[1;92m\002Terms\001\033[1;94m\002 ↵ to filter \001\033[1;92m\002mount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
                 std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
                 
                 if (!searchQuery || searchQuery.get()[0] == '\0') {
@@ -112,8 +111,6 @@ void select_and_mount_files_by_number() {
                 }
 
                 std::string inputSearch(searchQuery.get());
-                clearScrollBuffer();
-                std::cout << "\033[1mPlease wait...\033[1m\n";
                 
                 if (strcmp(searchQuery.get(), "/") != 0) {
                     add_history(searchQuery.get());
@@ -123,10 +120,10 @@ void select_and_mount_files_by_number() {
                 filteredFiles = filterFiles(isoFiles, inputSearch);
 
                 if (filteredFiles.empty()) {
-                    clearScrollBuffer();
-                    std::cout << "\n\033[1;91mNo matches found.\033[0;1m\n\n\033[1;32m↵ to continue...\033[0;1m";
-                    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+					std::cout << "\033[K";
+					continue;
                 } else {
+					clearScrollBuffer();
                     isFiltered = true;
                     break;
                 }
