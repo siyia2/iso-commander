@@ -168,6 +168,7 @@ bool blacklist(const std::filesystem::path& entry, bool blacklistMdf);
 std::vector<std::string> findFiles(const std::vector<std::string>& paths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrors);
 
 // voids
+void applyFilter(std::vector<std::string>& files, const std::string& fileTypeName);
 void convertToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool modeMdf);
 void verboseFind(std::set<std::string>& invalidDirectoryPaths);
 void verboseConversion(std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts);
