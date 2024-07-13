@@ -257,7 +257,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
             clearScrollBuffer();
             continue;
         }
-
+		bool returnedToOriginalList = false;
         while (true) {
             successOuts.clear(); skippedOuts.clear(); failedOuts.clear(); deletedOuts.clear(); processedErrors.clear();
 
@@ -286,9 +286,21 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
             std::string mainInputString(rawInput.get());
 
             if (std::isspace(rawInput.get()[0]) || rawInput.get()[0] == '\0') {
-                clearScrollBuffer();
-                break;
-            }
+				clearScrollBuffer();
+				if (returnedToOriginalList) {
+					break; // Exit the loop if enter is pressed twice
+				}
+				// Reset the files vector to the original list
+				if (!modeMdf) {
+					files = binImgFilesCache;
+				} else {
+					files = mdfMdsFilesCache;
+				}
+				returnedToOriginalList = true;
+				continue; // Continue the loop to display the original list
+			}
+
+			returnedToOriginalList = false; // reset flag
 
             if (strcmp(rawInput.get(), "/") == 0) {
                 applyFilter(files, fileTypeName);
