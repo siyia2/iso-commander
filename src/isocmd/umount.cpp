@@ -281,10 +281,8 @@ void unmountISOs() {
                 return;
             }
         } else if (inputString == "/") {
-			filteredIsoDirs.clear();
             historyPattern = true;
             loadHistory();
-            inputString.clear();
 
             while (true) {				
                 std::string filterPrompt = "\033[1A\033[K\033[1A\033[K\n\001\033[1;92m\002Terms\001\033[1;94m\002 ↵ to filter \033[1;93mumount\033[1;94m list (multi-term separator: \033[1;93m;\033[1;94m), ↵ return: \033[0;1m";
@@ -293,8 +291,8 @@ void unmountISOs() {
 
                 if (!searchQuery || searchQuery.get()[0] == '\0') {
                     historyPattern = false;
-                    isFiltered = false;
-                    filteredIsoDirs.clear(); // Clear the filtered list when exiting filter mode
+                    //isFiltered = false;
+                    //filteredIsoDirs.clear(); // Clear the filtered list when exiting filter mode
                     break;
                 }
 
@@ -313,6 +311,8 @@ void unmountISOs() {
                     filterPatterns.push_back(token);
                     toLowerInPlace(filterPatterns.back());
                 }
+                
+                filteredIsoDirs.clear();
 
                 size_t numDirs = isoDirs.size();
                 unsigned int numThreads = std::min(static_cast<unsigned int>(numDirs), maxThreads);
