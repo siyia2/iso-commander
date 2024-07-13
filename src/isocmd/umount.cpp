@@ -285,6 +285,7 @@ void unmountISOs() {
 				unmountedFiles.clear();
                 unmountedErrors.clear();
                 errorMessages.clear();
+                clear_history();
 				historyPattern = true;
 				loadHistory();			
 				std::string filterPrompt = "\033[1A\033[K\033[1A\033[K\n\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \033[1;93mumount\033[1;94m list (multi-term separator: \033[1;93m;\033[1;94m), ↵ return: \033[0;1m";
@@ -293,7 +294,7 @@ void unmountISOs() {
 				
 				if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
 					historyPattern = false;
-					
+					clear_history();
 					break;
 				}
 				std::string inputSearch(searchQuery.get());

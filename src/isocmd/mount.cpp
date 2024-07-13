@@ -102,7 +102,8 @@ void select_and_mount_files_by_number() {
 				skippedMessages.clear();
 				mountedFails.clear();
 				uniqueErrorMessages.clear();
-        
+				
+				clear_history();
 				historyPattern = true;
 				loadHistory();
 				std::string filterPrompt = "\033[1A\033[K\033[1A\033[K\n\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
