@@ -76,34 +76,28 @@ void verboseFind(std::set<std::string>& invalidDirectoryPaths) {
 
 
 // Function to apply input filtering to select_and_convert_files_to_iso
-void applyFilter(std::vector<std::string>& files, const std::string& fileTypeName) {
+void applyFilter(std::vector<std::string>& files, const std::vector<std::string>& originalFiles, const std::string& fileTypeName) {
     while (true) {
         historyPattern = true;
         clear_history();
         loadHistory();
-
         std::string filterPrompt = "\033[1A\033[K\033[1A\033[K\n\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;38;5;208m\002" + fileTypeName + "\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
         std::unique_ptr<char, decltype(&std::free)> rawSearchQuery(readline(filterPrompt.c_str()), &std::free);
         std::string inputSearch(rawSearchQuery.get());
-
         if (!inputSearch.empty() && inputSearch != "/") {
             add_history(rawSearchQuery.get());
             saveHistory();
         }
-		historyPattern = false;
+        historyPattern = false;
         clear_history();
-
         if (inputSearch.empty() || inputSearch == "/") {
             break;
         }
-
-        std::vector<std::string> filteredFiles = filterFiles(files, inputSearch);
-
+        std::vector<std::string> filteredFiles = filterFiles(originalFiles, inputSearch); // Filter the original list
         if (filteredFiles.empty()) {
             std::cout << "\033[K";  // Clear the previous input line
             continue;
         }
-
         files = filteredFiles;
         clearScrollBuffer();
         break;
@@ -113,7 +107,7 @@ void applyFilter(std::vector<std::string>& files, const std::string& fileTypeNam
 
 // Function to select and convert files based on user's choice of file type
 void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
-    std::vector<std::string> files;
+    std::vector<std::string> files, originalFiles;
     files.reserve(100);
     std::vector<std::string> directoryPaths;
     std::set<std::string> uniquePaths, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, invalidDirectoryPaths;
@@ -257,6 +251,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
             clearScrollBuffer();
             continue;
         }
+        originalFiles = files; // Save the original list
 		bool isFiltered = false;
 		bool isFilteredButUnchanged = false;
         while (true) {
@@ -282,7 +277,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
             printFileList(files);
 
             clear_history();
-           std::string prompt = "\n\001\033[1;38;5;208m\002" + fileTypeName + "\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion (e.g., 1-3,1 5), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+           std::string prompt = "\n\001\033[1;92m\002" + fileTypeName + "\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion (e.g., 1-3,1 5), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
 			std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
 			std::string mainInputString(rawInput.get());
 
@@ -304,15 +299,16 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 			}
 
 			if (strcmp(rawInput.get(), "/") == 0) {
-				std::vector<std::string> originalFiles = files;
-				applyFilter(files, fileTypeName);
-        
-				if (files == originalFiles) {
+				std::vector<std::string> beforeFilterFiles = files;
+				applyFilter(files, originalFiles, fileTypeName); // Pass both current and original lists
+    
+				if (files == beforeFilterFiles) {
 					isFilteredButUnchanged = true;
 				} else {
 					isFiltered = true;
 					isFilteredButUnchanged = false;
 				}
+
 			} else {
 				clearScrollBuffer();
 				std::cout << "\033[1m" << std::endl;
