@@ -10,9 +10,8 @@ For best experience execute with: `sudo isocmd`.
 
 Features:
 * Cached ISO management for reduced disk thrashing.
-* Utilizes GNU/Linux utilities: rm,cp,mv,libmount.
 * Tab completion and history support.
-* Sanitized shell commands for improved security.
+* Works exclusively with native C++ and libmount calls.
 * Ultra lightweight with no reliance on ncurses or any other external libraries for terminal control.
 * Multithreaded asynchronous tasks leveraging state-of-the-art concurrent practices.
 * Capable of seamlessly handling anywhere from 1 to an astonishing 100,000 ISO files.
