@@ -464,14 +464,15 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 
     // Lambda function to execute the operation
     auto executeOperation = [&](const std::vector<std::string>& files) {
-        for (const auto& operateIso : files) {
-            fs::path srcPath(operateIso);
-            fs::path destPath = fs::path(userDestDir) / srcPath.filename();
+    for (const auto& operateIso : files) {
+        fs::path srcPath(operateIso);
+        fs::path destPath = fs::path(userDestDir) / srcPath.filename();
 
-            std::error_code ec;
-            try {
-                if (isMove || isCopy) {
-                    // Create destination directory if it doesn't exist
+        std::error_code ec;
+        try {
+            if (isMove || isCopy) {
+                // Create destination directory if it doesn't exist
+                if (!fs::exists(userDestDir)) {
                     fs::create_directories(userDestDir, ec);
                     if (ec) {
                         throw std::runtime_error("Failed to create destination directory: " + ec.message());
@@ -479,25 +480,26 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 
                     // Change ownership of the created directory
                     changeOwnership(fs::path(userDestDir));
-
-                    // Copy or move the file
-                    if (isCopy) {
-                        fs::copy(srcPath, destPath, fs::copy_options::overwrite_existing, ec);
-                    } else if (isMove) {
-                        fs::rename(srcPath, destPath, ec);
-                    }
-                } else if (isDelete) {
-                    fs::remove(srcPath, ec);
                 }
 
-                if (ec) {
-                    throw std::runtime_error("Operation failed: " + ec.message());
+                // Copy or move the file
+                if (isCopy) {
+                    fs::copy(srcPath, destPath, fs::copy_options::overwrite_existing, ec);
+                } else if (isMove) {
+                    fs::rename(srcPath, destPath, ec);
                 }
+            } else if (isDelete) {
+                fs::remove(srcPath, ec);
+            }
 
-                // Change ownership of the copied/moved file
-                if (!isDelete) {
-                    changeOwnership(destPath);
-                }
+            if (ec) {
+                throw std::runtime_error("Operation failed: " + ec.message());
+            }
+
+            // Change ownership of the copied/moved file
+            if (!isDelete) {
+                changeOwnership(destPath);
+            }
 
                 // Store operation success info
                 std::string operationInfo = "\033[1m" + std::string(isDelete ? "Deleted" : (isCopy ? "Copied" : "Moved")) +
@@ -521,7 +523,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
             }
         }
     };
-
     // Iterate over each ISO file
     for (const auto& iso : isoFiles) {
         fs::path isoPath(iso);
