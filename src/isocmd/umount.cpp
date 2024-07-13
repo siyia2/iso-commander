@@ -332,21 +332,20 @@ void unmountISOs() {
 			}
 
 			if (tempFilteredIsoDirs.empty() || tempFilteredIsoDirs == isoDirs) {
-				std::cout << "\033[1;94m";
-            // No new matches or matches same as original, continue with original isoDirs
-            if (filteredIsoDirs.empty()) {
-                filteredIsoDirs = isoDirs;
-            }
-        } else {
-			
-            // Update filteredIsoDirs with new matches
-            filteredIsoDirs = std::move(tempFilteredIsoDirs);
-        }
-
-        clearScrollBuffer();
-        isFiltered = true;
-        break;
-    }
+				// No new matches or matches same as original, continue prompting for filterPattern
+				if (filteredIsoDirs.empty()) {
+					filteredIsoDirs = isoDirs;
+				}
+        
+				isFiltered = false;  // Reset filtered mode
+				continue;  // Prompt for new filter terms
+			} else {
+				// Update filteredIsoDirs with new matches
+				filteredIsoDirs = std::move(tempFilteredIsoDirs);
+				isFiltered = true;  // Ensure we're in filtered mode
+				break;  // Exit the filtering loop
+			}
+		}
 
 
 	} else {
