@@ -335,36 +335,6 @@ bool isNumeric(const std::string& str) {
 }
 
 
-// Function to apply input filtering
-void applyFilter(std::vector<std::string>& files, const std::vector<std::string>& originalFiles, const std::string& fileTypeName) {
-    while (true) {
-        historyPattern = true;
-        clear_history();
-        loadHistory();
-        std::string filterPrompt = "\033[1A\033[K\033[1A\033[K\n\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;38;5;208m\002" + fileTypeName + "\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
-        std::unique_ptr<char, decltype(&std::free)> rawSearchQuery(readline(filterPrompt.c_str()), &std::free);
-        std::string inputSearch(rawSearchQuery.get());
-        if (!inputSearch.empty() && inputSearch != "/") {
-            add_history(rawSearchQuery.get());
-            saveHistory();
-        }
-        historyPattern = false;
-        clear_history();
-        if (inputSearch.empty() || inputSearch == "/") {
-            break;
-        }
-        std::vector<std::string> filteredFiles = filterFiles(originalFiles, inputSearch); // Filter the original list
-        if (filteredFiles.empty()) {
-            std::cout << "\033[K";  // Clear the previous input line
-            continue;
-        }
-        files = filteredFiles;
-        clearScrollBuffer();
-        break;
-    }
-}
-
-
 // Function to display progress bar for native operations
 void displayProgressBar(const std::atomic<int>& completed, const int& total, std::atomic<bool>& isComplete) {
     const int barWidth = 50;
