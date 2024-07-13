@@ -306,14 +306,14 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 				std::vector<std::string> beforeFilterFiles = files;
 				applyFilter(files, originalFiles, fileTypeName); // Pass both current and original lists
 				if (!modeMdf){
-					if (binImgFilesCache.size() == originalFiles.size()) {
+					if (binImgFilesCache.size() == files.size() || files.size() == originalFiles.size()) {
 						isFilteredButUnchanged = true;
 					} else {
 						isFiltered = true;
 						isFilteredButUnchanged = false;
 					}
 				} else {
-					if (mdfMdsFilesCache.size() == originalFiles.size()) {
+					if (mdfMdsFilesCache.size() == files.size() || files.size() == originalFiles.size()) {
 						isFilteredButUnchanged = true;
 					} else {
 						isFiltered = true;
