@@ -78,8 +78,8 @@ void verboseFind(std::set<std::string>& invalidDirectoryPaths) {
 // Function to apply input filtering
 void applyFilter(std::vector<std::string>& files, const std::vector<std::string>& originalFiles, const std::string& fileTypeName) {
     while (true) {
+		clear_history();
         historyPattern = true;
-        clear_history();
         loadHistory();
         std::string filterPrompt = "\033[1A\033[K\033[1A\033[K\n\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;38;5;208m\002" + fileTypeName + "\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
         std::unique_ptr<char, decltype(&std::free)> rawSearchQuery(readline(filterPrompt.c_str()), &std::free);
@@ -129,6 +129,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     while (true) {
         bool list = false, clr = false;
         successOuts.clear(); skippedOuts.clear(); failedOuts.clear(); deletedOuts.clear(); processedErrors.clear();
+        clear_history();
         historyPattern = false;
         loadHistory();
 
