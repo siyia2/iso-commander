@@ -14,11 +14,13 @@
 #include <fstream>
 #include <functional>
 #include <future>
+#include <grp.h>
 #include <libmount/libmount.h>
 #include <iostream>
 #include <memory>
 #include <mntent.h>
 #include <mutex>
+#include <pwd.h>
 #include <queue>
 #include <random>
 #include <readline/readline.h>
