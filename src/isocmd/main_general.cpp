@@ -25,7 +25,7 @@ const std::string historyPatternFilePath = std::string(getenv("HOME")) + "/.cach
 //Maximum number of history entries at a time
 const int MAX_HISTORY_LINES = 100;
 
-const int MAX_HISTORY_PATTERN_LINES = 10;
+const int MAX_HISTORY_PATTERN_LINES = 20;
 
 // Global variables for cleanup
 int lockFileDescriptor = -1;
