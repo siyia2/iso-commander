@@ -239,7 +239,7 @@ void unmountISOs() {
         } else {
 			clearScrollBuffer();
             sortFilesCaseInsensitive(filteredIsoDirs);
-            std::cout << "\033[1mFiltered results:\n\033[0m\033[1m" << std::endl;
+            std::cout << "\n";
             size_t maxIndex = filteredIsoDirs.size();
             size_t numDigits = std::to_string(maxIndex).length();
 
