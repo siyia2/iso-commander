@@ -130,6 +130,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
         operationErrors.clear();
         uniqueErrorMessages.clear();
         
+        clear_history();
 		historyPattern = true;
 		loadHistory();
         std::string filterPrompt = "\033[1A\033[K\033[1A\033[K\n\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation 
@@ -175,6 +176,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
             
             if (process !="cp" && isFiltered && mvDelBreak) {
 				historyPattern = false;
+				clear_history();
 				isFiltered =false;
 			}
 
@@ -283,6 +285,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         while (true) {
             clearScrollBuffer();
             displaySelectedIsos();
+            clear_history();
             historyPattern = false;
             loadHistory();
             userDestDir.clear();
