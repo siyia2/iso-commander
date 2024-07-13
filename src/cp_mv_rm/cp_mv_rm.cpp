@@ -272,7 +272,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         for (const auto& chunk : indexChunks) {
             for (const auto& index : chunk) {
                 auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFiles[index - 1]);
-                std::cout << "\033[1m" << isoDirectory << "/\033[1;95m" << isoFilename << "\033[0;1m\n";
+                std::cout << "\033[1m -> " << isoDirectory << "/\033[1;95m" << isoFilename << "\033[0;1m\n";
             }
         }
     };
@@ -285,7 +285,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             loadHistory();
             userDestDir.clear();
 
-            std::string prompt = "\n\001\033[1;92m\002Destination directory\001\033[1;94m\002 ↵ for selected ISO to be " + operationColor + operationDescription + "\001\033[1;94m\002 into, or ↵ to abort:\n\001\033[0;1m\002";
+            std::string prompt = "\n\001\033[1;92m\002Destination directory\001\033[1;94m\002 ↵ for selected ISO to be " + operationColor + operationDescription + "\001\033[1;94m\002 into, ↵ return:\n\001\033[0;1m\002";
             std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
             std::string mainInputString(input.get());
 
