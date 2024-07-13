@@ -97,39 +97,40 @@ void select_and_mount_files_by_number() {
                 return;  // Exit the function only if we're already on the original list
             }
         } else if (inputString == "/") {
-            historyPattern = true;
-            loadHistory();
-
-            while (true) {
-                std::string filterPrompt = "\033[1A\033[K\033[1A\033[K\n\001\033[1;92m\002Terms\001\033[1;94m\002 ↵ to filter \001\033[1;92m\002mount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
-                std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
-                
-                if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
-                    historyPattern = false;
-                    isFiltered = true;
-                    break;
-                }
-
-                std::string inputSearch(searchQuery.get());
-                
-                if (strcmp(searchQuery.get(), "/") != 0) {
-                    add_history(searchQuery.get());
-                    saveHistory();
-                }
-                
-                filteredFiles = filterFiles(isoFiles, inputSearch);
-
-                if (filteredFiles.empty()) {
-					std::cout << "\033[K";
-					continue;
-                } else {
+			while (true) {
+				historyPattern = true;
+				loadHistory();
+				std::string filterPrompt = "\033[1A\033[K\033[1A\033[K\n\001\033[1;92m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
+				std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
+        
+				if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
+					historyPattern = false;
+					isFiltered = false;  // Exit filter mode
+					filteredFiles.clear();  // Clear any existing filtered results
+					break;
+				}
+        
+				std::string inputSearch(searchQuery.get());
+        
+				if (strcmp(searchQuery.get(), "/") != 0) {
+					add_history(searchQuery.get());
+					saveHistory();
+				}
+				historyPattern = false;
+				clear_history();
+        
+				filteredFiles = filterFiles(isoFiles, inputSearch);
+        
+				if (!filteredFiles.empty()) {
 					clearScrollBuffer();
-                    isFiltered = true;
-                    break;
-                }
-            }
-            clear_history();
-        } else {
+					isFiltered = true;
+					break;
+				}
+        
+				std::cout << "\033[K";  // Clear the previous input line
+			}
+            
+       } else {
             std::vector<std::string>& currentFiles = isFiltered ? filteredFiles : isoFiles;
             if (inputString == "00") {
                 mountAllIsoFiles(currentFiles, mountedFiles, skippedMessages, mountedFails);
