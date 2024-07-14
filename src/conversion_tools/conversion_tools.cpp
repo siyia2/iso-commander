@@ -708,49 +708,55 @@ bool blacklist(const std::filesystem::path& entry, bool blacklistMdf) {
 
 // Function to print found BIN/IMG files with alternating colored sequence numbers
 void printFileList(const std::vector<std::string>& fileList) {
-    const char* bold = "\033[1m";
-    const char* reset = "\033[0m";
-    const char* red = "\033[31;1m";
-    const char* green = "\033[32;1m";
-    const char* orangeBold = "\033[1;38;5;208m";
+    static const char* bold = "\033[1m";
+    static const char* reset = "\033[0m";
+    static const char* red = "\033[31;1m";
+    static const char* green = "\033[32;1m";
+    static const char* orangeBold = "\033[1;38;5;208m";
 
     size_t maxIndex = fileList.size();
     size_t numDigits = std::to_string(maxIndex).length();
 
-    std::ostringstream output;
-    // Reserve estimated space for the string buffer
-    std::string buffer;
-    buffer.reserve(fileList.size() * 100);
-    output.str(std::move(buffer));
+    std::string output;
+    output.reserve(fileList.size() * 100);  // Adjust based on average line length
 
     for (size_t i = 0; i < fileList.size(); ++i) {
         const auto& filename = fileList[i];
         auto [directory, fileNameOnly] = extractDirectoryAndFilename(filename);
 
-        const size_t dotPos = fileNameOnly.find_last_of('.');
+        std::string_view fileNameView(fileNameOnly);
+        size_t dotPos = fileNameView.rfind('.');
         bool isSpecialExtension = false;
 
-        if (dotPos != std::string::npos) {
-			std::string extension = fileNameOnly.substr(dotPos);
-			toLowerInPlace(extension);
-			isSpecialExtension = (extension == ".bin" || extension == ".img" || extension == ".mdf");
-		}
+        if (dotPos != std::string_view::npos) {
+            std::string_view extension = fileNameView.substr(dotPos);
+            isSpecialExtension = (extension == ".bin" || extension == ".img" || extension == ".mdf");
+        }
 
         const char* sequenceColor = (i % 2 == 0) ? red : green;
 
-        output << (isSpecialExtension ? sequenceColor : "")
-               << std::setw(numDigits) << std::right << (i + 1) << ". " << reset << bold;
+        // Use a temporary stringstream for setw formatting
+        std::ostringstream temp;
+        temp << (isSpecialExtension ? sequenceColor : "")
+             << std::setw(numDigits) << std::right << (i + 1) << ". " << reset << bold;
+        
+        output.append(temp.str());
 
         if (isSpecialExtension) {
-            output << directory << '/' << orangeBold << fileNameOnly;
+            output.append(directory)
+                  .append("/")
+                  .append(orangeBold)
+                  .append(fileNameOnly);
         } else {
-            output << filename;
+            output.append(filename);
         }
 
-        output << reset << "\033[0;1m\n";
+        output.append(reset)
+              .append(bold)
+              .append("\n");
     }
 
-    std::cout << output.str();
+    std::cout << output;
 }
 
 
