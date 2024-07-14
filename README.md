@@ -19,9 +19,11 @@ Features:
 * Supports BIN/IMG/MDF conversion to ISO by utilizing ccd2iso and mdf2iso.
 * Clean codebase in case someone decides to contribute in the future.
 
+Dependencies:
+Arch: readline, util-linux.
+Debian: libreadline-dev libmount-dev.
+
 Ways to Install:
 1) Download the binary executable from latest release.
 2) Download and compile from source with `make`.
 3) If on arch or on an arch based distro, install with `yay -S iso-commander`.
-
-`Make` dependencies for Debian based distros: `libreadline-dev` `libmount-dev`.
