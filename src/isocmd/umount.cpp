@@ -249,7 +249,7 @@ void unmountISOs() {
                 std::string color = (i % 2 == 0) ? "\033[1;31m" : "\033[1;32m"; // Red if even, Green if odd
 
                 std::cout << color << "\033[1m"
-                          << std::setw(numDigits) << std::setfill(' ') << (i + 1) << ".\033[0;1m /mnt/iso_"
+                          << std::setw(numDigits) << std::setfill(' ') << (i + 1) << ".\033[1;94m /mnt/iso_"
                           << "\033[1;95m" << afterUnderscore << "\033[0;1m\n";
             }
         }
@@ -281,20 +281,29 @@ void unmountISOs() {
                 return;
             }
         } else if (inputString == "/") {
-			while (true) {	
+			std::vector<std::string> lastFilteredIsoDirs = filteredIsoDirs;  // Preserve last filtered results
+			while (true) {    
 				unmountedFiles.clear();
-                unmountedErrors.clear();
-                errorMessages.clear();
-                clear_history();
+				unmountedErrors.clear();
+				errorMessages.clear();
+				clear_history();
 				historyPattern = true;
-				loadHistory();			
+				loadHistory();            
 				std::string filterPrompt = "\033[1A\033[K\033[1A\033[K\n\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \033[1;93mumount\033[1;94m list (multi-term separator: \033[1;93m;\033[1;94m), ↵ return: \033[0;1m";
 				std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
 				std::string terms(searchQuery.get());
-				
+        
 				if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
 					historyPattern = false;
 					clear_history();
+					// Restore last filtered results or original list
+					if (filteredIsoDirs.empty() && !lastFilteredIsoDirs.empty()) {
+						filteredIsoDirs = lastFilteredIsoDirs;
+						isFiltered = true;
+					} else if (filteredIsoDirs.empty()) {
+						filteredIsoDirs = isoDirs;
+						isFiltered = false;
+					}
 					break;
 				}
 				std::string inputSearch(searchQuery.get());
@@ -303,10 +312,10 @@ void unmountISOs() {
 					add_history(searchQuery.get());
 					saveHistory();
 				}
-				
+        
 				historyPattern = false;
 				clear_history();
-        
+    
 				std::vector<std::string> filterPatterns;
 				std::stringstream ss(terms);
 				std::string token;
@@ -314,7 +323,7 @@ void unmountISOs() {
 					filterPatterns.push_back(token);
 					toLowerInPlace(filterPatterns.back());
 				}
-        
+    
 				filteredIsoDirs.clear();
 				size_t numDirs = isoDirs.size();
 				unsigned int numThreads = std::min(static_cast<unsigned int>(numDirs), maxThreads);
@@ -332,20 +341,21 @@ void unmountISOs() {
 				for (auto& future : futuresFilter) {
 					future.get();
 				}
-        
+    
 				if (filteredIsoDirs.empty()) {
 					std::cout << "\033[1A\033[K";
+					// Restore previous filtered list if current filtering yields no results
+					filteredIsoDirs = lastFilteredIsoDirs;
 					continue;
-				// If user presses Enter, the loop will continue and prompt for new filter terms
 				} else {
 					clearScrollBuffer();
+					lastFilteredIsoDirs = filteredIsoDirs;  // Update last filtered results
 					isFiltered = true;
 					break;
 				}
 			}
-			
-        } else {
-            std::vector<std::string>& currentDirs = isFiltered ? filteredIsoDirs : isoDirs;
+		} else {
+			std::vector<std::string>& currentDirs = isFiltered ? filteredIsoDirs : isoDirs;
 
             if (inputString == "00") {
                 selectedIsoDirs = currentDirs;
