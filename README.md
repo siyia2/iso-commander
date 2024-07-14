@@ -21,7 +21,7 @@ Features:
 
 Dependencies:
 - Arch: readline, util-linux.
-- Debian: libreadline-dev libmount-dev.
+- Debian: libreadline-dev, libmount-dev.
 
 Ways to Install:
 1) Download the binary executable from latest release.
