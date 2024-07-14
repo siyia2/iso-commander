@@ -452,7 +452,6 @@ void unmountISOs() {
                     errorMessages.clear();
                 }
 
-                clearScrollBuffer();
                 isFiltered = false;
             } else {
                 clearScrollBuffer();
