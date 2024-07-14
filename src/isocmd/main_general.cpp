@@ -384,34 +384,45 @@ void displayProgressBar(const std::atomic<int>& completed, const int& total, std
 
 // Function to print ISO files with alternating colors for sequence numbers
 void printIsoFileList(const std::vector<std::string>& isoFiles) {
-    // ANSI escape codes for text formatting
-    const char* defaultColor = "\033[0m";
-    const char* bold = "\033[1m";
-    const char* red = "\033[31;1m";
-    const char* green = "\033[32;1m";
-    const char* magenta = "\033[95m";
+    static const char* defaultColor = "\033[0m";
+    static const char* bold = "\033[1m";
+    static const char* red = "\033[31;1m";
+    static const char* green = "\033[32;1m";
+    static const char* magenta = "\033[95m";
     
     size_t maxIndex = isoFiles.size();
     size_t numDigits = std::to_string(maxIndex).length();
     
-    std::ostringstream output;
-    // Reserve estimated space for the string buffer
-    std::string buffer;
-    buffer.reserve(isoFiles.size() * 100);
-    output.str(std::move(buffer));
+    std::string output;
+    output.reserve(isoFiles.size() * 100);  // Adjust based on average line length
 
     for (size_t i = 0; i < isoFiles.size(); ++i) {
         const char* sequenceColor = (i % 2 == 0) ? red : green;
         
-        output << '\n' << sequenceColor << std::right << std::setw(numDigits) 
-               << (i + 1) << ". " << defaultColor << bold;
+        output.append("\n")
+              .append(sequenceColor);
+
+        // Create a temporary stringstream for setw formatting
+        std::ostringstream temp;
+        temp << std::right << std::setw(numDigits) << (i + 1);
+        output.append(temp.str());
+
+        output.append(". ")
+              .append(defaultColor)
+              .append(bold);
 
         auto [directory, filename] = extractDirectoryAndFilename(isoFiles[i]);
         
-        output << directory << defaultColor << bold << '/' << magenta << filename << defaultColor;
+        output.append(directory)
+              .append(defaultColor)
+              .append(bold)
+              .append("/")
+              .append(magenta)
+              .append(filename)
+              .append(defaultColor);
     }
 
-    std::cout << output.str();
+    std::cout << output;
 }
 
 

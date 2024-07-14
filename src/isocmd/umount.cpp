@@ -6,23 +6,29 @@
 
 // Function to list mounted ISOs in the /mnt directory
 void listMountedISOs() {
-    const char* isoPath = "/mnt";
+    static const char* isoPath = "/mnt";
+    static const char* redBold = "\033[31;1m";
+    static const char* greenBold = "\033[32;1m";
+    static const char* blueBold = "\033[94;1m";
+    static const char* magentaBold = "\033[95;1m";
+    static const char* resetBold = "\033[0;1m";
+
     std::vector<std::string> isoDirs;
     isoDirs.reserve(100);  // Pre-allocate space for 100 entries
 
-        DIR* dir = opendir(isoPath);
-        if (dir == nullptr) {
-            std::cerr << "\033[1;91mError opening the /mnt directory.\033[0;1m\n";
-            return;
-        }
+    DIR* dir = opendir(isoPath);
+    if (dir == nullptr) {
+        std::cerr << "\033[1;91mError opening the /mnt directory.\033[0m\n";
+        return;
+    }
 
-        struct dirent* entry;
-        while ((entry = readdir(dir)) != nullptr) {
-            if (entry->d_type == DT_DIR && strncmp(entry->d_name, "iso_", 4) == 0) {
-                isoDirs.emplace_back(entry->d_name + 4);
-            }
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != nullptr) {
+        if (entry->d_type == DT_DIR && strncmp(entry->d_name, "iso_", 4) == 0) {
+            isoDirs.emplace_back(entry->d_name + 4);
         }
-        closedir(dir);
+    }
+    closedir(dir);
 
     if (isoDirs.empty()) {
         return;
@@ -30,25 +36,30 @@ void listMountedISOs() {
 
     sortFilesCaseInsensitive(isoDirs);
 
-    std::ostringstream output;
-    // Reserve estimated space for the string buffer
-    std::string buffer;
-    buffer.reserve(isoDirs.size() * 100);
-    output.str(std::move(buffer));
+    std::string output;
+    output.reserve(isoDirs.size() * 50);  // Adjust based on average line length
 
-    output << "\n";
-
+    output.append("\n");
     size_t numDigits = std::to_string(isoDirs.size()).length();
 
     for (size_t i = 0; i < isoDirs.size(); ++i) {
-        const char* sequenceColor = (i % 2 == 0) ? "\033[31;1m" : "\033[32;1m";
-        output << sequenceColor << std::setw(numDigits) << (i + 1) << ". "
-               << "\033[94;1m/mnt/iso_\033[95;1m" << isoDirs[i] << "\033[0;1m\n";
+        const char* sequenceColor = (i % 2 == 0) ? redBold : greenBold;
+
+        // Use a temporary stringstream for setw formatting
+        std::ostringstream temp;
+        temp << sequenceColor << std::setw(numDigits) << (i + 1) << ". ";
+
+        output.append(temp.str())
+              .append(blueBold)
+              .append("/mnt/iso_")
+              .append(magentaBold)
+              .append(isoDirs[i])
+              .append(resetBold)
+              .append("\n");
     }
 
-    std::cout << output.str();
+    std::cout << output;
 }
-
 
 // Function to check if directory is empty for unmountISO
 bool isDirectoryEmpty(const std::string& path) {
