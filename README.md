@@ -19,7 +19,7 @@ Features:
 * Supports BIN/IMG/MDF conversion to ISO by utilizing ccd2iso and mdf2iso.
 * Clean codebase in case someone decides to contribute in the future.
 
-Dependencies:
+Make Dependencies:
 - Arch: readline, util-linux.
 - Debian: libreadline-dev, libmount-dev.
 
