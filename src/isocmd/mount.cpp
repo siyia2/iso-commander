@@ -126,9 +126,10 @@ void select_and_mount_files_by_number() {
 				historyPattern = false;
 				clear_history();
         
-				filteredFiles = filterFiles(isoFiles, inputSearch);
+				auto newFilteredFiles = filterFiles(isoFiles, inputSearch);
         
-				if (!filteredFiles.empty()) {
+				if (!newFilteredFiles.empty()) {
+					filteredFiles = std::move(newFilteredFiles);
 					clearScrollBuffer();
 					isFiltered = true;
 					break;

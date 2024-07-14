@@ -155,13 +155,14 @@ void select_and_operate_files_by_number(const std::string& operation) {
             historyPattern = false;
 			clear_history();
         
-        filteredFiles = filterFiles(isoFiles, inputSearch);
+        auto newFilteredFiles = filterFiles(isoFiles, inputSearch);
         
-        if (!filteredFiles.empty()) {
-            clearScrollBuffer();
-            isFiltered = true;
-            break;
-        }
+        if (!newFilteredFiles.empty()) {
+			filteredFiles = std::move(newFilteredFiles);
+			clearScrollBuffer();
+			isFiltered = true;
+			break;
+		}
         std::cout << "\033[1A\033[K";  // Clear the previous input line
     }
 
