@@ -12,7 +12,7 @@ Features:
 * Cached ISO management for reduced disk thrashing.
 * Tab completion and history support.
 * Native C++ and libmount calls.
-* Ultra lightweight with no reliance on ncurses or any other external libraries for terminal control.
+* Ultra lightweight with no reliance on external libraries for terminal control.
 * Multithreaded asynchronous tasks leveraging state-of-the-art concurrent practices.
 * Capable of seamlessly handling anywhere from 1 to an astonishing 100,000 ISO files.
 * Supports most ISO filesystem types: iso9660, UDF, HFSPlus, Rock Ridge, Joliet, and ISOFs.
