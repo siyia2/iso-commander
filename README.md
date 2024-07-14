@@ -20,8 +20,8 @@ Features:
 * Clean codebase in case someone decides to contribute in the future.
 
 Dependencies:
-Arch: readline, util-linux.
-Debian: libreadline-dev libmount-dev.
+- Arch: readline, util-linux.
+- Debian: libreadline-dev libmount-dev.
 
 Ways to Install:
 1) Download the binary executable from latest release.
