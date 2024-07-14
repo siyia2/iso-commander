@@ -181,6 +181,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 			}
 
             if (currentFiles.empty()) {
+				clearScrollBuffer();
                 std::cout << "\n\033[1;93mNo ISO(s) available for " << operation << ".\033[0m\n\n";
                 std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
