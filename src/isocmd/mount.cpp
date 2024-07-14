@@ -112,8 +112,8 @@ void select_and_mount_files_by_number() {
 				if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
 					historyPattern = false;
 					clear_history();
-					isFiltered = false;  // Exit filter mode
-					filteredFiles.clear();  // Clear any existing filtered results
+					//isFiltered = false;  // Exit filter mode
+					//filteredFiles.clear();  // Clear any existing filtered results
 					break;
 				}
         

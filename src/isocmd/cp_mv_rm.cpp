@@ -140,8 +140,8 @@ void select_and_operate_files_by_number(const std::string& operation) {
         if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
             historyPattern = false;
             clear_history();
-            isFiltered = false;  // Exit filter mode
-            filteredFiles.clear();  // Clear any existing filtered results
+            //isFiltered = false;  // Exit filter mode
+            //filteredFiles.clear();  // Clear any existing filtered results
             break;
         }
         std::string inputSearch(searchQuery.get());
