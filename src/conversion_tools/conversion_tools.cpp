@@ -100,7 +100,6 @@ void applyFilter(std::vector<std::string>& files, const std::vector<std::string>
             continue;
         }
         files = filteredFiles;
-        clearScrollBuffer();
         break;
     }
 }
