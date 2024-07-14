@@ -348,7 +348,6 @@ void unmountISOs() {
 					filteredIsoDirs = lastFilteredIsoDirs;
 					continue;
 				} else {
-					clearScrollBuffer();
 					lastFilteredIsoDirs = filteredIsoDirs;  // Update last filtered results
 					isFiltered = true;
 					break;

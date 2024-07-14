@@ -159,7 +159,6 @@ void select_and_operate_files_by_number(const std::string& operation) {
         
         if (!newFilteredFiles.empty()) {
 			filteredFiles = std::move(newFilteredFiles);
-			clearScrollBuffer();
 			isFiltered = true;
 			break;
 		}

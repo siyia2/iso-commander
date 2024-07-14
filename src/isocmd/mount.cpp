@@ -130,7 +130,6 @@ void select_and_mount_files_by_number() {
         
 				if (!newFilteredFiles.empty()) {
 					filteredFiles = std::move(newFilteredFiles);
-					clearScrollBuffer();
 					isFiltered = true;
 					break;
 				}
