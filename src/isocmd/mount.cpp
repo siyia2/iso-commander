@@ -85,7 +85,6 @@ void select_and_mount_files_by_number() {
         std::string inputString(input.get());
         
         if (!inputString.empty() && inputString != "/") {
-			clearScrollBuffer();
 			std::cout << "\n\033[0;1m";
 		}
 
