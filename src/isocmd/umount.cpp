@@ -143,7 +143,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
             auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(mp);
             std::stringstream errorMessage;
             if (!isDirectoryEmpty(mp)) {
-                errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "\033[1;93m'\033[1;91m. Probably not an ISO mountpoint.\033[0m";
+                errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "\033[1;93m'\033[1;91m. Probably not an ISO mountpoint...\033[0m";
                 {
                     std::lock_guard<std::mutex> lowLock(Mutex4Low);
                     unmountedErrors.emplace(errorMessage.str());
@@ -160,7 +160,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
 		std::error_code ec;
 		if (!isDirectoryEmpty(dir)){
                 
-                errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << dir << "'\033[1;91m. Probably not an ISO mountpoint";
+                errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << dir << "'\033[1;91m. Probably not an ISO mountpoint...";
                 {
                     std::lock_guard<std::mutex> lowLock(Mutex4Low);
                     unmountedErrors.emplace(errorMessage.str());
