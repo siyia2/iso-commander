@@ -61,6 +61,7 @@ void listMountedISOs() {
     std::cout << output;
 }
 
+
 // Function to check if directory is empty for unmountISO
 bool isDirectoryEmpty(const std::string& path) {
     DIR* dir = opendir(path.c_str());
