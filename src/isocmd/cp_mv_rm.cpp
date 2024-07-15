@@ -288,12 +288,19 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         return;
     }
 
-    unsigned int numThreads = std::min(static_cast<int>(processedIndices.size()), static_cast<int>(maxThreads));
-    std::vector<std::vector<int>> indexChunks;
-    const size_t chunkSize = (processedIndices.size() + numThreads - 1) / numThreads;
-    for (size_t i = 0; i < processedIndices.size(); i += chunkSize) {
-        indexChunks.emplace_back(processedIndices.begin() + i, std::min(processedIndices.begin() + i + chunkSize, processedIndices.end()));
-    }
+		unsigned int numThreads = std::min(static_cast<unsigned int>(processedIndices.size()), maxThreads);
+		std::vector<std::vector<int>> indexChunks;
+		const size_t maxFilesPerChunk = 10;
+
+		// Distribute files evenly among threads, but not exceeding maxFilesPerChunk
+		size_t totalFiles = processedIndices.size();
+		size_t filesPerThread = (totalFiles + numThreads - 1) / numThreads;
+		size_t chunkSize = std::min(maxFilesPerChunk, filesPerThread);
+
+		for (size_t i = 0; i < totalFiles; i += chunkSize) {
+			auto chunkEnd = std::min(processedIndices.begin() + i + chunkSize, processedIndices.end());
+			indexChunks.emplace_back(processedIndices.begin() + i, chunkEnd);
+		}
 
     auto displaySelectedIsos = [&]() {
         std::cout << "\n";
@@ -362,35 +369,31 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     clearScrollBuffer();
     std::cout << "\033[1m\n";
     
-    std::atomic<size_t> totalTasks(processedIndices.size());
+    std::atomic<size_t> totalTasks(static_cast<int>(processedIndices.size()));
     std::atomic<size_t> completedTasks(0);
     std::atomic<bool> isProcessingComplete(false);
-    size_t totalTasksValue = totalTasks.load();
 
+    int totalTasksValue = totalTasks.load();
     std::thread progressThread(displayProgressBar, std::ref(completedTasks), std::cref(totalTasksValue), std::ref(isProcessingComplete));
 
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
+    futures.reserve(numThreads);
 
-    const size_t maxChunkSize = 10;
-    for (size_t i = 0; i < processedIndices.size(); i += maxChunkSize) {
-        size_t endIndex = std::min(i + maxChunkSize, processedIndices.size());
+    for (const auto& chunk : indexChunks) {
         std::vector<std::string> isoFilesInChunk;
-        isoFilesInChunk.reserve(endIndex - i);
-        
-        for (size_t j = i; j < endIndex; ++j) {
-            if (processedIndices[j] > 0 && static_cast<size_t>(processedIndices[j]) <= isoFiles.size()) {
-				isoFilesInChunk.push_back(isoFiles[static_cast<size_t>(processedIndices[j] - 1)]);
-			}
+        isoFilesInChunk.reserve(chunk.size());
+        for (const auto& index : chunk) {
+            isoFilesInChunk.push_back(isoFiles[index - 1]);
         }
 
-        futures.emplace_back(pool.enqueue([isoFilesInChunk = std::move(isoFilesInChunk), 
-                                           &isoFiles, &operationIsos, &operationErrors, 
-                                           &userDestDir, isMove, isCopy, isDelete, &completedTasks]() {
-            handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors, 
-                                   userDestDir, isMove, isCopy, isDelete);
-            completedTasks.fetch_add(isoFilesInChunk.size(), std::memory_order_relaxed);
-        }));
+        {
+            std::lock_guard<std::mutex> highLock(Mutex4High);
+            futures.emplace_back(pool.enqueue([isoFilesInChunk = std::move(isoFilesInChunk), &isoFiles, &operationIsos, &operationErrors, &userDestDir, isMove, isCopy, isDelete, &completedTasks]() {
+                handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors, userDestDir, isMove, isCopy, isDelete);
+                completedTasks.fetch_add(static_cast<int>(isoFilesInChunk.size()), std::memory_order_relaxed);
+            }));
+        }
     }
 
     for (auto& future : futures) {
