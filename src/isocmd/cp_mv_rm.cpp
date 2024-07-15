@@ -2,6 +2,9 @@
 #include "../threadpool.h"
 
 
+// For storing isoFiles in RAM
+static std::vector<std::string> globalIsoFileList;
+
 // For breaking mv&rm gracefully
 bool mvDelBreak=false;
 
@@ -97,13 +100,21 @@ void select_and_operate_files_by_number(const std::string& operation) {
             break;
         }
 
-        sortFilesCaseInsensitive(isoFiles);
+        // Check if the loaded cache differs from the global list
+        if (globalIsoFileList.size() != isoFiles.size() || 
+            !std::equal(globalIsoFileList.begin(), globalIsoFileList.end(), isoFiles.begin())) {
+            sortFilesCaseInsensitive(isoFiles);
+            globalIsoFileList = isoFiles;
+        } else {
+            isoFiles = globalIsoFileList;
+        }
+
         operationIsos.clear();
         operationErrors.clear();
         uniqueErrorMessages.clear();
         clearScrollBuffer();
 
-        printIsoFileList(isFiltered ? filteredFiles : isoFiles);
+        printIsoFileList(isFiltered ? filteredFiles : globalIsoFileList);
 
         std::string prompt = std::string(isFiltered ? "\n\n\001\033[1;96m\002Filtered \001\033[1;92m\002ISO" : "\n\n\001\033[1;92m\002\002ISO")
             + "\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation 
@@ -124,49 +135,45 @@ void select_and_operate_files_by_number(const std::string& operation) {
                 return;  // Exit the function only if we're already on the original list
             }
         } else if (inputString == "/") {
-    
-    while (true) {
-		operationIsos.clear();
-        operationErrors.clear();
-        uniqueErrorMessages.clear();
-        
-        clear_history();
-		historyPattern = true;
-		loadHistory();
-        std::string filterPrompt = "\001\033[1A\002\001\033[K\002\001\033[1A\002\001\033[K\002\n\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + " \001\033[1;94m\002list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
+            while (true) {
+                operationIsos.clear();
+                operationErrors.clear();
+                uniqueErrorMessages.clear();
+                
+                clear_history();
+                historyPattern = true;
+                loadHistory();
+                std::string filterPrompt = "\001\033[1A\002\001\033[K\002\001\033[1A\002\001\033[K\002\n\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + " \001\033[1;94m\002list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
 
-        std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
-        
-        if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
-            historyPattern = false;
-            clear_history();
-            //isFiltered = false;  // Exit filter mode
-            //filteredFiles.clear();  // Clear any existing filtered results
-            break;
-        }
-        std::string inputSearch(searchQuery.get());
-        std::cout << "\033[1m\n";
-        
-        if (strcmp(searchQuery.get(), "/") != 0) {
-            add_history(searchQuery.get());
-            saveHistory();
-        }
-        
-            historyPattern = false;
-			clear_history();
-        
-        auto newFilteredFiles = filterFiles(isoFiles, inputSearch);
-        
-        if (!newFilteredFiles.empty()) {
-			filteredFiles = std::move(newFilteredFiles);
-			isFiltered = true;
-			break;
-		}
-        std::cout << "\033[1A\033[K";  // Clear the previous input line
-    }
-
+                std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
+                
+                if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
+                    historyPattern = false;
+                    clear_history();
+                    break;
+                }
+                std::string inputSearch(searchQuery.get());
+                std::cout << "\033[1m\n";
+                
+                if (strcmp(searchQuery.get(), "/") != 0) {
+                    add_history(searchQuery.get());
+                    saveHistory();
+                }
+                
+                historyPattern = false;
+                clear_history();
+                
+                auto newFilteredFiles = filterFiles(globalIsoFileList, inputSearch);
+                
+                if (!newFilteredFiles.empty()) {
+                    filteredFiles = std::move(newFilteredFiles);
+                    isFiltered = true;
+                    break;
+                }
+                std::cout << "\033[1A\033[K";  // Clear the previous input line
+            }
         } else {
-            std::vector<std::string>& currentFiles = isFiltered ? filteredFiles : isoFiles;
+            std::vector<std::string>& currentFiles = isFiltered ? filteredFiles : globalIsoFileList;
             
             processOperationInput(inputString, currentFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
             
@@ -174,14 +181,14 @@ void select_and_operate_files_by_number(const std::string& operation) {
                 verbose_cp_mv_rm(operationIsos, operationErrors, uniqueErrorMessages);
             }
             
-            if (process !="cp" && isFiltered && mvDelBreak) {
-				historyPattern = false;
-				clear_history();
-				isFiltered =false;
-			}
+            if (process != "cp" && isFiltered && mvDelBreak) {
+                historyPattern = false;
+                clear_history();
+                isFiltered = false;
+            }
 
             if (currentFiles.empty()) {
-				clearScrollBuffer();
+                clearScrollBuffer();
                 std::cout << "\n\033[1;93mNo ISO(s) available for " << operation << ".\033[0m\n\n";
                 std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
