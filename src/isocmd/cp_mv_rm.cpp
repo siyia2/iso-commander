@@ -86,12 +86,8 @@ void select_and_operate_files_by_number(const std::string& operation) {
     std::string process = operation;
 
     while (true) {
-		bool needsScrnClr = true;
         removeNonExistentPathsFromCache();
         loadCache(isoFiles);
-        operationIsos.clear();
-		operationErrors.clear();
-		uniqueErrorMessages.clear();
 
         if (isoFiles.empty()) {
             clearScrollBuffer();
@@ -100,17 +96,18 @@ void select_and_operate_files_by_number(const std::string& operation) {
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             break;
         }
-		if (needsScrnClr) {
-			sortFilesCaseInsensitive(isoFiles);
-			clearScrollBuffer();
 
-			printIsoFileList(isFiltered ? filteredFiles : isoFiles);
-		}
-		std::cout << "\n";
-        std::string prompt = std::string(isFiltered ? "\n\n\001\033[1;96m\002Filtered \001\033[1;92m\002ISO" : "\n\n\001\033[1;92m\002ISO")
+        sortFilesCaseInsensitive(isoFiles);
+        operationIsos.clear();
+        operationErrors.clear();
+        uniqueErrorMessages.clear();
+        clearScrollBuffer();
+
+        printIsoFileList(isFiltered ? filteredFiles : isoFiles);
+
+        std::string prompt = std::string(isFiltered ? "\n\n\001\033[1;96m\002Filtered \001\033[1;92m\002ISO" : "\n\n\001\033[1;92m\002\002ISO")
             + "\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation 
             + "\001\033[1;94m\002 (e.g., 1-3,1 5), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
-            std::cout << "\033[A"; // Move cursor up one line and clear that line
 
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         std::string inputString(input.get());
@@ -143,7 +140,6 @@ void select_and_operate_files_by_number(const std::string& operation) {
         if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
             historyPattern = false;
             clear_history();
-            needsScrnClr = false;
             //isFiltered = false;  // Exit filter mode
             //filteredFiles.clear();  // Clear any existing filtered results
             break;
