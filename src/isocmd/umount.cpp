@@ -408,40 +408,47 @@ void unmountISOs() {
             }
 
             if (!selectedIsoDirs.empty()) {
-                unsigned int numThreads = std::min(static_cast<int>(selectedIsoDirs.size()), static_cast<int>(maxThreads));
-                ThreadPool pool(numThreads);
-                std::vector<std::future<void>> futuresUmount;
-                futuresUmount.reserve(numThreads);
+				unsigned int numThreads = std::min(static_cast<int>(selectedIsoDirs.size()), static_cast<int>(maxThreads));
+				ThreadPool pool(numThreads);
+				std::vector<std::future<void>> futuresUmount;
+				futuresUmount.reserve(numThreads);
 
-                size_t batchSize = (selectedIsoDirs.size() + maxThreads - 1) / maxThreads;
-                std::vector<std::vector<std::string>> batches;
-                for (size_t i = 0; i < selectedIsoDirs.size(); i += batchSize) {
-                    batches.emplace_back(selectedIsoDirs.begin() + i, std::min(selectedIsoDirs.begin() + i + batchSize, selectedIsoDirs.end()));
-                }
+				size_t maxBatchSize = 100;  // Maximum number of items per batch
 
-                std::atomic<int> completedIsos(0);
-                int totalIsos = static_cast<int>(selectedIsoDirs.size());
-                std::atomic<bool> isComplete(false);
+				// Calculate batch size ensuring it's at most maxBatchSize
+				size_t batchSize = std::min(maxBatchSize, (selectedIsoDirs.size() + numThreads - 1) / numThreads);
 
-                std::thread progressThread(displayProgressBar, std::ref(completedIsos), std::cref(totalIsos), std::ref(isComplete));
+				// Ensure batchSize is at least 1
+				batchSize = std::max(batchSize, static_cast<size_t>(1));
 
-                for (auto& batch : batches) {
-                    std::lock_guard<std::mutex> highLock(Mutex4High);
-                    futuresUmount.emplace_back(pool.enqueue([batch = std::move(batch), &unmountedFiles, &unmountedErrors, &completedIsos]() {
-                        for (const auto& iso : batch) {
-                            unmountISO({iso}, unmountedFiles, unmountedErrors);
-                            completedIsos.fetch_add(1, std::memory_order_relaxed);
-                        }
-                    }));
-                }
+				std::vector<std::vector<std::string>> batches;
+				for (size_t i = 0; i < selectedIsoDirs.size(); i += batchSize) {
+					batches.emplace_back(selectedIsoDirs.begin() + i, 
+					std::min(selectedIsoDirs.begin() + i + batchSize, 
+                    selectedIsoDirs.end()));
+				}
 
-                for (auto& future : futuresUmount) {
-                    future.wait();
-                }
+				std::atomic<size_t> completedIsos(0);
+				size_t totalIsos = selectedIsoDirs.size();
+				std::atomic<bool> isComplete(false);
+				std::thread progressThread(displayProgressBar, std::ref(completedIsos), std::cref(totalIsos), std::ref(isComplete));
 
-                isComplete.store(true);
-                progressThread.join();
+				for (auto& batch : batches) {
+					std::lock_guard<std::mutex> highLock(Mutex4High);
+					futuresUmount.emplace_back(pool.enqueue([batch = std::move(batch), &unmountedFiles, &unmountedErrors, &completedIsos]() {
+						for (const auto& iso : batch) {
+							unmountISO({iso}, unmountedFiles, unmountedErrors);
+							completedIsos.fetch_add(1, std::memory_order_relaxed);
+						}
+					}));
+				}
 
+			for (auto& future : futuresUmount) {
+				future.wait();
+			}
+
+        isComplete.store(true, std::memory_order_release);
+        progressThread.join();
                 if (verbose) {
                     printUnmountedAndErrors(unmountedFiles, unmountedErrors, errorMessages);
                     std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";

@@ -336,19 +336,19 @@ bool isNumeric(const std::string& str) {
 
 
 // Function to display progress bar for native operations
-void displayProgressBar(const std::atomic<int>& completed, const int& total, std::atomic<bool>& isComplete) {
+void displayProgressBar(const std::atomic<size_t>& completedIsos, const size_t& totalIsos, std::atomic<bool>& isComplete) {
     const int barWidth = 50;
     bool enterPressed = false;
     auto startTime = std::chrono::high_resolution_clock::now();
     
     while (!isComplete.load() || !enterPressed) {
-        int completedValue = completed.load();
-        float progress = static_cast<float>(completedValue) / total;
-        int pos = barWidth * progress;
+        size_t completedValue = completedIsos.load();
+        double progress = static_cast<double>(completedValue) / totalIsos;
+        int pos = static_cast<int>(barWidth * progress);
         
         auto currentTime = std::chrono::high_resolution_clock::now();
         auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime);
-        float elapsedSeconds = elapsedTime.count() / 1000.0f;
+        double elapsedSeconds = elapsedTime.count() / 1000.0;
         
         std::cout << "\r[";
         for (int i = 0; i < barWidth; ++i) {
@@ -357,20 +357,19 @@ void displayProgressBar(const std::atomic<int>& completed, const int& total, std
             else std::cout << " ";
         }
         std::cout << "] " << std::setw(3) << std::fixed << std::setprecision(1) 
-                  << (progress * 100.0) << "% (" << completedValue << "/" << total << ") "
+                  << (progress * 100.0) << "% (" << completedValue << "/" << totalIsos << ") "
                   << "Time Elapsed: "<< std::setprecision(1) << elapsedSeconds << "s";
         
-        if (completedValue == total && !enterPressed) {
-			enterPressed = true;
+        if (completedValue == totalIsos && !enterPressed) {
+            enterPressed = true;
             std::string confirmation;
             std::cout << "\n\n\033[1;94mDisplay verbose output? (y/n):\033[0;1m ";
             std::getline(std::cin, confirmation);
-            if ((confirmation == "y" || confirmation == "Y")) {
-				verbose = true;
-			} else {
-				verbose =false;
-			}
-            
+            if (confirmation == "y" || confirmation == "Y") {
+                verbose = true;
+            } else {
+                verbose = false;
+            }
         } else {
             std::cout.flush();
             std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Update every 100ms

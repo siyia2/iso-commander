@@ -5,45 +5,49 @@
 
 // Function to mount all ISOs indiscriminately
 void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
-    std::atomic<int> completedIsos(0);
+
+    size_t maxThreads = std::thread::hardware_concurrency();
+    size_t maxChunkSize = 100;  // Maximum number of files per chunk
+    size_t totalIsos = isoFiles.size();
+
+    std::atomic<size_t> completedIsos(0);
     std::atomic<bool> isComplete(false);
-    unsigned int numThreads = std::min(static_cast<unsigned int>(isoFiles.size()), static_cast<unsigned int>(maxThreads));
+
+    // Determine the number of threads to use
+    size_t numThreads = std::min(totalIsos, maxThreads);
+
+    // Adjust chunk size based on the number of files
+    size_t chunkSize = std::min(maxChunkSize, (totalIsos + numThreads - 1) / numThreads);
+
+    // Ensure chunkSize is at least 1
+    chunkSize = std::max(chunkSize, static_cast<size_t>(1));
+
     ThreadPool pool(numThreads);
 
-    int totalIsos = static_cast<int>(isoFiles.size());
-
-    // Calculate chunk size
-    size_t chunkSize = (totalIsos + numThreads - 1) / numThreads;
-
-    // Create progress thread
     std::thread progressThread(displayProgressBar, std::ref(completedIsos), totalIsos, std::ref(isComplete));
+
     std::vector<std::future<void>> futures;
     futures.reserve(numThreads);
 
-    for (size_t i = 0; i < isoFiles.size(); i += chunkSize) {
-        futures.push_back(pool.enqueue([&, i, chunkSize]() {
+    for (size_t i = 0; i < totalIsos; i += chunkSize) {
+        size_t end = std::min(i + chunkSize, totalIsos);
+        futures.push_back(pool.enqueue([&, i, end]() {
             std::vector<std::string> chunkFiles;
-            chunkFiles.reserve(chunkSize);
-
-            for (size_t j = i; j < std::min(i + chunkSize, isoFiles.size()); ++j) {
+            chunkFiles.reserve(end - i);
+            for (size_t j = i; j < end; ++j) {
                 chunkFiles.push_back(isoFiles[j]);
             }
-
-            // Directly call function assuming downstream mutex ensures thread safety
             mountIsoFiles(chunkFiles, mountedFiles, skippedMessages, mountedFails);
             completedIsos.fetch_add(chunkFiles.size(), std::memory_order_relaxed);
         }));
     }
 
-    // Wait for all tasks to complete
     for (auto& future : futures) {
         future.wait();
     }
 
-    // Signal completion
     isComplete.store(true);
 
-    // Wait for progress thread to finish
     if (progressThread.joinable()) {
         progressThread.join();
     }
@@ -345,7 +349,12 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
 
 
 // Function to process input and mount ISO files asynchronously
-void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages) {
+void processAndMountIsoFiles(const std::string& input,
+                             const std::vector<std::string>& isoFiles,
+                             std::set<std::string>& mountedFiles,
+                             std::set<std::string>& skippedMessages,
+                             std::set<std::string>& mountedFails,
+                             std::set<std::string>& uniqueErrorMessages) {
     std::istringstream iss(input);
     
     std::atomic<bool> invalidInput(false);
@@ -356,14 +365,13 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     std::mutex processedRangesMutex;
     std::set<std::pair<int, int>> processedRanges;
     
-    
     std::vector<int> indicesToAdd;
-    indicesToAdd.reserve(maxThreads);
+    indicesToAdd.reserve(1000);  // Use a reasonable reserve based on expected size
     
-    std::atomic<int> totalTasks(0);
-    std::atomic<int> completedTasks(0);
+    std::atomic<size_t> totalTasks(0);
+    std::atomic<size_t> completedTasks(0);
     std::atomic<bool> isProcessingComplete(false);
-    std::atomic<int> activeTaskCount(0);
+    std::atomic<size_t> activeTaskCount(0);
 
     std::condition_variable taskCompletionCV;
     std::mutex taskCompletionMutex;
@@ -454,8 +462,8 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
         std::lock_guard<std::mutex> lock(indicesMutex);
         indicesToProcess = std::move(indicesToAdd);
     }
-	
-	// Check if we have any valid indices to process
+    
+    // Check if we have any valid indices to process
     if (indicesToProcess.empty()) {
         addError("\033[1;91mNo valid input provided for mount.\033[0;1m");
         return;  // Exit the function early
@@ -464,7 +472,14 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     unsigned int numThreads = std::min(static_cast<int>(indicesToProcess.size()), static_cast<int>(maxThreads));
     ThreadPool pool(numThreads);
 
-    size_t chunkSize = std::max(1UL, (indicesToProcess.size() + maxThreads - 1) / maxThreads);
+    size_t maxChunkSize = 100;  // Maximum number of files per chunk
+
+    // Calculate chunk size ensuring it's at most maxChunkSize
+    size_t chunkSize = std::min(maxChunkSize, (indicesToProcess.size() + numThreads - 1) / numThreads);
+
+    // Ensure chunkSize is at least 1
+    chunkSize = std::max(chunkSize, static_cast<size_t>(1));
+
     totalTasks.store(indicesToProcess.size(), std::memory_order_relaxed);
     activeTaskCount.store((indicesToProcess.size() + chunkSize - 1) / chunkSize, std::memory_order_relaxed);
 
@@ -481,7 +496,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     }
 
     if (!indicesToProcess.empty()) {
-        int totalTasksValue = totalTasks.load();
+        size_t totalTasksValue = totalTasks.load();
         std::thread progressThread(displayProgressBar, std::ref(completedTasks), std::cref(totalTasksValue), std::ref(isProcessingComplete));
 
         {

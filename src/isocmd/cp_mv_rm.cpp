@@ -362,30 +362,40 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     clearScrollBuffer();
     std::cout << "\033[1m\n";
     
-    std::atomic<int> totalTasks(static_cast<int>(processedIndices.size()));
-    std::atomic<int> completedTasks(0);
+    std::atomic<size_t> totalTasks(indexChunks.size());
+    std::atomic<size_t> completedTasks(0);
     std::atomic<bool> isProcessingComplete(false);
 
-    int totalTasksValue = totalTasks.load();
+    size_t totalTasksValue = totalTasks.load();
     std::thread progressThread(displayProgressBar, std::ref(completedTasks), std::cref(totalTasksValue), std::ref(isProcessingComplete));
 
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
     futures.reserve(numThreads);
 
+    size_t maxChunkSize = 10;  // Maximum number of files per chunk
+
     for (const auto& chunk : indexChunks) {
-        std::vector<std::string> isoFilesInChunk;
-        isoFilesInChunk.reserve(chunk.size());
-        for (const auto& index : chunk) {
-            isoFilesInChunk.push_back(isoFiles[index - 1]);
+        // Split the chunk into smaller chunks if it exceeds the maximum size
+        std::vector<std::vector<size_t>> subChunks;
+        for (size_t i = 0; i < chunk.size(); i += maxChunkSize) {
+            subChunks.emplace_back(chunk.begin() + i, std::min(chunk.begin() + i + maxChunkSize, chunk.end()));
         }
 
-        {
-            std::lock_guard<std::mutex> highLock(Mutex4High);
-            futures.emplace_back(pool.enqueue([isoFilesInChunk = std::move(isoFilesInChunk), &isoFiles, &operationIsos, &operationErrors, &userDestDir, isMove, isCopy, isDelete, &completedTasks]() {
-                handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors, userDestDir, isMove, isCopy, isDelete);
-                completedTasks.fetch_add(static_cast<int>(isoFilesInChunk.size()), std::memory_order_relaxed);
-            }));
+        for (const auto& subChunk : subChunks) {
+            std::vector<std::string> isoFilesInChunk;
+            isoFilesInChunk.reserve(subChunk.size());
+            for (const auto& index : subChunk) {
+                isoFilesInChunk.push_back(isoFiles[index - 1]);
+            }
+
+            {
+                std::lock_guard<std::mutex> highLock(Mutex4High);
+                futures.emplace_back(pool.enqueue([isoFilesInChunk = std::move(isoFilesInChunk), &isoFiles, &operationIsos, &operationErrors, &userDestDir, isMove, isCopy, isDelete, &completedTasks]() {
+                    handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors, userDestDir, isMove, isCopy, isDelete);
+                    completedTasks.fetch_add(static_cast<int>(isoFilesInChunk.size()), std::memory_order_relaxed);
+                }));
+            }
         }
     }
 
