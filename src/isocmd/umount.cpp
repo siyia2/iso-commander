@@ -156,8 +156,17 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
 
     // Remove empty directories for all isoDirs
     for (const auto& dir : isoDirs) {
-        if (isDirectoryEmpty(dir)) {
-            std::error_code ec;
+		std::stringstream errorMessage;
+		std::error_code ec;
+		if (!isDirectoryEmpty(dir)){
+                
+                errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << dir << "'\033[1;91m. Probably not an ISO mountpoint";
+                {
+                    std::lock_guard<std::mutex> lowLock(Mutex4Low);
+                    unmountedErrors.emplace(errorMessage.str());
+                }
+			} else if (isDirectoryEmpty(dir)) {
+            
             if (std::filesystem::remove(dir, ec)) {
                 auto [directory, filename] = extractDirectoryAndFilename(dir);
                 std::string removedDirInfo = "\033[0;1mUnmounted: \033[1;92m'" + directory + "/" + filename + "\033[1;92m'\033[0m.";
@@ -166,7 +175,6 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
                     unmountedFiles.emplace(removedDirInfo);
                 }
             } else {
-                std::stringstream errorMessage;
                 errorMessage << "\033[1;91mFailed to remove directory: \033[1;93m'" << dir << "'\033[1;91m. Error: " << ec.message() << "\033[0m";
                 {
                     std::lock_guard<std::mutex> lowLock(Mutex4Low);
