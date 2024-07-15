@@ -2,9 +2,6 @@
 #include "../threadpool.h"
 
 
-// For storing isoFiles in RAM
-static std::vector<std::string> globalIsoFileList;
-
 // For breaking mv&rm gracefully
 bool mvDelBreak=false;
 
