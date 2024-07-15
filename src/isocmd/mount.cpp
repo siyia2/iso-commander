@@ -65,6 +65,10 @@ void select_and_mount_files_by_number() {
 		bool needsScrnClr = true;
         removeNonExistentPathsFromCache();
         loadCache(isoFiles);
+        mountedFiles.clear();
+		skippedMessages.clear();
+		mountedFails.clear();
+		uniqueErrorMessages.clear();
         		
 
         if (isoFiles.empty()) {
@@ -73,14 +77,10 @@ void select_and_mount_files_by_number() {
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             break;
         }
+        
         if (needsScrnClr) {
 			sortFilesCaseInsensitive(isoFiles);
 			clearScrollBuffer();
-
-			mountedFiles.clear();
-			skippedMessages.clear();
-			mountedFails.clear();
-			uniqueErrorMessages.clear();
 
 			printIsoFileList(isFiltered ? filteredFiles : isoFiles);
 		}
