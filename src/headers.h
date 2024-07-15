@@ -47,6 +47,10 @@ extern std::mutex Mutex4High;
 // Mutex for LowLevel functions
 extern std::mutex Mutex4Low;
 
+// For storing isoFiles in RAM
+extern std::vector<std::string> globalIsoFileList;
+
+
 // For cache directory creation
 extern bool gapPrinted; // for cache refresh for directory function
 extern bool promptFlag; // for cache refresh for directory function
