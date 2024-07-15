@@ -122,8 +122,6 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
     mnt_free_iter(itr);
     mnt_free_table(tb);
 
-    std::vector<std::string> successfully_unmounted;
-
     // Unmount in batch
     struct libmnt_context *ctx = mnt_new_context();
     if (!ctx) {
@@ -140,7 +138,6 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
     for (const auto& mp : mountpoints_to_unmount) {
         mnt_context_set_target(ctx, mp.c_str());
         mnt_context_set_mflags(ctx, MS_LAZYTIME);
-
         int rc = mnt_context_umount(ctx);
         if (rc != 0) {
             auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(mp);
@@ -152,35 +149,29 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
                     unmountedErrors.emplace(errorMessage.str());
                 }
             }
-        } else {
-            successfully_unmounted.push_back(mp);
         }
     }
 
     mnt_free_context(ctx);
 
-    // Remove empty directories in batch
-    std::vector<std::string> dirs_to_remove;
-    for (const auto& mp : successfully_unmounted) {
-        if (isDirectoryEmpty(mp)) {
-            dirs_to_remove.push_back(mp);
-        }
-    }
-
-    for (const auto& dir : dirs_to_remove) {
-        if (rmdir(dir.c_str()) == 0) {
-            auto [directory, filename] = extractDirectoryAndFilename(dir);
-            std::string removedDirInfo = "\033[0;1mUnmounted: \033[1;92m'" + directory + "/" + filename + "\033[1;92m'\033[0m.";
-            {
-                std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                unmountedFiles.emplace(removedDirInfo);
-            }
-        } else {
-            std::stringstream errorMessage;
-            errorMessage << "\033[1;91mFailed to remove directory: \033[1;93m'" << dir << "'\033[1;91m.\033[0m";
-            {
-                std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                unmountedErrors.emplace(errorMessage.str());
+    // Remove empty directories for all isoDirs
+    for (const auto& dir : isoDirs) {
+        if (isDirectoryEmpty(dir)) {
+            std::error_code ec;
+            if (std::filesystem::remove(dir, ec)) {
+                auto [directory, filename] = extractDirectoryAndFilename(dir);
+                std::string removedDirInfo = "\033[0;1mUnmounted: \033[1;92m'" + directory + "/" + filename + "\033[1;92m'\033[0m.";
+                {
+                    std::lock_guard<std::mutex> lowLock(Mutex4Low);
+                    unmountedFiles.emplace(removedDirInfo);
+                }
+            } else {
+                std::stringstream errorMessage;
+                errorMessage << "\033[1;91mFailed to remove directory: \033[1;93m'" << dir << "'\033[1;91m. Error: " << ec.message() << "\033[0m";
+                {
+                    std::lock_guard<std::mutex> lowLock(Mutex4Low);
+                    unmountedErrors.emplace(errorMessage.str());
+                }
             }
         }
     }
