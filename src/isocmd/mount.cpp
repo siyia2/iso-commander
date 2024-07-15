@@ -6,7 +6,6 @@
 // Function to mount all ISOs indiscriminately
 void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
 
-    size_t maxThreads = std::thread::hardware_concurrency();
     size_t maxChunkSize = 100;  // Maximum number of files per chunk
     size_t totalIsos = isoFiles.size();
 
