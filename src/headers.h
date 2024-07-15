@@ -110,7 +110,7 @@ void print_ascii();
 void loadHistory();
 void saveHistory();
 void signalHandler(int signum);
-void displayProgressBar(const std::atomic<int>& completed, const int& total, std::atomic<bool>& isComplete);
+void displayProgressBar(const std::atomic<size_t>& completedIsos, const size_t& totalIsos, std::atomic<bool>& isComplete);
 void clearScrollBuffer();
 
 // Mount functions
