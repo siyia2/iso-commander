@@ -13,7 +13,7 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::st
     std::atomic<bool> isComplete(false);
 
     // Determine the number of threads to use
-    size_t numThreads = std::min(totalIsos, maxThreads);
+    size_t numThreads = std::min(totalIsos, static_cast<size_t>(maxThreads));
 
     // Adjust chunk size based on the number of files
     size_t chunkSize = std::min(maxChunkSize, (totalIsos + numThreads - 1) / numThreads);
