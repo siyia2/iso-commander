@@ -2,6 +2,10 @@
 #include "../threadpool.h"
 
 
+// For storing isoDirs in RAM
+static std::vector<std::string> globalIsoDirs;
+
+
 // UMOUNT STUFF
 
 // Function to list mounted ISOs in the /mnt directory
@@ -211,36 +215,44 @@ void printUnmountedAndErrors(std::set<std::string>& unmountedFiles, std::set<std
 
 // Main function for unmounting ISOs
 void unmountISOs() {
-    std::vector<std::string> isoDirs;
     std::set<std::string> errorMessages, unmountedFiles, unmountedErrors;
     const std::string isoPath = "/mnt";
     bool isFiltered = false;
-    std::vector<std::string> filteredIsoDirs;
+    std::vector<std::string> filteredIsoDirs, isoDirs;
     filteredIsoDirs.reserve(100);
 
     while (true) {
         std::vector<std::string> selectedIsoDirs;
         selectedIsoDirs.reserve(maxThreads);
-		
+        
         clearScrollBuffer();
         listMountedISOs();
         if (!isFiltered) {
-			isoDirs.clear();
-		}
+            globalIsoDirs.clear();
+        }
         unmountedFiles.clear();
         unmountedErrors.clear();
         errorMessages.clear();
-
-        if (!isFiltered) {
-            for (const auto& entry : std::filesystem::directory_iterator(isoPath)) {
+		if (!isFiltered) {
+			for (const auto& entry : std::filesystem::directory_iterator(isoPath)) {
                 if (entry.is_directory() && entry.path().filename().string().find("iso_") == 0) {
                     isoDirs.push_back(entry.path().string());
                 }
             }
 
             sortFilesCaseInsensitive(isoDirs);
+            
+			if (isoDirs.size() != globalIsoDirs.size()) {
+				for (const auto& entry : std::filesystem::directory_iterator(isoPath)) {
+					if (entry.is_directory() && entry.path().filename().string().find("iso_") == 0) {
+						globalIsoDirs.push_back(entry.path().string());
+					}
+				}
+
+				sortFilesCaseInsensitive(globalIsoDirs);
+			}
         } else {
-			clearScrollBuffer();
+            clearScrollBuffer();
             sortFilesCaseInsensitive(filteredIsoDirs);
             std::cout << "\n";
             size_t maxIndex = filteredIsoDirs.size();
@@ -257,7 +269,7 @@ void unmountISOs() {
             }
         }
 
-        if (isoDirs.empty() && !isFiltered) {
+        if (globalIsoDirs.empty() && !isFiltered) {
             std::cerr << "\n\033[1;93mNo path(s) matching the '/mnt/iso_*' pattern found.\033[0m\033[1m\n";
             std::cout << "\n\033[1;32m↵ to continue...";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -271,7 +283,7 @@ void unmountISOs() {
         std::string inputString(input.get());
 
         if (!inputString.empty() && inputString != "/") {
-			clearScrollBuffer();
+            clearScrollBuffer();
             std::cout << "\033[1m\n";
         }
 
@@ -284,80 +296,80 @@ void unmountISOs() {
                 return;
             }
         } else if (inputString == "/") {
-			std::vector<std::string> lastFilteredIsoDirs = filteredIsoDirs;  // Preserve last filtered results
-			while (true) {    
-				unmountedFiles.clear();
-				unmountedErrors.clear();
-				errorMessages.clear();
-				clear_history();
-				historyPattern = true;
-				loadHistory();            
-				std::string filterPrompt = "\001\033[1A\002\001\033[K\002\001\033[1A\002\001\033[K\002\n\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
-				std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
-				std::string terms(searchQuery.get());
+            std::vector<std::string> lastFilteredIsoDirs = filteredIsoDirs;  // Preserve last filtered results
+            while (true) {    
+                unmountedFiles.clear();
+                unmountedErrors.clear();
+                errorMessages.clear();
+                clear_history();
+                historyPattern = true;
+                loadHistory();            
+                std::string filterPrompt = "\001\033[1A\002\001\033[K\002\001\033[1A\002\001\033[K\002\n\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
+                std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
+                std::string terms(searchQuery.get());
         
-				if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
-					historyPattern = false;
-					clear_history();
-					// Restore last filtered results or original list
-					if (filteredIsoDirs.empty() && !lastFilteredIsoDirs.empty()) {
-						filteredIsoDirs = lastFilteredIsoDirs;
-						isFiltered = true;
-					} else if (filteredIsoDirs.empty()) {
-						filteredIsoDirs = isoDirs;
-						isFiltered = false;
-					}
-					break;
-				}
-				std::string inputSearch(searchQuery.get());
-				std::cout << "\033[1m\n";
-				if (strcmp(searchQuery.get(), "/") != 0) {
-					add_history(searchQuery.get());
-					saveHistory();
-				}
+                if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
+                    historyPattern = false;
+                    clear_history();
+                    // Restore last filtered results or original list
+                    if (filteredIsoDirs.empty() && !lastFilteredIsoDirs.empty()) {
+                        filteredIsoDirs = lastFilteredIsoDirs;
+                        isFiltered = true;
+                    } else if (filteredIsoDirs.empty()) {
+                        filteredIsoDirs = globalIsoDirs;
+                        isFiltered = false;
+                    }
+                    break;
+                }
+                std::string inputSearch(searchQuery.get());
+                std::cout << "\033[1m\n";
+                if (strcmp(searchQuery.get(), "/") != 0) {
+                    add_history(searchQuery.get());
+                    saveHistory();
+                }
         
-				historyPattern = false;
-				clear_history();
+                historyPattern = false;
+                clear_history();
     
-				std::vector<std::string> filterPatterns;
-				std::stringstream ss(terms);
-				std::string token;
-				while (std::getline(ss, token, ';')) {
-					filterPatterns.push_back(token);
-					toLowerInPlace(filterPatterns.back());
-				}
+                std::vector<std::string> filterPatterns;
+                std::stringstream ss(terms);
+                std::string token;
+                while (std::getline(ss, token, ';')) {
+                    filterPatterns.push_back(token);
+                    toLowerInPlace(filterPatterns.back());
+                }
     
-				filteredIsoDirs.clear();
-				size_t numDirs = isoDirs.size();
-				unsigned int numThreads = std::min(static_cast<unsigned int>(numDirs), maxThreads);
-				std::vector<std::future<void>> futuresFilter;
-				futuresFilter.reserve(numThreads);
-				size_t baseDirsPerThread = numDirs / numThreads;
-				size_t remainder = numDirs % numThreads;
-				for (size_t i = 0; i < numThreads; ++i) {
-					size_t start = i * baseDirsPerThread + std::min(i, remainder);
-					size_t end = start + baseDirsPerThread + (i < remainder ? 1 : 0);
-					futuresFilter.push_back(std::async(std::launch::async, [&, start, end] {
-						filterMountPoints(isoDirs, filterPatterns, filteredIsoDirs, start, end);
-					}));
-				}
-				for (auto& future : futuresFilter) {
-					future.get();
-				}
+                filteredIsoDirs.clear();
+                size_t numDirs = globalIsoDirs.size();
+                unsigned int numThreads = std::min(static_cast<unsigned int>(numDirs), maxThreads);
+                std::vector<std::future<void>> futuresFilter;
+                futuresFilter.reserve(numThreads);
+                size_t baseDirsPerThread = numDirs / numThreads;
+                size_t remainder = numDirs % numThreads;
+                for (size_t i = 0; i < numThreads; ++i) {
+                    size_t start = i * baseDirsPerThread + std::min(i, remainder);
+                    size_t end = start + baseDirsPerThread + (i < remainder ? 1 : 0);
+                    futuresFilter.push_back(std::async(std::launch::async, [&, start, end] {
+                        filterMountPoints(globalIsoDirs, filterPatterns, filteredIsoDirs, start, end);
+                    }));
+                }
+                for (auto& future : futuresFilter) {
+                    future.get();
+                }
     
-				if (filteredIsoDirs.empty()) {
-					std::cout << "\033[1A\033[K";
-					// Restore previous filtered list if current filtering yields no results
-					filteredIsoDirs = lastFilteredIsoDirs;
-					continue;
-				} else {
-					lastFilteredIsoDirs = filteredIsoDirs;  // Update last filtered results
-					isFiltered = true;
-					break;
-				}
-			}
-		} else {
-			std::vector<std::string>& currentDirs = isFiltered ? filteredIsoDirs : isoDirs;
+                if (filteredIsoDirs.empty()) {
+                    std::cout << "\033[1A\033[K";
+                    // Restore previous filtered list if current filtering yields no results
+                    filteredIsoDirs = lastFilteredIsoDirs;
+                    continue;
+                } else {
+                    lastFilteredIsoDirs = filteredIsoDirs;  // Update last filtered results
+                    isFiltered = true;
+                    break;
+                }
+            }
+        } else {
+            std::vector<std::string>& currentDirs = isFiltered ? filteredIsoDirs : globalIsoDirs;
 
             if (inputString == "00") {
                 selectedIsoDirs = currentDirs;
@@ -400,47 +412,47 @@ void unmountISOs() {
             }
 
             if (!selectedIsoDirs.empty()) {
-				unsigned int numThreads = std::min(static_cast<int>(selectedIsoDirs.size()), static_cast<int>(maxThreads));
-				ThreadPool pool(numThreads);
-				std::vector<std::future<void>> futuresUmount;
-				futuresUmount.reserve(numThreads);
+                unsigned int numThreads = std::min(static_cast<int>(selectedIsoDirs.size()), static_cast<int>(maxThreads));
+                ThreadPool pool(numThreads);
+                std::vector<std::future<void>> futuresUmount;
+                futuresUmount.reserve(numThreads);
 
-				size_t maxBatchSize = 100;  // Maximum number of items per batch
+                size_t maxBatchSize = 100;  // Maximum number of items per batch
 
-				// Calculate batch size ensuring it's at most maxBatchSize
-				size_t batchSize = std::min(maxBatchSize, (selectedIsoDirs.size() + numThreads - 1) / numThreads);
+                // Calculate batch size ensuring it's at most maxBatchSize
+                size_t batchSize = std::min(maxBatchSize, (selectedIsoDirs.size() + numThreads - 1) / numThreads);
 
-				// Ensure batchSize is at least 1
-				batchSize = std::max(batchSize, static_cast<size_t>(1));
+                // Ensure batchSize is at least 1
+                batchSize = std::max(batchSize, static_cast<size_t>(1));
 
-				std::vector<std::vector<std::string>> batches;
-				for (size_t i = 0; i < selectedIsoDirs.size(); i += batchSize) {
-					batches.emplace_back(selectedIsoDirs.begin() + i, 
-					std::min(selectedIsoDirs.begin() + i + batchSize, 
+                std::vector<std::vector<std::string>> batches;
+                for (size_t i = 0; i < selectedIsoDirs.size(); i += batchSize) {
+                    batches.emplace_back(selectedIsoDirs.begin() + i, 
+                    std::min(selectedIsoDirs.begin() + i + batchSize, 
                     selectedIsoDirs.end()));
-				}
+                }
 
-				std::atomic<size_t> completedIsos(0);
-				size_t totalIsos = selectedIsoDirs.size();
-				std::atomic<bool> isComplete(false);
-				std::thread progressThread(displayProgressBar, std::ref(completedIsos), std::cref(totalIsos), std::ref(isComplete));
+                std::atomic<size_t> completedIsos(0);
+                size_t totalIsos = selectedIsoDirs.size();
+                std::atomic<bool> isComplete(false);
+                std::thread progressThread(displayProgressBar, std::ref(completedIsos), std::cref(totalIsos), std::ref(isComplete));
 
-				for (auto& batch : batches) {
-					std::lock_guard<std::mutex> highLock(Mutex4High);
-					futuresUmount.emplace_back(pool.enqueue([batch = std::move(batch), &unmountedFiles, &unmountedErrors, &completedIsos]() {
-						for (const auto& iso : batch) {
-							unmountISO({iso}, unmountedFiles, unmountedErrors);
-							completedIsos.fetch_add(1, std::memory_order_relaxed);
-						}
-					}));
-				}
+                for (auto& batch : batches) {
+                    std::lock_guard<std::mutex> highLock(Mutex4High);
+                    futuresUmount.emplace_back(pool.enqueue([batch = std::move(batch), &unmountedFiles, &unmountedErrors, &completedIsos]() {
+                        for (const auto& iso : batch) {
+                            unmountISO({iso}, unmountedFiles, unmountedErrors);
+                            completedIsos.fetch_add(1, std::memory_order_relaxed);
+                        }
+                    }));
+                }
 
-			for (auto& future : futuresUmount) {
-				future.wait();
-			}
+                for (auto& future : futuresUmount) {
+                    future.wait();
+                }
 
-				isComplete.store(true, std::memory_order_release);
-				progressThread.join();
+                isComplete.store(true, std::memory_order_release);
+                progressThread.join();
                 if (verbose) {
                     printUnmountedAndErrors(unmountedFiles, unmountedErrors, errorMessages);
                     std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
