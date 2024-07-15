@@ -400,7 +400,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     futures.reserve(numThreads);
     ThreadPool pool(numThreads);
 
-	std::atomic<int> completedTasks(0);
+	std::atomic<size_t> completedTasks(0);
 	// Create atomic flag for completion status
     std::atomic<bool> isComplete(false);
 
