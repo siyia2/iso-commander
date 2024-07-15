@@ -447,8 +447,8 @@ void unmountISOs() {
 				future.wait();
 			}
 
-        isComplete.store(true, std::memory_order_release);
-        progressThread.join();
+				isComplete.store(true, std::memory_order_release);
+				progressThread.join();
                 if (verbose) {
                     printUnmountedAndErrors(unmountedFiles, unmountedErrors, errorMessages);
                     std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";

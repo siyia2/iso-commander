@@ -349,12 +349,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
 
 
 // Function to process input and mount ISO files asynchronously
-void processAndMountIsoFiles(const std::string& input,
-                             const std::vector<std::string>& isoFiles,
-                             std::set<std::string>& mountedFiles,
-                             std::set<std::string>& skippedMessages,
-                             std::set<std::string>& mountedFails,
-                             std::set<std::string>& uniqueErrorMessages) {
+void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles,std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages) {
     std::istringstream iss(input);
     
     std::atomic<bool> invalidInput(false);
