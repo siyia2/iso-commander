@@ -2,8 +2,8 @@
 #include "../threadpool.h"
 
 
-static std::vector<std::string> binImgFilesCache(100); // Memory cached binImgFiles here
-static std::vector<std::string> mdfMdsFilesCache(100); // Memory cached mdfImgFiles here
+static std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles here
+static std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
 
 // Boolean flag for verbose beautification
 bool gapSet = true;
