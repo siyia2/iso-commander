@@ -731,9 +731,11 @@ void printFileList(const std::vector<std::string>& fileList) {
         bool isSpecialExtension = false;
 
         if (dotPos != std::string_view::npos) {
-            std::string_view extension = fileNameView.substr(dotPos);
-            isSpecialExtension = (extension == ".bin" || extension == ".img" || extension == ".mdf");
-        }
+			std::string_view extensionView = fileNameView.substr(dotPos);
+			std::string extension(extensionView);
+			toLowerInPlace(extension);
+			isSpecialExtension = (extension == ".bin" || extension == ".img" || extension == ".mdf");
+		}
 
         const char* sequenceColor = (i % 2 == 0) ? red : green;
 
