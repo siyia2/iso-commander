@@ -68,6 +68,7 @@ int main(int argc, char *argv[]) {
     std::string choice;
 
     while (!exitProgram) {
+		globalIsoFileList.reserve(100);
         clearScrollBuffer();
         print_ascii();
         // Display the main menu options

@@ -3,7 +3,7 @@
 
 
 // For storing isoFiles in RAM
-std::vector<std::string> globalIsoFileList(100);
+std::vector<std::string> globalIsoFileList;
 
 //	MOUNT STUFF
 
