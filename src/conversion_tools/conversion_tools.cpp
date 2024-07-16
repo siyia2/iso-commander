@@ -109,6 +109,8 @@ void applyFilter(std::vector<std::string>& files, const std::vector<std::string>
 void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     std::vector<std::string> files, originalFiles;
     files.reserve(100);
+    binImgFilesCache.reserve(100);
+	mdfMdsFilesCache.reserve(100);
     std::vector<std::string> directoryPaths;
     std::set<std::string> uniquePaths, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, invalidDirectoryPaths;
 
