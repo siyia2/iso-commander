@@ -107,11 +107,6 @@ void select_and_mount_files_by_number() {
 		}
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         std::string inputString(input.get());
-        
-        if (!inputString.empty() && inputString != "/") {
-            clearScrollBuffer();
-            std::cout << "\n\033[0;1m";
-        }
 
         if (inputString.empty()) {
             if (isFiltered) {
@@ -168,11 +163,13 @@ void select_and_mount_files_by_number() {
             std::vector<std::string>& currentFiles = isFiltered ? filteredFiles : globalIsoFileList;
             if (inputString == "00") {
 				clearScrollBuffer();
+				std::cout << "\033[1m\n";
 				needsClrScrn = true;
                 mountAllIsoFiles(currentFiles, mountedFiles, skippedMessages, mountedFails);
             } else {
 				clearScrollBuffer();
 				needsClrScrn = true;
+				std::cout << "\033[1m\n";
                 processAndMountIsoFiles(inputString, currentFiles, mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
             }
 
