@@ -251,8 +251,8 @@ bool isAlreadyMounted(const std::string& mountPoint) {
     struct libmnt_cache *cache = mnt_new_cache();
     
     if (!tb || !cache) {
-        mnt_free_table(tb);
-        mnt_free_cache(cache);
+        if (tb) mnt_free_table(tb);
+        if (cache) mnt_free_cache(cache);
         throw std::runtime_error("Failed to allocate mnt_table or mnt_cache");
     }
 
