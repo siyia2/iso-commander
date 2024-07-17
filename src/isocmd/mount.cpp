@@ -97,7 +97,7 @@ void select_and_mount_files_by_number() {
 			std::cout << "\n\n\n";
 		}
 		// Move the cursor up 3 lines and clear them
-                std::cout << "\033[1A\033[K";
+        std::cout << "\033[1A\033[K";
 
         std::string prompt;
 		if (isFiltered) {
@@ -167,17 +167,19 @@ void select_and_mount_files_by_number() {
         } else {
             std::vector<std::string>& currentFiles = isFiltered ? filteredFiles : globalIsoFileList;
             if (inputString == "00") {
+				needsClrScrn = true;
                 mountAllIsoFiles(currentFiles, mountedFiles, skippedMessages, mountedFails);
             } else {
+				needsClrScrn = true;
                 processAndMountIsoFiles(inputString, currentFiles, mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
             }
 
             if (!uniqueErrorMessages.empty() && mountedFiles.empty() && skippedMessages.empty() && mountedFails.empty()) {
-                clearScrollBuffer();
+				needsClrScrn = true;
                 std::cout << "\n\033[1;91mNo valid input provided for mount\033[0;1m\n\n\033[1;32m↵ to continue...\033[0;1m";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             } else if (verbose) {
-                clearScrollBuffer();
+				needsClrScrn = true;
                 printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
             }
         }
