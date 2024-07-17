@@ -330,7 +330,7 @@ void unmountISOs() {
 						filteredIsoDirs = isoDirs;
 						historyPattern = false;
 						hadSuccessfulFilter = false;
-						clr = true;
+						clr = false;
 						isFiltered = false;
 					}
 					break;
@@ -369,6 +369,11 @@ void unmountISOs() {
 				}
 				for (auto& future : futuresFilter) {
 					future.get();
+				}
+				
+				if (filteredIsoDirs.size() == isoDirs.size()) {
+					isFiltered = false;
+					break;
 				}
     
 				if (filteredIsoDirs.empty()) {
