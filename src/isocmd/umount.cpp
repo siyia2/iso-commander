@@ -290,85 +290,85 @@ void unmountISOs() {
             } else {
                 return;
             }
-        }else if (inputString == "/") {
-    std::vector<std::string> lastSuccessfulFilteredIsoDirs = filteredIsoDirs;  // Initialize with unfiltered list
-    static bool hadSuccessfulFilter = false;
-    while (true) {    
-        unmountedFiles.clear();
-        unmountedErrors.clear();
-        errorMessages.clear();
-        clear_history();
-        historyPattern = true;
-        loadHistory();            
-        std::string filterPrompt = "\001\033[1A\002\001\033[K\002\001\033[1A\002\001\033[K\002\n\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
-        std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
-        std::string terms(searchQuery.get());
+		} else if (inputString == "/") {
+			std::vector<std::string> lastSuccessfulFilteredIsoDirs = filteredIsoDirs;  // Initialize with unfiltered list
+			static bool hadSuccessfulFilter = false;
+			while (true) {    
+				unmountedFiles.clear();
+				unmountedErrors.clear();
+				errorMessages.clear();
+				clear_history();
+				historyPattern = true;
+				loadHistory();            
+				std::string filterPrompt = "\001\033[1A\002\001\033[K\002\001\033[1A\002\001\033[K\002\n\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
+				std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
+				std::string terms(searchQuery.get());
 
-        if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
-            historyPattern = false;
-            clear_history();
-            // Always use the last successful filtered results if we had any successful filters
-            if (hadSuccessfulFilter && !lastSuccessfulFilteredIsoDirs.empty()) {
-                filteredIsoDirs = lastSuccessfulFilteredIsoDirs;
-                isFiltered = true;
-            } else {
-                filteredIsoDirs = isoDirs;
-                isFiltered = false;
-            }
-            break;
-        }
-			std::string inputSearch(searchQuery.get());
-			std::cout << "\033[1m\n";
-			if (strcmp(searchQuery.get(), "/") != 0) {
-				add_history(searchQuery.get());
-				saveHistory();
-			}
-        
-			historyPattern = false;
-			clear_history();
-    
-			std::vector<std::string> filterPatterns;
-			std::stringstream ss(terms);
-			std::string token;
-			while (std::getline(ss, token, ';')) {
-				filterPatterns.push_back(token);
-				toLowerInPlace(filterPatterns.back());
-			}
-    
-			filteredIsoDirs.clear();
-			size_t numDirs = isoDirs.size();
-			unsigned int numThreads = std::min(static_cast<unsigned int>(numDirs), maxThreads);
-			std::vector<std::future<void>> futuresFilter;
-			futuresFilter.reserve(numThreads);
-			size_t baseDirsPerThread = numDirs / numThreads;
-			size_t remainder = numDirs % numThreads;
-			for (size_t i = 0; i < numThreads; ++i) {
-				size_t start = i * baseDirsPerThread + std::min(i, remainder);
-				size_t end = start + baseDirsPerThread + (i < remainder ? 1 : 0);
-				futuresFilter.push_back(std::async(std::launch::async, [&, start, end] {
-					filterMountPoints(isoDirs, filterPatterns, filteredIsoDirs, start, end);
-				}));
-			}
-			for (auto& future : futuresFilter) {
-				future.get();
-			}
-    
-			if (filteredIsoDirs.empty()) {
-				std::cout << "\033[1A\033[K";
-				// Don't change filteredIsoDirs here, just continue the loop
-				continue;
-			} else {
-				if (lastSuccessfulFilteredIsoDirs != filteredIsoDirs) {
-					lastSuccessfulFilteredIsoDirs = filteredIsoDirs;  // Update last successful filtered results
-					hadSuccessfulFilter = true;
-					isFiltered = true;
-				} else {
-					hadSuccessfulFilter = false;
-					isFiltered = false;
+				if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
+					historyPattern = false;
+					clear_history();
+					// Always use the last successful filtered results if we had any successful filters
+					if (hadSuccessfulFilter && !lastSuccessfulFilteredIsoDirs.empty()) {
+						filteredIsoDirs = lastSuccessfulFilteredIsoDirs;
+						isFiltered = true;
+					} else {
+						filteredIsoDirs = isoDirs;
+						isFiltered = false;
+					}
+					break;
 				}
-				break;  // Break after a successful filter
+				std::string inputSearch(searchQuery.get());
+				std::cout << "\033[1m\n";
+				if (strcmp(searchQuery.get(), "/") != 0) {
+					add_history(searchQuery.get());
+					saveHistory();
+				}
+        
+				historyPattern = false;
+				clear_history();
+    
+				std::vector<std::string> filterPatterns;
+				std::stringstream ss(terms);
+				std::string token;
+				while (std::getline(ss, token, ';')) {
+					filterPatterns.push_back(token);
+					toLowerInPlace(filterPatterns.back());
+				}
+    
+				filteredIsoDirs.clear();
+				size_t numDirs = isoDirs.size();
+				unsigned int numThreads = std::min(static_cast<unsigned int>(numDirs), maxThreads);
+				std::vector<std::future<void>> futuresFilter;
+				futuresFilter.reserve(numThreads);
+				size_t baseDirsPerThread = numDirs / numThreads;
+				size_t remainder = numDirs % numThreads;
+				for (size_t i = 0; i < numThreads; ++i) {
+					size_t start = i * baseDirsPerThread + std::min(i, remainder);
+					size_t end = start + baseDirsPerThread + (i < remainder ? 1 : 0);
+					futuresFilter.push_back(std::async(std::launch::async, [&, start, end] {
+						filterMountPoints(isoDirs, filterPatterns, filteredIsoDirs, start, end);
+					}));
+				}
+				for (auto& future : futuresFilter) {
+					future.get();
+				}
+    
+				if (filteredIsoDirs.empty()) {
+					std::cout << "\033[1A\033[K";
+					// Don't change filteredIsoDirs here, just continue the loop
+					continue;
+				} else {
+					if (lastSuccessfulFilteredIsoDirs != filteredIsoDirs) {
+						lastSuccessfulFilteredIsoDirs = filteredIsoDirs;  // Update last successful filtered results
+						hadSuccessfulFilter = true;
+						isFiltered = true;
+					} else {
+						hadSuccessfulFilter = false;
+						isFiltered = false;
+					}
+					break;  // Break after a successful filter
+				}
 			}
-		}
     
 		} else {
 			std::vector<std::string>& currentDirs = isFiltered ? filteredIsoDirs : isoDirs;
