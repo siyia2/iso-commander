@@ -35,7 +35,7 @@ int lockFileDescriptor = -1;
 int main(int argc, char *argv[]) {
 	
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
-        printVersionNumber("5.0.4");
+        printVersionNumber("5.0.5");
         return 0;
     }
 	
@@ -303,11 +303,7 @@ void printMenu() {
 
 // Function to clear scrollbuffer
 void clearScrollBuffer() {
-    std::cout << "\033[3J";  // Clear the scrollback buffer
-    std::cout << "\033[2J";  // Clear the screen
-    std::cout << "\033[H";   // Move the cursor to the top-left corner
-    std::cout << "\033[0m";
-    std::cout.flush();       // Ensure the output is flushed
+        std::cout << "\033[3J\033[2J\033[H\033[0m" << std::flush;
 }
 
 
