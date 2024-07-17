@@ -249,23 +249,29 @@ void printMountedAndErrors( std::set<std::string>& mountedFiles, std::set<std::s
 bool isAlreadyMounted(const std::string& mountPoint) {
     struct libmnt_table *tb = mnt_new_table();
     struct libmnt_cache *cache = mnt_new_cache();
-    int ret;
+    
+    if (!tb || !cache) {
+        mnt_free_table(tb);
+        mnt_free_cache(cache);
+        throw std::runtime_error("Failed to allocate mnt_table or mnt_cache");
+    }
 
     mnt_table_set_cache(tb, cache);
-    ret = mnt_table_parse_mtab(tb, NULL);
-
+    int ret = mnt_table_parse_mtab(tb, NULL);
     if (ret != 0) {
         mnt_free_table(tb);
         mnt_free_cache(cache);
-        return false; // Error parsing mtab
+        throw std::runtime_error("Error parsing mtab");
     }
 
     struct libmnt_fs *fs = mnt_table_find_target(tb, mountPoint.c_str(), MNT_ITER_BACKWARD);
+    
+    bool isMounted = (fs != NULL);
 
     mnt_free_table(tb);
     mnt_free_cache(cache);
 
-    return fs != NULL;
+    return isMounted;
 }
 
 
