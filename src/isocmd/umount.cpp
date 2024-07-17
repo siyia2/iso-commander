@@ -315,6 +315,7 @@ void unmountISOs() {
 					} else {
 						filteredIsoDirs = isoDirs;
 						historyPattern = false;
+						hadSuccessfulFilter = false;
 						isFiltered = false;
 					}
 					break;
