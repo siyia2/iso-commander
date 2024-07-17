@@ -239,13 +239,25 @@ void printMountedAndErrors( std::set<std::string>& mountedFiles, std::set<std::s
 
 // Function to check if a mountpoint isAlreadyMounted
 bool isAlreadyMounted(const std::string& mountPoint) {
-    struct statvfs vfs;
-    if (statvfs(mountPoint.c_str(), &vfs) != 0) {
-        return false; // Error or doesn't exist
+    struct libmnt_table *tb = mnt_new_table();
+    struct libmnt_cache *cache = mnt_new_cache();
+    int ret;
+
+    mnt_table_set_cache(tb, cache);
+    ret = mnt_table_parse_mtab(tb, NULL);
+
+    if (ret != 0) {
+        mnt_free_table(tb);
+        mnt_free_cache(cache);
+        return false; // Error parsing mtab
     }
 
-    // Check if it's a mount point
-    return (vfs.f_flag & ST_NODEV) == 0;
+    struct libmnt_fs *fs = mnt_table_find_target(tb, mountPoint.c_str(), MNT_ITER_BACKWARD);
+
+    mnt_free_table(tb);
+    mnt_free_cache(cache);
+
+    return fs != NULL;
 }
 
 
