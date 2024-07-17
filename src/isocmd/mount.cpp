@@ -63,11 +63,13 @@ void select_and_mount_files_by_number() {
     std::vector<std::string> isoFiles, filteredFiles;
     isoFiles.reserve(100);
     bool isFiltered = false;
+    bool needsClrScrn = true;
     
     while (true) {
         removeNonExistentPathsFromCache();
         loadCache(isoFiles);
-        clearScrollBuffer();
+        
+        if (needsClrScrn) clearScrollBuffer();
 
         if (isoFiles.empty()) {
             clearScrollBuffer();
@@ -89,12 +91,20 @@ void select_and_mount_files_by_number() {
         skippedMessages.clear();
         mountedFails.clear();
         uniqueErrorMessages.clear();
+		
+        if (needsClrScrn) {
+			printIsoFileList(isFiltered ? filteredFiles : globalIsoFileList);
+			std::cout << "\n\n\n";
+		}
+		// Move the cursor up 3 lines and clear them
+                std::cout << "\033[1A\033[K";
 
-        printIsoFileList(isFiltered ? filteredFiles : globalIsoFileList);
-
-        std::string prompt = std::string(isFiltered ? "\n\n\001\033[1;96m\002Filtered \001\033[1;92m\002ISO" : "\n\n\001\033[1;92m\002ISO")
-            + "\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
-
+        std::string prompt;
+		if (isFiltered) {
+			prompt = "\001\033[1;96m\002Filtered \001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+		} else {
+			prompt = "\001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+		}
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         std::string inputString(input.get());
         
@@ -120,12 +130,17 @@ void select_and_mount_files_by_number() {
                 clear_history();
                 historyPattern = true;
                 loadHistory();
-                std::string filterPrompt = "\001\033[1A\002\001\033[K\002\001\033[1A\002\001\033[K\002\n\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
+                // Move the cursor up 3 lines and clear them
+                std::cout << "\033[1A\033[K";
+
+                std::string filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
+
                 std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
         
                 if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
                     historyPattern = false;
                     clear_history();
+                    needsClrScrn = false;
                     break;
                 }
         
@@ -141,6 +156,7 @@ void select_and_mount_files_by_number() {
                 auto newFilteredFiles = filterFiles(globalIsoFileList, inputSearch);
         
                 if (!newFilteredFiles.empty()) {
+					needsClrScrn = true;
                     filteredFiles = std::move(newFilteredFiles);
                     isFiltered = true;
                     break;
