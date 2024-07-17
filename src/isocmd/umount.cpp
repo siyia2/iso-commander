@@ -222,15 +222,18 @@ void unmountISOs() {
     std::set<std::string> errorMessages, unmountedFiles, unmountedErrors;
     const std::string isoPath = "/mnt";
     bool isFiltered = false;
+    bool needsClrScrn = true;
     std::vector<std::string> filteredIsoDirs;
     filteredIsoDirs.reserve(100);
 
     while (true) {
         std::vector<std::string> selectedIsoDirs;
         selectedIsoDirs.reserve(maxThreads);
-		
-        clearScrollBuffer();
-        listMountedISOs();
+		if (needsClrScrn) {
+			clearScrollBuffer();
+			listMountedISOs();
+			std::cout << "\n";
+		}
         if (!isFiltered) {
 			isoDirs.clear();
 		}
@@ -271,8 +274,16 @@ void unmountISOs() {
             return;
         }
 
-        std::string prompt = std::string(isFiltered ? "\n\001\033[1;96m\002Filtered \001\033[1;92m\002ISO" : "\n\001\033[1;92m\002ISO")
-            + "\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+        std::string prompt;
+        std::cout << "\033[K";
+        if (isFiltered){
+			
+			prompt = "\n\001\033[1;96m\002Filtered \001\033[1;92m\002ISO"
+            "\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+        } else { 
+			prompt = "\001\033[1;92m\002ISO"
+            "\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+		}
 
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         std::string inputString(input.get());
@@ -299,8 +310,9 @@ void unmountISOs() {
 				errorMessages.clear();
 				clear_history();
 				historyPattern = true;
-				loadHistory();            
-				std::string filterPrompt = "\001\033[1A\002\001\033[K\002\001\033[1A\002\001\033[K\002\n\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
+				loadHistory(); 
+				std::cout << "\033[1A\033[K";        
+				std::string filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
 				std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
 				std::string terms(searchQuery.get());
 
