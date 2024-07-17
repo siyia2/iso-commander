@@ -195,8 +195,8 @@ void select_and_operate_files_by_number(const std::string& operation) {
             processOperationInput(inputString, currentFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
             
             if (verbose) {
+				needsClrScrn = true;
                 verbose_cp_mv_rm(operationIsos, operationErrors, uniqueErrorMessages);
-                needsClrScrn = true;
             }
             
             if (process != "cp" && isFiltered && mvDelBreak) {
