@@ -147,9 +147,16 @@ void select_and_mount_files_by_number() {
                 }
                 historyPattern = false;
                 clear_history();
+                
+                
         
                 auto newFilteredFiles = filterFiles(globalIsoFileList, inputSearch);
-        
+                
+                if (newFilteredFiles.size() == globalIsoFileList.size()) {
+					isFiltered = false;
+					break;
+				}
+				
                 if (!newFilteredFiles.empty()) {
 					needsClrScrn = true;
                     filteredFiles = std::move(newFilteredFiles);

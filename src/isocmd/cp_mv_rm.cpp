@@ -181,6 +181,11 @@ void select_and_operate_files_by_number(const std::string& operation) {
                 
                 auto newFilteredFiles = filterFiles(globalIsoFileList, inputSearch);
                 
+                if (newFilteredFiles.size() == globalIsoFileList.size()) {
+					isFiltered = false;
+					break;
+				}
+                
                 if (!newFilteredFiles.empty()) {
                     filteredFiles = std::move(newFilteredFiles);
                     needsClrScrn = true;
