@@ -89,6 +89,8 @@ void select_and_operate_files_by_number(const std::string& operation) {
     while (true) {
         removeNonExistentPathsFromCache();
         loadCache(isoFiles);
+        
+        if (needsClrScrn) clearScrollBuffer();
 
         if (isoFiles.empty()) {
             clearScrollBuffer();
@@ -113,7 +115,6 @@ void select_and_operate_files_by_number(const std::string& operation) {
         
 		
 		if (needsClrScrn) {
-			clearScrollBuffer();
 			printIsoFileList(isFiltered ? filteredFiles : globalIsoFileList);
 			std::cout << "\n\n\n";
 		}
