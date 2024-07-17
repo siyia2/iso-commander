@@ -60,6 +60,7 @@ void listMountedISOs() {
     }
 
     std::cout << output;
+    
 }
 
 // Function to check if directory is empty for unmountISO
@@ -223,6 +224,7 @@ void unmountISOs() {
     std::set<std::string> errorMessages, unmountedFiles, unmountedErrors;
     const std::string isoPath = "/mnt";
     bool isFiltered = false;
+    bool clr = true;
     std::vector<std::string> filteredIsoDirs;
     filteredIsoDirs.reserve(100);
 
@@ -230,9 +232,11 @@ void unmountISOs() {
 		historyPattern = false;
         std::vector<std::string> selectedIsoDirs;
         selectedIsoDirs.reserve(maxThreads);
-		
-        clearScrollBuffer();
-        listMountedISOs();
+		if (clr) {
+			clearScrollBuffer();
+			listMountedISOs();
+			std::cout << "\n\n";
+		}
         if (!isFiltered) {
 			isoDirs.clear();
 		}
@@ -272,9 +276,16 @@ void unmountISOs() {
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             return;
         }
-
-        std::string prompt = std::string(isFiltered ? "\n\001\033[1;96m\002Filtered \001\033[1;92m\002ISO" : "\n\001\033[1;92m\002ISO")
-            + "\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+        std::string prompt;        
+        if (isFiltered) {
+			std::cout << "\033[K";
+			prompt = "\n\001\033[1;96m\002Filtered \001\033[1;92m\002ISO"
+            "\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+        } else {
+			std::cout << "\033[1A\033[K";
+			prompt = "\001\033[1;92m\002ISO"
+			"\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+		}
 
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         std::string inputString(input.get());
@@ -302,7 +313,8 @@ void unmountISOs() {
 				clear_history();
 				historyPattern = true;
 				loadHistory();            
-				std::string filterPrompt = "\001\033[1A\002\001\033[K\002\001\033[1A\002\001\033[K\002\n\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
+				std::cout << "\033[1A\033[K";  
+				std::string filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
 				std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
 				std::string terms(searchQuery.get());
 
@@ -312,11 +324,13 @@ void unmountISOs() {
 					// Always use the last successful filtered results if we had any successful filters
 					if (hadSuccessfulFilter && !lastSuccessfulFilteredIsoDirs.empty()) {
 						filteredIsoDirs = lastSuccessfulFilteredIsoDirs;
+						clr = true; //needed
 						isFiltered = true;
 					} else {
 						filteredIsoDirs = isoDirs;
 						historyPattern = false;
 						hadSuccessfulFilter = false;
+						clr = true;
 						isFiltered = false;
 					}
 					break;
@@ -365,11 +379,13 @@ void unmountISOs() {
 					if (lastSuccessfulFilteredIsoDirs != filteredIsoDirs) {
 						lastSuccessfulFilteredIsoDirs = filteredIsoDirs;  // Update last successful filtered results
 						hadSuccessfulFilter = true;
+						clr = true; // needed
 						isFiltered = true;
 					} else {
 						hadSuccessfulFilter = false;
 						historyPattern = false;
 						isFiltered = false;
+						clr = false;
 					}
 					break;  // Break after a successful filter
 				}
