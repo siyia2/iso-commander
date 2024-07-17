@@ -261,6 +261,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 		}
 		bool isFiltered = false;
 		bool isFilteredButUnchanged = false;
+		bool needsScrnClr = true;
         while (true) {
             successOuts.clear(); skippedOuts.clear(); failedOuts.clear(); deletedOuts.clear(); processedErrors.clear();
 
@@ -277,11 +278,12 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
                 clearScrollBuffer();
                 break;
             }
-
-            clearScrollBuffer();
-            std::cout << "\n";
-            sortFilesCaseInsensitive(files);
-            printFileList(files);
+			if (needsScrnClr) {
+				clearScrollBuffer();
+				std::cout << "\n";
+				sortFilesCaseInsensitive(files);
+				printFileList(files);
+			}
 
             clear_history();
            std::string prompt = std::string(isFiltered ? "\n\001\033[1;96m\002Filtered \001\033[1;92m\002" : "\n\001\033[1;92m\002" ) + fileTypeName + "\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion (e.g., 1-3,1 5), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
@@ -291,6 +293,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 			if (std::isspace(rawInput.get()[0]) || rawInput.get()[0] == '\0') {
 				clearScrollBuffer();
 				if (isFiltered && !isFilteredButUnchanged) {
+					needsScrnClr = true;
 					// Reset to unfiltered list
 					if (!modeMdf) {
 						files = binImgFilesCache;
@@ -301,6 +304,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 					isFilteredButUnchanged = false;
 					continue;  // Continue to show unfiltered list
 				} else {
+					needsScrnClr = false;
 					break;  // Exit the function
 				}		
 			}
