@@ -226,6 +226,7 @@ void unmountISOs() {
     filteredIsoDirs.reserve(100);
 
     while (true) {
+		historyPattern = false;
         std::vector<std::string> selectedIsoDirs;
         selectedIsoDirs.reserve(maxThreads);
 		
@@ -313,6 +314,7 @@ void unmountISOs() {
 						isFiltered = true;
 					} else {
 						filteredIsoDirs = isoDirs;
+						historyPattern = false;
 						isFiltered = false;
 					}
 					break;
@@ -364,6 +366,7 @@ void unmountISOs() {
 						isFiltered = true;
 					} else {
 						hadSuccessfulFilter = false;
+						historyPattern = false;
 						isFiltered = false;
 					}
 					break;  // Break after a successful filter
