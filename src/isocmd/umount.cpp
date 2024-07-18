@@ -271,8 +271,9 @@ void unmountISOs() {
         }
 
         if (isoDirs.empty() && !isFiltered) {
+			clearScrollBuffer();
 			std::cout << "\033[1A\033[K"; 
-            std::cerr << "\033[1;93mNo path(s) matching the '/mnt/iso_*' pattern found.\033[0m\033[1m\n";
+            std::cerr << "\n\033[1;93mNo path(s) matching the '/mnt/iso_*' pattern found.\033[0m\033[1m\n";
             std::cout << "\n\033[1;32m↵ to continue...";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             return;
