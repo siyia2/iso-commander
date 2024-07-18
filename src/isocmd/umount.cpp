@@ -477,9 +477,9 @@ void unmountISOs() {
 					}));
 				}
 
-			for (auto& future : futuresUmount) {
-				future.wait();
-			}
+				for (auto& future : futuresUmount) {
+					future.wait();
+				}
 				filteredIsoDirs.clear();
 
 				isComplete.store(true, std::memory_order_release);
