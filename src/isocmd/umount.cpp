@@ -470,10 +470,10 @@ void unmountISOs() {
 				for (auto& batch : batches) {
 					std::lock_guard<std::mutex> highLock(Mutex4High);
 					futuresUmount.emplace_back(pool.enqueue([batch = std::move(batch), &unmountedFiles, &unmountedErrors, &completedIsos]() {
-						for (const auto& iso : batch) {
+							std::for_each(batch.begin(), batch.end(), [&](const auto& iso) {
 							unmountISO({iso}, unmountedFiles, unmountedErrors);
 							completedIsos.fetch_add(1, std::memory_order_relaxed);
-						}
+						});
 					}));
 				}
 

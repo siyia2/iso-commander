@@ -413,20 +413,22 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     futures.reserve(numThreads);
 
     for (const auto& chunk : indexChunks) {
-        std::vector<std::string> isoFilesInChunk;
-        isoFilesInChunk.reserve(chunk.size());
-        for (const auto& index : chunk) {
-            isoFilesInChunk.push_back(isoFiles[index - 1]);
-        }
-
-        {
-            std::lock_guard<std::mutex> highLock(Mutex4High);
-            futures.emplace_back(pool.enqueue([isoFilesInChunk = std::move(isoFilesInChunk), &isoFiles, &operationIsos, &operationErrors, &userDestDir, isMove, isCopy, isDelete, &completedTasks]() {
-                handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors, userDestDir, isMove, isCopy, isDelete);
-                completedTasks.fetch_add(static_cast<int>(isoFilesInChunk.size()), std::memory_order_relaxed);
-            }));
-        }
-    }
+		std::vector<std::string> isoFilesInChunk;
+		isoFilesInChunk.reserve(chunk.size());
+		std::transform(
+			chunk.begin(),
+			chunk.end(),
+			std::back_inserter(isoFilesInChunk),
+			[&isoFiles](size_t index) { return isoFiles[index - 1]; }
+		);
+		{
+			std::lock_guard<std::mutex> highLock(Mutex4High);
+			futures.emplace_back(pool.enqueue([isoFilesInChunk = std::move(isoFilesInChunk), &isoFiles, &operationIsos, &operationErrors, &userDestDir, isMove, isCopy, isDelete, &completedTasks]() {
+				handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors, userDestDir, isMove, isCopy, isDelete);
+				completedTasks.fetch_add(static_cast<int>(isoFilesInChunk.size()), std::memory_order_relaxed);
+			}));
+		}
+	}
 
     for (auto& future : futures) {
         future.wait();
