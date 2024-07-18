@@ -9,7 +9,7 @@ std::vector<std::string> globalIsoFileList;
 
 // Function to mount all ISOs indiscriminately
 void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
-    size_t maxChunkSize = 100;  // Maximum number of files per chunk
+    size_t maxChunkSize = 50;  // Maximum number of files per chunk
     size_t totalIsos = isoFiles.size();
     std::atomic<size_t> completedIsos(0);
     std::atomic<bool> isComplete(false);
@@ -502,7 +502,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     unsigned int numThreads = std::min(static_cast<int>(indicesToProcess.size()), static_cast<int>(maxThreads));
     ThreadPool pool(numThreads);
 
-    size_t maxChunkSize = 100;  // Maximum number of files per chunk
+    size_t maxChunkSize = 50;  // Maximum number of files per chunk
 
     // Calculate chunk size ensuring it's at most maxChunkSize
     size_t chunkSize = std::min(maxChunkSize, (indicesToProcess.size() + numThreads - 1) / numThreads);
