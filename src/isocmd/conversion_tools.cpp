@@ -1020,6 +1020,7 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
 
     CcdSector sector;
     size_t bytesRead = 0;
+    size_t bufferPos = 0;
     int sectNum = 0;
 
     try {
@@ -1033,14 +1034,30 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
 
             switch (sector.sectheader.header.mode) {
                 case 1:
-                    isoFile.write(reinterpret_cast<char*>(&sector.content.mode1.data), DATA_SIZE);
+                    // Ensure there's enough space in the buffer
+                    if (bufferPos + DATA_SIZE > bufferSize) {
+                        isoFile.write(buffer.data(), bufferPos);
+                        bufferPos = 0;
+                    }
+                    std::memcpy(&buffer[bufferPos], sector.content.mode1.data, DATA_SIZE);
+                    bufferPos += DATA_SIZE;
                     break;
                 case 2:
-                    isoFile.write(reinterpret_cast<char*>(&sector.content.mode2.data), DATA_SIZE);
+                    // Ensure there's enough space in the buffer
+                    if (bufferPos + DATA_SIZE > bufferSize) {
+                        isoFile.write(buffer.data(), bufferPos);
+                        bufferPos = 0;
+                    }
+                    std::memcpy(&buffer[bufferPos], sector.content.mode2.data, DATA_SIZE);
+                    bufferPos += DATA_SIZE;
                     break;
                 case 0xe2:
                     std::cout << "\nFound session marker, the image might contain multisession data.\n"
                               << "Only the first session dumped.\n";
+                    // Write any remaining buffered data
+                    if (bufferPos > 0) {
+                        isoFile.write(buffer.data(), bufferPos);
+                    }
                     return true;
                 default:
                     std::cerr << "\nUnrecognized sector mode ("
@@ -1049,6 +1066,11 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
                     return false;
             }
             sectNum++;
+        }
+
+        // Write any remaining buffered data
+        if (bufferPos > 0) {
+            isoFile.write(buffer.data(), bufferPos);
         }
 
     } catch (const std::exception& e) {
