@@ -185,8 +185,14 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice);
 void processInput(const std::string& input, const std::vector<std::string>& fileList, bool modeMdf, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts);
 void printFileList(const std::vector<std::string>& fileList);
 
+// CCD2ISO
+
 // bools
 bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath);
+
+//MDF2ISO
+
+//bools
 bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath);
 
 
