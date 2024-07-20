@@ -10,13 +10,13 @@ For best experience execute with: `sudo isocmd`.
 
 Features:
 * Cached ISO management for reduced disk thrashing.
-* Sanitized shell commands with tab completion and history support.
+* Sanitized shell commands, tab completion and history support.
 * Native C++ and libmount calls.
 * Ultra lightweight with no reliance on external libraries for terminal control.
 * Multithreaded asynchronous tasks leveraging state-of-the-art concurrent practices.
 * Capable of seamlessly handling anywhere from 1 to an astonishing 100,000 ISO files.
 * Supports most ISO filesystem types: iso9660, UDF, HFSPlus, Rock Ridge, Joliet, and ISOFs.
-* Integrates ccd2iso and mdf2iso internally for BIN/IMG/MDF conversion.
+* Integrates ccd2iso and mdf2iso internally for BIN/IMG/MDF conversion to ISO.
 * Clean codebase in case someone decides to contribute in the future.
 
 Make dependencies:
