@@ -55,7 +55,7 @@ void verboseFind(std::set<std::string>& invalidDirectoryPaths) {
 			std::cout << "\n";
 		}
 		std::cout << "\033[0;1mInvalid path(s) omitted from search: \033[1:91m";
-		
+
 		for (auto it = invalidDirectoryPaths.begin(); it != invalidDirectoryPaths.end(); ++it) {
         if (it == invalidDirectoryPaths.begin()) {
             std::cerr << "\033[31m'"; // Red color for the first quote
@@ -67,8 +67,8 @@ void verboseFind(std::set<std::string>& invalidDirectoryPaths) {
         if (std::next(it) != invalidDirectoryPaths.end()) {
             std::cerr << " ";
         }
-    }	
-		
+    }
+
 		std::cerr << "\033[0;1m.\n"; // Print a newline at the end
 		invalidDirectoryPaths.clear();
 	}
@@ -156,7 +156,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
             directoryPaths.clear();
             uniquePaths.clear();
             invalidDirectoryPaths.clear();
-            
+
             if (!modeMdf) {
                 binImgFilesCache.clear();
                 std::cout << "\n\033[1;92mBIN/IMG RAM cache cleared.\033[0;1m\n";
@@ -169,7 +169,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
             clearScrollBuffer();
             continue;
         }
-        
+
         // Return static cache if input=ls
 		if (list && !modeMdf) {
 			files = binImgFilesCache;
@@ -306,7 +306,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 				} else {
 					needsScrnClr = false;
 					break;  // Exit the function
-				}		
+				}
 			}
 
 			if (strcmp(rawInput.get(), "/") == 0) {
@@ -327,7 +327,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 						isFilteredButUnchanged = false;
 					}
 				}
-				
+
 			} else {
 				clearScrollBuffer();
 				std::cout << "\033[1m" << std::endl;
@@ -426,8 +426,8 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 
     while (iss >> token) {
 		if (startsWithZero(token)) {
-			processedErrors.emplace("\033[1;91mInvalid index: '0'.\033[0;1m"); 
-			continue; 
+			processedErrors.emplace("\033[1;91mInvalid index: '0'.\033[0;1m");
+			continue;
         }
         std::istringstream tokenStream(token);
         int start, end;
@@ -575,7 +575,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                 if (entry.is_regular_file() && blacklist(entry, blacklistMdf)) {
                     std::string fileName = entry.path().string();
                     auto& cache = (mode == "bin") ? binImgFilesCache : mdfMdsFilesCache;
-                    
+
                     if (std::find(cache.begin(), cache.end(), fileName) == cache.end()) {
                         if (numOngoingTasks < maxThreads) {
                             ++numOngoingTasks;
@@ -618,7 +618,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     if (!fileNames.empty()) {
         auto end_time = std::chrono::high_resolution_clock::now();
         std::cout << "\n";
-        
+
         verboseFind(invalidDirectoryPaths);
         if (gapSet) {
             std::cout << "\n";
@@ -626,7 +626,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         if ((!invalidPaths.empty() && !gapSet) || !gapSet || (gapSet && !invalidPaths.empty())) {
             std::cout << "\n";
         }
-        
+
         if (mode == "bin") {
             std::cout << "\033[1;92mFound " << fileNames.size() << " matching file(s)" << ".\033[1;93m " << binImgFilesCache.size() << " matching file(s) cached in RAM from previous searches.\033[0;1m\n";
         } else {
@@ -747,7 +747,7 @@ void printFileList(const std::vector<std::string>& fileList) {
         std::ostringstream temp;
         temp << (isSpecialExtension ? sequenceColor : "")
              << std::setw(numDigits) << std::right << (i + 1) << ". " << reset << bold;
-        
+
         output.append(temp.str());
 
         if (isSpecialExtension) {
@@ -768,6 +768,68 @@ void printFileList(const std::vector<std::string>& fileList) {
 }
 
 
+bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath) {
+    std::ifstream mdfFile(mdfPath, std::ios::binary);
+    std::ofstream isoFile(isoPath, std::ios::binary);
+
+    if (!mdfFile.is_open() || !isoFile.is_open()) {
+        return false;
+    }
+
+    // Determine file type
+    int seek_ecc, sector_size, seek_head, sector_data;
+    char buf[12];
+
+    mdfFile.seekg(32768);
+    mdfFile.read(buf, 8);
+    if (std::memcmp("CD001", buf + 1, 5) == 0) {
+        return false;
+    }
+
+    mdfFile.seekg(0);
+    mdfFile.read(buf, 12);
+    mdfFile.seekg(2352);
+
+    if (std::memcmp("\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00", buf, 12) == 0) {
+        mdfFile.read(buf, 12);
+        if (std::memcmp("\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00", buf, 12) == 0) {
+            // SYNC
+            seek_ecc = 288;
+            sector_size = 2352;
+            sector_data = 2048;
+            seek_head = 16;
+        } else {
+            // SYNC_MDF
+            seek_ecc = 384;
+            sector_size = 2448;
+            sector_data = 2048;
+            seek_head = 16;
+        }
+    } else {
+        // MDF_AUDIO
+        seek_head = 0;
+        sector_size = 2448;
+        seek_ecc = 96;
+        sector_data = 2352;
+    }
+
+    // Convert the file
+    mdfFile.seekg(0, std::ios::end);
+    long source_length = mdfFile.tellg() / sector_size;
+    mdfFile.seekg(0, std::ios::beg);
+
+    std::vector<char> buffer(sector_data);
+    for (long i = 0; i < source_length; ++i) {
+        mdfFile.seekg(seek_head, std::ios::cur);
+        mdfFile.read(buffer.data(), sector_data);
+        isoFile.write(buffer.data(), sector_data);
+        mdfFile.seekg(seek_ecc, std::ios::cur);
+
+    }
+    return true;
+}
+
+
 // Function to convert a BIN/IMG/MDF file to ISO format
 void convertToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool modeMdf) {
     // Get the real user ID and group ID (of the user who invoked sudo)
@@ -775,7 +837,7 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
     gid_t real_gid;
     const char* sudo_uid = std::getenv("SUDO_UID");
     const char* sudo_gid = std::getenv("SUDO_GID");
-    
+
     if (sudo_uid && sudo_gid) {
         real_uid = std::stoul(sudo_uid);
         real_gid = std::stoul(sudo_gid);
@@ -826,8 +888,7 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
     // Determine the appropriate conversion command
     std::string conversionCommand;
     if (modeMdf) {
-        conversionCommand = "mdf2iso " + escapedInputPath + " " + escapedOutputPath;
-        conversionCommand += " > /dev/null 2>&1";
+        convertMdfToIso(inputPath, outputPath);
     } else if (!modeMdf) {
         conversionCommand = "ccd2iso " + escapedInputPath + " " + escapedOutputPath;
         conversionCommand += " > /dev/null 2>&1";
