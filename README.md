@@ -10,7 +10,7 @@ For best experience execute with: `sudo isocmd`.
 
 Features:
 * Cached ISO management for reduced disk thrashing.
-* Sanitized shell commands, tab completion and history support.
+* Sanitized shell commands with tab completion and history support.
 * Native C++ and libmount calls.
 * Ultra lightweight with no reliance on external libraries for terminal control.
 * Multithreaded asynchronous tasks leveraging state-of-the-art concurrent practices.
