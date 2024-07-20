@@ -10,6 +10,40 @@ bool gapSet = true;
 
 // GENERAL
 
+#define DATA_SIZE 2048
+
+struct CcdSectheaderSyn {
+    unsigned char data[12];
+};
+
+struct CcdSectheaderHeader {
+    unsigned char sectaddr_min, sectaddr_sec, sectaddr_frac;
+    unsigned char mode;
+} __attribute__((packed));
+
+struct CcdSectheader {
+    CcdSectheaderSyn syn;
+    CcdSectheaderHeader header;
+} __attribute__((packed));
+
+struct CcdSector {
+    CcdSectheader sectheader;
+    union {
+        struct {
+            unsigned char data[DATA_SIZE];
+            unsigned char edc[4];
+            unsigned char unused[8];
+            unsigned char ecc[276];
+        } mode1;
+        struct {
+            unsigned char sectsubheader[8];
+            unsigned char data[DATA_SIZE];
+            unsigned char edc[4];
+            unsigned char ecc[276];
+        } mode2;
+    } content;
+} __attribute__((packed));
+
 // Function to check if a file already exists
 bool fileExists(const std::string& fullPath) {
         return std::filesystem::exists(fullPath);
@@ -830,6 +864,50 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath) {
 }
 
 
+bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
+    std::ifstream ccdFile(ccdPath, std::ios::binary);
+    std::ofstream isoFile(isoPath, std::ios::binary);
+
+    if (!ccdFile.is_open() || !isoFile.is_open()) {
+        std::cerr << "Error opening files." << std::endl;
+        return false;
+    }
+
+    CcdSector sector;
+    int sectNum = 0;
+
+    while (ccdFile.read(reinterpret_cast<char*>(&sector), sizeof(CcdSector))) {
+        switch (sector.sectheader.header.mode) {
+            case 1:  // Mode 1 Data Sector
+                isoFile.write(reinterpret_cast<char*>(&sector.content.mode1.data), DATA_SIZE);
+                break;
+            case 2:  // Mode 2 Data Sector
+                isoFile.write(reinterpret_cast<char*>(&sector.content.mode2.data), DATA_SIZE);
+                break;
+            case 0xe2:
+                std::cout << "\nFound session marker, the image might contain multisession data.\n"
+                          << "Only the first session dumped.\n";
+                return true;
+            default:
+                std::cerr << "\nUnrecognized sector mode ("
+                          << std::hex << static_cast<int>(sector.sectheader.header.mode)
+                          << ") at sector " << std::dec << sectNum << "!\n";
+                return false;
+        }
+
+        sectNum++;
+    }
+
+    if (ccdFile.gcount() > 0 && ccdFile.gcount() < static_cast<std::streamsize>(sizeof(CcdSector))) {
+        std::cerr << "Error at sector " << sectNum << ".\n"
+                  << "The sector does not contain complete data. Sector size must be "
+                  << sizeof(CcdSector) << ", while actual data read is " << ccdFile.gcount() << std::endl;
+        return false;
+    }
+    return true;
+}
+
+
 // Function to convert a BIN/IMG/MDF file to ISO format
 void convertToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool modeMdf) {
     // Get the real user ID and group ID (of the user who invoked sudo)
@@ -890,8 +968,7 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
     if (modeMdf) {
         convertMdfToIso(inputPath, outputPath);
     } else if (!modeMdf) {
-        conversionCommand = "ccd2iso " + escapedInputPath + " " + escapedOutputPath;
-        conversionCommand += " > /dev/null 2>&1";
+        convertCcdToIso(inputPath, outputPath);
     } else {
         std::string failedMessage = "\033[1;91mUnsupported file format for \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m. Conversion failed.\033[0;1m";
         {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
