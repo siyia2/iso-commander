@@ -60,7 +60,7 @@ void listMountedISOs() {
     }
 
     std::cout << output;
-    
+
 }
 
 // Function to check if directory is empty for unmountISO
@@ -92,7 +92,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
         for (const auto& isoDir : isoDirs) {
             auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoDir);
             std::stringstream errorMessage;
-            errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDirectory << "/" << isoFilename 
+            errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDirectory << "/" << isoFilename
                          << "\033[1;93m'\033[1;91m. Root privileges are required.\033[0m";
             {
                 std::lock_guard<std::mutex> lowLock(Mutex4Low);
@@ -139,13 +139,13 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
 
     for (const auto& mp : mountpoints_to_unmount) {
         mnt_context_set_target(ctx, mp.c_str());
-        mnt_context_set_mflags(ctx, MS_LAZYTIME);
+        mnt_context_set_mflags(ctx, MNT_FORCE);
         int rc = mnt_context_umount(ctx);
         if (rc != 0) {
             auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(mp);
             std::stringstream errorMessage;
             if (!isDirectoryEmpty(mp)) {
-                errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "\033[1;93m'\033[1;91m. Probably not an ISO mountpoint...\033[0m";
+                errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "\033[1;93m'\033[1;91m. Device is busy...\033[0m";
                 {
                     std::lock_guard<std::mutex> lowLock(Mutex4Low);
                     unmountedErrors.emplace(errorMessage.str());
@@ -161,14 +161,14 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
 		std::stringstream errorMessage;
 		std::error_code ec;
 		if (!isDirectoryEmpty(dir)){
-                
-                errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << dir << "'\033[1;91m. Probably not an ISO mountpoint...";
+
+                errorMessage << "\033[1;91mFailed to remove mountpoint: \033[1;93m'" << dir << "'\033[1;91m. Not empty.";
                 {
                     std::lock_guard<std::mutex> lowLock(Mutex4Low);
                     unmountedErrors.emplace(errorMessage.str());
                 }
 			} else if (isDirectoryEmpty(dir)) {
-            
+
             if (std::filesystem::remove(dir, ec)) {
                 auto [directory, filename] = extractDirectoryAndFilename(dir);
                 std::string removedDirInfo = "\033[0;1mUnmounted: \033[1;92m'" + directory + "/" + filename + "\033[1;92m'\033[0m.";
@@ -191,20 +191,20 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
 // Function to print unmounted ISOs and errors
 void printUnmountedAndErrors(std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors, std::set<std::string>& errorMessages) {
 	clearScrollBuffer();
-	
+
     // Print unmounted files
     for (const auto& unmountedFile : unmountedFiles) {
         std::cout << "\n" << unmountedFile;
     }
-    
+
     if (!unmountedErrors.empty() && !unmountedFiles.empty()) {
 				std::cout << "\n";
 			}
-			
+
 	for (const auto& unmountedError : unmountedErrors) {
         std::cout << "\n" << unmountedError;
     }
-    
+
     if (!errorMessages.empty()) {
 				std::cout << "\n";
 			}
@@ -272,13 +272,13 @@ void unmountISOs() {
 
         if (isoDirs.empty() && !isFiltered) {
 			clearScrollBuffer();
-			std::cout << "\033[1A\033[K"; 
+			std::cout << "\033[1A\033[K";
             std::cerr << "\n\033[1;93mNo path(s) matching the '/mnt/iso_*' pattern found.\033[0m\033[1m\n";
             std::cout << "\n\033[1;32m↵ to continue...";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             return;
         }
-        std::string prompt;        
+        std::string prompt;
         if (isFiltered) {
 			std::cout << "\033[K";
 			prompt = "\n\001\033[1;96m\002Filtered \001\033[1;92m\002ISO"
@@ -308,14 +308,14 @@ void unmountISOs() {
 		} else if (inputString == "/") {
 			std::vector<std::string> lastSuccessfulFilteredIsoDirs = filteredIsoDirs;  // Initialize with unfiltered list
 			static bool hadSuccessfulFilter = false;
-			while (true) {    
+			while (true) {
 				unmountedFiles.clear();
 				unmountedErrors.clear();
 				errorMessages.clear();
 				clear_history();
 				historyPattern = true;
-				loadHistory();            
-				std::cout << "\033[1A\033[K";  
+				loadHistory();
+				std::cout << "\033[1A\033[K";
 				std::string filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
 				std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
 				std::string terms(searchQuery.get());
@@ -343,10 +343,10 @@ void unmountISOs() {
 					add_history(searchQuery.get());
 					saveHistory();
 				}
-        
+
 				historyPattern = false;
 				clear_history();
-    
+
 				std::vector<std::string> filterPatterns;
 				std::stringstream ss(terms);
 				std::string token;
@@ -354,7 +354,7 @@ void unmountISOs() {
 					filterPatterns.push_back(token);
 					toLowerInPlace(filterPatterns.back());
 				}
-    
+
 				filteredIsoDirs.clear();
 				size_t numDirs = isoDirs.size();
 				unsigned int numThreads = std::min(static_cast<unsigned int>(numDirs), maxThreads);
@@ -372,12 +372,12 @@ void unmountISOs() {
 				for (auto& future : futuresFilter) {
 					future.get();
 				}
-				
+
 				if (filteredIsoDirs.size() == isoDirs.size()) {
 					isFiltered = false;
 					break;
 				}
-    
+
 				if (filteredIsoDirs.empty()) {
 					std::cout << "\033[1A\033[K";
 					// Don't change filteredIsoDirs here, just continue the loop
@@ -397,7 +397,7 @@ void unmountISOs() {
 					break;  // Break after a successful filter
 				}
 			}
-    
+
 		} else {
 			std::vector<std::string>& currentDirs = isFiltered ? filteredIsoDirs : isoDirs;
 
@@ -457,8 +457,8 @@ void unmountISOs() {
 
 				std::vector<std::vector<std::string>> batches;
 				for (size_t i = 0; i < selectedIsoDirs.size(); i += batchSize) {
-					batches.emplace_back(selectedIsoDirs.begin() + i, 
-					std::min(selectedIsoDirs.begin() + i + batchSize, 
+					batches.emplace_back(selectedIsoDirs.begin() + i,
+					std::min(selectedIsoDirs.begin() + i + batchSize,
                     selectedIsoDirs.end()));
 				}
 
