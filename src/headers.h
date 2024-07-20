@@ -186,7 +186,9 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 void printFileList(const std::vector<std::string>& fileList);
 
 // bools
-bool isProgramInstalled(const std::string& type);
+bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath);
+bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath);
+
 
 
 #endif // HEADERS_H
