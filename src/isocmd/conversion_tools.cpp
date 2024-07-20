@@ -802,7 +802,7 @@ void printFileList(const std::vector<std::string>& fileList) {
 }
 
 
-// function to convert mdf filesto iso
+// Function to convert mdf filesto iso
 bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath) {
     std::ifstream mdfFile(mdfPath, std::ios::binary);
     std::ofstream isoFile(isoPath, std::ios::binary);
