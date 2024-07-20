@@ -10,40 +10,6 @@ bool gapSet = true;
 
 // GENERAL
 
-#define DATA_SIZE 2048
-
-struct CcdSectheaderSyn {
-    unsigned char data[12];
-};
-
-struct CcdSectheaderHeader {
-    unsigned char sectaddr_min, sectaddr_sec, sectaddr_frac;
-    unsigned char mode;
-} __attribute__((packed));
-
-struct CcdSectheader {
-    CcdSectheaderSyn syn;
-    CcdSectheaderHeader header;
-} __attribute__((packed));
-
-struct CcdSector {
-    CcdSectheader sectheader;
-    union {
-        struct {
-            unsigned char data[DATA_SIZE];
-            unsigned char edc[4];
-            unsigned char unused[8];
-            unsigned char ecc[276];
-        } mode1;
-        struct {
-            unsigned char sectsubheader[8];
-            unsigned char data[DATA_SIZE];
-            unsigned char edc[4];
-            unsigned char ecc[276];
-        } mode2;
-    } content;
-} __attribute__((packed));
-
 // Function to check if a file already exists
 bool fileExists(const std::string& fullPath) {
         return std::filesystem::exists(fullPath);
@@ -802,137 +768,6 @@ void printFileList(const std::vector<std::string>& fileList) {
 }
 
 
-// Function to convert mdf files to iso
-bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath) {
-    std::ifstream mdfFile(mdfPath, std::ios::binary);
-    std::ofstream isoFile(isoPath, std::ios::binary);
-
-    if (!mdfFile.is_open() || !isoFile.is_open()) {
-        return false;
-    }
-
-    // Determine file type
-    int seek_ecc, sector_size, seek_head, sector_data;
-    char buf[12];
-
-    mdfFile.seekg(32768);
-    mdfFile.read(buf, 8);
-    if (std::memcmp("CD001", buf + 1, 5) == 0) {
-        return false;
-    }
-
-    mdfFile.seekg(0);
-    mdfFile.read(buf, 12);
-    mdfFile.seekg(2352);
-
-    if (std::memcmp("\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00", buf, 12) == 0) {
-        mdfFile.read(buf, 12);
-        if (std::memcmp("\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00", buf, 12) == 0) {
-            // SYNC
-            seek_ecc = 288;
-            sector_size = 2352;
-            sector_data = 2048;
-            seek_head = 16;
-        } else {
-            // SYNC_MDF
-            seek_ecc = 384;
-            sector_size = 2448;
-            sector_data = 2048;
-            seek_head = 16;
-        }
-    } else {
-        // MDF_AUDIO
-        seek_head = 0;
-        sector_size = 2448;
-        seek_ecc = 96;
-        sector_data = 2352;
-    }
-
-    // Convert the file
-    mdfFile.seekg(0, std::ios::end);
-    long source_length = mdfFile.tellg() / sector_size;
-    mdfFile.seekg(0, std::ios::beg);
-
-    // Use larger buffer for I/O operations
-    const size_t bufferSize = 8 * 1024 * 1024; // 8 MB buffer
-    std::vector<char> buffer(bufferSize);
-
-    for (long i = 0; i < source_length; ++i) {
-        if (i % (bufferSize / sector_data) == 0 && i != 0) {
-            isoFile.write(buffer.data(), bufferSize);
-            buffer.clear();
-        }
-
-        mdfFile.seekg(seek_head, std::ios::cur);
-        mdfFile.read(buffer.data() + (i % (bufferSize / sector_data)) * sector_data, sector_data);
-        mdfFile.seekg(seek_ecc, std::ios::cur);
-    }
-
-    // Write any remaining data in the buffer
-    if (!buffer.empty()) {
-        isoFile.write(buffer.data(), (source_length % (bufferSize / sector_data)) * sector_data);
-    }
-
-    return true;
-}
-
-
-// Function to convert bin/img files to iso
-bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
-    std::ifstream ccdFile(ccdPath, std::ios::binary);
-    std::ofstream isoFile(isoPath, std::ios::binary);
-
-    if (!ccdFile.is_open() || !isoFile.is_open()) {
-        std::cerr << "Error opening files." << std::endl;
-        return false;
-    }
-
-    // Increase buffer size to improve I/O performance
-    const size_t bufferSize = 8 * 1024 * 1024;  // 8 MB buffer
-    std::vector<char> buffer(bufferSize);
-
-    CcdSector sector;
-    int sectNum = 0;
-
-    while (ccdFile.read(reinterpret_cast<char*>(&sector), sizeof(CcdSector))) {
-        char* dataToWrite = nullptr;
-
-        switch (sector.sectheader.header.mode) {
-            case 1:
-                dataToWrite = reinterpret_cast<char*>(&sector.content.mode1.data);
-                break;
-            case 2:
-                dataToWrite = reinterpret_cast<char*>(&sector.content.mode2.data);
-                break;
-            case 0xe2:
-                std::cout << "\nFound session marker, the image might contain multisession data.\n"
-                          << "Only the first session dumped.\n";
-                return true;
-            default:
-                std::cerr << "\nUnrecognized sector mode ("
-                          << std::hex << static_cast<int>(sector.sectheader.header.mode)
-                          << ") at sector " << std::dec << sectNum << "!\n";
-                return false;
-        }
-
-        if (dataToWrite) {
-            isoFile.write(dataToWrite, DATA_SIZE);
-        }
-
-        sectNum++;
-    }
-
-    if (ccdFile.gcount() > 0) {
-        std::cerr << "Error at sector " << sectNum << ".\n"
-                  << "The sector does not contain complete data. Sector size must be "
-                  << sizeof(CcdSector) << ", while actual data read is " << ccdFile.gcount() << std::endl;
-        return false;
-    }
-
-    return true;
-}
-
-
 // Function to convert a BIN/IMG/MDF file to ISO format
 void convertToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool modeMdf) {
     // Get the real user ID and group ID (of the user who invoked sudo)
@@ -1037,4 +872,172 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
             }
         }
     }
+}
+
+// MDF2ISO
+
+// Function to convert mdf files to iso
+bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath) {
+    std::ifstream mdfFile(mdfPath, std::ios::binary);
+    std::ofstream isoFile(isoPath, std::ios::binary);
+
+    if (!mdfFile.is_open() || !isoFile.is_open()) {
+        return false;
+    }
+
+    // Determine file type
+    int seek_ecc, sector_size, seek_head, sector_data;
+    char buf[12];
+
+    mdfFile.seekg(32768);
+    mdfFile.read(buf, 8);
+    if (std::memcmp("CD001", buf + 1, 5) == 0) {
+        return false;
+    }
+
+    mdfFile.seekg(0);
+    mdfFile.read(buf, 12);
+    mdfFile.seekg(2352);
+
+    if (std::memcmp("\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00", buf, 12) == 0) {
+        mdfFile.read(buf, 12);
+        if (std::memcmp("\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00", buf, 12) == 0) {
+            // SYNC
+            seek_ecc = 288;
+            sector_size = 2352;
+            sector_data = 2048;
+            seek_head = 16;
+        } else {
+            // SYNC_MDF
+            seek_ecc = 384;
+            sector_size = 2448;
+            sector_data = 2048;
+            seek_head = 16;
+        }
+    } else {
+        // MDF_AUDIO
+        seek_head = 0;
+        sector_size = 2448;
+        seek_ecc = 96;
+        sector_data = 2352;
+    }
+
+    // Convert the file
+    mdfFile.seekg(0, std::ios::end);
+    long source_length = mdfFile.tellg() / sector_size;
+    mdfFile.seekg(0, std::ios::beg);
+
+    // Use larger buffer for I/O operations
+    const size_t bufferSize = 8 * 1024 * 1024; // 8 MB buffer
+    std::vector<char> buffer(bufferSize);
+
+    for (long i = 0; i < source_length; ++i) {
+        if (i % (bufferSize / sector_data) == 0 && i != 0) {
+            isoFile.write(buffer.data(), bufferSize);
+            buffer.clear();
+        }
+
+        mdfFile.seekg(seek_head, std::ios::cur);
+        mdfFile.read(buffer.data() + (i % (bufferSize / sector_data)) * sector_data, sector_data);
+        mdfFile.seekg(seek_ecc, std::ios::cur);
+    }
+
+    // Write any remaining data in the buffer
+    if (!buffer.empty()) {
+        isoFile.write(buffer.data(), (source_length % (bufferSize / sector_data)) * sector_data);
+    }
+
+    return true;
+}
+
+// CCD2ISO
+
+#define DATA_SIZE 2048
+
+struct CcdSectheaderSyn {
+    unsigned char data[12];
+};
+
+struct CcdSectheaderHeader {
+    unsigned char sectaddr_min, sectaddr_sec, sectaddr_frac;
+    unsigned char mode;
+} __attribute__((packed));
+
+struct CcdSectheader {
+    CcdSectheaderSyn syn;
+    CcdSectheaderHeader header;
+} __attribute__((packed));
+
+struct CcdSector {
+    CcdSectheader sectheader;
+    union {
+        struct {
+            unsigned char data[DATA_SIZE];
+            unsigned char edc[4];
+            unsigned char unused[8];
+            unsigned char ecc[276];
+        } mode1;
+        struct {
+            unsigned char sectsubheader[8];
+            unsigned char data[DATA_SIZE];
+            unsigned char edc[4];
+            unsigned char ecc[276];
+        } mode2;
+    } content;
+} __attribute__((packed));
+
+
+// Function to convert bin/img files to iso
+bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
+    std::ifstream ccdFile(ccdPath, std::ios::binary);
+    std::ofstream isoFile(isoPath, std::ios::binary);
+
+    if (!ccdFile.is_open() || !isoFile.is_open()) {
+        std::cerr << "Error opening files." << std::endl;
+        return false;
+    }
+
+    // Increase buffer size to improve I/O performance
+    const size_t bufferSize = 8 * 1024 * 1024;  // 8 MB buffer
+    std::vector<char> buffer(bufferSize);
+
+    CcdSector sector;
+    int sectNum = 0;
+
+    while (ccdFile.read(reinterpret_cast<char*>(&sector), sizeof(CcdSector))) {
+        char* dataToWrite = nullptr;
+
+        switch (sector.sectheader.header.mode) {
+            case 1:
+                dataToWrite = reinterpret_cast<char*>(&sector.content.mode1.data);
+                break;
+            case 2:
+                dataToWrite = reinterpret_cast<char*>(&sector.content.mode2.data);
+                break;
+            case 0xe2:
+                std::cout << "\nFound session marker, the image might contain multisession data.\n"
+                          << "Only the first session dumped.\n";
+                return true;
+            default:
+                std::cerr << "\nUnrecognized sector mode ("
+                          << std::hex << static_cast<int>(sector.sectheader.header.mode)
+                          << ") at sector " << std::dec << sectNum << "!\n";
+                return false;
+        }
+
+        if (dataToWrite) {
+            isoFile.write(dataToWrite, DATA_SIZE);
+        }
+
+        sectNum++;
+    }
+
+    if (ccdFile.gcount() > 0) {
+        std::cerr << "Error at sector " << sectNum << ".\n"
+                  << "The sector does not contain complete data. Sector size must be "
+                  << sizeof(CcdSector) << ", while actual data read is " << ccdFile.gcount() << std::endl;
+        return false;
+    }
+
+    return true;
 }
