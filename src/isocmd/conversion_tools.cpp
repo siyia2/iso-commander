@@ -802,6 +802,7 @@ void printFileList(const std::vector<std::string>& fileList) {
 }
 
 
+// function to convert mdf filesto iso
 bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath) {
     std::ifstream mdfFile(mdfPath, std::ios::binary);
     std::ofstream isoFile(isoPath, std::ios::binary);
@@ -852,18 +853,31 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath) {
     long source_length = mdfFile.tellg() / sector_size;
     mdfFile.seekg(0, std::ios::beg);
 
-    std::vector<char> buffer(sector_data);
-    for (long i = 0; i < source_length; ++i) {
-        mdfFile.seekg(seek_head, std::ios::cur);
-        mdfFile.read(buffer.data(), sector_data);
-        isoFile.write(buffer.data(), sector_data);
-        mdfFile.seekg(seek_ecc, std::ios::cur);
+    // Use larger buffer for I/O operations
+    const size_t bufferSize = 8 * 1024 * 1024; // 8 MB buffer
+    std::vector<char> buffer(bufferSize);
 
+    for (long i = 0; i < source_length; ++i) {
+        if (i % (bufferSize / sector_data) == 0 && i != 0) {
+            isoFile.write(buffer.data(), bufferSize);
+            buffer.clear();
+        }
+
+        mdfFile.seekg(seek_head, std::ios::cur);
+        mdfFile.read(buffer.data() + (i % (bufferSize / sector_data)) * sector_data, sector_data);
+        mdfFile.seekg(seek_ecc, std::ios::cur);
     }
+
+    // Write any remaining data in the buffer
+    if (!buffer.empty()) {
+        isoFile.write(buffer.data(), (source_length % (bufferSize / sector_data)) * sector_data);
+    }
+
     return true;
 }
 
 
+// Function to convert bin/img files to iso
 bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
     std::ifstream ccdFile(ccdPath, std::ios::binary);
     std::ofstream isoFile(isoPath, std::ios::binary);
@@ -873,16 +887,22 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
         return false;
     }
 
+    // Increase buffer size to improve I/O performance
+    const size_t bufferSize = 8 * 1024 * 1024;  // 8 MB buffer
+    std::vector<char> buffer(bufferSize);
+
     CcdSector sector;
     int sectNum = 0;
 
     while (ccdFile.read(reinterpret_cast<char*>(&sector), sizeof(CcdSector))) {
+        char* dataToWrite = nullptr;
+
         switch (sector.sectheader.header.mode) {
-            case 1:  // Mode 1 Data Sector
-                isoFile.write(reinterpret_cast<char*>(&sector.content.mode1.data), DATA_SIZE);
+            case 1:
+                dataToWrite = reinterpret_cast<char*>(&sector.content.mode1.data);
                 break;
-            case 2:  // Mode 2 Data Sector
-                isoFile.write(reinterpret_cast<char*>(&sector.content.mode2.data), DATA_SIZE);
+            case 2:
+                dataToWrite = reinterpret_cast<char*>(&sector.content.mode2.data);
                 break;
             case 0xe2:
                 std::cout << "\nFound session marker, the image might contain multisession data.\n"
@@ -895,15 +915,20 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
                 return false;
         }
 
+        if (dataToWrite) {
+            isoFile.write(dataToWrite, DATA_SIZE);
+        }
+
         sectNum++;
     }
 
-    if (ccdFile.gcount() > 0 && ccdFile.gcount() < static_cast<std::streamsize>(sizeof(CcdSector))) {
+    if (ccdFile.gcount() > 0) {
         std::cerr << "Error at sector " << sectNum << ".\n"
                   << "The sector does not contain complete data. Sector size must be "
                   << sizeof(CcdSector) << ", while actual data read is " << ccdFile.gcount() << std::endl;
         return false;
     }
+
     return true;
 }
 
