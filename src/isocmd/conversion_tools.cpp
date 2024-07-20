@@ -890,17 +890,23 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath) {
     char buf[12];
 
     mdfFile.seekg(32768);
-    mdfFile.read(buf, 8);
-    if (std::memcmp("CD001", buf + 1, 5) == 0) {
+    if (!mdfFile.read(buf, 8)) {
         return false;
+    }
+    if (std::memcmp("CD001", buf + 1, 5) == 0) {
+        return false; // Not an MDF file or not supported
     }
 
     mdfFile.seekg(0);
-    mdfFile.read(buf, 12);
+    if (!mdfFile.read(buf, 12)) {
+        return false;
+    }
     mdfFile.seekg(2352);
 
     if (std::memcmp("\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00", buf, 12) == 0) {
-        mdfFile.read(buf, 12);
+        if (!mdfFile.read(buf, 12)) {
+            return false;
+        }
         if (std::memcmp("\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00", buf, 12) == 0) {
             // SYNC
             seek_ecc = 288;
@@ -922,7 +928,7 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath) {
         sector_data = 2352;
     }
 
-    // Convert the file
+    // Calculate source length
     mdfFile.seekg(0, std::ios::end);
     long source_length = mdfFile.tellg() / sector_size;
     mdfFile.seekg(0, std::ios::beg);
@@ -931,16 +937,20 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath) {
     const size_t bufferSize = 8 * 1024 * 1024; // 8 MB buffer
     std::vector<char> buffer(bufferSize);
 
-    size_t bufferIndex = 0; // Change to size_t to match buffer size
+    size_t bufferIndex = 0;
     while (source_length > 0) {
         // Read data from MDF
         mdfFile.seekg(seek_head, std::ios::cur);
-        mdfFile.read(buffer.data() + bufferIndex, sector_data);
+        if (!mdfFile.read(buffer.data() + bufferIndex, sector_data)) {
+            return false;
+        }
         mdfFile.seekg(seek_ecc, std::ios::cur);
 
         bufferIndex += sector_data;
         if (bufferIndex >= bufferSize) {
-            isoFile.write(buffer.data(), bufferSize);
+            if (!isoFile.write(buffer.data(), bufferSize)) {
+                return false;
+            }
             bufferIndex = 0;
         }
 
@@ -949,7 +959,9 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath) {
 
     // Write any remaining data in the buffer
     if (bufferIndex > 0) {
-        isoFile.write(buffer.data(), bufferIndex);
+        if (!isoFile.write(buffer.data(), bufferIndex)) {
+            return false;
+        }
     }
 
     return true;
