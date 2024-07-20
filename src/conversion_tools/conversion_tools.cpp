@@ -1023,23 +1023,3 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
         }
     }
 }
-
-
-// Function to check if a program is installed based on its name
-bool isProgramInstalled(const std::string& type) {
-    // Construct the command to check if the program is in the system's PATH
-    std::string program;
-    if (type == "mdf") {
-		program = "mdf2iso";
-	} else {
-		program = "ccd2iso";
-	}
-    std::string command = "which " + shell_escape(program);
-
-    // Execute the command and check the result
-    if (std::system((command + " > /dev/null 2>&1").c_str()) == 0) {
-        return true;  // Program is installed
-    } else {
-        return false;  // Program is not installed
-    }
-}
