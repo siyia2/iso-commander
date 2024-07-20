@@ -1,6 +1,6 @@
 #include "../headers.h"
 
- 
+
 // Get max available CPU cores for global use, fallback is 2 cores
 unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
@@ -33,16 +33,16 @@ int lockFileDescriptor = -1;
 
 // Main function
 int main(int argc, char *argv[]) {
-	
+
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
-        printVersionNumber("5.0.7");
+        printVersionNumber("5.0.8");
         return 0;
     }
-	
+
     const char* lockFile = "/tmp/isocmd.lock";
-    
+
     lockFileDescriptor = open(lockFile, O_CREAT | O_RDWR, 0666);
-    
+
     if (lockFileDescriptor == -1) {
         std::cerr << "\033[93mAnother instance of isocmd is already running. If not run \"rm /tmp/isocmd.lock\".\n\033[0m";
         return 1;
@@ -63,7 +63,7 @@ int main(int argc, char *argv[]) {
     // Register signal handlers
     signal(SIGINT, signalHandler);  // Handle Ctrl+C
     signal(SIGTERM, signalHandler); // Handle termination signals
-    
+
     bool exitProgram = false;
     std::string choice;
 
@@ -76,20 +76,20 @@ int main(int argc, char *argv[]) {
 
         // Clear history
         clear_history();
-        
+
         rl_bind_key('\t', custom_complete);
 
         // Prompt for the main menu choice
         char* rawInput = readline("\n\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
-        
+
         std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
-        
+
         std::string mainInputString(input.get());
-        
+
         if (!input.get()) {
             break; // Exit the program if readline returns NULL (e.g., on EOF or Ctrl+D)
         }
-        
+
 
         std::string choice(mainInputString);
 
@@ -128,7 +128,7 @@ int main(int argc, char *argv[]) {
 
 // Print the version number of the program
 void printVersionNumber(const std::string& version) {
-    
+
     std::cout << "\x1B[32mIso Commander v" << version << "\x1B[0m\n"; // Output the version number in green color
 }
 
@@ -139,10 +139,10 @@ void print_ascii() {
 
     const char* Color = "\x1B[1;38;5;214m";
     const char* resetColor = "\x1B[0m"; // Reset color to default
-	                                                                                                                           
-std::cout << Color << R"((   (       )            )    *      *              ) (         (    
- )\ ))\ ) ( /(     (  ( /(  (  `   (  `    (     ( /( )\ )      )\ ) 
-(()/(()/( )\())    )\ )\()) )\))(  )\))(   )\    )\()(()/(  (  (()/( 
+
+std::cout << Color << R"((   (       )            )    *      *              ) (         (
+ )\ ))\ ) ( /(     (  ( /(  (  `   (  `    (     ( /( )\ )      )\ )
+(()/(()/( )\())    )\ )\()) )\))(  )\))(   )\    )\()(()/(  (  (()/(
  /(_)/(_)((_)\   (((_((_)\ ((_)()\((_)()((((_)( ((_)\ /(_)) )\  /(_))
 (_))(_))   ((_)  )\___ ((_)(_()((_(_()((_)\ _ )\ _((_(_))_ ((_)(_))
 |_ _/ __| / _ \ ((/ __/ _ \|  \/  |  \/  (_)_\(_| \| ||   \| __| _ \
@@ -174,16 +174,16 @@ void submenu1() {
         std::cout << "\033[1;32m+-------------------------+\n";
         std::cout << " ";
         char* rawInput = readline("\n\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
-        
+
         // Use std::unique_ptr to manage memory for input
 		std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
-        
+
         std::string mainInputString(input.get());
 
         if (!input.get() || std::strlen(input.get()) == 0) {
 			break; // Exit the submenu if input is empty or NULL
 		}
-					
+
           std::string submenu_choice(mainInputString);
          // Check if the input length is exactly 1
         if (submenu_choice.empty() || submenu_choice.length() == 1) {
@@ -236,49 +236,37 @@ void submenu2() {
         std::cout << "\033[1;32m+-------------------------+\n";
         std::cout << " ";
         char* rawInput = readline("\n\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
-        
+
         // Use std::unique_ptr to manage memory for input
 		std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
-        
+
         std::string mainInputString(input.get());
-        
+
 
         if (!input.get() || std::strlen(input.get()) == 0) {
 			break; // Exit the submenu if input is empty or NULL
 		}
-					
+
           std::string submenu_choice(mainInputString);
           std::string operation;
          // Check if the input length is exactly 1
 		 if (submenu_choice.empty() || submenu_choice.length() == 1){
-         switch (submenu_choice[0]) {	
+         switch (submenu_choice[0]) {
              case '1':
 				clearScrollBuffer();
 				operation = "bin";
-				if (isProgramInstalled(operation)) {
 					select_and_convert_files_to_iso(operation);
-				} else {
-					std::cout << "\n\033[1;91m'ccd2iso' is not installed.\033[0;1m\n";
-					std::cout << "\n\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
-					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-				}
                 clearScrollBuffer();
                 break;
              case '2':
 				clearScrollBuffer();
 				operation = "mdf";
-                if (isProgramInstalled(operation)) {
 					select_and_convert_files_to_iso(operation);
-				} else {
-					std::cout << "\n\033[1;91m'mdf2iso' is not installed.\033[0;1m\n";
-					std::cout << "\n\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
-					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-				}
                 clearScrollBuffer();
                 break;
 			}
 		}
-	}	
+	}
 }
 
 
@@ -326,13 +314,13 @@ int custom_complete(int count, int key) {
 
 // Function to handle termination signals
 void signalHandler(int signum) {
-    
+
     clearScrollBuffer();
     // Perform cleanup before exiting
     if (lockFileDescriptor != -1) {
         close(lockFileDescriptor);
     }
-    
+
     exit(signum);
 }
 
@@ -356,26 +344,26 @@ void displayProgressBar(const std::atomic<size_t>& completedIsos, const size_t& 
     const int barWidth = 50;
     bool enterPressed = false;
     auto startTime = std::chrono::high_resolution_clock::now();
-    
+
     while (!isComplete.load() || !enterPressed) {
         size_t completedValue = completedIsos.load();
         double progress = static_cast<double>(completedValue) / totalIsos;
         int pos = static_cast<int>(barWidth * progress);
-        
+
         auto currentTime = std::chrono::high_resolution_clock::now();
         auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime);
         double elapsedSeconds = elapsedTime.count() / 1000.0;
-        
+
         std::cout << "\r[";
         for (int i = 0; i < barWidth; ++i) {
             if (i < pos) std::cout << "=";
             else if (i == pos) std::cout << ">";
             else std::cout << " ";
         }
-        std::cout << "] " << std::setw(3) << std::fixed << std::setprecision(1) 
+        std::cout << "] " << std::setw(3) << std::fixed << std::setprecision(1)
                   << (progress * 100.0) << "% (" << completedValue << "/" << totalIsos << ") "
                   << "Time Elapsed: "<< std::setprecision(1) << elapsedSeconds << "s";
-        
+
         if (completedValue == totalIsos && !enterPressed) {
             enterPressed = true;
             std::string confirmation;
@@ -391,7 +379,7 @@ void displayProgressBar(const std::atomic<size_t>& completedIsos, const size_t& 
             std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Update every 100ms
         }
     }
-    
+
     // Print a newline after completion
     std::cout << std::endl;
 }
@@ -404,16 +392,16 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
     static const char* red = "\033[31;1m";
     static const char* green = "\033[32;1m";
     static const char* magenta = "\033[95m";
-    
+
     size_t maxIndex = isoFiles.size();
     size_t numDigits = std::to_string(maxIndex).length();
-    
+
     std::string output;
     output.reserve(isoFiles.size() * 100);  // Adjust based on average line length
 
     for (size_t i = 0; i < isoFiles.size(); ++i) {
         const char* sequenceColor = (i % 2 == 0) ? red : green;
-        
+
         output.append("\n")
               .append(sequenceColor);
 
@@ -427,7 +415,7 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
               .append(bold);
 
         auto [directory, filename] = extractDirectoryAndFilename(isoFiles[i]);
-        
+
         output.append(directory)
               .append(defaultColor)
               .append(bold)
@@ -578,7 +566,7 @@ void saveHistory() {
                     }
                 }
             }
-			
+
 			int excessLines; // Declare excessLines outside the if-else block
 
 			if (!historyPattern) {
