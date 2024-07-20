@@ -16,7 +16,7 @@ Features:
 * Multithreaded asynchronous tasks leveraging state-of-the-art concurrent practices.
 * Capable of seamlessly handling anywhere from 1 to an astonishing 100,000 ISO files.
 * Supports most ISO filesystem types: iso9660, UDF, HFSPlus, Rock Ridge, Joliet, and ISOFs.
-* Supports BIN/IMG/MDF conversion to ISO by utilizing ccd2iso and mdf2iso.
+* Supports BIN/IMG/MDF conversion by integrating ccd2iso and mdf2iso as inside functions.
 * Clean codebase in case someone decides to contribute in the future.
 
 Make Dependencies:
