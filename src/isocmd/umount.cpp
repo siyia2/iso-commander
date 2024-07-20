@@ -95,92 +95,73 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
             errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDirectory << "/" << isoFilename
                          << "\033[1;93m'\033[1;91m. Root privileges are required.\033[0m";
             {
-                std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                unmountedErrors.emplace(errorMessage.str());
-            }
+				std::lock_guard<std::mutex> lowLock(Mutex4Low);
+				unmountedErrors.emplace(errorMessage.str());
+			}
         }
         return;
     }
 
-    struct libmnt_table *tb = mnt_new_table();
-    struct libmnt_iter *itr = mnt_new_iter(MNT_ITER_BACKWARD);
-    struct libmnt_fs *fs;
-    std::vector<std::string> mountpoints_to_unmount;
-
-    // Parse current mount table
-    mnt_table_parse_mtab(tb, NULL);
-
-    // Find mountpoints to unmount
-    while (mnt_table_next_fs(tb, itr, &fs) == 0) {
-        const char *target = mnt_fs_get_target(fs);
-        if (target) {
-            auto it = std::find(isoDirs.begin(), isoDirs.end(), target);
-            if (it != isoDirs.end()) {
-                mountpoints_to_unmount.push_back(target);
-            }
-        }
+    // Construct the unmount command
+    std::string unmountCommand = "umount -l";
+    for (const auto& isoDir : isoDirs) {
+        unmountCommand += " " + shell_escape(isoDir) + " 2>/dev/null";
     }
 
-    mnt_free_iter(itr);
-    mnt_free_table(tb);
-
-    // Unmount in batch
-    struct libmnt_context *ctx = mnt_new_context();
-    if (!ctx) {
-        // Handle error: unable to create libmount context
-        std::stringstream errorMessage;
-        errorMessage << "\033[1;91mFailed to create libmount context.\033[0m";
-        {
-            std::lock_guard<std::mutex> lowLock(Mutex4Low);
-            unmountedErrors.emplace(errorMessage.str());
-        }
-        return;
-    }
-
-    for (const auto& mp : mountpoints_to_unmount) {
-        mnt_context_set_target(ctx, mp.c_str());
-        mnt_context_set_mflags(ctx, MNT_FORCE);
-        int rc = mnt_context_umount(ctx);
-        if (rc != 0) {
-            auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(mp);
+    // Execute the unmount command
+    int unmountResult = system(unmountCommand.c_str());
+    if (unmountResult != 0) {
+        // Some error occurred during unmounting
+        for (const auto& isoDir : isoDirs) {
+            auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoDir);
             std::stringstream errorMessage;
-            if (!isDirectoryEmpty(mp)) {
-                errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "\033[1;93m'\033[1;91m. Device is busy...\033[0m";
-                {
-                    std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                    unmountedErrors.emplace(errorMessage.str());
+            if (!isDirectoryEmpty(isoDir)) {
+                errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDirectory << "/" << isoFilename << "\033[1;93m'\033[1;91m. Probably not an ISO mountpoint.\033[0m";
+                if (unmountedErrors.find(errorMessage.str()) == unmountedErrors.end()) {
+					{
+						std::lock_guard<std::mutex> lowLock(Mutex4Low);
+						unmountedErrors.emplace(errorMessage.str());
+					}
                 }
             }
         }
     }
 
-    mnt_free_context(ctx);
+    // Remove empty directories
+    std::vector<const char*> directoriesToRemove;
+    for (const auto& isoDir : isoDirs) {
+        if (isDirectoryEmpty(isoDir)) {
+            directoriesToRemove.push_back(isoDir.c_str());
+        }
+    }
 
-    // Remove empty directories for all isoDirs
-    for (const auto& dir : isoDirs) {
-		std::stringstream errorMessage;
-		std::error_code ec;
-		if (!isDirectoryEmpty(dir)){
+    if (!directoriesToRemove.empty()) {
+        int removeDirResult = 0;
+        for (const char* dir : directoriesToRemove) {
+            removeDirResult = rmdir(dir);
+            if (removeDirResult != 0) {
+                break;
+            }
+        }
 
-                errorMessage << "\033[1;91mFailed to remove mountpoint: \033[1;93m'" << dir << "'\033[1;91m. Not empty.";
-                {
-                    std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                    unmountedErrors.emplace(errorMessage.str());
-                }
-			} else if (isDirectoryEmpty(dir)) {
-
-            if (std::filesystem::remove(dir, ec)) {
+        if (removeDirResult == 0) {
+            for (const auto& dir : directoriesToRemove) {
                 auto [directory, filename] = extractDirectoryAndFilename(dir);
                 std::string removedDirInfo = "\033[0;1mUnmounted: \033[1;92m'" + directory + "/" + filename + "\033[1;92m'\033[0m.";
                 {
-                    std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                    unmountedFiles.emplace(removedDirInfo);
-                }
-            } else {
-                errorMessage << "\033[1;91mFailed to remove directory: \033[1;93m'" << dir << "'\033[1;91m. Error: " << ec.message() << "\033[0m";
-                {
-                    std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                    unmountedErrors.emplace(errorMessage.str());
+					std::lock_guard<std::mutex> lowLock(Mutex4Low);
+					unmountedFiles.emplace(removedDirInfo);
+				}
+            }
+        } else {
+            for (const auto& isoDir : directoriesToRemove) {
+                std::stringstream errorMessage;
+                errorMessage << "\033[1;91mFailed to remove directory: \033[1;93m'" << isoDir << "'\033[1;91m.\033[0m";
+                if (unmountedErrors.find(errorMessage.str()) == unmountedErrors.end()) {
+					{
+						std::lock_guard<std::mutex> lowLock(Mutex4Low);
+						unmountedErrors.emplace(errorMessage.str());
+					}
                 }
             }
         }
