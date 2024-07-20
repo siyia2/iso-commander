@@ -959,28 +959,18 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
         }
         return;
     }
-    // Escape the inputPath before using it in shell commands
-    std::string escapedInputPath = shell_escape(inputPath);
-    // Escape the outputPath before using it in shell commands
-    std::string escapedOutputPath = shell_escape(outputPath);
-    // Determine the appropriate conversion command
-    std::string conversionCommand;
+
+    // Perform the conversion
+    bool conversionSuccess;
     if (modeMdf) {
-        convertMdfToIso(inputPath, outputPath);
-    } else if (!modeMdf) {
-        convertCcdToIso(inputPath, outputPath);
+        conversionSuccess = convertMdfToIso(inputPath, outputPath);
     } else {
-        std::string failedMessage = "\033[1;91mUnsupported file format for \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m. Conversion failed.\033[0;1m";
-        {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
-            failedOuts.insert(failedMessage);
-        }
-        return;
+        conversionSuccess = convertCcdToIso(inputPath, outputPath);
     }
-    // Execute the conversion command
-    int conversionStatus = std::system(conversionCommand.c_str());
+
     auto [outDirectory, outFileNameOnly] = extractDirectoryAndFilename(outputPath);
-    // Check the result of the conversion
-    if (conversionStatus == 0) {
+
+    if (conversionSuccess) {
         // Change ownership of the created ISO file
         struct stat file_stat;
         if (stat(outputPath.c_str(), &file_stat) == 0) {
