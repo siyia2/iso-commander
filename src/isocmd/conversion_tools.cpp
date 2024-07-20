@@ -927,24 +927,29 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath) {
     long source_length = mdfFile.tellg() / sector_size;
     mdfFile.seekg(0, std::ios::beg);
 
-    // Use larger buffer for I/O operations
+    // Use a larger buffer for I/O operations
     const size_t bufferSize = 8 * 1024 * 1024; // 8 MB buffer
     std::vector<char> buffer(bufferSize);
 
-    for (long i = 0; i < source_length; ++i) {
-        if (i % (bufferSize / sector_data) == 0 && i != 0) {
+    size_t bufferIndex = 0; // Change to size_t to match buffer size
+    while (source_length > 0) {
+        // Read data from MDF
+        mdfFile.seekg(seek_head, std::ios::cur);
+        mdfFile.read(buffer.data() + bufferIndex, sector_data);
+        mdfFile.seekg(seek_ecc, std::ios::cur);
+
+        bufferIndex += sector_data;
+        if (bufferIndex >= bufferSize) {
             isoFile.write(buffer.data(), bufferSize);
-            buffer.clear();
+            bufferIndex = 0;
         }
 
-        mdfFile.seekg(seek_head, std::ios::cur);
-        mdfFile.read(buffer.data() + (i % (bufferSize / sector_data)) * sector_data, sector_data);
-        mdfFile.seekg(seek_ecc, std::ios::cur);
+        --source_length;
     }
 
     // Write any remaining data in the buffer
-    if (!buffer.empty()) {
-        isoFile.write(buffer.data(), (source_length % (bufferSize / sector_data)) * sector_data);
+    if (bufferIndex > 0) {
+        isoFile.write(buffer.data(), bufferIndex);
     }
 
     return true;
@@ -1002,40 +1007,40 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
     std::vector<char> buffer(bufferSize);
 
     CcdSector sector;
+    size_t bytesRead = 0;
     int sectNum = 0;
 
-    while (ccdFile.read(reinterpret_cast<char*>(&sector), sizeof(CcdSector))) {
-        char* dataToWrite = nullptr;
-
-        switch (sector.sectheader.header.mode) {
-            case 1:
-                dataToWrite = reinterpret_cast<char*>(&sector.content.mode1.data);
-                break;
-            case 2:
-                dataToWrite = reinterpret_cast<char*>(&sector.content.mode2.data);
-                break;
-            case 0xe2:
-                std::cout << "\nFound session marker, the image might contain multisession data.\n"
-                          << "Only the first session dumped.\n";
-                return true;
-            default:
-                std::cerr << "\nUnrecognized sector mode ("
-                          << std::hex << static_cast<int>(sector.sectheader.header.mode)
-                          << ") at sector " << std::dec << sectNum << "!\n";
+    try {
+        while (ccdFile.read(reinterpret_cast<char*>(&sector), sizeof(CcdSector))) {
+            bytesRead = ccdFile.gcount();
+            if (bytesRead != sizeof(CcdSector)) {
+                std::cerr << "Error at sector " << sectNum << ". Sector size mismatch: expected "
+                          << sizeof(CcdSector) << ", read " << bytesRead << std::endl;
                 return false;
+            }
+
+            switch (sector.sectheader.header.mode) {
+                case 1:
+                    isoFile.write(reinterpret_cast<char*>(&sector.content.mode1.data), DATA_SIZE);
+                    break;
+                case 2:
+                    isoFile.write(reinterpret_cast<char*>(&sector.content.mode2.data), DATA_SIZE);
+                    break;
+                case 0xe2:
+                    std::cout << "\nFound session marker, the image might contain multisession data.\n"
+                              << "Only the first session dumped.\n";
+                    return true;
+                default:
+                    std::cerr << "\nUnrecognized sector mode ("
+                              << std::hex << static_cast<int>(sector.sectheader.header.mode)
+                              << ") at sector " << std::dec << sectNum << "!\n";
+                    return false;
+            }
+            sectNum++;
         }
 
-        if (dataToWrite) {
-            isoFile.write(dataToWrite, DATA_SIZE);
-        }
-
-        sectNum++;
-    }
-
-    if (ccdFile.gcount() > 0) {
-        std::cerr << "Error at sector " << sectNum << ".\n"
-                  << "The sector does not contain complete data. Sector size must be "
-                  << sizeof(CcdSector) << ", while actual data read is " << ccdFile.gcount() << std::endl;
+    } catch (const std::exception& e) {
+        std::cerr << "Exception occurred: " << e.what() << std::endl;
         return false;
     }
 
