@@ -14,7 +14,7 @@ int maxDepth = -1;
 
 // Function to remove non-existent paths from cache
 void removeNonExistentPathsFromCache() {
-	
+
     // Open the cache file for reading
     int fd = open(cacheFilePath.c_str(), O_RDONLY);
     if (fd == -1) {
@@ -134,14 +134,14 @@ std::string getHomeDirectory() {
 // Load cache
 void loadCache(std::vector<std::string>& isoFiles) {
     std::string cacheFilePath = getHomeDirectory() + "/.cache/iso_commander_cache.txt";
-    
+
     // Check if the cache file exists
     struct stat fileStat;
     if (stat(cacheFilePath.c_str(), &fileStat) == -1) {
         // File doesn't exist, handle error or just return
         return;
     }
-    
+
     // Check if the file is empty
     if (fileStat.st_size == 0) {
 		isoFiles.clear();  // Clear the vector to ensure we don't retain old data
@@ -285,7 +285,7 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 
 // Function for manual cache refresh
 void manualRefreshCache(const std::string& initialDir) {
-	
+
 	std::mutex cacheRefreshMutex;
 
 	// Assuming promptFlag is defined elsewhere
@@ -304,14 +304,14 @@ void manualRefreshCache(const std::string& initialDir) {
 		loadHistory();
 		maxDepth = -1;
 		// Prompt the user to enter directory paths for manual cache refresh
-		std::string prompt = "\001\033[1;92m\002Folder paths\001\033[1;94m\002 ↵ to scan for \001\033[1;92m\002.iso\001\033[1;94m\002 files and import into \001\033[1;92m\002on-disk\001\033[1;94m\002 cache (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002),\001\033[1;93m\002 clr\001\033[1;94m\002 ↵ clear \001\033[1m\002\001\033[1;92m\002on-disk\001\033[1m\002\001\033[1;94m\002 cache, ↵ return:\n\001\033[0;1m\002";
+		std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;92m\002.iso\001\033[1;94m\002 files and import into \001\033[1;92m\002on-disk\001\033[1;94m\002 cache (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002),\001\033[1;93m\002 clr\001\033[1;94m\002 ↵ clear \001\033[1m\002\001\033[1;92m\002on-disk\001\033[1m\002\001\033[1;94m\002 cache, ↵ return:\n\001\033[0;1m\002";
 		// Prompt user for input
 		char* rawSearchQuery = readline(prompt.c_str());
 
 		// Use std::unique_ptr to manage memory for rawSearchQuery
 		std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
 		std::string inputSearch(searchQuery.get());
-		
+
 		if (inputSearch == "clr") {
 			if (std::remove(cacheFilePath.c_str()) != 0) {
 				std::cerr << "\n\001\033[1;91mError deleting file: '" << cacheFilePath << "'. File does not exist or inaccessible." << std::endl;
@@ -324,7 +324,7 @@ void manualRefreshCache(const std::string& initialDir) {
 			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 			manualRefreshCache("");
         }
-			
+
 		} else if (!inputSearch.empty()) {
 			input = inputSearch;
 			add_history(searchQuery.get()); // Add to history
@@ -337,7 +337,7 @@ void manualRefreshCache(const std::string& initialDir) {
 	if (input.empty() || onlySpaces) {
 		return;
 	}
-	
+
 	if (promptFlag) {
 		// Save history
 		saveHistory();
@@ -358,7 +358,7 @@ void manualRefreshCache(const std::string& initialDir) {
 
     // Set to store processed invalid paths
     std::set<std::string> processedInvalidPaths;
-    
+
     // Set to store processed valid paths
     std::set<std::string> processedValidPaths;
     // Vector to store ISO unique input errors
@@ -393,7 +393,7 @@ void manualRefreshCache(const std::string& initialDir) {
     for (const auto& invalidPath : invalidPaths) {
         std::cout << invalidPath << std::endl;
     }
-    
+
     if (!invalidPaths.empty() && !validPaths.empty() && promptFlag) {
         std::cout << "\n";
     }
@@ -404,7 +404,7 @@ void manualRefreshCache(const std::string& initialDir) {
     // Create a task for each valid directory to refresh the cache and pass the vector by reference
     std::istringstream iss2(input); // Reset the string stream
     std::size_t runningTasks = 0;  // Track the number of running tasks
-        
+
     while (std::getline(iss2, path, ';')) {
         // Check if the directory path is valid
         if (!isValidDirectory(path)) {
@@ -443,21 +443,21 @@ void manualRefreshCache(const std::string& initialDir) {
     for (auto& future : futures) {
         future.wait();
     }
-    
+
     for (const auto& error : uniqueErrorMessages) {
         std::cout << error;
     }
-    
+
     if (!uniqueErrorMessages.empty()) {
 		std::cout << "\n";
 	}
-    
+
     // Save the combined cache to disk
     bool saveSuccess = saveCache(allIsoFiles, maxCacheSize);
 
     // Stop the timer after completing the cache refresh and removal of non-existent paths
     auto end_time = std::chrono::high_resolution_clock::now();
-    
+
     if (promptFlag) {
 
     // Calculate and print the elapsed time
@@ -474,7 +474,7 @@ void manualRefreshCache(const std::string& initialDir) {
         std::cout << "\n";
         std::cout << "\033[1;92mCache refreshed successfully.\033[0m";
         std::cout << "\n";
-    } 
+    }
     if (saveSuccess && !validPaths.empty() && (!invalidPaths.empty() || !uniqueErrorMessages.empty())) {
         std::cout << "\n";
         std::cout << "\033[1;93mCache refreshed with error(s).\033[0m";
@@ -484,7 +484,7 @@ void manualRefreshCache(const std::string& initialDir) {
         std::cout << "\n";
         std::cout << "\033[1;91mCache refresh failed due to missing valid path(s).\033[0m";
         std::cout << "\n";
-    } 
+    }
     if (!saveSuccess) {
         std::cout << "\n";
         std::cout << "\033[1;91mCache refresh failed.\033[0m";
@@ -513,12 +513,12 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
     try {
         // Set directory traversal options; initially none
         auto options = std::filesystem::directory_options::none;
-        
+
         // If maxDepth is non-negative, include symlink directories in traversal
         if (maxDepth >= 0) {
             options |= std::filesystem::directory_options::follow_directory_symlink;
         }
-        
+
         // Iterate through the directory recursively
         for (auto it = std::filesystem::recursive_directory_iterator(path, options); it != std::filesystem::recursive_directory_iterator(); ++it) {
             // If maxDepth is set and current depth exceeds it, skip further recursion
@@ -526,27 +526,27 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
                 it.disable_recursion_pending();
                 continue;
             }
-            
+
             const auto& entry = *it;
             // If the current entry is not a regular file, skip it
             if (!entry.is_regular_file()) {
                 continue;
             }
-            
+
             const auto& filePath = entry.path();
             const auto extension = filePath.extension();
-            
+
             // Skip files that do not have a ".iso" extension
             if (!iequals(extension.string(), ".iso")) {
                 continue;
             }
-            
+
             const auto fileSize = entry.file_size();
             // Skip files smaller than 5 MB or with a size of 0
             if (fileSize < 5 * 1024 * 1024 || fileSize == 0) {
                 continue;
             }
-            
+
             // Add valid .iso file paths to the isoFiles vector
             isoFiles.push_back(filePath.string());
         }
@@ -556,4 +556,3 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
         uniqueErrorMessages.insert(formattedError);
     }
 }
-
