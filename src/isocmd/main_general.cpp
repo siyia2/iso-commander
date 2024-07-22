@@ -35,7 +35,7 @@ int lockFileDescriptor = -1;
 int main(int argc, char *argv[]) {
 
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
-        printVersionNumber("5.0.9");
+        printVersionNumber("5.1.0");
         return 0;
     }
 
@@ -230,9 +230,9 @@ void submenu2() {
 		std::cout << "\033[1;32m+-------------------------+\n";
 		std::cout << "\033[1;32m|↵ Convert2ISO             |\n";
 		std::cout << "\033[1;32m+-------------------------+\n";
-        std::cout << "\033[1;32m|1. CCD2ISO               |\n";
+        std::cout << "\033[1;32m|1. CCD2ISO++             |\n";
         std::cout << "\033[1;32m+-------------------------+\n";
-        std::cout << "\033[1;32m|2. MDF2ISO               |\n";
+        std::cout << "\033[1;32m|2. MDF2ISO++             |\n";
         std::cout << "\033[1;32m+-------------------------+\n";
         std::cout << " ";
         char* rawInput = readline("\n\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
