@@ -540,28 +540,30 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                 }
             } else {
                 // Handle copy and move operations
-                for (const auto& destDir : destDirs) {
+                for (size_t i = 0; i < destDirs.size(); ++i) {
+                    const auto& destDir = destDirs[i];
                     fs::path destPath = fs::path(destDir) / srcPath.filename();
 
                     std::error_code ec;
                     try {
-                        if (isMove || isCopy) {
-                            // Create destination directory if it doesn't exist
-                            if (!fs::exists(destDir)) {
-                                fs::create_directories(destDir, ec);
-                                if (ec) {
-                                    throw std::runtime_error("Failed to create destination directory: " + ec.message());
-                                }
-
-                                // Change ownership of the created directory
-                                changeOwnership(fs::path(destDir));
+                        // Create destination directory if it doesn't exist
+                        if (!fs::exists(destDir)) {
+                            fs::create_directories(destDir, ec);
+                            if (ec) {
+                                throw std::runtime_error("Failed to create destination directory: " + ec.message());
                             }
+                            changeOwnership(fs::path(destDir));
+                        }
 
-                            // Copy or move the file
-                            if (isCopy) {
+                        if (isCopy) {
+                            // Copy operation
+                            fs::copy(srcPath, destPath, fs::copy_options::overwrite_existing, ec);
+                        } else if (isMove) {
+                            if (i < destDirs.size() - 1) {
+                                // For all but the last destination, copy the file
                                 fs::copy(srcPath, destPath, fs::copy_options::overwrite_existing, ec);
-                            } else if (isMove && destDir == destDirs.back()) {
-                                // Only move to the last destination directory
+                            } else {
+                                // For the last destination, move the file
                                 fs::rename(srcPath, destPath, ec);
                             }
                         }
@@ -570,11 +572,11 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                             throw std::runtime_error("Operation failed: " + ec.message());
                         }
 
-                        // Change ownership of the copied/moved file
                         changeOwnership(destPath);
 
                         // Store operation success info
-                        std::string operationInfo = "\033[1m" + std::string(isCopy ? "Copied" : "Moved") +
+                        std::string operationInfo = "\033[1m" +
+                            std::string(isCopy ? "Copied" : (i < destDirs.size() - 1 ? "Moved" : "Moved")) +
                             ": \033[1;92m'" + srcPath.string() + "'\033[1m\033[0;1m" +
                             " to \033[1;94m'" + destPath.string() + "'\033[0;1m.";
                         {
@@ -584,7 +586,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     } catch (const std::exception& e) {
                         // Store operation error info
                         std::string errorMessageInfo = "\033[1;91mError " +
-                            std::string(isCopy ? "copying" : "moving") +
+                            std::string(isCopy ? "copying" : (i < destDirs.size() - 1 ? "moving" : "moving")) +
                             ": \033[1;93m'" + srcPath.string() + "'\033[1;91m" +
                             " to '" + destDir + "': " + e.what() + "\033[1;91m.\033[0;1m";
                         {
