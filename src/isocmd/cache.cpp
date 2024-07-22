@@ -303,7 +303,7 @@ void manualRefreshCache(const std::string& initialDir) {
 		loadHistory();
 		maxDepth = -1;
 		// Prompt the user to enter directory paths for manual cache refresh
-		std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;92m\002.iso\001\033[1;94m\002 files and import into \001\033[1;92m\002on-disk\001\033[1;94m\002 cache (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002),\001\033[1;93m\002 clr\001\033[1;94m\002 ↵ clear \001\033[1m\002\001\033[1;92m\002on-disk\001\033[1m\002\001\033[1;94m\002 cache, ↵ return:\n\001\033[0;1m\002";
+		std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;92m\002.iso\001\033[1;94m\002 files (>= 5MB) and import into \001\033[1;92m\002on-disk\001\033[1;94m\002 cache (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002),\001\033[1;93m\002 clr\001\033[1;94m\002 ↵ clear \001\033[1m\002\001\033[1;92m\002on-disk\001\033[1m\002\001\033[1;94m\002 cache, ↵ return:\n\001\033[0;1m\002";
 		// Prompt user for input
 		char* rawSearchQuery = readline(prompt.c_str());
 
@@ -476,12 +476,12 @@ void manualRefreshCache(const std::string& initialDir) {
     }
     if (saveSuccess && !validPaths.empty() && (!invalidPaths.empty() || !uniqueErrorMessages.empty())) {
         std::cout << "\n";
-        std::cout << "\033[1;93mCache refreshed with error(s).\033[0m";
+        std::cout << "\033[1;93mCache refreshed with errors.\033[0m";
         std::cout << "\n";
     }
     if (saveSuccess && validPaths.empty() && !invalidPaths.empty()) {
         std::cout << "\n";
-        std::cout << "\033[1;91mCache refresh failed due to missing valid path(s).\033[0m";
+        std::cout << "\033[1;91mCache refresh failed due to missing valid paths.\033[0m";
         std::cout << "\n";
     }
     if (!saveSuccess) {
