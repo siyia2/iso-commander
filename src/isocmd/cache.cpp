@@ -255,7 +255,9 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 	}
 
 	std::vector<std::string> newIsoFiles;
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+	if (promptFlag) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }
 
 	// Perform the cache refresh for the directory (e.g., using parallelTraverse)
 	traverse(path, newIsoFiles, uniqueErrorMessages);
