@@ -226,6 +226,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
 // Function to process either mv or cp indices
 void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages) {
+    namespace fs = std::filesystem;
     std::string userDestDir;
     std::istringstream iss(input);
     std::vector<int> processedIndices;
@@ -364,14 +365,17 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             }
 
             if (isValidLinuxPathFormat(mainInputString)) {
-                if (mainInputString.back() == '/') {
+                bool slashBeforeSemicolon = mainInputString.find(";") == std::string::npos
+                                            || mainInputString.find(";") == 0
+                                            || mainInputString.find("/;") != std::string::npos;
+                if (mainInputString.back() == '/' && slashBeforeSemicolon) {
                     userDestDir = mainInputString;
                     add_history(input.get());
                     saveHistory();
                     clear_history();
                     break;
                 } else {
-                    std::cout << "\n\033[1;91mThe path must end with \033[0;1m'/'\033[1;91m.\033[0;1m\n";
+                    std::cout << "\n\033[1;91mThe paths must end with \033[0;1m'/'\033[1;91m.\033[0;1m\n";
                 }
             } else {
                 std::cout << "\n\033[1;91mInvalid paths are excluded from \033[1;92mcp\033[1;91m and \033[1;93mmv\033[1;91m operations.\033[0;1m\n";
@@ -437,11 +441,12 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     isProcessingComplete.store(true);
     progressThread.join();
 
-    if (!isDelete) {
-        promptFlag = false;
-        maxDepth = 0;
-        manualRefreshCache(userDestDir);
-    }
+       promptFlag = false;
+       maxDepth = 0;
+       // Refresh cache for all destination directories if not a delete operation
+       if (!isDelete) {
+               manualRefreshCache(userDestDir);
+       }
 
     clear_history();
     userDestDir.clear();
