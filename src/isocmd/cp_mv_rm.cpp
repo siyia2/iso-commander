@@ -226,7 +226,6 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
 // Function to process either mv or cp indices
 void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages) {
-    namespace fs = std::filesystem;
     std::string userDestDir;
     std::istringstream iss(input);
     std::vector<int> processedIndices;
