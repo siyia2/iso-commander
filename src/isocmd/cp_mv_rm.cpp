@@ -365,19 +365,31 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
             if (isValidLinuxPathFormat(mainInputString)) {
                 bool slashBeforeSemicolon = mainInputString.find(";") == std::string::npos
-                                            || mainInputString.find(";") == 0
+                                            || mainInputString.find(";/") != std::string::npos
                                             || mainInputString.find("/;") != std::string::npos;
-                if (mainInputString.back() == '/' && slashBeforeSemicolon) {
+                bool semicolonSurroundedBySlash = true;
+
+                // Check if semicolon is surrounded by slashes
+                for (size_t i = 0; i < mainInputString.size(); ++i) {
+                    if (mainInputString[i] == ';') {
+                        if (i == 0 || i == mainInputString.size() - 1 || mainInputString[i - 1] != '/' || mainInputString[i + 1] != '/') {
+                            semicolonSurroundedBySlash = false;
+                            break;
+                        }
+                    }
+                }
+
+                if (mainInputString.back() == '/' && mainInputString.front() == '/' && slashBeforeSemicolon && semicolonSurroundedBySlash) {
                     userDestDir = mainInputString;
                     add_history(input.get());
                     saveHistory();
                     clear_history();
                     break;
                 } else {
-                    std::cout << "\n\033[1;91mThe paths must end with \033[0;1m'/'\033[1;91m.\033[0;1m\n";
+                    std::cout << "\n\033[1;91mThe paths must start and end with \033[0;1m'/'\033[1;91m.\033[0;1m\n";
                 }
             } else {
-                std::cout << "\n\033[1;91mInvalid paths are excluded from \033[1;92mcp\033[1;91m and \033[1;93mmv\033[1;91m operations.\033[0;1m\n";
+                std::cout << "\n\033[1;91mInvalid paths are not allowed for \033[1;92mcp\033[1;91m and \033[1;93mmv\033[1;91m operations.\033[0;1m\n";
             }
 
             std::cout << "\n\033[1;32m↵ to try again...\033[0;1m";
