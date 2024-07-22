@@ -27,7 +27,7 @@ bool isValidLinuxPathFormat(const std::string& path) {
             previousWasSlash = false;
 
             // Check for invalid characters: '\0', '\n', '\r', '\t'
-            if (c == '\0' || c == '\n' || c == '\r' || c == '\t' || c == ';') {
+            if (c == '\0' || c == '\n' || c == '\r' || c == '\t') {
                 return false; // Invalid characters in Linux path
             }
         }
@@ -374,7 +374,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
                     std::cout << "\n\033[1;91mThe path must end with \033[0;1m'/'\033[1;91m.\033[0;1m\n";
                 }
             } else {
-                std::cout << "\n\033[1;91mInvalid paths and/or multiple paths are excluded from \033[1;92mcp\033[1;91m and \033[1;93mmv\033[1;91m operations.\033[0;1m\n";
+                std::cout << "\n\033[1;91mInvalid paths are excluded from \033[1;92mcp\033[1;91m and \033[1;93mmv\033[1;91m operations.\033[0;1m\n";
             }
 
             std::cout << "\n\033[1;32m↵ to try again...\033[0;1m";
@@ -489,6 +489,14 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
     // Vector to store ISO files to operate on
     std::vector<std::string> isoFilesToOperate;
 
+    // Split userDestDir into multiple paths
+    std::vector<std::string> destDirs;
+    std::istringstream iss(userDestDir);
+    std::string destDir;
+    while (std::getline(iss, destDir, ';')) {
+        destDirs.push_back(fs::path(destDir).string());
+    }
+
     // Lambda function to change ownership
     auto changeOwnership = [&](const fs::path& path) {
         struct stat file_stat;
@@ -506,65 +514,73 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 
     // Lambda function to execute the operation
     auto executeOperation = [&](const std::vector<std::string>& files) {
-    for (const auto& operateIso : files) {
-        fs::path srcPath(operateIso);
-        fs::path destPath = fs::path(userDestDir) / srcPath.filename();
+        for (const auto& operateIso : files) {
+            fs::path srcPath(operateIso);
 
-        std::error_code ec;
-        try {
-            if (isMove || isCopy) {
-                // Create destination directory if it doesn't exist
-                if (!fs::exists(userDestDir)) {
-                    fs::create_directories(userDestDir, ec);
-                    if (ec) {
-                        throw std::runtime_error("Failed to create destination directory: " + ec.message());
+            for (const auto& destDir : destDirs) {
+                fs::path destPath = fs::path(destDir) / srcPath.filename();
+
+                std::error_code ec;
+                try {
+                    if (isMove || isCopy) {
+                        // Create destination directory if it doesn't exist
+                        if (!fs::exists(destDir)) {
+                            fs::create_directories(destDir, ec);
+                            if (ec) {
+                                throw std::runtime_error("Failed to create destination directory: " + ec.message());
+                            }
+
+                            // Change ownership of the created directory
+                            changeOwnership(fs::path(destDir));
+                        }
+
+                        // Copy or move the file
+                        if (isCopy) {
+                            fs::copy(srcPath, destPath, fs::copy_options::overwrite_existing, ec);
+                        } else if (isMove && destDir == destDirs.back()) {
+                            // Only move to the last destination directory
+                            fs::rename(srcPath, destPath, ec);
+                        }
+                    } else if (isDelete) {
+                        if (destDir == destDirs.front()) {
+                            // Only delete once
+                            fs::remove(srcPath, ec);
+                        }
                     }
 
-                    // Change ownership of the created directory
-                    changeOwnership(fs::path(userDestDir));
-                }
+                    if (ec) {
+                        throw std::runtime_error("Operation failed: " + ec.message());
+                    }
 
-                // Copy or move the file
-                if (isCopy) {
-                    fs::copy(srcPath, destPath, fs::copy_options::overwrite_existing, ec);
-                } else if (isMove) {
-                    fs::rename(srcPath, destPath, ec);
-                }
-            } else if (isDelete) {
-                fs::remove(srcPath, ec);
-            }
+                    // Change ownership of the copied/moved file
+                    if (!isDelete) {
+                        changeOwnership(destPath);
+                    }
 
-            if (ec) {
-                throw std::runtime_error("Operation failed: " + ec.message());
-            }
-
-            // Change ownership of the copied/moved file
-            if (!isDelete) {
-                changeOwnership(destPath);
-            }
-
-                // Store operation success info
-                std::string operationInfo = "\033[1m" + std::string(isDelete ? "Deleted" : (isCopy ? "Copied" : "Moved")) +
-                    ": \033[1;92m'" + srcPath.string() + "'" + std::string(isDelete ? "\033[1m\033[0;1m." : "\033[1m\033[0;1m") +
-                    (isDelete ? "" : " to \033[1;94m'" + destPath.string() + "'\033[0;1m.");
-                {
-                    std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                    operationIsos.emplace(operationInfo);
-                }
-            } catch (const std::exception& e) {
-                // Store operation error info
-                std::string errorMessageInfo = "\033[1;91mError " +
-                    std::string(isDelete ? "deleting" : (isCopy ? "copying" : "moving")) +
-                    ": \033[1;93m'" + srcPath.string() + "'\033[1;91m" +
-                    (isDelete ? "" : " to '" + userDestDir + "'") +
-                    ": " + e.what() + "\033[1;91m.\033[0;1m";
-                {
-                    std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                    operationErrors.emplace(errorMessageInfo);
+                    // Store operation success info
+                    std::string operationInfo = "\033[1m" + std::string(isDelete ? "Deleted" : (isCopy ? "Copied" : "Moved")) +
+                        ": \033[1;92m'" + srcPath.string() + "'" + std::string(isDelete ? "\033[1m\033[0;1m." : "\033[1m\033[0;1m") +
+                        (isDelete ? "" : " to \033[1;94m'" + destPath.string() + "'\033[0;1m.");
+                    {
+                        std::lock_guard<std::mutex> lowLock(Mutex4Low);
+                        operationIsos.emplace(operationInfo);
+                    }
+                } catch (const std::exception& e) {
+                    // Store operation error info
+                    std::string errorMessageInfo = "\033[1;91mError " +
+                        std::string(isDelete ? "deleting" : (isCopy ? "copying" : "moving")) +
+                        ": \033[1;93m'" + srcPath.string() + "'\033[1;91m" +
+                        (isDelete ? "" : " to '" + destDir + "'") +
+                        ": " + e.what() + "\033[1;91m.\033[0;1m";
+                    {
+                        std::lock_guard<std::mutex> lowLock(Mutex4Low);
+                        operationErrors.emplace(errorMessageInfo);
+                    }
                 }
             }
         }
     };
+
     // Iterate over each ISO file
     for (const auto& iso : isoFiles) {
         fs::path isoPath(iso);
