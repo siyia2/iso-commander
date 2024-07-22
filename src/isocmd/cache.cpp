@@ -255,16 +255,15 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 	}
 
 	std::vector<std::string> newIsoFiles;
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
 	// Perform the cache refresh for the directory (e.g., using parallelTraverse)
 	traverse(path, newIsoFiles, uniqueErrorMessages);
 
 	// Use a separate mutex for read/write access to allIsoFiles
-	std::mutex allIsoFilesMutex;
-
 	{
 		// Acquire lock for checking gapPrinted and potential printing
-		std::lock_guard<std::mutex> lock(allIsoFilesMutex);
+		std::lock_guard<std::mutex> lock(Mutex4Low);
 		if (!gapPrinted && promptFlag) {
 		std::cout << "\n";
 		gapPrinted = true; // Set the flag to true
@@ -273,7 +272,7 @@ void refreshCacheForDirectory(const std::string& path, std::vector<std::string>&
 
 	// Append new entries to allIsoFiles under lock protection
 	{
-		std::lock_guard<std::mutex> lock(allIsoFilesMutex);
+		std::lock_guard<std::mutex> lock(Mutex4Low);
 		allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
 	}
 
