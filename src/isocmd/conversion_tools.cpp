@@ -901,18 +901,26 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath) {
     char buf[12];
     mdfFile.seekg(32768);
     if (!mdfFile.read(buf, 8)) {
+        mdfFile.close();
+        isoFile.close();
         return false;
     }
     if (std::memcmp("CD001", buf + 1, 5) == 0) {
+        mdfFile.close();
+        isoFile.close();
         return false; // Not an MDF file or not supported
     }
     mdfFile.seekg(0);
     if (!mdfFile.read(buf, 12)) {
+        mdfFile.close();
+        isoFile.close();
         return false;
     }
     mdfFile.seekg(2352);
     if (std::memcmp("\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00", buf, 12) == 0) {
         if (!mdfFile.read(buf, 12)) {
+            mdfFile.close();
+            isoFile.close();
             return false;
         }
         if (std::memcmp("\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00", buf, 12) == 0) {
@@ -950,12 +958,16 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath) {
         // Read data from MDF
         mdfFile.seekg(static_cast<std::streamoff>(seek_head), std::ios::cur);
         if (!mdfFile.read(buffer.data() + bufferIndex, static_cast<std::streamsize>(sector_data))) {
+            mdfFile.close();
+            isoFile.close();
             return false;
         }
         mdfFile.seekg(static_cast<std::streamoff>(seek_ecc), std::ios::cur);
         bufferIndex += sector_data;
         if (bufferIndex >= bufferSize) {
             if (!isoFile.write(buffer.data(), static_cast<std::streamsize>(bufferSize))) {
+                mdfFile.close();
+                isoFile.close();
                 return false;
             }
             bufferIndex = 0;
@@ -966,13 +978,17 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath) {
     // Write any remaining data in the buffer
     if (bufferIndex > 0) {
         if (!isoFile.write(buffer.data(), static_cast<std::streamsize>(bufferIndex))) {
+            mdfFile.close();
+            isoFile.close();
             return false;
         }
     }
 
+    mdfFile.close();
+    isoFile.close();
+
     return true;
 }
-
 
 // CCD2ISO
 
@@ -1033,6 +1049,8 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
             if (bytesRead != sizeof(CcdSector)) {
                 std::cerr << "Error at sector " << sectNum << ". Sector size mismatch: expected "
                           << sizeof(CcdSector) << ", read " << bytesRead << std::endl;
+                ccdFile.close();
+                isoFile.close();
                 return false;
             }
 
@@ -1056,11 +1074,15 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
                     if (bufferPos > 0) {
                         isoFile.write(buffer.data(), static_cast<std::streamsize>(bufferPos));
                     }
+                    ccdFile.close();
+                    isoFile.close();
                     return true;
                 default:
                     std::cerr << "\nUnrecognized sector mode ("
                               << std::hex << static_cast<int>(sector.sectheader.header.mode)
                               << ") at sector " << std::dec << sectNum << "!\n";
+                    ccdFile.close();
+                    isoFile.close();
                     return false;
             }
             sectNum++;
@@ -1071,7 +1093,12 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
         }
     } catch (const std::exception& e) {
         std::cerr << "Exception occurred: " << e.what() << std::endl;
+        ccdFile.close();
+        isoFile.close();
         return false;
     }
+
+    ccdFile.close();
+    isoFile.close();
     return true;
 }
