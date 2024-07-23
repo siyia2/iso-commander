@@ -7,6 +7,7 @@ static std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles h
 
 // Boolean flag for verbose beautification
 bool gapSet = true;
+bool gapSetTotal = true;
 
 // GENERAL
 
@@ -53,6 +54,9 @@ void verboseFind(std::set<std::string>& invalidDirectoryPaths) {
 	if (!invalidDirectoryPaths.empty()) {
 		if (gapSet) {
 			std::cout << "\n";
+		}
+		if (!gapSetTotal){
+		     std::cout << "\033[2A\033[K";
 		}
 		std::cout << "\033[0;1mInvalid paths omitted from search: \033[1:91m";
 
@@ -232,6 +236,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
             if (gapSet || !gapSet) {
 				std::cout << "\n";
 			}
+			gapSetTotal = true;
             std::cout << "\033[1;91mNo new " << fileExtension << " files over 5MB found. \033[1;92m" << files.size() << " files are cached in RAM from previous searches.\033[0;1m\n\n";
             auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
             std::cout << "\033[1mTime Elapsed: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n\n";
@@ -246,6 +251,10 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
             if (gapSet || !gapSet) {
 				std::cout << "\n";
 			}
+			if (!gapSetTotal && invalidDirectoryPaths.empty()) {
+			     std::cout << "\033[2A\033[K";
+			}
+			gapSetTotal = true;
             std::cout << "\033[1;91mNo " << fileExtension << " files over 5MB found in the specified paths or cached in RAM.\n\033[0;1m\n";
             auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
             std::cout << "\033[1mTime Elapsed: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n\n";
@@ -537,6 +546,9 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                     totalFiles++;
                     std::cout << "\rTotal files processed: " << totalFiles << std::flush;
                 }
+            }
+            if (totalFiles == 0) {
+                gapSetTotal = false;
             }
         } catch (const std::filesystem::filesystem_error& e) {
 			gapSet = false;
