@@ -1031,24 +1031,24 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
     std::ifstream ccdFile(ccdPath, std::ios::binary);
     std::ofstream isoFile(isoPath, std::ios::binary);
     if (!ccdFile.is_open() || !isoFile.is_open()) {
-        std::cerr << "Error opening files." << std::endl;
+        // std::cerr << "Error opening files." << std::endl;
         return false;
     }
 
-    // Increase buffer size to improve I/O performance
     const size_t bufferSize = 8 * 1024 * 1024;  // 8 MB buffer
     std::vector<char> buffer(bufferSize);
     CcdSector sector;
     size_t bytesRead = 0;
     size_t bufferPos = 0;
     size_t sectNum = 0;
+    int sessionCount = 0;
 
     try {
         while (ccdFile.read(reinterpret_cast<char*>(&sector), sizeof(CcdSector))) {
             bytesRead = static_cast<size_t>(ccdFile.gcount());
             if (bytesRead != sizeof(CcdSector)) {
-                std::cerr << "Error at sector " << sectNum << ". Sector size mismatch: expected "
-                          << sizeof(CcdSector) << ", read " << bytesRead << std::endl;
+              //  std::cerr << "Error at sector " << sectNum << ". Sector size mismatch: expected "
+                //          << sizeof(CcdSector) << ", read " << bytesRead << std::endl;
                 ccdFile.close();
                 isoFile.close();
                 return false;
@@ -1057,7 +1057,6 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
             switch (sector.sectheader.header.mode) {
                 case 1:
                 case 2:
-                    // Ensure there's enough space in the buffer
                     if (bufferPos + DATA_SIZE > bufferSize) {
                         isoFile.write(buffer.data(), static_cast<std::streamsize>(bufferPos));
                         bufferPos = 0;
@@ -1068,31 +1067,27 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
                     bufferPos += DATA_SIZE;
                     break;
                 case 0xe2:
-                    std::cout << "\nFound session marker, the image might contain multisession data.\n"
-                              << "Only the first session dumped.\n";
-                    // Write any remaining buffered data
-                    if (bufferPos > 0) {
-                        isoFile.write(buffer.data(), static_cast<std::streamsize>(bufferPos));
-                    }
-                    ccdFile.close();
-                    isoFile.close();
-                    return true;
+                    sessionCount++;
+            //        std::cout << "Found session marker for session " << sessionCount << ".\n";
+                    // Continue processing instead of returning
+                    break;
                 default:
-                    std::cerr << "\nUnrecognized sector mode ("
-                              << std::hex << static_cast<int>(sector.sectheader.header.mode)
-                              << ") at sector " << std::dec << sectNum << "!\n";
+      //              std::cerr << "\nUnrecognized sector mode ("
+        //                      << std::hex << static_cast<int>(sector.sectheader.header.mode)
+          //                    << ") at sector " << std::dec << sectNum << "!\n";
                     ccdFile.close();
                     isoFile.close();
                     return false;
             }
             sectNum++;
         }
+
         // Write any remaining buffered data
         if (bufferPos > 0) {
             isoFile.write(buffer.data(), static_cast<std::streamsize>(bufferPos));
         }
     } catch (const std::exception& e) {
-        std::cerr << "Exception occurred: " << e.what() << std::endl;
+    //    std::cerr << "Exception occurred: " << e.what() << std::endl;
         ccdFile.close();
         isoFile.close();
         return false;
@@ -1100,5 +1095,12 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
 
     ccdFile.close();
     isoFile.close();
+
+    if (sessionCount > 0) {
+  //      std::cout << "Successfully combined " << sessionCount << " sessions into one .iso file.\n";
+    } else {
+//        std::cout << "Converted single-session CCD to ISO.\n";
+    }
+
     return true;
 }
