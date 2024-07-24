@@ -532,13 +532,14 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
     auto executeOperation = [&](const std::vector<std::string>& files) {
         for (const auto& operateIso : files) {
             fs::path srcPath(operateIso);
+            auto [srcDir, srcFile] = extractDirectoryAndFilename(srcPath.string());
 
             if (isDelete) {
                 // Handle delete operation
                 std::error_code ec;
                 try {
                     if (fs::remove(srcPath, ec)) {
-                        std::string operationInfo = "\033[1mDeleted: \033[1;92m'" + srcPath.string() + "'\033[1m\033[0;1m.";
+                        std::string operationInfo = "\033[1mDeleted: \033[1;92m'" + srcDir + "/" + srcFile + "'\033[1m\033[0;1m.";
                         {
                             std::lock_guard<std::mutex> lowLock(Mutex4Low);
                             operationIsos.emplace(operationInfo);
@@ -547,7 +548,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         throw std::runtime_error("File could not be deleted");
                     }
                 } catch (const std::exception& e) {
-                    std::string errorMessageInfo = "\033[1;91mError deleting: \033[1;93m'" + srcPath.string() +
+                    std::string errorMessageInfo = "\033[1;91mError deleting: \033[1;93m'" + srcDir + "/" + srcFile +
                         "'\033[1;91m: " + e.what() + "\033[1;91m.\033[0;1m";
                     {
                         std::lock_guard<std::mutex> lowLock(Mutex4Low);
@@ -559,6 +560,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                 for (size_t i = 0; i < destDirs.size(); ++i) {
                     const auto& destDir = destDirs[i];
                     fs::path destPath = fs::path(destDir) / srcPath.filename();
+                    auto [destDirProcessed, destFile] = extractDirectoryAndFilename(destPath.string());
 
                     std::error_code ec;
                     try {
@@ -592,9 +594,9 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 
                         // Store operation success info
                         std::string operationInfo = "\033[1m" +
-                            std::string(isCopy ? "Copied" : (i < destDirs.size() - 1 ? "Moved" : "Moved")) +
-                            ": \033[1;92m'" + srcPath.string() + "'\033[1m\033[0;1m" +
-                            " to \033[1;94m'" + destPath.string() + "'\033[0;1m.";
+                            std::string(isCopy ? "Copied" : (i < destDirs.size() - 1 ? "Copied" : "Moved")) +
+                            ": \033[1;92m'" + srcDir + "/" + srcFile + "'\033[1m\033[0;1m" +
+                            " to \033[1;94m'" + destDirProcessed + "/" + destFile + "'\033[0;1m.";
                         {
                             std::lock_guard<std::mutex> lowLock(Mutex4Low);
                             operationIsos.emplace(operationInfo);
@@ -602,9 +604,9 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     } catch (const std::exception& e) {
                         // Store operation error info
                         std::string errorMessageInfo = "\033[1;91mError " +
-                            std::string(isCopy ? "copying" : (i < destDirs.size() - 1 ? "moving" : "moving")) +
-                            ": \033[1;93m'" + srcPath.string() + "'\033[1;91m" +
-                            " to '" + destDir + "': " + e.what() + "\033[1;91m.\033[0;1m";
+                            std::string(isCopy ? "copying" : (i < destDirs.size() - 1 ? "copying" : "moving")) +
+                            ": \033[1;93m'" + srcDir + "/" + srcFile + "'\033[1;91m" +
+                            " to '" + destDirProcessed + "': " + e.what() + "\033[1;91m.\033[0;1m";
                         {
                             std::lock_guard<std::mutex> lowLock(Mutex4Low);
                             operationErrors.emplace(errorMessageInfo);
@@ -618,6 +620,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
     // Iterate over each ISO file
     for (const auto& iso : isoFiles) {
         fs::path isoPath(iso);
+        auto [isoDir, isoFile] = extractDirectoryAndFilename(isoPath.string());
 
         // Check if ISO file is present in the copy list
         auto it = std::find(isoFilesCopy.begin(), isoFilesCopy.end(), iso);
@@ -629,7 +632,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
             } else {
                 // Print message if file not found
                 std::string errorMessageInfo = "\033[1;35mFile not found: \033[0;1m'" +
-                    isoPath.string() + "'\033[1;35m.\033[0;1m";
+                    isoDir + "/" + isoFile + "'\033[1;35m.\033[0;1m";
                 {
                     std::lock_guard<std::mutex> lowLock(Mutex4Low);
                     operationErrors.emplace(errorMessageInfo);
@@ -638,7 +641,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
         } else {
             // Print message if file not found in cache
             std::string errorMessageInfo = "\033[1;93mFile not found in cache: \033[0;1m'" +
-                isoPath.string() + "'\033[1;93m.\033[0;1m";
+                isoDir + "/" + isoFile + "'\033[1;93m.\033[0;1m";
             {
                 std::lock_guard<std::mutex> lowLock(Mutex4Low);
                 operationErrors.emplace(errorMessageInfo);
