@@ -824,7 +824,7 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
 
     // Check if the corresponding .iso file already exists
     if (fileExists(outputPath)) {
-        std::string skipMessage = "\033[1;93mThe corresponding .iso file already exists for: \033[1;92m'" + directory + "/" + fileNameOnly + "'\033[1;93m. Skipped conversion.\033[0;1m";
+        std::string skipMessage = "\033[1;93mThe corresponding .iso files already exist for: \033[1;92m'" + directory + "/" + fileNameOnly + "'\033[1;93m. Skipped conversion.\033[0;1m";
         {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
             skippedOuts.insert(skipMessage);
         }
