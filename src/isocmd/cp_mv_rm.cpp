@@ -594,7 +594,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 
                         // Store operation success info
                         std::string operationInfo = "\033[1m" +
-                            std::string(isCopy ? "Copied" : (i < destDirs.size() - 1 ? "Copied" : "Moved")) +
+                            std::string(isCopy ? "Copied" : (i < destDirs.size() - 1 ? "Moved" : "Moved")) +
                             ": \033[1;92m'" + srcDir + "/" + srcFile + "'\033[1m\033[0;1m" +
                             " to \033[1;94m'" + destDirProcessed + "/" + destFile + "'\033[0;1m.";
                         {
@@ -604,7 +604,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     } catch (const std::exception& e) {
                         // Store operation error info
                         std::string errorMessageInfo = "\033[1;91mError " +
-                            std::string(isCopy ? "copying" : (i < destDirs.size() - 1 ? "copying" : "moving")) +
+                            std::string(isCopy ? "copying" : (i < destDirs.size() - 1 ? "moving" : "moving")) +
                             ": \033[1;93m'" + srcDir + "/" + srcFile + "'\033[1;91m" +
                             " to '" + destDirProcessed + "': " + e.what() + "\033[1;91m.\033[0;1m";
                         {
