@@ -797,18 +797,23 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
         real_gid = getegid();
     }
 
-    // Get real user's name and group name
+    // Get real user's name
     struct passwd *pw = getpwuid(real_uid);
-    struct group *gr = getgrgid(real_gid);
-    if (pw == nullptr || gr == nullptr) {
-        std::cerr << "\nError getting user or group information: " << strerror(errno) << "\033[0;1m";
+    if (pw == nullptr) {
+        std::cerr << "\nError getting user information: " << strerror(errno) << "\033[0;1m";
         return;
     }
     std::string real_username(pw->pw_name);
+
+    // Get real group name
+    struct group *gr = getgrgid(real_gid);
+    if (gr == nullptr) {
+        std::cerr << "\nError getting group information: " << strerror(errno) << "\033[0;1m";
+        return;
+    }
     std::string real_groupname(gr->gr_name);
 
     auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath);
-
     // Check if the input file exists
     if (!std::ifstream(inputPath)) {
         std::string failedMessage = "\033[1;91mThe specified input file \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m does not exist.\033[0;1m\n";
@@ -817,12 +822,8 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
         }
         return;
     }
-
-    // Prepare output path
-    std::string outputPathBase = inputPath.substr(0, inputPath.find_last_of("."));
-    std::string outputPath = modeMdf ? outputPathBase + ".iso" : outputPathBase + "_s1.iso";
-
     // Check if the corresponding .iso file already exists
+    std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
     if (fileExists(outputPath)) {
         std::string skipMessage = "\033[1;93mThe corresponding .iso file already exists for: \033[1;92m'" + directory + "/" + fileNameOnly + "'\033[1;93m. Skipped conversion.\033[0;1m";
         {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
@@ -832,97 +833,58 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
     }
 
     // Perform the conversion
-    bool conversionSuccess = modeMdf ? convertMdfToIso(inputPath, outputPath) : convertCcdToIso(inputPath, outputPathBase);
+    bool conversionSuccess;
+    if (modeMdf) {
+        conversionSuccess = convertMdfToIso(inputPath, outputPath);
+    } else {
+        conversionSuccess = convertCcdToIso(inputPath, outputPath);
+    }
+
+    auto [outDirectory, outFileNameOnly] = extractDirectoryAndFilename(outputPath);
 
     if (conversionSuccess) {
-        int sessionCount = modeMdf ? 1 : 0;
-        bool suffixAdded = false;
-        do {
-            if (!modeMdf) {
-                sessionCount++;
-                outputPath = outputPathBase + "_s" + std::to_string(sessionCount) + ".iso";
-                if (!fileExists(outputPath)) break;
-                suffixAdded = true;
-            }
-
-            // Change ownership of the created ISO file
-            struct stat file_stat;
-            if (stat(outputPath.c_str(), &file_stat) == 0) {
-                if (file_stat.st_uid != real_uid || file_stat.st_gid != real_gid) {
-                    if (chown(outputPath.c_str(), real_uid, real_gid) != 0) {
-                        std::string errorMessage = "\033[1;91mFailed to change ownership of \033[1;93m'" + outputPath + "'\033[1;91m: " + strerror(errno) + "\033[0;1m";
-                        {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                            failedOuts.insert(errorMessage);
-                        }
+        // Change ownership of the created ISO file
+        struct stat file_stat;
+        if (stat(outputPath.c_str(), &file_stat) == 0) {
+            // Only change ownership if it's different from the current user
+            if (file_stat.st_uid != real_uid || file_stat.st_gid != real_gid) {
+                if (chown(outputPath.c_str(), real_uid, real_gid) != 0) {
+                    std::string errorMessage = "\033[1;91mFailed to change ownership of \033[1;93m'" + outDirectory + "/" + outFileNameOnly + "'\033[1;91m: " + strerror(errno) + "\033[0;1m";
+                    {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
+                        failedOuts.insert(errorMessage);
                     }
                 }
-            } else {
-                std::string errorMessage = "\033[1;91mFailed to get file information for \033[1;93m'" + outputPath + "'\033[1;91m: " + strerror(errno) + "\033[0;1m";
-                {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                    failedOuts.insert(errorMessage);
-                }
             }
-
-            std::string successMessage = "\033[1mImage file converted to ISO:\033[0;1m \033[1;92m'" + outputPath + "'\033[0;1m.\033[0;1m";
+        } else {
+            std::string errorMessage = "\033[1;91mFailed to get file information for \033[1;93m'" + outDirectory + "/" + outFileNameOnly + "'\033[1;91m: " + strerror(errno) + "\033[0;1m";
             {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                successOuts.insert(successMessage);
+                failedOuts.insert(errorMessage);
             }
-        } while (!modeMdf);
+        }
 
-        // If no suffix was added for multiple sessions, handle the single session outputPath
-        if (!modeMdf && !suffixAdded) {
-            outputPath = outputPathBase + ".iso";
-            if (fileExists(outputPath)) {
-                std::string successMessage = "\033[1mImage file converted to ISO:\033[0;1m \033[1;92m'" + outputPath + "'\033[0;1m.\033[0;1m";
-                {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                    successOuts.insert(successMessage);
-                }
-            }
+        std::string successMessage = "\033[1mImage file converted to ISO:\033[0;1m \033[1;92m'" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m.\033[0;1m";
+        {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
+            successOuts.insert(successMessage);
         }
     } else {
         std::string failedMessage = "\033[1;91mConversion of \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m failed.\033[0;1m";
         {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
             failedOuts.insert(failedMessage);
         }
-
-        // Delete the partially created ISO files
-        int sessionCount = modeMdf ? 1 : 0;
-        bool suffixAdded = false;
-        do {
-            if (!modeMdf) {
-                sessionCount++;
-                outputPath = outputPathBase + "_s" + std::to_string(sessionCount) + ".iso";
-                if (!fileExists(outputPath)) break;
-                suffixAdded = true;
+        // Delete the partially created ISO file
+        if (std::remove(outputPath.c_str()) == 0) {
+            std::string deletedMessage = "\033[1;92mDeleted incomplete ISO file:\033[1;91m '" + outDirectory + "/" + outFileNameOnly + "'\033[1;92m.\033[0;1m";
+            {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
+                deletedOuts.insert(deletedMessage);
             }
-
-            if (std::remove(outputPath.c_str()) == 0) {
-                std::string deletedMessage = "\033[1;92mDeleted incomplete ISO file:\033[1;91m '" + outputPath + "'\033[1;92m.\033[0;1m";
-                {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                    deletedOuts.insert(deletedMessage);
-                }
-            } else {
-                std::string deletedMessage = "\033[1;91mFailed to delete partially created ISO file: \033[1;93m'" + outputPath + "'\033[1;91m.\033[0;1m";
-                {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                    deletedOuts.insert(deletedMessage);
-                }
-            }
-        } while (!modeMdf);
-
-        // If no suffix was added during deletion, handle the single session outputPath
-        if (!modeMdf && !suffixAdded) {
-            outputPath = outputPathBase + ".iso";
-            if (std::remove(outputPath.c_str()) == 0) {
-                std::string deletedMessage = "\033[1;92mDeleted incomplete ISO file:\033[1;91m '" + outputPath + "'\033[1;92m.\033[0;1m";
-                {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                    deletedOuts.insert(deletedMessage);
-                }
+        } else {
+            std::string deletedMessage = "\033[1;91mFailed to delete partially created ISO file: \033[1;93m'" + outDirectory + "/" + outFileNameOnly + "'\033[1;91m.\033[0;1m";
+            {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
+                deletedOuts.insert(deletedMessage);
             }
         }
     }
 }
-
-
 
 // MDF2ISO
 
@@ -1065,10 +1027,11 @@ struct CcdSector {
 } __attribute__((packed));
 
 // Function to convert bin/img files to iso
-bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPathBase) {
+bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
     std::ifstream ccdFile(ccdPath, std::ios::binary);
-    if (!ccdFile.is_open()) {
-        std::cerr << "Error opening CCD file for conversion." << std::endl;
+    std::ofstream isoFile(isoPath, std::ios::binary);
+    if (!ccdFile.is_open() || !isoFile.is_open()) {
+        std::cerr << "Error opening files." << std::endl;
         return false;
     }
 
@@ -1079,100 +1042,63 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPathBase)
     size_t bytesRead = 0;
     size_t bufferPos = 0;
     size_t sectNum = 0;
-    int currentSession = 1;
-    int totalSessions = 1;  // Start with the first session
 
     try {
-        // First pass: Determine the total number of sessions
         while (ccdFile.read(reinterpret_cast<char*>(&sector), sizeof(CcdSector))) {
             bytesRead = static_cast<size_t>(ccdFile.gcount());
             if (bytesRead != sizeof(CcdSector)) {
-                std::cerr << "Error reading CCD file for session count." << std::endl;
+                std::cerr << "Error at sector " << sectNum << ". Sector size mismatch: expected "
+                          << sizeof(CcdSector) << ", read " << bytesRead << std::endl;
                 ccdFile.close();
-                return false;
-            }
-            if (sector.sectheader.header.mode == 0xe2) {
-                totalSessions++;
-            }
-        }
-
-        // Reset file stream to the beginning
-        ccdFile.clear();
-        ccdFile.seekg(0, std::ios::beg);
-
-        // Second pass: Convert CCD to ISO
-        while (true) {
-            std::string isoPath = (totalSessions > 1) ? isoPathBase + "_s" + std::to_string(currentSession) + ".iso" : isoPathBase + ".iso";
-            std::ofstream isoFile(isoPath, std::ios::binary);
-            if (!isoFile.is_open()) {
-                std::cerr << "Error opening ISO file for session " << currentSession << std::endl;
+                isoFile.close();
                 return false;
             }
 
-            while (ccdFile.read(reinterpret_cast<char*>(&sector), sizeof(CcdSector))) {
-                bytesRead = static_cast<size_t>(ccdFile.gcount());
-                if (bytesRead != sizeof(CcdSector)) {
-                    std::cerr << "Error at sector " << sectNum << ". Sector size mismatch: expected "
-                              << sizeof(CcdSector) << ", read " << bytesRead << std::endl;
+            switch (sector.sectheader.header.mode) {
+                case 1:
+                case 2:
+                    // Ensure there's enough space in the buffer
+                    if (bufferPos + DATA_SIZE > bufferSize) {
+                        isoFile.write(buffer.data(), static_cast<std::streamsize>(bufferPos));
+                        bufferPos = 0;
+                    }
+                    std::memcpy(&buffer[bufferPos],
+                                (sector.sectheader.header.mode == 1) ? sector.content.mode1.data : sector.content.mode2.data,
+                                DATA_SIZE);
+                    bufferPos += DATA_SIZE;
+                    break;
+                case 0xe2:
+                    std::cout << "\nFound session marker, the image might contain multisession data.\n"
+                              << "Only the first session dumped.\n";
+                    // Write any remaining buffered data
+                    if (bufferPos > 0) {
+                        isoFile.write(buffer.data(), static_cast<std::streamsize>(bufferPos));
+                    }
+                    ccdFile.close();
+                    isoFile.close();
+                    return true;
+                default:
+                    std::cerr << "\nUnrecognized sector mode ("
+                              << std::hex << static_cast<int>(sector.sectheader.header.mode)
+                              << ") at sector " << std::dec << sectNum << "!\n";
                     ccdFile.close();
                     isoFile.close();
                     return false;
-                }
-
-                switch (sector.sectheader.header.mode) {
-                    case 1:
-                    case 2:
-                        // Ensure there's enough space in the buffer
-                        if (bufferPos + DATA_SIZE > bufferSize) {
-                            isoFile.write(buffer.data(), static_cast<std::streamsize>(bufferPos));
-                            bufferPos = 0;
-                        }
-                        std::memcpy(&buffer[bufferPos],
-                                    (sector.sectheader.header.mode == 1) ? sector.content.mode1.data : sector.content.mode2.data,
-                                    DATA_SIZE);
-                        bufferPos += DATA_SIZE;
-                        break;
-                    case 0xe2:
-                        std::cout << "\nFound session marker, creating new ISO for next session.\n";
-                        // Write any remaining buffered data
-                        if (bufferPos > 0) {
-                            isoFile.write(buffer.data(), static_cast<std::streamsize>(bufferPos));
-                        }
-                        isoFile.close();
-                        currentSession++;
-                        break;
-                    default:
-                        std::cerr << "\nUnrecognized sector mode ("
-                                  << std::hex << static_cast<int>(sector.sectheader.header.mode)
-                                  << ") at sector " << std::dec << sectNum << "!\n";
-                        ccdFile.close();
-                        isoFile.close();
-                        return false;
-                }
-                sectNum++;
-                if (sector.sectheader.header.mode == 0xe2) {
-                    break;
-                }
             }
-            if (ccdFile.eof()) {
-                // Reached the end of the file
-                break;
-            }
+            sectNum++;
         }
-
-        // Write any remaining buffered data for the last session
+        // Write any remaining buffered data
         if (bufferPos > 0) {
-            std::string isoPath = (totalSessions > 1) ? isoPathBase + "_s" + std::to_string(currentSession) + ".iso" : isoPathBase + ".iso";
-            std::ofstream isoFile(isoPath, std::ios::binary | std::ios::app);  // Append mode for final session
             isoFile.write(buffer.data(), static_cast<std::streamsize>(bufferPos));
-            isoFile.close();
         }
     } catch (const std::exception& e) {
         std::cerr << "Exception occurred: " << e.what() << std::endl;
         ccdFile.close();
+        isoFile.close();
         return false;
     }
 
     ccdFile.close();
+    isoFile.close();
     return true;
 }
