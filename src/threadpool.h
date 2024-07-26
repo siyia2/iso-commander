@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GNU General Public License v3.0 or later
+
 #ifndef THREAD_POOL_H
 #define THREAD_POOL_H
 #include "headers.h"
