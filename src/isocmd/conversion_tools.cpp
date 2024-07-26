@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GNU General Public License v3.0 or later
+
+
 #include "../headers.h"
 #include "../threadpool.h"
 
