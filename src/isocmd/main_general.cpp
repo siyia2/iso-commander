@@ -23,9 +23,9 @@ const std::string historyFilePath = std::string(getenv("HOME")) + "/.cache/iso_c
 const std::string historyPatternFilePath = std::string(getenv("HOME")) + "/.cache/iso_commander_pattern_cache.txt";
 
 //Maximum number of history entries at a time
-const int MAX_HISTORY_LINES = 100;
+const int MAX_HISTORY_LINES = 25;
 
-const int MAX_HISTORY_PATTERN_LINES = 20;
+const int MAX_HISTORY_PATTERN_LINES = 25;
 
 // Global variables for cleanup
 int lockFileDescriptor = -1;
