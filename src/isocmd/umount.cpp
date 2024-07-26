@@ -428,7 +428,7 @@ void unmountISOs() {
 				std::vector<std::future<void>> futuresUmount;
 				futuresUmount.reserve(numThreads);
 
-				size_t maxBatchSize = 50;  // Maximum number of items per batch
+				size_t maxBatchSize = 100;  // Maximum number of items per batch
 
 				// Calculate batch size ensuring it's at most maxBatchSize
 				size_t batchSize = std::min(maxBatchSize, (selectedIsoDirs.size() + numThreads - 1) / numThreads);

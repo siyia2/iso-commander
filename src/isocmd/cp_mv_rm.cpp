@@ -322,7 +322,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
 		unsigned int numThreads = std::min(static_cast<unsigned int>(processedIndices.size()), maxThreads);
 		std::vector<std::vector<int>> indexChunks;
-		const size_t maxFilesPerChunk = 10;
+		const size_t maxFilesPerChunk = 5;
 
 		// Distribute files evenly among threads, but not exceeding maxFilesPerChunk
 		size_t totalFiles = processedIndices.size();
