@@ -166,7 +166,11 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
                 if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
                     historyPattern = false;
-                    needsClrScrn = false;
+                    if (isFiltered) {
+                        needsClrScrn = true;
+                    } else {
+                        needsClrScrn = false;
+                    }
                     clear_history();
                     break;
                 }

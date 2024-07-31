@@ -51,11 +51,11 @@ void select_and_mount_files_by_number() {
     isoFiles.reserve(100);
     bool isFiltered = false;
     bool needsClrScrn = true;
-    
+
     while (true) {
         removeNonExistentPathsFromCache();
         loadCache(isoFiles);
-        
+
         if (needsClrScrn) clearScrollBuffer();
 
         if (isoFiles.empty()) {
@@ -64,9 +64,9 @@ void select_and_mount_files_by_number() {
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             break;
         }
-        
+
         // Check if the loaded cache differs from the global list
-        if (globalIsoFileList.size() != isoFiles.size() || 
+        if (globalIsoFileList.size() != isoFiles.size() ||
             !std::equal(globalIsoFileList.begin(), globalIsoFileList.end(), isoFiles.begin())) {
             sortFilesCaseInsensitive(isoFiles);
             globalIsoFileList = isoFiles;
@@ -78,7 +78,7 @@ void select_and_mount_files_by_number() {
         skippedMessages.clear();
         mountedFails.clear();
         uniqueErrorMessages.clear();
-		
+
         if (needsClrScrn) {
 			printIsoFileList(isFiltered ? filteredFiles : globalIsoFileList);
 			std::cout << "\n\n\n";
@@ -108,7 +108,7 @@ void select_and_mount_files_by_number() {
                 skippedMessages.clear();
                 mountedFails.clear();
                 uniqueErrorMessages.clear();
-                
+
                 clear_history();
                 historyPattern = true;
                 loadHistory();
@@ -118,41 +118,45 @@ void select_and_mount_files_by_number() {
                 std::string filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
 
                 std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
-        
+
                 if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
                     historyPattern = false;
                     clear_history();
-                    needsClrScrn = false;
+                    if (isFiltered) {
+                        needsClrScrn = true;
+                    } else {
+                        needsClrScrn = false;
+                    }
                     break;
                 }
-        
+
                 std::string inputSearch(searchQuery.get());
-        
+
                 if (strcmp(searchQuery.get(), "/") != 0) {
                     add_history(searchQuery.get());
                     saveHistory();
                 }
                 historyPattern = false;
                 clear_history();
-                
-                
-        
+
+
+
                 auto newFilteredFiles = filterFiles(globalIsoFileList, inputSearch);
-                
+
                 if (newFilteredFiles.size() == globalIsoFileList.size()) {
 					isFiltered = false;
 					break;
 				}
-				
+
                 if (!newFilteredFiles.empty()) {
 					needsClrScrn = true;
                     filteredFiles = std::move(newFilteredFiles);
                     isFiltered = true;
                     break;
                 }
-        
+
             }
-            
+
         } else {
             std::vector<std::string>& currentFiles = isFiltered ? filteredFiles : globalIsoFileList;
             if (inputString == "00") {
@@ -184,12 +188,12 @@ void select_and_mount_files_by_number() {
 
 // Function to print mount verbose messages
 void printMountedAndErrors( std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages) {
-		
+
     // Print all mounted files
     for (const auto& mountedFile : mountedFiles) {
         std::cout << "\n" << mountedFile << "\033[0;1m";
     }
-    
+
     if (!mountedFiles.empty()) {
         std::cout << "\n";
     }
@@ -198,7 +202,7 @@ void printMountedAndErrors( std::set<std::string>& mountedFiles, std::set<std::s
     for (const auto& skippedMessage : skippedMessages) {
         std::cerr << "\n" << skippedMessage << "\033[0;1m";
     }
-    
+
     if (!skippedMessages.empty()) {
         std::cout << "\n";
     }
@@ -207,16 +211,16 @@ void printMountedAndErrors( std::set<std::string>& mountedFiles, std::set<std::s
     for (const auto& mountedFail : mountedFails) {
         std::cerr << "\n" << mountedFail << "\033[0;1m";
     }
-    
+
     if (!mountedFails.empty()) {
         std::cout << "\n";
     }
-	
+
     // Print all the stored error messages
     for (const auto& errorMessage : uniqueErrorMessages) {
         std::cerr << "\n" << errorMessage << "\033[0;1m";
     }
-    
+
     if (!uniqueErrorMessages.empty()) {
         std::cout << "\n";
     }
@@ -226,7 +230,7 @@ void printMountedAndErrors( std::set<std::string>& mountedFiles, std::set<std::s
     skippedMessages.clear();
     mountedFails.clear();
     uniqueErrorMessages.clear();
-    
+
 	std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 	std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
@@ -236,7 +240,7 @@ void printMountedAndErrors( std::set<std::string>& mountedFiles, std::set<std::s
 bool isAlreadyMounted(const std::string& mountPoint) {
     struct libmnt_table *tb = mnt_new_table();
     struct libmnt_cache *cache = mnt_new_cache();
-    
+
     if (!tb || !cache) {
         if (tb) mnt_free_table(tb);
         if (cache) mnt_free_cache(cache);
@@ -252,7 +256,7 @@ bool isAlreadyMounted(const std::string& mountPoint) {
     }
 
     struct libmnt_fs *fs = mnt_table_find_target(tb, mountPoint.c_str(), MNT_ITER_BACKWARD);
-    
+
     bool isMounted = (fs != NULL);
 
     mnt_free_table(tb);
@@ -282,10 +286,10 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
 
         std::string uniqueId = isoFileName + "\033[38;5;245m~" + shortHash + "\033[1;94m";
         std::string mountPoint = "/mnt/iso_" + uniqueId;
-        
+
         auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
         auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint);
-        
+
         if (geteuid() != 0) {
             std::stringstream errorMessage;
             errorMessage << "\033[1;91mFailed to mnt: \033[1;93m'" << isoDirectory << "/" << isoFilename
@@ -296,7 +300,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
             }
             continue;
         }
-        
+
         if (isAlreadyMounted(mountPoint)) {
             std::stringstream skippedMessage;
             skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename
@@ -323,7 +327,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
                 continue;
             }
         }
-        
+
         // Create a libmount context
         struct libmnt_context *ctx = mnt_new_context();
         if (!ctx) {
@@ -358,7 +362,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
 
         // Clean up the context
         mnt_free_context(ctx);
-        
+
         if (mountSuccess) {
             std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m"
                                         + "\033[1m mnt@: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename
@@ -388,7 +392,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
 // Function to process input and mount ISO files asynchronously
 void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles,std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages) {
     std::istringstream iss(input);
-    
+
     std::atomic<bool> invalidInput(false);
     std::mutex indicesMutex;
     std::set<int> processedIndices;
@@ -396,10 +400,10 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     std::set<int> validIndices;
     std::mutex processedRangesMutex;
     std::set<std::pair<int, int>> processedRanges;
-    
+
     std::vector<int> indicesToAdd;
     indicesToAdd.reserve(1000);  // Use a reasonable reserve based on expected size
-    
+
     std::atomic<size_t> totalTasks(0);
     std::atomic<size_t> completedTasks(0);
     std::atomic<bool> isProcessingComplete(false);
@@ -436,8 +440,8 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
 
         size_t dashPos = token.find('-');
         if (dashPos != std::string::npos) {
-            if (dashPos == 0 || dashPos == token.size() - 1 || 
-                !std::all_of(token.begin(), token.begin() + dashPos, ::isdigit) || 
+            if (dashPos == 0 || dashPos == token.size() - 1 ||
+                !std::all_of(token.begin(), token.begin() + dashPos, ::isdigit) ||
                 !std::all_of(token.begin() + dashPos + 1, token.end(), ::isdigit)) {
                 addError("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
                 continue;
@@ -452,7 +456,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                 continue;
             }
 
-            if (start < 1 || static_cast<size_t>(start) > isoFiles.size() || 
+            if (start < 1 || static_cast<size_t>(start) > isoFiles.size() ||
                 end < 1 || static_cast<size_t>(end) > isoFiles.size()) {
                 addError("\033[1;91mInvalid range: '" + token + "'.\033[0;1m");
                 continue;
@@ -494,13 +498,13 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
         std::lock_guard<std::mutex> lock(indicesMutex);
         indicesToProcess = std::move(indicesToAdd);
     }
-    
+
     // Check if we have any valid indices to process
     if (indicesToProcess.empty()) {
         addError("\033[1;91mNo valid input provided for mount.\033[0;1m");
         return;  // Exit the function early
     }
-    
+
     unsigned int numThreads = std::min(static_cast<int>(indicesToProcess.size()), static_cast<int>(maxThreads));
     ThreadPool pool(numThreads);
 
