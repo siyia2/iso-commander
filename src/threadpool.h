@@ -5,7 +5,7 @@
 #include "headers.h"
 
 
-// A global threadpool for async tasks with work-stealing scalable from 1 to 192 threads
+// A global lock-free threadpool for async tasks with work-stealing scalable from 1 to 192 threads
 template <typename T>
 class LockFreeQueue {
 private:
