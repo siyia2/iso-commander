@@ -9,63 +9,62 @@
 template <typename T>
 class LockFreeQueue {
 private:
+    // Cache line size to avoid false sharing
     static constexpr size_t CACHE_LINE_SIZE = 64;
 
-    // Node structure for the queue
-	struct Node {
-		T data;
-		std::atomic<Node*> next;
-		std::atomic<uint64_t> timestamp; // Timestamp for ABA prevention
-		Node(T value = T()) : data(std::move(value)), next(nullptr), timestamp(0) {}
-	};
-    // AlignedAtomicNode structure for aligned atomic operations
+    // Node structure to hold data and next pointer
+    struct Node {
+        T data;
+        std::atomic<Node*> next;
+        std::atomic<uint64_t> timestamp;
+        Node(T value = T()) : data(std::move(value)), next(nullptr), timestamp(0) {}
+    };
+
+    // Structure to align atomic pointers to cache lines
     struct alignas(CACHE_LINE_SIZE) AlignedAtomicNode {
         std::atomic<Node*> ptr;
         AlignedAtomicNode(Node* p = nullptr) : ptr(p) {}
     };
 
-    // Pool size and node pool for memory management
-    size_t pool_size;
-    std::vector<Node> node_pool;
-    alignas(CACHE_LINE_SIZE) AlignedAtomicNode head;
-    alignas(CACHE_LINE_SIZE) AlignedAtomicNode tail;
-    std::atomic<size_t> pool_index; // Tracks next index in node_pool
+    size_t pool_size;                          // Size of the node pool
+    std::vector<Node> node_pool;               // Pool of preallocated nodes
+    alignas(CACHE_LINE_SIZE) AlignedAtomicNode head; // Head pointer of the queue
+    alignas(CACHE_LINE_SIZE) AlignedAtomicNode tail; // Tail pointer of the queue
+    std::atomic<size_t> pool_index;            // Index to track allocation in the node pool
 
     // Calculate pool size based on number of threads
     static size_t calculatePoolSize(size_t num_threads) {
-		return std::min(num_threads * 64, static_cast<size_t>(12288));
+        return std::min(num_threads * 128, static_cast<size_t>(16384));
     }
 
-    // Allocate a node from the pool or dynamically
+    // Allocate a new node, either from the pool or dynamically
     Node* allocate_node(T value) {
-		size_t index = pool_index.fetch_add(1, std::memory_order_relaxed);
-		if (index < pool_size) {
-			Node* node = new (&node_pool[index]) Node(std::move(value));
-			node->timestamp.store(1, std::memory_order_relaxed); // Initial timestamp
-			return node;
-		} else {
-			Node* node = new Node(std::move(value));
-			node->timestamp.store(1, std::memory_order_relaxed); // Initial timestamp
-			return node;
-		}
-	}
+        size_t index = pool_index.fetch_add(1, std::memory_order_relaxed);
+        if (index < pool_size) {
+            Node* node = new (&node_pool[index]) Node(std::move(value));
+            node->timestamp.store(1, std::memory_order_relaxed);
+            return node;
+        } else {
+            Node* node = new Node(std::move(value));
+            node->timestamp.store(1, std::memory_order_relaxed);
+            return node;
+        }
+    }
 
-
-    // Deallocate a node
+    // Deallocate a node, either back to the pool or by deleting
     void deallocate_node(Node* node) {
-    // Check if the node belongs to the node_pool
-    auto pool_begin = &node_pool[0];
-    auto pool_end = pool_begin + pool_size;
-    if (node >= pool_begin && node < pool_end) {
-        node->~Node(); // Call the destructor explicitly, but don't free memory
-        node->timestamp.fetch_add(1, std::memory_order_relaxed); // Increment timestamp to prevent ABA
-		} else {
-			delete node; // If not in pool, delete normally
-		}
-	}
+        auto pool_begin = &node_pool[0];
+        auto pool_end = pool_begin + pool_size;
+        if (node >= pool_begin && node < pool_end) {
+            node->~Node();
+            node->timestamp.fetch_add(1, std::memory_order_relaxed);
+        } else {
+            delete node;
+        }
+    }
 
 public:
-    // Constructor initializes the queue with a dummy node
+    // Constructor to initialize the queue with a dummy node
     explicit LockFreeQueue(size_t num_threads)
         : pool_size(calculatePoolSize(num_threads)),
           node_pool(pool_size),
@@ -78,113 +77,163 @@ public:
         tail.ptr.store(dummy, std::memory_order_relaxed);
     }
 
-    // Destructor cleans up all nodes in the queue
+    // Destructor to clean up the nodes
     ~LockFreeQueue() {
-    Node* current = head.ptr.load(std::memory_order_acquire);
-    while (current != nullptr) {
-        Node* next = current->next.load(std::memory_order_relaxed);
-        deallocate_node(current);
-        current = next;
+        Node* current = head.ptr.load(std::memory_order_acquire);
+        while (current != nullptr) {
+            Node* next = current->next.load(std::memory_order_relaxed);
+            deallocate_node(current);
+            current = next;
+        }
+        for (size_t i = 0; i < pool_size; ++i) {
+            node_pool[i].~Node();
+        }
     }
-    // Explicitly destroy all nodes in the pool
-    for (size_t i = 0; i < pool_size; ++i) {
-        node_pool[i].~Node();
-		}
-	}
 
-    // Enqueue an item into the queue
+    // Enqueue a new item into the queue
     void enqueue(T value) {
-    Node* newNode = allocate_node(std::move(value));
-    while (true) {
-        Node* oldTail = tail.ptr.load(std::memory_order_acquire);
-        Node* next = oldTail->next.load(std::memory_order_acquire);
-        uint64_t timestamp = oldTail->timestamp.load(std::memory_order_relaxed);
-        if (next == nullptr) {
-            if (oldTail->next.compare_exchange_weak(next, newNode,
-                                                    std::memory_order_release,
-                                                    std::memory_order_relaxed) &&
-                oldTail->timestamp.compare_exchange_weak(timestamp, timestamp + 1,
-                                                          std::memory_order_release,
-                                                          std::memory_order_relaxed)) {
-                tail.ptr.compare_exchange_strong(oldTail, newNode,
+        Node* new_node = allocate_node(std::move(value));
+        while (true) {
+            Node* old_tail = tail.ptr.load(std::memory_order_acquire);
+            Node* next = old_tail->next.load(std::memory_order_acquire);
+            uint64_t timestamp = old_tail->timestamp.load(std::memory_order_relaxed);
+            if (next == nullptr) {
+                if (old_tail->next.compare_exchange_weak(next, new_node,
+                                                        std::memory_order_release,
+                                                        std::memory_order_relaxed) &&
+                    old_tail->timestamp.compare_exchange_weak(timestamp, timestamp + 1,
+                                                              std::memory_order_release,
+                                                              std::memory_order_relaxed)) {
+                    tail.ptr.compare_exchange_strong(old_tail, new_node,
+                                                     std::memory_order_release,
+                                                     std::memory_order_relaxed);
+                    return;
+                }
+            } else {
+                tail.ptr.compare_exchange_strong(old_tail, next,
                                                  std::memory_order_release,
                                                  std::memory_order_relaxed);
-					return;
-				}
-			} else {
-            tail.ptr.compare_exchange_strong(oldTail, next,
-                                             std::memory_order_release,
-                                             std::memory_order_relaxed);
-			}
-		}
-	}
-
-
-bool dequeue(T& result) {
-    while (true) {
-        Node* oldHead = head.ptr.load(std::memory_order_acquire);
-        Node* next = oldHead->next.load(std::memory_order_acquire);
-        if (next == nullptr) {
-            return false;
-        }
-        if (head.ptr.compare_exchange_weak(oldHead, next,
-                                           std::memory_order_release,
-                                           std::memory_order_relaxed)) {
-            result = std::move(next->data);
-            deallocate_node(oldHead);
-            return true;
+            }
         }
     }
-}
+
+    // Dequeue an item from the queue
+    bool dequeue(T& result) {
+        while (true) {
+            Node* old_head = head.ptr.load(std::memory_order_acquire);
+            Node* next = old_head->next.load(std::memory_order_acquire);
+            if (next == nullptr) {
+                return false;
+            }
+            if (head.ptr.compare_exchange_weak(old_head, next,
+                                               std::memory_order_release,
+                                               std::memory_order_relaxed)) {
+                result = std::move(next->data);
+                deallocate_node(old_head);
+                return true;
+            }
+        }
+    }
 
     // Check if the queue is empty
     bool isEmpty() const {
         return head.ptr.load(std::memory_order_acquire)->next.load(std::memory_order_acquire) == nullptr;
     }
 
-    // Steal operation for work stealing
+    // Steal an item from the queue (same as dequeue)
     bool steal(T& result) {
         return dequeue(result);
+    }
+
+    // Enqueue a batch of items into the queue
+    template <typename InputIt>
+    void enqueue_batch(InputIt first, InputIt last) {
+        std::vector<Node*> new_nodes;
+        for (auto it = first; it != last; ++it) {
+            new_nodes.push_back(allocate_node(std::move(*it)));
+        }
+
+        if (new_nodes.empty()) return;
+
+        while (true) {
+            Node* old_tail = tail.ptr.load(std::memory_order_acquire);
+            Node* next = old_tail->next.load(std::memory_order_acquire);
+            uint64_t timestamp = old_tail->timestamp.load(std::memory_order_relaxed);
+
+            if (next == nullptr) {
+                for (size_t i = 0; i < new_nodes.size() - 1; ++i) {
+                    new_nodes[i]->next.store(new_nodes[i + 1], std::memory_order_relaxed);
+                }
+
+                if (old_tail->next.compare_exchange_weak(next, new_nodes[0],
+                                                         std::memory_order_release,
+                                                         std::memory_order_relaxed) &&
+                    old_tail->timestamp.compare_exchange_weak(timestamp, timestamp + 1,
+                                                              std::memory_order_release,
+                                                              std::memory_order_relaxed)) {
+                    tail.ptr.compare_exchange_strong(old_tail, new_nodes.back(),
+                                                     std::memory_order_release,
+                                                     std::memory_order_relaxed);
+                    return;
+                }
+            } else {
+                tail.ptr.compare_exchange_strong(old_tail, next,
+                                                 std::memory_order_release,
+                                                 std::memory_order_relaxed);
+            }
+        }
+    }
+
+    // Dequeue a batch of items from the queue
+    template <typename OutputIt>
+    size_t dequeue_batch(OutputIt out, size_t max_items) {
+        size_t dequeued = 0;
+        while (dequeued < max_items) {
+            Node* old_head = head.ptr.load(std::memory_order_acquire);
+            Node* next = old_head->next.load(std::memory_order_acquire);
+
+            if (next == nullptr) {
+                return dequeued;
+            }
+
+            if (head.ptr.compare_exchange_weak(old_head, next,
+                                               std::memory_order_release,
+                                               std::memory_order_relaxed)) {
+                *out++ = std::move(next->data);
+                deallocate_node(old_head);
+                ++dequeued;
+            }
+        }
+        return dequeued;
     }
 };
 
 class ThreadPool {
 private:
-    // Struct for aligning atomic bool values to avoid false sharing
+    // Atomic boolean with cache line alignment to avoid false sharing
     struct alignas(64) AlignedAtomic {
         std::atomic<bool> value;
         AlignedAtomic(bool initial = false) : value(initial) {}
     };
 
-    // Struct for aligning atomic size_t values to avoid false sharing
+    // Atomic size_t with cache line alignment to avoid false sharing
     struct alignas(64) AlignedAtomicSize {
         std::atomic<size_t> value;
         AlignedAtomicSize(size_t initial = 0) : value(initial) {}
     };
 
-    // Vector of worker threads
-    std::vector<std::thread> workers;
+    std::vector<std::thread> workers; // Worker threads
+    std::vector<std::unique_ptr<LockFreeQueue<std::function<void()>>>> queues; // Queues for each thread
+    std::mutex mutex; // Mutex for condition variable
+    std::condition_variable cv; // Condition variable for synchronization
+    AlignedAtomic stop; // Atomic flag to stop the thread pool
+    AlignedAtomicSize next_queue; // Index to select next queue for task
+    const size_t num_threads; // Number of threads in the pool
+    std::atomic<size_t> active_tasks; // Counter for active tasks
+    static constexpr size_t BATCH_SIZE = 32; // Batch size for notification
+    std::atomic<size_t> enqueued_tasks{0}; // Counter for enqueued tasks
 
-    // Vector of queues (one for each worker thread)
-    std::vector<std::unique_ptr<LockFreeQueue<std::function<void()>>>> queues;
-
-    // Mutex and condition variable for synchronization
-    std::mutex mutex;
-    std::condition_variable cv;
-
-    // Atomic flag to signal threads to stop
-    AlignedAtomic stop;
-
-    // Atomic variable to select the next queue for task enqueueing
-    AlignedAtomicSize next_queue;
-
-    // Number of threads in the pool
-    const size_t num_threads;
-
-    // Atomic counter for tracking active tasks
-    std::atomic<size_t> active_tasks;
-
-    // Private method to select a queue index based on a random strategy
+    // Select a queue to enqueue a new task
     size_t selectQueue() {
         static thread_local std::mt19937 rng(std::random_device{}());
         std::uniform_int_distribution<size_t> dist(0, num_threads - 1);
@@ -198,40 +247,39 @@ private:
     void workerThread(size_t id) {
         std::mt19937 rng(id);
         std::uniform_int_distribution<size_t> dist(0, num_threads - 1);
+        std::exponential_distribution<> exp_dist(1.0);
 
         while (true) {
             std::function<void()> task;
-            bool gotTask = queues[id]->dequeue(task);
+            bool got_task = queues[id]->dequeue(task);
 
-            // Attempt to steal tasks if the current queue is empty
-            if (!gotTask) {
+            if (!got_task) {
                 size_t steal_attempts = adaptiveStealAttempts();
                 for (size_t i = 0; i < steal_attempts; ++i) {
                     size_t victim = dist(rng);
                     if (victim != id && queues[victim]->steal(task)) {
-                        gotTask = true;
+                        got_task = true;
                         break;
                     }
+                    std::this_thread::sleep_for(std::chrono::microseconds(
+                        static_cast<size_t>(exp_dist(rng))));
                 }
             }
 
-            // Execute the task if obtained, otherwise wait
-            if (gotTask) {
+            if (got_task) {
                 ++active_tasks;
                 task();
                 --active_tasks;
             } else {
-                // Wait for a signal to wake up or terminate
                 std::unique_lock<std::mutex> lock(mutex);
-                cv.wait_for(lock, std::chrono::milliseconds(1), [this] { 
-                    return stop.value.load(std::memory_order_acquire) || 
-                           std::any_of(queues.begin(), queues.end(), 
+                cv.wait_for(lock, std::chrono::milliseconds(1), [this] {
+                    return stop.value.load(std::memory_order_acquire) ||
+                           std::any_of(queues.begin(), queues.end(),
                                [](const auto& q) { return !q->isEmpty(); });
                 });
 
-                // Exit the thread if signaled to stop and all queues are empty
-                if (stop.value.load(std::memory_order_acquire) && 
-                    std::all_of(queues.begin(), queues.end(), 
+                if (stop.value.load(std::memory_order_acquire) &&
+                    std::all_of(queues.begin(), queues.end(),
                         [](const auto& q) { return q->isEmpty(); })) {
                     return;
                 }
@@ -239,14 +287,14 @@ private:
         }
     }
 
-    // Method to determine the number of steal attempts based on the number of threads
+    // Calculate adaptive steal attempts based on number of threads
     size_t adaptiveStealAttempts() {
         if (num_threads <= 2) return 1;
         return std::min(num_threads / 2, static_cast<size_t>(64));
     }
 
 public:
-    // Constructor to initialize the thread pool with a specified number of threads
+    // Constructor to initialize the thread pool
     explicit ThreadPool(size_t numThreads)
         : stop(false), next_queue(0), num_threads(numThreads), active_tasks(0) {
         queues.reserve(numThreads);
@@ -258,7 +306,7 @@ public:
         }
     }
 
-    // Enqueue method to submit a task to the thread pool
+    // Enqueue a task into the pool and return a future for its result
     template <class F, class... Args>
     auto enqueue(F&& f, Args&&... args) -> std::future<decltype(f(args...))> {
         using return_type = decltype(f(args...));
@@ -270,11 +318,14 @@ public:
         size_t index = selectQueue();
         queues[index]->enqueue([task]() { (*task)(); });
 
-        cv.notify_one();
+        if (++enqueued_tasks % BATCH_SIZE == 0) {
+            cv.notify_all();
+        }
+
         return res;
     }
 
-    // Destructor to stop all threads and clean up resources
+    // Destructor to clean up the threads and queues
     ~ThreadPool() {
         stop.value.store(true, std::memory_order_release);
         cv.notify_all();
@@ -284,7 +335,7 @@ public:
         }
     }
 
-    // Method to wait until all tasks are completed
+    // Wait for all tasks to complete
     void waitAllTasksCompleted() {
         std::unique_lock<std::mutex> lock(mutex);
         cv.wait(lock, [this] {
