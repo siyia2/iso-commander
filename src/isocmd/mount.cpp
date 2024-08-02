@@ -24,23 +24,24 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::st
     ThreadPool pool(numThreads);
     std::thread progressThread(displayProgressBar, std::ref(completedIsos), totalIsos, std::ref(isComplete));
     std::vector<std::future<void>> futures;
-    futures.reserve(numThreads);
+    futures.reserve((totalIsos + chunkSize - 1) / chunkSize);  // Reserve enough space for all future tasks
+
     for (size_t i = 0; i < totalIsos; i += chunkSize) {
         size_t end = std::min(i + chunkSize, totalIsos);
-        futures.push_back(pool.enqueue([&, i, end]() {
+        futures.emplace_back(pool.enqueue([&, i, end]() {
             // Optimization: Replace loop with efficient vector construction
             std::vector<std::string> chunkFiles(isoFiles.begin() + i, isoFiles.begin() + end);
             mountIsoFiles(chunkFiles, mountedFiles, skippedMessages, mountedFails);
             completedIsos.fetch_add(chunkFiles.size(), std::memory_order_relaxed);
         }));
     }
+
     for (auto& future : futures) {
         future.wait();
     }
-    isComplete.store(true);
-    if (progressThread.joinable()) {
-        progressThread.join();
-    }
+
+    isComplete.store(true, std::memory_order_release);
+    progressThread.join();
 }
 
 
@@ -520,19 +521,19 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     activeTaskCount.store((indicesToProcess.size() + chunkSize - 1) / chunkSize, std::memory_order_relaxed);
 
     for (size_t i = 0; i < indicesToProcess.size(); i += chunkSize) {
-		size_t end = std::min(i + chunkSize, indicesToProcess.size());
-		pool.enqueue([&, i, end]() {
-			std::vector<std::string> filesToMount;
-			filesToMount.reserve(end - i);
-			std::transform(
-				indicesToProcess.begin() + i,
-				indicesToProcess.begin() + end,
-				std::back_inserter(filesToMount),
-				[&isoFiles](size_t index) { return isoFiles[index - 1]; }
-			);
-			processTask(filesToMount);
-		});
-	}
+        size_t end = std::min(i + chunkSize, indicesToProcess.size());
+        pool.enqueue([&, i, end]() {
+            std::vector<std::string> filesToMount;
+            filesToMount.reserve(end - i);
+            std::transform(
+                indicesToProcess.begin() + i,
+                indicesToProcess.begin() + end,
+                std::back_inserter(filesToMount),
+                [&isoFiles](size_t index) { return isoFiles[index - 1]; }
+            );
+            processTask(filesToMount);
+        });
+    }
 
     if (!indicesToProcess.empty()) {
         size_t totalTasksValue = totalTasks.load();
