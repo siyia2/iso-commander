@@ -173,8 +173,8 @@ void submenu1() {
         std::cout << "\033[1;32m|4. Move                  |\n";
         std::cout << "\033[1;32m+-------------------------+\n";
         std::cout << "\033[1;32m|5. Copy                  |\n";
-        std::cout << "\033[1;32m+-------------------------+\n";
-        std::cout << " ";
+        std::cout << "\033[1;32m+-------------------------+";
+        std::cout << "\n";
         char* rawInput = readline("\n\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
 
         // Use std::unique_ptr to manage memory for input
@@ -235,8 +235,8 @@ void submenu2() {
         std::cout << "\033[1;32m|1. CCD2ISO++             |\n";
         std::cout << "\033[1;32m+-------------------------+\n";
         std::cout << "\033[1;32m|2. MDF2ISO++             |\n";
-        std::cout << "\033[1;32m+-------------------------+\n";
-        std::cout << " ";
+        std::cout << "\033[1;32m+-------------------------+";
+        std::cout << "\n";
         char* rawInput = readline("\n\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
 
         // Use std::unique_ptr to manage memory for input
@@ -284,8 +284,8 @@ void printMenu() {
     std::cout << "\033[1;32m|3. ImportISO             |\n";
     std::cout << "\033[1;32m+-------------------------+\n";
     std::cout << "\033[1;32m|4. Exit                  |\n";
-    std::cout << "\033[1;32m+-------------------------+\n";
-    std::cout << " ";
+    std::cout << "\033[1;32m+-------------------------+";
+    std::cout << "\n";
 }
 
 
