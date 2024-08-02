@@ -403,7 +403,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     std::set<std::pair<int, int>> processedRanges;
 
     std::vector<int> indicesToAdd;
-    indicesToAdd.reserve(1000);  // Use a reasonable reserve based on expected size
+    indicesToAdd.reserve(100);  // Use a reasonable reserve based on expected size
 
     std::atomic<size_t> totalTasks(0);
     std::atomic<size_t> completedTasks(0);
