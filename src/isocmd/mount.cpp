@@ -394,7 +394,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
 void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages) {
     std::istringstream iss(input);
     std::vector<int> indicesToProcess;
-    indicesToProcess.reserve(isoFiles.size());  // Reserve maximum possible size
+    indicesToProcess.reserve(100); // Reserve a reasonable size for indices
 
     std::atomic<bool> invalidInput(false);
     std::set<std::string> processedRanges;
