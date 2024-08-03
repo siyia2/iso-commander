@@ -471,7 +471,6 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     size_t totalTasks = indicesToProcess.size();
     size_t chunkSize = std::max(size_t(1), std::min(size_t(50), (totalTasks + numThreads - 1) / numThreads));
 
-    std::mutex filesMutex;
     std::atomic<size_t> activeTaskCount(0);
     std::condition_variable taskCompletionCV;
     std::mutex taskCompletionMutex;
@@ -489,12 +488,9 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
             std::set<std::string> localMounted, localSkipped, localFails;
             mountIsoFiles(filesToMount, localMounted, localSkipped, localFails);
             
-            {
-                std::lock_guard<std::mutex> lock(filesMutex);
-                mountedFiles.insert(localMounted.begin(), localMounted.end());
-                skippedMessages.insert(localSkipped.begin(), localSkipped.end());
-                mountedFails.insert(localFails.begin(), localFails.end());
-            }
+            mountedFiles.insert(localMounted.begin(), localMounted.end());
+            skippedMessages.insert(localSkipped.begin(), localSkipped.end());
+            mountedFails.insert(localFails.begin(), localFails.end());
 
             completedTasks.fetch_add(end - i, std::memory_order_relaxed);
 
