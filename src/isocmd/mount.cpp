@@ -285,7 +285,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
             hashValue /= 36;
         }
 
-        std::string uniqueId = isoFileName + "\033[38;5;245m~" + shortHash + "\033[1;94m";
+        std::string uniqueId = isoFileName + "\033[38;5;245m~" + shortHash + "\033[0;1m";
         std::string mountPoint = "/mnt/iso_" + uniqueId;
 
         auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
@@ -367,7 +367,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
         if (mountSuccess) {
             std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m"
                                         + "\033[1m mnt@: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename
-                                        + "'\033[0;1m.";
+                                        + "\033[1;94m'\033[0;1m.";
             if (successfulFsType != "auto") {
                 mountedFileInfo += " {" + successfulFsType + "}";
             }
