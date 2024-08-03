@@ -306,7 +306,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
             std::stringstream skippedMessage;
             skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename
                            << "'\033[1;93m already mnt@: \033[1;94m'" << mountisoDirectory
-                           << "/" << mountisoFilename << "'\033[1;93m.\033[0m";
+                           << "/" << mountisoFilename << "\033[1;94m'\033[1;93m.\033[0m";
             {
                 std::lock_guard<std::mutex> lowLock(Mutex4Low);
                 skippedMessages.insert(skippedMessage.str());
