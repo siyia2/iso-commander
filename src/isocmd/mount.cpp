@@ -392,14 +392,16 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
 
 // Function to process input and mount ISO files asynchronously
 void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages) {
-    std::istringstream iss(input);
-    std::vector<int> indicesToProcess;
-    indicesToProcess.reserve(100); // Reserve a reasonable size for indices
+    
+    std::istringstream iss(input); // Create an input stream from the input string
+    std::vector<int> indicesToProcess; // To store indices parsed from the input
+    indicesToProcess.reserve(100); // Reserve space for indices to improve performance
 
-    std::atomic<bool> invalidInput(false);
-    std::set<std::string> processedRanges;
-    std::mutex errorMutex;
+    std::atomic<bool> invalidInput(false); // Flag to track if there's any invalid input
+    std::set<std::string> processedRanges; // To keep track of processed ranges
+    std::mutex errorMutex; // Mutex to protect access to the error messages
 
+    // Lambda function to add an error message in a thread-safe manner
     auto addError = [&](const std::string& error) {
         std::lock_guard<std::mutex> lock(errorMutex);
         uniqueErrorMessages.insert(error);
@@ -407,16 +409,17 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     };
 
     std::string token;
-    while (iss >> token) {
-        if (token == "/") break;
+    while (iss >> token) { // Read tokens from the input stream
+        if (token == "/") break; // Stop processing if '/' is encountered
 
         if (token[0] == '0') {
             addError("\033[1;91mInvalid index: '0'.\033[0;1m");
             continue;
         }
 
-        size_t dashPos = token.find('-');
+        size_t dashPos = token.find('-'); // Check if token contains a range (start-end)
         if (dashPos != std::string::npos) {
+            // Check if the token is a valid range
             if (dashPos == 0 || dashPos == token.size() - 1 || 
                 !std::all_of(token.begin(), token.begin() + dashPos, ::isdigit) ||
                 !std::all_of(token.begin() + dashPos + 1, token.end(), ::isdigit)) {
@@ -426,29 +429,31 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
 
             int start, end;
             try {
-                start = std::stoi(token.substr(0, dashPos));
-                end = std::stoi(token.substr(dashPos + 1));
+                start = std::stoi(token.substr(0, dashPos)); // Extract start index
+                end = std::stoi(token.substr(dashPos + 1)); // Extract end index
             } catch (const std::exception&) {
                 addError("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
                 continue;
             }
 
+            // Validate range boundaries
             if (start < 1 || static_cast<size_t>(start) > isoFiles.size() ||
                 end < 1 || static_cast<size_t>(end) > isoFiles.size()) {
                 addError("\033[1;91mInvalid range: '" + token + "'.\033[0;1m");
                 continue;
             }
 
+            // If range is valid and not processed before, add indices to process
             if (processedRanges.insert(token).second) {
-                int step = (start <= end) ? 1 : -1;
+                int step = (start <= end) ? 1 : -1; // Determine step direction
                 for (int i = start; (step > 0) ? (i <= end) : (i >= end); i += step) {
-                    indicesToProcess.push_back(i);
+                    indicesToProcess.push_back(i); // Add each index in the range
                 }
             }
         } else if (std::all_of(token.begin(), token.end(), ::isdigit)) {
-            int num = std::stoi(token);
+            int num = std::stoi(token); // Parse individual index
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size()) {
-                indicesToProcess.push_back(num);
+                indicesToProcess.push_back(num); // Add valid index to process
             } else {
                 addError("\033[1;91mInvalid index: '" + token + "'.\033[0;1m");
             }
@@ -459,47 +464,56 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
 
     if (indicesToProcess.empty()) {
         addError("\033[1;91mNo valid input provided for mount.\033[0;1m");
-        return;
+        return; // Exit if no valid indices are provided
     }
 
-    std::atomic<size_t> completedTasks(0);
-    std::atomic<bool> isProcessingComplete(false);
+    // Remove duplicate indices and sort them
+    std::set<int> uniqueIndices(indicesToProcess.begin(), indicesToProcess.end());
+    indicesToProcess.assign(uniqueIndices.begin(), uniqueIndices.end());
+
+    std::atomic<size_t> completedTasks(0); // Number of completed tasks
+    std::atomic<bool> isProcessingComplete(false); // Flag to indicate processing completion
 
     unsigned int numThreads = std::min(static_cast<unsigned int>(indicesToProcess.size()), static_cast<unsigned int>(maxThreads));
-    ThreadPool pool(numThreads);
+    ThreadPool pool(numThreads); // Create a thread pool with the determined number of threads
 
     size_t totalTasks = indicesToProcess.size();
-    size_t chunkSize = std::max(size_t(1), std::min(size_t(50), (totalTasks + numThreads - 1) / numThreads));
+    size_t chunkSize = std::max(size_t(1), std::min(size_t(50), (totalTasks + numThreads - 1) / numThreads)); // Determine chunk size for tasks
 
-    std::atomic<size_t> activeTaskCount(0);
-    std::condition_variable taskCompletionCV;
-    std::mutex taskCompletionMutex;
+    std::atomic<size_t> activeTaskCount(0); // Track the number of active tasks
+    std::condition_variable taskCompletionCV; // Condition variable to notify when all tasks are done
+    std::mutex taskCompletionMutex; // Mutex to protect the condition variable
 
     for (size_t i = 0; i < totalTasks; i += chunkSize) {
-        size_t end = std::min(i + chunkSize, totalTasks);
-        activeTaskCount.fetch_add(1, std::memory_order_relaxed);
+        size_t end = std::min(i + chunkSize, totalTasks); // Determine the end index for this chunk
+        activeTaskCount.fetch_add(1, std::memory_order_relaxed); // Increment active task count
+
+        // Enqueue a task to the thread pool
         pool.enqueue([&, i, end]() {
             std::vector<std::string> filesToMount;
             filesToMount.reserve(end - i);
             for (size_t j = i; j < end; ++j) {
-                filesToMount.push_back(isoFiles[indicesToProcess[j] - 1]);
+                filesToMount.push_back(isoFiles[indicesToProcess[j] - 1]); // Collect files for this chunk
             }
             
-            std::set<std::string> localMounted, localSkipped, localFails;
-            mountIsoFiles(filesToMount, localMounted, localSkipped, localFails);
+            std::set<std::string> localMounted, localSkipped, localFails; // Local sets to collect results
+            mountIsoFiles(filesToMount, localMounted, localSkipped, localFails); // Mount ISO files
             
+            // Update global sets with results from this chunk
             mountedFiles.insert(localMounted.begin(), localMounted.end());
             skippedMessages.insert(localSkipped.begin(), localSkipped.end());
             mountedFails.insert(localFails.begin(), localFails.end());
 
-            completedTasks.fetch_add(end - i, std::memory_order_relaxed);
+            completedTasks.fetch_add(end - i, std::memory_order_relaxed); // Update completed tasks count
 
+            // Notify if all tasks are done
             if (activeTaskCount.fetch_sub(1, std::memory_order_release) == 1) {
                 taskCompletionCV.notify_one();
             }
         });
     }
 
+    // Create a thread to display progress
     std::thread progressThread(displayProgressBar, std::ref(completedTasks), totalTasks, std::ref(isProcessingComplete));
 
     // Wait for all tasks to complete
@@ -508,6 +522,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
         taskCompletionCV.wait(lock, [&]() { return activeTaskCount.load(std::memory_order_acquire) == 0; });
     }
 
-    isProcessingComplete.store(true, std::memory_order_release);
-    progressThread.join();
+    isProcessingComplete.store(true, std::memory_order_release); // Set processing completion flag
+    progressThread.join(); // Wait for the progress thread to finish
 }
+
