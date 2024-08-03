@@ -483,7 +483,6 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     std::atomic<size_t> activeTaskCount(0); // Track the number of active tasks
     std::condition_variable taskCompletionCV; // Condition variable to notify when all tasks are done
     std::mutex taskCompletionMutex; // Mutex to protect the condition variable
-    std::mutex globalSetMutex; // Mutex for thread-safe access to global sets
 
     for (size_t i = 0; i < totalTasks; i += chunkSize) {
         size_t end = std::min(i + chunkSize, totalTasks); // Determine the end index for this chunk
@@ -497,17 +496,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                 filesToMount.push_back(isoFiles[indicesToProcess[j] - 1]); // Collect files for this chunk
             }
             
-            std::set<std::string> localMounted, localSkipped, localFails; // Local sets to collect results
-            mountIsoFiles(filesToMount, localMounted, localSkipped, localFails); // Mount ISO files
-            
-            // Update global sets with results from this chunk
-            {
-                std::lock_guard<std::mutex> lock(globalSetMutex); // Lock the mutex before updating global sets
-                // Merge local results into the global sets
-                mountedFiles.insert(localMounted.begin(), localMounted.end());
-                skippedMessages.insert(localSkipped.begin(), localSkipped.end());
-                mountedFails.insert(localFails.begin(), localFails.end());
-            }
+            mountIsoFiles(filesToMount, mountedFiles, skippedMessages, mountedFails); // Mount ISO files            
 
             completedTasks.fetch_add(end - i, std::memory_order_relaxed); // Update completed tasks count
 
