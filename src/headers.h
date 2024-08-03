@@ -33,6 +33,7 @@
 #include <sys/file.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <thread>
 #include <vector>
 #include <unistd.h>
