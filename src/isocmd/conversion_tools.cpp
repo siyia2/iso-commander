@@ -888,9 +888,9 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
     }
 }
 
+
 // MDF2ISO
 
-// Function to convert mdf files to iso
 bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath) {
     std::ifstream mdfFile(mdfPath, std::ios::binary);
     std::ofstream isoFile(isoPath, std::ios::binary);
@@ -992,6 +992,7 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath) {
     return true;
 }
 
+
 // CCD2ISO
 
 const size_t DATA_SIZE = 2048;
@@ -1028,12 +1029,10 @@ struct CcdSector {
     } content;
 } __attribute__((packed));
 
-// Function to convert bin/img files to iso
 bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
     std::ifstream ccdFile(ccdPath, std::ios::binary);
     std::ofstream isoFile(isoPath, std::ios::binary);
     if (!ccdFile.is_open() || !isoFile.is_open()) {
-        // std::cerr << "Error opening files." << std::endl;
         return false;
     }
 
@@ -1049,8 +1048,6 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
         while (ccdFile.read(reinterpret_cast<char*>(&sector), sizeof(CcdSector))) {
             bytesRead = static_cast<size_t>(ccdFile.gcount());
             if (bytesRead != sizeof(CcdSector)) {
-              //  std::cerr << "Error at sector " << sectNum << ". Sector size mismatch: expected "
-                //          << sizeof(CcdSector) << ", read " << bytesRead << std::endl;
                 ccdFile.close();
                 isoFile.close();
                 return false;
@@ -1070,13 +1067,8 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
                     break;
                 case 0xe2:
                     sessionCount++;
-            //        std::cout << "Found session marker for session " << sessionCount << ".\n";
-                    // Continue processing instead of returning
                     break;
                 default:
-      //              std::cerr << "\nUnrecognized sector mode ("
-        //                      << std::hex << static_cast<int>(sector.sectheader.header.mode)
-          //                    << ") at sector " << std::dec << sectNum << "!\n";
                     ccdFile.close();
                     isoFile.close();
                     return false;
@@ -1089,7 +1081,6 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
             isoFile.write(buffer.data(), static_cast<std::streamsize>(bufferPos));
         }
     } catch (const std::exception& e) {
-    //    std::cerr << "Exception occurred: " << e.what() << std::endl;
         ccdFile.close();
         isoFile.close();
         return false;
@@ -1097,12 +1088,6 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
 
     ccdFile.close();
     isoFile.close();
-
-    if (sessionCount > 0) {
-  //      std::cout << "Successfully combined " << sessionCount << " sessions into one .iso file.\n";
-    } else {
-//        std::cout << "Converted single-session CCD to ISO.\n";
-    }
 
     return true;
 }
