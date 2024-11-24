@@ -302,10 +302,6 @@ void unmountISOs() {
 				std::string filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
 				std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
 				std::string terms(searchQuery.get());
-				
-				if (searchQuery && searchQuery.get()[0] != '\0') {
-					add_history(searchQuery.get());
-				}
 
 				if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
 					historyPattern = false;
@@ -326,7 +322,7 @@ void unmountISOs() {
 				}
 				std::string inputSearch(searchQuery.get());
 				std::cout << "\033[1m\n";
-				if (strcmp(searchQuery.get(), "/") != 0) {
+				if (searchQuery && searchQuery.get()[0] != '\0' && strcmp(searchQuery.get(), "/") != 0) {
 					add_history(searchQuery.get());
 					saveHistory();
 				}
