@@ -210,13 +210,19 @@ void unmountISOs() {
     std::vector<std::string> filteredIsoDirs;
     filteredIsoDirs.reserve(100);
 
-    // Load initial directory listing
-    for (const auto& entry : std::filesystem::directory_iterator(isoPath)) {
-        if (entry.is_directory() && entry.path().filename().string().find("iso_") == 0) {
-            isoDirs.push_back(entry.path().string());
+    // Function to refresh ISO directory listing
+    auto refreshIsoDirs = [&]() {
+        isoDirs.clear();
+        for (const auto& entry : std::filesystem::directory_iterator(isoPath)) {
+            if (entry.is_directory() && entry.path().filename().string().find("iso_") == 0) {
+                isoDirs.push_back(entry.path().string());
+            }
         }
-    }
-    sortFilesCaseInsensitive(isoDirs);
+        sortFilesCaseInsensitive(isoDirs);
+    };
+
+    // Initial directory loading
+    refreshIsoDirs();
 
     while (true) {
         historyPattern = false;
@@ -432,19 +438,15 @@ void unmountISOs() {
                 std::vector<std::future<void>> futuresUmount;
                 futuresUmount.reserve(numThreads);
 
-                size_t maxBatchSize = 100;  // Maximum number of items per batch
-
-                // Calculate batch size ensuring it's at most maxBatchSize
+                size_t maxBatchSize = 100;
                 size_t batchSize = std::min(maxBatchSize, (selectedIsoDirs.size() + numThreads - 1) / numThreads);
-
-                // Ensure batchSize is at least 1
                 batchSize = std::max(batchSize, static_cast<size_t>(1));
 
                 std::vector<std::vector<std::string>> batches;
                 for (size_t i = 0; i < selectedIsoDirs.size(); i += batchSize) {
                     batches.emplace_back(selectedIsoDirs.begin() + i,
-                                         std::min(selectedIsoDirs.begin() + i + batchSize,
-                                         selectedIsoDirs.end()));
+                                       std::min(selectedIsoDirs.begin() + i + batchSize,
+                                       selectedIsoDirs.end()));
                 }
 
                 std::atomic<size_t> completedIsos(0);
@@ -469,7 +471,19 @@ void unmountISOs() {
                 isComplete.store(true, std::memory_order_release);
                 progressThread.join();
 
-				filteredIsoDirs.clear();
+                // Refresh both isoDirs and filteredIsoDirs after unmounting
+                refreshIsoDirs();
+                
+                if (isFiltered) {
+                    // Reapply the filter to the updated isoDirs
+                    std::vector<std::string> newFilteredIsoDirs;
+                    for (const auto& dir : isoDirs) {
+                        if (std::find(filteredIsoDirs.begin(), filteredIsoDirs.end(), dir) != filteredIsoDirs.end()) {
+                            newFilteredIsoDirs.push_back(dir);
+                        }
+                    }
+                    filteredIsoDirs = std::move(newFilteredIsoDirs);
+                }
 
                 if (verbose) {
                     printUnmountedAndErrors(unmountedFiles, unmountedErrors, errorMessages);
@@ -481,7 +495,7 @@ void unmountISOs() {
                     errorMessages.clear();
                 }
 
-                isFiltered = false;
+                // Don't reset isFiltered flag here - maintain the filtered state
             } else {
                 clearScrollBuffer();
                 std::cerr << "\n\033[1;91mNo valid input provided for umount.\n";
