@@ -154,13 +154,12 @@ size_t boyerMooreSearchMountPoints(const std::string& haystack, const std::strin
 
 
 // Function to filter mounted isoDirs using Boyer-Moore search
-void filterMountPoints(const std::vector<std::string>& isoDirs, std::vector<std::string>& filterPatterns, std::vector<std::string>& filteredIsoDirs, size_t start, size_t end) {
-std::shared_mutex filterMutex;  // Shared mutex for thread-safe access to filteredFiles
-    std::vector<std::string> localFiltered;
+void filterMountPoints(const std::vector<std::string>& isoDirs, const std::vector<std::string>& filterPatterns, std::vector<std::string>& filteredIsoDirs, std::shared_mutex& filterMutex, size_t start, size_t end) {
+    std::vector<std::string> localFiltered; // Local buffer for matches
     for (size_t i = start; i < end; ++i) {
         const std::string& dir = isoDirs[i];
         std::string dirLower = dir;
-        toLowerInPlace(dirLower);
+        toLowerInPlace(dirLower); // Convert directory name to lowercase
         bool matchFound = false;
         for (const std::string& pattern : filterPatterns) {
             if (boyerMooreSearchMountPoints(dirLower, pattern) != std::string::npos) {
@@ -172,6 +171,8 @@ std::shared_mutex filterMutex;  // Shared mutex for thread-safe access to filter
             localFiltered.push_back(dir);
         }
     }
+    // Safely insert results into shared vector
     std::unique_lock<std::shared_mutex> lock(filterMutex);
     filteredIsoDirs.insert(filteredIsoDirs.end(), localFiltered.begin(), localFiltered.end());
 }
+
