@@ -483,6 +483,11 @@ void unmountISOs() {
                         }
                     }
                     filteredIsoDirs = std::move(newFilteredIsoDirs);
+                    
+                    // If all filtered ISOs were unmounted, switch back to showing all ISOs
+                    if (filteredIsoDirs.empty()) {
+                        isFiltered = false;
+                    }
                 }
 
                 if (verbose) {
