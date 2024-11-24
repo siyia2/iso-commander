@@ -107,8 +107,6 @@ void select_and_operate_files_by_number(const std::string& operation) {
             !std::equal(globalIsoFileList.begin(), globalIsoFileList.end(), isoFiles.begin())) {
             sortFilesCaseInsensitive(isoFiles);
             globalIsoFileList = isoFiles;
-            // Reset filtered state if global list changes
-            isFiltered = false;
         } else {
             isoFiles = globalIsoFileList;
         }
@@ -117,24 +115,25 @@ void select_and_operate_files_by_number(const std::string& operation) {
         operationErrors.clear();
         uniqueErrorMessages.clear();
 
-        if (needsClrScrn) {
-            printIsoFileList(isFiltered ? filteredFiles : globalIsoFileList);
-            std::cout << "\n\n\n";
-        }
 
-        // Move the cursor up 3 lines and clear them
+		if (needsClrScrn) {
+			printIsoFileList(isFiltered ? filteredFiles : globalIsoFileList);
+			std::cout << "\n\n\n";
+		}
+
+		// Move the cursor up 3 lines and clear them
         std::cout << "\033[1A\033[K";
 
-        std::string prompt;
-        if (isFiltered) {
-            prompt = "\001\033[1;96m\002Filtered \001\033[1;92m\002ISO"
+		std::string prompt;
+		if (isFiltered) {
+			prompt = "\001\033[1;96m\002Filtered \001\033[1;92m\002ISO"
             "\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation
             + "\001\033[1;94m\002 (e.g., 1-3,1 5), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
         } else {
-            prompt = "\001\033[1;92m\002ISO"
+			prompt = "\001\033[1;92m\002\002ISO"
             "\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation
             + "\001\033[1;94m\002 (e.g., 1-3,1 5), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
-        }
+		}
 
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         std::string inputString(input.get());
@@ -167,7 +166,11 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
                 if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
                     historyPattern = false;
-                    needsClrScrn = !isFiltered;
+                    if (isFiltered) {
+                        needsClrScrn = true;
+                    } else {
+                        needsClrScrn = false;
+                    }
                     clear_history();
                     break;
                 }
@@ -186,10 +189,10 @@ void select_and_operate_files_by_number(const std::string& operation) {
                 const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : globalIsoFileList;
                 auto newFilteredFiles = filterFiles(sourceList, inputSearch);
 
-                if (newFilteredFiles.size() == sourceList.size()) {
-                    // No change in list size means no effective filtering
-                    break;
-                }
+                if (newFilteredFiles.size() == globalIsoFileList.size()) {
+					isFiltered = false;
+					break;
+				}
 
                 if (!newFilteredFiles.empty()) {
                     filteredFiles = std::move(newFilteredFiles);
@@ -201,11 +204,11 @@ void select_and_operate_files_by_number(const std::string& operation) {
             }
         } else {
             std::vector<std::string>& currentFiles = isFiltered ? filteredFiles : globalIsoFileList;
-            needsClrScrn = true;
+            needsClrScrn =true;
             processOperationInput(inputString, currentFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
 
             if (verbose) {
-                needsClrScrn = true;
+				needsClrScrn = true;
                 verbose_cp_mv_rm(operationIsos, operationErrors, uniqueErrorMessages);
             }
 
@@ -213,7 +216,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
                 historyPattern = false;
                 clear_history();
                 isFiltered = false;
-                needsClrScrn = true;
+                needsClrScrn =true;
             }
 
             if (currentFiles.empty()) {
