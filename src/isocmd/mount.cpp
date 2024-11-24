@@ -143,6 +143,7 @@ void select_and_mount_files_by_number() {
 				std::vector<std::string>& currentFiles = isFiltered ? filteredFiles : globalIsoFileList;
 				// Apply the filter on the current list
 				auto newFilteredFiles = filterFiles(currentFiles, inputSearch);
+				sortFilesCaseInsensitive(newFilteredFiles);
 
                 if (newFilteredFiles.size() == globalIsoFileList.size()) {
 					isFiltered = false;

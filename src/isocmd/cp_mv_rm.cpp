@@ -188,6 +188,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
                 // Filter based on current active list instead of always using global list
                 const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : globalIsoFileList;
                 auto newFilteredFiles = filterFiles(sourceList, inputSearch);
+                sortFilesCaseInsensitive(newFilteredFiles);
 
                 if (newFilteredFiles.size() == globalIsoFileList.size()) {
 					isFiltered = false;
