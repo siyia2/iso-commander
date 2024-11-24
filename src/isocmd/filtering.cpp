@@ -23,47 +23,40 @@ void toLowerInPlace(std::string& str) {
 
 // Boyer-Moore string search implementation for files
 std::vector<size_t> boyerMooreSearch(const std::string& pattern, const std::string& text) {
-    // Helper lambda to convert a string to lowercase
-    auto toLower = [](const std::string& str) {
-        std::string lowerStr = str;
-        toLowerInPlace(lowerStr);
-        return lowerStr;
-    };
+    auto toLower = [](char c) { return std::tolower(c); };
 
-    std::string lowerPattern = toLower(pattern);
-    std::string lowerText = toLower(text);
+    size_t patternLen = pattern.length();
+    size_t textLen = text.length();
 
-    std::vector<size_t> shifts(256, lowerPattern.length());
+    if (patternLen == 0 || textLen == 0 || patternLen > textLen) return {};
+
     std::vector<size_t> matches;
 
-    for (size_t i = 0; i < lowerPattern.length() - 1; i++) {
-        shifts[static_cast<unsigned char>(lowerPattern[i])] = lowerPattern.length() - i - 1;
+    if (patternLen == 1) {
+        // Single-character pattern optimization
+        char singleChar = toLower(pattern[0]);
+        for (size_t i = 0; i < textLen; ++i) {
+            if (toLower(text[i]) == singleChar) {
+                matches.push_back(i);
+            }
+        }
+        return matches;
     }
 
-    size_t patternLen = lowerPattern.length();
-    size_t textLen = lowerText.length();
+    std::vector<size_t> shifts(256, patternLen);
+    for (size_t i = 0; i < patternLen - 1; ++i) {
+        shifts[static_cast<unsigned char>(toLower(pattern[i]))] = patternLen - i - 1;
+    }
 
-    size_t i = 0; // Start at the beginning of the text
-
+    size_t i = 0;
     while (i <= textLen - patternLen) {
         size_t skip = 0;
-        
-        // Match pattern from end to start
-        while (skip < patternLen && lowerPattern[patternLen - 1 - skip] == lowerText[i + patternLen - 1 - skip]) {
+        while (skip < patternLen && toLower(pattern[patternLen - 1 - skip]) == toLower(text[i + patternLen - 1 - skip])) {
             skip++;
         }
-        
-        // If the whole pattern was found, record the match
-        if (skip == patternLen) {
-            matches.push_back(i);
-        }
+        if (skip == patternLen) matches.push_back(i);
 
-        // Move the pattern based on the last character of the current window in the text
-        if (i + patternLen < textLen) {
-            i += shifts[static_cast<unsigned char>(lowerText[i + patternLen - 1])];
-        } else {
-            break;
-        }
+        i += (i + patternLen < textLen) ? shifts[static_cast<unsigned char>(toLower(text[i + patternLen - 1]))] : 1;
     }
 
     return matches;
