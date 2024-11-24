@@ -362,11 +362,8 @@ void unmountISOs() {
 					isFiltered = false;
 					break;
 				}
-				if (lastSuccessfulFilteredIsoDirs == filteredIsoDirs) {
-					continue;
-				}
 
-				else if (filteredIsoDirs.empty()) {
+				else if (filteredIsoDirs.empty() || lastSuccessfulFilteredIsoDirs == filteredIsoDirs) {
 					std::cout << "\033[1A\033[K";
 					// Don't change filteredIsoDirs here, just continue the loop
 					continue;
