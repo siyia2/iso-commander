@@ -357,7 +357,8 @@ void unmountISOs() {
                     size_t start = i * baseDirsPerThread + std::min(i, remainder);
                     size_t end = start + baseDirsPerThread + (i < remainder ? 1 : 0);
                     futuresFilter.push_back(std::async(std::launch::async, [&, start, end] {
-                        filterMountPoints(baseSearchList, filterPatterns, filteredIsoDirs, start, end);
+                        std::shared_mutex filterMutex;
+						filterMountPoints(baseSearchList, filterPatterns, filteredIsoDirs, filterMutex, start, end);
                     }));
                 }
 
