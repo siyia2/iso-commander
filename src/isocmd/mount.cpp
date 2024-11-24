@@ -71,6 +71,8 @@ void select_and_mount_files_by_number() {
             !std::equal(globalIsoFileList.begin(), globalIsoFileList.end(), isoFiles.begin())) {
             sortFilesCaseInsensitive(isoFiles);
             globalIsoFileList = isoFiles;
+            // Reset filtered state if global list changes
+            isFiltered = false;
         } else {
             isoFiles = globalIsoFileList;
         }
@@ -81,18 +83,18 @@ void select_and_mount_files_by_number() {
         uniqueErrorMessages.clear();
 
         if (needsClrScrn) {
-			printIsoFileList(isFiltered ? filteredFiles : globalIsoFileList);
-			std::cout << "\n\n\n";
-		}
-		// Move the cursor up 3 lines and clear them
+            printIsoFileList(isFiltered ? filteredFiles : globalIsoFileList);
+            std::cout << "\n\n\n";
+        }
+        // Move the cursor up 3 lines and clear them
         std::cout << "\033[1A\033[K";
 
         std::string prompt;
-		if (isFiltered) {
-			prompt = "\001\033[1;96m\002Filtered \001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
-		} else {
-			prompt = "\001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
-		}
+        if (isFiltered) {
+            prompt = "\001\033[1;96m\002Filtered \001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+        } else {
+            prompt = "\001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+        }
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         std::string inputString(input.get());
 
@@ -123,11 +125,7 @@ void select_and_mount_files_by_number() {
                 if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
                     historyPattern = false;
                     clear_history();
-                    if (isFiltered) {
-                        needsClrScrn = true;
-                    } else {
-                        needsClrScrn = false;
-                    }
+                    needsClrScrn = !isFiltered;
                     break;
                 }
 
@@ -140,46 +138,44 @@ void select_and_mount_files_by_number() {
                 historyPattern = false;
                 clear_history();
 
+                // Filter based on current active list instead of always using global list
+                const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : globalIsoFileList;
+                auto newFilteredFiles = filterFiles(sourceList, inputSearch);
 
-
-                auto newFilteredFiles = filterFiles(globalIsoFileList, inputSearch);
-
-                if (newFilteredFiles.size() == globalIsoFileList.size()) {
-					isFiltered = false;
-					break;
-				}
+                if (newFilteredFiles.size() == sourceList.size()) {
+                    // No change in list size means no effective filtering
+                    break;
+                }
 
                 if (!newFilteredFiles.empty()) {
-					needsClrScrn = true;
+                    needsClrScrn = true;
                     filteredFiles = std::move(newFilteredFiles);
                     isFiltered = true;
                     break;
                 }
-
             }
-
         } else {
             std::vector<std::string>& currentFiles = isFiltered ? filteredFiles : globalIsoFileList;
             if (inputString == "00") {
-				clearScrollBuffer();
-				std::cout << "\033[1m\n";
-				needsClrScrn = true;
+                clearScrollBuffer();
+                std::cout << "\033[1m\n";
+                needsClrScrn = true;
                 mountAllIsoFiles(currentFiles, mountedFiles, skippedMessages, mountedFails);
             } else {
-				clearScrollBuffer();
-				needsClrScrn = true;
-				std::cout << "\033[1m\n";
+                clearScrollBuffer();
+                needsClrScrn = true;
+                std::cout << "\033[1m\n";
                 processAndMountIsoFiles(inputString, currentFiles, mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
             }
 
             if (!uniqueErrorMessages.empty() && mountedFiles.empty() && skippedMessages.empty() && mountedFails.empty()) {
-				clearScrollBuffer();
-				needsClrScrn = true;
+                clearScrollBuffer();
+                needsClrScrn = true;
                 std::cout << "\n\033[1;91mNo valid input provided for mount\033[0;1m\n\n\033[1;32m↵ to continue...\033[0;1m";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             } else if (verbose) {
-				clearScrollBuffer();
-				needsClrScrn = true;
+                clearScrollBuffer();
+                needsClrScrn = true;
                 printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
             }
         }
