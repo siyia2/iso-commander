@@ -322,7 +322,7 @@ void unmountISOs() {
 				}
 				std::string inputSearch(searchQuery.get());
 				std::cout << "\033[1m\n";
-				if (searchQuery && searchQuery.get()[0] != '\0' && strcmp(searchQuery.get(), "/") != 0) {
+				if (searchQuery && searchQuery.get()[0] != '\0') {
 					add_history(searchQuery.get());
 					saveHistory();
 				}
