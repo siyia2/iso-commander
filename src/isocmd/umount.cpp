@@ -358,13 +358,15 @@ void unmountISOs() {
 					future.get();
 				}
 
-				if (filteredIsoDirs.size() == isoDirs.size() || filteredIsoDirs.size() == baseSearchList.size()) {
+				if (filteredIsoDirs.size() == isoDirs.size()) {
 					isFiltered = false;
 					break;
 				}
-				
+				if (lastSuccessfulFilteredIsoDirs == filteredIsoDirs) {
+					continue;
+				}
 
-				if (filteredIsoDirs.empty()) {
+				else if (filteredIsoDirs.empty()) {
 					std::cout << "\033[1A\033[K";
 					// Don't change filteredIsoDirs here, just continue the loop
 					continue;
