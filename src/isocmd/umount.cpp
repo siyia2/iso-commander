@@ -338,22 +338,21 @@ void unmountISOs() {
 					toLowerInPlace(filterPatterns.back());
 				}
 
+				std::shared_mutex globalFilterMutex;
 				filteredIsoDirs.clear();
-                size_t numDirs = baseSearchList.size();
-                unsigned int numThreads = std::min(static_cast<unsigned int>(numDirs), maxThreads);
-                std::vector<std::future<void>> futuresFilter;
-                futuresFilter.reserve(numThreads);
-                size_t baseDirsPerThread = numDirs / numThreads;
-                size_t remainder = numDirs % numThreads;
-
-                for (size_t i = 0; i < numThreads; ++i) {
-                    size_t start = i * baseDirsPerThread + std::min(i, remainder);
-                    size_t end = start + baseDirsPerThread + (i < remainder ? 1 : 0);
-                    futuresFilter.push_back(std::async(std::launch::async, [&, start, end] {
-                        std::shared_mutex filterMutex;
-						filterMountPoints(baseSearchList, filterPatterns, filteredIsoDirs, filterMutex, start, end);
-                    }));
-                }
+				size_t numDirs = baseSearchList.size();
+				unsigned int numThreads = std::min(static_cast<unsigned int>(numDirs), maxThreads);
+				std::vector<std::future<void>> futuresFilter;
+				futuresFilter.reserve(numThreads);
+				size_t baseDirsPerThread = numDirs / numThreads;
+				size_t remainder = numDirs % numThreads;
+				for (size_t i = 0; i < numThreads; ++i) {
+					size_t start = i * baseDirsPerThread + std::min(i, remainder);
+					size_t end = start + baseDirsPerThread + (i < remainder ? 1 : 0);
+					futuresFilter.push_back(std::async(std::launch::async, [&, start, end] {
+					filterMountPoints(baseSearchList, filterPatterns, filteredIsoDirs, globalFilterMutex, start, end);
+					}));
+				}
 				for (auto& future : futuresFilter) {
 					future.get();
 				}
