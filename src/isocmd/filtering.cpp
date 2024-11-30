@@ -23,8 +23,6 @@ void toLowerInPlace(std::string& str) {
 
 // Boyer-Moore string search implementation for files
 std::vector<size_t> boyerMooreSearch(const std::string& pattern, const std::string& text) {
-    auto toLower = [](char c) { return std::tolower(c); };
-
     size_t patternLen = pattern.length();
     size_t textLen = text.length();
 
@@ -34,9 +32,9 @@ std::vector<size_t> boyerMooreSearch(const std::string& pattern, const std::stri
 
     if (patternLen == 1) {
         // Single-character pattern optimization
-        char singleChar = toLower(pattern[0]);
+        char singleChar = pattern[0];
         for (size_t i = 0; i < textLen; ++i) {
-            if (toLower(text[i]) == singleChar) {
+            if (text[i] == singleChar) {
                 matches.push_back(i);
             }
         }
@@ -45,18 +43,18 @@ std::vector<size_t> boyerMooreSearch(const std::string& pattern, const std::stri
 
     std::vector<size_t> shifts(256, patternLen);
     for (size_t i = 0; i < patternLen - 1; ++i) {
-        shifts[static_cast<unsigned char>(toLower(pattern[i]))] = patternLen - i - 1;
+        shifts[static_cast<unsigned char>(pattern[i])] = patternLen - i - 1;
     }
 
     size_t i = 0;
     while (i <= textLen - patternLen) {
         size_t skip = 0;
-        while (skip < patternLen && toLower(pattern[patternLen - 1 - skip]) == toLower(text[i + patternLen - 1 - skip])) {
+        while (skip < patternLen && pattern[patternLen - 1 - skip] == text[i + patternLen - 1 - skip]) {
             skip++;
         }
         if (skip == patternLen) matches.push_back(i);
 
-        i += (i + patternLen < textLen) ? shifts[static_cast<unsigned char>(toLower(text[i + patternLen - 1]))] : 1;
+        i += (i + patternLen < textLen) ? shifts[static_cast<unsigned char>(text[i + patternLen - 1])] : 1;
     }
 
     return matches;
