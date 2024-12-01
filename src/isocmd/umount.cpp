@@ -334,8 +334,10 @@ void unmountISOs() {
 				std::stringstream ss(terms);
 				std::string token;
 				while (std::getline(ss, token, ';')) {
-					filterPatterns.push_back(token);
-					toLowerInPlace(filterPatterns.back());
+					 if (token.length() > 1) {  // Check if token length is greater than 1
+						filterPatterns.push_back(token);
+						toLowerInPlace(filterPatterns.back());
+					}
 				}
 
 				std::shared_mutex globalFilterMutex;
