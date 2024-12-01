@@ -21,42 +21,62 @@ void toLowerInPlace(std::string& str) {
     }
 }
 
-// Boyer-Moore string search implementation for files
-std::vector<size_t> boyerMooreSearch(const std::string& pattern, const std::string& text) {
+// Rabin-Karp string search implementation for filenames
+std::vector<size_t> rabinKarpSearch(const std::string& pattern, const std::string& text) {
+    std::vector<size_t> matches;
+    
+    // Handle edge cases
     size_t patternLen = pattern.length();
     size_t textLen = text.length();
-
-    if (patternLen == 0 || textLen == 0 || patternLen > textLen) return {};
-
-    std::vector<size_t> matches;
-
-    if (patternLen == 1) {
-        // Single-character pattern optimization
-        char singleChar = pattern[0];
-        for (size_t i = 0; i < textLen; ++i) {
-            if (text[i] == singleChar) {
+    if (patternLen == 0 || textLen == 0 || patternLen > textLen) {
+        return matches;
+    }
+    
+    // Prime number for hash calculation
+    const int prime = 101;
+    
+    // Calculate the power of prime for the pattern length
+    long long primePow = 1;
+    for (size_t i = 0; i < patternLen - 1; ++i) {
+        primePow *= prime;
+    }
+    
+    // Calculate initial hash values
+    long long patternHash = 0;
+    long long textHash = 0;
+    
+    // Compute initial hash for pattern and first window of text
+    for (size_t i = 0; i < patternLen; ++i) {
+        patternHash = patternHash * prime + pattern[i];
+        textHash = textHash * prime + text[i];
+    }
+    
+    // Slide the pattern over text one by one
+    for (size_t i = 0; i <= textLen - patternLen; ++i) {
+        // If hash matches, check characters
+        if (patternHash == textHash) {
+            // Verify characters to handle hash collisions
+            bool match = true;
+            for (size_t j = 0; j < patternLen; ++j) {
+                if (text[i + j] != pattern[j]) {
+                    match = false;
+                    break;
+                }
+            }
+            
+            // If all characters match, add to matches
+            if (match) {
                 matches.push_back(i);
             }
         }
-        return matches;
-    }
-
-    std::vector<size_t> shifts(256, patternLen);
-    for (size_t i = 0; i < patternLen - 1; ++i) {
-        shifts[static_cast<unsigned char>(pattern[i])] = patternLen - i - 1;
-    }
-
-    size_t i = 0;
-    while (i <= textLen - patternLen) {
-        size_t skip = 0;
-        while (skip < patternLen && pattern[patternLen - 1 - skip] == text[i + patternLen - 1 - skip]) {
-            skip++;
+        
+        // Calculate hash for next window
+        if (i < textLen - patternLen) {
+            // Remove leading digit, add trailing digit
+            textHash = (textHash - text[i] * primePow) * prime + text[i + patternLen];
         }
-        if (skip == patternLen) matches.push_back(i);
-
-        i += (i + patternLen < textLen) ? shifts[static_cast<unsigned char>(text[i + patternLen - 1])] : 1;
     }
-
+    
     return matches;
 }
 
@@ -70,24 +90,77 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
     std::string token;
     
     while (std::getline(ss, token, ';')) {
-		toLowerInPlace(token);
-		if (token.length() > 1) { // Only insert if length is greater than 1
-			queryTokens.insert(token);
-		}
-	}
-
+        toLowerInPlace(token);
+        if (token.length() > 1) { // Only insert if length is greater than 1
+            queryTokens.insert(token);
+        }
+    }
     std::shared_mutex filterMutex;
+    
+    // Rabin-Karp search function inlined for performance
+    auto rabinKarpSearch = [](const std::string& pattern, const std::string& text) -> bool {
+        if (pattern.empty() || text.empty() || pattern.length() > text.length()) {
+            return false;
+        }
+        
+        // Prime number for hash calculation
+        const int prime = 101;
+        
+        // Calculate the power of prime for the pattern length
+        long long primePow = 1;
+        for (size_t i = 0; i < pattern.length() - 1; ++i) {
+            primePow *= prime;
+        }
+        
+        // Calculate initial hash values
+        long long patternHash = 0;
+        long long textHash = 0;
+        
+        // Compute initial hash for pattern and first window of text
+        for (size_t i = 0; i < pattern.length(); ++i) {
+            patternHash = patternHash * prime + pattern[i];
+            textHash = textHash * prime + text[i];
+        }
+        
+        // Slide the pattern over text one by one
+        for (size_t i = 0; i <= text.length() - pattern.length(); ++i) {
+            // If hash matches, check characters
+            if (patternHash == textHash) {
+                // Verify characters to handle hash collisions
+                bool match = true;
+                for (size_t j = 0; j < pattern.length(); ++j) {
+                    if (text[i + j] != pattern[j]) {
+                        match = false;
+                        break;
+                    }
+                }
+                
+                // If all characters match, return true
+                if (match) {
+                    return true;
+                }
+            }
+            
+            // Calculate hash for next window
+            if (i < text.length() - pattern.length()) {
+                // Remove leading digit, add trailing digit
+                textHash = (textHash - text[i] * primePow) * prime + text[i + pattern.length()];
+            }
+        }
+        
+        return false;
+    };
     
     auto filterTask = [&](size_t start, size_t end) {
         std::vector<std::string> localFilteredFiles;
         for (size_t i = start; i < end; ++i) {
             const std::string& file = files[i];
             std::string fileName = file;
-			toLowerInPlace(fileName);
+            toLowerInPlace(fileName);
             
             bool matchFound = false;
             for (const std::string& queryToken : queryTokens) {
-                if (!boyerMooreSearch(queryToken, fileName).empty()) {
+                if (rabinKarpSearch(queryToken, fileName)) {
                     matchFound = true;
                     break;
                 }
@@ -101,7 +174,7 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
         std::unique_lock<std::shared_mutex> lock(filterMutex);
         filteredFiles.insert(filteredFiles.end(), localFilteredFiles.begin(), localFilteredFiles.end());
     };
-
+    
     size_t numFiles = files.size();
     size_t numThreads = std::min(static_cast<size_t>(maxThreads), numFiles);
     size_t filesPerThread = numFiles / numThreads;
@@ -119,6 +192,5 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
     for (auto& future : futures) {
         future.wait();
     }
-
     return filteredFiles;
 }
