@@ -359,6 +359,8 @@ void unmountISOs() {
 
 				if (filteredIsoDirs.size() == isoDirs.size()) {
 					std::cout << "\033[1A\033[K";
+					lastSuccessfulFilteredIsoDirs.clear();
+					filteredIsoDirs.clear();
 					isFiltered = false;
 					break;
 				}
