@@ -453,7 +453,6 @@ void unmountISOs() {
                     printUnmountedAndErrors(unmountedFiles, unmountedErrors, errorMessages);
                     std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
                     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                    clr = true;
                 } else {
                     unmountedFiles.clear();
                     unmountedErrors.clear();
