@@ -144,19 +144,20 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
 
     size_t numFiles = files.size();
     size_t numThreads = std::min(static_cast<size_t>(maxThreads), numFiles);
-    size_t filesPerThread = numFiles / numThreads;
+
+    // Calculate the batch size based on the number of threads
+    size_t batchSize = (numFiles + numThreads - 1) / numThreads; // This ensures at least one file per thread
 
     std::vector<std::future<void>> futures;
 
-    // Launch threads
-    for (size_t i = 0; i < numThreads - 1; ++i) {
-        size_t start = i * filesPerThread;
-        size_t end = start + filesPerThread;
+    // Launch threads to process files in batches
+    for (size_t i = 0; i < numFiles; i += batchSize) {
+        size_t start = i;
+        size_t end = std::min(i + batchSize, numFiles);
+        
+        // Launch each batch processing task asynchronously
         futures.push_back(std::async(std::launch::async, filterTask, start, end));
     }
-
-    // Handle the remaining files for the last thread
-    filterTask((numThreads - 1) * filesPerThread, numFiles);
 
     // Wait for all threads to finish
     for (auto& future : futures) {
