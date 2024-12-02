@@ -26,62 +26,53 @@ void toLowerInPlace(std::string& str) {
 std::vector<size_t> boyerMooreSearch(const std::string& pattern, const std::string& text) {
     const size_t patternLen = pattern.length();
     const size_t textLen = text.length();
-    
-    if (patternLen == 0 || textLen == 0 || patternLen > textLen) 
+
+    if (patternLen == 0 || textLen == 0 || patternLen > textLen)
         return {};
-    
+
     // Preprocess bad character shifts
     std::vector<size_t> badCharShifts(256, patternLen);
-    for (size_t i = 0; i < patternLen; ++i) 
+    for (size_t i = 0; i < patternLen - 1; ++i)
         badCharShifts[static_cast<unsigned char>(pattern[i])] = patternLen - i - 1;
-    
+
     // Preprocess good suffix shifts
-    std::vector<size_t> goodSuffixShifts(patternLen, patternLen);
-    std::vector<size_t> suffixLengths(patternLen, 0);
-    
-    // Compute suffix lengths
-    suffixLengths[patternLen - 1] = patternLen;
-    for (size_t i = patternLen - 1; i > 0; --i) {
-        size_t j = 0;
-        while (i >= j + 1 && pattern[i - j - 1] == pattern[patternLen - 1 - j]) {
-            ++j;
-        }
-        suffixLengths[i - 1] = j;
+    std::vector<size_t> goodSuffixShifts(patternLen + 1, patternLen);
+    std::vector<size_t> suffixLengths(patternLen + 1, 0);
+
+    // Compute suffix lengths and good suffix shifts
+    size_t lastPrefixPos = patternLen;
+    for (size_t i = patternLen; i > 0; --i) {
+        if (pattern.compare(i - 1, patternLen - i + 1, pattern) == 0)
+            lastPrefixPos = i - 1;
+        goodSuffixShifts[patternLen - i] = lastPrefixPos + (patternLen - i);
     }
-    
-    // Compute good suffix shifts
-    for (size_t i = 0; i < patternLen; ++i) {
-        size_t shift = patternLen;
-        if (suffixLengths[i] > 0) {
-            shift = patternLen - i - 1;
-        }
-        for (size_t j = patternLen - suffixLengths[i]; j < patternLen; ++j) {
-            goodSuffixShifts[j] = std::min(goodSuffixShifts[j], shift);
-        }
+
+    for (size_t i = 0; i < patternLen - 1; ++i) {
+        size_t slen = 0;
+        while (i >= slen && pattern[i - slen] == pattern[patternLen - slen - 1])
+            ++slen;
+        suffixLengths[patternLen - slen - 1] = slen;
     }
+
+    for (size_t i = 0; i < patternLen - 1; ++i)
+        goodSuffixShifts[suffixLengths[i]] = patternLen - i - 1;
 
     // Search for pattern in text
     std::vector<size_t> matches;
     size_t i = 0;
     while (i <= textLen - patternLen) {
         size_t j = patternLen - 1;
-        while (j < patternLen && pattern[j] == text[i + j]) {
-            if (j == 0) {
-                matches.push_back(i);
-                break;
-            }
+        while (j != static_cast<size_t>(-1) && pattern[j] == text[i + j]) {
             --j;
         }
-        if (j < patternLen && pattern[j] != text[i + j]) {
-            unsigned char badChar = static_cast<unsigned char>(text[i + j]);
-            size_t badCharShift = badCharShifts[badChar];
-            size_t goodSuffixShift = goodSuffixShifts[j];
-            i += std::max<size_t>(1, std::min(badCharShift, goodSuffixShift));
+        if (j == static_cast<size_t>(-1)) {
+            matches.push_back(i);
+            i += goodSuffixShifts[0];
         } else {
-            i += patternLen; // Pattern match found
+            i += std::max(goodSuffixShifts[j], badCharShifts[static_cast<unsigned char>(text[i + j])]);
         }
     }
-    
+
     return matches;
 }
 
