@@ -120,8 +120,8 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
         std::vector<std::string> localFilteredFiles;
         for (size_t i = start; i < end; ++i) {
             const std::string& file = files[i];
-            std::string fileName = file;
-            toLowerInPlace(fileName);
+            std::string fileName = file;  // Copy the file name
+            toLowerInPlace(fileName);     // Convert once to lowercase
 
             // Check if any of the query tokens is found in the file name
             bool matchFound = false;
@@ -165,3 +165,4 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
 
     return filteredFiles;
 }
+
