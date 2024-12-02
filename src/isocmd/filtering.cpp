@@ -97,7 +97,7 @@ std::vector<size_t> boyerMooreSearch(const std::string& pattern, const std::stri
 }
 
 
-// Function to filter cached ISO files based on search query (case-insensitive)
+// Function to filter cached ISO files or mountpoints based on search query (case-insensitive)
 std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query) {
     std::vector<std::string> filteredFiles;
     std::set<std::string> queryTokens;
