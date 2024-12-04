@@ -4,7 +4,9 @@ https://github.com/siyia2/mounter_elite
 
 
 
-https://github.com/user-attachments/assets/79cfe76f-d1dd-4ebd-81f4-f6d4e399dae1
+
+https://github.com/user-attachments/assets/2d247581-bf84-437b-b872-800111986d42
+
 
 
 
