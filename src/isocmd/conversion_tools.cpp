@@ -463,7 +463,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
         std::size_t found = selectedFile.find_last_of("/\\");
         std::string filePath = selectedFile.substr(0, found);
         selectedFilePaths.emplace(filePath);
-        convertToISO(selectedFile, successOuts, skippedOuts, failedOuts, deletedOuts, modeMdf);
+        convertToISO(selectedFile, successOuts, skippedOuts, failedOuts, deletedOuts, modeMdf, modeNrg);
         // Increment completedTasks when conversion is done
         ++completedTasks;
     };
@@ -814,7 +814,7 @@ void printFileList(const std::vector<std::string>& fileList) {
 
 
 // Function to convert a BIN/IMG/MDF file to ISO format
-void convertToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool modeMdf) {
+void convertToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool modeMdf, bool modeNrg) {
     // Get the real user ID and group ID (of the user who invoked sudo)
     uid_t real_uid;
     gid_t real_gid;
@@ -869,9 +869,12 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
     bool conversionSuccess;
     if (modeMdf) {
         conversionSuccess = convertMdfToIso(inputPath, outputPath);
-    } else {
+    } else if (!modeMdf && !modeNrg){
         conversionSuccess = convertCcdToIso(inputPath, outputPath);
-    }
+    } else if (modeNrg) {
+		conversionSuccess = convertNrgToiso(inputPath, outputPath);
+	}
+		
 
     auto [outDirectory, outFileNameOnly] = extractDirectoryAndFilename(outputPath);
 
@@ -1119,6 +1122,62 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
 
     ccdFile.close();
     isoFile.close();
+
+    return true;
+}
+
+
+bool convertNrgToiso(const std::string& inputFile, const std::string& outputFile) {
+    struct stat fileStat;
+    if (stat(inputFile.c_str(), &fileStat) != 0) {
+        return false;
+    }
+
+    // Open input file
+    std::ifstream nrgFile(inputFile, std::ios::binary);
+    if (!nrgFile) {
+        return false;
+    }
+
+    // Check if already ISO by reading specific sector bytes
+    std::vector<char> isoBuf(17 * 2048);
+    nrgFile.read(isoBuf.data(), isoBuf.size());
+    
+    bool isIso = (isoBuf[16*2048] == 1 &&
+                  isoBuf[16*2048+1] == 67 &&
+                  isoBuf[16*2048+2] == 68 &&
+                  isoBuf[16*2048+3] == 48 &&
+                  isoBuf[16*2048+4] == 48 &&
+                  isoBuf[16*2048+5] == 49 &&
+                  isoBuf[16*2048+6] == 1 &&
+                  isoBuf[16*2048+7] == 0);
+
+    if (isIso) {
+        return false;
+    }
+
+    // Reset file position to Nero header skip point
+    nrgFile.seekg(307200, std::ios::beg);
+
+    // Open output file
+    std::ofstream isoFile(outputFile, std::ios::binary);
+    if (!isoFile) {
+        return false;
+    }
+
+    // Allocate 8MB buffer
+    const size_t BUFFER_SIZE = 8 * 1024 * 1024;
+    std::vector<char> buffer(BUFFER_SIZE);
+    
+    // Convert file
+    while (nrgFile) {
+        nrgFile.read(buffer.data(), BUFFER_SIZE);
+        std::streamsize bytesRead = nrgFile.gcount();
+        
+        if (bytesRead > 0) {
+            isoFile.write(buffer.data(), bytesRead);
+        }
+    }
 
     return true;
 }
