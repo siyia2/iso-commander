@@ -68,7 +68,7 @@ Conversions are enhanced with 8MB read/write buffer for improved performance.
 ## Ways to Install
 * Download the binary executable from latest release.
 * Download and compile from source with `make`.
-* If on arch or on an arch based distro, install with `yay -S iso-commander`.
+* On arch install from `AUR`.
 
 ## 🏆 Credits
 Special thanks to the original authors of the conversion tools:
