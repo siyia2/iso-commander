@@ -62,8 +62,8 @@ For best experience execute with: `sudo isocmd`.
 Conversions are enhanced with 8MB read/write buffer for improved performance.
 
 ## Make dependencies
-- Archlinux: `readline util-linux`.
-- Debian: `libreadline-dev libmount-dev`.
+- Archlinux: `pacman -S readline util-linux`.
+- Debian: `apt-get install libreadline-dev libmount-dev`.
 
 ## Ways to Install
 * Download the binary executable from latest release.
