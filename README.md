@@ -39,4 +39,4 @@ Special thanks to original authors:
 - Grégory Kokanosky (nrg2iso)
 - Danny Kurniawan and Kerry Harris (ccd2iso)
 
-  I only reconstructed their code in modern C++ and added an 8mb read/write buffer to increase conversion performance.
+  I only moved over their original code in modern C++ and added an 8mb read/write buffer to increase conversion performance.
