@@ -68,7 +68,7 @@ Conversions are enhanced with 8MB read/write buffer for improved performance.
 ## Ways to Install
 * Download the binary executables from latest release.
 * Download and compile from source with `make`.
-* If on arch install `iso-commander` from `AUR`.
+* On ArchLinux `iso-commander` is available on `AUR`.
 
 ## 🏆 Credits
 Special thanks to the original authors of the conversion tools:
