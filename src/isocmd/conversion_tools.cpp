@@ -131,8 +131,12 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
     } else if (fileType == "mdf") {
         fileExtension = ".mdf";
         fileTypeName = "MDF";
-    } else {
-        std::cout << "Invalid file type choice. Supported types: BIN/IMG, MDF\n";
+    } else if (fileType == "nrg") {
+        fileExtension = ".nrg";
+        fileTypeName = "NRG";
+    }
+    else {
+        std::cout << "Invalid file type choice. Supported types: BIN/IMG, MDF, NRG\n";
         return;
     }
 
@@ -165,12 +169,15 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
             uniquePaths.clear();
             invalidDirectoryPaths.clear();
 
-            if (!modeMdf) {
+            if (!modeMdf && !modeNrg) {
                 binImgFilesCache.clear();
                 std::cout << "\n\033[1;92mBIN/IMG RAM cache cleared.\033[0;1m\n";
-            } else {
+            } else if (modeMdf){
                 mdfMdsFilesCache.clear();
                 std::cout << "\n\033[1;92mMDF RAM cache cleared.\033[0;1m\n";
+            } else if (modeNrg){
+                mdfMdsFilesCache.clear();
+                std::cout << "\n\033[1;92mNRG RAM cache cleared.\033[0;1m\n";
             }
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -179,10 +186,12 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         }
 
         // Return static cache if input=ls
-		if (list && !modeMdf) {
+		if (list && !modeMdf && !modeNrg) {
 			files = binImgFilesCache;
 		} else if (list && modeMdf) {
 			files = mdfMdsFilesCache;
+		} else if (list && modeNrg) {
+			files = nrgFilesCache;
 		}
 
         if (!inputSearch.empty() && !list && !clr) {
@@ -267,10 +276,12 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
             clearScrollBuffer();
             continue;
         }
-        if (!modeMdf) {
+        if (!modeMdf && !modeNrg) {
 			originalFiles = binImgFilesCache;
-        } else {
+        } else if (modeMdf){
 			originalFiles = mdfMdsFilesCache;
+		} else if (modeNrg) {
+			originalFiles = nrgFilesCache;
 		}
 		bool isFiltered = false;
 		bool isFilteredButUnchanged = false;
@@ -278,13 +289,19 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
         while (true) {
             successOuts.clear(); skippedOuts.clear(); failedOuts.clear(); deletedOuts.clear(); processedErrors.clear();
 
-            if (binImgFilesCache.empty() && !modeMdf) {
+            if (binImgFilesCache.empty() && !modeMdf && !modeNrg) {
                 std::cout << "\n\033[1;93mNo " << fileExtension << " files stored in RAM cache for potential ISO conversions.\033[1m\n";
                 std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 clearScrollBuffer();
                 break;
             } else if (mdfMdsFilesCache.empty() && modeMdf) {
+                std::cout << "\n\033[1;93mNo " << fileExtension << " files stored in RAM cache for potential ISO conversions.\033[1m\n";
+                std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                clearScrollBuffer();
+                break;
+            } else if (nrgFilesCache.empty() && modeNrg) {
                 std::cout << "\n\033[1;93mNo " << fileExtension << " files stored in RAM cache for potential ISO conversions.\033[1m\n";
                 std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -308,10 +325,12 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 				if (isFiltered && !isFilteredButUnchanged) {
 					needsScrnClr = true;
 					// Reset to unfiltered list
-					if (!modeMdf) {
+					if (!modeMdf && !modeNrg) {
 						files = binImgFilesCache;
-					} else {
+					} else if (modeMdf) {
 						files = mdfMdsFilesCache;
+					} else if (modeNrg) {
+						files = nrgFilesCache;
 					}
 					isFiltered = false;
 					isFilteredButUnchanged = false;
@@ -334,15 +353,22 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 				}
 
 				// Check filter status after applying
-				if (!modeMdf) {
+				if (!modeMdf && !modeNrg) {
 					if (binImgFilesCache.size() == files.size() || files.size() == originalFiles.size()) {
 						isFilteredButUnchanged = true;
 					} else {
 						isFiltered = true;
 						isFilteredButUnchanged = false;
 					}
-				} else {
+				} else if (modeMdf){
 					if (mdfMdsFilesCache.size() == files.size() || files.size() == originalFiles.size()) {
+						isFilteredButUnchanged = true;
+					} else {
+						isFiltered = true;
+						isFilteredButUnchanged = false;
+					}
+				} else if (modeNrg) {
+					if (nrgFilesCache.size() == files.size() || files.size() == originalFiles.size()) {
 						isFilteredButUnchanged = true;
 					} else {
 						isFiltered = true;
