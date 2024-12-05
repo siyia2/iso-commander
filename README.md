@@ -53,7 +53,7 @@ For best experience execute with: `sudo isocmd`.
 - ISOFs
 
 
-🔄 Powerful Conversion Toolkit integrating:
+🔄 Powerful Conversion Toolkit Integrating:
 
 * ccd2iso
 * mdf2iso
