@@ -14,7 +14,7 @@ Blazing fast cmd `ISO` manager written in C++. All paths are mounted under `/mnt
 
 For best experience execute with: `sudo isocmd`.
 
-# ✨ Features
+## ✨ Features
 
 💾 Intelligent ISO Caching
 
