@@ -170,18 +170,18 @@ std::vector<std::string> parseUserInputUnmountISOs(const std::string& input, con
 // General
 
 // bools
-bool blacklist(const std::filesystem::path& entry, bool blacklistMdf);
+bool blacklist(const std::filesystem::path& entry, bool blacklistMdf, bool blacklistNrg);
 
 // stds
 std::vector<std::string> findFiles(const std::vector<std::string>& paths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrors);
 
 // voids
 void applyFilter(std::vector<std::string>& files, const std::vector<std::string>& originalFiles, const std::string& fileTypeName);
-void convertToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool modeMdf);
+void convertToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool modeMdf, bool modeNrg);
 void verboseFind(std::set<std::string>& invalidDirectoryPaths);
 void verboseConversion(std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts);
 void select_and_convert_files_to_iso(const std::string& fileTypeChoice);
-void processInput(const std::string& input, const std::vector<std::string>& fileList, bool modeMdf, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts);
+void processInput(const std::string& input, const std::vector<std::string>& fileList, bool modeMdf, bool modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts);
 void printFileList(const std::vector<std::string>& fileList);
 
 // CCD2ISO
@@ -193,6 +193,11 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath);
 
 //bools
 bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath);
+
+//NRG2ISO
+
+//bools
+bool convertNrgToiso(const std::string& inputFile, const std::string& outputFile);
 
 
 
