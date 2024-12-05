@@ -77,4 +77,4 @@ Special thanks to the original authors of the conversion tools:
 * Grégory Kokanosky (nrg2iso).
 * Danny Kurniawan and Kerry Harris (ccd2iso).
 
- Note: Original code has been modernized and moved over to C++.
+ Note: Their original code has been modernized and moved over to C++.
