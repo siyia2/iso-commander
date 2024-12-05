@@ -61,16 +61,16 @@ For best experience execute with: `sudo isocmd`.
 
 All are enhanced with 8MB read/write buffer for superior conversion performance
 
-Make dependencies:
+## Make dependencies
 - Archlinux: `readline util-linux`.
 - Debian: `libreadline-dev libmount-dev`.
 
-Ways to Install:
+## Ways to Install
 1) Download the binary executable from latest release.
 2) Download and compile from source with `make`.
 3) If on arch or on an arch based distro, install with `yay -S iso-commander`.
 
-🏆 Credits
+## 🏆 Credits
 Special thanks to the original authors of the conversion tools:
 
 * Salvatore Santagati (mdf2iso).
