@@ -66,7 +66,7 @@ Conversions are enhanced with 8MB read/write buffer for improved performance.
 - Debian: `libreadline-dev libmount-dev`.
 
 ## Ways to Install
-* Download the binary executables from latest release.
+* Download the binaries from latest release.
 * Download and compile from source with `make`.
 * On ArchLinux `iso-commander` is available from the `AUR`.
 
