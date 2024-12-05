@@ -1126,6 +1126,7 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
     return true;
 }
 
+// NRG2ISO
 
 bool convertNrgToiso(const std::string& inputFile, const std::string& outputFile) {
     struct stat fileStat;
@@ -1151,7 +1152,6 @@ bool convertNrgToiso(const std::string& inputFile, const std::string& outputFile
                   isoBuf[16*2048+5] == 49 &&
                   isoBuf[16*2048+6] == 1 &&
                   isoBuf[16*2048+7] == 0);
-
     if (isIso) {
         return false;
     }
@@ -1170,12 +1170,19 @@ bool convertNrgToiso(const std::string& inputFile, const std::string& outputFile
     std::vector<char> buffer(BUFFER_SIZE);
     
     // Convert file
-    while (nrgFile) {
+    while (true) {
         nrgFile.read(buffer.data(), BUFFER_SIZE);
         std::streamsize bytesRead = nrgFile.gcount();
         
-        if (bytesRead > 0) {
-            isoFile.write(buffer.data(), bytesRead);
+        if (bytesRead <= 0) {
+            break;  // Exit loop when no more data
+        }
+
+        isoFile.write(buffer.data(), bytesRead);
+
+        // Check for end of file
+        if (nrgFile.eof()) {
+            break;
         }
     }
 
