@@ -54,8 +54,7 @@ For best experience execute with: `sudo isocmd`.
 - ISOFs
 
 
-🔄 Powerful Conversion Toolkit
-Built-in conversion capabilities for:
+🔄 Powerful Conversion Toolkit utilizing:
 
 * ccd2iso
 * mdf2iso
