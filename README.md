@@ -44,7 +44,7 @@ For best experience execute with: `sudo isocmd`.
 
 
 📂 Comprehensive Filesystem Support
-* Supports multiple ISO filesystem types:
+Supports multiple ISO filesystem types:
 
 - iso9660
 - UDF
