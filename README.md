@@ -33,3 +33,8 @@ Ways to Install:
 1) Download the binary executable from latest release.
 2) Download and compile from source with `make`.
 3) If on arch or on an arch based distro, install with `yay -S iso-commander`.
+
+Special thanks to original authors:
+Salvatore Santagati (mdf2iso)
+Grégory Kokanosky (nrg2iso)
+Danny Kurniawan and Kerry Harris (ccd2iso)
