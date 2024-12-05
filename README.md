@@ -14,16 +14,54 @@ State of the art secure and blazing fast terminal `ISO` manager written in C++. 
 
 For best experience execute with: `sudo isocmd`.
 
-Features:
-* Cached ISO management for reduced disk thrashing.
-* Sanitized shell commands, tab completion and history support.
-* Native C++ and libmount calls.
-* Ultra lightweight with no reliance on external libraries for terminal control.
-* Multithreaded asynchronous tasks leveraging state-of-the-art concurrent practices.
-* Capable of seamlessly handling anywhere from 1 to an astonishing 100,000 ISO files.
-* Supports most ISO filesystem types: iso9660, UDF, HFSPlus, Rock Ridge, Joliet, and ISOFs.
-* Reimplemented ccd2iso, mdf2iso and nrg2iso internally for converting BIN/IMG/MDF/NRG to ISO.
-* Clean codebase in case someone decides to contribute in the future.
+✨ Features
+
+💾 Intelligent ISO Caching
+
+* Minimizes disk thrashing
+* Optimizes file access performance
+
+
+🖥️ Advanced Terminal Interface
+
+* Sanitized shell commands
+* Robust tab completion
+* Comprehensive command history
+
+
+⚡ High-Performance Architecture
+
+* Native C++ implementation
+* Direct libmount system calls
+* Zero external library dependencies for terminal control
+
+
+🔀 Concurrent Processing
+
+* Multithreaded asynchronous task handling
+* Scalable from 1 to 100,000 ISO files
+* Implements cutting-edge concurrent programming practices
+
+
+📂 Comprehensive Filesystem Support
+* Supports multiple ISO filesystem types:
+
+- iso9660
+- UDF
+- HFSPlus
+- Rock Ridge
+- Joliet
+- ISOFs
+
+
+🔄 Powerful Conversion Toolkit
+Built-in conversion capabilities for:
+
+* ccd2iso
+* mdf2iso
+* nrg2iso
+
+- Enhanced with an 8MB read/write buffer for superior conversion performance
 
 Make dependencies:
 - Archlinux: readline, util-linux.
@@ -34,9 +72,11 @@ Ways to Install:
 2) Download and compile from source with `make`.
 3) If on arch or on an arch based distro, install with `yay -S iso-commander`.
 
-Special thanks to original authors:
-- Salvatore Santagati (mdf2iso)
-- Grégory Kokanosky (nrg2iso)
-- Danny Kurniawan and Kerry Harris (ccd2iso)
+🏆 Credits
+Special thanks to the original authors of the conversion tools:
 
-  I only moved over their original code in modern C++ and added an 8mb read/write buffer to increase conversion performance.
+* Salvatore Santagati (mdf2iso)
+* Grégory Kokanosky (nrg2iso)
+* Danny Kurniawan and Kerry Harris (ccd2iso)
+
+ Note: Original code modernized and performance optimized in C++.
