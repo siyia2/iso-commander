@@ -10,7 +10,7 @@ https://github.com/user-attachments/assets/2d247581-bf84-437b-b872-800111986d42
 
 
 
-State of the art secure and blazing fast terminal `ISO` manager written in C++. All paths are mounted under `/mnt/iso_*` format and conversions are stored in their respective source directories. `ROOT` access is essential for `mount&umount` operations.
+Blazing fast cmd `ISO` manager written in C++. All paths are mounted under `/mnt/iso_*` format and conversions are stored in their respective source directories. `ROOT` access is essential for `mount&umount` operations.
 
 For best experience execute with: `sudo isocmd`.
 
@@ -62,8 +62,8 @@ For best experience execute with: `sudo isocmd`.
 - Enhanced with an 8MB read/write buffer for superior conversion performance
 
 Make dependencies:
-- Archlinux: readline, util-linux.
-- Debian: libreadline-dev, libmount-dev.
+- Archlinux: `readline util-linux`.
+- Debian: `libreadline-dev libmount-dev`.
 
 Ways to Install:
 1) Download the binary executable from latest release.
