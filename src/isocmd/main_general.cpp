@@ -235,7 +235,9 @@ void submenu2() {
         std::cout << "\033[1;32m|1. CCD2ISO++             |\n";
         std::cout << "\033[1;32m+-------------------------+\n";
         std::cout << "\033[1;32m|2. MDF2ISO++             |\n";
-        std::cout << "\033[1;32m+-------------------------+";
+        std::cout << "\033[1;32m+-------------------------+\n";
+        std::cout << "\033[1;32m|3. NRG2ISO++             |\n";
+        std::cout << "\033[1;32m+-------------------------+\n";
         std::cout << "\n";
         char* rawInput = readline("\n\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
 
@@ -263,6 +265,12 @@ void submenu2() {
              case '2':
 				clearScrollBuffer();
 				operation = "mdf";
+					select_and_convert_files_to_iso(operation);
+                clearScrollBuffer();
+                break;
+             case '3':
+				clearScrollBuffer();
+				operation = "nrg";
 					select_and_convert_files_to_iso(operation);
                 clearScrollBuffer();
                 break;
