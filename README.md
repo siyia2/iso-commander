@@ -35,6 +35,6 @@ Ways to Install:
 3) If on arch or on an arch based distro, install with `yay -S iso-commander`.
 
 Special thanks to original authors:
-Salvatore Santagati (mdf2iso)
-Grégory Kokanosky (nrg2iso)
-Danny Kurniawan and Kerry Harris (ccd2iso)
+- Salvatore Santagati (mdf2iso)
+- Grégory Kokanosky (nrg2iso)
+- Danny Kurniawan and Kerry Harris (ccd2iso)
