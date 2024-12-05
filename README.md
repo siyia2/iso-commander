@@ -18,29 +18,29 @@ For best experience execute with: `sudo isocmd`.
 
 💾 Intelligent ISO Caching
 
-* Minimizes disk thrashing
-* Optimizes file access performance
+* Minimizes disk thrashing.
+* Optimizes file access performance.
 
 
 🖥️ Advanced Terminal Interface
 
-* Sanitized shell commands
-* Robust tab completion
-* Comprehensive command history
+* Sanitized shell commands.
+* Robust tab completion.
+* Comprehensive command history.
 
 
 ⚡ High-Performance Architecture
 
-* Native C++ implementation
-* Direct libmount system calls
-* Zero external library dependencies for terminal control
+* Native C++ implementation.
+* Direct libmount system calls.
+* Zero external library dependencies for terminal control.
 
 
 🔀 Concurrent Processing
 
-* Multithreaded asynchronous task handling
-* Scalable from 1 to 100,000 ISO files
-* Implements cutting-edge concurrent programming practices
+* Multithreaded asynchronous task handling.
+* Scalable from 1 to 100,000 ISO files.
+* Implements cutting-edge concurrent programming practices.
 
 
 📂 Supports multiple ISO filesystem types:
@@ -59,7 +59,7 @@ For best experience execute with: `sudo isocmd`.
 * mdf2iso
 * nrg2iso
 
-Enhanced with 8MB read/write buffer for superior conversion performance
+All are enhanced with 8MB read/write buffer for superior conversion performance
 
 Make dependencies:
 - Archlinux: `readline util-linux`.
@@ -73,8 +73,8 @@ Ways to Install:
 🏆 Credits
 Special thanks to the original authors of the conversion tools:
 
-* Salvatore Santagati (mdf2iso)
-* Grégory Kokanosky (nrg2iso)
-* Danny Kurniawan and Kerry Harris (ccd2iso)
+* Salvatore Santagati (mdf2iso).
+* Grégory Kokanosky (nrg2iso).
+* Danny Kurniawan and Kerry Harris (ccd2iso).
 
  Note: Original code has been modernized and performance optimized in C++.
