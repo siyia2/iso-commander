@@ -38,3 +38,5 @@ Special thanks to original authors:
 - Salvatore Santagati (mdf2iso)
 - Grégory Kokanosky (nrg2iso)
 - Danny Kurniawan and Kerry Harris (ccd2iso)
+
+  I only reconstructed their code in modern C++ and added an 8mb read/write buffer to increase conversion performance.
