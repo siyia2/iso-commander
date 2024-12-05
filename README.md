@@ -59,7 +59,7 @@ For best experience execute with: `sudo isocmd`.
 * mdf2iso
 * nrg2iso
 
-All are enhanced with 8MB read/write buffer for improved conversion speeds.
+Conversions are enhanced with 8MB read/write buffer for improved performance.
 
 ## Make dependencies
 - Archlinux: `readline util-linux`.
