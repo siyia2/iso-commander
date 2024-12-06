@@ -197,7 +197,7 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath);
 //NRG2ISO
 
 //bools
-bool convertNrgToiso(const std::string& inputFile, const std::string& outputFile);
+bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile);
 
 
 
