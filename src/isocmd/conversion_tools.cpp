@@ -913,7 +913,7 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
             {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
                 deletedOuts.insert(deletedMessage);
             }
-        } else {
+        } else if (!modeNrg){
             std::string deletedMessage = "\033[1;91mFailed to delete partially created ISO file: \033[1;93m'" + outDirectory + "/" + outFileNameOnly + "'\033[1;91m.\033[0;1m";
             {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
                 deletedOuts.insert(deletedMessage);
