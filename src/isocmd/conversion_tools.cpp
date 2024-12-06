@@ -872,7 +872,7 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
     } else if (!modeMdf && !modeNrg){
         conversionSuccess = convertCcdToIso(inputPath, outputPath);
     } else if (modeNrg) {
-		conversionSuccess = convertNrgToiso(inputPath, outputPath);
+		conversionSuccess = convertNrgToIso(inputPath, outputPath);
 	}
 		
 
@@ -930,100 +930,87 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
 bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath) {
     std::ifstream mdfFile(mdfPath, std::ios::binary);
     std::ofstream isoFile(isoPath, std::ios::binary);
+
     if (!mdfFile.is_open() || !isoFile.is_open()) {
         return false;
     }
 
-    // Determine file type
-    size_t seek_ecc, sector_size, seek_head, sector_data;
+    size_t seek_ecc = 0, sector_size = 0, seek_head = 0, sector_data = 0;
     char buf[12];
+
+    // Check if file is valid MDF
     mdfFile.seekg(32768);
-    if (!mdfFile.read(buf, 8)) {
-        mdfFile.close();
-        isoFile.close();
-        return false;
+    if (!mdfFile.read(buf, 8) || std::memcmp("CD001", buf + 1, 5) == 0) {
+        return false; // Not an MDF file or unsupported format
     }
-    if (std::memcmp("CD001", buf + 1, 5) == 0) {
-        mdfFile.close();
-        isoFile.close();
-        return false; // Not an MDF file or not supported
-    }
+
     mdfFile.seekg(0);
     if (!mdfFile.read(buf, 12)) {
-        mdfFile.close();
-        isoFile.close();
         return false;
     }
-    mdfFile.seekg(2352);
+
+    // Determine MDF type based on sync patterns
     if (std::memcmp("\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00", buf, 12) == 0) {
+        mdfFile.seekg(2352);
         if (!mdfFile.read(buf, 12)) {
-            mdfFile.close();
-            isoFile.close();
             return false;
         }
+
         if (std::memcmp("\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00", buf, 12) == 0) {
-            // SYNC
             seek_ecc = 288;
             sector_size = 2352;
             sector_data = 2048;
             seek_head = 16;
         } else {
-            // SYNC_MDF
             seek_ecc = 384;
             sector_size = 2448;
             sector_data = 2048;
             seek_head = 16;
         }
     } else {
-        // MDF_AUDIO
         seek_head = 0;
         sector_size = 2448;
         seek_ecc = 96;
         sector_data = 2352;
     }
 
-    // Calculate source length
+    // Calculate the number of sectors
     mdfFile.seekg(0, std::ios::end);
     size_t source_length = static_cast<size_t>(mdfFile.tellg()) / sector_size;
     mdfFile.seekg(0, std::ios::beg);
 
-    // Use a larger buffer for I/O operations
-    const size_t bufferSize = 8 * 1024 * 1024; // 8 MB buffer
+    // Buffer for reading and writing
+    const size_t bufferSize = 8 * 1024 * 1024; // 8 MB
     std::vector<char> buffer(bufferSize);
     size_t bufferIndex = 0;
 
     while (source_length > 0) {
-        // Read data from MDF
+        // Read sector data
         mdfFile.seekg(static_cast<std::streamoff>(seek_head), std::ios::cur);
-        if (!mdfFile.read(buffer.data() + bufferIndex, static_cast<std::streamsize>(sector_data))) {
-            mdfFile.close();
-            isoFile.close();
+        if (!mdfFile.read(buffer.data() + bufferIndex, sector_data)) {
             return false;
         }
         mdfFile.seekg(static_cast<std::streamoff>(seek_ecc), std::ios::cur);
+
         bufferIndex += sector_data;
+
+        // Write full buffer if filled
         if (bufferIndex >= bufferSize) {
-            if (!isoFile.write(buffer.data(), static_cast<std::streamsize>(bufferSize))) {
-                mdfFile.close();
-                isoFile.close();
+            if (!isoFile.write(buffer.data(), bufferIndex)) {
                 return false;
             }
             bufferIndex = 0;
         }
+
         --source_length;
     }
 
     // Write any remaining data in the buffer
     if (bufferIndex > 0) {
-        if (!isoFile.write(buffer.data(), static_cast<std::streamsize>(bufferIndex))) {
-            mdfFile.close();
-            isoFile.close();
+        if (!isoFile.write(buffer.data(), bufferIndex)) {
             return false;
         }
     }
-
-    mdfFile.close();
-    isoFile.close();
 
     return true;
 }
@@ -1032,159 +1019,132 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath) {
 // CCD2ISO
 
 const size_t DATA_SIZE = 2048;
+const size_t BUFFER_SIZE = 8 * 1024 * 1024;  // 8 MB buffer
 
-struct CcdSectheaderSyn {
-    unsigned char data[12];
+struct __attribute__((packed)) CcdSectheaderSyn {
+    uint8_t data[12];
 };
 
-struct CcdSectheaderHeader {
-    unsigned char sectaddr_min, sectaddr_sec, sectaddr_frac;
-    unsigned char mode;
-} __attribute__((packed));
+struct __attribute__((packed)) CcdSectheaderHeader {
+    uint8_t sectaddr_min, sectaddr_sec, sectaddr_frac;
+    uint8_t mode;
+};
 
-struct CcdSectheader {
+struct __attribute__((packed)) CcdSectheader {
     CcdSectheaderSyn syn;
     CcdSectheaderHeader header;
-} __attribute__((packed));
+};
 
-struct CcdSector {
+struct __attribute__((packed)) CcdSector {
     CcdSectheader sectheader;
     union {
         struct {
-            unsigned char data[DATA_SIZE];
-            unsigned char edc[4];
-            unsigned char unused[8];
-            unsigned char ecc[276];
+            uint8_t data[DATA_SIZE];
+            uint8_t edc[4];
+            uint8_t unused[8];
+            uint8_t ecc[276];
         } mode1;
         struct {
-            unsigned char sectsubheader[8];
-            unsigned char data[DATA_SIZE];
-            unsigned char edc[4];
-            unsigned char ecc[276];
+            uint8_t sectsubheader[8];
+            uint8_t data[DATA_SIZE];
+            uint8_t edc[4];
+            uint8_t ecc[276];
         } mode2;
     } content;
-} __attribute__((packed));
+};
+
 
 bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
-    std::ifstream ccdFile(ccdPath, std::ios::binary);
-    std::ofstream isoFile(isoPath, std::ios::binary);
-    if (!ccdFile.is_open() || !isoFile.is_open()) {
-        return false;
-    }
+    // Use memory-mapped file I/O for better performance
+    std::ifstream ccdFile(ccdPath, std::ios::binary | std::ios::ate);
+    if (!ccdFile) return false;
 
-    const size_t bufferSize = 8 * 1024 * 1024;  // 8 MB buffer
-    std::vector<char> buffer(bufferSize);
-    CcdSector sector;
-    size_t bytesRead = 0;
+    std::ofstream isoFile(isoPath, std::ios::binary);
+    if (!isoFile) return false;
+
+    size_t fileSize = ccdFile.tellg();
+    ccdFile.seekg(0, std::ios::beg);
+
+    // Pre-allocate output file to reduce fragmentation
+    isoFile.seekp(fileSize / sizeof(CcdSector) * DATA_SIZE);
+    isoFile.put(0);
+    isoFile.seekp(0);
+
+    std::vector<uint8_t> buffer(BUFFER_SIZE);
     size_t bufferPos = 0;
-    size_t sectNum = 0;
+    CcdSector sector;
     int sessionCount = 0;
 
-    try {
-        while (ccdFile.read(reinterpret_cast<char*>(&sector), sizeof(CcdSector))) {
-            bytesRead = static_cast<size_t>(ccdFile.gcount());
-            if (bytesRead != sizeof(CcdSector)) {
-                ccdFile.close();
-                isoFile.close();
+    while (ccdFile.read(reinterpret_cast<char*>(&sector), sizeof(CcdSector))) {
+        switch (sector.sectheader.header.mode) {
+            case 1:
+            case 2: {
+                const uint8_t* sectorData = (sector.sectheader.header.mode == 1) 
+                    ? sector.content.mode1.data 
+                    : sector.content.mode2.data;
+
+                if (bufferPos + DATA_SIZE > BUFFER_SIZE) {
+                    isoFile.write(reinterpret_cast<char*>(buffer.data()), bufferPos);
+                    bufferPos = 0;
+                }
+
+                // Use faster memcpy
+                std::memcpy(&buffer[bufferPos], sectorData, DATA_SIZE);
+                bufferPos += DATA_SIZE;
+                break;
+            }
+            case 0xe2:
+                sessionCount++;
+                break;
+            default:
                 return false;
-            }
-
-            switch (sector.sectheader.header.mode) {
-                case 1:
-                case 2:
-                    if (bufferPos + DATA_SIZE > bufferSize) {
-                        isoFile.write(buffer.data(), static_cast<std::streamsize>(bufferPos));
-                        bufferPos = 0;
-                    }
-                    std::memcpy(&buffer[bufferPos],
-                                (sector.sectheader.header.mode == 1) ? sector.content.mode1.data : sector.content.mode2.data,
-                                DATA_SIZE);
-                    bufferPos += DATA_SIZE;
-                    break;
-                case 0xe2:
-                    sessionCount++;
-                    break;
-                default:
-                    ccdFile.close();
-                    isoFile.close();
-                    return false;
-            }
-            sectNum++;
         }
-
-        // Write any remaining buffered data
-        if (bufferPos > 0) {
-            isoFile.write(buffer.data(), static_cast<std::streamsize>(bufferPos));
-        }
-    } catch (const std::exception& e) {
-        ccdFile.close();
-        isoFile.close();
-        return false;
     }
 
-    ccdFile.close();
-    isoFile.close();
+    // Flush remaining data
+    if (bufferPos > 0) {
+        isoFile.write(reinterpret_cast<char*>(buffer.data()), bufferPos);
+    }
 
     return true;
 }
 
+
 // NRG2ISO
 
-bool convertNrgToiso(const std::string& inputFile, const std::string& outputFile) {
-    struct stat fileStat;
-    if (stat(inputFile.c_str(), &fileStat) != 0) {
-        return false;
-    }
-
-    // Open input file
+bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile) {
     std::ifstream nrgFile(inputFile, std::ios::binary);
     if (!nrgFile) {
         return false;
     }
 
-    // Check if already ISO by reading specific sector bytes
-    std::vector<char> isoBuf(17 * 2048);
-    nrgFile.read(isoBuf.data(), isoBuf.size());
+    // More efficient ISO checking using memory mapping or direct read
+    nrgFile.seekg(16 * 2048);
+    char isoBuf[8];
+    nrgFile.read(isoBuf, 8);
     
-    bool isIso = (isoBuf[16*2048] == 1 &&
-                  isoBuf[16*2048+1] == 67 &&
-                  isoBuf[16*2048+2] == 68 &&
-                  isoBuf[16*2048+3] == 48 &&
-                  isoBuf[16*2048+4] == 48 &&
-                  isoBuf[16*2048+5] == 49 &&
-                  isoBuf[16*2048+6] == 1 &&
-                  isoBuf[16*2048+7] == 0);
-    if (isIso) {
-        return false;
+    if (memcmp(isoBuf, "\x01" "CD001" "\x01\x00", 8) == 0) {
+		return false;  // Already an ISO
     }
 
-    // Reset file position to Nero header skip point
+    // Reopen file for conversion to avoid multiple seekg operations
+    nrgFile.clear();
     nrgFile.seekg(307200, std::ios::beg);
 
-    // Open output file
     std::ofstream isoFile(outputFile, std::ios::binary);
     if (!isoFile) {
         return false;
     }
 
-    // Allocate 8MB buffer
-    const size_t BUFFER_SIZE = 8 * 1024 * 1024;
+    constexpr size_t BUFFER_SIZE = 8 * 1024 * 1024;  // 8MB buffer
     std::vector<char> buffer(BUFFER_SIZE);
     
-    // Convert file
-    while (true) {
+    while (nrgFile) {
         nrgFile.read(buffer.data(), BUFFER_SIZE);
         std::streamsize bytesRead = nrgFile.gcount();
         
-        if (bytesRead <= 0) {
-            break;  // Exit loop when no more data
-        }
-
-        isoFile.write(buffer.data(), bytesRead);
-
-        // Check for end of file
-        if (nrgFile.eof()) {
-            break;
+        if (bytesRead > 0) {
+            isoFile.write(buffer.data(), bytesRead);
         }
     }
 
