@@ -979,6 +979,11 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath) {
     size_t source_length = static_cast<size_t>(mdfFile.tellg()) / sector_size;
     mdfFile.seekg(0, std::ios::beg);
 
+    // Pre-allocate the ISO file to optimize file write performance
+    isoFile.seekp(source_length * sector_data);
+    isoFile.put(0); // Write a dummy byte to allocate space
+    isoFile.seekp(0); // Reset the pointer to the beginning of the file
+
     // Buffer for reading and writing
     const size_t bufferSize = 8 * 1024 * 1024; // 8 MB
     std::vector<char> buffer(bufferSize);
@@ -1014,6 +1019,7 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath) {
 
     return true;
 }
+
 
 
 // CCD2ISO
@@ -1066,9 +1072,9 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
     ccdFile.seekg(0, std::ios::beg);
 
     // Pre-allocate output file to reduce fragmentation
-    isoFile.seekp(fileSize / sizeof(CcdSector) * DATA_SIZE);
-    isoFile.put(0);
-    isoFile.seekp(0);
+    isoFile.seekp(fileSize / sizeof(CcdSector) * DATA_SIZE); // Preallocate based on expected data size
+    isoFile.put(0);  // Write a dummy byte to allocate space
+    isoFile.seekp(0); // Reset the pointer to the beginning
 
     std::vector<uint8_t> buffer(BUFFER_SIZE);
     size_t bufferPos = 0;
@@ -1110,35 +1116,46 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
 }
 
 
+
 // NRG2ISO
 
 bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile) {
-    std::ifstream nrgFile(inputFile, std::ios::binary);
+    std::ifstream nrgFile(inputFile, std::ios::binary | std::ios::ate);  // Open for reading, with positioning at the end
     if (!nrgFile) {
         return false;
     }
 
-    // More efficient ISO checking using memory mapping or direct read
+    std::streamsize nrgFileSize = nrgFile.tellg();  // Get the size of the input file
+    nrgFile.seekg(0, std::ios::beg);  // Rewind to the beginning of the file
+
+    // Check if the file is already in ISO format
     nrgFile.seekg(16 * 2048);
     char isoBuf[8];
     nrgFile.read(isoBuf, 8);
     
     if (memcmp(isoBuf, "\x01" "CD001" "\x01\x00", 8) == 0) {
-		return false;  // Already an ISO
+        return false;  // Already an ISO, no conversion needed
     }
 
     // Reopen file for conversion to avoid multiple seekg operations
     nrgFile.clear();
-    nrgFile.seekg(307200, std::ios::beg);
+    nrgFile.seekg(307200, std::ios::beg);  // Skipping the header section
 
     std::ofstream isoFile(outputFile, std::ios::binary);
     if (!isoFile) {
         return false;
     }
 
+    // Preallocate output file by setting its size
+    isoFile.seekp(nrgFileSize - 1);  // Move the write pointer to the end of the file
+    isoFile.write("", 1);  // Write a dummy byte to allocate space
+    isoFile.seekp(0, std::ios::beg);  // Reset write pointer to the beginning of the file
+
+    // Buffer for reading and writing
     constexpr size_t BUFFER_SIZE = 8 * 1024 * 1024;  // 8MB buffer
     std::vector<char> buffer(BUFFER_SIZE);
-    
+
+    // Read and write in chunks
     while (nrgFile) {
         nrgFile.read(buffer.data(), BUFFER_SIZE);
         std::streamsize bytesRead = nrgFile.gcount();
@@ -1150,3 +1167,4 @@ bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile
 
     return true;
 }
+
