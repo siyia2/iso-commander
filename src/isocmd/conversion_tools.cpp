@@ -917,6 +917,13 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
     }
 }
 
+// Special thanks to the original authors of the conversion tools:
+
+// Salvatore Santagati (mdf2iso).
+// Grégory Kokanosky (nrg2iso).
+// Danny Kurniawan and Kerry Harris (ccd2iso).
+
+// Note: Their original code has been modernized and ported to C++.
 
 // MDF2ISO
 
