@@ -345,6 +345,7 @@ void manualRefreshCache(const std::string& initialDir) {
 		// Save history
 		saveHistory();
 	}
+	
 
     // Create an input string stream to parse directory paths
     std::istringstream iss(input);
@@ -407,7 +408,18 @@ void manualRefreshCache(const std::string& initialDir) {
     // Create a task for each valid directory to refresh the cache and pass the vector by reference
     std::istringstream iss2(input); // Reset the string stream
     std::size_t runningTasks = 0;  // Track the number of running tasks
+	
+	// Set up non-blocking input
+    struct termios oldt, newt;
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
 
+    // Set stdin to non-blocking mode
+    int oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
+    fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
+    
     while (std::getline(iss2, path, ';')) {
         // Check if the directory path is valid
         if (!isValidDirectory(path)) {
@@ -418,7 +430,7 @@ void manualRefreshCache(const std::string& initialDir) {
         if (processedValidPaths.find(path) != processedValidPaths.end()) {
             continue; // Skip already processed valid paths
         }
-
+	
         // Add a task to the thread pool for refreshing the cache for each directory
         futures.emplace_back(std::async(std::launch::async, refreshCacheForDirectory, path, std::ref(allIsoFiles), std::ref(uniqueErrorMessages)));
 
@@ -493,9 +505,28 @@ void manualRefreshCache(const std::string& initialDir) {
         std::cout << "\033[1;91mCache refresh failed.\033[0m";
         std::cout << "\n";
     }
+    // Flush any pending input
+    char ch;
+    while (read(STDIN_FILENO, &ch, 1) > 0) {
+		// Discard any input during progress
+    }
+    // Ensure terminal is restored to original settings
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    fcntl(STDIN_FILENO, F_SETFL, oldf);
+        
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     manualRefreshCache("");
+	}
+	if (!promptFlag) {
+		// Flush any pending input
+    char ch;
+    while (read(STDIN_FILENO, &ch, 1) > 0) {
+		// Discard any input during progress
+    }
+    // Ensure terminal is restored to original settings
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    fcntl(STDIN_FILENO, F_SETFL, oldf);
 	}
 	uniqueErrorMessages.clear();
 	promptFlag = true;
