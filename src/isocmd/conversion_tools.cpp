@@ -1061,7 +1061,6 @@ struct __attribute__((packed)) CcdSector {
 
 
 bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
-    // Use memory-mapped file I/O for better performance
     std::ifstream ccdFile(ccdPath, std::ios::binary | std::ios::ate);
     if (!ccdFile) return false;
 
