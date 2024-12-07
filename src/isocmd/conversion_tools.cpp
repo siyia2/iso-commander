@@ -1021,7 +1021,6 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath) {
 }
 
 
-
 // CCD2ISO
 
 const size_t DATA_SIZE = 2048;
@@ -1113,7 +1112,6 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
 
     return true;
 }
-
 
 
 // NRG2ISO
