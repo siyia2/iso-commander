@@ -374,7 +374,8 @@ void manualRefreshCache(const std::string& initialDir) {
     std::size_t runningTasks = 0;  // Track the number of running tasks
     size_t totalProcessedFiles = 0;
 
-    
+    // Disable input before processing
+	disableInput();
 	std::mutex totalProcessedFilesMutex;
 
     while (std::getline(iss2, path, ';')) {
@@ -429,7 +430,11 @@ void manualRefreshCache(const std::string& initialDir) {
 
     // Stop the timer after completing the cache refresh and removal of non-existent paths
     auto end_time = std::chrono::high_resolution_clock::now();
-
+    
+	 // Flush and Restore input after processing
+    flushStdin();
+    restoreInput();
+    
     if (promptFlag) {
 
     if (!validPaths.empty() || (!invalidPaths.empty() && validPaths.empty())) {
@@ -531,14 +536,8 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
             isoFiles.push_back(filePath.string());
         }
     } catch (const std::filesystem::filesystem_error& e) {
-		// Flush and Restore input if exception
-		flushStdin();
-		restoreInput();
         // Catch any filesystem errors, format the error message, and add it to the set of unique error messages
         std::string formattedError = std::string("\n\n\033[1;91m") + e.what() + ".\033[0;1m\033[1A\033[K";
         uniqueErrorMessages.insert(formattedError);
     }
-    // Flush and Restore input after processing
-    flushStdin();
-    restoreInput();
 }

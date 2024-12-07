@@ -237,6 +237,8 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 
         bool newFilesFound = false;
         if (!list) {
+			// Disable input before processing
+			disableInput();
             files = findFiles(directoryPaths, fileType, [&](const std::string&, const std::string&) {
                 newFilesFound = true;
             }, invalidDirectoryPaths, processedErrors);
@@ -573,13 +575,13 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     std::set<std::string> fileNames;
     std::mutex mutex4search;
     auto start_time = std::chrono::high_resolution_clock::now();
-
-	// Disable input before processing
-	disableInput();
     
+    // Disable input before processing
+	disableInput();
+	
     // Consolidated set for all invalid paths
     std::set<std::string> invalidPaths;
-
+	
     size_t totalFiles = 0;
     for (const auto& path : paths) {
         try {
@@ -593,9 +595,6 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                 gapSetTotal = false;
             }
         } catch (const std::filesystem::filesystem_error& e) {
-			// Flush and Restore input if exception
-			flushStdin();
-			restoreInput();
             gapSet = false;
             std::string errorMessage = "\033[1;91mError accessing path: " + path + " - " + e.what() + "\033[0;1m";
             processedErrors.insert(errorMessage);
@@ -656,10 +655,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                     }
                 }
             }
-        } catch (const std::filesystem::filesystem_error& e) {	
-			// Flush and Restore input if exception
-			flushStdin();
-			restoreInput();		
+        } catch (const std::filesystem::filesystem_error& e) {		
             std::lock_guard<std::mutex> lock(mutex4search);
             if (e.code() == std::errc::permission_denied) {
                 invalidPaths.insert(path);
