@@ -34,6 +34,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
+#include <termios.h>
 #include <thread>
 #include <vector>
 #include <unistd.h>
