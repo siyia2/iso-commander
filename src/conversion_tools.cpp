@@ -577,6 +577,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     // Set stdin to non-blocking mode
     int oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
     fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
+    
 
     std::mutex fileCheckMutex;
     bool blacklistMdf = false;
@@ -593,7 +594,6 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         try {
             for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
                 if (entry.is_regular_file()) {
-					std::lock_guard<std::mutex> lock(counterMutex);
                     totalFiles++;
                     std::cout << "\rTotal files processed: " << totalFiles << std::flush;
                 }
@@ -693,7 +693,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
             future.get();
         }
     }
-	// Flush any pending input
+		// Flush any pending input
 		char ch;
 		while (read(STDIN_FILENO, &ch, 1) > 0) {
 			// Discard any input during progress

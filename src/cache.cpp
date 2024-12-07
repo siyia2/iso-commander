@@ -258,7 +258,6 @@ void manualRefreshCache(const std::string& initialDir) {
 	// Assuming promptFlag is defined elsewhere
 	if (promptFlag) {
 		clearScrollBuffer();
-		gapPrinted = false;
 	}
 
 	std::string input;
@@ -352,7 +351,6 @@ void manualRefreshCache(const std::string& initialDir) {
 
     // Check if any invalid paths were encountered and add a gap
     if ((!invalidPaths.empty() || !validPaths.empty()) && promptFlag) {
-		std::lock_guard<std::mutex> lock(cacheRefreshMutex);
         std::cout << "\n";
     }
 
@@ -372,7 +370,7 @@ void manualRefreshCache(const std::string& initialDir) {
     std::istringstream iss2(input); // Reset the string stream
     std::size_t runningTasks = 0;  // Track the number of running tasks
     
-    	// Set up non-blocking input
+    // Set up non-blocking input
     struct termios oldt, newt;
     tcgetattr(STDIN_FILENO, &oldt);
     newt = oldt;
@@ -414,7 +412,6 @@ void manualRefreshCache(const std::string& initialDir) {
             runningTasks = 0;  // Reset the count of running tasks
             std::lock_guard<std::mutex> lock(cacheRefreshMutex);
             std::cout << "\n";
-            gapPrinted = false;
         }
     }
 
