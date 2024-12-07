@@ -601,6 +601,14 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                 gapSetTotal = false;
             }
         } catch (const std::filesystem::filesystem_error& e) {
+			// Flush any pending input in case of any exceptions
+			char ch;
+			while (read(STDIN_FILENO, &ch, 1) > 0) {
+				// Discard any input during progress
+			}
+			// Ensure terminal is restored in case of any exceptions
+			tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+			fcntl(STDIN_FILENO, F_SETFL, oldf);
             gapSet = false;
             std::string errorMessage = "Error accessing path: " + path + " - " + e.what();
             processedErrors.insert(errorMessage);
