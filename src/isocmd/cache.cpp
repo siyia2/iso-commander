@@ -432,10 +432,10 @@ void manualRefreshCache(const std::string& initialDir) {
 
     if (promptFlag) {
 
-    // Calculate and print the elapsed time
     if (!validPaths.empty() || (!invalidPaths.empty() && validPaths.empty())) {
     std::cout << "\n";
 	}
+	// Calculate and print the elapsed time
     auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
 
     // Print the time taken for the entire process in bold with one decimal place
@@ -535,7 +535,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
 		flushStdin();
 		restoreInput();
         // Catch any filesystem errors, format the error message, and add it to the set of unique error messages
-        std::string formattedError = std::string("\n\033[1;91m") + e.what() + ".\033[0;1m";
+        std::string formattedError = std::string("\n\n\033[1;91m") + e.what() + ".\033[0;1m\033[1A\033[K";
         uniqueErrorMessages.insert(formattedError);
     }
     // Flush and Restore input after processing
