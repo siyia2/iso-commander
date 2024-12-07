@@ -567,16 +567,6 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 // Function to search for .bin and .img files over 5MB
 std::vector<std::string> findFiles(const std::vector<std::string>& paths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrors) {
 	
-	// Set up non-blocking input
-    struct termios oldt, newt;
-    tcgetattr(STDIN_FILENO, &oldt);
-    newt = oldt;
-    newt.c_lflag &= ~(ICANON | ECHO);
-    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-
-    // Set stdin to non-blocking mode
-    int oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
-    fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
 
     std::mutex fileCheckMutex;
     bool blacklistMdf = false;
@@ -591,49 +581,44 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     size_t totalFiles = 0;
     for (const auto& path : paths) {
 			
-	// Set up non-blocking input
-    struct termios oldt, newt;
-    tcgetattr(STDIN_FILENO, &oldt);
-    newt = oldt;
-    newt.c_lflag &= ~(ICANON | ECHO);
-    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-
-    // Set stdin to non-blocking mode
-    int oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
-    fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
         try {
             for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
+				// Set up non-blocking input
+				struct termios oldt, newt;
+				tcgetattr(STDIN_FILENO, &oldt);
+				newt = oldt;
+				newt.c_lflag &= ~(ICANON | ECHO);
+				tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+
+				// Set stdin to non-blocking mode
+				int oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
+				fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
+				
                 if (entry.is_regular_file()) {
                     totalFiles++;
                     std::cout << "\rTotal files processed: " << totalFiles << std::flush;
                 }
+                    // Flush any pending input
+					char ch;
+					while (read(STDIN_FILENO, &ch, 1) > 0) {
+						// Discard any input during progress
+					}
+					// Ensure terminal is restored
+					tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+					fcntl(STDIN_FILENO, F_SETFL, oldf);
             }
             if (totalFiles == 0) {
                 gapSetTotal = false;
             }
         } catch (const std::filesystem::filesystem_error& e) {
-			// Flush any pending input in case of any exceptions
-			char ch;
-			while (read(STDIN_FILENO, &ch, 1) > 0) {
-				// Discard any input during progress
-			}
-			// Ensure terminal is restored in case of any exceptions
-			tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-			fcntl(STDIN_FILENO, F_SETFL, oldf);
             gapSet = false;
             std::string errorMessage = "Error accessing path: " + path + " - " + e.what();
             processedErrors.insert(errorMessage);
             invalidPaths.insert(path);
         }
+    
     }
-    // Flush any pending input
-	char ch;
-	while (read(STDIN_FILENO, &ch, 1) > 0) {
-		// Discard any input during progress
-	}
-    // Ensure terminal is restored
-    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-    fcntl(STDIN_FILENO, F_SETFL, oldf);
+    
 
     if (!processedErrors.empty()) {
         std::cout << "\n\n";
@@ -687,15 +672,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                     }
                 }
             }
-        } catch (const std::filesystem::filesystem_error& e) {
-			// Flush any pending input in case of any exceptions
-			char ch;
-			while (read(STDIN_FILENO, &ch, 1) > 0) {
-				// Discard any input during progress
-			}
-			// Ensure terminal is restored in case of any exceptions
-			tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-			fcntl(STDIN_FILENO, F_SETFL, oldf);
+        } catch (const std::filesystem::filesystem_error& e) {			
             std::lock_guard<std::mutex> lock(mutex4search);
             if (e.code() == std::errc::permission_denied) {
                 invalidPaths.insert(path);
@@ -1211,4 +1188,3 @@ bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile
 
     return true;
 }
-
