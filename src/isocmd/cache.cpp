@@ -280,12 +280,12 @@ void manualRefreshCache(const std::string& initialDir) {
 
 		if (inputSearch == "clr") {
 			if (std::remove(cacheFilePath.c_str()) != 0) {
-				std::cerr << "\n\001\033[1;91mError deleting file: '" << cacheFilePath << "'. File does not exist or inaccessible." << std::endl;
+				std::cerr << "\n\001\033[1;91mError deleting IsoCache: '" << cacheFilePath << "'. File does not exist or inaccessible." << std::endl;
 				std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 				manualRefreshCache("");
         } else {
-			std::cout << "\n\001\033[1;92mFile deleted successfully: '" << cacheFilePath <<"'." << std::endl;
+			std::cout << "\n\001\033[1;92mIsoCache deleted successfully: '" << cacheFilePath <<"'." << std::endl;
 			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 			manualRefreshCache("");
@@ -485,11 +485,6 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
 	try {
         // Set directory traversal options; initially none
         auto options = std::filesystem::directory_options::none;
-
-        // If maxDepth is non-negative, include symlink directories in traversal
-        if (maxDepth >= 0) {
-            options |= std::filesystem::directory_options::follow_directory_symlink;
-        }
         
         // Disable input before processing
 		disableInput();
