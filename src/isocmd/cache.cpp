@@ -408,6 +408,7 @@ void manualRefreshCache(const std::string& initialDir) {
     // Create a task for each valid directory to refresh the cache and pass the vector by reference
     std::istringstream iss2(input); // Reset the string stream
     std::size_t runningTasks = 0;  // Track the number of running tasks
+	
 	// Set up non-blocking input
     struct termios oldt, newt;
     tcgetattr(STDIN_FILENO, &oldt);
@@ -418,6 +419,7 @@ void manualRefreshCache(const std::string& initialDir) {
     // Set stdin to non-blocking mode
     int oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
     fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
+    
 	try {
     
 		while (std::getline(iss2, path, ';')) {
@@ -528,6 +530,11 @@ void manualRefreshCache(const std::string& initialDir) {
 		uniqueErrorMessages.clear();
 		promptFlag = true;
 	} catch (...) {
+		// Flush any pending input in case of any exceptions
+		char ch;
+		while (read(STDIN_FILENO, &ch, 1) > 0) {
+			// Discard any input during progress
+		}
         // Ensure terminal is restored in case of any exceptions
         tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
         fcntl(STDIN_FILENO, F_SETFL, oldf);

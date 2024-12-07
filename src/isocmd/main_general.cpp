@@ -414,6 +414,11 @@ void displayProgressBar(const std::atomic<size_t>& completedIsos, const size_t& 
         }
     }
     catch (...) {
+		// Flush any pending input in case of any exceptions
+		char ch;
+		while (read(STDIN_FILENO, &ch, 1) > 0) {
+			// Discard any input during progress
+		}
         // Ensure terminal is restored in case of any exceptions
         tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
         fcntl(STDIN_FILENO, F_SETFL, oldf);
