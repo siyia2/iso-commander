@@ -54,7 +54,6 @@ extern std::vector<std::string> globalIsoFileList;
 
 
 // For cache directory creation
-extern bool gapPrinted; // for cache refresh for directory function
 extern bool promptFlag; // for cache refresh for directory function
 
 // Global variable to control recursion depth
@@ -116,6 +115,9 @@ void submenu2();
 void print_ascii();
 
 // General functions
+void flushStdin();
+void disableInput();
+void restoreInput();
 void loadHistory();
 void saveHistory();
 void signalHandler(int signum);
@@ -133,8 +135,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
 // Cache functions
 void loadCache(std::vector<std::string>& isoFiles);
 void manualRefreshCache(const std::string& initialDir = "");
-void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages);
-void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles, std::set<std::string>& uniqueErrorMessages);
+void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, size_t& totalProcessedFiles, std::mutex& totalProcessedFilesMutex);
 void removeNonExistentPathsFromCache();
 
 // Filter functions
