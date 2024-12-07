@@ -590,6 +590,17 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
 
     size_t totalFiles = 0;
     for (const auto& path : paths) {
+			
+	// Set up non-blocking input
+    struct termios oldt, newt;
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+
+    // Set stdin to non-blocking mode
+    int oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
+    fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
         try {
             for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
                 if (entry.is_regular_file()) {
@@ -615,6 +626,14 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
             invalidPaths.insert(path);
         }
     }
+    // Flush any pending input
+	char ch;
+	while (read(STDIN_FILENO, &ch, 1) > 0) {
+		// Discard any input during progress
+	}
+    // Ensure terminal is restored
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    fcntl(STDIN_FILENO, F_SETFL, oldf);
 
     if (!processedErrors.empty()) {
         std::cout << "\n\n";
@@ -721,15 +740,6 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
         std::cout << "\033[1mTime Elapsed: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n";
         std::cout << "\n";
-        
-        // Flush any pending input
-		char ch;
-		while (read(STDIN_FILENO, &ch, 1) > 0) {
-			// Discard any input during progress
-		}
-        // Ensure terminal is restored
-        tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-        fcntl(STDIN_FILENO, F_SETFL, oldf);
         
         std::cout << "\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
