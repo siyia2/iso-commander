@@ -250,42 +250,6 @@ bool isValidDirectory(const std::string& path) {
 }
 
 
-// Function to refresh the cache for a single directory
-void refreshCacheForDirectory(const std::string& path, std::vector<std::string>& allIsoFiles, std::set<std::string>& uniqueErrorMessages) {
-	if (promptFlag) {
-		std::cout << "\033[1;93mProcessing directory path: '" << path << "'.\033[0m"<< std::endl;
-	}
-
-	std::vector<std::string> newIsoFiles;
-	if (promptFlag) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    }
-
-	// Perform the cache refresh for the directory (e.g., using parallelTraverse)
-	traverse(path, newIsoFiles, uniqueErrorMessages);
-
-	// Use a separate mutex for read/write access to allIsoFiles
-	{
-		// Acquire lock for checking gapPrinted and potential printing
-		std::lock_guard<std::mutex> lock(Mutex4Low);
-		if (!gapPrinted && promptFlag) {
-		std::cout << "\n";
-		gapPrinted = true; // Set the flag to true
-		}
-	}
-
-	// Append new entries to allIsoFiles under lock protection
-	{
-		std::lock_guard<std::mutex> lock(Mutex4Low);
-		allIsoFiles.insert(allIsoFiles.end(), newIsoFiles.begin(), newIsoFiles.end());
-	}
-
-	if (promptFlag) {
-		std::cout << "\033[1;92mProcessed directory path: '" << path << "'.\033[0m" << std::endl;
-	}
-}
-
-
 // Function for manual cache refresh
 void manualRefreshCache(const std::string& initialDir) {
 
@@ -345,7 +309,6 @@ void manualRefreshCache(const std::string& initialDir) {
 		// Save history
 		saveHistory();
 	}
-	
 
     // Create an input string stream to parse directory paths
     std::istringstream iss(input);
@@ -408,8 +371,8 @@ void manualRefreshCache(const std::string& initialDir) {
     // Create a task for each valid directory to refresh the cache and pass the vector by reference
     std::istringstream iss2(input); // Reset the string stream
     std::size_t runningTasks = 0;  // Track the number of running tasks
-	
-	// Set up non-blocking input
+    
+    	// Set up non-blocking input
     struct termios oldt, newt;
     tcgetattr(STDIN_FILENO, &oldt);
     newt = oldt;
@@ -419,127 +382,106 @@ void manualRefreshCache(const std::string& initialDir) {
     // Set stdin to non-blocking mode
     int oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
     fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
-    
-	try {
-    
-		while (std::getline(iss2, path, ';')) {
-			// Check if the directory path is valid
-			if (!isValidDirectory(path)) {
-				continue; // Skip invalid paths
-			}
 
-			// Check if the path has already been processed
-			if (processedValidPaths.find(path) != processedValidPaths.end()) {
-				continue; // Skip already processed valid paths
-			}
+    while (std::getline(iss2, path, ';')) {
 	
-			// Add a task to the thread pool for refreshing the cache for each directory
-			futures.emplace_back(std::async(std::launch::async, refreshCacheForDirectory, path, std::ref(allIsoFiles), std::ref(uniqueErrorMessages)));
+        // Check if the directory path is valid
+        if (!isValidDirectory(path)) {
+            continue; // Skip invalid paths
+        }
 
-			++runningTasks;
+        // Check if the path has already been processed
+        if (processedValidPaths.find(path) != processedValidPaths.end()) {
+            continue; // Skip already processed valid paths
+        }
 
-			// Mark the path as processed
-			processedValidPaths.insert(path);
+        // Add a task to the thread pool for refreshing the cache for each directory
+        futures.emplace_back(std::async(std::launch::async, traverse, path, std::ref(allIsoFiles), std::ref(uniqueErrorMessages)));
 
-			// Check if the number of running tasks has reached the maximum allowed
-			if (runningTasks >= maxThreads) {
-				// Wait for the tasks to complete
-				for (auto& future : futures) {
-					future.wait();
-				}
-				// Clear completed tasks from the vector
-				futures.clear();
-				runningTasks = 0;  // Reset the count of running tasks
-				std::lock_guard<std::mutex> lock(cacheRefreshMutex);
-				std::cout << "\n";
-				gapPrinted = false;
-			}
-		}
+        ++runningTasks;
 
-		// Wait for the remaining tasks to complete
-		for (auto& future : futures) {
-			future.wait();
-		}
+        // Mark the path as processed
+        processedValidPaths.insert(path);
 
-		for (const auto& error : uniqueErrorMessages) {
-			std::cout << error;
-		}
+        // Check if the number of running tasks has reached the maximum allowed
+        if (runningTasks >= maxThreads) {
+            // Wait for the tasks to complete
+            for (auto& future : futures) {
+                future.wait();
+            }
+            // Clear completed tasks from the vector
+            futures.clear();
+            runningTasks = 0;  // Reset the count of running tasks
+            std::lock_guard<std::mutex> lock(cacheRefreshMutex);
+            std::cout << "\n";
+            gapPrinted = false;
+        }
+    }
 
-		if (!uniqueErrorMessages.empty()) {
-			std::cout << "\n";
-		}
+    // Wait for the remaining tasks to complete
+    for (auto& future : futures) {
+        future.wait();
+    }
+	// Flush any pending input
+	char ch;
+	while (read(STDIN_FILENO, &ch, 1) > 0) {
+		// Discard any input during progress
+	}
+    // Ensure terminal is restored
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    fcntl(STDIN_FILENO, F_SETFL, oldf);
+    for (const auto& error : uniqueErrorMessages) {
+        std::cout << error;
+    }
 
-		// Save the combined cache to disk
-		bool saveSuccess = saveCache(allIsoFiles, maxCacheSize);
-
-		// Stop the timer after completing the cache refresh and removal of non-existent paths
-		auto end_time = std::chrono::high_resolution_clock::now();
-		
-		// Flush any pending input
-		char ch;
-		while (read(STDIN_FILENO, &ch, 1) > 0) {
-			// Discard any input during progress
-		}
-		
-		if (promptFlag) {
-
-		// Calculate and print the elapsed time
-		if (!validPaths.empty() || (!invalidPaths.empty() && validPaths.empty())) {
+    if (!uniqueErrorMessages.empty()) {
 		std::cout << "\n";
-		}
-		auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+	}
 
-		// Print the time taken for the entire process in bold with one decimal place
-		std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\n";
+    // Save the combined cache to disk
+    bool saveSuccess = saveCache(allIsoFiles, maxCacheSize);
 
-		// Inform the user about the cache refresh status
-		if (saveSuccess && !validPaths.empty() && invalidPaths.empty() && uniqueErrorMessages.empty()) {
-			std::cout << "\n";
-			std::cout << "\033[1;92mCache refreshed successfully.\033[0m";
-			std::cout << "\n";
-		}
-		if (saveSuccess && !validPaths.empty() && (!invalidPaths.empty() || !uniqueErrorMessages.empty())) {
-			std::cout << "\n";
-			std::cout << "\033[1;93mCache refreshed with errors.\033[0m";
-			std::cout << "\n";
-		}
-		if (saveSuccess && validPaths.empty() && !invalidPaths.empty()) {
-			std::cout << "\n";
-			std::cout << "\033[1;91mCache refresh failed due to missing valid paths.\033[0m";
-			std::cout << "\n";
-		}
-		if (!saveSuccess) {
-			std::cout << "\n";
-			std::cout << "\033[1;91mCache refresh failed.\033[0m";
-			std::cout << "\n";
-		}
-		
-		// Ensure terminal is restored to original settings
-		tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-		fcntl(STDIN_FILENO, F_SETFL, oldf);
-        
-		std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-		manualRefreshCache("");
-		}
-		if (!promptFlag) {
-			// Ensure terminal is restored to original settings
-			tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-			fcntl(STDIN_FILENO, F_SETFL, oldf);
-		}
-		uniqueErrorMessages.clear();
-		promptFlag = true;
-	} catch (...) {
-		// Flush any pending input in case of any exceptions
-		char ch;
-		while (read(STDIN_FILENO, &ch, 1) > 0) {
-			// Discard any input during progress
-		}
-        // Ensure terminal is restored in case of any exceptions
-        tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-        fcntl(STDIN_FILENO, F_SETFL, oldf);
-        throw;
-    }	
+    // Stop the timer after completing the cache refresh and removal of non-existent paths
+    auto end_time = std::chrono::high_resolution_clock::now();
+
+    if (promptFlag) {
+
+    // Calculate and print the elapsed time
+    if (!validPaths.empty() || (!invalidPaths.empty() && validPaths.empty())) {
+    std::cout << "\n";
+	}
+    auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+
+    // Print the time taken for the entire process in bold with one decimal place
+    std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\n";
+
+    // Inform the user about the cache refresh status
+    if (saveSuccess && !validPaths.empty() && invalidPaths.empty() && uniqueErrorMessages.empty()) {
+        std::cout << "\n";
+        std::cout << "\033[1;92mCache refreshed successfully.\033[0m";
+        std::cout << "\n";
+    }
+    if (saveSuccess && !validPaths.empty() && (!invalidPaths.empty() || !uniqueErrorMessages.empty())) {
+        std::cout << "\n";
+        std::cout << "\033[1;93mCache refreshed with errors.\033[0m";
+        std::cout << "\n";
+    }
+    if (saveSuccess && validPaths.empty() && !invalidPaths.empty()) {
+        std::cout << "\n";
+        std::cout << "\033[1;91mCache refresh failed due to missing valid paths.\033[0m";
+        std::cout << "\n";
+    }
+    if (!saveSuccess) {
+        std::cout << "\n";
+        std::cout << "\033[1;91mCache refresh failed.\033[0m";
+        std::cout << "\n";
+    }
+    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    manualRefreshCache("");
+	}
+	uniqueErrorMessages.clear();
+	promptFlag = true;
 }
 
 
@@ -554,49 +496,65 @@ bool iequals(const std::string_view& a, const std::string_view& b) {
 
 // Function to traverse a directory and find ISO files
 void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages) {
+	    size_t totalProcessedFiles = 0;
+	    
     try {
+		
         // Set directory traversal options; initially none
         auto options = std::filesystem::directory_options::none;
-
         // If maxDepth is non-negative, include symlink directories in traversal
         if (maxDepth >= 0) {
             options |= std::filesystem::directory_options::follow_directory_symlink;
         }
-
         // Iterate through the directory recursively
         for (auto it = std::filesystem::recursive_directory_iterator(path, options); it != std::filesystem::recursive_directory_iterator(); ++it) {
+			
+			 // Set up non-blocking input
+			struct termios oldt, newt;
+			tcgetattr(STDIN_FILENO, &oldt);
+			newt = oldt;
+			newt.c_lflag &= ~(ICANON | ECHO);
+			tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+
+			// Set stdin to non-blocking mode
+			int oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
+			fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
+			
+            // Update total processed files
+            totalProcessedFiles++;
+            
+            
+            // Print progress
+            std::cout << "\033[0;1m\rTotal files processed: " << totalProcessedFiles << std::flush;
+
             // If maxDepth is set and current depth exceeds it, skip further recursion
             if (maxDepth >= 0 && it.depth() > maxDepth) {
                 it.disable_recursion_pending();
                 continue;
             }
-
             const auto& entry = *it;
             // If the current entry is not a regular file, skip it
             if (!entry.is_regular_file()) {
                 continue;
             }
-
             const auto& filePath = entry.path();
             const auto extension = filePath.extension();
-
             // Skip files that do not have a ".iso" extension
             if (!iequals(extension.string(), ".iso")) {
                 continue;
             }
-
             const auto fileSize = entry.file_size();
             // Skip files smaller than 5 MB or with a size of 0
             if (fileSize < 5 * 1024 * 1024 || fileSize == 0) {
                 continue;
             }
-
             // Add valid .iso file paths to the isoFiles vector
             isoFiles.push_back(filePath.string());
-        }
+		}
+        std::cout << "\n";
     } catch (const std::filesystem::filesystem_error& e) {
         // Catch any filesystem errors, format the error message, and add it to the set of unique error messages
-        std::string formattedError = std::string("\n\033[1;91m") + e.what() + ".\033[0;1m";
+        std::string formattedError = std::string("\n\033[1;91m") + e.what() + ".\033[0m";
         uniqueErrorMessages.insert(formattedError);
     }
 }
