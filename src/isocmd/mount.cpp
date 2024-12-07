@@ -296,6 +296,18 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
             }
             continue;
         }
+        
+        // New check: Verify if the ISO file exists
+        if (!fs::exists(isoPath)) {
+            std::stringstream errorMessage;
+            errorMessage << "\033[1;91mFailed to mnt: \033[1;93m'" << isoFile 
+                         << "'\033[0m\033[1;91m. ISO file missing.\033[0m";
+            {
+                std::lock_guard<std::mutex> lowLock(Mutex4Low);
+                mountedFails.insert(errorMessage.str());
+            }
+            continue;
+        }
 
         if (!fs::exists(mountPoint)) {
             try {
