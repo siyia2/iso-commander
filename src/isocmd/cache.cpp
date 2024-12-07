@@ -490,20 +490,23 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
 
         // Iterate through the directory recursively
         for (auto it = std::filesystem::recursive_directory_iterator(path, options); it != std::filesystem::recursive_directory_iterator(); ++it) {
-			std::lock_guard<std::mutex> lock(totalProcessedFilesMutex);
-			// Increment global counter for processed files
-            totalProcessedFiles++;
-
-            // Display live aggregated count
-            std::cout << "\r\033[0;1mTotal files processed: " << totalProcessedFiles << std::flush;
             // If maxDepth is set and current depth exceeds it, skip further recursion
             if (maxDepth >= 0 && it.depth() > maxDepth) {
                 it.disable_recursion_pending();
                 continue;
             }
             
-
             const auto& entry = *it;
+			// Increment global counter for processed file
+			if (entry.is_regular_file()) {
+            std::lock_guard<std::mutex> lock(totalProcessedFilesMutex);
+            totalProcessedFiles++;
+            
+            // Display live aggregated count
+            std::cout << "\r\033[0;1mTotal files processed: " << totalProcessedFiles << std::flush;
+			}     
+            
+            
             // If the current entry is not a regular file, skip it
             if (!entry.is_regular_file()) {
                 continue;
