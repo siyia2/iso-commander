@@ -365,6 +365,9 @@ void manualRefreshCache(const std::string& initialDir) {
 
     // Start the timer
     auto start_time = std::chrono::high_resolution_clock::now();
+    
+    // Disable input before processing
+	disableInput();
 
     // Create a task for each valid directory to refresh the cache and pass the vector by reference
     std::istringstream iss2(input); // Reset the string stream
@@ -487,6 +490,9 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
         if (maxDepth >= 0) {
             options |= std::filesystem::directory_options::follow_directory_symlink;
         }
+        
+        // Disable input before processing
+		disableInput();
 
         // Iterate through the directory recursively
         for (auto it = std::filesystem::recursive_directory_iterator(path, options); it != std::filesystem::recursive_directory_iterator(); ++it) {
@@ -530,8 +536,14 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
             isoFiles.push_back(filePath.string());
         }
     } catch (const std::filesystem::filesystem_error& e) {
+		// Flush and Restore input if exception
+		flushStdin();
+		restoreInput();
         // Catch any filesystem errors, format the error message, and add it to the set of unique error messages
         std::string formattedError = std::string("\n\033[1;91m") + e.what() + ".\033[0;1m";
         uniqueErrorMessages.insert(formattedError);
     }
+    // Flush and Restore input after processing
+    flushStdin();
+    restoreInput();
 }

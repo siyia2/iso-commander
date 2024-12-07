@@ -304,6 +304,27 @@ void clearScrollBuffer() {
         std::cout << "\033[3J\033[2J\033[H\033[0m" << std::flush;
 }
 
+// Function to flush input buffer
+void flushStdin() {
+    tcflush(STDIN_FILENO, TCIFLUSH);
+}
+
+// Function to disable input during processing
+void disableInput() {
+    struct termios term;
+    tcgetattr(STDIN_FILENO, &term);
+    term.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &term);
+}
+
+// Function to restore normal input
+void restoreInput() {
+    struct termios term;
+    tcgetattr(STDIN_FILENO, &term);
+    term.c_lflag |= ICANON | ECHO;
+    tcsetattr(STDIN_FILENO, TCSANOW, &term);
+}
+
 
 // Custom function to handle tab presses
 int custom_complete(int count, int key) {
