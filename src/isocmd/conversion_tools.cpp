@@ -596,7 +596,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
             }
         } catch (const std::filesystem::filesystem_error& e) {
             gapSet = false;
-            std::string errorMessage = "\033[1;91mError accessing path: " + path + " - " + e.what() + "\033[0;1m";
+            std::string errorMessage = "\033[1;91mError traversing directory: " + path + " - " + e.what() + "\033[0;1m";
             processedErrors.insert(errorMessage);
             invalidPaths.insert(path);
         }
