@@ -355,43 +355,77 @@ void displayProgressBar(const std::atomic<size_t>& completedIsos, const size_t& 
     bool enterPressed = false;
     auto startTime = std::chrono::high_resolution_clock::now();
 
-    while (!isComplete.load() || !enterPressed) {
-        size_t completedValue = completedIsos.load();
-        double progress = static_cast<double>(completedValue) / totalIsos;
-        int pos = static_cast<int>(barWidth * progress);
+    // Set up non-blocking input
+    struct termios oldt, newt;
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
 
-        auto currentTime = std::chrono::high_resolution_clock::now();
-        auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime);
-        double elapsedSeconds = elapsedTime.count() / 1000.0;
+    // Set stdin to non-blocking mode
+    int oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
+    fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
 
-        std::cout << "\r[";
-        for (int i = 0; i < barWidth; ++i) {
-            if (i < pos) std::cout << "=";
-            else if (i == pos) std::cout << ">";
-            else std::cout << " ";
-        }
-        std::cout << "] " << std::setw(3) << std::fixed << std::setprecision(1)
-                  << (progress * 100.0) << "% (" << completedValue << "/" << totalIsos << ") "
-                  << "Time Elapsed: "<< std::setprecision(1) << elapsedSeconds << "s";
-
-        if (completedValue == totalIsos && !enterPressed) {
-            enterPressed = true;
-            std::string confirmation;
-            std::cout << "\n\n\033[1;94mDisplay verbose output? (y/n):\033[0;1m ";
-            std::getline(std::cin, confirmation);
-            if (confirmation == "y" || confirmation == "Y") {
-                verbose = true;
-            } else {
-                verbose = false;
+    try {
+        while (!isComplete.load() || !enterPressed) {
+            // Flush any pending input
+            char ch;
+            while (read(STDIN_FILENO, &ch, 1) > 0) {
+                // Discard any input during progress
             }
-        } else {
-            std::cout.flush();
-            std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Update every 100ms
+
+            size_t completedValue = completedIsos.load();
+            double progress = static_cast<double>(completedValue) / totalIsos;
+            int pos = static_cast<int>(barWidth * progress);
+            auto currentTime = std::chrono::high_resolution_clock::now();
+            auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime);
+            double elapsedSeconds = elapsedTime.count() / 1000.0;
+
+            std::cout << "\r[";
+            for (int i = 0; i < barWidth; ++i) {
+                if (i < pos) std::cout << "=";
+                else if (i == pos) std::cout << ">";
+                else std::cout << " ";
+            }
+            std::cout << "] " << std::setw(3) << std::fixed << std::setprecision(1)
+                      << (progress * 100.0) << "% (" << completedValue << "/" << totalIsos << ") "
+                      << "Time Elapsed: " << std::setprecision(1) << elapsedSeconds << "s";
+
+            if (completedValue == totalIsos && !enterPressed) {
+                enterPressed = true;
+                
+                // Restore terminal to original settings before getting input
+                tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+                fcntl(STDIN_FILENO, F_SETFL, oldf);
+
+                std::string confirmation;
+                std::cout << "\n\n\033[1;94mDisplay verbose output? (y/n):\033[0;1m ";
+                std::getline(std::cin, confirmation);
+                
+                if (confirmation == "y" || confirmation == "Y") {
+                    verbose = true;
+                } else {
+                    verbose = false;
+                }
+            } else {
+                std::cout.flush();
+                std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Update every 100ms
+            }
         }
+    }
+    catch (...) {
+        // Ensure terminal is restored in case of any exceptions
+        tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+        fcntl(STDIN_FILENO, F_SETFL, oldf);
+        throw;
     }
 
     // Print a newline after completion
     std::cout << std::endl;
+
+    // Ensure terminal is restored to original settings
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    fcntl(STDIN_FILENO, F_SETFL, oldf);
 }
 
 
