@@ -408,7 +408,6 @@ void manualRefreshCache(const std::string& initialDir) {
     // Create a task for each valid directory to refresh the cache and pass the vector by reference
     std::istringstream iss2(input); // Reset the string stream
     std::size_t runningTasks = 0;  // Track the number of running tasks
-	
 	// Set up non-blocking input
     struct termios oldt, newt;
     tcgetattr(STDIN_FILENO, &oldt);
@@ -419,117 +418,121 @@ void manualRefreshCache(const std::string& initialDir) {
     // Set stdin to non-blocking mode
     int oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
     fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
+	try {
     
-    while (std::getline(iss2, path, ';')) {
-        // Check if the directory path is valid
-        if (!isValidDirectory(path)) {
-            continue; // Skip invalid paths
-        }
+		while (std::getline(iss2, path, ';')) {
+			// Check if the directory path is valid
+			if (!isValidDirectory(path)) {
+				continue; // Skip invalid paths
+			}
 
-        // Check if the path has already been processed
-        if (processedValidPaths.find(path) != processedValidPaths.end()) {
-            continue; // Skip already processed valid paths
-        }
+			// Check if the path has already been processed
+			if (processedValidPaths.find(path) != processedValidPaths.end()) {
+				continue; // Skip already processed valid paths
+			}
 	
-        // Add a task to the thread pool for refreshing the cache for each directory
-        futures.emplace_back(std::async(std::launch::async, refreshCacheForDirectory, path, std::ref(allIsoFiles), std::ref(uniqueErrorMessages)));
+			// Add a task to the thread pool for refreshing the cache for each directory
+			futures.emplace_back(std::async(std::launch::async, refreshCacheForDirectory, path, std::ref(allIsoFiles), std::ref(uniqueErrorMessages)));
 
-        ++runningTasks;
+			++runningTasks;
 
-        // Mark the path as processed
-        processedValidPaths.insert(path);
+			// Mark the path as processed
+			processedValidPaths.insert(path);
 
-        // Check if the number of running tasks has reached the maximum allowed
-        if (runningTasks >= maxThreads) {
-            // Wait for the tasks to complete
-            for (auto& future : futures) {
-                future.wait();
-            }
-            // Clear completed tasks from the vector
-            futures.clear();
-            runningTasks = 0;  // Reset the count of running tasks
-            std::lock_guard<std::mutex> lock(cacheRefreshMutex);
-            std::cout << "\n";
-            gapPrinted = false;
-        }
-    }
+			// Check if the number of running tasks has reached the maximum allowed
+			if (runningTasks >= maxThreads) {
+				// Wait for the tasks to complete
+				for (auto& future : futures) {
+					future.wait();
+				}
+				// Clear completed tasks from the vector
+				futures.clear();
+				runningTasks = 0;  // Reset the count of running tasks
+				std::lock_guard<std::mutex> lock(cacheRefreshMutex);
+				std::cout << "\n";
+				gapPrinted = false;
+			}
+		}
 
-    // Wait for the remaining tasks to complete
-    for (auto& future : futures) {
-        future.wait();
-    }
+		// Wait for the remaining tasks to complete
+		for (auto& future : futures) {
+			future.wait();
+		}
 
-    for (const auto& error : uniqueErrorMessages) {
-        std::cout << error;
-    }
+		for (const auto& error : uniqueErrorMessages) {
+			std::cout << error;
+		}
 
-    if (!uniqueErrorMessages.empty()) {
-		std::cout << "\n";
-	}
+		if (!uniqueErrorMessages.empty()) {
+			std::cout << "\n";
+		}
 
-    // Save the combined cache to disk
-    bool saveSuccess = saveCache(allIsoFiles, maxCacheSize);
+		// Save the combined cache to disk
+		bool saveSuccess = saveCache(allIsoFiles, maxCacheSize);
 
-    // Stop the timer after completing the cache refresh and removal of non-existent paths
-    auto end_time = std::chrono::high_resolution_clock::now();
-
-    if (promptFlag) {
-
-    // Calculate and print the elapsed time
-    if (!validPaths.empty() || (!invalidPaths.empty() && validPaths.empty())) {
-    std::cout << "\n";
-	}
-    auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-
-    // Print the time taken for the entire process in bold with one decimal place
-    std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\n";
-
-    // Inform the user about the cache refresh status
-    if (saveSuccess && !validPaths.empty() && invalidPaths.empty() && uniqueErrorMessages.empty()) {
-        std::cout << "\n";
-        std::cout << "\033[1;92mCache refreshed successfully.\033[0m";
-        std::cout << "\n";
-    }
-    if (saveSuccess && !validPaths.empty() && (!invalidPaths.empty() || !uniqueErrorMessages.empty())) {
-        std::cout << "\n";
-        std::cout << "\033[1;93mCache refreshed with errors.\033[0m";
-        std::cout << "\n";
-    }
-    if (saveSuccess && validPaths.empty() && !invalidPaths.empty()) {
-        std::cout << "\n";
-        std::cout << "\033[1;91mCache refresh failed due to missing valid paths.\033[0m";
-        std::cout << "\n";
-    }
-    if (!saveSuccess) {
-        std::cout << "\n";
-        std::cout << "\033[1;91mCache refresh failed.\033[0m";
-        std::cout << "\n";
-    }
-    // Flush any pending input
-    char ch;
-    while (read(STDIN_FILENO, &ch, 1) > 0) {
-		// Discard any input during progress
-    }
-    // Ensure terminal is restored to original settings
-    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-    fcntl(STDIN_FILENO, F_SETFL, oldf);
-        
-    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-    manualRefreshCache("");
-	}
-	if (!promptFlag) {
+		// Stop the timer after completing the cache refresh and removal of non-existent paths
+		auto end_time = std::chrono::high_resolution_clock::now();
+		
 		// Flush any pending input
-    char ch;
-    while (read(STDIN_FILENO, &ch, 1) > 0) {
-		// Discard any input during progress
-    }
-    // Ensure terminal is restored to original settings
-    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-    fcntl(STDIN_FILENO, F_SETFL, oldf);
-	}
-	uniqueErrorMessages.clear();
-	promptFlag = true;
+		char ch;
+		while (read(STDIN_FILENO, &ch, 1) > 0) {
+			// Discard any input during progress
+		}
+		
+		if (promptFlag) {
+
+		// Calculate and print the elapsed time
+		if (!validPaths.empty() || (!invalidPaths.empty() && validPaths.empty())) {
+		std::cout << "\n";
+		}
+		auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+
+		// Print the time taken for the entire process in bold with one decimal place
+		std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\n";
+
+		// Inform the user about the cache refresh status
+		if (saveSuccess && !validPaths.empty() && invalidPaths.empty() && uniqueErrorMessages.empty()) {
+			std::cout << "\n";
+			std::cout << "\033[1;92mCache refreshed successfully.\033[0m";
+			std::cout << "\n";
+		}
+		if (saveSuccess && !validPaths.empty() && (!invalidPaths.empty() || !uniqueErrorMessages.empty())) {
+			std::cout << "\n";
+			std::cout << "\033[1;93mCache refreshed with errors.\033[0m";
+			std::cout << "\n";
+		}
+		if (saveSuccess && validPaths.empty() && !invalidPaths.empty()) {
+			std::cout << "\n";
+			std::cout << "\033[1;91mCache refresh failed due to missing valid paths.\033[0m";
+			std::cout << "\n";
+		}
+		if (!saveSuccess) {
+			std::cout << "\n";
+			std::cout << "\033[1;91mCache refresh failed.\033[0m";
+			std::cout << "\n";
+		}
+		
+		// Ensure terminal is restored to original settings
+		tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+		fcntl(STDIN_FILENO, F_SETFL, oldf);
+        
+		std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+		manualRefreshCache("");
+		}
+		if (!promptFlag) {
+			// Ensure terminal is restored to original settings
+			tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+			fcntl(STDIN_FILENO, F_SETFL, oldf);
+		}
+		uniqueErrorMessages.clear();
+		promptFlag = true;
+	} catch (...) {
+        // Ensure terminal is restored in case of any exceptions
+        tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+        fcntl(STDIN_FILENO, F_SETFL, oldf);
+        throw;
+    }	
 }
 
 
