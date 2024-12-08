@@ -370,46 +370,75 @@ void manualRefreshCache(const std::string& initialDir) {
 
     // Disable input before processing
 	disableInput();
-	std::mutex totalProcessedFilesMutex;
-
-    while (std::getline(iss2, path, ';')) {
 	
-        // Check if the directory path is valid
-        if (!isValidDirectory(path)) {
-            continue; // Skip invalid paths
-        }
+	std::mutex traverseFilesMutex;
+	std::mutex traverseErrorsMutex;
 
-        // Check if the path has already been processed
-        if (processedValidPaths.find(path) != processedValidPaths.end()) {
-            continue; // Skip already processed valid paths
-        }
+	std::mutex pathsMutex; // For protecting processedValidPaths and runningTasks
+	std::mutex futuresMutex; // For protecting futures
 
-        // Add a task to the thread pool for refreshing the cache for each directory
-            futures.emplace_back(std::async(std::launch::async, traverse, path, std::ref(allIsoFiles), std::ref(uniqueErrorMessages), std::ref(totalProcessedFiles), std::ref(totalProcessedFilesMutex)));
+	// Use thread-local storage for temporary path tracking
+	thread_local std::set<std::string> localProcessedPaths;
 
-        ++runningTasks;
+	while (std::getline(iss2, path, ';')) {
+		bool shouldProcess = false;
+    
+		// Minimize the critical section for checking and marking unique paths
+		{
+			std::lock_guard<std::mutex> lock(pathsMutex);
+			if (isValidDirectory(path) && 
+				processedValidPaths.find(path) == processedValidPaths.end()) {
+				processedValidPaths.insert(path);
+				shouldProcess = true;
+			}
+		}
+    
+		// Process the path outside the lock if it's valid
+		if (shouldProcess) {
+			// Use thread-local tracking to reduce contention
+			localProcessedPaths.insert(path);
+        
+			// Minimal locking
+			{
+				std::lock_guard<std::mutex> lock(futuresMutex);
+				futures.emplace_back(std::async(std::launch::async, 
+					[path, &allIsoFiles, &uniqueErrorMessages, &totalProcessedFiles, 
+					&traverseFilesMutex, &traverseErrorsMutex]() {
+						// Perform traversal with minimal global locking
+						traverse(path, allIsoFiles, uniqueErrorMessages, 
+								totalProcessedFiles, traverseFilesMutex, 
+								traverseErrorsMutex);
+                    
+						// Remove path from local tracking after processing
+						localProcessedPaths.erase(path);
+					}
+				));
+				++runningTasks;
+			}
+        
+			// Task management with reduced locking
+			if (runningTasks >= maxThreads) {
+				std::vector<std::future<void>> localFutures;
+				{
+					std::lock_guard<std::mutex> lock(futuresMutex);
+					localFutures = std::move(futures);
+					futures.clear();
+					runningTasks = 0;
+				}
+            
+				// Wait outside the lock
+				for (auto &future : localFutures) {
+					future.wait();
+				}
+				std::cout << "\n";
+			}
+		}
+	}
 
-        // Mark the path as processed
-        processedValidPaths.insert(path);
-
-        // Check if the number of running tasks has reached the maximum allowed
-        if (runningTasks >= maxThreads) {
-            // Wait for the tasks to complete
-            for (auto& future : futures) {
-                future.wait();
-            }
-            // Clear completed tasks from the vector
-            futures.clear();
-            runningTasks = 0;  // Reset the count of running tasks
-            std::lock_guard<std::mutex> lock(cacheRefreshMutex);
-            std::cout << "\n";
-        }
-    }
-
-    // Wait for the remaining tasks to complete
-    for (auto& future : futures) {
-        future.wait();
-    }
+	// Final wait for remaining tasks
+	for (auto &future : futures) {
+			future.wait();
+	}
     
     // Print invalid paths
     if ((!uniqueErrorMessages.empty() || !invalidPaths.empty()) && promptFlag) {
@@ -498,18 +527,18 @@ bool iequals(const std::string_view& a, const std::string_view& b) {
 
 
 // Function to traverse a directory and find ISO files
-void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, size_t& totalProcessedFiles, std::mutex& totalProcessedFilesMutex) {
+void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, size_t& totalProcessedFiles, std::mutex& traverseFilesMutex, std::mutex& traverseErrorsMutex) {
+    // Batch collection for ISO files to reduce mutex lock frequency
+    std::vector<std::string> localIsoFiles;
+    const size_t BATCH_SIZE = 100; // Adjust batch size as needed
+
     try {
-        // Set directory traversal options; initially none
         auto options = std::filesystem::directory_options::none;
         
-        // Disable input before processing
         disableInput();
         
-        // Iterate through the directory recursively
         for (auto it = std::filesystem::recursive_directory_iterator(path, options); it != std::filesystem::recursive_directory_iterator(); ++it) {
             try {
-                // If maxDepth is set and current depth exceeds it, skip further recursion
                 if (maxDepth >= 0 && it.depth() > maxDepth) {
                     it.disable_recursion_pending();
                     continue;
@@ -517,16 +546,13 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
                 
                 const auto& entry = *it;
                 
-                // Increment global counter for processed file
                 if (entry.is_regular_file()) {
-                    std::lock_guard<std::mutex> lock(totalProcessedFilesMutex);
+                    std::lock_guard<std::mutex> lock(traverseFilesMutex);
                     totalProcessedFiles++;
                     
-                    // Display live aggregated count
                     std::cout << "\r\033[0;1mTotal files processed: " << totalProcessedFiles << std::flush;
                 }     
                 
-                // If the current entry is not a regular file, skip it
                 if (!entry.is_regular_file()) {
                     continue;
                 }
@@ -534,36 +560,46 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
                 const auto& filePath = entry.path();
                 const auto extension = filePath.extension();
                 
-                // Skip files that do not have a ".iso" extension
                 if (!iequals(extension.string(), ".iso")) {
                     continue;
                 }
                 
                 const auto fileSize = entry.file_size();
                 
-                // Skip files smaller than 5 MB or with a size of 0
                 if (fileSize < 5 * 1024 * 1024 || fileSize == 0) {
                     continue;
                 }
                 
-                // Add valid .iso file paths to the isoFiles vector
-                isoFiles.push_back(filePath.string());
+                // Collect ISO files in a local batch
+                localIsoFiles.push_back(filePath.string());
+                
+                // When batch reaches specified size, add to shared vector
+                if (localIsoFiles.size() >= BATCH_SIZE) {
+                    {
+                        std::lock_guard<std::mutex> lock(Mutex4Low);
+                        isoFiles.insert(isoFiles.end(), localIsoFiles.begin(), localIsoFiles.end());
+                        localIsoFiles.clear();
+                    }
+                }
             
             } catch (const std::filesystem::filesystem_error& entryError) {
-                // Catch filesystem errors for specific entries
                 std::string formattedError = std::string("\n\033[1;91mError processing path: ") + 
                     it->path().string() + " - " + entryError.what() + "\033[0;1m";
                 
-                // Use a lock to safely insert into the shared set of unique error messages
-                std::lock_guard<std::mutex> errorLock(totalProcessedFilesMutex);
+                std::lock_guard<std::mutex> errorLock(traverseErrorsMutex);
                 uniqueErrorMessages.insert(formattedError);
             }
         }
+        
+        // Add any remaining files in the local batch
+        if (!localIsoFiles.empty()) {
+            std::lock_guard<std::mutex> lock(Mutex4Low);
+            isoFiles.insert(isoFiles.end(), localIsoFiles.begin(), localIsoFiles.end());
+        }
     } catch (const std::filesystem::filesystem_error& e) {
-        // Catch any top-level filesystem errors for the entire directory traversal
         std::string formattedError = std::string("\n\033[1;91mError traversing directory: ") + 
             path.string() + " - " + e.what() + "\033[0;1m";
-        
+        std::lock_guard<std::mutex> errorLock(traverseErrorsMutex);
         uniqueErrorMessages.insert(formattedError);
     }
 }

@@ -567,21 +567,21 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 
 
 // Function to search for .bin and .img files over 5MB
-std::vector<std::string> findFiles(const std::vector<std::string>& paths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrors) {
+std::vector<std::string> findFiles(const std::vector<std::string>& paths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrors)  {
 
     std::mutex fileCheckMutex;
     bool blacklistMdf = false;
     bool blacklistNrg = false;
-    std::set<std::string> fileNames;
+    std::vector<std::string> fileNames;
     std::mutex mutex4search;
     auto start_time = std::chrono::high_resolution_clock::now();
     
     // Disable input before processing
-	disableInput();
-	
+    disableInput();
+    
     // Consolidated set for all invalid paths
     std::set<std::string> invalidPaths;
-	
+    
     size_t totalFiles = 0;
     for (const auto& path : paths) {
         try {
@@ -602,7 +602,6 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         }
     }
     
-
     if (!processedErrors.empty()) {
         std::cout << "\n\n";
         for (const auto& error : processedErrors) {
@@ -615,15 +614,27 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     futures.reserve(totalFiles);
     unsigned int numOngoingTasks = 0;
 
-    auto processFileAsync = [&](const std::filesystem::directory_entry& entry) {
+    auto processFileAsync = [&](const std::filesystem::directory_entry& entry, std::vector<std::string>& batch) {
         std::string fileName = entry.path().string();
         std::string filePath = entry.path().parent_path().string();
         callback(fileName, filePath);
-
+        
         std::lock_guard<std::mutex> lock(mutex4search);
-        fileNames.insert(fileName);
+        batch.push_back(fileName);
+
+        // If batch size reaches 100, process the batch
+        if (batch.size() >= 100) {
+            // Process the batch here (e.g., write to file or store)
+            std::lock_guard<std::mutex> lockBatch(mutex4search);
+            fileNames.insert(fileNames.end(), batch.begin(), batch.end());
+            batch.clear(); // Clear the batch after processing
+        }
+
         --numOngoingTasks;
     };
+
+    // Temporary container for the current batch of file names
+    std::vector<std::string> batch;
 
     for (const auto& path : paths) {
         try {
@@ -641,7 +652,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                         if (numOngoingTasks < maxThreads) {
                             ++numOngoingTasks;
                             std::lock_guard<std::mutex> lock(mutex4search);
-                            futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
+                            futures.emplace_back(std::async(std::launch::async, processFileAsync, entry, std::ref(batch)));
                         } else {
                             for (auto& future : futures) {
                                 if (future.valid()) {
@@ -650,12 +661,12 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
                             }
                             ++numOngoingTasks;
                             std::lock_guard<std::mutex> lock(mutex4search);
-                            futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
+                            futures.emplace_back(std::async(std::launch::async, processFileAsync, entry, std::ref(batch)));
                         }
                     }
                 }
             }
-        } catch (const std::filesystem::filesystem_error& e) {		
+        } catch (const std::filesystem::filesystem_error& e) {
             std::lock_guard<std::mutex> lock(mutex4search);
             if (e.code() == std::errc::permission_denied) {
                 invalidPaths.insert(path);
@@ -666,11 +677,19 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         }
     }
 
+    // Process any remaining files in the last batch if there are fewer than 100
+    if (!batch.empty()) {
+        std::lock_guard<std::mutex> lock(mutex4search);
+        fileNames.insert(fileNames.end(), batch.begin(), batch.end());
+    }
+
+    // Wait for all async tasks to finish
     for (auto& future : futures) {
         if (future.valid()) {
             future.get();
         }
     }
+
     // Flush and Restore input after processing
     flushStdin();
     restoreInput();
@@ -703,9 +722,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
         std::cout << "\033[1mTime Elapsed: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n";
         std::cout << "\n";
-        
-        
-        
+
         std::cout << "\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     }
