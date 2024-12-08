@@ -647,15 +647,10 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, c
                                 // Check cache and process file
                                 {
                                     std::lock_guard<std::mutex> lock(fileCheckMutex);
-                                    if (cache && 
-                                        std::find(cache->begin(), cache->end(), fileName) == cache->end()) {
-                                        // Call user-provided callback
-                                        callback(fileName, entry.path().parent_path().string());
-
-                                        // Add to file names
-                                        fileNames.insert(fileName);
-                                    }
-                                    // Print progress
+									if (cache && fileNames.insert(fileName).second) {
+										// Only call the callback for new files
+										callback(fileName, entry.path().parent_path().string());
+									}
                                 
                                 }
                             }
