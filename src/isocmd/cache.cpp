@@ -471,12 +471,12 @@ void manualRefreshCache(const std::string& initialDir) {
     }
     if (saveSuccess && validPaths.empty() && !invalidPaths.empty()) {
         std::cout << "\n";
-        std::cout << "\033[1;91mCache refresh failed due to missing valid paths.\033[0m";
+        std::cout << "\033[1;91mCache refresh failed due to lack of valid paths.\033[0m";
         std::cout << "\n";
     }
     if (!saveSuccess) {
         std::cout << "\n";
-        std::cout << "\033[1;91mCache refresh failed.\033[0m";
+        std::cout << "\033[1;91mCache refresh failed. Unable to save the cache file.\033[0m";
         std::cout << "\n";
     }
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
