@@ -400,7 +400,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice) {
 }
 
 
-// Function to process user input and convert selected BIN/MDF files to ISO format
+// Function to process user input and convert selected BIN/MDF/NRG files to ISO format
 void processInput(const std::string& input, const std::vector<std::string>& fileList, bool modeMdf, bool modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts) {
     std::mutex futuresMutex;
     std::set<int> processedIndices;
@@ -569,6 +569,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 
 // Function to search for .bin and .img files over 5MB
 std::vector<std::string> findFiles(const std::vector<std::string>& paths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrors) {
+
     std::mutex fileCheckMutex;
     bool blacklistMdf = false;
     bool blacklistNrg = false;
@@ -614,76 +615,45 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
     futures.reserve(totalFiles);
     unsigned int numOngoingTasks = 0;
 
-    // Process a file asynchronously
     auto processFileAsync = [&](const std::filesystem::directory_entry& entry) {
         std::string fileName = entry.path().string();
         std::string filePath = entry.path().parent_path().string();
-        
-        // Callback to handle the file (actual file processing logic)
         callback(fileName, filePath);
 
-        // Lock mutex to ensure thread-safe access to fileNames
         std::lock_guard<std::mutex> lock(mutex4search);
         fileNames.insert(fileName);
         --numOngoingTasks;
     };
 
-    // Function to process files in batches
-    auto processBatch = [&](const std::vector<std::filesystem::directory_entry>& batch) {
-        // Process each file in the batch asynchronously
-        for (const auto& entry : batch) {
-            if (entry.is_regular_file()) {
-                std::string fileName = entry.path().string();
-                std::vector<std::string>* cache = (mode == "bin") ? &binImgFilesCache
-                                                                 : (mode == "mdf") ? &mdfMdsFilesCache
-                                                                                   : (mode == "nrg") ? &nrgFilesCache
-                                                                                                     : nullptr;
-
-                // Skip the file if it already exists in the cache
-                if (std::find(cache->begin(), cache->end(), fileName) == cache->end()) {
-                    if (numOngoingTasks < maxThreads) {
-                        ++numOngoingTasks;
-                        std::lock_guard<std::mutex> lock(mutex4search);
-                        futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
-                    } else {
-                        // Wait for some tasks to finish
-                        for (auto& future : futures) {
-                            if (future.valid()) {
-                                future.get();
-                            }
-                        }
-                        ++numOngoingTasks;
-                        std::lock_guard<std::mutex> lock(mutex4search);
-                        futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
-                    }
-                }
-            }
-        }
-    };
-
-    // Iterate through the paths and process files in batches of 100
     for (const auto& path : paths) {
         try {
             blacklistMdf = (mode == "mdf");
             blacklistNrg = (mode == "nrg");
-
-            std::vector<std::filesystem::directory_entry> batch;
-
             for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
                 if (entry.is_regular_file() && blacklist(entry, blacklistMdf, blacklistNrg)) {
-                    batch.push_back(entry);
+                    std::string fileName = entry.path().string();
+                    std::vector<std::string>* cache = (mode == "bin") ? &binImgFilesCache
+                                     : (mode == "mdf") ? &mdfMdsFilesCache
+                                     : (mode == "nrg") ? &nrgFilesCache
+                                     : nullptr;
 
-                    // Once we have 100 files in the batch, process them
-                    if (batch.size() >= 100) {
-                        processBatch(batch);
-                        batch.clear();  // Reset the batch for the next set of files
+                    if (std::find(cache->begin(), cache->end(), fileName) == cache->end()) {
+                        if (numOngoingTasks < maxThreads) {
+                            ++numOngoingTasks;
+                            std::lock_guard<std::mutex> lock(mutex4search);
+                            futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
+                        } else {
+                            for (auto& future : futures) {
+                                if (future.valid()) {
+                                    future.get();
+                                }
+                            }
+                            ++numOngoingTasks;
+                            std::lock_guard<std::mutex> lock(mutex4search);
+                            futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
+                        }
                     }
                 }
-            }
-
-            // Process any remaining files in the batch (if less than 100)
-            if (!batch.empty()) {
-                processBatch(batch);
             }
         } catch (const std::filesystem::filesystem_error& e) {
             std::lock_guard<std::mutex> lock(mutex4search);
@@ -696,7 +666,6 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         }
     }
 
-    // Wait for all tasks to finish
     for (auto& future : futures) {
         if (future.valid()) {
             future.get();
@@ -740,26 +709,63 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     }
 
-    // Add the files to the cache based on the mode
     std::lock_guard<std::mutex> lock(mutex4search);
     if (mode == "bin") {
-        binImgFilesCache.insert(binImgFilesCache.end(), fileNames.begin(), fileNames.end());
+        // Store files in batches of 100
+        size_t batchSize = 100;
+        std::vector<std::string> batch;
+        for (const auto& fileName : fileNames) {
+            batch.push_back(fileName);
+            if (batch.size() == batchSize) {
+                binImgFilesCache.insert(binImgFilesCache.end(), batch.begin(), batch.end());
+                batch.clear();
+            }
+        }
+        if (!batch.empty()) {
+            binImgFilesCache.insert(binImgFilesCache.end(), batch.begin(), batch.end());
+        }
         return binImgFilesCache;
     }
 
     if (mode == "mdf") {
-        mdfMdsFilesCache.insert(mdfMdsFilesCache.end(), fileNames.begin(), fileNames.end());
+        // Store files in batches of 100
+        size_t batchSize = 100;
+        std::vector<std::string> batch;
+        for (const auto& fileName : fileNames) {
+            batch.push_back(fileName);
+            if (batch.size() == batchSize) {
+                mdfMdsFilesCache.insert(mdfMdsFilesCache.end(), batch.begin(), batch.end());
+                batch.clear();
+            }
+        }
+        if (!batch.empty()) {
+            mdfMdsFilesCache.insert(mdfMdsFilesCache.end(), batch.begin(), batch.end());
+        }
         return mdfMdsFilesCache;
     }
 
     if (mode == "nrg") {
-        nrgFilesCache.insert(nrgFilesCache.end(), fileNames.begin(), fileNames.end());
+        // Store files in batches of 100
+        size_t batchSize = 100;
+        std::vector<std::string> batch;
+        for (const auto& fileName : fileNames) {
+            batch.push_back(fileName);
+            if (batch.size() == batchSize) {
+                nrgFilesCache.insert(nrgFilesCache.end(), batch.begin(), batch.end());
+                batch.clear();
+            }
+        }
+        if (!batch.empty()) {
+            nrgFilesCache.insert(nrgFilesCache.end(), batch.begin(), batch.end());
+        }
         return nrgFilesCache;
     }
 
     // Return an empty vector if mode is not recognized
     return std::vector<std::string>();
 }
+
+
 
 
 
