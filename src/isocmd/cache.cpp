@@ -456,27 +456,27 @@ void manualRefreshCache(const std::string& initialDir) {
     auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
 
     // Print the time taken for the entire process in bold with one decimal place
-    std::cout << "\n\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0m\n";
+    std::cout << "\n\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n";
 
     // Inform the user about the cache refresh status
     if (saveSuccess && !validPaths.empty() && invalidPaths.empty() && uniqueErrorMessages.empty()) {
         std::cout << "\n";
-        std::cout << "\033[1;92mCache refreshed successfully.\033[0m";
+        std::cout << "\033[1;92mCache refreshed successfully.\033[0;1m";
         std::cout << "\n";
     }
     if (saveSuccess && !validPaths.empty() && (!invalidPaths.empty() || !uniqueErrorMessages.empty())) {
         std::cout << "\n";
-        std::cout << "\033[1;93mCache refreshed with errors.\033[0m";
+        std::cout << "\033[1;93mCache refreshed with errors.\033[0;1m";
         std::cout << "\n";
     }
     if (saveSuccess && validPaths.empty() && !invalidPaths.empty()) {
         std::cout << "\n";
-        std::cout << "\033[1;91mCache refresh failed due to lack of valid paths.\033[0m";
+        std::cout << "\033[1;91mCache refresh failed due to lack of valid paths.\033[0;1m";
         std::cout << "\n";
     }
     if (!saveSuccess) {
         std::cout << "\n";
-        std::cout << "\033[1;91mCache refresh failed. Unable to save the cache file.\033[0m";
+        std::cout << "\033[1;91mCache refresh failed. Unable to write to the cache file.\033[0;1m";
         std::cout << "\n";
     }
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
