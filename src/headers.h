@@ -134,7 +134,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
 // Cache functions
 void loadCache(std::vector<std::string>& isoFiles);
 void manualRefreshCache(const std::string& initialDir = "");
-void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, size_t& totalProcessedFiles, std::mutex& totalProcessedFilesMutex);
+void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, size_t& totalProcessedFiles, std::mutex& traverseFilesMutex, std::mutex& traverseErrorsMutex);
 void removeNonExistentPathsFromCache();
 
 // Filter functions
