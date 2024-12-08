@@ -567,13 +567,13 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 }
 
 
-// Function to search for .bin and .img files over 5MB
+// Function to search for .bin .img .nrg and mdf files over 5MB
 std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, const std::string& mode, 
     const std::function<void(const std::string&, const std::string&)>& callback, 
     std::set<std::string>& invalidDirectoryPaths, 
     std::set<std::string>& processedErrors) {
 
-    // Thread-safe containers and synchronization primitives
+    // Local mutexes
     std::mutex pathsMutex;
     std::mutex futuresMutex;
     std::mutex fileCheckMutex;
@@ -663,10 +663,9 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, c
                     }
                     catch (const std::filesystem::filesystem_error& e) {
                         std::lock_guard<std::mutex> lock(fileCheckMutex);
-                        std::string errorMessage = "\033[1;91mError processing path: " 
+                        std::string errorMessage = "\033[1;91mError traversing path: " 
                             + path + " - " + e.what() + "\033[0;1m";
                         processedErrors.insert(errorMessage);
-                        invalidPaths.insert(path);
                     }
                 }));
                 ++runningTasks;
@@ -710,9 +709,20 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, c
         if (gapSet) {
             std::cout << "\n";
         }
+        
+        
         if ((!invalidPaths.empty() && !gapSet) || !gapSet || (gapSet && !invalidPaths.empty())) {
             std::cout << "\n";
         }
+        
+        if (!processedErrors.empty()) {
+			for (const auto& errorMsg : processedErrors) {
+				std::cout << errorMsg << "\n";
+			}
+		}
+        if (!processedErrors.empty()) {
+			std::cout << "\n";
+		}
 
         if (mode == "bin") {
             std::cout << "\033[1;92mFound " << fileNames.size() << " matching files" << ".\033[1;93m " << binImgFilesCache.size() << " matching files cached in RAM from previous searches.\033[0;1m\n";
