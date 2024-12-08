@@ -254,7 +254,6 @@ void manualRefreshCache(const std::string& initialDir) {
 
 	std::mutex cacheRefreshMutex;
 
-
 	// Assuming promptFlag is defined elsewhere
 	if (promptFlag) {
 		clearScrollBuffer();
@@ -320,7 +319,7 @@ void manualRefreshCache(const std::string& initialDir) {
     std::vector<std::string> validPaths;
 
     // Vector to store invalid paths
-    std::vector<std::string> invalidPaths;
+    std::set<std::string> invalidPaths;
 
     // Set to store processed invalid paths
     std::set<std::string> processedInvalidPaths;
@@ -342,7 +341,7 @@ void manualRefreshCache(const std::string& initialDir) {
             if (processedInvalidPaths.find(path) == processedInvalidPaths.end()) {
                 // Print the error message and mark the path as processed
                 if (promptFlag){
-					invalidPaths.push_back("\033[1;91mInvalid directory path: '" + path + "'. Skipped from processing.\033[0m");
+					invalidPaths.insert(path);
 					processedInvalidPaths.insert(path);
 				}
             }
@@ -353,14 +352,9 @@ void manualRefreshCache(const std::string& initialDir) {
     if ((!invalidPaths.empty() || !validPaths.empty()) && promptFlag) {
         std::cout << "\n";
     }
-
-    // Print invalid paths
-    for (const auto& invalidPath : invalidPaths) {
-        std::cout << invalidPath << std::endl;
-    }
-
-    if (!invalidPaths.empty() && !validPaths.empty() && promptFlag) {
-        std::cout << "\n";
+    
+    if (validPaths.empty() && promptFlag) {
+       std::cout << "\033[1A\033[K";
     }
 
     // Start the timer
@@ -416,6 +410,24 @@ void manualRefreshCache(const std::string& initialDir) {
     for (auto& future : futures) {
         future.wait();
     }
+    
+    // Print invalid paths
+    if ((!uniqueErrorMessages.empty() || !invalidPaths.empty()) && promptFlag) {
+		if (!validPaths.empty()) {
+			std::cout << "\n\n\033[0;1mInvalid paths omitted from search: \033[1;91m";
+		} else {
+			std::cout << "\n\033[0;1mInvalid paths omitted from search: \033[1;91m";
+		}
+		auto it = invalidPaths.begin();
+		while (it != invalidPaths.end()) {
+			std::cout << "'" << *it << "'";
+			++it;
+			if (it != invalidPaths.end()) {
+				std::cout << " ";  // Add space between paths, but not after the last one.
+			}
+		}
+		std::cout << "\033[0;1m.";
+	}
     
     if (!uniqueErrorMessages.empty()) {
 		std::cout << "\n";
