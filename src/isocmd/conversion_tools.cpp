@@ -568,13 +568,24 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 
 
 // Function to search for .bin and .img files over 5MB
-std::vector<std::string> findFiles(const std::vector<std::string>& paths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrors) {
+std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, const std::string& mode, 
+    const std::function<void(const std::string&, const std::string&)>& callback, 
+    std::set<std::string>& invalidDirectoryPaths, 
+    std::set<std::string>& processedErrors) {
 
+    // Thread-safe containers and synchronization primitives
+    std::mutex pathsMutex;
+    std::mutex futuresMutex;
     std::mutex fileCheckMutex;
-    bool blacklistMdf = false;
-    bool blacklistNrg = false;
+    std::mutex fileCountMutex;
+    
+    // Tracking sets and variables
+    std::set<std::string> processedValidPaths;
     std::set<std::string> fileNames;
-    std::mutex mutex4search;
+    unsigned int runningTasks = 0;
+    size_t totalFiles = 0;
+
+    // Time tracking
     auto start_time = std::chrono::high_resolution_clock::now();
 
     // Disable input before processing
@@ -582,102 +593,112 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
 
     // Consolidated set for all invalid paths
     std::set<std::string> invalidPaths;
+    
 
-    size_t totalFiles = 0;
-    for (const auto& path : paths) {
-        try {
-            for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
-                if (entry.is_regular_file()) {
-                    totalFiles++;
-                    std::cout << "\rTotal files processed: " << totalFiles << std::flush;
-                }
-            }
-            if (totalFiles == 0) {
-                gapSetTotal = false;
-            }
-        } catch (const std::filesystem::filesystem_error& e) {
-            gapSet = false;
-            std::string errorMessage = "\033[1;91mError traversing directory: " + path + " - " + e.what() + "\033[0;1m";
-            processedErrors.insert(errorMessage);
-            invalidPaths.insert(path);
-        }
-    }
-
-    if (!processedErrors.empty()) {
-        std::cout << "\n\n";
-        for (const auto& error : processedErrors) {
-            std::cout << "\033[1;91m" << error << "\033[0;1m" << std::endl;
-        }
-        processedErrors.clear();
-    }
-
-    std::vector<std::future<void>> futures;
-    futures.reserve(totalFiles);
-    unsigned int numOngoingTasks = 0;
-
-    auto processFileAsync = [&](const std::filesystem::directory_entry& entry) {
-        std::string fileName = entry.path().string();
-        std::string filePath = entry.path().parent_path().string();
-        callback(fileName, filePath);
-
-        std::lock_guard<std::mutex> lock(mutex4search);
-        fileNames.insert(fileName);
-        --numOngoingTasks;
-    };
-
-    for (const auto& path : paths) {
-        try {
-            blacklistMdf = (mode == "mdf");
-            blacklistNrg = (mode == "nrg");
-            for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
-                if (entry.is_regular_file() && blacklist(entry, blacklistMdf, blacklistNrg)) {
-                    std::string fileName = entry.path().string();
-                    std::vector<std::string>* cache = (mode == "bin") ? &binImgFilesCache
+    // Prepare file caches based on mode
+    std::vector<std::string>* cache = (mode == "bin") ? &binImgFilesCache
                                      : (mode == "mdf") ? &mdfMdsFilesCache
                                      : (mode == "nrg") ? &nrgFilesCache
                                      : nullptr;
 
-                    if (std::find(cache->begin(), cache->end(), fileName) == cache->end()) {
-                        if (numOngoingTasks < maxThreads) {
-                            ++numOngoingTasks;
-                            std::lock_guard<std::mutex> lock(mutex4search);
-                            futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
-                        } else {
-                            for (auto& future : futures) {
-                                if (future.valid()) {
-                                    future.get();
+    // Process paths
+    std::vector<std::future<void>> futures;
+    std::vector<std::string> paths(inputPaths.begin(), inputPaths.end());
+
+    for (const auto& originalPath : paths) {
+        // Trim and validate path
+        std::string path = std::filesystem::path(originalPath).string();
+        bool shouldProcess = false;
+
+        // Minimize critical section for checking unique paths
+        {
+            std::lock_guard<std::mutex> lock(pathsMutex);
+            if (!path.empty() && 
+                processedValidPaths.find(path) == processedValidPaths.end()) {
+                processedValidPaths.insert(path);
+                shouldProcess = true;
+            }
+        }
+
+        // Process the path if valid
+        if (shouldProcess) {
+            // Minimal locking for futures management
+            {
+                std::lock_guard<std::mutex> lock(futuresMutex);
+                futures.emplace_back(std::async(std::launch::async, 
+                    [&callback, path, mode, &fileNames, &invalidPaths, 
+                     &processedErrors, &fileCheckMutex, &fileCountMutex, cache, &totalFiles]() {
+                    try {
+                        // Flags for blacklisting
+                        bool blacklistMdf = (mode == "mdf");
+                        bool blacklistNrg = (mode == "nrg");
+
+                        // Traverse directory
+                        for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
+							if (entry.is_regular_file()) {
+								std::lock_guard<std::mutex> lock(fileCountMutex);
+								totalFiles ++;
+								std::cout << "\r\033[0;1mTotal files processed: " << totalFiles << std::flush;
+							}
+                            if (entry.is_regular_file() && 
+                                // Call the global blacklist function directly
+                                blacklist(entry, blacklistMdf, blacklistNrg)) {
+                                std::string fileName = entry.path().string();
+                                // Check cache and process file
+                                {
+                                    std::lock_guard<std::mutex> lock(fileCheckMutex);
+                                    if (cache && 
+                                        std::find(cache->begin(), cache->end(), fileName) == cache->end()) {
+                                        // Call user-provided callback
+                                        callback(fileName, entry.path().parent_path().string());
+
+                                        // Add to file names
+                                        fileNames.insert(fileName);
+                                    }
+                                    // Print progress
+                                
                                 }
                             }
-                            ++numOngoingTasks;
-                            std::lock_guard<std::mutex> lock(mutex4search);
-                            futures.emplace_back(std::async(std::launch::async, processFileAsync, entry));
                         }
                     }
-                }
+                    catch (const std::filesystem::filesystem_error& e) {
+                        std::lock_guard<std::mutex> lock(fileCheckMutex);
+                        std::string errorMessage = "\033[1;91mError processing path: " 
+                            + path + " - " + e.what() + "\033[0;1m";
+                        processedErrors.insert(errorMessage);
+                        invalidPaths.insert(path);
+                    }
+                }));
+                ++runningTasks;
             }
-        } catch (const std::filesystem::filesystem_error& e) {
-            std::lock_guard<std::mutex> lock(mutex4search);
-            if (e.code() == std::errc::permission_denied) {
-                invalidPaths.insert(path);
-            } else {
-                std::string errorMessage = "\033[1;91mError processing path: " + path + " - " + e.what() + "\033[0;1m";
-                processedErrors.insert(errorMessage);
+
+            // Manage task count
+            if (runningTasks >= maxThreads) {
+                // Wait for existing futures
+                for (auto& future : futures) {
+                    if (future.valid()) {
+                        future.wait();
+                    }
+                }
+                // Clear completed futures
+                futures.clear();
+                runningTasks = 0;
             }
         }
     }
 
-    // Wait for all futures to complete
+    // Wait for any remaining futures
     for (auto& future : futures) {
         if (future.valid()) {
-            future.get();
+            future.wait();
         }
     }
 
-    // Flush and Restore input after processing
+    // Restore input
     flushStdin();
     restoreInput();
 
-    // Update invalidDirectoryPaths with all invalid paths
+    // Update invalid directory paths
     invalidDirectoryPaths.insert(invalidPaths.begin(), invalidPaths.end());
 
     // Print success message if files were found
@@ -710,35 +731,28 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     }
 
-    // Handle batch insertions only after all threads are completed
+      // Batch insert processed files into cache
     std::vector<std::string> batch;
     size_t batchSize = 100;
 
     for (const auto& fileName : fileNames) {
         batch.push_back(fileName);
         if (batch.size() == batchSize) {
-            if (mode == "bin") {
-                binImgFilesCache.insert(binImgFilesCache.end(), batch.begin(), batch.end());
-            } else if (mode == "mdf") {
-                mdfMdsFilesCache.insert(mdfMdsFilesCache.end(), batch.begin(), batch.end());
-            } else if (mode == "nrg") {
-                nrgFilesCache.insert(nrgFilesCache.end(), batch.begin(), batch.end());
-            }
+            if (mode == "bin") binImgFilesCache.insert(binImgFilesCache.end(), batch.begin(), batch.end());
+            else if (mode == "mdf") mdfMdsFilesCache.insert(mdfMdsFilesCache.end(), batch.begin(), batch.end());
+            else if (mode == "nrg") nrgFilesCache.insert(nrgFilesCache.end(), batch.begin(), batch.end());
             batch.clear();
         }
     }
 
-    // Insert remaining files if any
+    // Insert remaining files
     if (!batch.empty()) {
-        if (mode == "bin") {
-            binImgFilesCache.insert(binImgFilesCache.end(), batch.begin(), batch.end());
-        } else if (mode == "mdf") {
-            mdfMdsFilesCache.insert(mdfMdsFilesCache.end(), batch.begin(), batch.end());
-        } else if (mode == "nrg") {
-            nrgFilesCache.insert(nrgFilesCache.end(), batch.begin(), batch.end());
-        }
+        if (mode == "bin") binImgFilesCache.insert(binImgFilesCache.end(), batch.begin(), batch.end());
+        else if (mode == "mdf") mdfMdsFilesCache.insert(mdfMdsFilesCache.end(), batch.begin(), batch.end());
+        else if (mode == "nrg") nrgFilesCache.insert(nrgFilesCache.end(), batch.begin(), batch.end());
     }
 
+    // Return appropriate cache
     return (mode == "bin") ? binImgFilesCache
            : (mode == "mdf") ? mdfMdsFilesCache
            : (mode == "nrg") ? nrgFilesCache
