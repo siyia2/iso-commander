@@ -666,6 +666,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         }
     }
 
+    // Wait for all futures to complete
     for (auto& future : futures) {
         if (future.valid()) {
             future.get();
@@ -709,64 +710,40 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     }
 
-    std::lock_guard<std::mutex> lock(mutex4search);
-    if (mode == "bin") {
-        // Store files in batches of 100
-        size_t batchSize = 100;
-        std::vector<std::string> batch;
-        for (const auto& fileName : fileNames) {
-            batch.push_back(fileName);
-            if (batch.size() == batchSize) {
+    // Handle batch insertions only after all threads are completed
+    std::vector<std::string> batch;
+    size_t batchSize = 100;
+
+    for (const auto& fileName : fileNames) {
+        batch.push_back(fileName);
+        if (batch.size() == batchSize) {
+            if (mode == "bin") {
                 binImgFilesCache.insert(binImgFilesCache.end(), batch.begin(), batch.end());
-                batch.clear();
-            }
-        }
-        if (!batch.empty()) {
-            binImgFilesCache.insert(binImgFilesCache.end(), batch.begin(), batch.end());
-        }
-        return binImgFilesCache;
-    }
-
-    if (mode == "mdf") {
-        // Store files in batches of 100
-        size_t batchSize = 100;
-        std::vector<std::string> batch;
-        for (const auto& fileName : fileNames) {
-            batch.push_back(fileName);
-            if (batch.size() == batchSize) {
+            } else if (mode == "mdf") {
                 mdfMdsFilesCache.insert(mdfMdsFilesCache.end(), batch.begin(), batch.end());
-                batch.clear();
+            } else if (mode == "nrg") {
+                nrgFilesCache.insert(nrgFilesCache.end(), batch.begin(), batch.end());
             }
+            batch.clear();
         }
-        if (!batch.empty()) {
-            mdfMdsFilesCache.insert(mdfMdsFilesCache.end(), batch.begin(), batch.end());
-        }
-        return mdfMdsFilesCache;
     }
 
-    if (mode == "nrg") {
-        // Store files in batches of 100
-        size_t batchSize = 100;
-        std::vector<std::string> batch;
-        for (const auto& fileName : fileNames) {
-            batch.push_back(fileName);
-            if (batch.size() == batchSize) {
-                nrgFilesCache.insert(nrgFilesCache.end(), batch.begin(), batch.end());
-                batch.clear();
-            }
-        }
-        if (!batch.empty()) {
+    // Insert remaining files if any
+    if (!batch.empty()) {
+        if (mode == "bin") {
+            binImgFilesCache.insert(binImgFilesCache.end(), batch.begin(), batch.end());
+        } else if (mode == "mdf") {
+            mdfMdsFilesCache.insert(mdfMdsFilesCache.end(), batch.begin(), batch.end());
+        } else if (mode == "nrg") {
             nrgFilesCache.insert(nrgFilesCache.end(), batch.begin(), batch.end());
         }
-        return nrgFilesCache;
     }
 
-    // Return an empty vector if mode is not recognized
-    return std::vector<std::string>();
+    return (mode == "bin") ? binImgFilesCache
+           : (mode == "mdf") ? mdfMdsFilesCache
+           : (mode == "nrg") ? nrgFilesCache
+           : std::vector<std::string>();
 }
-
-
-
 
 
 // Blacklist function for MDF BIN IMG
