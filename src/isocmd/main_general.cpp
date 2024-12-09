@@ -32,7 +32,7 @@ int main(int argc, char *argv[]) {
 	bool promptFlag = true;
 	// For saving history to a differrent cache for FilterPatterns
 	bool historyPattern = false;
-	
+	//Flag to enable/disable verboseoutput
 	bool verbose = false;
 	// Traverse depth for cache refresh
 	int maxDepth = -1;
