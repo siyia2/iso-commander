@@ -5,7 +5,6 @@
 
 
 // For breaking mv&rm gracefully
-bool mvDelBreak=false;
 
 // General
 
@@ -82,6 +81,8 @@ void select_and_operate_files_by_number(const std::string& operation, bool promp
     isoFiles.reserve(100);
     bool isFiltered = false;
     bool needsClrScrn = true;
+    bool mvDelBreak=false;
+
 
     std::string operationColor = (operation == "rm") ? "\033[1;91m" :
                                  (operation == "cp") ? "\033[1;92m" : "\033[1;93m";
@@ -143,98 +144,111 @@ void select_and_operate_files_by_number(const std::string& operation, bool promp
         }
 
         if (inputString.empty()) {
-            if (isFiltered) {
-                isFiltered = false;
-                continue;  // Return to the original list
-            } else {
-                return;  // Exit the function only if we're already on the original list
-            }
-        } else if (inputString == "/") {
-            while (true) {
-                operationIsos.clear();
-                operationErrors.clear();
-                uniqueErrorMessages.clear();
+    if (isFiltered) {
+        isFiltered = false;
+        continue;  // Return to the original list
+    } else {
+        return;  // Exit the function only if we're already on the original list
+    }
+}
 
-                clear_history();
-                historyPattern = true;
-                loadHistory();
-                // Move the cursor up 3 lines and clear them
-                std::cout << "\033[1A\033[K";
-                std::string filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + " \001\033[1;94m\002list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
-
-                std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
-
-                if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
-                    historyPattern = false;
-                    if (isFiltered) {
-                        needsClrScrn = true;
-                    } else {
-                        needsClrScrn = false;
-                    }
-                    clear_history();
-                    break;
-                }
-                std::string inputSearch(searchQuery.get());
-                std::cout << "\033[1m\n";
-
-                if (strcmp(searchQuery.get(), "/") != 0) {
-                    add_history(searchQuery.get());
-                    saveHistory();
-                }
-
-                historyPattern = false;
-                clear_history();
-
-                // Filter based on current active list instead of always using global list
-                const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : globalIsoFileList;
-                auto newFilteredFiles = filterFiles(sourceList, inputSearch);
-                sortFilesCaseInsensitive(newFilteredFiles);
-
-                if (newFilteredFiles.size() == globalIsoFileList.size()) {
+		if (inputString == "/") {
+			while (true) {  // Use a more controlled loop
+				operationIsos.clear();
+				operationErrors.clear();
+				uniqueErrorMessages.clear();
+				clear_history();
+				historyPattern = true;
+				loadHistory();
+        
+				// Move the cursor up 3 lines and clear them
+				std::cout << "\033[1A\033[K";
+				std::string filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + " \001\033[1;94m\002list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
+        
+				std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
+        
+				// Exit conditions
+				if (!searchQuery || 
+					searchQuery.get()[0] == '\0' || 
+					strcmp(searchQuery.get(), "/") == 0) {
+					historyPattern = false;
+					needsClrScrn = isFiltered;
+					clear_history();
+					isFiltered = false;  // Reset filtered state
+					break;
+				}
+        
+				std::string inputSearch(searchQuery.get());
+				std::cout << "\033[1m\n";
+        
+				// Add to history if not a repeat
+				if (strcmp(searchQuery.get(), "/") != 0) {
+					add_history(searchQuery.get());
+					saveHistory();
+				}
+        
+				historyPattern = false;
+				clear_history();
+        
+				// Determine source list for filtering
+				const std::vector<std::string>& sourceList = globalIsoFileList;
+				auto newFilteredFiles = filterFiles(sourceList, inputSearch);
+				sortFilesCaseInsensitive(newFilteredFiles);
+        
+				// Handle filter results
+				if (newFilteredFiles.empty()) {
+					std::cout << "\033[1A\033[K";  // Clear the previous input line
+					continue;  // Prompt again if no files match
+				}
+        
+				if (newFilteredFiles.size() == globalIsoFileList.size()) {
 					isFiltered = false;
 					break;
 				}
-
-                if (!newFilteredFiles.empty()) {
-                    filteredFiles = std::move(newFilteredFiles);
-                    needsClrScrn = true;
-                    isFiltered = true;
-                    break;
-                }
-                std::cout << "\033[1A\033[K";  // Clear the previous input line
-            }
-        } else {
-            std::vector<std::string>& currentFiles = isFiltered ? filteredFiles : globalIsoFileList;
-            needsClrScrn =true;
-            processOperationInput(inputString, currentFiles, process, operationIsos, operationErrors, uniqueErrorMessages, promptFlag, maxDepth);
-
-            if (verbose) {
+        
+				// Update filtered files
+				filteredFiles = std::move(newFilteredFiles);
 				needsClrScrn = true;
-                verbose_cp_mv_rm(operationIsos, operationErrors, uniqueErrorMessages);
-            }
+				isFiltered = true;
+				break;
+			}
+		} else {
+			std::vector<std::string>& currentFiles = isFiltered ? filteredFiles : globalIsoFileList;
+			needsClrScrn = true;
+    
+			bool result = processOperationInput(inputString, currentFiles, process, operationIsos, 
+												operationErrors, uniqueErrorMessages, promptFlag, 
+												maxDepth, mvDelBreak);
+    
+			if (verbose) {
+				needsClrScrn = true;
+				verbose_cp_mv_rm(operationIsos, operationErrors, uniqueErrorMessages);
+			}
+    
+			if (process != "cp" && isFiltered && result) {
+				historyPattern = false;
+				clear_history();
+				isFiltered = false;
+				needsClrScrn = true;
+				mvDelBreak = true;
+			}
+    
+			if (currentFiles.empty()) {
+				clearScrollBuffer();
+				needsClrScrn = true;
+				std::cout << "\n\033[1;93mNo ISO available for " << operation << ".\033[0m\n\n";
+				std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+				return;
+			}
+		}
 
-            if (process != "cp" && isFiltered && mvDelBreak) {
-                historyPattern = false;
-                clear_history();
-                isFiltered = false;
-                needsClrScrn =true;
-            }
-
-            if (currentFiles.empty()) {
-                clearScrollBuffer();
-                needsClrScrn = true;
-                std::cout << "\n\033[1;93mNo ISO available for " << operation << ".\033[0m\n\n";
-                std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                return;
-            }
-        }
     }
 }
 
 
 // Function to process either mv or cp indices
-void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool promptFlag, int maxDepth) {
+bool processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool promptFlag, int maxDepth, bool mvDelBreak) {
     std::string userDestDir;
     std::istringstream iss(input);
     std::vector<int> processedIndices;
@@ -326,7 +340,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         clear_history();
-        return;
+        return mvDelBreak;
     }
 
 		unsigned int numThreads = std::min(static_cast<unsigned int>(processedIndices.size()), maxThreads);
@@ -355,6 +369,9 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
     if (!isDelete) {
         while (true) {
+			if (!isCopy) {
+				mvDelBreak = true;
+			}
             clearScrollBuffer();
             displaySelectedIsos();
             clear_history();
@@ -369,7 +386,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             if (mainInputString.empty()) {
                 mvDelBreak = false;
                 clear_history();
-                return;
+                return mvDelBreak;
             }
 
             if (isValidLinuxPathFormat(mainInputString)) {
@@ -417,7 +434,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             std::cout << "\n\033[1;93mDelete operation aborted by user.\033[0;1m\n";
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            return;
+            return mvDelBreak;
         }
         mvDelBreak = true;
     }
@@ -469,6 +486,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     clear_history();
     userDestDir.clear();
     maxDepth = -1;
+    return mvDelBreak;
 }
 
 
