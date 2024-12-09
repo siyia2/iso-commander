@@ -452,6 +452,7 @@ bool processOperationInput(const std::string& input, std::vector<std::string>& i
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
     futures.reserve(indexChunks.size());
+    std::mutex Mutex4Low; // Mutex for low-level processing
 
     for (const auto& chunk : indexChunks) {
         std::vector<std::string> isoFilesInChunk;
@@ -463,10 +464,10 @@ bool processOperationInput(const std::string& input, std::vector<std::string>& i
             [&isoFiles](size_t index) { return isoFiles[index - 1]; }
         );
 
-        futures.emplace_back(pool.enqueue([isoFilesInChunk = std::move(isoFilesInChunk), &isoFiles, &operationIsos, &operationErrors, &userDestDir, isMove, isCopy, isDelete, &completedTasks]() {
-            handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors, userDestDir, isMove, isCopy, isDelete);
-            completedTasks.fetch_add(static_cast<int>(isoFilesInChunk.size()), std::memory_order_relaxed);
-        }));
+        futures.emplace_back(pool.enqueue([isoFilesInChunk = std::move(isoFilesInChunk), &isoFiles, &operationIsos, &operationErrors, &userDestDir, isMove, isCopy, isDelete, &completedTasks, &Mutex4Low]() {
+			handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors, userDestDir, isMove, isCopy, isDelete, Mutex4Low);
+			completedTasks.fetch_add(isoFilesInChunk.size(), std::memory_order_relaxed); // No need for static_cast to int
+		}));
     }
 
     for (auto& future : futures) {
@@ -501,7 +502,7 @@ bool directoryExists(const std::string& path) {
 
 
 // Function to handle the deletion of ISO files in batches
-void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete) {
+void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete, std::mutex& Mutex4Low) {
     namespace fs = std::filesystem;
 
     // Get the real user ID and group ID (of the user who invoked sudo)

@@ -402,6 +402,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool pro
 void processInput(const std::string& input, const std::vector<std::string>& fileList, bool modeMdf, bool modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool promptFlag, int maxDepth, bool historyPattern, bool& verbose) {
     std::mutex futuresMutex;
     std::set<int> processedIndices;
+    std::mutex Mutex4Low; // Mutex for low-level processing
 
     // Step 1: Tokenize the input to determine the number of threads to use
     std::istringstream issCount(input);
@@ -464,7 +465,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
         std::size_t found = selectedFile.find_last_of("/\\");
         std::string filePath = selectedFile.substr(0, found);
         selectedFilePaths.emplace(filePath);
-        convertToISO(selectedFile, successOuts, skippedOuts, failedOuts, deletedOuts, modeMdf, modeNrg);
+        convertToISO(selectedFile, successOuts, skippedOuts, failedOuts, deletedOuts, modeMdf, modeNrg, Mutex4Low);
         // Increment completedTasks when conversion is done
         ++completedTasks;
     };
@@ -888,7 +889,7 @@ void printFileList(const std::vector<std::string>& fileList) {
 
 
 // Function to convert a BIN/IMG/MDF file to ISO format
-void convertToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool modeMdf, bool modeNrg) {
+void convertToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool modeMdf, bool modeNrg, std::mutex& Mutex4Low) {
     // Get the real user ID and group ID (of the user who invoked sudo)
     uid_t real_uid;
     gid_t real_gid;

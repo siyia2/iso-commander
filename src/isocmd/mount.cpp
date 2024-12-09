@@ -10,7 +10,7 @@ std::vector<std::string> globalIsoFileList;
 //	MOUNT STUFF
 
 // Function to mount all ISOs indiscriminately
-void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, bool& verbose) {
+void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, bool& verbose, std::mutex& Mutex4Low) {
     size_t maxChunkSize = 50;  // Maximum number of files per chunk
     size_t totalIsos = isoFiles.size();
     std::atomic<size_t> completedIsos(0);
@@ -31,7 +31,7 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::st
         futures.emplace_back(pool.enqueue([&, i, end]() {
             // Optimization: Replace loop with efficient vector construction
             std::vector<std::string> chunkFiles(isoFiles.begin() + i, isoFiles.begin() + end);
-            mountIsoFiles(chunkFiles, mountedFiles, skippedMessages, mountedFails);
+            mountIsoFiles(chunkFiles, mountedFiles, skippedMessages, mountedFails, Mutex4Low);
             completedIsos.fetch_add(chunkFiles.size(), std::memory_order_relaxed);
         }));
     }
@@ -52,6 +52,7 @@ void select_and_mount_files_by_number(bool historyPattern, bool& verbose) {
     isoFiles.reserve(100);
     bool isFiltered = false;
     bool needsClrScrn = true;
+    std::mutex Mutex4Low; // Mutex for low-level processing
 
     while (true) {
         removeNonExistentPathsFromCache();
@@ -165,12 +166,12 @@ void select_and_mount_files_by_number(bool historyPattern, bool& verbose) {
 				clearScrollBuffer();
 				std::cout << "\033[1m\n";
 				needsClrScrn = true;
-                mountAllIsoFiles(currentFiles, mountedFiles, skippedMessages, mountedFails, verbose);
+                mountAllIsoFiles(currentFiles, mountedFiles, skippedMessages, mountedFails, verbose, Mutex4Low);
             } else {
 				clearScrollBuffer();
 				needsClrScrn = true;
 				std::cout << "\033[1m\n";
-                processAndMountIsoFiles(inputString, currentFiles, mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages, verbose);
+                processAndMountIsoFiles(inputString, currentFiles, mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages, verbose, Mutex4Low);
             }
             
 
@@ -252,7 +253,7 @@ bool isAlreadyMounted(const std::string& mountPoint) {
 
 
 // Function to mount selected ISO files called from processAndMountIsoFiles
-void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
+void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::mutex& Mutex4Low) {
     for (const auto& isoFile : isoFiles) {
         namespace fs = std::filesystem;
 
@@ -387,7 +388,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
 
 
 // Function to process input and mount ISO files asynchronously
-void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages, bool& verbose) {
+void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages, bool& verbose, std::mutex& Mutex4Low) {
     
     std::istringstream iss(input); // Create an input stream from the input string
     std::vector<int> indicesToProcess; // To store indices parsed from the input
@@ -492,7 +493,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
                 filesToMount.push_back(isoFiles[indicesToProcess[j] - 1]); // Collect files for this chunk
             }
             
-            mountIsoFiles(filesToMount, mountedFiles, skippedMessages, mountedFails); // Mount ISO files            
+            mountIsoFiles(filesToMount, mountedFiles, skippedMessages, mountedFails, Mutex4Low); // Mount ISO files            
 
             completedTasks.fetch_add(end - i, std::memory_order_relaxed); // Update completed tasks count
 

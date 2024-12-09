@@ -87,7 +87,7 @@ bool isDirectoryEmpty(const std::string& path) {
 
 
 // Function to unmount ISO files asynchronously
-void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors) {
+void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors, std::mutex& Mutex4Low) {
     // Check for root privileges
     if (geteuid() != 0) {
         for (const auto& isoDir : isoDirs) {
@@ -205,6 +205,7 @@ void unmountISOs(bool historyPattern, bool& verbose) {
     std::vector<std::string> isoDirs;
     std::set<std::string> errorMessages, unmountedFiles, unmountedErrors;
     std::mutex umountMutex;
+    std::mutex Mutex4Low; // Mutex for low-level processing
     const std::string isoPath = "/mnt";
     bool isFiltered = false;
     bool clr = true;
@@ -432,10 +433,10 @@ void unmountISOs(bool historyPattern, bool& verbose) {
                 std::thread progressThread(displayProgressBar, std::ref(completedIsos), std::cref(totalIsos), std::ref(isComplete), std::ref(verbose));
 
                 for (auto& batch : batches) {
-                    futuresUmount.emplace_back(pool.enqueue([batch = std::move(batch), &unmountedFiles, &unmountedErrors, &completedIsos, &umountMutex]() {
+                    futuresUmount.emplace_back(pool.enqueue([batch = std::move(batch), &unmountedFiles, &unmountedErrors, &completedIsos, &umountMutex, &Mutex4Low]() {
                         std::lock_guard<std::mutex> umountLock(umountMutex);
                         std::for_each(batch.begin(), batch.end(), [&](const auto& iso) {
-                            unmountISO({iso}, unmountedFiles, unmountedErrors);
+                            unmountISO({iso}, unmountedFiles, unmountedErrors, Mutex4Low);
                             completedIsos.fetch_add(1, std::memory_order_relaxed);
                         });
                     }));
