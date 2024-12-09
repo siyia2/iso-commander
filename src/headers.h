@@ -43,9 +43,6 @@
 // Get max available CPU cores for global use
 extern unsigned int maxThreads;
 
-// Mutex for HighLevel functions
-extern std::mutex Mutex4High;
-
 // Mutex for LowLevel functions
 extern std::mutex Mutex4Low;
 
