@@ -221,7 +221,7 @@ void select_and_operate_files_by_number(const std::string& operation, bool promp
 			}
     
 			// Only reset filter for certain operations
-			if (process != "cp" && result) {
+			if (process != "cp" && isFiltered && result) {
                 historyPattern = false;
                 clear_history();
                 isFiltered = false;
