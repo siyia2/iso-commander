@@ -629,35 +629,52 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, c
                     [&callback, path, mode, &fileNames, &invalidPaths, 
                      &processedErrors, &fileCheckMutex, &fileCountMutex, cache, &totalFiles]() {
                     try {
-                        // Flags for blacklisting
-                        bool blacklistMdf = (mode == "mdf");
-                        bool blacklistNrg = (mode == "nrg");
+							// Flags for blacklisting
+							bool blacklistMdf = (mode == "mdf");
+							bool blacklistNrg = (mode == "nrg");
 
-                        // Traverse directory
-                        for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
-							if (entry.is_regular_file()) {
-								std::lock_guard<std::mutex> lock(fileCountMutex);
-								totalFiles ++;
-								std::cout << "\r\033[0;1mTotal files processed: " << totalFiles << std::flush;
-							}
-                            if (entry.is_regular_file() && 
-                                // Call the global blacklist function directly
-                                blacklist(entry, blacklistMdf, blacklistNrg)) {
-                                std::string fileName = entry.path().string();
-                                // Check cache and process file
-                                {
-                                    std::lock_guard<std::mutex> lock(fileCheckMutex);
-									if (cache && fileNames.insert(fileName).second) {
-										// Only call the callback for new files
-										callback(fileName, entry.path().parent_path().string());
+							// Traverse directory
+							for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
+								if (entry.is_regular_file()) {
+									{
+										std::lock_guard<std::mutex> lock(fileCountMutex);
+										totalFiles++;
+										std::cout << "\r\033[0;1mTotal files processed: " << totalFiles << std::flush;
 									}
-                                
-                                }
-                            }
-                        }
-                    }
-                    catch (const std::filesystem::filesystem_error& e) {
-                        std::lock_guard<std::mutex> lock(fileCheckMutex);
+
+								if (entry.is_regular_file() && 
+									// Call the global blacklist function directly
+									blacklist(entry, blacklistMdf, blacklistNrg)) {
+									std::string fileName = entry.path().string();
+
+										// Determine the relevant cache based on mode
+										bool isInCache = false;
+										{
+											std::lock_guard<std::mutex> lock(fileCheckMutex);
+											if (mode == "nrg") {
+												isInCache = (std::find(nrgFilesCache.begin(), nrgFilesCache.end(), fileName) != nrgFilesCache.end());
+											} else if (mode == "mdf") {
+												isInCache = (std::find(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end(), fileName) != mdfMdsFilesCache.end());
+											} else if (mode == "bin") {
+												isInCache = (std::find(binImgFilesCache.begin(), binImgFilesCache.end(), fileName) != binImgFilesCache.end());
+											}
+										}
+
+										// Check cache and process file if not already in cache
+										if (!isInCache) {
+											{
+												std::lock_guard<std::mutex> lock(fileCheckMutex);
+												if (cache && fileNames.insert(fileName).second) {
+													// Only call the callback for new files
+													callback(fileName, entry.path().parent_path().string());
+												}
+											}
+										}
+									}
+								}
+							}
+					} catch (const std::filesystem::filesystem_error& e) {
+						std::lock_guard<std::mutex> lock(fileCheckMutex);
                         std::string errorMessage = "\033[1;91mError traversing path: " 
                             + path + " - " + e.what() + "\033[0;1m";
                         processedErrors.insert(errorMessage);
@@ -736,50 +753,46 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, c
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     }
 
-    // Batch insert processed files into cache with deduplication using std::set
-    std::vector<std::string>* targetCache = nullptr;
-    std::set<std::string> uniqueFiles;
+// Choose the appropriate cache
+    std::set<std::string> currentCacheSet;
+    std::vector<std::string>* currentCache = nullptr;
 
     if (mode == "bin") {
-        targetCache = &binImgFilesCache;
-        uniqueFiles = std::set<std::string>(binImgFilesCache.begin(), binImgFilesCache.end());
-    }
-    else if (mode == "mdf") {
-        targetCache = &mdfMdsFilesCache;
-        uniqueFiles = std::set<std::string>(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end());
-    }
-    else if (mode == "nrg") {
-        targetCache = &nrgFilesCache;
-        uniqueFiles = std::set<std::string>(nrgFilesCache.begin(), nrgFilesCache.end());
+        currentCache = &binImgFilesCache;
+        currentCacheSet.insert(binImgFilesCache.begin(), binImgFilesCache.end());
+    } else if (mode == "mdf") {
+        currentCache = &mdfMdsFilesCache;
+        currentCacheSet.insert(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end());
+    } else if (mode == "nrg") {
+        currentCache = &nrgFilesCache;
+        currentCacheSet.insert(nrgFilesCache.begin(), nrgFilesCache.end());
+    } else {
+        return {};
     }
 
-    if (targetCache) {
-        std::vector<std::string> batch;
-        size_t batchSize = 100;
+    // Batch insert unique files
+    std::vector<std::string> batch;
+    size_t batchSize = 100;
 
-        for (const auto& fileName : fileNames) {
-            // Use std::set's efficient insertion with uniqueness check
-            if (uniqueFiles.insert(fileName).second) {
-                batch.push_back(fileName);
-                
-                if (batch.size() == batchSize) {
-                    targetCache->insert(targetCache->end(), batch.begin(), batch.end());
-                    batch.clear();
-                }
+    for (const auto& fileName : fileNames) {
+        if (currentCacheSet.find(fileName) == currentCacheSet.end()) {
+            batch.push_back(fileName);
+            currentCacheSet.insert(fileName); // Mark as added
+
+            if (batch.size() == batchSize) {
+                currentCache->insert(currentCache->end(), batch.begin(), batch.end());
+                batch.clear();
             }
         }
-
-        // Insert remaining files
-        if (!batch.empty()) {
-            targetCache->insert(targetCache->end(), batch.begin(), batch.end());
-        }
     }
 
-    // Return appropriate cache
-    return (mode == "bin") ? binImgFilesCache
-           : (mode == "mdf") ? mdfMdsFilesCache
-           : (mode == "nrg") ? nrgFilesCache
-           : std::vector<std::string>();
+    // Insert remaining files
+    if (!batch.empty()) {
+        currentCache->insert(currentCache->end(), batch.begin(), batch.end());
+    }
+
+    // Return the updated cache
+    return *currentCache;
 }
 
 
