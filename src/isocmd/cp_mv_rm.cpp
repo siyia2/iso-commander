@@ -143,16 +143,16 @@ void select_and_operate_files_by_number(const std::string& operation, bool promp
         }
 
         if (inputString.empty()) {
-			if (isFiltered) {
-				isFiltered = false;
-				continue;  // Return to the original list
-			} else {
-				return;  // Exit the function only if we're already on the original list
-			}
+            if (isFiltered) {
+                isFiltered = false;
+                continue;  // Return to the original list
+            } else {
+                return;  // Exit the function only if we're already on the original list
+            }
 		}
 
 		if (inputString == "/") {
-			while (true) {  // Use a more controlled loop
+			while (true) {
 				operationIsos.clear();
 				operationErrors.clear();
 				uniqueErrorMessages.clear();
@@ -160,27 +160,26 @@ void select_and_operate_files_by_number(const std::string& operation, bool promp
 				historyPattern = true;
 				loadHistory(historyPattern);
         
-				// Move the cursor up 3 lines and clear them
 				std::cout << "\033[1A\033[K";
 				std::string filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + " \001\033[1;94m\002list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
         
 				std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
         
 				// Exit conditions
-				if (!searchQuery || 
-					searchQuery.get()[0] == '\0' || 
-					strcmp(searchQuery.get(), "/") == 0) {
-					historyPattern = false;
-					needsClrScrn = isFiltered;
-					clear_history();
-					isFiltered = false;  // Reset filtered state
-					break;
-				}
+				if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
+                    historyPattern = false;
+                    if (isFiltered) {
+                        needsClrScrn = true;
+                    } else {
+                        needsClrScrn = false;
+                    }
+                    clear_history();
+                    break;
+                }
         
 				std::string inputSearch(searchQuery.get());
 				std::cout << "\033[1m\n";
         
-				// Add to history if not a repeat
 				if (strcmp(searchQuery.get(), "/") != 0) {
 					add_history(searchQuery.get());
 					saveHistory(historyPattern);
@@ -188,29 +187,25 @@ void select_and_operate_files_by_number(const std::string& operation, bool promp
         
 				historyPattern = false;
 				clear_history();
-        
-				// Determine source list for filtering
-				const std::vector<std::string>& sourceList = globalIsoFileList;
-				auto newFilteredFiles = filterFiles(sourceList, inputSearch);
-				sortFilesCaseInsensitive(newFilteredFiles);
-        
-				// Handle filter results
-				if (newFilteredFiles.empty()) {
-					std::cout << "\033[1A\033[K";  // Clear the previous input line
-					continue;  // Prompt again if no files match
-				}
-        
-				if (newFilteredFiles.size() == globalIsoFileList.size()) {
+				
+				// Filter based on current active list instead of always using global list
+                const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : globalIsoFileList;
+                auto newFilteredFiles = filterFiles(sourceList, inputSearch);
+                sortFilesCaseInsensitive(newFilteredFiles);
+
+                if (newFilteredFiles.size() == globalIsoFileList.size()) {
 					isFiltered = false;
 					break;
 				}
-        
-				// Update filtered files
-				filteredFiles = std::move(newFilteredFiles);
-				needsClrScrn = true;
-				isFiltered = true;
-				break;
-			}
+
+                if (!newFilteredFiles.empty()) {
+                    filteredFiles = std::move(newFilteredFiles);
+                    needsClrScrn = true;
+                    isFiltered = true;
+                    break;
+                }
+                std::cout << "\033[1A\033[K";  // Clear the previous input line
+            }
 		} else {
 			std::vector<std::string>& currentFiles = isFiltered ? filteredFiles : globalIsoFileList;
 			needsClrScrn = true;
@@ -225,13 +220,13 @@ void select_and_operate_files_by_number(const std::string& operation, bool promp
 				verbose = false;
 			}
     
-			if (process != "cp" && isFiltered && result) {
-				historyPattern = false;
-				clear_history();
-				isFiltered = false;
-				needsClrScrn = true;
-				mvDelBreak = true;
-			}
+			// Only reset filter for certain operations
+			if (process != "cp" && result) {
+                historyPattern = false;
+                clear_history();
+                isFiltered = false;
+                needsClrScrn =true;
+            }
     
 			if (currentFiles.empty()) {
 				clearScrollBuffer();
@@ -242,7 +237,6 @@ void select_and_operate_files_by_number(const std::string& operation, bool promp
 				return;
 			}
 		}
-
     }
 }
 
