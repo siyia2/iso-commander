@@ -76,7 +76,7 @@ void verbose_cp_mv_rm(std::set<std::string>& operationIsos, std::set<std::string
 
 
 // Main function to select and operate on files by number
-void select_and_operate_files_by_number(const std::string& operation, bool promptFlag) {
+void select_and_operate_files_by_number(const std::string& operation, bool promptFlag, int maxDepth) {
     std::set<std::string> operationIsos, operationErrors, uniqueErrorMessages;
     std::vector<std::string> isoFiles, filteredFiles;
     isoFiles.reserve(100);
@@ -206,7 +206,7 @@ void select_and_operate_files_by_number(const std::string& operation, bool promp
         } else {
             std::vector<std::string>& currentFiles = isFiltered ? filteredFiles : globalIsoFileList;
             needsClrScrn =true;
-            processOperationInput(inputString, currentFiles, process, operationIsos, operationErrors, uniqueErrorMessages, promptFlag);
+            processOperationInput(inputString, currentFiles, process, operationIsos, operationErrors, uniqueErrorMessages, promptFlag, maxDepth);
 
             if (verbose) {
 				needsClrScrn = true;
@@ -234,7 +234,7 @@ void select_and_operate_files_by_number(const std::string& operation, bool promp
 
 
 // Function to process either mv or cp indices
-void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool promptFlag) {
+void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool promptFlag, int maxDepth) {
     std::string userDestDir;
     std::istringstream iss(input);
     std::vector<int> processedIndices;
@@ -446,7 +446,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             [&isoFiles](size_t index) { return isoFiles[index - 1]; }
         );
 
-        futures.emplace_back(pool.enqueue([isoFilesInChunk = std::move(isoFilesInChunk), &isoFiles, &operationIsos, &operationErrors, &userDestDir, isMove, isCopy, isDelete, &completedTasks]() {
+        futures.emplace_back(pool.enqueue([isoFilesInChunk = std::move(isoFilesInChunk), &isoFiles, &operationIsos, &operationErrors, &userDestDir, isMove, isCopy, isDelete, &completedTasks, promptFlag, maxDepth]() {
             handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors, userDestDir, isMove, isCopy, isDelete);
             completedTasks.fetch_add(static_cast<int>(isoFilesInChunk.size()), std::memory_order_relaxed);
         }));

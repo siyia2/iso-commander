@@ -11,9 +11,6 @@ const std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/iso_com
 const std::string cacheFileName = "iso_commander_cache.txt";
 const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
-int maxDepth = -1;
-
-
 // Function to remove non-existent paths from cache
 void removeNonExistentPathsFromCache() {
 
@@ -250,7 +247,7 @@ bool isValidDirectory(const std::string& path) {
 }
 
 // Function for manual cache refresh
-void manualRefreshCache(const std::string& initialDir, bool promptFlag) {
+void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxDepth) {
 
 	std::mutex cacheRefreshMutex;
 
@@ -403,11 +400,11 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag) {
 				std::lock_guard<std::mutex> lock(futuresMutex);
 				futures.emplace_back(std::async(std::launch::async, 
 					[path, &allIsoFiles, &uniqueErrorMessages, &totalProcessedFiles, 
-					&traverseFilesMutex, &traverseErrorsMutex]() {
+					&traverseFilesMutex, &traverseErrorsMutex, &maxDepth]() {
 						// Perform traversal with minimal global locking
 						traverse(path, allIsoFiles, uniqueErrorMessages, 
 								totalProcessedFiles, traverseFilesMutex, 
-								traverseErrorsMutex);
+								traverseErrorsMutex, maxDepth) ;
                     
 						// Remove path from local tracking after processing
 						localProcessedPaths.erase(path);
@@ -527,7 +524,7 @@ bool iequals(const std::string_view& a, const std::string_view& b) {
 
 
 // Function to traverse a directory and find ISO files
-void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, size_t& totalProcessedFiles, std::mutex& traverseFilesMutex, std::mutex& traverseErrorsMutex) {
+void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, size_t& totalProcessedFiles, std::mutex& traverseFilesMutex, std::mutex& traverseErrorsMutex, int maxDepth) {
     
     const size_t BATCH_SIZE = 100; // Adjust batch size as needed
 

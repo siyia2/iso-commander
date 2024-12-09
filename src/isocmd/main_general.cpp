@@ -36,6 +36,7 @@ int lockFileDescriptor = -1;
 int main(int argc, char *argv[]) {
 	
 	bool promptFlag = true;
+	int maxDepth = -1;
 
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
         printVersionNumber("5.2.7");
@@ -97,16 +98,16 @@ int main(int argc, char *argv[]) {
         std::string choice(mainInputString);
 
         if (choice == "1") {
-            submenu1(promptFlag);
+            submenu1(promptFlag, maxDepth);
         } else {
             // Check if the input length is exactly 1
             if (choice.length() == 1) {
                 switch (choice[0]) {
                     case '2':
-                        submenu2(promptFlag);
+                        submenu2(promptFlag, maxDepth);
                         break;
                     case '3':
-                        manualRefreshCache("", promptFlag);
+                        manualRefreshCache("", promptFlag, maxDepth);
                         clearScrollBuffer();
                         break;
                     case '4':
@@ -158,7 +159,7 @@ std::cout << Color << R"((   (       )            )    *      *              ) (
 
 
 // Function to print submenu1
-void submenu1(bool promptFlag) {
+void submenu1(bool promptFlag, int maxDepth) {
 
     while (true) {
         clearScrollBuffer();
@@ -205,19 +206,19 @@ void submenu1(bool promptFlag) {
         case '3':
 			clearScrollBuffer();
             operation = "rm";
-            select_and_operate_files_by_number(operation, promptFlag);
+            select_and_operate_files_by_number(operation, promptFlag, maxDepth);
             clearScrollBuffer();
             break;
         case '4':
 			clearScrollBuffer();
             operation = "mv";
-            select_and_operate_files_by_number(operation, promptFlag);
+            select_and_operate_files_by_number(operation, promptFlag, maxDepth);
             clearScrollBuffer();
             break;
         case '5':
 			clearScrollBuffer();
             operation = "cp";
-            select_and_operate_files_by_number(operation, promptFlag);
+            select_and_operate_files_by_number(operation, promptFlag, maxDepth);
             clearScrollBuffer();
             break;
 			}
@@ -227,7 +228,7 @@ void submenu1(bool promptFlag) {
 
 
 // Function to print submenu2
-void submenu2(bool promptFlag) {
+void submenu2(bool promptFlag, int maxDepth) {
 	while (true) {
 		clearScrollBuffer();
 		std::cout << "\033[1;32m+-------------------------+\n";
@@ -260,19 +261,19 @@ void submenu2(bool promptFlag) {
              case '1':
 				clearScrollBuffer();
 				operation = "bin";
-					select_and_convert_files_to_iso(operation, promptFlag);
+					select_and_convert_files_to_iso(operation, promptFlag, maxDepth);
                 clearScrollBuffer();
                 break;
              case '2':
 				clearScrollBuffer();
 				operation = "mdf";
-					select_and_convert_files_to_iso(operation, promptFlag);
+					select_and_convert_files_to_iso(operation, promptFlag, maxDepth);
                 clearScrollBuffer();
                 break;
              case '3':
 				clearScrollBuffer();
 				operation = "nrg";
-					select_and_convert_files_to_iso(operation, promptFlag);
+					select_and_convert_files_to_iso(operation, promptFlag, maxDepth);
                 clearScrollBuffer();
                 break;
 			}

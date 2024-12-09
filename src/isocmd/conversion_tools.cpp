@@ -113,7 +113,7 @@ void applyFilter(std::vector<std::string>& files, const std::vector<std::string>
 
 
 // Function to select and convert files based on user's choice of file type
-void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool promptFlag) {
+void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool promptFlag, int maxDepth) {
     std::vector<std::string> files, originalFiles;
     files.reserve(100);
     binImgFilesCache.reserve(100);
@@ -381,7 +381,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool pro
 			} else {
 				clearScrollBuffer();
 				std::cout << "\033[1m" << std::endl;
-				processInput(mainInputString, files, modeMdf, modeNrg, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, promptFlag);
+				processInput(mainInputString, files, modeMdf, modeNrg, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, promptFlag, maxDepth);
 				clearScrollBuffer();
 				std::cout << "\n";
 				if (verbose) {
@@ -401,7 +401,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool pro
 
 
 // Function to process user input and convert selected BIN/MDF/NRG files to ISO format
-void processInput(const std::string& input, const std::vector<std::string>& fileList, bool modeMdf, bool modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool promptFlag) {
+void processInput(const std::string& input, const std::vector<std::string>& fileList, bool modeMdf, bool modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool promptFlag, int maxDepth) {
     std::mutex futuresMutex;
     std::set<int> processedIndices;
 
