@@ -204,6 +204,7 @@ void printUnmountedAndErrors(std::set<std::string>& unmountedFiles, std::set<std
 void unmountISOs() {
     std::vector<std::string> isoDirs;
     std::set<std::string> errorMessages, unmountedFiles, unmountedErrors;
+    std::mutex umountMutex;
     const std::string isoPath = "/mnt";
     bool isFiltered = false;
     bool clr = true;
@@ -431,8 +432,8 @@ void unmountISOs() {
                 std::thread progressThread(displayProgressBar, std::ref(completedIsos), std::cref(totalIsos), std::ref(isComplete));
 
                 for (auto& batch : batches) {
-                    futuresUmount.emplace_back(pool.enqueue([batch = std::move(batch), &unmountedFiles, &unmountedErrors, &completedIsos]() {
-                        std::lock_guard<std::mutex> highLock(Mutex4High);
+                    futuresUmount.emplace_back(pool.enqueue([batch = std::move(batch), &unmountedFiles, &unmountedErrors, &completedIsos, &umountMutex]() {
+                        std::lock_guard<std::mutex> umountLock(umountMutex);
                         std::for_each(batch.begin(), batch.end(), [&](const auto& iso) {
                             unmountISO({iso}, unmountedFiles, unmountedErrors);
                             completedIsos.fetch_add(1, std::memory_order_relaxed);
