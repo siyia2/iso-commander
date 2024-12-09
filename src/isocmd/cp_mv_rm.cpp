@@ -446,7 +446,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             [&isoFiles](size_t index) { return isoFiles[index - 1]; }
         );
 
-        futures.emplace_back(pool.enqueue([isoFilesInChunk = std::move(isoFilesInChunk), &isoFiles, &operationIsos, &operationErrors, &userDestDir, isMove, isCopy, isDelete, &completedTasks, promptFlag, maxDepth]() {
+        futures.emplace_back(pool.enqueue([isoFilesInChunk = std::move(isoFilesInChunk), &isoFiles, &operationIsos, &operationErrors, &userDestDir, isMove, isCopy, isDelete, &completedTasks]() {
             handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors, userDestDir, isMove, isCopy, isDelete);
             completedTasks.fetch_add(static_cast<int>(isoFilesInChunk.size()), std::memory_order_relaxed);
         }));
@@ -463,7 +463,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
        maxDepth = 0;
        // Refresh cache for all destination directories if not a delete operation
        if (!isDelete) {
-               manualRefreshCache(userDestDir);
+               manualRefreshCache(userDestDir, promptFlag, maxDepth);
        }
 
     clear_history();
