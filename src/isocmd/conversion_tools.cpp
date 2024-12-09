@@ -645,7 +645,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, c
 								if (entry.is_regular_file() && 
 									// Call the global blacklist function directly
 									blacklist(entry, blacklistMdf, blacklistNrg)) {
-									std::string fileName = entry.path().string();
+										std::string fileName = entry.path().string();
 
 										// Determine the relevant cache based on mode
 										bool isInCache = false;
@@ -673,14 +673,14 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, c
 									}
 								}
 							}
-					} catch (const std::filesystem::filesystem_error& e) {
-						std::lock_guard<std::mutex> lock(fileCheckMutex);
-                        std::string errorMessage = "\033[1;91mError traversing path: " 
+						} catch (const std::filesystem::filesystem_error& e) {
+							std::lock_guard<std::mutex> lock(fileCheckMutex);
+							std::string errorMessage = "\033[1;91mError traversing path: " 
                             + path + " - " + e.what() + "\033[0;1m";
-                        processedErrors.insert(errorMessage);
-                    }
-                }));
-                ++runningTasks;
+							processedErrors.insert(errorMessage);
+						}
+					}));
+				++runningTasks;
             }
 
             // Manage task count
@@ -753,7 +753,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, c
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     }
 
-// Choose the appropriate cache
+	// Choose the appropriate cache
     std::set<std::string> currentCacheSet;
     std::vector<std::string>* currentCache = nullptr;
 
