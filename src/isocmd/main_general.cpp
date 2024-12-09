@@ -6,13 +6,6 @@
 // Get max available CPU cores for global use, fallback is 2 cores
 unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
-// Mutex for HighLevel functions
-std::mutex Mutex4High;
-
-// Mutex for LowLevel functions
-std::mutex Mutex4Low;
-
-
 // Default readline history save path
 const std::string historyFilePath = std::string(getenv("HOME")) + "/.cache/iso_commander_history_cache.txt";
 const std::string historyPatternFilePath = std::string(getenv("HOME")) + "/.cache/iso_commander_pattern_cache.txt";
