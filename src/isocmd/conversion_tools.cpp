@@ -9,7 +9,6 @@ static std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles h
 static std::vector<std::string> nrgFilesCache; // Memory cached nrgImgFiles here
 
 // Boolean flag for verbose beautification
-bool gapSet = true;
 bool gapSetTotal = true;
 
 // GENERAL
@@ -55,9 +54,7 @@ void verboseConversion(std::set<std::string>& processedErrors, std::set<std::str
 // Function to print invalid directory paths from search
 void verboseFind(std::set<std::string>& invalidDirectoryPaths) {
 	if (!invalidDirectoryPaths.empty()) {
-		if (gapSet) {
 			std::cout << "\n";
-		}
 		if (!gapSetTotal){
 		     std::cout << "\033[2A\033[K";
 		}
@@ -248,9 +245,9 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool pro
             std::cout << "\n";
             verboseFind(invalidDirectoryPaths);
             auto end_time = std::chrono::high_resolution_clock::now();
-            if (gapSet || !gapSet) {
-				std::cout << "\n";
-			}
+				
+			std::cout << "\n";
+				
 			gapSetTotal = true;
             std::cout << "\033[1;91mNo new " << fileExtension << " files over 5MB found. \033[1;92m" << files.size() << " files are cached in RAM from previous searches.\033[0;1m\n\n";
             auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
@@ -263,9 +260,9 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool pro
             std::cout << "\n";
             verboseFind(invalidDirectoryPaths);
             auto end_time = std::chrono::high_resolution_clock::now();
-            if (gapSet || !gapSet) {
-				std::cout << "\n";
-			}
+          
+			std::cout << "\n";
+			
 			if (!gapSetTotal && invalidDirectoryPaths.empty()) {
 			     std::cout << "\033[2A\033[K";
 			}
@@ -718,12 +715,11 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, c
         std::cout << "\n";
 
         verboseFind(invalidDirectoryPaths);
-        if (gapSet) {
-            std::cout << "\n";
-        }
+        std::cout << "\n";
+
         
         
-        if ((!invalidPaths.empty() && !gapSet) || !gapSet || (gapSet && !invalidPaths.empty())) {
+        if (!invalidPaths.empty()) {
             std::cout << "\n";
         }
         
