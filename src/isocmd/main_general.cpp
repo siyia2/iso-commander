@@ -14,7 +14,6 @@ std::mutex Mutex4Low;
 
 // For cache directory creation
 bool gapPrinted = false;
-bool promptFlag = true;
 bool verbose = false;
 
 // For saving history to a differrent cache for FilterPatterns
@@ -35,6 +34,8 @@ int lockFileDescriptor = -1;
 
 // Main function
 int main(int argc, char *argv[]) {
+	
+	bool promptFlag = true;
 
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
         printVersionNumber("5.2.7");
@@ -96,16 +97,16 @@ int main(int argc, char *argv[]) {
         std::string choice(mainInputString);
 
         if (choice == "1") {
-            submenu1();
+            submenu1(promptFlag);
         } else {
             // Check if the input length is exactly 1
             if (choice.length() == 1) {
                 switch (choice[0]) {
                     case '2':
-                        submenu2();
+                        submenu2(promptFlag);
                         break;
                     case '3':
-                        manualRefreshCache();
+                        manualRefreshCache("", promptFlag);
                         clearScrollBuffer();
                         break;
                     case '4':
@@ -157,7 +158,7 @@ std::cout << Color << R"((   (       )            )    *      *              ) (
 
 
 // Function to print submenu1
-void submenu1() {
+void submenu1(bool promptFlag) {
 
     while (true) {
         clearScrollBuffer();
@@ -204,19 +205,19 @@ void submenu1() {
         case '3':
 			clearScrollBuffer();
             operation = "rm";
-            select_and_operate_files_by_number(operation);
+            select_and_operate_files_by_number(operation, promptFlag);
             clearScrollBuffer();
             break;
         case '4':
 			clearScrollBuffer();
             operation = "mv";
-            select_and_operate_files_by_number(operation);
+            select_and_operate_files_by_number(operation, promptFlag);
             clearScrollBuffer();
             break;
         case '5':
 			clearScrollBuffer();
             operation = "cp";
-            select_and_operate_files_by_number(operation);
+            select_and_operate_files_by_number(operation, promptFlag);
             clearScrollBuffer();
             break;
 			}
@@ -226,7 +227,7 @@ void submenu1() {
 
 
 // Function to print submenu2
-void submenu2() {
+void submenu2(bool promptFlag) {
 	while (true) {
 		clearScrollBuffer();
 		std::cout << "\033[1;32m+-------------------------+\n";
@@ -259,19 +260,19 @@ void submenu2() {
              case '1':
 				clearScrollBuffer();
 				operation = "bin";
-					select_and_convert_files_to_iso(operation);
+					select_and_convert_files_to_iso(operation, promptFlag);
                 clearScrollBuffer();
                 break;
              case '2':
 				clearScrollBuffer();
 				operation = "mdf";
-					select_and_convert_files_to_iso(operation);
+					select_and_convert_files_to_iso(operation, promptFlag);
                 clearScrollBuffer();
                 break;
              case '3':
 				clearScrollBuffer();
 				operation = "nrg";
-					select_and_convert_files_to_iso(operation);
+					select_and_convert_files_to_iso(operation, promptFlag);
                 clearScrollBuffer();
                 break;
 			}

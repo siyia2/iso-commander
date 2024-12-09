@@ -76,7 +76,7 @@ void verbose_cp_mv_rm(std::set<std::string>& operationIsos, std::set<std::string
 
 
 // Main function to select and operate on files by number
-void select_and_operate_files_by_number(const std::string& operation) {
+void select_and_operate_files_by_number(const std::string& operation, bool promptFlag) {
     std::set<std::string> operationIsos, operationErrors, uniqueErrorMessages;
     std::vector<std::string> isoFiles, filteredFiles;
     isoFiles.reserve(100);
@@ -206,7 +206,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
         } else {
             std::vector<std::string>& currentFiles = isFiltered ? filteredFiles : globalIsoFileList;
             needsClrScrn =true;
-            processOperationInput(inputString, currentFiles, process, operationIsos, operationErrors, uniqueErrorMessages);
+            processOperationInput(inputString, currentFiles, process, operationIsos, operationErrors, uniqueErrorMessages, promptFlag);
 
             if (verbose) {
 				needsClrScrn = true;
@@ -234,7 +234,7 @@ void select_and_operate_files_by_number(const std::string& operation) {
 
 
 // Function to process either mv or cp indices
-void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages) {
+void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool promptFlag) {
     std::string userDestDir;
     std::istringstream iss(input);
     std::vector<int> processedIndices;

@@ -250,7 +250,7 @@ bool isValidDirectory(const std::string& path) {
 }
 
 // Function for manual cache refresh
-void manualRefreshCache(const std::string& initialDir) {
+void manualRefreshCache(const std::string& initialDir, bool promptFlag) {
 
 	std::mutex cacheRefreshMutex;
 
