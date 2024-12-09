@@ -8,8 +8,6 @@ static std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles h
 static std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
 static std::vector<std::string> nrgFilesCache; // Memory cached nrgImgFiles here
 
-// Boolean flag for verbose beautification
-bool gapSetTotal = true;
 
 // GENERAL
 
@@ -52,10 +50,10 @@ void verboseConversion(std::set<std::string>& processedErrors, std::set<std::str
 
 
 // Function to print invalid directory paths from search
-void verboseFind(std::set<std::string>& invalidDirectoryPaths) {
+void verboseFind(std::set<std::string>& invalidDirectoryPaths, bool gapSet) {
 	if (!invalidDirectoryPaths.empty()) {
 			std::cout << "\n";
-		if (!gapSetTotal){
+		if (!gapSet){
 		     std::cout << "\033[2A\033[K";
 		}
 		std::cout << "\033[0;1mInvalid paths omitted from search: \033[1:91m";
@@ -117,6 +115,9 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool pro
 	mdfMdsFilesCache.reserve(100);
     std::vector<std::string> directoryPaths;
     std::set<std::string> uniquePaths, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, invalidDirectoryPaths;
+    
+    // Boolean flag for verbose beautification
+	bool gapSet = true;
 
     std::string fileExtension, fileTypeName, fileType = fileTypeChoice;
     bool modeMdf = (fileType == "mdf");
@@ -238,17 +239,17 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool pro
 			disableInput();
             files = findFiles(directoryPaths, fileType, [&](const std::string&, const std::string&) {
                 newFilesFound = true;
-            }, invalidDirectoryPaths, processedErrors);
+            }, invalidDirectoryPaths, processedErrors, gapSet);
         }
 
         if (!newFilesFound && !files.empty() && !list) {
             std::cout << "\n";
-            verboseFind(invalidDirectoryPaths);
+            verboseFind(invalidDirectoryPaths, gapSet);
             auto end_time = std::chrono::high_resolution_clock::now();
 				
 			std::cout << "\n";
 				
-			gapSetTotal = true;
+			gapSet = true;
             std::cout << "\033[1;91mNo new " << fileExtension << " files over 5MB found. \033[1;92m" << files.size() << " files are cached in RAM from previous searches.\033[0;1m\n\n";
             auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
             std::cout << "\033[1mTime Elapsed: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n\n";
@@ -258,15 +259,15 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool pro
 
         if (files.empty() && !list) {
             std::cout << "\n";
-            verboseFind(invalidDirectoryPaths);
+            verboseFind(invalidDirectoryPaths, gapSet);
             auto end_time = std::chrono::high_resolution_clock::now();
           
 			std::cout << "\n";
 			
-			if (!gapSetTotal && invalidDirectoryPaths.empty()) {
+			if (!gapSet && invalidDirectoryPaths.empty()) {
 			     std::cout << "\033[2A\033[K";
 			}
-			gapSetTotal = true;
+			gapSet = true;
             std::cout << "\033[1;91mNo " << fileExtension << " files over 5MB found in the specified paths or cached in RAM.\n\033[0;1m\n";
             auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
             std::cout << "\033[1mTime Elapsed: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n\n";
@@ -568,7 +569,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
 std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, const std::string& mode, 
     const std::function<void(const std::string&, const std::string&)>& callback, 
     std::set<std::string>& invalidDirectoryPaths, 
-    std::set<std::string>& processedErrors) {
+    std::set<std::string>& processedErrors, bool gapSet) {
 
     // Local mutexes
     std::mutex pathsMutex;
@@ -714,7 +715,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, c
         auto end_time = std::chrono::high_resolution_clock::now();
         std::cout << "\n";
 
-        verboseFind(invalidDirectoryPaths);
+        verboseFind(invalidDirectoryPaths, gapSet);
         std::cout << "\n";
 
         
