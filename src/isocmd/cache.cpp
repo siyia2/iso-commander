@@ -279,11 +279,13 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 				std::cerr << "\n\001\033[1;91mError deleting IsoCache: '" << cacheFilePath << "'. File does not exist or inaccessible." << std::endl;
 				std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+				clearScrollBuffer();
 				manualRefreshCache("");
         } else {
 			std::cout << "\n\001\033[1;92mIsoCache deleted successfully: '" << cacheFilePath <<"'." << std::endl;
 			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			clearScrollBuffer();
 			manualRefreshCache("");
         }
 
