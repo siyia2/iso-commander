@@ -10,7 +10,7 @@ https://github.com/user-attachments/assets/2d247581-bf84-437b-b872-800111986d42
 
 
 
-Blazing fast cmd `ISO` manager written in C++. All paths are mounted under `/mnt/iso_*` format and conversions are stored in their respective source directories. `ROOT` access is essential for `mount&umount` operations.
+Blazing fast cmd `ISO` manager written in pure C++. All paths are mounted under `/mnt/iso_*` format and conversions are stored in their respective source directories. `ROOT` access is essential for `mount&umount` operations.
 
 For best experience execute with: `sudo isocmd`.
 
