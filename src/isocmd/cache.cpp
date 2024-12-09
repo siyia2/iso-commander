@@ -509,6 +509,7 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
     }
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    clearScrollBuffer();
     manualRefreshCache("");
 	}
 	uniqueErrorMessages.clear();
