@@ -144,13 +144,13 @@ void select_and_operate_files_by_number(const std::string& operation, bool promp
         }
 
         if (inputString.empty()) {
-    if (isFiltered) {
-        isFiltered = false;
-        continue;  // Return to the original list
-    } else {
-        return;  // Exit the function only if we're already on the original list
-    }
-}
+			if (isFiltered) {
+				isFiltered = false;
+				continue;  // Return to the original list
+			} else {
+				return;  // Exit the function only if we're already on the original list
+			}
+		}
 
 		if (inputString == "/") {
 			while (true) {  // Use a more controlled loop
