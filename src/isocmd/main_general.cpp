@@ -607,61 +607,57 @@ void loadHistory() {
 // Function to save history from readline
 void saveHistory() {
     std::ofstream historyFile;
-    if (!historyPattern) {
-        historyFile.open(historyFilePath, std::ios::out | std::ios::trunc);
-    } else {
-        historyFile.open(historyPatternFilePath, std::ios::out | std::ios::trunc);
+    
+    // Choose file path based on historyPattern flag
+    std::string targetFilePath = !historyPattern ? 
+        historyFilePath : historyPatternFilePath;
+    
+    // Open file in truncate mode
+    historyFile.open(targetFilePath, std::ios::out | std::ios::trunc);
+    
+    if (!historyFile.is_open()) {
+        return;
     }
 
+    HIST_ENTRY **histList = history_list();
+    if (!histList) return;
 
-    if (historyFile.is_open()) {
-        HIST_ENTRY **histList = history_list();
+    std::unordered_map<std::string, size_t> lineIndices;
+    std::vector<std::string> uniqueLines;
 
-        if (histList) {
-            std::unordered_map<std::string, int> lineIndices; // To store the index of each line
-            std::vector<std::string> uniqueLines;
+    // Iterate through history entries
+    for (int i = 0; histList[i]; i++) {
+        std::string line(histList[i]->line);
+        if (line.empty()) continue;
 
-            // Iterate through all history entries
-            for (int i = 0; histList[i]; i++) {
-                std::string line(histList[i]->line);
-
-                if (!line.empty()) {
-                    auto it = lineIndices.find(line);
-                    if (it == lineIndices.end()) {
-                        // Line not found, insert it
-                        lineIndices[line] = uniqueLines.size();
-                        uniqueLines.push_back(line);
-                    } else {
-                        // Line found, remove the old instance and add the new one
-                        uniqueLines.erase(uniqueLines.begin() + it->second);
-                        lineIndices[line] = uniqueLines.size();
-                        uniqueLines.push_back(line);
-                    }
-                }
-            }
-
-			int excessLines; // Declare excessLines outside the if-else block
-
-			if (!historyPattern) {
-				// Adjust the number of lines to keep within the limit
-				excessLines = uniqueLines.size() - MAX_HISTORY_LINES;
-			} else {
-				excessLines = uniqueLines.size() - MAX_HISTORY_PATTERN_LINES;
-			}
-
-            if (excessLines > 0) {
-                // Remove excess lines from the beginning
-                uniqueLines.erase(uniqueLines.begin(), uniqueLines.begin() + excessLines);
-            }
-
-            // Write all the lines to the file
-            for (const auto& line : uniqueLines) {
-                historyFile << line << std::endl;
-            }
+        // Remove existing duplicate if present, then add to end
+        auto it = lineIndices.find(line);
+        if (it != lineIndices.end()) {
+            uniqueLines.erase(uniqueLines.begin() + it->second);
+            lineIndices.erase(it);
         }
 
-        historyFile.close();
-    } else {
-        std::cerr << "\n\033[1;91mFailed to open history cache file: \033[1;93m'" << historyFilePath << "'\033[1;91m. Check read/write permissions.\033[0m";
+        // Add new line to end and update index
+        lineIndices[line] = uniqueLines.size();
+        uniqueLines.push_back(line);
     }
+
+    // Determine max lines based on pattern flag
+    size_t maxLines = !historyPattern ? 
+        MAX_HISTORY_LINES : MAX_HISTORY_PATTERN_LINES;
+
+    // Trim excess lines if needed
+    if (uniqueLines.size() > maxLines) {
+        uniqueLines.erase(
+            uniqueLines.begin(), 
+            uniqueLines.begin() + (uniqueLines.size() - maxLines)
+        );
+    }
+
+    // Write unique lines to file
+    for (const auto& line : uniqueLines) {
+        historyFile << line << std::endl;
+    }
+
+    historyFile.close();
 }
