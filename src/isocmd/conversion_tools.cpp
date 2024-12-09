@@ -78,18 +78,18 @@ void verboseFind(std::set<std::string>& invalidDirectoryPaths, bool gapSet) {
 
 
 // Function to apply input filtering
-void applyFilter(std::vector<std::string>& files, const std::vector<std::string>& originalFiles, const std::string& fileTypeName) {
+void applyFilter(std::vector<std::string>& files, const std::vector<std::string>& originalFiles, const std::string& fileTypeName, bool historyPattern) {
     while (true) {
 		clear_history();
         historyPattern = true;
-        loadHistory();
+        loadHistory(historyPattern);
         std::string filterPrompt = "\001\033[1A\002\001\033[K\002\001\033[1A\002\001\033[K\002\n\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;38;5;208m\002" + fileTypeName + "\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
 
         std::unique_ptr<char, decltype(&std::free)> rawSearchQuery(readline(filterPrompt.c_str()), &std::free);
         std::string inputSearch(rawSearchQuery.get());
         if (!inputSearch.empty() && inputSearch != "/") {
             add_history(rawSearchQuery.get());
-            saveHistory();
+            saveHistory(historyPattern);
         }
         historyPattern = false;
         clear_history();
@@ -108,7 +108,7 @@ void applyFilter(std::vector<std::string>& files, const std::vector<std::string>
 
 
 // Function to select and convert files based on user's choice of file type
-void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool promptFlag, int maxDepth) {
+void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool promptFlag, int maxDepth, bool historyPattern) {
     std::vector<std::string> files, originalFiles;
     files.reserve(100);
     binImgFilesCache.reserve(100);
@@ -143,7 +143,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool pro
         successOuts.clear(); skippedOuts.clear(); failedOuts.clear(); deletedOuts.clear(); processedErrors.clear();
         clear_history();
         historyPattern = false;
-        loadHistory();
+        loadHistory(historyPattern);
 
         std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m ↵ to scan for \001\033[1;38;5;208m\002" + fileExtension +
                              "\001\033[1;94m files (>= 5MB) and import into \001\033[1;93m\002RAM\001\033[1;94m\002 cache (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002), \001\033[1;92m\002ls \001\033[1;94m\002↵ open \001\033[1;93m\002RAM\001\033[1;94m\002 cache, "
@@ -195,7 +195,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool pro
         if (!inputSearch.empty() && !list && !clr) {
             std::cout << " " << std::endl;
             add_history(mainSearch.get());
-            saveHistory();
+            saveHistory(historyPattern);
         }
 
         clear_history();
@@ -346,10 +346,10 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool pro
 
 				// If the list is already filtered, apply filter on the filtered list
 				if (isFiltered || isFilteredButUnchanged) {
-					applyFilter(files, files, fileTypeName);  // Apply filter on the already filtered list
+					applyFilter(files, files, fileTypeName, historyPattern);  // Apply filter on the already filtered list
 				} else {
 					// First time filtering or no filter applied yet
-					applyFilter(files, originalFiles, fileTypeName);  // Apply filter on the full list
+					applyFilter(files, originalFiles, fileTypeName, historyPattern);  // Apply filter on the full list
 				}
 
 				// Check filter status after applying
@@ -379,7 +379,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool pro
 			} else {
 				clearScrollBuffer();
 				std::cout << "\033[1m" << std::endl;
-				processInput(mainInputString, files, modeMdf, modeNrg, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, promptFlag, maxDepth);
+				processInput(mainInputString, files, modeMdf, modeNrg, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, promptFlag, maxDepth, historyPattern);
 				clearScrollBuffer();
 				std::cout << "\n";
 				if (verbose) {
@@ -399,7 +399,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool pro
 
 
 // Function to process user input and convert selected BIN/MDF/NRG files to ISO format
-void processInput(const std::string& input, const std::vector<std::string>& fileList, bool modeMdf, bool modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool promptFlag, int maxDepth) {
+void processInput(const std::string& input, const std::vector<std::string>& fileList, bool modeMdf, bool modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool promptFlag, int maxDepth, bool historyPattern) {
     std::mutex futuresMutex;
     std::set<int> processedIndices;
 
@@ -559,7 +559,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     promptFlag = false;
     if (!processedIndices.empty()) {
         maxDepth = 0;
-        manualRefreshCache(concatenatedFilePaths, promptFlag, maxDepth);
+        manualRefreshCache(concatenatedFilePaths, promptFlag, maxDepth, historyPattern);
     }
     maxDepth = -1;
 }

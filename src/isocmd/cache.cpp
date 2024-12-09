@@ -247,7 +247,7 @@ bool isValidDirectory(const std::string& path) {
 }
 
 // Function for manual cache refresh
-void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxDepth) {
+void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxDepth, bool historyPattern) {
 
 	std::mutex cacheRefreshMutex;
 
@@ -263,7 +263,7 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 		input = initialDir;
 	} else {
 		// Load history from file
-		loadHistory();
+		loadHistory(historyPattern);
 		maxDepth = -1;
 		// Prompt the user to enter directory paths for manual cache refresh
 		std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;92m\002.iso\001\033[1;94m\002 files (>= 5MB) and import into \001\033[1;92m\002on-disk\001\033[1;94m\002 cache (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002),\001\033[1;93m\002 clr\001\033[1;94m\002 ↵ clear \001\033[1m\002\001\033[1;92m\002on-disk\001\033[1m\002\001\033[1;94m\002 cache, ↵ return:\n\001\033[0;1m\002";
@@ -279,12 +279,12 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 				std::cerr << "\n\001\033[1;91mError deleting IsoCache: '" << cacheFilePath << "'. File does not exist or inaccessible." << std::endl;
 				std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-				manualRefreshCache("", promptFlag, maxDepth);
+				manualRefreshCache("", promptFlag, maxDepth, historyPattern);
         } else {
 			std::cout << "\n\001\033[1;92mIsoCache deleted successfully: '" << cacheFilePath <<"'." << std::endl;
 			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-			manualRefreshCache("", promptFlag, maxDepth);
+			manualRefreshCache("", promptFlag, maxDepth, historyPattern);
         }
 
 		} else if (!inputSearch.empty()) {
@@ -302,7 +302,7 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 
 	if (promptFlag) {
 		// Save history
-		saveHistory();
+		saveHistory(historyPattern);
 	}
 
     // Create an input string stream to parse directory paths
@@ -507,7 +507,7 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
     }
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-    manualRefreshCache("", promptFlag, maxDepth);
+    manualRefreshCache("", promptFlag, maxDepth, historyPattern);
 	}
 	uniqueErrorMessages.clear();
 	promptFlag = true;

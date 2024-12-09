@@ -201,7 +201,7 @@ void printUnmountedAndErrors(std::set<std::string>& unmountedFiles, std::set<std
 
 
 // Main function for unmounting ISOs
-void unmountISOs() {
+void unmountISOs(bool historyPattern) {
     std::vector<std::string> isoDirs;
     std::set<std::string> errorMessages, unmountedFiles, unmountedErrors;
     std::mutex umountMutex;
@@ -301,7 +301,7 @@ void unmountISOs() {
                 errorMessages.clear();
                 clear_history();
                 historyPattern = true;
-                loadHistory();
+                loadHistory(historyPattern);
                 std::cout << "\033[1A\033[K";
 
                 std::string filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
@@ -329,7 +329,7 @@ void unmountISOs() {
                 std::cout << "\033[1m\n";
                 if (searchQuery && searchQuery.get()[0] != '\0') {
                     add_history(searchQuery.get());
-                    saveHistory();
+                    saveHistory(historyPattern);
                 }
 
                 historyPattern = false;

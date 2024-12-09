@@ -15,8 +15,6 @@ std::mutex Mutex4Low;
 // For cache directory creation
 bool verbose = false;
 
-// For saving history to a differrent cache for FilterPatterns
-bool historyPattern = false;
 
 // Default readline history save path
 const std::string historyFilePath = std::string(getenv("HOME")) + "/.cache/iso_commander_history_cache.txt";
@@ -33,8 +31,11 @@ int lockFileDescriptor = -1;
 
 // Main function
 int main(int argc, char *argv[]) {
-	
+	// For enabling/disabling cache refresh prompt
 	bool promptFlag = true;
+	// For saving history to a differrent cache for FilterPatterns
+	bool historyPattern = false;
+	// Traverse depth for ache refresh
 	int maxDepth = -1;
 
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
@@ -97,16 +98,16 @@ int main(int argc, char *argv[]) {
         std::string choice(mainInputString);
 
         if (choice == "1") {
-            submenu1(promptFlag, maxDepth);
+            submenu1(promptFlag, maxDepth, historyPattern);
         } else {
             // Check if the input length is exactly 1
             if (choice.length() == 1) {
                 switch (choice[0]) {
                     case '2':
-                        submenu2(promptFlag, maxDepth);
+                        submenu2(promptFlag, maxDepth, historyPattern);
                         break;
                     case '3':
-                        manualRefreshCache("", promptFlag, maxDepth);
+                        manualRefreshCache("", promptFlag, maxDepth, historyPattern);
                         clearScrollBuffer();
                         break;
                     case '4':
@@ -158,7 +159,7 @@ std::cout << Color << R"((   (       )            )    *      *              ) (
 
 
 // Function to print submenu1
-void submenu1(bool promptFlag, int maxDepth) {
+void submenu1(bool promptFlag, int maxDepth, bool historyPattern) {
 
     while (true) {
         clearScrollBuffer();
@@ -194,30 +195,30 @@ void submenu1(bool promptFlag, int maxDepth) {
 		switch (submenu_choice[0]) {
         case '1':
 			clearScrollBuffer();
-            select_and_mount_files_by_number();
+            select_and_mount_files_by_number(historyPattern);
             clearScrollBuffer();
             break;
         case '2':
 			clearScrollBuffer();
-            unmountISOs();
+            unmountISOs(historyPattern);
             clearScrollBuffer();
             break;
         case '3':
 			clearScrollBuffer();
             operation = "rm";
-            select_and_operate_files_by_number(operation, promptFlag, maxDepth);
+            select_and_operate_files_by_number(operation, promptFlag, maxDepth, historyPattern);
             clearScrollBuffer();
             break;
         case '4':
 			clearScrollBuffer();
             operation = "mv";
-            select_and_operate_files_by_number(operation, promptFlag, maxDepth);
+            select_and_operate_files_by_number(operation, promptFlag, maxDepth, historyPattern);
             clearScrollBuffer();
             break;
         case '5':
 			clearScrollBuffer();
             operation = "cp";
-            select_and_operate_files_by_number(operation, promptFlag, maxDepth);
+            select_and_operate_files_by_number(operation, promptFlag, maxDepth, historyPattern);
             clearScrollBuffer();
             break;
 			}
@@ -227,7 +228,7 @@ void submenu1(bool promptFlag, int maxDepth) {
 
 
 // Function to print submenu2
-void submenu2(bool promptFlag, int maxDepth) {
+void submenu2(bool promptFlag, int maxDepth, bool historyPattern) {
 	while (true) {
 		clearScrollBuffer();
 		std::cout << "\033[1;32m+-------------------------+\n";
@@ -260,19 +261,19 @@ void submenu2(bool promptFlag, int maxDepth) {
              case '1':
 				clearScrollBuffer();
 				operation = "bin";
-					select_and_convert_files_to_iso(operation, promptFlag, maxDepth);
+					select_and_convert_files_to_iso(operation, promptFlag, maxDepth, historyPattern);
                 clearScrollBuffer();
                 break;
              case '2':
 				clearScrollBuffer();
 				operation = "mdf";
-					select_and_convert_files_to_iso(operation, promptFlag, maxDepth);
+					select_and_convert_files_to_iso(operation, promptFlag, maxDepth, historyPattern);
                 clearScrollBuffer();
                 break;
              case '3':
 				clearScrollBuffer();
 				operation = "nrg";
-					select_and_convert_files_to_iso(operation, promptFlag, maxDepth);
+					select_and_convert_files_to_iso(operation, promptFlag, maxDepth, historyPattern);
                 clearScrollBuffer();
                 break;
 			}
@@ -584,7 +585,7 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(const std::strin
 
 
 // Function to load history from readline
-void loadHistory() {
+void loadHistory(bool historyPattern) {
     // Only load history from file if it's not already populated in memory
     if (history_length == 0) {
         std::ifstream file;
@@ -606,7 +607,7 @@ void loadHistory() {
 
 
 // Function to save history from readline
-void saveHistory() {
+void saveHistory(bool historyPattern) {
     std::ofstream historyFile;
     
     // Choose file path based on historyPattern flag

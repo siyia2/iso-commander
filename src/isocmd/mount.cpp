@@ -46,7 +46,7 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::st
 
 
 // Function to select and mount ISO files by number
-void select_and_mount_files_by_number() {
+void select_and_mount_files_by_number(bool historyPattern) {
     std::set<std::string> mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages;
     std::vector<std::string> isoFiles, filteredFiles;
     isoFiles.reserve(100);
@@ -112,7 +112,7 @@ void select_and_mount_files_by_number() {
 
                 clear_history();
                 historyPattern = true;
-                loadHistory();
+                loadHistory(historyPattern);
                 // Move the cursor up 3 lines and clear them
                 std::cout << "\033[1A\033[K";
 
@@ -135,7 +135,7 @@ void select_and_mount_files_by_number() {
 
                 if (strcmp(searchQuery.get(), "/") != 0) {
                     add_history(searchQuery.get());
-                    saveHistory();
+                    saveHistory(historyPattern);
                 }
                 historyPattern = false;
                 clear_history();

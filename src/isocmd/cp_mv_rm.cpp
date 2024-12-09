@@ -75,7 +75,7 @@ void verbose_cp_mv_rm(std::set<std::string>& operationIsos, std::set<std::string
 
 
 // Main function to select and operate on files by number
-void select_and_operate_files_by_number(const std::string& operation, bool promptFlag, int maxDepth) {
+void select_and_operate_files_by_number(const std::string& operation, bool promptFlag, int maxDepth, bool historyPattern) {
     std::set<std::string> operationIsos, operationErrors, uniqueErrorMessages;
     std::vector<std::string> isoFiles, filteredFiles;
     isoFiles.reserve(100);
@@ -159,7 +159,7 @@ void select_and_operate_files_by_number(const std::string& operation, bool promp
 				uniqueErrorMessages.clear();
 				clear_history();
 				historyPattern = true;
-				loadHistory();
+				loadHistory(historyPattern);
         
 				// Move the cursor up 3 lines and clear them
 				std::cout << "\033[1A\033[K";
@@ -184,7 +184,7 @@ void select_and_operate_files_by_number(const std::string& operation, bool promp
 				// Add to history if not a repeat
 				if (strcmp(searchQuery.get(), "/") != 0) {
 					add_history(searchQuery.get());
-					saveHistory();
+					saveHistory(historyPattern);
 				}
         
 				historyPattern = false;
@@ -218,7 +218,7 @@ void select_and_operate_files_by_number(const std::string& operation, bool promp
     
 			bool result = processOperationInput(inputString, currentFiles, process, operationIsos, 
 												operationErrors, uniqueErrorMessages, promptFlag, 
-												maxDepth, mvDelBreak);
+												maxDepth, mvDelBreak, historyPattern);
     
 			if (verbose) {
 				needsClrScrn = true;
@@ -248,7 +248,7 @@ void select_and_operate_files_by_number(const std::string& operation, bool promp
 
 
 // Function to process either mv or cp indices
-bool processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool promptFlag, int maxDepth, bool mvDelBreak) {
+bool processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool promptFlag, int maxDepth, bool mvDelBreak, bool historyPattern) {
     std::string userDestDir;
     std::istringstream iss(input);
     std::vector<int> processedIndices;
@@ -376,7 +376,7 @@ bool processOperationInput(const std::string& input, std::vector<std::string>& i
             displaySelectedIsos();
             clear_history();
             historyPattern = false;
-            loadHistory();
+            loadHistory(historyPattern);
             userDestDir.clear();
 
             std::string prompt = "\n\001\033[1;92m\002DestinationDirs\001\033[1;94m\002 ↵ for selected \001\033[1;92m\002ISO\001\033[1;94m\002 to be " + operationColor + operationDescription + "\001\033[1;94m\002 into (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002), ↵ return:\n\001\033[0;1m\002";
@@ -408,7 +408,7 @@ bool processOperationInput(const std::string& input, std::vector<std::string>& i
                 if (mainInputString.back() == '/' && mainInputString.front() == '/' && slashBeforeSemicolon && semicolonSurroundedBySlash) {
                     userDestDir = mainInputString;
                     add_history(input.get());
-                    saveHistory();
+                    saveHistory(historyPattern);
                     clear_history();
                     break;
                 } else {
@@ -480,7 +480,7 @@ bool processOperationInput(const std::string& input, std::vector<std::string>& i
        maxDepth = 0;
        // Refresh cache for all destination directories if not a delete operation
        if (!isDelete) {
-               manualRefreshCache(userDestDir, promptFlag, maxDepth);
+               manualRefreshCache(userDestDir, promptFlag, maxDepth, historyPattern);
        }
 
     clear_history();
