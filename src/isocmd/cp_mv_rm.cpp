@@ -68,14 +68,13 @@ void verbose_cp_mv_rm(std::set<std::string>& operationIsos, std::set<std::string
     operationIsos.clear();
     operationErrors.clear();
     uniqueErrorMessages.clear();
-	verbose = false;
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
 
 // Main function to select and operate on files by number
-void select_and_operate_files_by_number(const std::string& operation, bool promptFlag, int maxDepth, bool historyPattern) {
+void select_and_operate_files_by_number(const std::string& operation, bool promptFlag, int maxDepth, bool historyPattern, bool& verbose) {
     std::set<std::string> operationIsos, operationErrors, uniqueErrorMessages;
     std::vector<std::string> isoFiles, filteredFiles;
     isoFiles.reserve(100);
@@ -218,11 +217,12 @@ void select_and_operate_files_by_number(const std::string& operation, bool promp
     
 			bool result = processOperationInput(inputString, currentFiles, process, operationIsos, 
 												operationErrors, uniqueErrorMessages, promptFlag, 
-												maxDepth, mvDelBreak, historyPattern);
+												maxDepth, mvDelBreak, historyPattern, verbose);
     
 			if (verbose) {
 				needsClrScrn = true;
 				verbose_cp_mv_rm(operationIsos, operationErrors, uniqueErrorMessages);
+				verbose = false;
 			}
     
 			if (process != "cp" && isFiltered && result) {
@@ -248,7 +248,7 @@ void select_and_operate_files_by_number(const std::string& operation, bool promp
 
 
 // Function to process either mv or cp indices
-bool processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool promptFlag, int maxDepth, bool mvDelBreak, bool historyPattern) {
+bool processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool promptFlag, int maxDepth, bool mvDelBreak, bool historyPattern, bool& verbose) {
     std::string userDestDir;
     std::istringstream iss(input);
     std::vector<int> processedIndices;
@@ -447,7 +447,7 @@ bool processOperationInput(const std::string& input, std::vector<std::string>& i
     std::atomic<bool> isProcessingComplete(false);
 
     int totalTasksValue = totalTasks.load();
-    std::thread progressThread(displayProgressBar, std::ref(completedTasks), std::cref(totalTasksValue), std::ref(isProcessingComplete));
+    std::thread progressThread(displayProgressBar, std::ref(completedTasks), std::cref(totalTasksValue), std::ref(isProcessingComplete), std::ref(verbose));
 
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
