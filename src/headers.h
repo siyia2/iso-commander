@@ -49,8 +49,6 @@ extern std::mutex Mutex4Low;
 // For storing isoFiles in RAM
 extern std::vector<std::string> globalIsoFileList; 
 
-// For enabling/disabling verbose output on the fly
-extern bool& verbose;
 
 //	CP&MV&RM
 
