@@ -52,7 +52,7 @@ extern std::vector<std::string> globalIsoFileList;
 // For saving history to a differrent cache for FilterPatterns
 extern bool historyPattern;
 
-// For enabling/disabling verbose on the fly
+// For enabling/disabling verbose output on the fly
 extern bool verbose;
 
 //	CP&MV&RM
