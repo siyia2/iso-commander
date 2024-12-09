@@ -201,7 +201,7 @@ void printUnmountedAndErrors(std::set<std::string>& unmountedFiles, std::set<std
 
 
 // Main function for unmounting ISOs
-void unmountISOs() {
+void unmountISOs(bool verbose) {
     std::vector<std::string> isoDirs;
     std::set<std::string> errorMessages, unmountedFiles, unmountedErrors;
     std::mutex umountMutex;
@@ -429,7 +429,7 @@ void unmountISOs() {
                 std::atomic<size_t> completedIsos(0);
                 size_t totalIsos = selectedIsoDirs.size();
                 std::atomic<bool> isComplete(false);
-                std::thread progressThread(displayProgressBar, std::ref(completedIsos), std::cref(totalIsos), std::ref(isComplete));
+                std::thread progressThread(displayProgressBar, std::ref(completedIsos), std::cref(totalIsos), std::ref(isComplete), std::ref(verbose));
 
                 for (auto& batch : batches) {
                     futuresUmount.emplace_back(pool.enqueue([batch = std::move(batch), &unmountedFiles, &unmountedErrors, &completedIsos, &umountMutex]() {

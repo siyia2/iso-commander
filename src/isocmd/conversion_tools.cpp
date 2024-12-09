@@ -48,7 +48,6 @@ void verboseConversion(std::set<std::string>& processedErrors, std::set<std::str
     failedOuts.clear();		// Clear the set of failed messages
     deletedOuts.clear();   // Clear the set of deleted messages
     processedErrors.clear(); // Clear the set of error messages
-    verbose = false;
 }
 
 
@@ -113,7 +112,7 @@ void applyFilter(std::vector<std::string>& files, const std::vector<std::string>
 
 
 // Function to select and convert files based on user's choice of file type
-void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool promptFlag, int maxDepth) {
+void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool promptFlag, int maxDepth, bool verbose) {
     std::vector<std::string> files, originalFiles;
     files.reserve(100);
     binImgFilesCache.reserve(100);
@@ -381,11 +380,12 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool pro
 			} else {
 				clearScrollBuffer();
 				std::cout << "\033[1m" << std::endl;
-				processInput(mainInputString, files, modeMdf, modeNrg, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, promptFlag, maxDepth);
+				processInput(mainInputString, files, modeMdf, modeNrg, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, promptFlag, maxDepth, verbose);
 				clearScrollBuffer();
 				std::cout << "\n";
 				if (verbose) {
 					verboseConversion(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts);
+					verbose = false;
 				}
 				if (!processedErrors.empty() && successOuts.empty() && skippedOuts.empty() && failedOuts.empty() && deletedOuts.empty()) {
 					clearScrollBuffer();
@@ -401,7 +401,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool pro
 
 
 // Function to process user input and convert selected BIN/MDF/NRG files to ISO format
-void processInput(const std::string& input, const std::vector<std::string>& fileList, bool modeMdf, bool modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool promptFlag, int maxDepth) {
+void processInput(const std::string& input, const std::vector<std::string>& fileList, bool modeMdf, bool modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool promptFlag, int maxDepth, bool verbose) {
     std::mutex futuresMutex;
     std::set<int> processedIndices;
 
@@ -535,7 +535,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     if (!processedIndices.empty()) {
     // Launch progress bar display in a separate thread
     int totalTasks = processedIndices.size();  // Total number of tasks to complete
-    std::thread progressThread(displayProgressBar, std::ref(completedTasks), totalTasks, std::ref(isComplete));
+    std::thread progressThread(displayProgressBar, std::ref(completedTasks), totalTasks, std::ref(isComplete), std::ref(verbose));
 
     for (auto& future : futures) {
         future.wait();
@@ -561,7 +561,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
     promptFlag = false;
     if (!processedIndices.empty()) {
         maxDepth = 0;
-        manualRefreshCache(concatenatedFilePaths);
+        manualRefreshCache(concatenatedFilePaths,maxDepth, promptFlag);
     }
     maxDepth = -1;
 }

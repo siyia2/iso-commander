@@ -40,7 +40,7 @@ bool isValidLinuxPathFormat(const std::string& path) {
 
 
 // Print verbose output for cp_mv_rm
-void verbose_cp_mv_rm(std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages) {
+void verbose_cp_mv_rm(std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool verbose) {
     clearScrollBuffer();
 
     if (!operationIsos.empty()) {
@@ -76,7 +76,7 @@ void verbose_cp_mv_rm(std::set<std::string>& operationIsos, std::set<std::string
 
 
 // Main function to select and operate on files by number
-void select_and_operate_files_by_number(const std::string& operation, bool promptFlag, int maxDepth) {
+void select_and_operate_files_by_number(const std::string& operation, bool promptFlag, int maxDepth, bool verbose) {
     std::set<std::string> operationIsos, operationErrors, uniqueErrorMessages;
     std::vector<std::string> isoFiles, filteredFiles;
     isoFiles.reserve(100);
@@ -206,11 +206,11 @@ void select_and_operate_files_by_number(const std::string& operation, bool promp
         } else {
             std::vector<std::string>& currentFiles = isFiltered ? filteredFiles : globalIsoFileList;
             needsClrScrn =true;
-            processOperationInput(inputString, currentFiles, process, operationIsos, operationErrors, uniqueErrorMessages, promptFlag, maxDepth);
+            processOperationInput(inputString, currentFiles, process, operationIsos, operationErrors, uniqueErrorMessages, promptFlag, maxDepth, verbose);
 
             if (verbose) {
 				needsClrScrn = true;
-                verbose_cp_mv_rm(operationIsos, operationErrors, uniqueErrorMessages);
+                verbose_cp_mv_rm(operationIsos, operationErrors, uniqueErrorMessages, verbose);
             }
 
             if (process != "cp" && isFiltered && mvDelBreak) {
@@ -234,7 +234,7 @@ void select_and_operate_files_by_number(const std::string& operation, bool promp
 
 
 // Function to process either mv or cp indices
-void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool promptFlag, int maxDepth) {
+void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool promptFlag, int maxDepth, bool verbose) {
     std::string userDestDir;
     std::istringstream iss(input);
     std::vector<int> processedIndices;
@@ -430,7 +430,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     std::atomic<bool> isProcessingComplete(false);
 
     int totalTasksValue = totalTasks.load();
-    std::thread progressThread(displayProgressBar, std::ref(completedTasks), std::cref(totalTasksValue), std::ref(isProcessingComplete));
+    std::thread progressThread(displayProgressBar, std::ref(completedTasks), std::cref(totalTasksValue), std::ref(isProcessingComplete), std::ref(verbose));
 
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
