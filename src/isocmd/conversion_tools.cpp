@@ -736,25 +736,43 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, c
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     }
 
-      // Batch insert processed files into cache
-    std::vector<std::string> batch;
-    size_t batchSize = 100;
+    // Batch insert processed files into cache with deduplication using std::set
+    std::vector<std::string>* targetCache = nullptr;
+    std::set<std::string> uniqueFiles;
 
-    for (const auto& fileName : fileNames) {
-        batch.push_back(fileName);
-        if (batch.size() == batchSize) {
-            if (mode == "bin") binImgFilesCache.insert(binImgFilesCache.end(), batch.begin(), batch.end());
-            else if (mode == "mdf") mdfMdsFilesCache.insert(mdfMdsFilesCache.end(), batch.begin(), batch.end());
-            else if (mode == "nrg") nrgFilesCache.insert(nrgFilesCache.end(), batch.begin(), batch.end());
-            batch.clear();
-        }
+    if (mode == "bin") {
+        targetCache = &binImgFilesCache;
+        uniqueFiles = std::set<std::string>(binImgFilesCache.begin(), binImgFilesCache.end());
+    }
+    else if (mode == "mdf") {
+        targetCache = &mdfMdsFilesCache;
+        uniqueFiles = std::set<std::string>(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end());
+    }
+    else if (mode == "nrg") {
+        targetCache = &nrgFilesCache;
+        uniqueFiles = std::set<std::string>(nrgFilesCache.begin(), nrgFilesCache.end());
     }
 
-    // Insert remaining files
-    if (!batch.empty()) {
-        if (mode == "bin") binImgFilesCache.insert(binImgFilesCache.end(), batch.begin(), batch.end());
-        else if (mode == "mdf") mdfMdsFilesCache.insert(mdfMdsFilesCache.end(), batch.begin(), batch.end());
-        else if (mode == "nrg") nrgFilesCache.insert(nrgFilesCache.end(), batch.begin(), batch.end());
+    if (targetCache) {
+        std::vector<std::string> batch;
+        size_t batchSize = 100;
+
+        for (const auto& fileName : fileNames) {
+            // Use std::set's efficient insertion with uniqueness check
+            if (uniqueFiles.insert(fileName).second) {
+                batch.push_back(fileName);
+                
+                if (batch.size() == batchSize) {
+                    targetCache->insert(targetCache->end(), batch.begin(), batch.end());
+                    batch.clear();
+                }
+            }
+        }
+
+        // Insert remaining files
+        if (!batch.empty()) {
+            targetCache->insert(targetCache->end(), batch.begin(), batch.end());
+        }
     }
 
     // Return appropriate cache
