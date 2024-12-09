@@ -10,7 +10,7 @@ std::vector<std::string> globalIsoFileList;
 //	MOUNT STUFF
 
 // Function to mount all ISOs indiscriminately
-void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, bool verbose) {
+void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
     size_t maxChunkSize = 50;  // Maximum number of files per chunk
     size_t totalIsos = isoFiles.size();
     std::atomic<size_t> completedIsos(0);
@@ -22,7 +22,7 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::st
     // Ensure chunkSize is at least 1
     chunkSize = std::max(chunkSize, static_cast<size_t>(1));
     ThreadPool pool(numThreads);
-    std::thread progressThread(displayProgressBar, std::ref(completedIsos), totalIsos, std::ref(isComplete),std::ref(verbose));
+    std::thread progressThread(displayProgressBar, std::ref(completedIsos), totalIsos, std::ref(isComplete));
     std::vector<std::future<void>> futures;
     futures.reserve((totalIsos + chunkSize - 1) / chunkSize);  // Reserve enough space for all future tasks
 
@@ -46,7 +46,7 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::st
 
 
 // Function to select and mount ISO files by number
-void select_and_mount_files_by_number(bool verbose) {
+void select_and_mount_files_by_number() {
     std::set<std::string> mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages;
     std::vector<std::string> isoFiles, filteredFiles;
     isoFiles.reserve(100);
@@ -165,12 +165,12 @@ void select_and_mount_files_by_number(bool verbose) {
 				clearScrollBuffer();
 				std::cout << "\033[1m\n";
 				needsClrScrn = true;
-                mountAllIsoFiles(currentFiles, mountedFiles, skippedMessages, mountedFails, verbose);
+                mountAllIsoFiles(currentFiles, mountedFiles, skippedMessages, mountedFails);
             } else {
 				clearScrollBuffer();
 				needsClrScrn = true;
 				std::cout << "\033[1m\n";
-                processAndMountIsoFiles(inputString, currentFiles, mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages, verbose);
+                processAndMountIsoFiles(inputString, currentFiles, mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
             }
 
             if (!uniqueErrorMessages.empty() && mountedFiles.empty() && skippedMessages.empty() && mountedFails.empty()) {
@@ -386,7 +386,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
 
 
 // Function to process input and mount ISO files asynchronously
-void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages, bool verbose) {
+void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages) {
     
     std::istringstream iss(input); // Create an input stream from the input string
     std::vector<int> indicesToProcess; // To store indices parsed from the input
@@ -503,7 +503,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     }
 
     // Create a thread to display progress
-    std::thread progressThread(displayProgressBar, std::ref(completedTasks), totalTasks, std::ref(isProcessingComplete), std::ref(verbose));
+    std::thread progressThread(displayProgressBar, std::ref(completedTasks), totalTasks, std::ref(isProcessingComplete));
 
     // Wait for all tasks to complete
     {

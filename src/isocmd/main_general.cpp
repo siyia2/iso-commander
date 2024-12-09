@@ -13,7 +13,7 @@ std::mutex Mutex4High;
 std::mutex Mutex4Low;
 
 // For cache directory creation
-bool gapPrinted = false;
+bool verbose = false;
 
 // For saving history to a differrent cache for FilterPatterns
 bool historyPattern = false;
@@ -35,7 +35,6 @@ int lockFileDescriptor = -1;
 int main(int argc, char *argv[]) {
 	
 	bool promptFlag = true;
-	bool verbose = false;
 	int maxDepth = -1;
 
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
@@ -98,13 +97,13 @@ int main(int argc, char *argv[]) {
         std::string choice(mainInputString);
 
         if (choice == "1") {
-            submenu1(promptFlag, maxDepth, verbose);
+            submenu1(promptFlag, maxDepth);
         } else {
             // Check if the input length is exactly 1
             if (choice.length() == 1) {
                 switch (choice[0]) {
                     case '2':
-                        submenu2(promptFlag, maxDepth, verbose);
+                        submenu2(promptFlag, maxDepth);
                         break;
                     case '3':
                         manualRefreshCache("", promptFlag, maxDepth);
@@ -159,7 +158,7 @@ std::cout << Color << R"((   (       )            )    *      *              ) (
 
 
 // Function to print submenu1
-void submenu1(bool promptFlag, int maxDepth, bool verbose) {
+void submenu1(bool promptFlag, int maxDepth) {
 
     while (true) {
         clearScrollBuffer();
@@ -195,30 +194,30 @@ void submenu1(bool promptFlag, int maxDepth, bool verbose) {
 		switch (submenu_choice[0]) {
         case '1':
 			clearScrollBuffer();
-            select_and_mount_files_by_number(verbose);
+            select_and_mount_files_by_number();
             clearScrollBuffer();
             break;
         case '2':
 			clearScrollBuffer();
-            unmountISOs(verbose);
+            unmountISOs();
             clearScrollBuffer();
             break;
         case '3':
 			clearScrollBuffer();
             operation = "rm";
-            select_and_operate_files_by_number(operation, promptFlag, maxDepth, verbose);
+            select_and_operate_files_by_number(operation, promptFlag, maxDepth);
             clearScrollBuffer();
             break;
         case '4':
 			clearScrollBuffer();
             operation = "mv";
-            select_and_operate_files_by_number(operation, promptFlag, maxDepth, verbose);
+            select_and_operate_files_by_number(operation, promptFlag, maxDepth);
             clearScrollBuffer();
             break;
         case '5':
 			clearScrollBuffer();
             operation = "cp";
-            select_and_operate_files_by_number(operation, promptFlag, maxDepth, verbose);
+            select_and_operate_files_by_number(operation, promptFlag, maxDepth);
             clearScrollBuffer();
             break;
 			}
@@ -228,7 +227,7 @@ void submenu1(bool promptFlag, int maxDepth, bool verbose) {
 
 
 // Function to print submenu2
-void submenu2(bool promptFlag, int maxDepth, bool verbose) {
+void submenu2(bool promptFlag, int maxDepth) {
 	while (true) {
 		clearScrollBuffer();
 		std::cout << "\033[1;32m+-------------------------+\n";
@@ -261,19 +260,19 @@ void submenu2(bool promptFlag, int maxDepth, bool verbose) {
              case '1':
 				clearScrollBuffer();
 				operation = "bin";
-					select_and_convert_files_to_iso(operation, promptFlag, maxDepth, verbose);
+					select_and_convert_files_to_iso(operation, promptFlag, maxDepth);
                 clearScrollBuffer();
                 break;
              case '2':
 				clearScrollBuffer();
 				operation = "mdf";
-					select_and_convert_files_to_iso(operation, promptFlag, maxDepth, verbose);
+					select_and_convert_files_to_iso(operation, promptFlag, maxDepth);
                 clearScrollBuffer();
                 break;
              case '3':
 				clearScrollBuffer();
 				operation = "nrg";
-					select_and_convert_files_to_iso(operation, promptFlag, maxDepth, verbose);
+					select_and_convert_files_to_iso(operation, promptFlag, maxDepth);
                 clearScrollBuffer();
                 break;
 			}
@@ -376,7 +375,7 @@ bool isNumeric(const std::string& str) {
 
 
 // Function to display progress bar for native operations
-void displayProgressBar(const std::atomic<size_t>& completedIsos, const size_t& totalIsos, std::atomic<bool>& isComplete, bool verbose) {
+void displayProgressBar(const std::atomic<size_t>& completedIsos, const size_t& totalIsos, std::atomic<bool>& isComplete) {
     const int barWidth = 50;
     bool enterPressed = false;
     auto startTime = std::chrono::high_resolution_clock::now();
