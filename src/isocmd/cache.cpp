@@ -599,6 +599,9 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
                         std::cout << "\r\033[0;1mTotal files processed: " << totalProcessedFiles << std::flush;
                     }
                 }
+                
+					
+                
 
                 if (!entry.is_regular_file()) {
                     continue;
@@ -634,6 +637,10 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
                 uniqueErrorMessages.insert(formattedError);
             }
         }
+        
+        if (totalProcessedFiles == 0) {
+			std::cout << "\r\033[0;1mTotal files processed: 0" << std::flush;
+		}
 
         // Store any remaining local ISO files in leftover storage
         leftoverFiles = std::move(localIsoFiles);

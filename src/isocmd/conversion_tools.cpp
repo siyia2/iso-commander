@@ -744,6 +744,10 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, c
             future.wait();
         }
     }
+    
+    if (totalFiles == 0) {
+		std::cout << "\r\033[0;1mTotal files processed: 0" << std::flush;
+	}
 
     // Restore input
     flushStdin();
