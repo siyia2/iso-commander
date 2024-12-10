@@ -286,7 +286,6 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool pro
 		bool isFilteredButUnchanged = false;
 		bool needsScrnClr = true;
         while (true) {
-			verbose = false;
             successOuts.clear(); skippedOuts.clear(); failedOuts.clear(); deletedOuts.clear(); processedErrors.clear();
 
             if (binImgFilesCache.empty() && !modeMdf && !modeNrg) {
@@ -319,6 +318,17 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool pro
            std::string prompt = std::string(isFiltered ? "\n\001\033[1;96m\002Filtered \001\033[1;92m\002" : "\n\001\033[1;92m\002" ) + fileTypeName + "\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion (e.g., 1-3,1 5), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
 			std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
 			std::string mainInputString(rawInput.get());
+			
+			if (mainInputString == "*") {
+				if (toggleFullList) {
+					toggleFullList = false;
+				} else {
+					toggleFullList = true;
+				}
+				clearScrollBuffer();
+				printFileList(files);
+				continue;
+			}
 
 			if (std::isspace(rawInput.get()[0]) || rawInput.get()[0] == '\0') {
 				clearScrollBuffer();
@@ -384,9 +394,11 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool pro
 				std::cout << "\n";
 				if (verbose) {
 					verboseConversion(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts);
+					verbose = false;
 				}
 				if (!processedErrors.empty() && successOuts.empty() && skippedOuts.empty() && failedOuts.empty() && deletedOuts.empty()) {
 					clearScrollBuffer();
+					verbose = false;
 					std::cout << "\n\033[1;91mNo valid input provided for ISO conversion.\033[0;1m";
 					std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
 					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
