@@ -276,12 +276,12 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 
 		if (inputSearch == "clr") {
 			if (std::remove(cacheFilePath.c_str()) != 0) {
-				std::cerr << "\n\001\033[1;91mError deleting IsoCache: '" << cacheFilePath << "'. File does not exist or inaccessible." << std::endl;
+				std::cerr << "\n\001\033[1;91mError deleting IsoCache: '\001\033[1;93m" << cacheFilePath << "\001\033[1;91m'. File missing or inaccessible." << std::endl;
 				std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 				manualRefreshCache("", promptFlag, maxDepth, historyPattern);
         } else {
-			std::cout << "\n\001\033[1;92mIsoCache deleted successfully: '" << cacheFilePath <<"'." << std::endl;
+			std::cout << "\n\001\033[1;92mIsoCache deleted successfully: '\001\033[0;1m" << cacheFilePath <<"\001\033[1;92m'." << std::endl;
 			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 			manualRefreshCache("", promptFlag, maxDepth, historyPattern);
