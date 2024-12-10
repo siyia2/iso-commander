@@ -602,6 +602,7 @@ void processInput(const std::string& input, const std::vector<std::string>& file
         maxDepth = 0;
         manualRefreshCache(concatenatedFilePaths, promptFlag, maxDepth, historyPattern);
     }
+    promptFlag = true;
     maxDepth = -1;
 }
 

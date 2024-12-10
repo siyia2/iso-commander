@@ -483,6 +483,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
     clear_history();
     userDestDir.clear();
+    promptFlag = true;
     maxDepth = -1;
 }
 
