@@ -196,7 +196,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& pr
                 nrgFilesCache.clear();
                 for (auto it = transformationCache.begin(); it != transformationCache.end();) {
 						const std::string& key = it->first;
-						if ((key.size() >= 4 && key.compare(key.size() - 4, 4, ".mdf") == 0))
+						if ((key.size() >= 4 && key.compare(key.size() - 4, 4, ".nrg") == 0))
 					{
 						it = transformationCache.erase(it);  // erase and move to the next element
 					} else {
