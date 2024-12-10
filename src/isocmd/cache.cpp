@@ -266,15 +266,30 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 		loadHistory(historyPattern);
 		maxDepth = -1;
 		// Prompt the user to enter directory paths for manual cache refresh
-		std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;92m\002.iso\001\033[1;94m\002 files (>= 5MB) and import into \001\033[1;92m\002on-disk\001\033[1;94m\002 cache (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002),\001\033[1;93m\002 clr\001\033[1;94m\002 ↵ clear \001\033[1m\002\001\033[1;92m\002on-disk\001\033[1m\002\001\033[1;94m\002 cache, ↵ return:\n\001\033[0;1m\002";
+		std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;92m\002.iso\001\033[1;94m\002 files (>= 5MB) and import into \001\033[1;92m\002on-disk\001\033[1;94m\002 cache (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002),\001\033[1;93m\002 clr\001\033[1;94m\002 ↵ clear \001\033[1m\002\001\033[1;92m\002on-disk\001\033[1m\002\001\033[1;94m\002 cache, \001\033[1;93m\002stats\001\033[1;94m\002 ↵ cache\001\033[1m\002\001\033[1;94m\002 stats, ↵ return:\n\001\033[0;1m\002";
 		// Prompt user for input
 		char* rawSearchQuery = readline(prompt.c_str());
 
 		// Use std::unique_ptr to manage memory for rawSearchQuery
 		std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
 		std::string inputSearch(searchQuery.get());
-
-		if (inputSearch == "clr") {
+		if (inputSearch == "stats") {
+			try {
+				// Get the file size in bytes
+				std::filesystem::path filePath(cacheFilePath);
+				std::uintmax_t fileSizeInBytes = std::filesystem::file_size(filePath);
+        
+				// Convert to MB
+				double fileSizeInMB = fileSizeInBytes / (1024.0 * 1024.0);
+        
+				std::cout << "\nSize: " << std::fixed << std::setprecision(1) << fileSizeInMB << "MB" << "/10MB." << " \nLocation: " << "'" << cacheFilePath << "'\033[0;1m." <<std::endl;
+				} catch (const std::filesystem::filesystem_error& e) {
+					std::cerr << "\n\033[1;91mError: " << e.what() << std::endl;
+				}
+				std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+				manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+	   } else if (inputSearch == "clr") {
 			if (std::remove(cacheFilePath.c_str()) != 0) {
 				std::cerr << "\n\001\033[1;91mError deleting IsoCache: '\001\033[1;93m" << cacheFilePath << "\001\033[1;91m'. File missing or inaccessible." << std::endl;
 				std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
@@ -283,7 +298,7 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
         } else {
 			for (auto it = transformationCache.begin(); it != transformationCache.end();) {
 						const std::string& key = it->first;
-						if ((key.size() >= 4 && key.compare(key.size() - 4, 4, ".iso") == 0))
+						if ((key.size() >= 4 && key.compare(key.size() - 4, 4, ".mdf") == 0))
 					{
 						it = transformationCache.erase(it);  // erase and move to the next element
 					} else {
