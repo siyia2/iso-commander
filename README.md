@@ -10,33 +10,33 @@ https://github.com/user-attachments/assets/2d247581-bf84-437b-b872-800111986d42
 
 
 
-Blazing fast cmd `ISO` manager written in pure C++. All paths are mounted under `/mnt/iso_*` format and conversions are stored in their respective source directories. `ROOT` access is essential for `mount&umount` operations.
+Secure and blazing fast cmd `ISO` manager written in pure C++. All paths are mounted under `/mnt/iso_*` format and conversions are stored in their respective source directories. `ROOT` access is essential for `mount&umount` operations.
 
 For best experience execute with: `sudo isocmd`.
 
 ## ✨ Features
 
-💾 Intelligent ISO Caching
+💾 Intelligent ISO Caching:
 
 * Minimizes disk thrashing.
 * Optimizes file access performance.
 
 
-🖥️ Advanced Terminal Interface
+🖥️ Advanced Terminal Interface:
 
 * Sanitized shell commands.
 * Robust tab completion.
 * Comprehensive command history.
 
 
-⚡ High-Performance Architecture
+⚡ High-Performance Architecture:
 
 * Native C++ implementation.
 * Direct libmount system calls.
 * Zero external library dependencies for terminal control.
 
 
-🔀 Concurrent Processing
+🔀 Concurrent Processing:
 
 * Multithreaded asynchronous task handling.
 * Scalable from 1 to 100,000 ISO files.
