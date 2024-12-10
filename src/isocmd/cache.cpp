@@ -119,6 +119,25 @@ void removeNonExistentPathsFromCache() {
     close(fd);
 }
 
+int countNonEmptyLines(const std::string& filePath) {
+    std::ifstream file(filePath);
+    if (!file.is_open()) {
+        std::cerr << "Unable to open file: " << filePath << std::endl;
+        return -1;
+    }
+
+    int nonEmptyLineCount = 0;
+    std::string line;
+    while (std::getline(file, line)) {
+        // Check if the line is not empty (ignoring whitespace)
+        if (!line.empty() && line.find_first_not_of(" \t\n\r\f\v") != std::string::npos) {
+            ++nonEmptyLineCount;
+        }
+    }
+
+    file.close();
+    return nonEmptyLineCount;
+}
 
 // Set default cache dir
 std::string getHomeDirectory() {
@@ -282,7 +301,7 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 				// Convert to MB
 				double fileSizeInMB = fileSizeInBytes / (1024.0 * 1024.0);
         
-				std::cout << "\nSize: " << std::fixed << std::setprecision(1) << fileSizeInMB << "MB" << "/10MB." << " \nLocation: " << "'" << cacheFilePath << "'\033[0;1m." <<std::endl;
+				std::cout << "\nSize: " << std::fixed << std::setprecision(1) << fileSizeInMB << "MB" << "/10MB." << " \nEntries: "<< countNonEmptyLines(cacheFilePath) << "\nLocation: " << "'" << cacheFilePath << "'\033[0;1m." <<std::endl;
 				} catch (const std::filesystem::filesystem_error& e) {
 					std::cerr << "\n\033[1;91mError: " << e.what() << std::endl;
 				}
