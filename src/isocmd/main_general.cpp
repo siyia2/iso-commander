@@ -15,8 +15,10 @@ const int MAX_HISTORY_LINES = 25;
 
 const int MAX_HISTORY_PATTERN_LINES = 25;
 
+//For toggling long/short paths in lists and verbose
 bool toggleFullList = false;
 
+// For memory mapping string transformations
 std::unordered_map<std::string, std::string> transformationCache;
 
 // Global variables for cleanup
