@@ -281,6 +281,15 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 				manualRefreshCache("", promptFlag, maxDepth, historyPattern);
         } else {
+			for (auto it = transformationCache.begin(); it != transformationCache.end();) {
+						const std::string& key = it->first;
+						if ((key.size() >= 4 && key.compare(key.size() - 4, 4, ".iso") == 0))
+					{
+						it = transformationCache.erase(it);  // erase and move to the next element
+					} else {
+						++it;  // move to the next element
+					}
+				}
 			std::cout << "\n\001\033[1;92mIsoCache deleted successfully: '\001\033[0;1m" << cacheFilePath <<"\001\033[1;92m'." << std::endl;
 			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');

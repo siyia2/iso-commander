@@ -168,12 +168,41 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& pr
 
             if (!modeMdf && !modeNrg) {
                 binImgFilesCache.clear();
+                for (auto it = transformationCache.begin(); it != transformationCache.end();) {
+						const std::string& key = it->first;
+						if ((key.size() >= 4 && key.compare(key.size() - 4, 4, ".bin") == 0) || 
+						(key.size() >= 4 && key.compare(key.size() - 4, 4, ".img") == 0))
+					{
+						it = transformationCache.erase(it);  // erase and move to the next element
+					} else {
+						++it;  // move to the next element
+					}
+				}
+
                 std::cout << "\n\033[1;92mBIN/IMG RAM cache cleared.\033[0;1m\n";
             } else if (modeMdf){
                 mdfMdsFilesCache.clear();
+                for (auto it = transformationCache.begin(); it != transformationCache.end();) {
+						const std::string& key = it->first;
+						if ((key.size() >= 4 && key.compare(key.size() - 4, 4, ".mdf") == 0))
+					{
+						it = transformationCache.erase(it);  // erase and move to the next element
+					} else {
+						++it;  // move to the next element
+					}
+				}
                 std::cout << "\n\033[1;92mMDF RAM cache cleared.\033[0;1m\n";
             } else if (modeNrg){
-                mdfMdsFilesCache.clear();
+                nrgFilesCache.clear();
+                for (auto it = transformationCache.begin(); it != transformationCache.end();) {
+						const std::string& key = it->first;
+						if ((key.size() >= 4 && key.compare(key.size() - 4, 4, ".mdf") == 0))
+					{
+						it = transformationCache.erase(it);  // erase and move to the next element
+					} else {
+						++it;  // move to the next element
+					}
+				}
                 std::cout << "\n\033[1;92mNRG RAM cache cleared.\033[0;1m\n";
             }
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
