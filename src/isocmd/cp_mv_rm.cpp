@@ -80,7 +80,7 @@ void select_and_operate_files_by_number(const std::string& operation, bool& prom
     isoFiles.reserve(100);
     bool isFiltered = false;
     bool needsClrScrn = true;
-    bool mvDelBreak=false;
+    bool mvDelBreak = false;
 
     std::string operationColor = (operation == "rm") ? "\033[1;91m" :
                                  (operation == "cp") ? "\033[1;92m" : "\033[1;93m";
@@ -333,6 +333,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     if (processedIndices.empty()) {
         clearScrollBuffer();
         mvDelBreak = false;
+        verbose = false;
         std::cout << "\n\033[1;91mNo valid indices to be " << operationDescription << ".\033[1;91m\n";
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -382,6 +383,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
             if (mainInputString.empty()) {
                 mvDelBreak = false;
+                verbose = false;
                 clear_history();
                 return;
             }
@@ -428,6 +430,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
         if (!(confirmation == "y" || confirmation == "Y")) {
             mvDelBreak = false;
+            verbose = false;
             std::cout << "\n\033[1;93mDelete operation aborted by user.\033[0;1m\n";
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
