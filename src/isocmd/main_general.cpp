@@ -15,7 +15,7 @@ const int MAX_HISTORY_LINES = 25;
 
 const int MAX_HISTORY_PATTERN_LINES = 25;
 
-bool toggleFullIsoList = false;
+bool toggleFullList = false;
 
 // Global variables for cleanup
 int lockFileDescriptor = -1;
@@ -540,7 +540,7 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(const std::strin
 
     std::string processedDir = path.substr(0, lastSlashPos);
 
-    if (!toggleFullIsoList) {
+    if (!toggleFullList) {
         // Shorten the directory path
         std::string shortenedDir;
         shortenedDir.reserve(processedDir.length());  // Pre-allocate memory

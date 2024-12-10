@@ -96,6 +96,17 @@ void select_and_mount_files_by_number(bool historyPattern, bool& verbose) {
 		}
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         std::string inputString(input.get());
+        
+        if (inputString == "full") {
+			if (toggleFullList) {
+				toggleFullList = false;
+			} else {
+				toggleFullList = true;
+			}
+			
+			needsClrScrn = true;
+			continue;
+		}
 
         if (inputString.empty()) {
             if (isFiltered) {

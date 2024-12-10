@@ -137,6 +137,17 @@ void select_and_operate_files_by_number(const std::string& operation, bool promp
 
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         std::string inputString(input.get());
+        
+        if (inputString == "full") {
+			if (toggleFullList) {
+				toggleFullList = false;
+			} else {
+				toggleFullList = true;
+			}
+			
+			needsClrScrn = true;
+			continue;
+		}
 
         if (!inputString.empty() && inputString != "/") {
             std::cout << "\033[1m\n";
