@@ -90,14 +90,14 @@ void select_and_mount_files_by_number(bool historyPattern, bool& verbose) {
 
         std::string prompt;
 		if (isFiltered) {
-			prompt = "\001\033[1;96m\002Filtered \001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), + ↵ toggle, / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+			prompt = "\001\033[1;96m\002Filtered \001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), ~ ↵ toggle, / ↵ filter, ↵ return:\001\033[0;1m\002 ";
 		} else {
-			prompt = "\001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), + ↵ toggle, / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+			prompt = "\001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), ~ ↵ toggle, / ↵ filter, ↵ return:\001\033[0;1m\002 ";
 		}
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         std::string inputString(input.get());
         
-        if (inputString == "+") {
+        if (inputString == "~") {
 			if (toggleFullList) {
 				toggleFullList = false;
 			} else {

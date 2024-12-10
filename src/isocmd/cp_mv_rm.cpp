@@ -128,17 +128,17 @@ void select_and_operate_files_by_number(const std::string& operation, bool promp
 		if (isFiltered) {
 			prompt = "\001\033[1;96m\002Filtered \001\033[1;92m\002ISO"
             "\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation
-            + "\001\033[1;94m\002 (e.g., 1-3,1 5), + ↵ toggle, / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+            + "\001\033[1;94m\002 (e.g., 1-3,1 5), ~ ↵ toggle, / ↵ filter, ↵ return:\001\033[0;1m\002 ";
         } else {
 			prompt = "\001\033[1;92m\002\002ISO"
             "\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation
-            + "\001\033[1;94m\002 (e.g., 1-3,1 5), + ↵ toggle, / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+            + "\001\033[1;94m\002 (e.g., 1-3,1 5), ~ ↵ toggle, / ↵ filter, ↵ return:\001\033[0;1m\002 ";
 		}
 
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         std::string inputString(input.get());
         
-        if (inputString == "+") {
+        if (inputString == "~") {
 			if (toggleFullList) {
 				toggleFullList = false;
 			} else {
