@@ -153,7 +153,7 @@ std::cout << Color << R"((   (       )            )    *      *              ) (
 
 
 // Function to print submenu1
-void submenu1(bool promptFlag, int maxDepth, bool historyPattern, bool& verbose) {
+void submenu1(bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
 
     while (true) {
         clearScrollBuffer();
@@ -222,7 +222,7 @@ void submenu1(bool promptFlag, int maxDepth, bool historyPattern, bool& verbose)
 
 
 // Function to print submenu2
-void submenu2(bool promptFlag, int maxDepth, bool historyPattern, bool& verbose) {
+void submenu2(bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
 	while (true) {
 		clearScrollBuffer();
 		std::cout << "\033[1;32m+-------------------------+\n";
@@ -587,7 +587,7 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(const std::strin
 
 
 // Function to load history from readline
-void loadHistory(bool historyPattern) {
+void loadHistory(bool& historyPattern) {
     // Only load history from file if it's not already populated in memory
     if (history_length == 0) {
         std::ifstream file;
@@ -609,7 +609,7 @@ void loadHistory(bool historyPattern) {
 
 
 // Function to save history from readline
-void saveHistory(bool historyPattern) {
+void saveHistory(bool& historyPattern) {
     std::ofstream historyFile;
     
     // Choose file path based on historyPattern flag

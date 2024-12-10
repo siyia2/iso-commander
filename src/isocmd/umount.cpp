@@ -201,7 +201,7 @@ void printUnmountedAndErrors(std::set<std::string>& unmountedFiles, std::set<std
 
 
 // Main function for unmounting ISOs
-void unmountISOs(bool historyPattern, bool& verbose) {
+void unmountISOs(bool& historyPattern, bool& verbose) {
     std::vector<std::string> isoDirs;
     std::set<std::string> errorMessages, unmountedFiles, unmountedErrors;
     std::mutex umountMutex;

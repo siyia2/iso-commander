@@ -525,7 +525,7 @@ bool iequals(const std::string_view& a, const std::string_view& b) {
 
 
 // Function to traverse a directory and find ISO files
-void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, size_t& totalProcessedFiles, std::mutex& traverseFilesMutex, std::mutex& traverseErrorsMutex, int maxDepth) {
+void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, size_t& totalProcessedFiles, std::mutex& traverseFilesMutex, std::mutex& traverseErrorsMutex, int& maxDepth) {
     
     const size_t BATCH_SIZE = 100; // Adjust batch size as needed
 

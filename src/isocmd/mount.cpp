@@ -46,7 +46,7 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::st
 
 
 // Function to select and mount ISO files by number
-void select_and_mount_files_by_number(bool historyPattern, bool& verbose) {
+void select_and_mount_files_by_number(bool& historyPattern, bool& verbose) {
     std::set<std::string> mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages;
     std::vector<std::string> isoFiles, filteredFiles;
     isoFiles.reserve(100);
