@@ -46,6 +46,8 @@ extern unsigned int maxThreads;
 // For storing isoFiles in RAM cache
 extern std::vector<std::string> globalIsoFileList; 
 
+extern bool toggleFullList;
+
 
 //	CP&MV&RM
 
