@@ -46,6 +46,7 @@ extern unsigned int maxThreads;
 // For storing isoFiles in RAM cache
 extern std::vector<std::string> globalIsoFileList; 
 
+// For toggling between full and shortened paths in lists
 extern bool toggleFullList;
 
 
