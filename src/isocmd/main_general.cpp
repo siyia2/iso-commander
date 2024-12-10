@@ -15,6 +15,8 @@ const int MAX_HISTORY_LINES = 25;
 
 const int MAX_HISTORY_PATTERN_LINES = 25;
 
+bool toggleFullIsoList = false;
+
 // Global variables for cleanup
 int lockFileDescriptor = -1;
 
@@ -536,41 +538,48 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(const std::strin
         return {"", path};
     }
 
-    std::string processedDir;
-    processedDir.reserve(path.length());  // Pre-allocate memory
+    std::string processedDir = path.substr(0, lastSlashPos);
 
-    size_t start = 0;
-    while (start < lastSlashPos) {
-        size_t end = path.find_first_of("/\\", start);
-        if (end == std::string::npos || end > lastSlashPos) {
-            end = lastSlashPos;
+    if (!toggleFullIsoList) {
+        // Shorten the directory path
+        std::string shortenedDir;
+        shortenedDir.reserve(processedDir.length());  // Pre-allocate memory
+
+        size_t start = 0;
+        while (start < lastSlashPos) {
+            size_t end = processedDir.find_first_of("/\\", start);
+            if (end == std::string::npos || end > lastSlashPos) {
+                end = lastSlashPos;
+            }
+
+            size_t componentLength = end - start;
+            size_t truncatePos = std::min({
+                componentLength,
+                processedDir.find(' ', start) - start,
+                processedDir.find('-', start) - start,
+                size_t(28)
+            });
+
+            shortenedDir.append(processedDir, start, truncatePos);
+            shortenedDir.push_back('/');
+
+            start = end + 1;
         }
 
-        size_t componentLength = end - start;
-        size_t truncatePos = std::min({
-            componentLength,
-            path.find(' ', start) - start,
-            path.find('-', start) - start,
-            size_t(28)
-        });
-
-        processedDir.append(path, start, truncatePos);
-        processedDir.push_back('/');
-
-        start = end + 1;
-    }
-
-    if (!processedDir.empty()) {
-        processedDir.pop_back();  // Remove trailing slash
-    }
-
-    // Apply replacements
-    for (const auto& [oldDir, newDir] : replacements) {
-        size_t pos = 0;
-        while ((pos = processedDir.find(oldDir, pos)) != std::string::npos) {
-            processedDir.replace(pos, oldDir.length(), newDir);
-            pos += newDir.length();
+        if (!shortenedDir.empty()) {
+            shortenedDir.pop_back();  // Remove trailing slash
         }
+
+        // Apply replacements
+        for (const auto& [oldDir, newDir] : replacements) {
+            size_t pos = 0;
+            while ((pos = shortenedDir.find(oldDir, pos)) != std::string::npos) {
+                shortenedDir.replace(pos, oldDir.length(), newDir);
+                pos += newDir.length();
+            }
+        }
+
+        processedDir = std::move(shortenedDir);
     }
 
     return {processedDir, path.substr(lastSlashPos + 1)};
