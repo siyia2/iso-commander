@@ -49,6 +49,9 @@ extern std::vector<std::string> globalIsoFileList;
 // For toggling between full and shortened paths in lists
 extern bool toggleFullList;
 
+// Caching the results of directory and filename extraction for file entries
+extern std::unordered_map<std::string, std::string> transformationCache;
+
 
 //	CP&MV&RM
 
