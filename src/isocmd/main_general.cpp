@@ -17,6 +17,8 @@ const int MAX_HISTORY_PATTERN_LINES = 25;
 
 bool toggleFullList = false;
 
+std::unordered_map<std::string, std::string> transformationCache;
+
 // Global variables for cleanup
 int lockFileDescriptor = -1;
 
@@ -540,6 +542,11 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(const std::strin
 
     std::string processedDir = path.substr(0, lastSlashPos);
 
+    // Check if the path transformation has already been cached for non-toggleFullList case
+    if (!toggleFullList && transformationCache.find(path) != transformationCache.end()) {
+        return {transformationCache[path], path.substr(lastSlashPos + 1)};
+    }
+
     if (!toggleFullList) {
         // Shorten the directory path
         std::string shortenedDir;
@@ -580,6 +587,14 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(const std::strin
         }
 
         processedDir = std::move(shortenedDir);
+    } else {
+        // If toggleFullList is true, just return the original path
+        processedDir = path.substr(0, lastSlashPos);  // Keep the full directory as is
+    }
+
+    // Cache the transformed directory only if toggleFullList is false
+    if (!toggleFullList) {
+        transformationCache[path] = processedDir;
     }
 
     return {processedDir, path.substr(lastSlashPos + 1)};
