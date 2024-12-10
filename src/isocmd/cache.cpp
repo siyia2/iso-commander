@@ -119,6 +119,8 @@ void removeNonExistentPathsFromCache() {
     close(fd);
 }
 
+
+// Count ISOCache entries for stats
 int countNonEmptyLines(const std::string& filePath) {
     std::ifstream file(filePath);
     if (!file.is_open()) {
