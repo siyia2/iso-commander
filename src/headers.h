@@ -90,8 +90,6 @@ bool isDirectoryEmpty(const std::string& path);
 bool startsWithZero(const std::string& str);
 bool isNumeric(const std::string& str);
 
-int custom_complete(int count, int key);
-
 
 
 //	voids
