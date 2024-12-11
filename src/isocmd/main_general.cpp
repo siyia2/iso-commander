@@ -79,8 +79,6 @@ int main(int argc, char *argv[]) {
         // Clear history
         clear_history();
 
-        rl_bind_key('\t', custom_complete);
-
         // Prompt for the main menu choice
         char* rawInput = readline("\n\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
 
@@ -326,23 +324,6 @@ void restoreInput() {
     tcgetattr(STDIN_FILENO, &term);
     term.c_lflag |= ICANON | ECHO;
     tcsetattr(STDIN_FILENO, TCSANOW, &term);
-}
-
-
-// Custom function to handle tab presses
-int custom_complete(int count, int key) {
-    // If it's not a tab key, use default behavior
-    if (key != '\t') {
-        return rl_insert(count, key);
-    }
-
-    // If it's the first tab, do normal completion
-    if (rl_last_func != rl_complete) {
-        return rl_complete(count, key);
-    }
-
-    // If it's a second tab, do nothing
-    return 0;
 }
 
 
