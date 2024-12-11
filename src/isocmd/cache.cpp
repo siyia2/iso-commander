@@ -287,7 +287,7 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 		loadHistory(historyPattern);
 		maxDepth = -1;
 		// Prompt the user to enter directory paths for manual cache refresh
-		std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;92m\002.iso\001\033[1;94m\002 files (>= 5MB) and import into \001\033[1;92m\002on-disk\001\033[1;94m\002 cache (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002),\001\033[1;93m\002 clr\001\033[1;94m\002 ↵ clear \001\033[1m\002\001\033[1;92m\002on-disk\001\033[1m\002\001\033[1;94m\002 cache, \001\033[1;93m\002stats\001\033[1;94m\002 ↵ cache\001\033[1m\002\001\033[1;94m\002 stats, ↵ return:\n\001\033[0;1m\002";
+		std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;92m\002.iso\001\033[1;94m\002 files (>= 5MB) and import into \001\033[1;92m\002on-disk\001\033[1;94m\002 cache (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002),\001\033[1;93m\002 clr\001\033[1;94m\002 ↵ clear \001\033[1m\002\001\033[1;92m\002on-disk\001\033[1m\002\001\033[1;94m\002 cache, \001\033[1;93m\002stats\001\033[1;94m\002 ↵ show cache\001\033[1m\002\001\033[1;94m\002 stats, ↵ return:\n\001\033[0;1m\002";
 		// Prompt user for input
 		char* rawSearchQuery = readline(prompt.c_str());
 
@@ -445,11 +445,11 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 				std::lock_guard<std::mutex> lock(futuresMutex);
 				futures.emplace_back(std::async(std::launch::async, 
 					[path, &allIsoFiles, &uniqueErrorMessages, &totalProcessedFiles, 
-					&traverseFilesMutex, &traverseErrorsMutex, &maxDepth]() {
+					&traverseFilesMutex, &traverseErrorsMutex, &maxDepth, &promptFlag]() {
 						// Perform traversal with minimal global locking
 						traverse(path, allIsoFiles, uniqueErrorMessages, 
 								totalProcessedFiles, traverseFilesMutex, 
-								traverseErrorsMutex, maxDepth) ;
+								traverseErrorsMutex, maxDepth, promptFlag) ;
                     
 						// Remove path from local tracking after processing
 						localProcessedPaths.erase(path);
@@ -570,7 +570,7 @@ bool iequals(const std::string_view& a, const std::string_view& b) {
 
 
 // Function to traverse a directory and find ISO files
-void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, size_t& totalProcessedFiles, std::mutex& traverseFilesMutex, std::mutex& traverseErrorsMutex, int& maxDepth) {
+void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, size_t& totalProcessedFiles, std::mutex& traverseFilesMutex, std::mutex& traverseErrorsMutex, int& maxDepth, bool& promptFlag) {
     
     const size_t BATCH_SIZE = 100; // Adjust batch size as needed
 
@@ -591,18 +591,16 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
                 }
 
                 const auto& entry = *it;
-
-                if (entry.is_regular_file()) {
-                    {
-                        std::lock_guard<std::mutex> lock(traverseFilesMutex);
-                        totalProcessedFiles++;
-                        std::cout << "\r\033[0;1mTotal files processed: " << totalProcessedFiles << std::flush;
-                    }
-                }
-                
+				if (promptFlag){
+					if (entry.is_regular_file()) {
+						{
+							std::lock_guard<std::mutex> lock(traverseFilesMutex);
+							totalProcessedFiles++;
+							std::cout << "\r\033[0;1mTotal files processed: " << totalProcessedFiles << std::flush;
+						}
+					}
+				}
 					
-                
-
                 if (!entry.is_regular_file()) {
                     continue;
                 }
@@ -638,7 +636,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
             }
         }
         
-        if (totalProcessedFiles == 0) {
+        if (totalProcessedFiles == 0 && promptFlag) {
 			std::cout << "\r\033[0;1mTotal files processed: 0" << std::flush;
 		}
 
