@@ -530,76 +530,71 @@ std::string shell_escape(const std::string& s) {
 
 
 // Function to extract directory and filename from a given path
-std::pair<std::string, std::string> extractDirectoryAndFilename(const std::string& path) {
-    static const std::unordered_map<std::string_view, std::string_view> replacements = {
+std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view path) {
+    // Use string_view for non-modifying operations
+    static const std::array<std::pair<std::string_view, std::string_view>, 2> replacements = {{
         {"/home", "~"},
-        {"/root", "/R"},
-        // Add more replacements as needed
-    };
+        {"/root", "/R"}
+    }};
 
-    size_t lastSlashPos = path.find_last_of("/\\");
-    if (lastSlashPos == std::string::npos) {
-        return {"", path};
+    // Find last slash efficiently
+    auto lastSlashPos = path.find_last_of("/\\");
+    if (lastSlashPos == std::string_view::npos) {
+        return {"", std::string(path)};
     }
 
-    std::string processedDir = path.substr(0, lastSlashPos);
-
-    // Check if the path transformation has already been cached for non-toggleFullList case
-    if (!toggleFullList && transformationCache.find(path) != transformationCache.end()) {
-        return {transformationCache[path], path.substr(lastSlashPos + 1)};
+    // Early return for full list mode
+    if (toggleFullList) {
+        return {std::string(path.substr(0, lastSlashPos)), 
+                std::string(path.substr(lastSlashPos + 1))};
     }
 
-    if (!toggleFullList) {
-        // Shorten the directory path
-        std::string shortenedDir;
-        shortenedDir.reserve(processedDir.length());  // Pre-allocate memory
+    // Check cache first
+    auto cacheIt = transformationCache.find(std::string(path));
+    if (cacheIt != transformationCache.end()) {
+        return {cacheIt->second, std::string(path.substr(lastSlashPos + 1))};
+    }
 
-        size_t start = 0;
-        while (start < lastSlashPos) {
-            size_t end = processedDir.find_first_of("/\\", start);
-            if (end == std::string::npos || end > lastSlashPos) {
-                end = lastSlashPos;
-            }
+    // Optimize directory shortening
+    std::string processedDir;
+    processedDir.reserve(path.length() / 2);  // More conservative pre-allocation
 
-            size_t componentLength = end - start;
-            size_t truncatePos = std::min({
-                componentLength,
-                processedDir.find(' ', start) - start,
-                processedDir.find('-', start) - start,
-                size_t(28)
-            });
+    size_t start = 0;
+    while (start < lastSlashPos) {
+        auto end = path.find_first_of("/\\", start);
+        if (end == std::string_view::npos) end = lastSlashPos;
 
-            shortenedDir.append(processedDir, start, truncatePos);
-            shortenedDir.push_back('/');
+        // More efficient component truncation
+        size_t componentLength = end - start;
+        size_t truncatePos = std::min({
+            componentLength, 
+            path.find(' ', start) - start,
+            path.find('-', start) - start,
+            size_t(28)
+        });
 
-            start = end + 1;
-        }
+        processedDir.append(path.substr(start, truncatePos));
+        processedDir.push_back('/');
+        start = end + 1;
+    }
 
-        if (!shortenedDir.empty()) {
-            shortenedDir.pop_back();  // Remove trailing slash
-        }
+    if (!processedDir.empty()) {
+        processedDir.pop_back();  // Remove trailing slash
 
-        // Apply replacements
+        // More efficient replacements using string_view
         for (const auto& [oldDir, newDir] : replacements) {
             size_t pos = 0;
-            while ((pos = shortenedDir.find(oldDir, pos)) != std::string::npos) {
-                shortenedDir.replace(pos, oldDir.length(), newDir);
+            while ((pos = processedDir.find(oldDir, pos)) != std::string::npos) {
+                processedDir.replace(pos, oldDir.length(), newDir);
                 pos += newDir.length();
             }
         }
-
-        processedDir = std::move(shortenedDir);
-    } else {
-        // If toggleFullList is true, just return the original path
-        processedDir = path.substr(0, lastSlashPos);  // Keep the full directory as is
     }
 
-    // Cache the transformed directory only if toggleFullList is false
-    if (!toggleFullList) {
-        transformationCache[path] = processedDir;
-    }
+    // Cache the result
+    transformationCache[std::string(path)] = processedDir;
 
-    return {processedDir, path.substr(lastSlashPos + 1)};
+    return {processedDir, std::string(path.substr(lastSlashPos + 1))};
 }
 
 
