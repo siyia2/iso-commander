@@ -16,9 +16,9 @@ Iso-Commander provides the following key functionalities:
 
 .TP
 .B ManageISO
-- Mount: Efficiently mounts .iso files using direct libmount calls. Root access is required for successful mounting.
+- Mount: Efficiently mounts .iso files using direct libmount calls. Root access is required for successful mounts.
 
-- Umount: Unmounts groups of .iso files using sanitized shell commands. Root access is required.
+- Umount: Unmounts groups of .iso files using sanitized shell commands. Root access is required for sucessful unmounts.
 
 - Delete/Move/Copy: Deletes, moves, or copies groups of .iso files using native C++ calls.
 
@@ -37,7 +37,7 @@ Creates and updates an ISO cache for fast and organized access:
 
 - Cache file locations:
   - User mode: \fI~/.cache/iso_commander_cache.txt\fR
-  - Root mode: Stored under the corresponding root directory.
+  - Root mode: \fI/root/.cache/iso_commander_cache.txt\fR
 
 .TP
 .B Automatic ISO Cache Management
@@ -57,7 +57,7 @@ Notes:
 
 - Converted and moved/deleted/copied .iso files in root mode are automatically assigned to the currently logged-in user.
 
-- Built-in filtering accepts only tokens with a minimum length of 2 characters.
+- Built-in filtering skips tokens with fewer than 2 characters.
 
 .SH USAGE TIPS
 Iso-Commander leverages the readline library for enhanced line-editing capabilities:
