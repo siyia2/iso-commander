@@ -141,7 +141,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
 
 // General functions
 std::string shell_escape(const std::string& s);
-std::pair<std::string, std::string> extractDirectoryAndFilename(const std::string& path);
+std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view path);
 
 
 // Cache functions
