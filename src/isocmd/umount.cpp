@@ -44,14 +44,20 @@ void listMountedISOs() {
     output.append("\n");
     size_t numDigits = std::to_string(isoDirs.size()).length();
 
+    // Precompute formatted indices
+    std::vector<std::string> indexStrings(isoDirs.size());
+    for (size_t i = 0; i < isoDirs.size(); ++i) {
+        indexStrings[i] = std::to_string(i + 1);
+        indexStrings[i].insert(0, numDigits - indexStrings[i].length(), ' ');  // Right-align with padding
+    }
+
     for (size_t i = 0; i < isoDirs.size(); ++i) {
         const char* sequenceColor = (i % 2 == 0) ? redBold : greenBold;
 
-        // Use a temporary stringstream for setw formatting
-        std::ostringstream temp;
-        temp << sequenceColor << std::setw(numDigits) << (i + 1) << ". ";
-
-        output.append(temp.str())
+        // Append formatted output
+        output.append(sequenceColor)
+              .append(indexStrings[i])
+              .append(". ")
               .append(blueBold)
               .append("/mnt/iso_")
               .append(magentaBold)
@@ -61,8 +67,8 @@ void listMountedISOs() {
     }
 
     std::cout << output;
-
 }
+
 
 // Function to check if directory is empty for unmountISO
 bool isDirectoryEmpty(const std::string& path) {

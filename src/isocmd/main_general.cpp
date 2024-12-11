@@ -470,37 +470,41 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
     size_t maxIndex = isoFiles.size();
     size_t numDigits = std::to_string(maxIndex).length();
 
-    std::string output;
-    output.reserve(isoFiles.size() * 100);  // Adjust based on average line length
+    // Precompute index strings to avoid using ostringstream
+    std::vector<std::string> indexStrings(maxIndex);
+    for (size_t i = 0; i < maxIndex; ++i) {
+        indexStrings[i] = std::to_string(i + 1);
+        indexStrings[i].insert(0, numDigits - indexStrings[i].length(), ' ');  // Right-align with padding
+    }
+
+    std::ostringstream output;  // Use ostringstream for faster output
 
     for (size_t i = 0; i < isoFiles.size(); ++i) {
         const char* sequenceColor = (i % 2 == 0) ? red : green;
 
-        output.append("\n")
-              .append(sequenceColor);
-
-        // Create a temporary stringstream for setw formatting
-        std::ostringstream temp;
-        temp << std::right << std::setw(numDigits) << (i + 1);
-        output.append(temp.str());
-
-        output.append(". ")
-              .append(defaultColor)
-              .append(bold);
+        output << "\n"
+               << sequenceColor
+               << indexStrings[i]
+               << ". "
+               << defaultColor
+               << bold;
 
         auto [directory, filename] = extractDirectoryAndFilename(isoFiles[i]);
 
-        output.append(directory)
-              .append(defaultColor)
-              .append(bold)
-              .append("/")
-              .append(magenta)
-              .append(filename)
-              .append(defaultColor);
+        output << directory
+               << defaultColor
+               << bold
+               << "/"
+               << magenta
+               << filename
+               << defaultColor;
     }
 
-    std::cout << output;
+    // Output the whole result at once
+    std::cout << output.str();
 }
+
+
 
 
 //	SANITISATION AND STRING STUFF

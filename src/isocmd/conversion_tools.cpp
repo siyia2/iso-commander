@@ -896,16 +896,27 @@ void printFileList(const std::vector<std::string>& fileList) {
     static const char* red = "\033[31;1m";
     static const char* green = "\033[32;1m";
     static const char* orangeBold = "\033[1;38;5;208m";
+    
     size_t maxIndex = fileList.size();
     size_t numDigits = std::to_string(maxIndex).length();
+
+    // Precompute formatted indices
+    std::vector<std::string> indexStrings(maxIndex);
+    for (size_t i = 0; i < maxIndex; ++i) {
+        indexStrings[i] = std::to_string(i + 1);
+        indexStrings[i].insert(0, numDigits - indexStrings[i].length(), ' ');  // Right-align with padding
+    }
+
     std::string output;
-    output.reserve(fileList.size() * 100);  // Adjust based on average line length
+    output.reserve(fileList.size() * 100);  // Estimate buffer size
+
     for (size_t i = 0; i < fileList.size(); ++i) {
         const auto& filename = fileList[i];
         auto [directory, fileNameOnly] = extractDirectoryAndFilename(filename);
         std::string_view fileNameView(fileNameOnly);
         size_t dotPos = fileNameView.rfind('.');
         bool isSpecialExtension = false;
+        
         if (dotPos != std::string_view::npos) {
             std::string_view extensionView = fileNameView.substr(dotPos);
             std::string extension(extensionView);
@@ -913,11 +924,17 @@ void printFileList(const std::vector<std::string>& fileList) {
             isSpecialExtension = (extension == ".bin" || extension == ".img" || 
                                   extension == ".mdf" || extension == ".nrg");
         }
+
         const char* sequenceColor = (i % 2 == 0) ? red : green;
-        std::ostringstream temp;
-        temp << (isSpecialExtension ? sequenceColor : "")
-             << std::setw(numDigits) << std::right << (i + 1) << ". " << reset << bold;
-        output.append(temp.str());
+
+        // Add index and colors
+        output.append(isSpecialExtension ? sequenceColor : "")
+              .append(indexStrings[i])
+              .append(". ")
+              .append(reset)
+              .append(bold);
+
+        // Add directory and filename
         if (isSpecialExtension) {
             output.append(directory)
                   .append("/")
@@ -926,10 +943,13 @@ void printFileList(const std::vector<std::string>& fileList) {
         } else {
             output.append(filename);
         }
+
+        // Final reset and newline
         output.append(reset)
               .append(bold)
               .append("\n");
     }
+
     std::cout << output;
 }
 
