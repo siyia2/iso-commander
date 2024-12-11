@@ -316,6 +316,9 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& pr
 		bool needsScrnClr = true;
         while (true) {
             successOuts.clear(); skippedOuts.clear(); failedOuts.clear(); deletedOuts.clear(); processedErrors.clear();
+            
+            // Verbose output is to be disabled unless specified by progressbar function downstream
+            verbose = false;
 
             if (binImgFilesCache.empty() && !modeMdf && !modeNrg) {
                 std::cout << "\n\033[1;93mNo " << fileExtension << " file entries stored in RAM cache for potential ISO conversions.\033[1m\n";
@@ -423,11 +426,9 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& pr
 				std::cout << "\n";
 				if (verbose) {
 					verboseConversion(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts);
-					verbose = false;
 				}
 				if (!processedErrors.empty() && successOuts.empty() && skippedOuts.empty() && failedOuts.empty() && deletedOuts.empty()) {
 					clearScrollBuffer();
-					verbose = false;
 					std::cout << "\n\033[1;91mNo valid input provided for ISO conversion.\033[0;1m";
 					std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
 					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');

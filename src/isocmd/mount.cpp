@@ -121,6 +121,9 @@ void select_and_mount_files_by_number(bool& historyPattern, bool& verbose) {
                 skippedMessages.clear();
                 mountedFails.clear();
                 uniqueErrorMessages.clear();
+                
+                // Verbose output is to be disabled unless specified by progressbar function downstream
+                verbose = false;
 
                 clear_history();
                 historyPattern = true;

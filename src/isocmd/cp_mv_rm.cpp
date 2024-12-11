@@ -164,6 +164,9 @@ void select_and_operate_files_by_number(const std::string& operation, bool& prom
                 operationIsos.clear();
                 operationErrors.clear();
                 uniqueErrorMessages.clear();
+                
+                // Verbose output is to be disabled unless specified by progressbar function downstream
+                verbose = false;
 
                 clear_history();
                 historyPattern = true;
@@ -221,7 +224,6 @@ void select_and_operate_files_by_number(const std::string& operation, bool& prom
             if (verbose) {
 				needsClrScrn = true;
                 verbose_cp_mv_rm(operationIsos, operationErrors, uniqueErrorMessages);
-                verbose = false;
             }
 
             if (process != "cp" && isFiltered && mvDelBreak) {
@@ -333,7 +335,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     if (processedIndices.empty()) {
         clearScrollBuffer();
         mvDelBreak = false;
-        verbose = false;
         std::cout << "\n\033[1;91mNo valid indices to be " << operationDescription << ".\033[1;91m\n";
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -383,7 +384,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
             if (mainInputString.empty()) {
                 mvDelBreak = false;
-                verbose = false;
                 clear_history();
                 return;
             }
@@ -430,7 +430,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
         if (!(confirmation == "y" || confirmation == "Y")) {
             mvDelBreak = false;
-            verbose = false;
             std::cout << "\n\033[1;93mDelete operation aborted by user.\033[0;1m\n";
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');

@@ -300,6 +300,10 @@ void unmountISOs(bool& historyPattern, bool& verbose) {
                 unmountedFiles.clear();
                 unmountedErrors.clear();
                 errorMessages.clear();
+                
+                // Verbose output is to be disabled unless specified by progressbar function downstream
+                verbose = false;
+                
                 clear_history();
                 historyPattern = true;
                 loadHistory(historyPattern);
