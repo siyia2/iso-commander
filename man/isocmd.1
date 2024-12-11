@@ -1,10 +1,10 @@
 .\" Manpage for isocmd
-.TH ISOCMD 1 "December 2024" "1.0" "Iso-Commander Manual"
+.TH ISOCMD 1 "December 2024" "Iso Commander v5.3.6" "Iso-Commander Manual"
 .SH NAME
-Iso-Commander \- A command-line utility for managing and converting .iso files.
+Iso Commander, or in short isocmd.
 
 .SH DESCRIPTION
-Iso-Commander is a versatile command-line utility designed for efficiently managing .iso files and converting various image formats into the .iso format.
+A versatile command-line utility designed for efficiently managing .iso files and converting various image formats into the .iso format.
 
 .SH OPTIONS
 .TP
@@ -12,7 +12,7 @@ Iso-Commander is a versatile command-line utility designed for efficiently manag
 Display the version of the program.
 
 .SH FEATURES
-Iso-Commander provides the following key functionalities:
+Iso Commander provides the following key functionalities:
 
 .TP
 .B ManageISO
@@ -41,11 +41,11 @@ Creates and updates an ISO cache for fast and organized access:
 
 .TP
 .B Automatic ISO Cache Management
-- Deleted .iso files are automatically removed from the cache.
+- Locally removed .iso files are automatically removed from the cache.
 
 - Successfully converted .iso files are automatically added to the cache.
 
-- Files that are moved, copied, or deleted are automatically updated in the cache.
+- The status of files that are deleted, moved, or copied by the program is automatically updated in ISO cache.
 
 .TP
 .B Built-in Filtering
@@ -55,21 +55,26 @@ Creates and updates an ISO cache for fast and organized access:
 Notes:
 - Files smaller than 5MB are excluded from the above operations.
 
-- Converted and moved/deleted/copied .iso files in root mode are automatically assigned to the currently logged-in user.
+- Partial conversions to .iso are automatically deleted.
+
+- Converted and moved/deleted/copied .iso files in root mode are automatically assigned to the current logged-in user.
 
 - Built-in filtering skips tokens with fewer than 2 characters.
 
 .SH USAGE TIPS
-Iso-Commander leverages the readline library for enhanced line-editing capabilities:
+Iso Commander leverages the readline library for enhanced line-editing capabilities:
 
 .TP
-.B Horizontal Tab
+.B Tab completion
 - At a scan prompt, pressing the Tab key once attempts to autocomplete paths. Pressing it twice or more lists available local files.
 
 .TP
-.B Keyboard Shortcuts
+.B Useful Keyboard Shortcuts
 - \fBCtrl+l\fR: Clears the screen and redraws the current line, keeping it at the top of the screen. 
   This is particularly useful when long file lists from autocompletion clutter the display.
+  
+- \fBCtrl+u\fR: Kill backward from point to the beginning of the line.
+  This is useful for speedy deleting a prompt line.
 
 .SH SEE ALSO
 .BR readline (3)
