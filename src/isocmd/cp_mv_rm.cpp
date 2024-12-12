@@ -358,88 +358,14 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 			indexChunks.emplace_back(processedIndices.begin() + i, chunkEnd);
 		}
 
-    auto displaySelectedIsos = [&]() {
-        std::cout << "\n";
-        for (const auto& chunk : indexChunks) {
-            for (const auto& index : chunk) {
-                auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFiles[index - 1]);
-                std::cout << "\033[1m-> " << isoDirectory << "/\033[1;95m" << isoFilename << "\033[0;1m\n";
-            }
-        }
-    };
-
-    if (!isDelete) {
-        while (true) {
-			if (!isCopy) {
-				mvDelBreak = true;
-			}
-            clearScrollBuffer();
-            displaySelectedIsos();
-            clear_history();
-            historyPattern = false;
-            loadHistory(historyPattern);
-            userDestDir.clear();
-
-            std::string prompt = "\n\001\033[1;92m\002DestinationDirs\001\033[1;94m\002 ↵ for selected \001\033[1;92m\002ISO\001\033[1;94m\002 to be " + operationColor + operationDescription + "\001\033[1;94m\002 into (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002), ↵ return:\n\001\033[0;1m\002";
-            std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
-            std::string mainInputString(input.get());
-
-            if (mainInputString.empty()) {
-                mvDelBreak = false;
-                clear_history();
-                return;
-            }
-
-            if (isValidLinuxPathFormat(mainInputString)) {
-                bool slashBeforeSemicolon = mainInputString.find(";") == std::string::npos
-                                            || mainInputString.find(";/") != std::string::npos
-                                            || mainInputString.find("/;") != std::string::npos;
-                bool semicolonSurroundedBySlash = true;
-
-                // Check if semicolon is surrounded by slashes
-                for (size_t i = 0; i < mainInputString.size(); ++i) {
-                    if (mainInputString[i] == ';') {
-                        if (i == 0 || i == mainInputString.size() - 1 || mainInputString[i - 1] != '/' || mainInputString[i + 1] != '/') {
-                            semicolonSurroundedBySlash = false;
-                            break;
-                        }
-                    }
-                }
-
-                if (mainInputString.back() == '/' && mainInputString.front() == '/' && slashBeforeSemicolon && semicolonSurroundedBySlash) {
-                    userDestDir = mainInputString;
-                    add_history(input.get());
-                    saveHistory(historyPattern);
-                    clear_history();
-                    break;
-                } else {
-                    std::cout << "\n\033[1;91mThe paths must start and end with \033[0;1m'/'\033[1;91m.\033[0;1m\n";
-                }
-            } else {
-                std::cout << "\n\033[1;91mInvalid paths are not allowed for \033[1;92mcp\033[1;91m and \033[1;93mmv\033[1;91m operations.\033[0;1m\n";
-            }
-
-            std::cout << "\n\033[1;32m↵ to try again...\033[0;1m";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        }
-    } else {
-        clearScrollBuffer();
-        displaySelectedIsos();
-
-        std::string confirmation;
-        std::cout << "\n\001\033[1;94m\002The selected \001\033[1;92m\002ISO\001\033[1;94m\002 will be \001\033[1;91m\002*PERMANENTLY DELETED FROM DISK*\001\033[1;94m\002. Proceed? (y/n):\001\033[0;1m\002 ";
-        std::getline(std::cin, confirmation);
-
-        if (!(confirmation == "y" || confirmation == "Y")) {
-            mvDelBreak = false;
-            std::cout << "\n\033[1;93mDelete operation aborted by user.\033[0;1m\n";
-            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            return;
-        }
-        mvDelBreak = true;
-    }
-
+    
+	std::string processedUserDestDir = operation_for_processOperationInput(isoFiles, indexChunks, userDestDir, operationColor, operationDescription, mvDelBreak, historyPattern, isDelete, isCopy);
+	
+	// Early exit if Deletion is aborted or userDestDir is empty
+	if (processedUserDestDir == "") {
+		return;
+	}
+	
     clearScrollBuffer();
     std::cout << "\033[1m\n";
 
@@ -486,9 +412,97 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
        }
 
     clear_history();
-    userDestDir.clear();
     promptFlag = true;
     maxDepth = -1;
+}
+
+
+std::string operation_for_processOperationInput(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& mvDelBreak, bool& historyPattern, bool& isDelete, bool& isCopy) {
+	
+	    auto displaySelectedIsos = [&]() {
+        std::cout << "\n";
+        for (const auto& chunk : indexChunks) {
+            for (const auto& index : chunk) {
+                auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFiles[index - 1]);
+                std::cout << "\033[1m-> " << isoDirectory << "/\033[1;95m" << isoFilename << "\033[0;1m\n";
+            }
+        }
+    };
+	
+	if (!isDelete) {
+        while (true) {
+			if (!isCopy) {
+				mvDelBreak = true;
+			}
+            clearScrollBuffer();
+            displaySelectedIsos();
+            clear_history();
+            historyPattern = false;
+            loadHistory(historyPattern);
+            userDestDir.clear();
+
+            std::string prompt = "\n\001\033[1;92m\002DestinationDirs\001\033[1;94m\002 ↵ for selected \001\033[1;92m\002ISO\001\033[1;94m\002 to be " + operationColor + operationDescription + "\001\033[1;94m\002 into (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002), ↵ return:\n\001\033[0;1m\002";
+            std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
+            std::string mainInputString(input.get());
+
+            if (mainInputString.empty()) {
+                mvDelBreak = false;
+                userDestDir = "";
+                clear_history();
+                return userDestDir;
+            }
+
+            if (isValidLinuxPathFormat(mainInputString)) {
+                bool slashBeforeSemicolon = mainInputString.find(";") == std::string::npos
+                                            || mainInputString.find(";/") != std::string::npos
+                                            || mainInputString.find("/;") != std::string::npos;
+                bool semicolonSurroundedBySlash = true;
+
+                // Check if semicolon is surrounded by slashes
+                for (size_t i = 0; i < mainInputString.size(); ++i) {
+                    if (mainInputString[i] == ';') {
+                        if (i == 0 || i == mainInputString.size() - 1 || mainInputString[i - 1] != '/' || mainInputString[i + 1] != '/') {
+                            semicolonSurroundedBySlash = false;
+                            break;
+                        }
+                    }
+                }
+
+                if (mainInputString.back() == '/' && mainInputString.front() == '/' && slashBeforeSemicolon && semicolonSurroundedBySlash) {
+                    userDestDir = mainInputString;
+                    add_history(input.get());
+                    saveHistory(historyPattern);
+                    clear_history();
+                    break;
+                } else {
+                    std::cout << "\n\033[1;91mThe paths must start and end with \033[0;1m'/'\033[1;91m.\033[0;1m\n";
+                }
+            } else {
+                std::cout << "\n\033[1;91mInvalid paths are not allowed for \033[1;92mcp\033[1;91m and \033[1;93mmv\033[1;91m operations.\033[0;1m\n";
+            }
+
+            std::cout << "\n\033[1;32m↵ to try again...\033[0;1m";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        }
+    } else {
+        clearScrollBuffer();
+        displaySelectedIsos();
+
+        std::string confirmation;
+        std::cout << "\n\001\033[1;94m\002The selected \001\033[1;92m\002ISO\001\033[1;94m\002 will be \001\033[1;91m\002*PERMANENTLY DELETED FROM DISK*\001\033[1;94m\002. Proceed? (y/n):\001\033[0;1m\002 ";
+        std::getline(std::cin, confirmation);
+
+        if (!(confirmation == "y" || confirmation == "Y")) {
+            mvDelBreak = false;
+            userDestDir = "";
+            std::cout << "\n\033[1;93mDelete operation aborted by user.\033[0;1m\n";
+            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            return userDestDir;
+        }
+        mvDelBreak = true;
+    }
+    return userDestDir;
 }
 
 
