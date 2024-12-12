@@ -325,6 +325,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& pr
 }
 
 
+// function to handle conversions for select_and_convert_to_iso
 void handle_file_conversion_for_select_and_convert_to_iso(const std::string& fileType, std::vector<std::string>& files, std::vector<std::string>& originalFiles, bool& verbose, bool& promptFlag, bool& modeMdf, bool& modeNrg, int& maxDepth, bool& historyPattern) {
     std::set<std::string> processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts;
     bool isFiltered = false;
@@ -459,171 +460,98 @@ void handle_file_conversion_for_select_and_convert_to_iso(const std::string& fil
 
 
 // Function to process user input and convert selected BIN/MDF/NRG files to ISO format
-void processInput(const std::string& input, const std::vector<std::string>& fileList, bool modeMdf, bool modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
-    std::mutex futuresMutex;
-    std::set<int> processedIndices;
-    std::mutex Mutex4Low; // Mutex for low-level processing
-
-    // Step 1: Tokenize the input to determine the number of threads to use
-    std::istringstream issCount(input);
-    std::set<std::string> tokens;
-    std::string tokenCount;
-
-    while (issCount >> tokenCount && tokens.size() < maxThreads) {
-		if (tokenCount[0] == '-' || startsWithZero(tokenCount)) continue;
-
-    // Count the number of hyphens
-    size_t hyphenCount = std::count(tokenCount.begin(), tokenCount.end(), '-');
-
-    // Skip if there's more than one hyphen
-    if (hyphenCount > 1) continue;
-
-    size_t dashPos = tokenCount.find('-');
-    if (dashPos != std::string::npos) {
-        std::string start = tokenCount.substr(0, dashPos);
-        std::string end = tokenCount.substr(dashPos + 1);
-        if (std::all_of(start.begin(), start.end(), ::isdigit) &&
-            std::all_of(end.begin(), end.end(), ::isdigit)) {
-            int startNum = std::stoi(start);
-            int endNum = std::stoi(end);
-            if (static_cast<std::vector<std::string>::size_type>(startNum) <= fileList.size() &&
-                static_cast<std::vector<std::string>::size_type>(endNum) <= fileList.size()) {
-                int step = (startNum <= endNum) ? 1 : -1;
-                for (int i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
-                    if (i != 0) {
-                        tokens.emplace(std::to_string(i));
-                    }
-                    if (tokens.size() >= maxThreads) {
-                        break;
-                    }
-                }
-            }
-        }
-    } else if (!tokenCount.empty() && std::all_of(tokenCount.begin(), tokenCount.end(), ::isdigit)) {
-		int num = std::stoi(tokenCount);
-        if (num > 0 && static_cast<std::vector<std::string>::size_type>(num) <= fileList.size()) {
-            tokens.emplace(tokenCount);
-				if (tokens.size() >= maxThreads) {
-					break;
-				}
-			}
-		}
-	}
-
-    unsigned int numThreads = std::min(static_cast<int>(tokens.size()), static_cast<int>(maxThreads));
-    std::vector<std::future<void>> futures;
-    futures.reserve(numThreads);
-    ThreadPool pool(numThreads);
-
-	std::atomic<size_t> completedTasks(0);
-	// Create atomic flag for completion status
-    std::atomic<bool> isComplete(false);
-
+void processInput(
+    const std::string& input,
+    std::vector<std::string>& fileList,
+    bool modeMdf,
+    bool modeNrg,
+    std::set<std::string>& processedErrors,
+    std::set<std::string>& successOuts,
+    std::set<std::string>& skippedOuts,
+    std::set<std::string>& failedOuts,
+    std::set<std::string>& deletedOuts,
+    bool& promptFlag,
+    int& maxDepth,
+    bool& historyPattern,
+    bool& verbose
+) {
+    // Set of selected file paths for processing
     std::set<std::string> selectedFilePaths;
     std::string concatenatedFilePaths;
-    auto asyncConvertToISO = [&](const std::string& selectedFile) {
-        std::size_t found = selectedFile.find_last_of("/\\");
-        std::string filePath = selectedFile.substr(0, found);
-        selectedFilePaths.emplace(filePath);
-        convertToISO(selectedFile, successOuts, skippedOuts, failedOuts, deletedOuts, modeMdf, modeNrg, Mutex4Low);
-        // Increment completedTasks when conversion is done
-        ++completedTasks;
-    };
 
-    std::istringstream iss(input);
-    std::string token;
+    // Tokenize the input string to identify files to process
+    std::vector<int> processedIndices;
+    tokenizeInput(input, fileList, processedErrors, processedIndices);
 
-    while (iss >> token) {
-		if (startsWithZero(token)) {
-			processedErrors.emplace("\033[1;91mInvalid index: '0'.\033[0;1m");
-			continue;
-        }
-        std::istringstream tokenStream(token);
-        int start, end;
-        char dash;
-        if (tokenStream >> start) {
-            if (tokenStream >> dash && dash == '-') {
-                if (tokenStream >> end) {
-                    char extraChar;
-                    if (tokenStream >> extraChar) {
-                        // Extra characters found after the range, treat as invalid
-                        processedErrors.emplace("\033[1;91mInvalid range: '" + token + "'.\033[1;0m");
-                    } else if (start > 0 && end > 0 && start <= static_cast<int>(fileList.size()) && end <= static_cast<int>(fileList.size())) {
-                        int step = (start <= end) ? 1 : -1;
-                        for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
-                            int selectedIndex = i - 1;
-								if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-										std::string selectedFile = fileList[selectedIndex];
-										{
-											std::lock_guard<std::mutex> lock(futuresMutex);
-											futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));
+    unsigned int numThreads = std::min(static_cast<unsigned int>(processedIndices.size()), std::thread::hardware_concurrency());
+    std::vector<std::vector<size_t>> indexChunks;
+    const size_t maxFilesPerChunk = 5;
 
-											processedIndices.emplace(selectedIndex);
-										}
-                            }
-                        }
-                    } else {
-						if (start < 0) {
-							processedErrors.emplace("\033[1;91mInvalid input: '" + std::to_string(start) + "-" + std::to_string(end) + "'.\033[1;0m");
-						} else {
-							processedErrors.emplace("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'.\033[1;0m");
-						}
-                    }
-                } else {
-                    processedErrors.emplace("\033[1;91mInvalid range: '" + token + "'.\033[1;0m");
-                }
-            } else if (start >= 1 && static_cast<size_t>(start) <= fileList.size()) {
-                int selectedIndex = start - 1;
-					if (processedIndices.find(selectedIndex) == processedIndices.end()) {
-							std::string selectedFile = fileList[selectedIndex];
-							{
-								std::lock_guard<std::mutex> lock(futuresMutex);
-								futures.push_back(pool.enqueue(asyncConvertToISO, selectedFile));
+    // Distribute files evenly among threads with chunk size limits
+    size_t totalFiles = processedIndices.size();
+    size_t filesPerThread = (totalFiles + numThreads - 1) / numThreads;
+    size_t chunkSize = std::min(maxFilesPerChunk, filesPerThread);
 
-								processedIndices.emplace(selectedIndex);
-							}
-                }
-            } else {
-                processedErrors.emplace("\033[1;91mInvalid index: '" + std::to_string(start) + "'.\033[1;0m");
-            }
-        } else {
-            processedErrors.emplace("\033[1;91mInvalid input: '" + token + "'.\033[1;0m");
-        }
+    for (size_t i = 0; i < totalFiles; i += chunkSize) {
+        auto chunkEnd = std::min(processedIndices.begin() + i + chunkSize, processedIndices.end());
+        indexChunks.emplace_back(processedIndices.begin() + i, chunkEnd);
     }
 
-    if (!processedIndices.empty()) {
-    // Launch progress bar display in a separate thread
-    int totalTasks = processedIndices.size();  // Total number of tasks to complete
-    std::thread progressThread(displayProgressBar, std::ref(completedTasks), totalTasks, std::ref(isComplete), std::ref(verbose));
+    std::atomic<size_t> totalTasks(static_cast<int>(processedIndices.size()));
+    std::atomic<size_t> completedTasks(0);
+    std::atomic<bool> isProcessingComplete(false);
 
+    int totalTasksValue = totalTasks.load();
+    std::thread progressThread(displayProgressBar, 
+                                std::ref(completedTasks), 
+                                std::cref(totalTasksValue), 
+                                std::ref(isProcessingComplete), 
+                                std::ref(verbose));
+
+    ThreadPool pool(numThreads);
+    std::vector<std::future<void>> futures;
+    futures.reserve(indexChunks.size());
+    std::mutex Mutex4Low; // Mutex for low-level processing
+
+    for (const auto& chunk : indexChunks) {
+        // Gather files for this chunk
+        std::vector<std::string> imageFilesInChunk;
+        imageFilesInChunk.reserve(chunk.size());
+        std::transform(
+            chunk.begin(),
+            chunk.end(),
+            std::back_inserter(imageFilesInChunk),
+            [&fileList](size_t index) { return fileList[index - 1]; }
+        );
+
+        // Enqueue task for the thread pool
+        futures.emplace_back(pool.enqueue([imageFilesInChunk = std::move(imageFilesInChunk), 
+                                           &fileList, 
+                                           &successOuts, 
+                                           &skippedOuts, 
+                                           &failedOuts, 
+                                           &deletedOuts, 
+                                           modeMdf, 
+                                           modeNrg, 
+                                           &maxDepth,
+                                           &promptFlag,
+                                           &historyPattern,
+                                           &Mutex4Low, 
+                                           &completedTasks]() {
+            // Process each file
+            convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts, deletedOuts, modeMdf, modeNrg, maxDepth, promptFlag, historyPattern, Mutex4Low);
+            completedTasks.fetch_add(imageFilesInChunk.size(), std::memory_order_relaxed);
+        }));
+    }
+
+    // Wait for all threads to complete
     for (auto& future : futures) {
         future.wait();
     }
-    // Signal the progress bar thread to stop
-    isComplete = true;
 
-    // Join the progress bar thread
+    isProcessingComplete.store(true);
     progressThread.join();
-	} else {
-		// No need to display progress bar or wait for futures
-		isComplete = true;
-	}
 
-    concatenatedFilePaths.clear();
-    for (const auto& path : selectedFilePaths) {
-		concatenatedFilePaths += path + ";";
-    }
-    if (!concatenatedFilePaths.empty()) {
-		concatenatedFilePaths.pop_back();
-    }
-
-    promptFlag = false;
-    if (!processedIndices.empty()) {
-        maxDepth = 0;
-        manualRefreshCache(concatenatedFilePaths, promptFlag, maxDepth, historyPattern);
-    }
-    promptFlag = true;
-    maxDepth = -1;
 }
 
 
@@ -974,7 +902,29 @@ void printFileList(const std::vector<std::string>& fileList) {
 
 
 // Function to convert a BIN/IMG/MDF file to ISO format
-void convertToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool modeMdf, bool modeNrg, std::mutex& Mutex4Low) {
+void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool modeMdf, bool modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern, std::mutex& Mutex4Low) {
+	
+	// Set to store unique directory paths
+    std::set<std::string> uniqueDirectories;
+    
+    // Iterate over image files
+    for (const auto& filePath : imageFiles) {
+        // Use std::filesystem to get the directory path
+        std::filesystem::path path(filePath);
+        if (path.has_parent_path()) {
+            uniqueDirectories.insert(path.parent_path().string());
+        }
+    }
+
+    // Concatenate unique directory paths with ';'
+    std::string result;
+    for (const auto& dir : uniqueDirectories) {
+        if (!result.empty()) {
+            result += ";";
+        }
+        result += dir;
+    }
+	
     // Get the real user ID and group ID (of the user who invoked sudo)
     uid_t real_uid;
     gid_t real_gid;
@@ -982,8 +932,14 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
     const char* sudo_gid = std::getenv("SUDO_GID");
 
     if (sudo_uid && sudo_gid) {
-        real_uid = std::stoul(sudo_uid);
-        real_gid = std::stoul(sudo_gid);
+        try {
+            real_uid = static_cast<uid_t>(std::stoul(sudo_uid));
+            real_gid = static_cast<gid_t>(std::stoul(sudo_gid));
+        } catch (const std::exception& e) {
+            std::lock_guard<std::mutex> lock(Mutex4Low);
+            failedOuts.insert("\033[1;91mError parsing SUDO_UID or SUDO_GID environment variables.\033[0;1m");
+            return;
+        }
     } else {
         // Fallback to current effective user if not running with sudo
         real_uid = geteuid();
@@ -993,7 +949,8 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
     // Get real user's name
     struct passwd *pw = getpwuid(real_uid);
     if (pw == nullptr) {
-      //std::cerr << "\nError getting user information: " << strerror(errno) << "\033[0;1m";
+        std::lock_guard<std::mutex> lock(Mutex4Low);
+        failedOuts.insert("\033[1;91mError getting user information: " + std::string(strerror(errno)) + "\033[0;1m");
         return;
     }
     std::string real_username(pw->pw_name);
@@ -1001,87 +958,125 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
     // Get real group name
     struct group *gr = getgrgid(real_gid);
     if (gr == nullptr) {
-        //std::cerr << "\nError getting group information: " << strerror(errno) << "\033[0;1m";
+        std::lock_guard<std::mutex> lock(Mutex4Low);
+        failedOuts.insert("\033[1;91mError getting group information: " + std::string(strerror(errno)) + "\033[0;1m");
         return;
     }
     std::string real_groupname(gr->gr_name);
 
-    auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath);
-    std::ifstream file(inputPath);
-    if (!std::filesystem::exists(inputPath)) {
-        std::string failedMessage = "\033[1;91mThe specified input file \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m does not exist anymore.\033[0;1m";
-        {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
-            failedOuts.insert(failedMessage);
-        }
-        return;
-    } else if (!file.good()) {
-        std::string failedMessage = "\033[1;91mThe specified file \033[1;93m'" + inputPath + "'\033[1;91m cannot be read. Check file permissions.\033[0;1m";
-        {
-            std::lock_guard<std::mutex> lowLock(Mutex4Low);
-            failedOuts.insert(failedMessage);
-        }
-        return;
-    } 
-    // Check if the corresponding .iso file already exists
-    std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
-    if (fileExists(outputPath)) {
-        std::string skipMessage = "\033[1;93mThe corresponding .iso file already exists for: \033[1;92m'" + directory + "/" + fileNameOnly + "'\033[1;93m. Skipped conversion.\033[0;1m";
-        {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
-            skippedOuts.insert(skipMessage);
-        }
-        return;
-    }
+    // Iterate over each image file
+    for (const std::string& inputPath : imageFiles) {
+        // Extract directory and filename
+        auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath);
 
-    // Perform the conversion
-    bool conversionSuccess;
-    if (modeMdf) {
-        conversionSuccess = convertMdfToIso(inputPath, outputPath);
-    } else if (!modeMdf && !modeNrg){
-        conversionSuccess = convertCcdToIso(inputPath, outputPath);
-    } else if (modeNrg) {
-		conversionSuccess = convertNrgToIso(inputPath, outputPath);
-	}
-		
+        // Check if the input file exists
+        if (!std::filesystem::exists(inputPath)) {
+            std::string failedMessage = "\033[1;91mThe specified input file \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m does not exist anymore.\033[0;1m";
+            {
+                std::lock_guard<std::mutex> lock(Mutex4Low);
+                failedOuts.insert(failedMessage);
+            }
+            continue;
+        }
 
-    auto [outDirectory, outFileNameOnly] = extractDirectoryAndFilename(outputPath);
+        // Attempt to open the file to check readability
+        std::ifstream file(inputPath);
+        if (!file.good()) {
+            std::string failedMessage = "\033[1;91mThe specified file \033[1;93m'" + inputPath + "'\033[1;91m cannot be read. Check file permissions.\033[0;1m";
+            {
+                std::lock_guard<std::mutex> lock(Mutex4Low);
+                failedOuts.insert(failedMessage);
+            }
+            continue;
+        }
 
-    if (conversionSuccess) {
-        // Change ownership of the created ISO file
-        struct stat file_stat;
-        if (stat(outputPath.c_str(), &file_stat) == 0) {
-            // Only change ownership if it's different from the current user
-            if (file_stat.st_uid != real_uid || file_stat.st_gid != real_gid) {
-                if (chown(outputPath.c_str(), real_uid, real_gid) != 0) {
-                    std::string errorMessage = "\033[1;91mFailed to change ownership of \033[1;93m'" + outDirectory + "/" + outFileNameOnly + "'\033[1;91m: " + strerror(errno) + "\033[0;1m";
-                    {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                        failedOuts.insert(errorMessage);
+        // Determine the output ISO file path
+        std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
+
+        // Check if the corresponding .iso file already exists
+        if (fileExists(outputPath)) {
+            std::string skipMessage = "\033[1;93mThe corresponding .iso file already exists for: \033[1;92m'" + directory + "/" + fileNameOnly + "'\033[1;93m. Skipped conversion.\033[0;1m";
+            {
+                std::lock_guard<std::mutex> lock(Mutex4Low);
+                skippedOuts.insert(skipMessage);
+            }
+            continue;
+        }
+
+        // Perform the conversion based on the mode
+        bool conversionSuccess = false;
+        if (modeMdf) {
+            conversionSuccess = convertMdfToIso(inputPath, outputPath);
+        } else if (!modeMdf && !modeNrg) {
+            conversionSuccess = convertCcdToIso(inputPath, outputPath);
+        } else if (modeNrg) {
+            conversionSuccess = convertNrgToIso(inputPath, outputPath);
+        }
+
+        // Extract output directory and filename
+        auto [outDirectory, outFileNameOnly] = extractDirectoryAndFilename(outputPath);
+
+        if (conversionSuccess) {
+            // Change ownership of the created ISO file
+            struct stat file_stat;
+            if (stat(outputPath.c_str(), &file_stat) == 0) {
+                // Only change ownership if it's different from the current user
+                if (file_stat.st_uid != real_uid || file_stat.st_gid != real_gid) {
+                    if (chown(outputPath.c_str(), real_uid, real_gid) != 0) {
+                        std::string errorMessage = "\033[1;91mFailed to change ownership of \033[1;93m'" + outDirectory + "/" + outFileNameOnly + "'\033[1;91m: " + strerror(errno) + "\033[0;1m";
+                        {
+                            std::lock_guard<std::mutex> lock(Mutex4Low);
+                            failedOuts.insert(errorMessage);
+                        }
                     }
                 }
+            } else {
+                std::string errorMessage = "\033[1;91mFailed to get file information for \033[1;93m'" + outDirectory + "/" + outFileNameOnly + "'\033[1;91m: " + strerror(errno) + "\033[0;1m";
+                {
+                    std::lock_guard<std::mutex> lock(Mutex4Low);
+                    failedOuts.insert(errorMessage);
+                }
+            }
+
+            // Log success message
+            std::string successMessage = "\033[1mImage file converted to ISO:\033[0;1m \033[1;92m'" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m.\033[0;1m";
+            {
+                std::lock_guard<std::mutex> lock(Mutex4Low);
+                successOuts.insert(successMessage);
             }
         } else {
-            std::string errorMessage = "\033[1;91mFailed to get file information for \033[1;93m'" + outDirectory + "/" + outFileNameOnly + "'\033[1;91m: " + strerror(errno) + "\033[0;1m";
-            {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                failedOuts.insert(errorMessage);
+            // Log conversion failure
+            std::string failedMessage = "\033[1;91mConversion of \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m failed.\033[0;1m";
+            {
+                std::lock_guard<std::mutex> lock(Mutex4Low);
+                failedOuts.insert(failedMessage);
             }
-        }
 
-        std::string successMessage = "\033[1mImage file converted to ISO:\033[0;1m \033[1;92m'" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m.\033[0;1m";
-        {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
-            successOuts.insert(successMessage);
-        }
-    } else {
-        std::string failedMessage = "\033[1;91mConversion of \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m failed.\033[0;1m";
-        {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
-            failedOuts.insert(failedMessage);
-        }
-        // Delete the partially created ISO file
-        if (std::remove(outputPath.c_str()) == 0) {
-            std::string deletedMessage = "\033[1;92mDeleted incomplete ISO file:\033[1;91m '" + outDirectory + "/" + outFileNameOnly + "'\033[1;92m.\033[0;1m";
-            {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                deletedOuts.insert(deletedMessage);
+            // Attempt to delete the partially created ISO file
+            if (std::remove(outputPath.c_str()) == 0) {
+                std::string deletedMessage = "\033[1;92mDeleted incomplete ISO file:\033[1;91m '" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m";
+                {
+                    std::lock_guard<std::mutex> lock(Mutex4Low);
+                    deletedOuts.insert(deletedMessage);
+                }
+            } else {
+                std::string deleteFailMessage = "\033[1;91mFailed to delete incomplete ISO file: \033[1;93m'" + outputPath + "'\033[0;1m";
+                {
+                    std::lock_guard<std::mutex> lock(Mutex4Low);
+                    failedOuts.insert(deleteFailMessage);
+                }
             }
         }
     }
+    // Reset flags and update cache
+    promptFlag = false;
+    maxDepth = 0;
+    if (!successOuts.empty()) {
+        manualRefreshCache(result, promptFlag, maxDepth, historyPattern);
+    }
+
+    promptFlag = true;
+    maxDepth = -1;
 }
 
 // Special thanks to the original authors of the conversion tools:
