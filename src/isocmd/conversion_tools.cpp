@@ -315,10 +315,10 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& pr
 		bool isFilteredButUnchanged = false;
 		bool needsScrnClr = true;
         while (true) {
-            successOuts.clear(); skippedOuts.clear(); failedOuts.clear(); deletedOuts.clear(); processedErrors.clear();
-            
-            // Verbose output is to be disabled unless specified by progressbar function downstream
+			// Verbose output is to be disabled unless specified by progressbar function downstream
             verbose = false;
+            
+            successOuts.clear(); skippedOuts.clear(); failedOuts.clear(); deletedOuts.clear(); processedErrors.clear();
 
             if (binImgFilesCache.empty() && !modeMdf && !modeNrg) {
                 std::cout << "\n\033[1;93mNo " << fileExtension << " file entries stored in RAM cache for potential ISO conversions.\033[1m\n";
