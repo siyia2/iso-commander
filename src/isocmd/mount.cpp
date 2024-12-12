@@ -294,7 +294,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
         if (geteuid() != 0) {
             std::stringstream errorMessage;
             errorMessage << "\033[1;91mFailed to mnt: \033[1;93m'" << isoDirectory << "/" << isoFilename
-                         << "'\033[0m\033[1;91m. Root privileges are required.\033[0m";
+                         << "'\033[0m\033[1;91m.\033[0;1m {needsRoot}\033[0m";
             {
                 std::lock_guard<std::mutex> lowLock(Mutex4Low);
                 mountedFails.insert(errorMessage.str());
@@ -318,7 +318,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
         if (!fs::exists(isoPath)) {
             std::stringstream errorMessage;
             errorMessage << "\033[1;91mFailed to mnt: \033[1;93m'" << isoDirectory 
-                         << "'\033[0m\033[1;91m.\033[0;1m {MissingISO}";
+                         << "'\033[0m\033[1;91m.\033[0;1m {missingISO}";
             {
                 std::lock_guard<std::mutex> lowLock(Mutex4Low);
                 mountedFails.insert(errorMessage.str());
