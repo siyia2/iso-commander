@@ -358,11 +358,11 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 			indexChunks.emplace_back(processedIndices.begin() + i, chunkEnd);
 		}
 
-    
-	std::string processedUserDestDir = operation_for_processOperationInput(isoFiles, indexChunks, userDestDir, operationColor, operationDescription, mvDelBreak, historyPattern, isDelete, isCopy);
+    bool abortDel = false;
+	std::string processedUserDestDir = operation_for_processOperationInput(isoFiles, indexChunks, userDestDir, operationColor, operationDescription, mvDelBreak, historyPattern, isDelete, isCopy, abortDel);
 	
-	// Early exit if Deletion is aborted or userDestDir is empty
-	if (processedUserDestDir == "") {
+	// Early exit if Deletion is aborted or userDestDir is empty for mv or cp
+	if ((processedUserDestDir == "" && (isCopy || isMove)) || abortDel) {
 		return;
 	}
 	
@@ -417,7 +417,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 }
 
 
-std::string operation_for_processOperationInput(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& mvDelBreak, bool& historyPattern, bool& isDelete, bool& isCopy) {
+std::string operation_for_processOperationInput(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& mvDelBreak, bool& historyPattern, bool& isDelete, bool& isCopy, bool& abortDel) {
 	
 	    auto displaySelectedIsos = [&]() {
         std::cout << "\n";
@@ -494,6 +494,7 @@ std::string operation_for_processOperationInput(std::vector<std::string>& isoFil
 
         if (!(confirmation == "y" || confirmation == "Y")) {
             mvDelBreak = false;
+            abortDel = true;
             userDestDir = "";
             std::cout << "\n\033[1;93mDelete operation aborted by user.\033[0;1m\n";
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
