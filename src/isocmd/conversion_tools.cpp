@@ -253,26 +253,55 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& pr
 
         // File collection (integrated file search logic)
         if (!list) {
-            disableInput();
+			disableInput();
+    
+			// Parse input search paths
+			std::istringstream ss(inputSearch);
+			std::string path;
+			std::set<std::string> uniquePaths;
+    
+			while (std::getline(ss, path, ';')) {
+				// Trim leading and trailing whitespace
+				size_t start = path.find_first_not_of(" \t");
+				size_t end = path.find_last_not_of(" \t");
+        
+				// Check if the path is not just whitespace
+				if (start != std::string::npos && end != std::string::npos) {
+					// Extract the cleaned path
+					std::string cleanedPath = path.substr(start, end - start + 1);
             
-            // Parse input search paths
-            std::istringstream ss(inputSearch);
-            std::string path;
-            while (std::getline(ss, path, ';')) {
-                directoryPaths.push_back(path);
-            }
+					// Check if the path is unique
+					if (uniquePaths.find(cleanedPath) == uniquePaths.end()) {
+						// Check if the directory exists
+						if (directoryExists(cleanedPath)) {
+							directoryPaths.push_back(cleanedPath);
+							uniquePaths.insert(cleanedPath);
+						} else {
+							// Mark invalid directories with red color
+							invalidDirectoryPaths.insert("\033[1;91m" + cleanedPath);
+						}
+					}
+				}
+			}
+    
+		// Find files with updated logic from the separate function
+		files = findFiles(directoryPaths, fileType, 
+		[&](const std::string&, const std::string&) {
+				newFilesFound = true;
+		}, 
+				invalidDirectoryPaths, 
+				processedErrors,
+				gapSet
+			);
+		}
 
-            // Find files with updated logic from the separate function
-            files = findFiles(directoryPaths, fileType, 
-                [&](const std::string&, const std::string&) {
-                    newFilesFound = true;
-                }, 
-                invalidDirectoryPaths, 
-                processedErrors, 
-                gapSet
-            );
+		if (directoryPaths.empty() && !invalidDirectoryPaths.empty()) {
+            std::cout << "\n\n\033[1;91mNo valid paths provided.\033[0;1m\n";
+            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            clearScrollBuffer();
+            continue;
         }
-
         // No new files found handling
         if (!newFilesFound && !files.empty() && !list) {
             std::cout << "\n";
