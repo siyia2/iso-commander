@@ -219,6 +219,9 @@ void unmountISOs(bool& historyPattern, bool& verbose) {
     filteredIsoDirs.reserve(100);
 
     while (true) {
+		// Verbose output is to be disabled unless specified by progressbar function downstream
+        verbose = false;
+        
         historyPattern = false;
         std::vector<std::string> selectedIsoDirs;
         selectedIsoDirs.reserve(maxThreads);
@@ -303,12 +306,12 @@ void unmountISOs(bool& historyPattern, bool& verbose) {
             static bool hadSuccessfulFilter = false;
 
             while (true) {
+				// Verbose output is to be disabled unless specified by progressbar function downstream
+                verbose = false;
+                
                 unmountedFiles.clear();
                 unmountedErrors.clear();
                 errorMessages.clear();
-                
-                // Verbose output is to be disabled unless specified by progressbar function downstream
-                verbose = false;
                 
                 clear_history();
                 historyPattern = true;

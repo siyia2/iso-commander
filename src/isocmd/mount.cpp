@@ -55,6 +55,8 @@ void select_and_mount_files_by_number(bool& historyPattern, bool& verbose) {
     std::mutex Mutex4Low; // Mutex for low-level processing
 
     while (true) {
+		// Verbose output is to be disabled unless specified by progressbar function downstream
+        verbose = false;
         removeNonExistentPathsFromCache();
         loadCache(isoFiles);
 
@@ -117,13 +119,12 @@ void select_and_mount_files_by_number(bool& historyPattern, bool& verbose) {
             }
         } else if (inputString == "/") {
             while (true) {
+				// Verbose output is to be disabled unless specified by progressbar function downstream
+                verbose = false;
                 mountedFiles.clear();
                 skippedMessages.clear();
                 mountedFails.clear();
                 uniqueErrorMessages.clear();
-                
-                // Verbose output is to be disabled unless specified by progressbar function downstream
-                verbose = false;
 
                 clear_history();
                 historyPattern = true;

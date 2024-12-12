@@ -88,6 +88,8 @@ void select_and_operate_files_by_number(const std::string& operation, bool& prom
     std::string process = operation;
 
     while (true) {
+		// Verbose output is to be disabled unless specified by progressbar function downstream
+        verbose = false;
         removeNonExistentPathsFromCache();
         loadCache(isoFiles);
 
@@ -161,12 +163,12 @@ void select_and_operate_files_by_number(const std::string& operation, bool& prom
             }
         } else if (inputString == "/") {
             while (true) {
+                // Verbose output is to be disabled unless specified by progressbar function downstream
+				verbose = false;
                 operationIsos.clear();
                 operationErrors.clear();
                 uniqueErrorMessages.clear();
                 
-                // Verbose output is to be disabled unless specified by progressbar function downstream
-                verbose = false;
 
                 clear_history();
                 historyPattern = true;
