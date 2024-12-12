@@ -251,7 +251,6 @@ void select_and_operate_files_by_number(const std::string& operation, bool& prom
 // Function to process either mv or cp indices
 void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& mvDelBreak, bool& historyPattern, bool& verbose) {
     std::string userDestDir;
-    std::istringstream iss(input);
     std::vector<int> processedIndices;
     processedIndices.reserve(maxThreads);
 
@@ -262,70 +261,9 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
     std::string operationColor = isDelete ? "\033[1;91m" : (isCopy ? "\033[1;92m" : "\033[1;93m");
 
-    std::string token;
     // Tokenize the input string
-    while (iss >> token) {
-
-        // Check if the token starts wit zero and treat it as a non-existent index
-        if (startsWithZero(token)) {
-			uniqueErrorMessages.emplace("\033[1;91mInvalid index: '0'.\033[0;1m");
-			continue;
-        }
-
-        // Check if there is more than one hyphen in the token
-        if (std::count(token.begin(), token.end(), '-') > 1) {
-            uniqueErrorMessages.emplace("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
-            continue;
-        }
-
-        // Process ranges specified with hyphens
-        size_t dashPos = token.find('-');
-        if (dashPos != std::string::npos) {
-            int start, end;
-
-            try {
-
-                start = std::stoi(token.substr(0, dashPos));
-                end = std::stoi(token.substr(dashPos + 1));
-            } catch (const std::invalid_argument& e) {
-                // Handle the exception for invalid input
-                uniqueErrorMessages.emplace("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
-                continue;
-            } catch (const std::out_of_range& e) {
-                // Handle the exception for out-of-range input
-                uniqueErrorMessages.emplace("\033[1;91mInvalid range: '" + token + "'.\033[0;1m");
-                continue;
-            }
-
-            // Check for validity of the specified range
-            if ((start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) ||
-                (start == 0 || end == 0)) {
-                uniqueErrorMessages.emplace("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'.\033[0;1m");
-                continue;
-            }
-
-            // Mark indices within the specified range as valid
-            int step = (start <= end) ? 1 : -1;
-            for (int i = start; ((start <= end) && (i <= end)) || ((start > end) && (i >= end)); i += step) {
-                if ((i >= 1) && (i <= static_cast<int>(isoFiles.size())) && std::find(processedIndices.begin(), processedIndices.end(), i) == processedIndices.end()) {
-                    processedIndices.push_back(i); // Mark as processed
-                } else if ((i < 1) || (i > static_cast<int>(isoFiles.size()))) {
-                    uniqueErrorMessages.emplace("\033[1;91mInvalid index '" + std::to_string(i) + "'.\033[0;1m");
-                }
-            }
-        } else if (isNumeric(token)) {
-            // Process single numeric indices
-            int num = std::stoi(token);
-            if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size() && std::find(processedIndices.begin(), processedIndices.end(), num) == processedIndices.end()) {
-                processedIndices.push_back(num); // Mark index as processed
-            } else if (static_cast<std::vector<std::string>::size_type>(num) > isoFiles.size()) {
-                uniqueErrorMessages.emplace("\033[1;91mInvalid index: '" + std::to_string(num) + "'.\033[0;1m");
-            }
-        } else {
-            uniqueErrorMessages.emplace("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
-        }
-    }
-
+    tokenizeInput(input, isoFiles, uniqueErrorMessages, processedIndices);
+    
     if (!uniqueErrorMessages.empty()) {
         std::cout << "\n";
         for (const auto& errorMsg : uniqueErrorMessages) {
@@ -343,6 +281,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         clear_history();
         return;
     }
+
 
 		unsigned int numThreads = std::min(static_cast<unsigned int>(processedIndices.size()), maxThreads);
 		std::vector<std::vector<int>> indexChunks;

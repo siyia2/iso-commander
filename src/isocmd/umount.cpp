@@ -382,42 +382,11 @@ void unmountISOs(bool& historyPattern, bool& verbose) {
             if (inputString == "00") {
                 selectedIsoDirs = currentDirs;
             } else {
-                std::set<size_t> selectedIndices;
-                std::istringstream iss(inputString);
-                for (std::string token; iss >> token;) {
-                    if (startsWithZero(token)) {
-                        errorMessages.emplace("\033[1;91mInvalid index: '0'.\033[0;1m");
-                        continue;
-                    }
-                    try {
-                        size_t dashPos = token.find('-');
-                        if (dashPos != std::string::npos) {
-                            size_t start = std::stoi(token.substr(0, dashPos)) - 1;
-                            size_t end = std::stoi(token.substr(dashPos + 1)) - 1;
-                            if (start < currentDirs.size() && end < currentDirs.size()) {
-                                for (size_t i = std::min(start, end); i <= std::max(start, end); ++i) {
-                                    selectedIndices.emplace(i);
-                                }
-                            } else {
-                                errorMessages.emplace("Invalid range: '" + token + "'.");
-                            }
-                        } else {
-                            size_t index = std::stoi(token) - 1;
-                            if (index < currentDirs.size()) {
-                                selectedIndices.emplace(index);
-                            } else {
-                                errorMessages.emplace("Invalid index: '" + token + "'.");
-                            }
-                        }
-                    } catch (const std::invalid_argument&) {
-                        errorMessages.emplace("Invalid input: '" + token + "'.");
-                    }
-                }
-
-                for (size_t index : selectedIndices) {
-                    selectedIsoDirs.push_back(currentDirs[index]);
-                }
-            }
+                std::vector<int> selectedIndices;
+            
+				// Tokenize the input string
+				tokenizeInput(inputString, currentDirs, errorMessages, selectedIndices);
+			}
 
             if (!selectedIsoDirs.empty()) {
                 unsigned int numThreads = std::min(static_cast<int>(selectedIsoDirs.size()), static_cast<int>(maxThreads));

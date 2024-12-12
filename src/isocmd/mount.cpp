@@ -403,9 +403,8 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
 
 
 // Function to process input and mount ISO files asynchronously
-void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages, bool& verbose, std::mutex& Mutex4Low) {
+void processAndMountIsoFiles(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages, bool& verbose, std::mutex& Mutex4Low) {
     
-    std::istringstream iss(input); // Create an input stream from the input string
     std::vector<int> indicesToProcess; // To store indices parsed from the input
     indicesToProcess.reserve(100); // Reserve space for indices to improve performance
 
@@ -420,59 +419,8 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
         invalidInput.store(true, std::memory_order_release);
     };
 
-    std::string token;
-    while (iss >> token) { // Read tokens from the input stream
-        if (token == "/") break; // Stop processing if '/' is encountered
-
-        if (token[0] == '0') {
-            addError("\033[1;91mInvalid index: '0'.\033[0;1m");
-            continue;
-        }
-
-        size_t dashPos = token.find('-'); // Check if token contains a range (start-end)
-        if (dashPos != std::string::npos) {
-            // Check if the token is a valid range
-            if (dashPos == 0 || dashPos == token.size() - 1 || 
-                !std::all_of(token.begin(), token.begin() + dashPos, ::isdigit) ||
-                !std::all_of(token.begin() + dashPos + 1, token.end(), ::isdigit)) {
-                addError("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
-                continue;
-            }
-
-            int start, end;
-            try {
-                start = std::stoi(token.substr(0, dashPos)); // Extract start index
-                end = std::stoi(token.substr(dashPos + 1)); // Extract end index
-            } catch (const std::exception&) {
-                addError("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
-                continue;
-            }
-
-            // Validate range boundaries
-            if (start < 1 || static_cast<size_t>(start) > isoFiles.size() ||
-                end < 1 || static_cast<size_t>(end) > isoFiles.size()) {
-                addError("\033[1;91mInvalid range: '" + token + "'.\033[0;1m");
-                continue;
-            }
-
-            // If range is valid and not processed before, add indices to process
-            if (processedRanges.insert(token).second) {
-                int step = (start <= end) ? 1 : -1; // Determine step direction
-                for (int i = start; (step > 0) ? (i <= end) : (i >= end); i += step) {
-                    indicesToProcess.push_back(i); // Add each index in the range
-                }
-            }
-        } else if (std::all_of(token.begin(), token.end(), ::isdigit)) {
-            int num = std::stoi(token); // Parse individual index
-            if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size()) {
-                indicesToProcess.push_back(num); // Add valid index to process
-            } else {
-                addError("\033[1;91mInvalid index: '" + token + "'.\033[0;1m");
-            }
-        } else {
-            addError("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
-        }
-    }
+    // Tokenize the input string
+    tokenizeInput(input, isoFiles, uniqueErrorMessages, indicesToProcess);
 
     if (indicesToProcess.empty()) {
         addError("\033[1;91mNo valid input provided for mount.\033[0;1m");
