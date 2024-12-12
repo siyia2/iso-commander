@@ -359,7 +359,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 		}
 
     bool abortDel = false;
-	std::string processedUserDestDir = operation_for_processOperationInput(isoFiles, indexChunks, userDestDir, operationColor, operationDescription, mvDelBreak, historyPattern, isDelete, isCopy, abortDel);
+	std::string processedUserDestDir = promptCpMvRm(isoFiles, indexChunks, userDestDir, operationColor, operationDescription, mvDelBreak, historyPattern, isDelete, isCopy, abortDel);
 	
 	// Early exit if Deletion is aborted or userDestDir is empty for mv or cp
 	if ((processedUserDestDir == "" && (isCopy || isMove)) || abortDel) {
@@ -417,7 +417,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 }
 
 
-std::string operation_for_processOperationInput(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& mvDelBreak, bool& historyPattern, bool& isDelete, bool& isCopy, bool& abortDel) {
+std::string promptCpMvRm(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& mvDelBreak, bool& historyPattern, bool& isDelete, bool& isCopy, bool& abortDel) {
 	
 	    auto displaySelectedIsos = [&]() {
         std::cout << "\n";
