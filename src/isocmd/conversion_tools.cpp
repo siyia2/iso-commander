@@ -460,8 +460,7 @@ void handle_file_conversion_for_select_and_convert_to_iso(const std::string& fil
 
 
 // Function to process user input and convert selected BIN/MDF/NRG files to ISO format
-void processInput(
-    const std::string& input, std::vector<std::string>& fileList, bool modeMdf, bool modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
+void processInput( const std::string& input, std::vector<std::string>& fileList, bool modeMdf, bool modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
     // Set of selected file paths for processing
     std::set<std::string> selectedFilePaths;
     std::string concatenatedFilePaths;
@@ -512,19 +511,7 @@ void processInput(
         );
 
         // Enqueue task for the thread pool
-        futures.emplace_back(pool.enqueue([imageFilesInChunk = std::move(imageFilesInChunk), 
-                                           &fileList, 
-                                           &successOuts, 
-                                           &skippedOuts, 
-                                           &failedOuts, 
-                                           &deletedOuts, 
-                                           modeMdf, 
-                                           modeNrg, 
-                                           &maxDepth,
-                                           &promptFlag,
-                                           &historyPattern,
-                                           &Mutex4Low, 
-                                           &completedTasks]() {
+        futures.emplace_back(pool.enqueue([imageFilesInChunk = std::move(imageFilesInChunk), &fileList, &successOuts, &skippedOuts, &failedOuts, &deletedOuts, modeMdf, modeNrg, &maxDepth, &promptFlag, &historyPattern, &Mutex4Low, &completedTasks]() {
             // Process each file
             convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts, deletedOuts, modeMdf, modeNrg, maxDepth, promptFlag, historyPattern, Mutex4Low);
             completedTasks.fetch_add(imageFilesInChunk.size(), std::memory_order_relaxed);
