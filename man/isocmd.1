@@ -1,7 +1,7 @@
 .\" Manpage for isocmd
 .TH ISOCMD 1 "December 2024" "Iso Commander 5.3.6" "Iso-Commander Manual"
 .SH NAME
-Iso Commander, or in short isocmd.
+Iso Commander or isocmd.
 
 .SH DESCRIPTION
 A versatile command-line utility designed for efficiently managing .iso files and converting various image formats into the .iso format.
@@ -61,6 +61,8 @@ Notes:
 
 - Built-in filtering skips tokens with fewer than 2 characters.
 
+- Ranges and single numbers can be used simultaneously in selections.
+
 .SH USAGE TIPS
 Iso Commander leverages the readline library for enhanced line-editing capabilities:
 
@@ -74,7 +76,7 @@ Iso Commander leverages the readline library for enhanced line-editing capabilit
   This is particularly useful when long file lists from autocompletion clutter the display.
   
 - \fBCtrl+u\fR: Kill backward from point to the beginning of the line.
-  This is useful for speedy deleting a prompt line.
+  This is useful for quickly deleting a prompt line.
 
 .SH SEE ALSO
 .BR readline (3)
