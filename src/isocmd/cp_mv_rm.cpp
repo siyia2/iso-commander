@@ -621,7 +621,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         fs::create_directories(destDir, ec);
                         if (ec) {
                             std::string errorMessage = "\033[1;91mFailed to create destination directory: " + 
-                                                       destDir + ": " + ec.message() + "\033[0;1m";
+                                                       destDir + " : " + ec.message() + "\033[0;1m";
                             {
                                 std::lock_guard<std::mutex> lowLock(Mutex4Low);
                                 operationErrors.emplace(errorMessage);
@@ -653,7 +653,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         std::string errorMessageInfo = "\033[1;91mError " +
                             std::string(isCopy ? "copying" : (i < destDirs.size() - 1 ? "moving" : "moving")) +
                             ": \033[1;93m'" + srcDir + "/" + srcFile + "'\033[1;91m" +
-                            " to '" + destDirProcessed + "': " + ec.message() + "\033[1;91m.\033[0;1m";
+                            " to '" + destDirProcessed + "/': " + ec.message() + "\033[1;91m.\033[0;1m";
                         {
                             std::lock_guard<std::mutex> lowLock(Mutex4Low);
                             operationErrors.emplace(errorMessageInfo);
