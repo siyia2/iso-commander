@@ -974,7 +974,7 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
     // Get real user's name
     struct passwd *pw = getpwuid(real_uid);
     if (pw == nullptr) {
-        std::cerr << "\nError getting user information: " << strerror(errno) << "\033[0;1m";
+      //std::cerr << "\nError getting user information: " << strerror(errno) << "\033[0;1m";
         return;
     }
     std::string real_username(pw->pw_name);
@@ -982,7 +982,7 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
     // Get real group name
     struct group *gr = getgrgid(real_gid);
     if (gr == nullptr) {
-        std::cerr << "\nError getting group information: " << strerror(errno) << "\033[0;1m";
+        //std::cerr << "\nError getting group information: " << strerror(errno) << "\033[0;1m";
         return;
     }
     std::string real_groupname(gr->gr_name);
@@ -990,7 +990,7 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
     auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath);
     std::ifstream file(inputPath);
     if (!std::filesystem::exists(inputPath)) {
-        std::string failedMessage = "\033[1;91mThe specified input file \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m does not exist.\033[0;1m";
+        std::string failedMessage = "\033[1;91mThe specified input file \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m does not exist anymore.\033[0;1m";
         {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
             failedOuts.insert(failedMessage);
         }
