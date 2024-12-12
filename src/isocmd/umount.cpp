@@ -377,16 +377,21 @@ void unmountISOs(bool& historyPattern, bool& verbose) {
         } else {
 			std::vector<std::string>& currentDirs = isFiltered ? filteredIsoDirs : isoDirs;
 			// Continue with other logic
-
+			std::vector<int> selectedIndices;
 
             if (inputString == "00") {
                 selectedIsoDirs = currentDirs;
             } else {
-                std::vector<int> selectedIndices;
             
 				// Tokenize the input string
 				tokenizeInput(inputString, currentDirs, errorMessages, selectedIndices);
 			}
+			
+			for (int index : selectedIndices) {
+				// Subtract 1 to convert from 1-based to 0-based indexing
+				selectedIsoDirs.push_back(currentDirs[index - 1]);
+			}
+            
 
             if (!selectedIsoDirs.empty()) {
                 unsigned int numThreads = std::min(static_cast<int>(selectedIsoDirs.size()), static_cast<int>(maxThreads));
