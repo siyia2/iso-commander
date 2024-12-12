@@ -988,14 +988,21 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
     std::string real_groupname(gr->gr_name);
 
     auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath);
-    // Check if the input file exists
-    if (!std::ifstream(inputPath)) {
-        std::string failedMessage = "\033[1;91mThe specified input file \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m does not exist.\033[0;1m\n";
+    std::ifstream file(inputPath);
+    if (!std::filesystem::exists(inputPath)) {
+        std::string failedMessage = "\033[1;91mThe specified input file \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m does not exist.\033[0;1m";
         {   std::lock_guard<std::mutex> lowLock(Mutex4Low);
             failedOuts.insert(failedMessage);
         }
         return;
-    }
+    } else if (!file.good()) {
+        std::string failedMessage = "\033[1;91mThe specified file \033[1;93m'" + inputPath + "'\033[1;91m cannot be read. Check file permissions.\033[0;1m";
+        {
+            std::lock_guard<std::mutex> lowLock(Mutex4Low);
+            failedOuts.insert(failedMessage);
+        }
+        return;
+    } 
     // Check if the corresponding .iso file already exists
     std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
     if (fileExists(outputPath)) {
