@@ -39,6 +39,8 @@
 #include <vector>
 #include <unistd.h>
 
+void tokenizeInput(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, std::vector<int>& processedIndices);
+
 // Get max available CPU cores for global use
 extern unsigned int maxThreads;
 
@@ -121,7 +123,7 @@ void printMountedAndErrors(std::set<std::string>& mountedFiles, std::set<std::st
 void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::mutex& Mutex4Low);
 void select_and_mount_files_by_number(bool& historyPattern, bool& verbose);
 void printIsoFileList(const std::vector<std::string>& isoFiles);
-void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFilesIn, std::set<std::string>& mountedFiles,std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages, bool& verbose, std::mutex& Mutex4Low);
+void processAndMountIsoFiles(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles,std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages, bool& verbose, std::mutex& Mutex4Low);
 
 // Cache functions
 void loadCache(std::vector<std::string>& isoFiles);
@@ -170,12 +172,12 @@ std::vector<std::string> findFiles(const std::vector<std::string>& paths, const 
 
 // voids
 void applyFilter(std::vector<std::string>& files, const std::vector<std::string>& originalFiles, const std::string& fileTypeName, bool& historyPattern);
-void convertToISO(const std::string& inputPath, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool modeMdf, bool modeNrg, std::mutex& Mutex4Low);
+void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool modeMdf, bool modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern, std::mutex& Mutex4Low);
 void verboseFind(std::set<std::string>& invalidDirectoryPaths, bool gapSet);
 void verboseConversion(std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts);
 void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose);
 void handle_file_conversion_for_select_and_convert_to_iso(const std::string& fileType, std::vector<std::string>& files, std::vector<std::string>& originalFiles, bool& verbose, bool& promptFlag, bool& modeMdf, bool& modeNrg, int& maxDepth, bool& historyPattern);
-void processInput(const std::string& input, const std::vector<std::string>& fileList, bool modeMdf, bool modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose);
+void processInput(const std::string& input, std::vector<std::string>& fileList, bool modeMdf, bool modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose);
 void printFileList(const std::vector<std::string>& fileList);
 
 
