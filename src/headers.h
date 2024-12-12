@@ -39,7 +39,6 @@
 #include <vector>
 #include <unistd.h>
 
-
 // Get max available CPU cores for global use
 extern unsigned int maxThreads;
 
@@ -49,7 +48,7 @@ extern std::vector<std::string> globalIsoFileList;
 // For toggling between full and shortened paths in lists
 extern bool toggleFullList;
 
-// Caching the results of directory and filename extraction for file entries
+// Caching the results of directory and filename transformations
 extern std::unordered_map<std::string, std::string> transformationCache;
 
 
@@ -70,6 +69,11 @@ void verbose_cp_mv_rm(std::set<std::string>& operationIsos, std::set<std::string
 void select_and_operate_files_by_number(const std::string& operation, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose);
 void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& mvDelBreak, bool& historyPattern, bool& verbose);
 void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete, std::mutex& Mutex4Low);
+
+// stds
+
+// General
+std::string operation_for_processOperationInput(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& mvDelBreak, bool& historyPattern, bool& isDelete, bool& isCopy);
 
 //	ISO COMMANDER
 
@@ -170,8 +174,10 @@ void convertToISO(const std::string& inputPath, std::set<std::string>& successOu
 void verboseFind(std::set<std::string>& invalidDirectoryPaths, bool gapSet);
 void verboseConversion(std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts);
 void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose);
+void handle_file_conversion_for_select_and_convert_to_iso(const std::string& fileType, std::vector<std::string>& files, std::vector<std::string>& originalFiles, bool& verbose, bool& promptFlag, bool& modeMdf, bool& modeNrg, int& maxDepth, bool& historyPattern);
 void processInput(const std::string& input, const std::vector<std::string>& fileList, bool modeMdf, bool modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose);
 void printFileList(const std::vector<std::string>& fileList);
+
 
 // CCD2ISO
 
