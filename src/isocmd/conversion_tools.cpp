@@ -49,29 +49,44 @@ void verboseConversion(std::set<std::string>& processedErrors, std::set<std::str
 
 
 // Function to print invalid directory paths from search
-void verboseFind(std::set<std::string>& invalidDirectoryPaths, bool gapSet) {
-	if (!invalidDirectoryPaths.empty()) {
+void verboseFind(std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrors) {
+	if (!invalidDirectoryPaths.empty() || !processedErrors.empty()) {
 			std::cout << "\n";
-		if (!gapSet){
-		     std::cout << "\033[2A\033[K";
+		
+        if (!processedErrors.empty()) {
+			std::cout << "\n";
+			for (const auto& errorMsg : processedErrors) {
+				std::cout << errorMsg << "\n";
+			}
+			
+			if (!invalidDirectoryPaths.empty()) {
+				std::cout << "\n";
+			} else {
+				std::cout << "\033[K\033[1A";
+			}
 		}
+		if (!invalidDirectoryPaths.empty()) {
+			if (processedErrors.empty()) {
+				std::cout << "\n";
+			}
 		std::cout << "\033[0;1mInvalid paths omitted from search: \033[1:91m";
 
-		for (auto it = invalidDirectoryPaths.begin(); it != invalidDirectoryPaths.end(); ++it) {
-        if (it == invalidDirectoryPaths.begin()) {
-            std::cerr << "\033[31m'"; // Red color for the first quote
-        } else {
-            std::cerr << "'";
-        }
-        std::cerr << *it << "'";
-        // Check if it's not the last element
-        if (std::next(it) != invalidDirectoryPaths.end()) {
-            std::cerr << " ";
-        }
-    }
-
-		std::cerr << "\033[0;1m.\n"; // Print a newline at the end
+			for (auto it = invalidDirectoryPaths.begin(); it != invalidDirectoryPaths.end(); ++it) {
+				if (it == invalidDirectoryPaths.begin()) {
+					std::cerr << "\033[31m'"; // Red color for the first quote
+				} else {
+					std::cerr << "'";
+				}
+				std::cerr << *it << "'";
+				// Check if it's not the last element
+				if (std::next(it) != invalidDirectoryPaths.end()) {
+					std::cerr << " ";
+				}
+			}std::cerr << "\033[0;1m."; // Print a newline at the end
+		}
+		
 		invalidDirectoryPaths.clear();
+		processedErrors.clear();
 	}
 }
 
@@ -106,27 +121,19 @@ void applyFilter(std::vector<std::string>& files, const std::vector<std::string>
 }
 
 
-// Main function to orchestrate the file conversion process
+// Function to select and convert files based on user's choice of file type
 void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
-    // Prepare containers for files and caches
     std::vector<std::string> files, originalFiles;
     files.reserve(100);
     binImgFilesCache.reserve(100);
-    mdfMdsFilesCache.reserve(100);
-    
-    // Tracking sets
+	mdfMdsFilesCache.reserve(100);
     std::vector<std::string> directoryPaths;
-    std::set<std::string> uniquePaths, processedErrors, successOuts, 
-                           skippedOuts, failedOuts, deletedOuts, 
-                           invalidDirectoryPaths;
+    std::set<std::string> uniquePaths, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, invalidDirectoryPaths;
     
-    // Control flags
-    bool gapSet = true;
     std::string fileExtension, fileTypeName, fileType = fileTypeChoice;
     bool modeMdf = (fileType == "mdf");
     bool modeNrg = (fileType == "nrg");
 
-    // Configure file type specifics
     if (fileType == "bin" || fileType == "img") {
         fileExtension = ".bin/.img";
         fileTypeName = "BIN/IMG";
@@ -136,46 +143,34 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& pr
     } else if (fileType == "nrg") {
         fileExtension = ".nrg";
         fileTypeName = "NRG";
-    } else {
+    }
+    else {
         std::cout << "Invalid file type choice. Supported types: BIN/IMG, MDF, NRG\n";
         return;
     }
 
-    // Main processing loop
     while (true) {
-        // Reset control flags and clear tracking sets
         bool list = false, clr = false;
-        successOuts.clear(); 
-        skippedOuts.clear(); 
-        failedOuts.clear(); 
-        deletedOuts.clear(); 
-        processedErrors.clear();
-
-        // Manage command history
+        successOuts.clear(); skippedOuts.clear(); failedOuts.clear(); deletedOuts.clear(); processedErrors.clear();
         clear_history();
         historyPattern = false;
         loadHistory(historyPattern);
 
-        // Interactive prompt setup (similar to original code)
         std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m ↵ to scan for \001\033[1;38;5;208m\002" + fileExtension +
                              "\001\033[1;94m files (>= 5MB) and import into \001\033[1;93m\002RAM\001\033[1;94m\002 cache (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002), \001\033[1;92m\002ls \001\033[1;94m\002↵ open \001\033[1;93m\002RAM\001\033[1;94m\002 cache, "
                              "\001\033[1;93m\002clr\001\033[1;94m\002 ↵ clear \001\033[1;93m\002RAM\001\033[1;94m\002 cache, ↵ return:\n\001\033[0;1m\002";
 
-        // Get user input
         char* rawinput = readline(prompt.c_str());
         std::unique_ptr<char, decltype(&std::free)> mainSearch(rawinput, &std::free);
         std::string inputSearch(mainSearch.get());
 
-        // Exit condition
         if (std::isspace(mainSearch.get()[0]) || mainSearch.get()[0] == '\0') {
             break;
         }
 
-        // Determine input type
         list = (inputSearch == "ls");
         clr = (inputSearch == "clr");
 
-        // Handle cache clearing (similar to original code)
         if (clr) {
             // Clear all relevant data structures
             files.clear();
@@ -186,39 +181,40 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& pr
             if (!modeMdf && !modeNrg) {
                 binImgFilesCache.clear();
                 for (auto it = transformationCache.begin(); it != transformationCache.end();) {
-                    const std::string& key = it->first;
-                    if ((key.size() >= 4 && key.compare(key.size() - 4, 4, ".bin") == 0) || 
-                    (key.size() >= 4 && key.compare(key.size() - 4, 4, ".img") == 0))
-                    {
-                        it = transformationCache.erase(it);
-                    } else {
-                        ++it;
-                    }
-                }
+						const std::string& key = it->first;
+						if ((key.size() >= 4 && key.compare(key.size() - 4, 4, ".bin") == 0) || 
+						(key.size() >= 4 && key.compare(key.size() - 4, 4, ".img") == 0))
+					{
+						it = transformationCache.erase(it);  // erase and move to the next element
+					} else {
+						++it;  // move to the next element
+					}
+				}
+
                 std::cout << "\n\033[1;92mBIN/IMG RAM cache cleared.\033[0;1m\n";
-            } else if (modeMdf) {
+            } else if (modeMdf){
                 mdfMdsFilesCache.clear();
                 for (auto it = transformationCache.begin(); it != transformationCache.end();) {
-                    const std::string& key = it->first;
-                    if ((key.size() >= 4 && key.compare(key.size() - 4, 4, ".mdf") == 0))
-                    {
-                        it = transformationCache.erase(it);
-                    } else {
-                        ++it;
-                    }
-                }
+						const std::string& key = it->first;
+						if ((key.size() >= 4 && key.compare(key.size() - 4, 4, ".mdf") == 0))
+					{
+						it = transformationCache.erase(it);  // erase and move to the next element
+					} else {
+						++it;  // move to the next element
+					}
+				}
                 std::cout << "\n\033[1;92mMDF RAM cache cleared.\033[0;1m\n";
-            } else if (modeNrg) {
+            } else if (modeNrg){
                 nrgFilesCache.clear();
                 for (auto it = transformationCache.begin(); it != transformationCache.end();) {
-                    const std::string& key = it->first;
-                    if ((key.size() >= 4 && key.compare(key.size() - 4, 4, ".nrg") == 0))
-                    {
-                        it = transformationCache.erase(it);
-                    } else {
-                        ++it;
-                    }
-                }
+						const std::string& key = it->first;
+						if ((key.size() >= 4 && key.compare(key.size() - 4, 4, ".nrg") == 0))
+					{
+						it = transformationCache.erase(it);  // erase and move to the next element
+					} else {
+						++it;  // move to the next element
+					}
+				}
                 std::cout << "\n\033[1;92mNRG RAM cache cleared.\033[0;1m\n";
             }
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
@@ -227,16 +223,15 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& pr
             continue;
         }
 
-        // Return cached files if list is requested
-        if (list && !modeMdf && !modeNrg) {
-            files = binImgFilesCache;
-        } else if (list && modeMdf) {
-            files = mdfMdsFilesCache;
-        } else if (list && modeNrg) {
-            files = nrgFilesCache;
-        }
+        // Return static cache if input=ls
+		if (list && !modeMdf && !modeNrg) {
+			files = binImgFilesCache;
+		} else if (list && modeMdf) {
+			files = mdfMdsFilesCache;
+		} else if (list && modeNrg) {
+			files = nrgFilesCache;
+		}
 
-        // Manage command history
         if (!inputSearch.empty() && !list && !clr) {
             std::cout << " " << std::endl;
             add_history(mainSearch.get());
@@ -245,140 +240,99 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& pr
 
         clear_history();
 
-        // Timing setup
         auto start_time = std::chrono::high_resolution_clock::now();
-        
-        // New files tracking
-        bool newFilesFound = false;
+        directoryPaths.clear();
+        uniquePaths.clear();
+        invalidDirectoryPaths.clear();
 
-        // File collection (integrated file search logic)
         if (!list) {
-			disableInput();
-    
-			// Parse input search paths
-			std::istringstream ss(inputSearch);
-			std::string path;
-			std::set<std::string> uniquePaths;
-    
-			while (std::getline(ss, path, ';')) {
-				// Trim leading and trailing whitespace
-				size_t start = path.find_first_not_of(" \t");
-				size_t end = path.find_last_not_of(" \t");
-        
-				// Check if the path is not just whitespace
-				if (start != std::string::npos && end != std::string::npos) {
-					// Extract the cleaned path
-					std::string cleanedPath = path.substr(start, end - start + 1);
-            
-					// Check if the path is unique
-					if (uniquePaths.find(cleanedPath) == uniquePaths.end()) {
-						// Check if the directory exists
-						if (directoryExists(cleanedPath)) {
-							directoryPaths.push_back(cleanedPath);
-							uniquePaths.insert(cleanedPath);
-						} else {
-							// Mark invalid directories with red color
-							invalidDirectoryPaths.insert("\033[1;91m" + cleanedPath);
-						}
-					}
-				}
-			}
-    
-		// Find files with updated logic from the separate function
-		files = findFiles(directoryPaths, fileType, 
-		[&](const std::string&, const std::string&) {
-				newFilesFound = true;
-		}, 
-				invalidDirectoryPaths, 
-				processedErrors,
-				gapSet
-			);
-		}
+            std::istringstream iss(inputSearch);
+            std::string path;
+            while (std::getline(iss, path, ';')) {
+                size_t start = path.find_first_not_of(" \t");
+                size_t end = path.find_last_not_of(" \t");
+                if (start != std::string::npos && end != std::string::npos) {
+                    std::string cleanedPath = path.substr(start, end - start + 1);
+                    if (uniquePaths.find(cleanedPath) == uniquePaths.end()) {
+                        if (directoryExists(cleanedPath)) {
+                            directoryPaths.push_back(cleanedPath);
+                            uniquePaths.insert(cleanedPath);
+                        } else {
+                            invalidDirectoryPaths.insert("\033[1;91m" + cleanedPath);
+                        }
+                    }
+                }
+            }
+        }
 
-		if (directoryPaths.empty() && !invalidDirectoryPaths.empty()) {
-            std::cout << "\n\n\033[1;91mNo valid paths provided.\033[0;1m\n";
+        if (directoryPaths.empty() && !invalidDirectoryPaths.empty()) {
+            std::cout << "\033[1;91mNo valid paths provided.\033[0;1m\n";
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             clearScrollBuffer();
             continue;
         }
-        // No new files found handling
+
+        bool newFilesFound = false;
+        if (!list) {
+			// Disable input before processing
+			disableInput();
+            files = findFiles(directoryPaths, fileType, [&](const std::string&, const std::string&) {
+                newFilesFound = true;
+            }, invalidDirectoryPaths, processedErrors);
+        }
+
         if (!newFilesFound && !files.empty() && !list) {
             std::cout << "\n";
-            verboseFind(invalidDirectoryPaths, gapSet);
+            verboseFind(invalidDirectoryPaths,processedErrors);
             auto end_time = std::chrono::high_resolution_clock::now();
             
-            std::cout << "\n";
-            gapSet = true;
-            std::cout << "\033[1;91mNo new " << fileExtension << " files over 5MB found. \033[1;92m" 
-                      << files.size() << " files are cached in RAM from previous searches.\033[0;1m\n\n";
-            
+            if (processedErrors.empty() || invalidDirectoryPaths.empty()) {
+				std::cout << "\n";
+			}
+								
+            std::cout << "\033[1;91mNo new " << fileExtension << " files over 5MB found. \033[1;92m" << files.size() << " files are cached in RAM from previous searches.\033[0;1m\n\n";
             auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
             std::cout << "\033[1mTime Elapsed: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n\n";
-            
             std::cout << "\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         }
 
-        // No files found handling
         if (files.empty() && !list) {
-            std::cout << "\n";
-            verboseFind(invalidDirectoryPaths, gapSet);
+            verboseFind(invalidDirectoryPaths, processedErrors);
             auto end_time = std::chrono::high_resolution_clock::now();
           
-            std::cout << "\n";
-            
-            if (!gapSet && invalidDirectoryPaths.empty()) {
-                std::cout << "\033[2A\033[K";
-            }
-            gapSet = true;
+			std::cout << "\n";
+			
+			if (processedErrors.empty() || invalidDirectoryPaths.empty()) {
+				std::cout << "\n";
+			}
+			
             std::cout << "\033[1;91mNo " << fileExtension << " files over 5MB found in the specified paths or cached in RAM.\n\033[0;1m\n";
-            
             auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
             std::cout << "\033[1mTime Elapsed: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n\n";
-            
             std::cout << "\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             clearScrollBuffer();
             continue;
         }
+        if (!modeMdf && !modeNrg) {
+			originalFiles = binImgFilesCache;
+        } else if (modeMdf){
+			originalFiles = mdfMdsFilesCache;
+		} else if (modeNrg) {
+			originalFiles = nrgFilesCache;
+		}
+		bool isFiltered = false;
+		bool isFilteredButUnchanged = false;
+		bool needsScrnClr = true;
+        while (true) {
+			// Verbose output is to be disabled unless specified by progressbar function downstream
+            verbose = false;
+            
+            successOuts.clear(); skippedOuts.clear(); failedOuts.clear(); deletedOuts.clear(); processedErrors.clear();
 
-        // Determine original files based on file type
-        originalFiles = (!modeMdf && !modeNrg) ? binImgFilesCache :
-                       (modeMdf ? mdfMdsFilesCache : nrgFilesCache);
-
-        // File conversion workflow (using new modular function)
-        handle_file_conversion_for_select_and_convert_to_iso(fileType, files, originalFiles, verbose, 
-                                promptFlag, modeMdf, modeNrg, maxDepth, historyPattern);
-    }
-}
-
-
-// function to handle conversions for select_and_convert_to_iso
-void handle_file_conversion_for_select_and_convert_to_iso(const std::string& fileType, std::vector<std::string>& files, std::vector<std::string>& originalFiles, bool& verbose, bool& promptFlag, bool& modeMdf, bool& modeNrg, int& maxDepth, bool& historyPattern) {
-    std::set<std::string> processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts;
-    bool isFiltered = false;
-    bool isFilteredButUnchanged = false;
-    bool needsScrnClr = true;
-        std::string fileExtension;
-    if (fileType == "bin" || fileType == "img") {
-        fileExtension = ".bin/.img";
-    } else if (fileType == "mdf") {
-        fileExtension = ".mdf";
-    } else if (fileType == "nrg") {
-        fileExtension = ".nrg";
-    }
-
-    while (true) {
-        verbose = false;
-        processedErrors.clear(); 
-        successOuts.clear(); 
-        skippedOuts.clear(); 
-        failedOuts.clear(); 
-        deletedOuts.clear();
-
-        // Cache emptiness checks remain the same as in original code
-        if (binImgFilesCache.empty() && !modeMdf && !modeNrg) {
+            if (binImgFilesCache.empty() && !modeMdf && !modeNrg) {
                 std::cout << "\n\033[1;93mNo " << fileExtension << " file entries stored in RAM cache for potential ISO conversions.\033[1m\n";
                 std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -397,91 +351,100 @@ void handle_file_conversion_for_select_and_convert_to_iso(const std::string& fil
                 clearScrollBuffer();
                 break;
             }
+			if (needsScrnClr) {
+				clearScrollBuffer();
+				std::cout << "\n";
+				sortFilesCaseInsensitive(files);
+				printFileList(files);
+			}
 
-        if (needsScrnClr) {
-            clearScrollBuffer();
-            std::cout << "\n";
-            sortFilesCaseInsensitive(files);
-            printFileList(files);
-        }
+            clear_history();
+           std::string prompt = std::string(isFiltered ? "\n\001\033[1;96m\002Filtered \001\033[1;92m\002" : "\n\001\033[1;92m\002" ) + fileTypeName + "\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion (e.g., 1-3,1 5), ~ ↵ (un)fold, / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+			std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
+			std::string mainInputString(rawInput.get());
+			
+			if (mainInputString == "~") {
+				if (toggleFullList) {
+					toggleFullList = false;
+				} else {
+					toggleFullList = true;
+				}
+				clearScrollBuffer();
+				printFileList(files);
+				continue;
+			}
 
-        clear_history();
-        std::string prompt = std::string(isFiltered ? "\n\001\033[1;96m\002Filtered \001\033[1;92m\002" : "\n\001\033[1;92m\002") + 
-                             (fileType == "bin" || fileType == "img" ? "BIN/IMG" : (fileType == "mdf" ? "MDF" : "NRG")) + 
-                             "\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion (e.g., 1-3,1 5), ~ ↵ (un)fold, / ↵ filter, ↵ return:\001\033[0;1m\002 ";
-        
-        std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
-        std::string mainInputString(rawInput.get());
+			if (std::isspace(rawInput.get()[0]) || rawInput.get()[0] == '\0') {
+				clearScrollBuffer();
+				if (isFiltered && !isFilteredButUnchanged) {
+					needsScrnClr = true;
+					// Reset to unfiltered list
+					if (!modeMdf && !modeNrg) {
+						files = binImgFilesCache;
+					} else if (modeMdf) {
+						files = mdfMdsFilesCache;
+					} else if (modeNrg) {
+						files = nrgFilesCache;
+					}
+					isFiltered = false;
+					isFilteredButUnchanged = false;
+					continue;  // Continue to show unfiltered list
+				} else {
+					needsScrnClr = false;
+					break;  // Exit the function
+				}
+			}
 
-        // Toggle list folding logic
-        if (mainInputString == "~") {
-            toggleFullList = !toggleFullList;
-            clearScrollBuffer();
-            printFileList(files);
-            continue;
-        }
+			if (strcmp(rawInput.get(), "/") == 0) {
+				std::vector<std::string> beforeFilterFiles = files;
 
-        // Exit conditions and list reset logic remain the same as in original code
-        if (std::isspace(rawInput.get()[0]) || rawInput.get()[0] == '\0') {
-            clearScrollBuffer();
-            if (isFiltered && !isFilteredButUnchanged) {
-                needsScrnClr = true;
-                files = (fileType == "bin" || fileType == "img") ? binImgFilesCache :
-                        (fileType == "mdf" ? mdfMdsFilesCache : nrgFilesCache);
-                isFiltered = false;
-                isFilteredButUnchanged = false;
-                continue;
-            } else {
-                needsScrnClr = false;
-                break;
-            }
-        }
+				// If the list is already filtered, apply filter on the filtered list
+				if (isFiltered || isFilteredButUnchanged) {
+					applyFilter(files, files, fileTypeName, historyPattern);  // Apply filter on the already filtered list
+				} else {
+					// First time filtering or no filter applied yet
+					applyFilter(files, originalFiles, fileTypeName, historyPattern);  // Apply filter on the full list
+				}
 
-        // Filtering logic
-        if (strcmp(rawInput.get(), "/") == 0) {
-            std::vector<std::string> beforeFilterFiles = files;
-            std::string fileTypeName = (fileType == "bin" || fileType == "img" ? "BIN/IMG" : (fileType == "mdf" ? "MDF" : "NRG"));
+				// Check filter status after applying
+				if (!modeMdf && !modeNrg) {
+					if (binImgFilesCache.size() == files.size() || files.size() == originalFiles.size()) {
+						isFilteredButUnchanged = true;
+					} else {
+						isFiltered = true;
+						isFilteredButUnchanged = false;
+					}
+				} else if (modeMdf){
+					if (mdfMdsFilesCache.size() == files.size() || files.size() == originalFiles.size()) {
+						isFilteredButUnchanged = true;
+					} else {
+						isFiltered = true;
+						isFilteredButUnchanged = false;
+					}
+				} else if (modeNrg) {
+					if (nrgFilesCache.size() == files.size() || files.size() == originalFiles.size()) {
+						isFilteredButUnchanged = true;
+					} else {
+						isFiltered = true;
+						isFilteredButUnchanged = false;
+					}
+				}
 
-            if (isFiltered || isFilteredButUnchanged) {
-                applyFilter(files, files, fileTypeName, historyPattern);
-            } else {
-                applyFilter(files, originalFiles, fileTypeName, historyPattern);
-            }
-
-            // Update filter status based on file type
-            std::vector<std::string>& cacheRef = (fileType == "bin" || fileType == "img") ? binImgFilesCache :
-                                                  (fileType == "mdf" ? mdfMdsFilesCache : nrgFilesCache);
-
-            if (cacheRef.size() == files.size() || files.size() == originalFiles.size()) {
-                isFilteredButUnchanged = true;
-            } else {
-                isFiltered = true;
-                isFilteredButUnchanged = false;
-            }
-        } else {
-            clearScrollBuffer();
-            std::cout << "\033[1m" << std::endl;
-            
-            processInput(mainInputString, files, 
-                         (fileType == "mdf"), (fileType == "nrg"),
-                         processedErrors, successOuts, 
-                         skippedOuts, failedOuts, deletedOuts, 
-                         promptFlag, maxDepth, historyPattern, verbose);
-            
-            clearScrollBuffer();
-            std::cout << "\n";
-            
-            if (verbose) {
-                verboseConversion(processedErrors, successOuts, 
-                                  skippedOuts, failedOuts, deletedOuts);
-            }
-            
-            if (!processedErrors.empty() && successOuts.empty() && 
-                skippedOuts.empty() && failedOuts.empty() && deletedOuts.empty()) {
-                clearScrollBuffer();
-                std::cout << "\n\033[1;91mNo valid input provided for ISO conversion.\033[0;1m";
-                std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
-                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			} else {
+				clearScrollBuffer();
+				std::cout << "\033[1m" << std::endl;
+				processInput(mainInputString, files, modeMdf, modeNrg, processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, promptFlag, maxDepth, historyPattern, verbose);
+				clearScrollBuffer();
+				std::cout << "\n";
+				if (verbose) {
+					verboseConversion(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts);
+				}
+				if (!processedErrors.empty() && successOuts.empty() && skippedOuts.empty() && failedOuts.empty() && deletedOuts.empty()) {
+					clearScrollBuffer();
+					std::cout << "\n\033[1;91mNo valid input provided for ISO conversion.\033[0;1m";
+					std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
+					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+				}
             }
         }
     }
@@ -555,10 +518,7 @@ void processInput( const std::string& input, std::vector<std::string>& fileList,
 
 
 // Function to search for .bin .img .nrg and mdf files over 5MB
-std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, const std::string& mode, 
-    const std::function<void(const std::string&, const std::string&)>& callback, 
-    std::set<std::string>& invalidDirectoryPaths, 
-    std::set<std::string>& processedErrors, bool gapSet) {
+std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrors) {
 
     // Local mutexes
     std::mutex pathsMutex;
@@ -702,29 +662,17 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, c
 
     // Update invalid directory paths
     invalidDirectoryPaths.insert(invalidPaths.begin(), invalidPaths.end());
-
+	
+	verboseFind(invalidDirectoryPaths, processedErrors);
+	
+	if (!invalidPaths.empty()) {
+            std::cout << "\n";
+        }
+	
     // Print success message if files were found
     if (!fileNames.empty()) {
         auto end_time = std::chrono::high_resolution_clock::now();
-        std::cout << "\n";
-
-        verboseFind(invalidDirectoryPaths, gapSet);
-        std::cout << "\n";
-
-        
-        
-        if (!invalidPaths.empty()) {
-            std::cout << "\n";
-        }
-        
-        if (!processedErrors.empty()) {
-			for (const auto& errorMsg : processedErrors) {
-				std::cout << errorMsg << "\n";
-			}
-		}
-        if (!processedErrors.empty()) {
-			std::cout << "\n";
-		}
+        std::cout << "\n\n";
 
         if (mode == "bin") {
             std::cout << "\033[1;92mFound " << fileNames.size() << " matching files" << ".\033[1;93m " << binImgFilesCache.size() << " matching files cached in RAM from previous searches.\033[0;1m\n";
@@ -1077,6 +1025,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
     promptFlag = true;
     maxDepth = -1;
 }
+
 
 // Special thanks to the original authors of the conversion tools:
 
