@@ -73,7 +73,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 // stds
 
 // General
-std::string operation_for_processOperationInput(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& mvDelBreak, bool& historyPattern, bool& isDelete, bool& isCopy);
+std::string operation_for_processOperationInput(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& mvDelBreak, bool& historyPattern, bool& isDelete, bool& isCopy, bool& abortDel);
 
 //	ISO COMMANDER
 
