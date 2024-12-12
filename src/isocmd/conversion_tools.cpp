@@ -848,7 +848,7 @@ void printFileList(const std::vector<std::string>& fileList) {
 }
 
 
-// Function to convert a BIN/IMG/MDF file to ISO format
+// Function to convert a BIN/IMG/MDF/NRG file to ISO format
 void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool modeMdf, bool modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern, std::mutex& Mutex4Low) {
 	
 	// Set to store unique directory paths
