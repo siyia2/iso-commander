@@ -356,6 +356,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 }
 
 
+// Function to promtp for userDestDir and Delete confirmation
 std::string promptCpMvRm(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& mvDelBreak, bool& historyPattern, bool& isDelete, bool& isCopy, bool& abortDel) {
 	
 	    auto displaySelectedIsos = [&]() {

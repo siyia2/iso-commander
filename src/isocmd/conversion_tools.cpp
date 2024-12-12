@@ -488,11 +488,7 @@ void processInput( const std::string& input, std::vector<std::string>& fileList,
     std::atomic<bool> isProcessingComplete(false);
 
     int totalTasksValue = totalTasks.load();
-    std::thread progressThread(displayProgressBar, 
-                                std::ref(completedTasks), 
-                                std::cref(totalTasksValue), 
-                                std::ref(isProcessingComplete), 
-                                std::ref(verbose));
+    std::thread progressThread(displayProgressBar, std::ref(completedTasks), std::cref(totalTasksValue), std::ref(isProcessingComplete), std::ref(verbose));
 
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;

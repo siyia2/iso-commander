@@ -354,6 +354,7 @@ bool isNumeric(const std::string& str) {
 }
 
 
+// General function to tokenize input strings
 void tokenizeInput(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, std::vector<int>& processedIndices) {
 	    std::istringstream iss(input);
 	    std::string token;
