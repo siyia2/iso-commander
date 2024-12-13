@@ -40,8 +40,6 @@
 #include <unistd.h>
 
 
-void clearRamCache (bool& modeMdf, bool& modeNrg);
-
 // Get max available CPU cores for global use
 extern unsigned int maxThreads;
 
@@ -115,7 +113,7 @@ void restoreInput();
 void loadHistory(bool& historyPattern);
 void saveHistory(bool& historyPattern);
 void signalHandler(int signum);
-void getRealUserId(const std::vector<std::string>& imageFiles, std::set<std::string>& uniqueDirectories, std::string& result, uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname, std::set<std::string>& uniqueErrors, std::mutex& Mutex4Low);
+void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname,std::set<std::string>& uniqueErrors,std::mutex& Mutex4Low);
 void tokenizeInput(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, std::vector<int>& processedIndices);
 void displayProgressBar(const std::atomic<size_t>& completedIsos, const size_t& totalIsos, std::atomic<bool>& isComplete, bool& verbose);
 void clearScrollBuffer();
@@ -184,6 +182,7 @@ void searchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFlag, int
 void select_and_convert_to_iso(const std::string& fileType, std::vector<std::string>& files, std::vector<std::string>& originalFiles, bool& verbose, bool& promptFlag, int& maxDepth, bool& historyPattern);
 void processInput(const std::string& input, std::vector<std::string>& fileList, bool modeMdf, bool modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose);
 void printFileList(const std::vector<std::string>& fileList);
+void clearRamCache (bool& modeMdf, bool& modeNrg);
 
 
 // CCD2ISO
