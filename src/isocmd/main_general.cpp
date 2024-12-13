@@ -597,8 +597,6 @@ void printIsoFileList(const std::vector<std::string>& isoFiles) {
 }
 
 
-
-
 //	SANITISATION AND STRING STUFF
 
 // Function to escape characters in a string for shell usage
