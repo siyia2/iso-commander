@@ -257,19 +257,19 @@ void submenu2(bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbo
              case '1':
 				clearScrollBuffer();
 				operation = "bin";
-					select_and_convert_files_to_iso(operation, promptFlag, maxDepth, historyPattern, verbose);
+					searchBinImgMdfNrg(operation, promptFlag, maxDepth, historyPattern, verbose);
                 clearScrollBuffer();
                 break;
              case '2':
 				clearScrollBuffer();
 				operation = "mdf";
-					select_and_convert_files_to_iso(operation, promptFlag, maxDepth, historyPattern, verbose);
+					searchBinImgMdfNrg(operation, promptFlag, maxDepth, historyPattern, verbose);
                 clearScrollBuffer();
                 break;
              case '3':
 				clearScrollBuffer();
 				operation = "nrg";
-					select_and_convert_files_to_iso(operation, promptFlag, maxDepth, historyPattern, verbose);
+					searchBinImgMdfNrg(operation, promptFlag, maxDepth, historyPattern, verbose);
                 clearScrollBuffer();
                 break;
 			}
