@@ -484,11 +484,8 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
     
     // Print invalid paths
     if ((!uniqueErrorMessages.empty() || !invalidPaths.empty()) && promptFlag) {
-		if (!validPaths.empty()) {
+		if (!invalidPaths.empty()) {
 			std::cout << "\n\n\033[0;1mInvalid paths omitted from search: \033[1;91m";
-		} else {
-			std::cout << "\n\033[0;1mInvalid paths omitted from search: \033[1;91m";
-		}
 			auto it = invalidPaths.begin();
 			while (it != invalidPaths.end()) {
 				std::cout << "'" << *it << "'";
@@ -498,6 +495,7 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 				}
 			}
 			std::cout << "\033[0;1m.";
+		}
     
 		if (!uniqueErrorMessages.empty()) {
 			std::cout << "\n";
@@ -631,9 +629,11 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
             } catch (const std::filesystem::filesystem_error& entryError) {
                 std::string formattedError = std::string("\n\033[1;91mError processing path: ") +
                                               it->path().string() + " - " + entryError.what() + "\033[0;1m";
-                std::lock_guard<std::mutex> errorLock(traverseErrorsMutex);
-                uniqueErrorMessages.insert(formattedError);
-            }
+                if (promptFlag){
+					std::lock_guard<std::mutex> errorLock(traverseErrorsMutex);
+					uniqueErrorMessages.insert(formattedError);
+				}
+			}
         }
         
         if (totalProcessedFiles == 0 && promptFlag) {
@@ -646,8 +646,10 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
     } catch (const std::filesystem::filesystem_error& e) {
         std::string formattedError = std::string("\n\033[1;91mError traversing directory: ") +
                                       path.string() + " - " + e.what() + "\033[0;1m";
-        std::lock_guard<std::mutex> errorLock(traverseErrorsMutex);
-        uniqueErrorMessages.insert(formattedError);
+        if (promptFlag){
+			std::lock_guard<std::mutex> errorLock(traverseErrorsMutex);
+			uniqueErrorMessages.insert(formattedError);
+		}
     }
 
     // Merge leftovers into shared vector at the end
