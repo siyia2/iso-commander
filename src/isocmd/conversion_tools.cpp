@@ -165,6 +165,10 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& pr
         deletedOuts.clear(); 
         processedErrors.clear();
         directoryPaths.clear();
+        invalidDirectoryPaths.clear();
+        uniquePaths.clear();
+        files.clear();
+
 
         // Manage command history
         clear_history();
@@ -192,12 +196,6 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& pr
 
         // Handle cache clearing (similar to original code)
         if (clr) {
-            // Clear all relevant data structures
-            files.clear();
-            directoryPaths.clear();
-            uniquePaths.clear();
-            invalidDirectoryPaths.clear();
-
             if (!modeMdf && !modeNrg) {
                 binImgFilesCache.clear();
                 for (auto it = transformationCache.begin(); it != transformationCache.end();) {
@@ -365,7 +363,9 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& pr
 
 // function to handle conversions for select_and_convert_to_iso
 void handle_file_conversion_for_select_and_convert_to_iso(const std::string& fileType, std::vector<std::string>& files, std::vector<std::string>& originalFiles, bool& verbose, bool& promptFlag, bool& modeMdf, bool& modeNrg, int& maxDepth, bool& historyPattern) {
+    
     std::set<std::string> processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts;
+    
     bool isFiltered = false;
     bool isFilteredButUnchanged = false;
     bool needsScrnClr = true;
