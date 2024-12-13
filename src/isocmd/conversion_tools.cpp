@@ -90,6 +90,52 @@ void verboseFind(std::set<std::string>& invalidDirectoryPaths, std::set<std::str
 	}
 }
 
+void verboseSearchResults(const std::string& fileExtension, std::set<std::string>& fileNames, std::set<std::string>& invalidDirectoryPaths, bool newFilesFound, bool list, int currentCacheOld, const std::vector<std::string>& files, const std::chrono::high_resolution_clock::time_point& start_time, std::set<std::string>& processedErrorsFind) {
+
+    auto end_time = std::chrono::high_resolution_clock::now();
+
+    // Case: Files were found
+    if (!fileNames.empty()) {
+        std::cout << "\n\n";
+        if (!invalidDirectoryPaths.empty()) {
+            std::cout << "\n";
+        }
+        std::cout << "\033[1;92mFound " << fileNames.size() << " matching files";
+        std::cout << ".\033[1;93m " << currentCacheOld << " matching files cached in RAM from previous searches.\033[0;1m\n\n";
+    }
+
+    // Case: No new files were found, but files exist in cache
+    if (!newFilesFound && !files.empty() && !list) {
+        std::cout << "\n";
+        verboseFind(invalidDirectoryPaths, processedErrorsFind);
+        if (processedErrorsFind.empty() || invalidDirectoryPaths.empty()) {
+            std::cout << "\n";
+        }
+        std::cout << "\033[1;91mNo new " << fileExtension << " files over 5MB found. \033[1;92m";
+        std::cout << files.size() << " files are cached in RAM from previous searches.\033[0;1m\n\n";
+    }
+
+    // Case: No files were found
+    if (files.empty() && !list) {
+        verboseFind(invalidDirectoryPaths, processedErrorsFind);
+        std::cout << "\n";
+        if (processedErrorsFind.empty() || invalidDirectoryPaths.empty()) {
+            std::cout << "\n";
+        }
+        std::cout << "\033[1;91mNo " << fileExtension << " files over 5MB found in the specified paths or cached in RAM.\n\033[0;1m\n";
+    }
+    
+    auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+    std::cout << "\033[1mTime Elapsed: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n\n";
+    
+    std::cout << "\033[1;32m↵ to continue...\033[0;1m";
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    clearScrollBuffer();
+    return;
+}
+
+
+
 
 // Function to apply input filtering
 void applyFilter(std::vector<std::string>& files, const std::vector<std::string>& originalFiles, const std::string& fileTypeName, bool& historyPattern) {
@@ -316,60 +362,20 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& pr
 			);
 		}
 		
-	// Print success message if files were found
-    if (!fileNames.empty()) {
-        std::cout << "\n\n";
-        if (!invalidDirectoryPaths.empty()) {
-            std::cout << "\n";
+		if (!fileNames.empty()) {
+			verboseSearchResults(fileExtension, fileNames, invalidDirectoryPaths, 
+                            newFilesFound, list, currentCacheOld, files, start_time, processedErrorsFind);
+                            
 		}
-
-        if (fileTypeName == "BIN/IMG") {
-            std::cout << "\033[1;92mFound " << fileNames.size() << " matching files" << ".\033[1;93m " << currentCacheOld << " matching files cached in RAM from previous searches.\033[0;1m\n";
-        } else if (fileTypeName == "MDF") {
-            std::cout << "\033[1;92mFound " << fileNames.size() << " matching files" << ".\033[1;93m " << currentCacheOld << " matching files cached in RAM from previous searches.\033[0;1m\n";
-        } else if (fileTypeName == "NRG") {
-            std::cout << "\033[1;92mFound " << fileNames.size() << " matching files" << ".\033[1;93m " << currentCacheOld << " matching files cached in RAM from previous searches.\033[0;1m\n";
-        }
-        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        clearScrollBuffer();
-        continue;
-	}
-
-         if (!newFilesFound && !files.empty() && !list) {
-            std::cout << "\n";
-            verboseFind(invalidDirectoryPaths,processedErrorsFind);
-            auto end_time = std::chrono::high_resolution_clock::now();
-            
-            if (processedErrorsFind.empty() || invalidDirectoryPaths.empty()) {
-				std::cout << "\n";
-			}
-								
-            std::cout << "\033[1;91mNo new " << fileExtension << " files over 5MB found. \033[1;92m" << files.size() << " files are cached in RAM from previous searches.\033[0;1m\n\n";
-            auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-            std::cout << "\033[1mTime Elapsed: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n\n";
-            std::cout << "\033[1;32m↵ to continue...\033[0;1m";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        }
-
-        if (files.empty() && !list) {
-            verboseFind(invalidDirectoryPaths, processedErrorsFind);
-            auto end_time = std::chrono::high_resolution_clock::now();
-          
-			std::cout << "\n";
-			
-			if (processedErrorsFind.empty() || invalidDirectoryPaths.empty()) {
-				std::cout << "\n";
-			}
-			
-            std::cout << "\033[1;91mNo " << fileExtension << " files over 5MB found in the specified paths or cached in RAM.\n\033[0;1m\n";
-            auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-            std::cout << "\033[1mTime Elapsed: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n\n";
-            std::cout << "\033[1;32m↵ to continue...\033[0;1m";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            clearScrollBuffer();
-            continue;
-        }
+		if (!newFilesFound && !files.empty() && !list) {
+			verboseSearchResults(fileExtension, fileNames, invalidDirectoryPaths, 
+                            newFilesFound, list, currentCacheOld, files, start_time, processedErrorsFind);
+		}
+		if (files.empty() && !list) {
+			verboseSearchResults(fileExtension, fileNames, invalidDirectoryPaths, 
+                            newFilesFound, list, currentCacheOld, files, start_time, processedErrorsFind);
+		}
+	
 
         // Determine original files based on file type
         originalFiles = (!modeMdf && !modeNrg) ? binImgFilesCache :
