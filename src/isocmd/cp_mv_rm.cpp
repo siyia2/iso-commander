@@ -465,16 +465,12 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
     bool operationSuccessful = true;
 
     // Get the real user ID and group ID (of the user who invoked sudo)
-// Variables for user and environment information
-    std::set<std::string> uniqueDirectories;
-    uid_t real_uid = 0;
-    gid_t real_gid = 0;
+    uid_t real_uid;
+    gid_t real_gid;
     std::string real_username;
     std::string real_groupname;
-    std::string sourceDirsResult;
+    getRealUserId(real_uid, real_gid, real_username, real_groupname, operationErrors, Mutex4Low);
 
-    // Call the modular function to prepare conversion environment
-    getRealUserId(isoFiles, uniqueDirectories, sourceDirsResult, real_uid, real_gid, real_username, real_groupname, operationErrors, Mutex4Low);
     // Vector to store ISO files to operate on
     std::vector<std::string> isoFilesToOperate;
 
