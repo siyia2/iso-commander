@@ -90,6 +90,7 @@ void verboseFind(std::set<std::string>& invalidDirectoryPaths, std::set<std::str
 	}
 }
 
+
 // Function that handles verbose results and timing from select select_and_convert_files_to_iso
 void verboseSearchResults(const std::string& fileExtension, std::set<std::string>& fileNames, std::set<std::string>& invalidDirectoryPaths, bool newFilesFound, bool list, int currentCacheOld, const std::vector<std::string>& files, const std::chrono::high_resolution_clock::time_point& start_time, std::set<std::string>& processedErrorsFind) {
 
@@ -416,25 +417,15 @@ void handle_file_conversion_for_select_and_convert_to_iso(const std::string& fil
         deletedOuts.clear();
 
         // Cache emptiness checks remain the same as in original code
-        if (binImgFilesCache.empty() && !modeMdf && !modeNrg) {
-                std::cout << "\n\033[1;93mNo " << fileExtension << " file entries stored in RAM cache for potential ISO conversions.\033[1m\n";
-                std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                clearScrollBuffer();
-                break;
-            } else if (mdfMdsFilesCache.empty() && modeMdf) {
-                std::cout << "\n\033[1;93mNo " << fileExtension << " file entries stored in RAM cache for potential ISO conversions.\033[1m\n";
-                std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                clearScrollBuffer();
-                break;
-            } else if (nrgFilesCache.empty() && modeNrg) {
-                std::cout << "\n\033[1;93mNo " << fileExtension << " file entries stored in RAM cache for potential ISO conversions.\033[1m\n";
-                std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                clearScrollBuffer();
-                break;
-            }
+        if ((binImgFilesCache.empty() && !modeMdf && !modeNrg) || (mdfMdsFilesCache.empty() && modeMdf) || (nrgFilesCache.empty() && modeNrg)) {
+    
+			std::cout << "\n\033[1;93mNo " << fileExtension << " file entries stored in RAM cache for potential ISO conversions.\033[1m\n";
+			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			
+			clearScrollBuffer();
+			break;
+		}	
 
         if (needsScrnClr) {
             clearScrollBuffer();
@@ -459,7 +450,7 @@ void handle_file_conversion_for_select_and_convert_to_iso(const std::string& fil
             continue;
         }
 
-        // Exit conditions and list reset logic remain the same as in original code
+        // Exit conditions and list reset logic
         if (std::isspace(rawInput.get()[0]) || rawInput.get()[0] == '\0') {
             clearScrollBuffer();
             if (isFiltered && !isFilteredButUnchanged) {
@@ -524,6 +515,7 @@ void handle_file_conversion_for_select_and_convert_to_iso(const std::string& fil
         }
     }
 }
+
 
 // Function to process user input and convert selected BIN/MDF/NRG files to ISO format
 void processInput( const std::string& input, std::vector<std::string>& fileList, bool modeMdf, bool modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
