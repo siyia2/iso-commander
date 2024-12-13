@@ -292,14 +292,20 @@ void searchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFlag, int
 
         // Handle cache clearing (similar to original code)
         if (clr) {
-			
 			clearRamCache(modeMdf, modeNrg);
 			continue;
 
 		}
-
-        // Return cached files if list is requested
-        if (list && !modeMdf && !modeNrg) {
+		 // Ram Cache emptiness checks and returns
+        if (((binImgFilesCache.empty() && !modeMdf && !modeNrg) || (mdfMdsFilesCache.empty() && modeMdf) || (nrgFilesCache.empty() && modeNrg)) && list) {
+    
+			std::cout << "\n\033[1;93mNo " << fileExtension << " file entries stored in RAM cache for potential ISO conversions.\033[1m\n";
+			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			clearScrollBuffer();
+			list = false;
+			continue;
+		} else if (list && !modeMdf && !modeNrg) {
             files = binImgFilesCache;
         } else if (list && modeMdf) {
             files = mdfMdsFilesCache;
@@ -365,7 +371,7 @@ void searchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFlag, int
 			);
 		}
 		
-		if (!fileNames.empty()) {
+		if (!fileNames.empty() && !list) {
 			verboseSearchResults(fileExtension, fileNames, invalidDirectoryPaths, 
                             newFilesFound, list, currentCacheOld, files, start_time, processedErrorsFind);
                             
@@ -386,13 +392,13 @@ void searchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFlag, int
 
         // File conversion workflow (using new modular function)
         select_and_convert_to_iso(fileType, files, originalFiles, verbose, 
-                                promptFlag, modeMdf, modeNrg, maxDepth, historyPattern);
+                                promptFlag, maxDepth, historyPattern);
     }
 }
 
 
 // Function to handle conversions for select_and_convert_to_iso
-void select_and_convert_to_iso(const std::string& fileType, std::vector<std::string>& files, std::vector<std::string>& originalFiles, bool& verbose, bool& promptFlag, bool& modeMdf, bool& modeNrg, int& maxDepth, bool& historyPattern) {
+void select_and_convert_to_iso(const std::string& fileType, std::vector<std::string>& files, std::vector<std::string>& originalFiles, bool& verbose, bool& promptFlag, int& maxDepth, bool& historyPattern) {
     
     std::set<std::string> processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts;
     
@@ -415,17 +421,6 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         skippedOuts.clear(); 
         failedOuts.clear(); 
         deletedOuts.clear();
-
-        // Cache emptiness checks
-        if ((binImgFilesCache.empty() && !modeMdf && !modeNrg) || (mdfMdsFilesCache.empty() && modeMdf) || (nrgFilesCache.empty() && modeNrg)) {
-    
-			std::cout << "\n\033[1;93mNo " << fileExtension << " file entries stored in RAM cache for potential ISO conversions.\033[1m\n";
-			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-			
-			clearScrollBuffer();
-			break;
-		}	
 
         if (needsScrnClr) {
             clearScrollBuffer();
@@ -478,8 +473,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
             }
 
             // Update filter status based on file type
-            std::vector<std::string>& cacheRef = (fileType == "bin" || fileType == "img") ? binImgFilesCache :
-                                                  (fileType == "mdf" ? mdfMdsFilesCache : nrgFilesCache);
+            std::vector<std::string>& cacheRef = (fileType == "bin" || fileType == "img") ? binImgFilesCache : (fileType == "mdf" ? mdfMdsFilesCache : nrgFilesCache);
 
             if (cacheRef.size() == files.size() || files.size() == originalFiles.size()) {
                 isFilteredButUnchanged = true;
@@ -491,18 +485,13 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
             clearScrollBuffer();
             std::cout << "\033[1m" << std::endl;
             
-            processInput(mainInputString, files, 
-                         (fileType == "mdf"), (fileType == "nrg"),
-                         processedErrors, successOuts, 
-                         skippedOuts, failedOuts, deletedOuts, 
-                         promptFlag, maxDepth, historyPattern, verbose);
+            processInput(mainInputString, files, (fileType == "mdf"), (fileType == "nrg"), processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, promptFlag, maxDepth, historyPattern, verbose);
             
             clearScrollBuffer();
             std::cout << "\n";
             
             if (verbose) {
-                verboseConversion(processedErrors, successOuts, 
-                                  skippedOuts, failedOuts, deletedOuts);
+                verboseConversion(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts);
             }
         }
     }
