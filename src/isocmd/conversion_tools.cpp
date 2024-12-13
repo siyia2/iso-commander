@@ -90,6 +90,7 @@ void verboseFind(std::set<std::string>& invalidDirectoryPaths, std::set<std::str
 	}
 }
 
+// Function that handles verbose results and timing from select select_and_convert_files_to_iso
 void verboseSearchResults(const std::string& fileExtension, std::set<std::string>& fileNames, std::set<std::string>& invalidDirectoryPaths, bool newFilesFound, bool list, int currentCacheOld, const std::vector<std::string>& files, const std::chrono::high_resolution_clock::time_point& start_time, std::set<std::string>& processedErrorsFind) {
 
     auto end_time = std::chrono::high_resolution_clock::now();
@@ -166,6 +167,7 @@ void applyFilter(std::vector<std::string>& files, const std::vector<std::string>
     }
 }
 
+// Function to clear Ram Cache and memory transformations for bin/img mdf nrg files
 void clearRamCache (bool& modeMdf, bool& modeNrg) {
 
     std::vector<std::string> extensions;
