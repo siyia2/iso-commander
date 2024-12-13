@@ -354,6 +354,7 @@ bool isNumeric(const std::string& str) {
 }
 
 
+// Function to get the sudo invoker ID
 void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname,std::set<std::string>& uniqueErrors,std::mutex& Mutex4Low) {
 
     // Get the real user ID and group ID (of the user who invoked sudo)
