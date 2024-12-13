@@ -30,6 +30,15 @@ std::vector<size_t> boyerMooreSearch(const std::string& pattern, const std::stri
     if (patternLen == 0 || textLen == 0 || patternLen > textLen) 
         return {};
     
+    // Single character optimization
+    if (patternLen == 1) {
+        std::vector<size_t> matches;
+        for (size_t i = 0; i < textLen; ++i) 
+            if (text[i] == pattern[0]) 
+                matches.push_back(i);
+        return matches;
+    }
+    
     // Preprocess bad character shifts
     std::vector<size_t> badCharShifts(256, patternLen);
     for (size_t i = 0; i < patternLen - 1; ++i) 
