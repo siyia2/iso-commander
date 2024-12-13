@@ -217,6 +217,7 @@ void unmountISOs(bool& historyPattern, bool& verbose) {
     bool clr = true;
     std::vector<std::string> filteredIsoDirs;
     filteredIsoDirs.reserve(100);
+    isoDirs.reserve(100);
 
     while (true) {
 		// Verbose output is to be disabled unless specified by progressbar function downstream
