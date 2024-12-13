@@ -50,44 +50,42 @@ void verboseConversion(std::set<std::string>& processedErrors, std::set<std::str
 
 // Function to print invalid directory paths from search
 void verboseFind(std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrorsFind) {
-	if (!invalidDirectoryPaths.empty() || !processedErrorsFind.empty()) {
 			std::cout << "\n";
-		
-        if (!processedErrorsFind.empty()) {
-			std::cout << "\n";
-			for (const auto& errorMsg : processedErrorsFind) {
-				std::cout << errorMsg << "\n";
-			}
 			
-			if (!invalidDirectoryPaths.empty()) {
+	if (!invalidDirectoryPaths.empty()) {
 				std::cout << "\n";
-			} else {
-				std::cout << "\033[K\033[1A";
-			}
-		}
-		if (!invalidDirectoryPaths.empty()) {
-			if (processedErrorsFind.empty()) {
-				std::cout << "\n";
-			}
 		std::cout << "\033[0;1mInvalid paths omitted from search: \033[1:91m";
 
-			for (auto it = invalidDirectoryPaths.begin(); it != invalidDirectoryPaths.end(); ++it) {
-				if (it == invalidDirectoryPaths.begin()) {
-					std::cerr << "\033[31m'"; // Red color for the first quote
-				} else {
-					std::cerr << "'";
-				}
-				std::cerr << *it << "'";
-				// Check if it's not the last element
-				if (std::next(it) != invalidDirectoryPaths.end()) {
-					std::cerr << " ";
-				}
-			}std::cerr << "\033[0;1m."; // Print a newline at the end
-		}
-		
-		invalidDirectoryPaths.clear();
-		processedErrorsFind.clear();
+		for (auto it = invalidDirectoryPaths.begin(); it != invalidDirectoryPaths.end(); ++it) {
+			if (it == invalidDirectoryPaths.begin()) {
+				std::cerr << "\033[31m'"; // Red color for the first quote
+			} else {
+				std::cerr << "'";
+			}
+			std::cerr << *it << "'";
+			// Check if it's not the last element
+			if (std::next(it) != invalidDirectoryPaths.end()) {
+				std::cerr << " ";
+			}
+		}std::cerr << "\033[0;1m."; // Print a newline at the end
 	}
+		
+    if (!processedErrorsFind.empty()) {
+		if ((!invalidDirectoryPaths.empty())) {
+			std::cout << "\n";
+		}
+		std::cout << "\n";
+		for (const auto& errorMsg : processedErrorsFind) {
+			std::cout << errorMsg << "\n";
+		}
+			
+		if (!invalidDirectoryPaths.empty()) {
+			std::cout << "\033[K\033[1A";
+		}
+	}
+		
+	invalidDirectoryPaths.clear();
+	processedErrorsFind.clear();
 }
 
 
@@ -98,32 +96,21 @@ void verboseSearchResults(const std::string& fileExtension, std::set<std::string
 
     // Case: Files were found
     if (!fileNames.empty()) {
-        std::cout << "\n\n";
-        if (!invalidDirectoryPaths.empty()) {
-            std::cout << "\n";
-        }
-        std::cout << "\033[1;92mFound " << fileNames.size() << " matching files";
+        
+        std::cout << "\n\033[1;92mFound " << fileNames.size() << " matching files";
         std::cout << ".\033[1;93m " << currentCacheOld << " matching files cached in RAM from previous searches.\033[0;1m\n\n";
     }
 
     // Case: No new files were found, but files exist in cache
     if (!newFilesFound && !files.empty() && !list) {
-        std::cout << "\n";
         verboseFind(invalidDirectoryPaths, processedErrorsFind);
-        if (processedErrorsFind.empty() || invalidDirectoryPaths.empty()) {
-            std::cout << "\n";
-        }
-        std::cout << "\033[1;91mNo new " << fileExtension << " files over 5MB found. \033[1;92m";
+        std::cout << "\n\033[1;91mNo new " << fileExtension << " files over 5MB found. \033[1;92m";
         std::cout << files.size() << " files are cached in RAM from previous searches.\033[0;1m\n\n";
     }
 
     // Case: No files were found
     if (files.empty() && !list) {
         verboseFind(invalidDirectoryPaths, processedErrorsFind);
-        std::cout << "\n";
-        if (processedErrorsFind.empty() || invalidDirectoryPaths.empty()) {
-            std::cout << "\n";
-        }
         std::cout << "\033[1;91mNo " << fileExtension << " files over 5MB found in the specified paths or cached in RAM.\n\033[0;1m\n";
     }
     
@@ -372,17 +359,15 @@ void searchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFlag, int
 		}
 		
 		if (!fileNames.empty() && !list) {
-			verboseSearchResults(fileExtension, fileNames, invalidDirectoryPaths, 
-                            newFilesFound, list, currentCacheOld, files, start_time, processedErrorsFind);
+			verboseSearchResults(fileExtension, fileNames, invalidDirectoryPaths, newFilesFound, list, currentCacheOld, files, start_time, processedErrorsFind);
                             
 		}
 		if (!newFilesFound && !files.empty() && !list) {
-			verboseSearchResults(fileExtension, fileNames, invalidDirectoryPaths, 
-                            newFilesFound, list, currentCacheOld, files, start_time, processedErrorsFind);
+			verboseSearchResults(fileExtension, fileNames, invalidDirectoryPaths, newFilesFound, list, currentCacheOld, files, start_time, processedErrorsFind);
 		}
 		if (files.empty() && !list) {
-			verboseSearchResults(fileExtension, fileNames, invalidDirectoryPaths, 
-                            newFilesFound, list, currentCacheOld, files, start_time, processedErrorsFind);
+			verboseSearchResults(fileExtension, fileNames, invalidDirectoryPaths, newFilesFound, list, currentCacheOld, files, start_time, processedErrorsFind);
+            continue;
 		}
 	
 
