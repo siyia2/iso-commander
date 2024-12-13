@@ -183,8 +183,6 @@ void verboseConversions(const std::string& type, const std::string& directory, c
 }
 
 
-
-
 // Function to apply input filtering
 void applyFilter(std::vector<std::string>& files, const std::vector<std::string>& originalFiles, const std::string& fileTypeName, bool& historyPattern) {
     while (true) {
