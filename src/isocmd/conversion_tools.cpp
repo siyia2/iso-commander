@@ -213,7 +213,7 @@ void clearRamCache (bool& modeMdf, bool& modeNrg) {
 
 
 // Function to select and convert files based on user's choice of file type
-void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
+void searchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
     // Prepare containers for files and caches
     std::vector<std::string> files, originalFiles;
     files.reserve(100);
@@ -385,14 +385,14 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& pr
                        (modeMdf ? mdfMdsFilesCache : nrgFilesCache);
 
         // File conversion workflow (using new modular function)
-        handle_file_conversion_for_select_and_convert_to_iso(fileType, files, originalFiles, verbose, 
+        select_and_convert_to_iso(fileType, files, originalFiles, verbose, 
                                 promptFlag, modeMdf, modeNrg, maxDepth, historyPattern);
     }
 }
 
 
-// function to handle conversions for select_and_convert_to_iso
-void handle_file_conversion_for_select_and_convert_to_iso(const std::string& fileType, std::vector<std::string>& files, std::vector<std::string>& originalFiles, bool& verbose, bool& promptFlag, bool& modeMdf, bool& modeNrg, int& maxDepth, bool& historyPattern) {
+// Function to handle conversions for select_and_convert_to_iso
+void select_and_convert_to_iso(const std::string& fileType, std::vector<std::string>& files, std::vector<std::string>& originalFiles, bool& verbose, bool& promptFlag, bool& modeMdf, bool& modeNrg, int& maxDepth, bool& historyPattern) {
     
     std::set<std::string> processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts;
     
@@ -504,14 +504,6 @@ void handle_file_conversion_for_select_and_convert_to_iso(const std::string& fil
                 verboseConversion(processedErrors, successOuts, 
                                   skippedOuts, failedOuts, deletedOuts);
             }
-            
-            if (!processedErrors.empty() && successOuts.empty() && 
-                skippedOuts.empty() && failedOuts.empty() && deletedOuts.empty()) {
-                clearScrollBuffer();
-                std::cout << "\n\033[1;91mNo valid input provided for ISO conversion.\033[0;1m";
-                std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
-                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            }
         }
     }
 }
@@ -526,6 +518,15 @@ void processInput( const std::string& input, std::vector<std::string>& fileList,
     // Tokenize the input string to identify files to process
     std::vector<int> processedIndices;
     tokenizeInput(input, fileList, processedErrors, processedIndices);
+    
+    if (processedIndices.empty()) {
+        clearScrollBuffer();
+        std::cout << "\n\033[1;91mNo valid indices for conversion.\033[1;91m\n";
+        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        clear_history();
+        return;
+    }
 
     unsigned int numThreads = std::min(static_cast<unsigned int>(processedIndices.size()), std::thread::hardware_concurrency());
     std::vector<std::vector<size_t>> indexChunks;
