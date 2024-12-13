@@ -120,6 +120,48 @@ void applyFilter(std::vector<std::string>& files, const std::vector<std::string>
     }
 }
 
+void clearRamCache (bool& modeMdf, bool& modeNrg) {
+
+    std::vector<std::string> extensions;
+    std::string cacheType;
+
+    if (!modeMdf && !modeNrg) {
+        extensions = {".bin", ".img"};
+        binImgFilesCache.clear();
+        cacheType = "BIN/IMG";
+    } else if (modeMdf) {
+        extensions = {".mdf"};
+        mdfMdsFilesCache.clear();
+        cacheType = "MDF";
+    } else if (modeNrg) {
+        extensions = {".nrg"};
+        nrgFilesCache.clear();
+        cacheType = "NRG";
+    }
+
+    // Manually remove items with matching extensions
+    for (auto it = transformationCache.begin(); it != transformationCache.end();) {
+        const std::string& key = it->first;
+        bool shouldErase = std::any_of(extensions.begin(), extensions.end(), 
+            [&key](const std::string& ext) {
+                return key.size() >= ext.size() && 
+                       key.compare(key.size() - ext.size(), ext.size(), ext) == 0;
+            });
+        
+        if (shouldErase) {
+            it = transformationCache.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    std::cout << "\n\033[1;92m" << cacheType << " RAM cache cleared.\033[0;1m\n";
+    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    clearScrollBuffer();
+    
+}
+
 
 // Function to select and convert files based on user's choice of file type
 void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
@@ -129,12 +171,14 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& pr
     binImgFilesCache.reserve(100);
     mdfMdsFilesCache.reserve(100);
     
-    // Tracking sets
+    int currentCacheOld = 0;
+    
+    // Tracking sets and vectors
     std::vector<std::string> directoryPaths;
     std::set<std::string> uniquePaths, processedErrors, processedErrorsFind, successOuts, 
                            skippedOuts, failedOuts, deletedOuts, 
-                           invalidDirectoryPaths;
-    
+                           invalidDirectoryPaths, fileNames;
+                           
     // Control flags
     std::string fileExtension, fileTypeName, fileType = fileTypeChoice;
     bool modeMdf = (fileType == "mdf");
@@ -157,6 +201,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& pr
 
     // Main processing loop
     while (true) {
+		
         // Reset control flags and clear tracking sets
         bool list = false, clr = false;
         successOuts.clear(); 
@@ -168,6 +213,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& pr
         invalidDirectoryPaths.clear();
         uniquePaths.clear();
         files.clear();
+        fileNames.clear();
         processedErrorsFind.clear();
 
 
@@ -197,49 +243,11 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& pr
 
         // Handle cache clearing (similar to original code)
         if (clr) {
-            if (!modeMdf && !modeNrg) {
-                binImgFilesCache.clear();
-                for (auto it = transformationCache.begin(); it != transformationCache.end();) {
-                    const std::string& key = it->first;
-                    if ((key.size() >= 4 && key.compare(key.size() - 4, 4, ".bin") == 0) || 
-                    (key.size() >= 4 && key.compare(key.size() - 4, 4, ".img") == 0))
-                    {
-                        it = transformationCache.erase(it);
-                    } else {
-                        ++it;
-                    }
-                }
-                std::cout << "\n\033[1;92mBIN/IMG RAM cache cleared.\033[0;1m\n";
-            } else if (modeMdf) {
-                mdfMdsFilesCache.clear();
-                for (auto it = transformationCache.begin(); it != transformationCache.end();) {
-                    const std::string& key = it->first;
-                    if ((key.size() >= 4 && key.compare(key.size() - 4, 4, ".mdf") == 0))
-                    {
-                        it = transformationCache.erase(it);
-                    } else {
-                        ++it;
-                    }
-                }
-                std::cout << "\n\033[1;92mMDF RAM cache cleared.\033[0;1m\n";
-            } else if (modeNrg) {
-                nrgFilesCache.clear();
-                for (auto it = transformationCache.begin(); it != transformationCache.end();) {
-                    const std::string& key = it->first;
-                    if ((key.size() >= 4 && key.compare(key.size() - 4, 4, ".nrg") == 0))
-                    {
-                        it = transformationCache.erase(it);
-                    } else {
-                        ++it;
-                    }
-                }
-                std::cout << "\n\033[1;92mNRG RAM cache cleared.\033[0;1m\n";
-            }
-            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            clearScrollBuffer();
-            continue;
-        }
+			
+			clearRamCache(modeMdf, modeNrg);
+			continue;
+
+		}
 
         // Return cached files if list is requested
         if (list && !modeMdf && !modeNrg) {
@@ -299,7 +307,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& pr
 			}
     
 			// Find files with updated logic from the separate function
-			files = findFiles(directoryPaths, fileType, 
+			files = findFiles(directoryPaths, fileNames, currentCacheOld, fileType, 
 				[&](const std::string&, const std::string&) {
 					newFilesFound = true;
 				}, 
@@ -307,6 +315,26 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& pr
 				processedErrorsFind 
 			);
 		}
+		
+	// Print success message if files were found
+    if (!fileNames.empty()) {
+        std::cout << "\n\n";
+        if (!invalidDirectoryPaths.empty()) {
+            std::cout << "\n";
+		}
+
+        if (fileTypeName == "BIN/IMG") {
+            std::cout << "\033[1;92mFound " << fileNames.size() << " matching files" << ".\033[1;93m " << currentCacheOld << " matching files cached in RAM from previous searches.\033[0;1m\n";
+        } else if (fileTypeName == "MDF") {
+            std::cout << "\033[1;92mFound " << fileNames.size() << " matching files" << ".\033[1;93m " << currentCacheOld << " matching files cached in RAM from previous searches.\033[0;1m\n";
+        } else if (fileTypeName == "NRG") {
+            std::cout << "\033[1;92mFound " << fileNames.size() << " matching files" << ".\033[1;93m " << currentCacheOld << " matching files cached in RAM from previous searches.\033[0;1m\n";
+        }
+        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        clearScrollBuffer();
+        continue;
+	}
 
          if (!newFilesFound && !files.empty() && !list) {
             std::cout << "\n";
@@ -556,7 +584,7 @@ void processInput( const std::string& input, std::vector<std::string>& fileList,
 
 
 // Function to search for .bin .img .nrg and mdf files over 5MB
-std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrorsFind) {
+std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, std::set<std::string>& fileNames, int& currentCacheOld, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrorsFind) {
 
     // Local mutexes
     std::mutex pathsMutex;
@@ -566,12 +594,10 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, c
     
     // Tracking sets and variables
     std::set<std::string> processedValidPaths;
-    std::set<std::string> fileNames;
     unsigned int runningTasks = 0;
     size_t totalFiles = 0;
+    
 
-    // Time tracking
-    auto start_time = std::chrono::high_resolution_clock::now();
 
     // Disable input before processing
     disableInput();
@@ -703,43 +729,21 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, c
 	
 	verboseFind(invalidDirectoryPaths, processedErrorsFind);
 	
-	if (!invalidPaths.empty()) {
-            std::cout << "\n";
-        }
-	
-    // Print success message if files were found
-    if (!fileNames.empty()) {
-        auto end_time = std::chrono::high_resolution_clock::now();
-        std::cout << "\n\n";
-
-        if (mode == "bin") {
-            std::cout << "\033[1;92mFound " << fileNames.size() << " matching files" << ".\033[1;93m " << binImgFilesCache.size() << " matching files cached in RAM from previous searches.\033[0;1m\n";
-        } else if (mode == "mdf") {
-            std::cout << "\033[1;92mFound " << fileNames.size() << " matching files" << ".\033[1;93m " << mdfMdsFilesCache.size() << " matching files cached in RAM from previous searches.\033[0;1m\n";
-        } else if (mode == "nrg") {
-            std::cout << "\033[1;92mFound " << fileNames.size() << " matching files" << ".\033[1;93m " << nrgFilesCache.size() << " matching files cached in RAM from previous searches.\033[0;1m\n";
-        }
-
-        std::cout << "\n";
-        auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-        std::cout << "\033[1mTime Elapsed: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n";
-        std::cout << "\n";
-
-        std::cout << "\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-    }
 
 	// Choose the appropriate cache
     std::set<std::string> currentCacheSet;
     std::vector<std::string>* currentCache = nullptr;
 
     if (mode == "bin") {
+		currentCacheOld = binImgFilesCache.size();
         currentCache = &binImgFilesCache;
         currentCacheSet.insert(binImgFilesCache.begin(), binImgFilesCache.end());
     } else if (mode == "mdf") {
+		currentCacheOld = mdfMdsFilesCache.size();
         currentCache = &mdfMdsFilesCache;
         currentCacheSet.insert(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end());
     } else if (mode == "nrg") {
+		currentCacheOld = nrgFilesCache.size();
         currentCache = &nrgFilesCache;
         currentCacheSet.insert(nrgFilesCache.begin(), nrgFilesCache.end());
     } else {
