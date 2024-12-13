@@ -304,17 +304,9 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& pr
 					newFilesFound = true;
 				}, 
 				invalidDirectoryPaths, 
-				processedErrors 
+				processedErrorsFind 
 			);
 		}
-		
-		if (directoryPaths.empty() && !invalidDirectoryPaths.empty()) {
-            std::cout << "\n\n\033[1;91mNo valid paths provided.\033[0;1m\n";
-            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            clearScrollBuffer();
-            continue;
-        }
 
          if (!newFilesFound && !files.empty() && !list) {
             std::cout << "\n";
@@ -551,7 +543,6 @@ void processInput( const std::string& input, std::vector<std::string>& fileList,
             completedTasks.fetch_add(imageFilesInChunk.size(), std::memory_order_relaxed);
         }));
     }
-    
 
     // Wait for all threads to complete
     for (auto& future : futures) {
