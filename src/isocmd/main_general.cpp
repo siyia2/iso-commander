@@ -353,29 +353,9 @@ bool isNumeric(const std::string& str) {
     });
 }
 
-// Function to real user ID when running as sudo
-void getRealUserId(const std::vector<std::string>& imageFiles, std::set<std::string>& uniqueDirectories, std::string& result, uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname,std::set<std::string>& uniqueErrors,std::mutex& Mutex4Low) {
-    // Set to store unique directory paths
-    uniqueDirectories.clear();
-    
-    // Iterate over image files
-    for (const auto& filePath : imageFiles) {
-        // Use std::filesystem to get the directory path
-        std::filesystem::path path(filePath);
-        if (path.has_parent_path()) {
-            uniqueDirectories.insert(path.parent_path().string());
-        }
-    }
 
-    // Concatenate unique directory paths with ';'
-    result.clear();
-    for (const auto& dir : uniqueDirectories) {
-        if (!result.empty()) {
-            result += ";";
-        }
-        result += dir;
-    }
-	
+void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname,std::set<std::string>& uniqueErrors,std::mutex& Mutex4Low) {
+
     // Get the real user ID and group ID (of the user who invoked sudo)
     const char* sudo_uid = std::getenv("SUDO_UID");
     const char* sudo_gid = std::getenv("SUDO_GID");
@@ -413,6 +393,7 @@ void getRealUserId(const std::vector<std::string>& imageFiles, std::set<std::str
     }
     real_groupname = gr->gr_name;
 }
+
 
 
 // General function to tokenize input strings

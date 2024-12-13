@@ -950,41 +950,11 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
     // Get the real user ID and group ID (of the user who invoked sudo)
     uid_t real_uid;
     gid_t real_gid;
-    const char* sudo_uid = std::getenv("SUDO_UID");
-    const char* sudo_gid = std::getenv("SUDO_GID");
+    std::string real_username;
+    std::string real_groupname;
+    
+    getRealUserId(real_uid, real_gid, real_username, real_groupname, failedOuts, Mutex4Low);
 
-    if (sudo_uid && sudo_gid) {
-        try {
-            real_uid = static_cast<uid_t>(std::stoul(sudo_uid));
-            real_gid = static_cast<gid_t>(std::stoul(sudo_gid));
-        } catch (const std::exception& e) {
-            std::lock_guard<std::mutex> lock(Mutex4Low);
-            failedOuts.insert("\033[1;91mError parsing SUDO_UID or SUDO_GID environment variables.\033[0;1m");
-            return;
-        }
-    } else {
-        // Fallback to current effective user if not running with sudo
-        real_uid = geteuid();
-        real_gid = getegid();
-    }
-
-    // Get real user's name
-    struct passwd *pw = getpwuid(real_uid);
-    if (pw == nullptr) {
-        std::lock_guard<std::mutex> lock(Mutex4Low);
-        failedOuts.insert("\033[1;91mError getting user information: " + std::string(strerror(errno)) + "\033[0;1m");
-        return;
-    }
-    std::string real_username(pw->pw_name);
-
-    // Get real group name
-    struct group *gr = getgrgid(real_gid);
-    if (gr == nullptr) {
-        std::lock_guard<std::mutex> lock(Mutex4Low);
-        failedOuts.insert("\033[1;91mError getting group information: " + std::string(strerror(errno)) + "\033[0;1m");
-        return;
-    }
-    std::string real_groupname(gr->gr_name);
 
     // Iterate over each image file
     for (const std::string& inputPath : imageFiles) {
