@@ -489,24 +489,24 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 		} else {
 			std::cout << "\n\033[0;1mInvalid paths omitted from search: \033[1;91m";
 		}
-		auto it = invalidPaths.begin();
-		while (it != invalidPaths.end()) {
-			std::cout << "'" << *it << "'";
-			++it;
-			if (it != invalidPaths.end()) {
-				std::cout << " ";  // Add space between paths, but not after the last one.
+			auto it = invalidPaths.begin();
+			while (it != invalidPaths.end()) {
+				std::cout << "'" << *it << "'";
+				++it;
+				if (it != invalidPaths.end()) {
+					std::cout << " ";  // Add space between paths, but not after the last one.
+				}
 			}
-		}
-		std::cout << "\033[0;1m.";
-	}
+			std::cout << "\033[0;1m.";
     
-    if (!uniqueErrorMessages.empty()) {
-		std::cout << "\n";
-	}
+		if (!uniqueErrorMessages.empty()) {
+			std::cout << "\n";
+		}
 
-    for (const auto& error : uniqueErrorMessages) {
-        std::cout << error;
-    }
+		for (const auto& error : uniqueErrorMessages) {
+			std::cout << error;
+		}
+	}
 
     // Save the combined cache to disk
     bool saveSuccess = saveCache(allIsoFiles, maxCacheSize);
