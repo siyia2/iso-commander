@@ -50,10 +50,9 @@ void verboseConversion(std::set<std::string>& processedErrors, std::set<std::str
 
 // Function to print invalid directory paths from search
 void verboseFind(std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrorsFind) {
-			std::cout << "\n";
 			
 	if (!invalidDirectoryPaths.empty()) {
-				std::cout << "\n";
+				std::cout << "\n\n";
 		std::cout << "\033[0;1mInvalid paths omitted from search: \033[1:91m";
 
 		for (auto it = invalidDirectoryPaths.begin(); it != invalidDirectoryPaths.end(); ++it) {
@@ -70,17 +69,11 @@ void verboseFind(std::set<std::string>& invalidDirectoryPaths, std::set<std::str
 		}std::cerr << "\033[0;1m."; // Print a newline at the end
 	}
 		
-    if (!processedErrorsFind.empty()) {
-		if ((!invalidDirectoryPaths.empty())) {
+    if (!processedErrorsFind.empty()) {	
 			std::cout << "\n";
-		}
 		std::cout << "\n";
 		for (const auto& errorMsg : processedErrorsFind) {
-			std::cout << errorMsg << "\n";
-		}
-			
-		if (!invalidDirectoryPaths.empty()) {
-			std::cout << "\033[K\033[1A";
+			std::cout << errorMsg;
 		}
 	}
 		
@@ -96,21 +89,31 @@ void verboseSearchResults(const std::string& fileExtension, std::set<std::string
 
     // Case: Files were found
     if (!fileNames.empty()) {
+
+		if (processedErrorsFind.empty()) {
+			std::cout << "\n\n";
+		}
+        std::cout << "\033[1;92mFound " << fileNames.size() << " matching files.\033[1;93m " << currentCacheOld << " matching files cached in RAM from previous searches.\033[0;1m\n\n";
         
-        std::cout << "\n\033[1;92mFound " << fileNames.size() << " matching files";
-        std::cout << ".\033[1;93m " << currentCacheOld << " matching files cached in RAM from previous searches.\033[0;1m\n\n";
+        
     }
 
     // Case: No new files were found, but files exist in cache
     if (!newFilesFound && !files.empty() && !list) {
         verboseFind(invalidDirectoryPaths, processedErrorsFind);
-        std::cout << "\n\033[1;91mNo new " << fileExtension << " files over 5MB found. \033[1;92m";
+        if (processedErrorsFind.empty()) {
+			std::cout << "\n\n";
+		}
+        std::cout << "\033[1;91mNo new " << fileExtension << " files over 5MB found. \033[1;92m";
         std::cout << files.size() << " files are cached in RAM from previous searches.\033[0;1m\n\n";
     }
 
     // Case: No files were found
     if (files.empty() && !list) {
         verboseFind(invalidDirectoryPaths, processedErrorsFind);
+		if (processedErrorsFind.empty()) {
+			std::cout << "\n\n";
+		}
         std::cout << "\033[1;91mNo " << fileExtension << " files over 5MB found in the specified paths or cached in RAM.\n\033[0;1m\n";
     }
     
