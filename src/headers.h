@@ -39,7 +39,6 @@
 #include <vector>
 #include <unistd.h>
 
-void tokenizeInput(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, std::vector<int>& processedIndices);
 
 // Get max available CPU cores for global use
 extern unsigned int maxThreads;
@@ -114,6 +113,7 @@ void restoreInput();
 void loadHistory(bool& historyPattern);
 void saveHistory(bool& historyPattern);
 void signalHandler(int signum);
+void tokenizeInput(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, std::vector<int>& processedIndices);
 void displayProgressBar(const std::atomic<size_t>& completedIsos, const size_t& totalIsos, std::atomic<bool>& isComplete, bool& verbose);
 void clearScrollBuffer();
 
