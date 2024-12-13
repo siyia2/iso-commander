@@ -153,6 +153,7 @@ std::string getHomeDirectory();
 std::vector<std::string> loadCache();
 
 // Filter functions
+std::string removeAnsiCodes(const std::string& input);
 std::vector<size_t> boyerMooreSearch(const std::string& pattern, const std::string& text);
 std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query);
 
