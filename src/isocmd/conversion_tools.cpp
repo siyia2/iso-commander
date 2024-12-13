@@ -49,13 +49,13 @@ void verboseConversion(std::set<std::string>& processedErrors, std::set<std::str
 
 
 // Function to print invalid directory paths from search
-void verboseFind(std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrors) {
-	if (!invalidDirectoryPaths.empty() || !processedErrors.empty()) {
+void verboseFind(std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrorsFind) {
+	if (!invalidDirectoryPaths.empty() || !processedErrorsFind.empty()) {
 			std::cout << "\n";
 		
-        if (!processedErrors.empty()) {
+        if (!processedErrorsFind.empty()) {
 			std::cout << "\n";
-			for (const auto& errorMsg : processedErrors) {
+			for (const auto& errorMsg : processedErrorsFind) {
 				std::cout << errorMsg << "\n";
 			}
 			
@@ -66,7 +66,7 @@ void verboseFind(std::set<std::string>& invalidDirectoryPaths, std::set<std::str
 			}
 		}
 		if (!invalidDirectoryPaths.empty()) {
-			if (processedErrors.empty()) {
+			if (processedErrorsFind.empty()) {
 				std::cout << "\n";
 			}
 		std::cout << "\033[0;1mInvalid paths omitted from search: \033[1:91m";
@@ -86,7 +86,7 @@ void verboseFind(std::set<std::string>& invalidDirectoryPaths, std::set<std::str
 		}
 		
 		invalidDirectoryPaths.clear();
-		processedErrors.clear();
+		processedErrorsFind.clear();
 	}
 }
 
@@ -131,7 +131,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& pr
     
     // Tracking sets
     std::vector<std::string> directoryPaths;
-    std::set<std::string> uniquePaths, processedErrors, successOuts, 
+    std::set<std::string> uniquePaths, processedErrors, processedErrorsFind, successOuts, 
                            skippedOuts, failedOuts, deletedOuts, 
                            invalidDirectoryPaths;
     
@@ -168,6 +168,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& pr
         invalidDirectoryPaths.clear();
         uniquePaths.clear();
         files.clear();
+        processedErrorsFind.clear();
 
 
         // Manage command history
@@ -308,7 +309,7 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& pr
 		}
 		
 		if (directoryPaths.empty() && !invalidDirectoryPaths.empty()) {
-            std::cout << "\033[1;91mNo valid paths provided.\033[0;1m\n";
+            std::cout << "\n\n\033[1;91mNo valid paths provided.\033[0;1m\n";
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             clearScrollBuffer();
@@ -317,10 +318,10 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& pr
 
          if (!newFilesFound && !files.empty() && !list) {
             std::cout << "\n";
-            verboseFind(invalidDirectoryPaths,processedErrors);
+            verboseFind(invalidDirectoryPaths,processedErrorsFind);
             auto end_time = std::chrono::high_resolution_clock::now();
             
-            if (processedErrors.empty() || invalidDirectoryPaths.empty()) {
+            if (processedErrorsFind.empty() || invalidDirectoryPaths.empty()) {
 				std::cout << "\n";
 			}
 								
@@ -332,12 +333,12 @@ void select_and_convert_files_to_iso(const std::string& fileTypeChoice, bool& pr
         }
 
         if (files.empty() && !list) {
-            verboseFind(invalidDirectoryPaths, processedErrors);
+            verboseFind(invalidDirectoryPaths, processedErrorsFind);
             auto end_time = std::chrono::high_resolution_clock::now();
           
 			std::cout << "\n";
 			
-			if (processedErrors.empty() || invalidDirectoryPaths.empty()) {
+			if (processedErrorsFind.empty() || invalidDirectoryPaths.empty()) {
 				std::cout << "\n";
 			}
 			
@@ -550,6 +551,7 @@ void processInput( const std::string& input, std::vector<std::string>& fileList,
             completedTasks.fetch_add(imageFilesInChunk.size(), std::memory_order_relaxed);
         }));
     }
+    
 
     // Wait for all threads to complete
     for (auto& future : futures) {
@@ -563,7 +565,7 @@ void processInput( const std::string& input, std::vector<std::string>& fileList,
 
 
 // Function to search for .bin .img .nrg and mdf files over 5MB
-std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrors) {
+std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrorsFind) {
 
     // Local mutexes
     std::mutex pathsMutex;
@@ -619,7 +621,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, c
                 std::lock_guard<std::mutex> lock(futuresMutex);
                 futures.emplace_back(std::async(std::launch::async, 
                     [&callback, path, mode, &fileNames, &invalidPaths, 
-                     &processedErrors, &fileCheckMutex, &fileCountMutex, cache, &totalFiles]() {
+                     &processedErrorsFind, &fileCheckMutex, &fileCountMutex, cache, &totalFiles]() {
                     try {
 							// Flags for blacklisting
 							bool blacklistMdf = (mode == "mdf");
@@ -669,7 +671,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, c
 							std::lock_guard<std::mutex> lock(fileCheckMutex);
 							std::string errorMessage = "\033[1;91mError traversing path: " 
                             + path + " - " + e.what() + "\033[0;1m";
-							processedErrors.insert(errorMessage);
+							processedErrorsFind.insert(errorMessage);
 						}
 					}));
 				++runningTasks;
@@ -708,7 +710,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, c
     // Update invalid directory paths
     invalidDirectoryPaths.insert(invalidPaths.begin(), invalidPaths.end());
 	
-	verboseFind(invalidDirectoryPaths, processedErrors);
+	verboseFind(invalidDirectoryPaths, processedErrorsFind);
 	
 	if (!invalidPaths.empty()) {
             std::cout << "\n";
@@ -779,7 +781,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, c
 }
 
 
-// Blacklist function for MDF BIN IMG
+// Blacklist function for MDF BIN IMG NRG
 bool blacklist(const std::filesystem::path& entry, bool blacklistMdf, bool blacklistNrg) {
     const std::string filenameLower = entry.filename().string();
     const std::string ext = entry.extension().string();
