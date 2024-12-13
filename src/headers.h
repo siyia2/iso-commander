@@ -39,6 +39,7 @@
 #include <vector>
 #include <unistd.h>
 
+
 void clearRamCache (bool& modeMdf, bool& modeNrg);
 
 // Get max available CPU cores for global use
@@ -114,6 +115,7 @@ void restoreInput();
 void loadHistory(bool& historyPattern);
 void saveHistory(bool& historyPattern);
 void signalHandler(int signum);
+void getRealUserId(const std::vector<std::string>& imageFiles, std::set<std::string>& uniqueDirectories, std::string& result, uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname, std::set<std::string>& uniqueErrors, std::mutex& Mutex4Low);
 void tokenizeInput(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, std::vector<int>& processedIndices);
 void displayProgressBar(const std::atomic<size_t>& completedIsos, const size_t& totalIsos, std::atomic<bool>& isComplete, bool& verbose);
 void clearScrollBuffer();
