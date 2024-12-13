@@ -485,6 +485,9 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
     // Print invalid paths
     if ((!uniqueErrorMessages.empty() || !invalidPaths.empty()) && promptFlag) {
 		if (!invalidPaths.empty()) {
+			if (totalProcessedFiles == 0 && validPaths.empty()) {
+				std::cout << "\n\r\033[0;1mTotal files processed: 0" << std::flush;
+			}
 			std::cout << "\n\n\033[0;1mInvalid paths omitted from search: \033[1;91m";
 			auto it = invalidPaths.begin();
 			while (it != invalidPaths.end()) {
@@ -535,7 +538,7 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
     }
     if (saveSuccess && !validPaths.empty() && (!invalidPaths.empty() || !uniqueErrorMessages.empty())) {
         std::cout << "\n";
-        std::cout << "\033[1;93mCache refreshed with errors.\033[0;1m";
+        std::cout << "\033[1;93mCache refreshed with some errors.\033[0;1m";
         std::cout << "\n";
     }
     if (saveSuccess && validPaths.empty() && !invalidPaths.empty()) {
