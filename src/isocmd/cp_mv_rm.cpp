@@ -465,43 +465,16 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
     bool operationSuccessful = true;
 
     // Get the real user ID and group ID (of the user who invoked sudo)
+// Variables for user and environment information
+    std::set<std::string> uniqueDirectories;
     uid_t real_uid = 0;
     gid_t real_gid = 0;
-    const char* sudo_uid = std::getenv("SUDO_UID");
-    const char* sudo_gid = std::getenv("SUDO_GID");
+    std::string real_username;
+    std::string real_groupname;
+    std::string sourceDirsResult;
 
-    if (sudo_uid && sudo_gid) {
-        try {
-            real_uid = std::stoul(sudo_uid);
-            real_gid = std::stoul(sudo_gid);
-        } catch (const std::exception& e) {
-            std::string errorMessage = "\033[1;91mError parsing SUDO_UID/SUDO_GID: " + std::string(e.what()) + "\033[0;1m";
-            {
-                std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                operationErrors.emplace(errorMessage);
-            }
-            operationSuccessful = false;
-            return;
-        }
-    } else {
-        // Fallback to current effective user if not running with sudo
-        real_uid = geteuid();
-        real_gid = getegid();
-    }
-
-    // Get real user's name
-    struct passwd *pw = getpwuid(real_uid);
-    if (pw == nullptr) {
-        std::string errorMessage = "\033[1;91mError getting user information: " + std::string(strerror(errno)) + "\033[0;1m";
-        {
-            std::lock_guard<std::mutex> lowLock(Mutex4Low);
-            operationErrors.emplace(errorMessage);
-        }
-        operationSuccessful = false;
-        return;
-    }
-    std::string real_username(pw->pw_name);
-
+    // Call the modular function to prepare conversion environment
+    getRealUserId(isoFiles, uniqueDirectories, sourceDirsResult, real_uid, real_gid, real_username, real_groupname, operationErrors, Mutex4Low);
     // Vector to store ISO files to operate on
     std::vector<std::string> isoFilesToOperate;
 

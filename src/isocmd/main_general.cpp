@@ -353,6 +353,67 @@ bool isNumeric(const std::string& str) {
     });
 }
 
+// Function to real user ID when running as sudo
+void getRealUserId(const std::vector<std::string>& imageFiles, std::set<std::string>& uniqueDirectories, std::string& result, uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname,std::set<std::string>& uniqueErrors,std::mutex& Mutex4Low) {
+    // Set to store unique directory paths
+    uniqueDirectories.clear();
+    
+    // Iterate over image files
+    for (const auto& filePath : imageFiles) {
+        // Use std::filesystem to get the directory path
+        std::filesystem::path path(filePath);
+        if (path.has_parent_path()) {
+            uniqueDirectories.insert(path.parent_path().string());
+        }
+    }
+
+    // Concatenate unique directory paths with ';'
+    result.clear();
+    for (const auto& dir : uniqueDirectories) {
+        if (!result.empty()) {
+            result += ";";
+        }
+        result += dir;
+    }
+	
+    // Get the real user ID and group ID (of the user who invoked sudo)
+    const char* sudo_uid = std::getenv("SUDO_UID");
+    const char* sudo_gid = std::getenv("SUDO_GID");
+
+    if (sudo_uid && sudo_gid) {
+        try {
+            real_uid = static_cast<uid_t>(std::stoul(sudo_uid));
+            real_gid = static_cast<gid_t>(std::stoul(sudo_gid));
+        } catch (const std::exception& e) {
+            std::lock_guard<std::mutex> lock(Mutex4Low);
+            uniqueErrors.insert("\033[1;91mError parsing SUDO_UID or SUDO_GID environment variables.\033[0;1m");
+            return;
+        }
+    } else {
+        // Fallback to current effective user if not running with sudo
+        real_uid = geteuid();
+        real_gid = getegid();
+    }
+
+    // Get real user's name
+    struct passwd *pw = getpwuid(real_uid);
+    if (pw == nullptr) {
+        std::lock_guard<std::mutex> lock(Mutex4Low);
+        uniqueErrors.insert("\033[1;91mError getting user information: " + std::string(strerror(errno)) + "\033[0;1m");
+        return;
+    }
+    real_username = pw->pw_name;
+
+    // Get real group name
+    struct group *gr = getgrgid(real_gid);
+    if (gr == nullptr) {
+        std::lock_guard<std::mutex> lock(Mutex4Low);
+        uniqueErrors.insert("\033[1;91mError getting group information: " + std::string(strerror(errno)) + "\033[0;1m");
+        return;
+    }
+    real_groupname = gr->gr_name;
+}
+
 
 // General function to tokenize input strings
 void tokenizeInput(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, std::vector<int>& processedIndices) {
