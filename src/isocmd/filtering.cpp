@@ -88,6 +88,23 @@ std::vector<size_t> boyerMooreSearch(const std::string& pattern, const std::stri
 }
 
 
+// Remove AnsiCodes from filenames
+std::string removeAnsiCodes(const std::string& input) {
+    std::string result;
+    for (size_t i = 0; i < input.length(); ++i) {
+        if (input[i] == '\033' && i + 1 < input.length() && input[i+1] == '[') {
+            // Skip the entire ANSI escape sequence
+            while (i < input.length() && !isalpha(input[i])) {
+                ++i;
+            }
+        } else {
+            result += input[i];
+        }
+    }
+    return result;
+}
+
+
 // Function to filter cached ISO files or mountpoints based on search query (case-insensitive)
 std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query) {
     std::vector<std::string> filteredFiles;
@@ -99,34 +116,33 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
     
     while (std::getline(ss, token, ';')) {
         toLowerInPlace(token);
-        if (token.length() > 1) { // Only insert if length is greater than 1
-            queryTokens.insert(token);
-        }
+        queryTokens.insert(token);
     }
 
     // This mutex will only be used for the final merge
     std::mutex filterMutex;
 
     auto filterTask = [&](size_t start, size_t end) {
-        std::vector<std::string> localFilteredFiles;
-        for (size_t i = start; i < end; ++i) {
-            const std::string& file = files[i];
-            std::string fileName = file;  // Copy the file name
-            toLowerInPlace(fileName);     // Convert once to lowercase
+    std::vector<std::string> localFilteredFiles;
+    for (size_t i = start; i < end; ++i) {
+        const std::string& file = files[i];
+        std::string cleanFileName = removeAnsiCodes(file);  // Remove ANSI codes first
+        std::string fileName = cleanFileName;  // Copy the clean file name
+        toLowerInPlace(fileName);  // Convert once to lowercase
 
-            // Check if any of the query tokens is found in the file name
-            bool matchFound = false;
-            for (const std::string& queryToken : queryTokens) {
-                if (!boyerMooreSearch(queryToken, fileName).empty()) {
-                    matchFound = true;
-                    break;
-                }
-            }
-
-            if (matchFound) {
-                localFilteredFiles.push_back(file);
+        // Check if any of the query tokens is found in the file name
+        bool matchFound = false;
+        for (const std::string& queryToken : queryTokens) {
+            if (!boyerMooreSearch(queryToken, fileName).empty()) {
+                matchFound = true;
+                break;
             }
         }
+
+        if (matchFound) {
+            localFilteredFiles.push_back(file);  // Push back the original file name with color codes
+        }
+    }
 
         // Merge local results into the global filteredFiles vector
         std::lock_guard<std::mutex> lock(filterMutex);
