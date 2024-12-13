@@ -416,7 +416,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         failedOuts.clear(); 
         deletedOuts.clear();
 
-        // Cache emptiness checks remain the same as in original code
+        // Cache emptiness checks
         if ((binImgFilesCache.empty() && !modeMdf && !modeNrg) || (mdfMdsFilesCache.empty() && modeMdf) || (nrgFilesCache.empty() && modeNrg)) {
     
 			std::cout << "\n\033[1;93mNo " << fileExtension << " file entries stored in RAM cache for potential ISO conversions.\033[1m\n";
