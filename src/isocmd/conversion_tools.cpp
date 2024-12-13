@@ -1019,7 +1019,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
             // Attempt to delete the partially created ISO file
             if (std::remove(outputPath.c_str()) == 0) {
                 logVerbose("ISO_DELETED", outDirectory, outFileNameOnly, "", successOuts, skippedOuts, failedOuts, deletedOuts, Mutex4Low);
-            } else {
+            } else if (!modeNrg){
                 logVerbose("ISO_DELETE_FAILED", "", outputPath, "", successOuts, skippedOuts, failedOuts, deletedOuts, Mutex4Low);
             }
         }

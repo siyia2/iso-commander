@@ -396,7 +396,6 @@ void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username,
 }
 
 
-
 // General function to tokenize input strings
 void tokenizeInput(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, std::vector<int>& processedIndices) {
 	    std::istringstream iss(input);
