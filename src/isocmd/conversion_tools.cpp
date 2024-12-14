@@ -203,7 +203,7 @@ void clearRamCache (bool& modeMdf, bool& modeNrg) {
 // Function to select and convert files based on user's choice of file type
 void searchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
     // Prepare containers for files and caches
-    std::vector<std::string> files, originalFiles;
+    std::vector<std::string> files;
     files.reserve(100);
     binImgFilesCache.reserve(100);
     mdfMdsFilesCache.reserve(100);
