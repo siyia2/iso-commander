@@ -267,6 +267,128 @@ bool isValidDirectory(const std::string& path) {
     return std::filesystem::is_directory(path);
 }
 
+
+// Function that can delete or show stats for ISO cache it is called from within manualRefreshCache
+void delCacheAndShowStats (std::string& inputSearch, bool& promptFlag, int& maxDepth, bool& historyPattern) {
+	if (inputSearch == "stats") {
+		try {
+				// Get the file size in bytes
+				std::filesystem::path filePath(cacheFilePath);
+				std::uintmax_t fileSizeInBytes = std::filesystem::file_size(filePath);
+        
+				// Convert to MB
+				double fileSizeInMB = fileSizeInBytes / (1024.0 * 1024.0);
+        
+				std::cout << "\nSize: " << std::fixed << std::setprecision(1) << fileSizeInMB << "MB" << "/10MB." << " \nEntries: "<< countNonEmptyLines(cacheFilePath) << "\nLocation: " << "'" << cacheFilePath << "'\033[0;1m." <<std::endl;
+			} catch (const std::filesystem::filesystem_error& e) {
+					std::cerr << "\n\033[1;91mError: " << e.what() << std::endl;
+			}
+			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+	} else if (inputSearch == "clr") {
+		if (std::remove(cacheFilePath.c_str()) != 0) {
+			std::cerr << "\n\001\033[1;91mError deleting IsoCache: '\001\033[1;93m" << cacheFilePath << "\001\033[1;91m'. File missing or inaccessible." << std::endl;
+			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+		} else {
+			for (auto it = transformationCache.begin(); it != transformationCache.end();) {
+				const std::string& key = it->first;
+				if ((key.size() >= 4 && key.compare(key.size() - 4, 4, ".mdf") == 0))
+					{
+						it = transformationCache.erase(it);  // erase and move to the next element
+					} else {
+						++it;  // move to the next element
+					}
+			}
+			std::cout << "\n\001\033[1;92mIsoCache deleted successfully: '\001\033[0;1m" << cacheFilePath <<"\001\033[1;92m'." << std::endl;
+			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+		}
+	}
+}
+
+
+// Function that provides verbose output for manualRefreshCache
+void verboseIsoCacheRefresh(std::vector<std::string>& allIsoFiles, std::atomic<size_t>& totalFiles, std::vector<std::string>& validPaths, std::set<std::string>& invalidPaths, std::set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& historyPattern, const std::chrono::high_resolution_clock::time_point& start_time) {
+	// Print invalid paths
+    if ((!uniqueErrorMessages.empty() || !invalidPaths.empty()) && promptFlag) {
+		if (!invalidPaths.empty()) {
+			if (totalFiles == 0 && validPaths.empty()) {
+				std::cout << "\n\r\033[0;1mTotal files processed: 0" << std::flush;
+			}
+			std::cout << "\n\n\033[0;1mInvalid paths omitted from search: \033[1;91m";
+			auto it = invalidPaths.begin();
+			while (it != invalidPaths.end()) {
+				std::cout << "'" << *it << "'";
+				++it;
+				if (it != invalidPaths.end()) {
+					std::cout << " ";  // Add space between paths, but not after the last one.
+				}
+			}
+			std::cout << "\033[0;1m.";
+		}
+    
+		if (!uniqueErrorMessages.empty()) {
+			std::cout << "\n";
+		}
+
+		for (const auto& error : uniqueErrorMessages) {
+			std::cout << error;
+		}
+	}
+
+    // Save the combined cache to disk
+    bool saveSuccess = saveCache(allIsoFiles, maxCacheSize);
+
+    // Stop the timer after completing the cache refresh and removal of non-existent paths
+    auto end_time = std::chrono::high_resolution_clock::now();
+    
+	 // Flush and Restore input after processing
+    flushStdin();
+    restoreInput();
+    
+    if (promptFlag) {
+
+    if (!validPaths.empty() || (!invalidPaths.empty() && validPaths.empty())) {
+    std::cout << "\n";
+	}
+	// Calculate and print the elapsed time
+    auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+
+    // Print the time taken for the entire process in bold with one decimal place
+    std::cout << "\n\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n";
+
+    // Inform the user about the cache refresh status
+    if (saveSuccess && !validPaths.empty() && invalidPaths.empty() && uniqueErrorMessages.empty()) {
+        std::cout << "\n";
+        std::cout << "\033[1;92mCache refreshed successfully.\033[0;1m";
+        std::cout << "\n";
+    }
+    if (saveSuccess && !validPaths.empty() && (!invalidPaths.empty() || !uniqueErrorMessages.empty())) {
+        std::cout << "\n";
+        std::cout << "\033[1;93mCache refreshed with some errors.\033[0;1m";
+        std::cout << "\n";
+    }
+    if (saveSuccess && validPaths.empty() && !invalidPaths.empty()) {
+        std::cout << "\n";
+        std::cout << "\033[1;91mCache refresh failed due to lack of valid paths.\033[0;1m";
+        std::cout << "\n";
+    }
+    if (!saveSuccess) {
+        std::cout << "\n";
+        std::cout << "\033[1;91mCache refresh failed. Unable to write to the cache file.\033[0;1m";
+        std::cout << "\n";
+    }
+    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+	}
+}
+
+
 // Function for manual cache refresh
 void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxDepth, bool historyPattern) {
 
@@ -294,45 +416,10 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 		// Use std::unique_ptr to manage memory for rawSearchQuery
 		std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
 		std::string inputSearch(searchQuery.get());
-		if (inputSearch == "stats") {
-			try {
-				// Get the file size in bytes
-				std::filesystem::path filePath(cacheFilePath);
-				std::uintmax_t fileSizeInBytes = std::filesystem::file_size(filePath);
-        
-				// Convert to MB
-				double fileSizeInMB = fileSizeInBytes / (1024.0 * 1024.0);
-        
-				std::cout << "\nSize: " << std::fixed << std::setprecision(1) << fileSizeInMB << "MB" << "/10MB." << " \nEntries: "<< countNonEmptyLines(cacheFilePath) << "\nLocation: " << "'" << cacheFilePath << "'\033[0;1m." <<std::endl;
-				} catch (const std::filesystem::filesystem_error& e) {
-					std::cerr << "\n\033[1;91mError: " << e.what() << std::endl;
-				}
-				std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-				manualRefreshCache("", promptFlag, maxDepth, historyPattern);
-	   } else if (inputSearch == "clr") {
-			if (std::remove(cacheFilePath.c_str()) != 0) {
-				std::cerr << "\n\001\033[1;91mError deleting IsoCache: '\001\033[1;93m" << cacheFilePath << "\001\033[1;91m'. File missing or inaccessible." << std::endl;
-				std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-				manualRefreshCache("", promptFlag, maxDepth, historyPattern);
-        } else {
-			for (auto it = transformationCache.begin(); it != transformationCache.end();) {
-						const std::string& key = it->first;
-						if ((key.size() >= 4 && key.compare(key.size() - 4, 4, ".mdf") == 0))
-					{
-						it = transformationCache.erase(it);  // erase and move to the next element
-					} else {
-						++it;  // move to the next element
-					}
-				}
-			std::cout << "\n\001\033[1;92mIsoCache deleted successfully: '\001\033[0;1m" << cacheFilePath <<"\001\033[1;92m'." << std::endl;
-			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-			manualRefreshCache("", promptFlag, maxDepth, historyPattern);
-        }
-
-		} else if (!inputSearch.empty()) {
+		 
+		 delCacheAndShowStats (inputSearch, promptFlag, maxDepth, historyPattern);
+		 
+		 if (!inputSearch.empty()) {
 			input = inputSearch;
 			add_history(searchQuery.get()); // Add to history
 		}
@@ -482,79 +569,8 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 		saveHistory(historyPattern);
 	}
     
-    // Print invalid paths
-    if ((!uniqueErrorMessages.empty() || !invalidPaths.empty()) && promptFlag) {
-		if (!invalidPaths.empty()) {
-			if (totalFiles == 0 && validPaths.empty()) {
-				std::cout << "\n\r\033[0;1mTotal files processed: 0" << std::flush;
-			}
-			std::cout << "\n\n\033[0;1mInvalid paths omitted from search: \033[1;91m";
-			auto it = invalidPaths.begin();
-			while (it != invalidPaths.end()) {
-				std::cout << "'" << *it << "'";
-				++it;
-				if (it != invalidPaths.end()) {
-					std::cout << " ";  // Add space between paths, but not after the last one.
-				}
-			}
-			std::cout << "\033[0;1m.";
-		}
+    verboseIsoCacheRefresh(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, promptFlag, maxDepth, historyPattern, start_time);
     
-		if (!uniqueErrorMessages.empty()) {
-			std::cout << "\n";
-		}
-
-		for (const auto& error : uniqueErrorMessages) {
-			std::cout << error;
-		}
-	}
-
-    // Save the combined cache to disk
-    bool saveSuccess = saveCache(allIsoFiles, maxCacheSize);
-
-    // Stop the timer after completing the cache refresh and removal of non-existent paths
-    auto end_time = std::chrono::high_resolution_clock::now();
-    
-	 // Flush and Restore input after processing
-    flushStdin();
-    restoreInput();
-    
-    if (promptFlag) {
-
-    if (!validPaths.empty() || (!invalidPaths.empty() && validPaths.empty())) {
-    std::cout << "\n";
-	}
-	// Calculate and print the elapsed time
-    auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-
-    // Print the time taken for the entire process in bold with one decimal place
-    std::cout << "\n\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n";
-
-    // Inform the user about the cache refresh status
-    if (saveSuccess && !validPaths.empty() && invalidPaths.empty() && uniqueErrorMessages.empty()) {
-        std::cout << "\n";
-        std::cout << "\033[1;92mCache refreshed successfully.\033[0;1m";
-        std::cout << "\n";
-    }
-    if (saveSuccess && !validPaths.empty() && (!invalidPaths.empty() || !uniqueErrorMessages.empty())) {
-        std::cout << "\n";
-        std::cout << "\033[1;93mCache refreshed with some errors.\033[0;1m";
-        std::cout << "\n";
-    }
-    if (saveSuccess && validPaths.empty() && !invalidPaths.empty()) {
-        std::cout << "\n";
-        std::cout << "\033[1;91mCache refresh failed due to lack of valid paths.\033[0;1m";
-        std::cout << "\n";
-    }
-    if (!saveSuccess) {
-        std::cout << "\n";
-        std::cout << "\033[1;91mCache refresh failed. Unable to write to the cache file.\033[0;1m";
-        std::cout << "\n";
-    }
-    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-    manualRefreshCache("", promptFlag, maxDepth, historyPattern);
-	}
 	uniqueErrorMessages.clear();
 	promptFlag = true;
 	maxDepth = -1;
