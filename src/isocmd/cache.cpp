@@ -295,7 +295,7 @@ void delCacheAndShowStats (std::string& inputSearch, bool& promptFlag, int& maxD
 		} else {
 			for (auto it = transformationCache.begin(); it != transformationCache.end();) {
 				const std::string& key = it->first;
-				if ((key.size() >= 4 && key.compare(key.size() - 4, 4, ".mdf") == 0))
+				if ((key.size() >= 4 && key.compare(key.size() - 4, 4, ".iso") == 0))
 					{
 						it = transformationCache.erase(it);  // erase and move to the next element
 					} else {
