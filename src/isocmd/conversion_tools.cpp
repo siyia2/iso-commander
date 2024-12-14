@@ -145,7 +145,7 @@ void applyFilter(std::vector<std::string>& files, const std::string& fileTypeNam
         if (inputSearch.empty() || inputSearch == "/") {
             break;
         }
-        std::vector<std::string> filteredFiles = filterFiles(files, inputSearch); // Filter the original list
+        std::vector<std::string> filteredFiles = filterFiles(files, inputSearch);
         if (filteredFiles.empty()) {
             std::cout << "\033[K";  // Clear the previous input line
             continue;
