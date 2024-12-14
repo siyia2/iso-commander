@@ -321,7 +321,7 @@ void verboseIsoCacheRefresh(std::vector<std::string>& allIsoFiles, std::atomic<s
     if ((!uniqueErrorMessages.empty() || !invalidPaths.empty()) && promptFlag) {
 		if (!invalidPaths.empty()) {
 			if (totalFiles == 0 && validPaths.empty()) {
-				std::cout << "\r\033[0;1mTotal files processed: 0" << std::flush;
+				std::cout << "\r\033[0;1mTotal files processed: 0\n" << std::flush;
 			}
 			std::cout << "\n\033[0;1mInvalid paths omitted from search: \033[1;91m";
 			auto it = invalidPaths.begin();
@@ -490,8 +490,9 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
         if (validPaths.empty()) {
             std::cout << "\033[1A\033[K";
         }
-
-        saveHistory(historyPattern);
+		if (!validPaths.empty()) {
+			saveHistory(historyPattern);
+		}
         verboseIsoCacheRefresh(allIsoFiles, totalFiles, validPaths, invalidPaths, 
                                uniqueErrorMessages, promptFlag, maxDepth, historyPattern, start_time);
     }
