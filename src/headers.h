@@ -183,7 +183,6 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 void processInput(const std::string& input, std::vector<std::string>& fileList, bool modeMdf, bool modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose);
 void printFileList(const std::vector<std::string>& fileList);
 void clearRamCache (bool& modeMdf, bool& modeNrg);
-void verboseConversions(const std::string& type, const std::string& directory, const std::string& fileName, const std::string& additionalInfo, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, std::mutex& Mutex4Low);
 
 
 // CCD2ISO
