@@ -408,7 +408,7 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
     // Create a task for each valid directory to refresh the cache and pass the vector by reference
     std::istringstream iss2(input); // Reset the string stream
     std::size_t runningTasks = 0;  // Track the number of running tasks
-    size_t totalProcessedFiles = 0;
+    std::atomic<size_t> totalFiles{0};
 
     // Disable input before processing
 	disableInput();
@@ -444,11 +444,11 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 			{
 				std::lock_guard<std::mutex> lock(futuresMutex);
 				futures.emplace_back(std::async(std::launch::async, 
-					[path, &allIsoFiles, &uniqueErrorMessages, &totalProcessedFiles, 
+					[path, &allIsoFiles, &uniqueErrorMessages, &totalFiles, 
 					&traverseFilesMutex, &traverseErrorsMutex, &maxDepth, &promptFlag]() {
 						// Perform traversal with minimal global locking
 						traverse(path, allIsoFiles, uniqueErrorMessages, 
-								totalProcessedFiles, traverseFilesMutex, 
+								totalFiles, traverseFilesMutex, 
 								traverseErrorsMutex, maxDepth, promptFlag) ;
                     
 						// Remove path from local tracking after processing
@@ -485,7 +485,7 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
     // Print invalid paths
     if ((!uniqueErrorMessages.empty() || !invalidPaths.empty()) && promptFlag) {
 		if (!invalidPaths.empty()) {
-			if (totalProcessedFiles == 0 && validPaths.empty()) {
+			if (totalFiles == 0 && validPaths.empty()) {
 				std::cout << "\n\r\033[0;1mTotal files processed: 0" << std::flush;
 			}
 			std::cout << "\n\n\033[0;1mInvalid paths omitted from search: \033[1;91m";
@@ -571,7 +571,7 @@ bool iequals(const std::string_view& a, const std::string_view& b) {
 
 
 // Function to traverse a directory and find ISO files
-void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, size_t& totalProcessedFiles, std::mutex& traverseFilesMutex, std::mutex& traverseErrorsMutex, int& maxDepth, bool& promptFlag) {
+void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, std::atomic<size_t>& totalFiles, std::mutex& traverseFilesMutex, std::mutex& traverseErrorsMutex, int& maxDepth, bool& promptFlag) {
     
     const size_t BATCH_SIZE = 100; // Adjust batch size as needed
 
@@ -594,11 +594,8 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
                 const auto& entry = *it;
 				if (promptFlag){
 					if (entry.is_regular_file()) {
-						{
-							std::lock_guard<std::mutex> lock(traverseFilesMutex);
-							totalProcessedFiles++;
-							std::cout << "\r\033[0;1mTotal files processed: " << totalProcessedFiles << std::flush;
-						}
+							totalFiles++;
+							std::cout << "\r\033[0;1mTotal files processed: " << totalFiles << std::flush;
 					}
 				}
 					
@@ -639,7 +636,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
 			}
         }
         
-        if (totalProcessedFiles == 0 && promptFlag) {
+        if (totalFiles == 0 && promptFlag) {
 			std::cout << "\r\033[0;1mTotal files processed: 0" << std::flush;
 		}
 
