@@ -94,8 +94,7 @@ void verboseSearchResults(const std::string& fileExtension, std::set<std::string
 			std::cout << "\n\n";
 		}
         std::cout << "\033[1;92mFound " << fileNames.size() << " matching files.\033[1;93m " << currentCacheOld << " matching files cached in RAM from previous searches.\033[0;1m\n\n";
-        
-        
+
     }
 
     // Case: No new files were found, but files exist in cache
@@ -207,6 +206,7 @@ void searchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFlag, int
     files.reserve(100);
     binImgFilesCache.reserve(100);
     mdfMdsFilesCache.reserve(100);
+    nrgFilesCache.reserve(100);
     
     int currentCacheOld = 0;
     
