@@ -322,7 +322,7 @@ void verboseIsoCacheRefresh(std::vector<std::string>& allIsoFiles, std::atomic<s
 			if (totalFiles == 0 && validPaths.empty()) {
 				std::cout << "\n\r\033[0;1mTotal files processed: 0" << std::flush;
 			}
-			std::cout << "\n\n\033[0;1mInvalid paths omitted from search: \033[1;91m";
+			std::cout << "\n\033[0;1mInvalid paths omitted from search: \033[1;91m";
 			auto it = invalidPaths.begin();
 			while (it != invalidPaths.end()) {
 				std::cout << "'" << *it << "'";
@@ -331,15 +331,15 @@ void verboseIsoCacheRefresh(std::vector<std::string>& allIsoFiles, std::atomic<s
 					std::cout << " ";  // Add space between paths, but not after the last one.
 				}
 			}
-			std::cout << "\033[0;1m.";
+			std::cout << "\033[0;1m.\n";
 		}
     
-		if (!uniqueErrorMessages.empty()) {
-			std::cout << "\n";
-		}
 
 		for (const auto& error : uniqueErrorMessages) {
 			std::cout << error;
+		}
+		if (!uniqueErrorMessages.empty()) {
+			std::cout << "\n";
 		}
 	}
 
@@ -362,7 +362,7 @@ void verboseIsoCacheRefresh(std::vector<std::string>& allIsoFiles, std::atomic<s
     auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
 
     // Print the time taken for the entire process in bold with one decimal place
-    std::cout << "\n\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n";
+    std::cout << "\033[1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n";
 
     // Inform the user about the cache refresh status
     if (saveSuccess && !validPaths.empty() && invalidPaths.empty() && uniqueErrorMessages.empty()) {
@@ -394,190 +394,103 @@ void verboseIsoCacheRefresh(std::vector<std::string>& allIsoFiles, std::atomic<s
 
 // Function for manual cache refresh
 void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxDepth, bool historyPattern) {
-
-	std::mutex cacheRefreshMutex;
-
-	// Assuming promptFlag is defined elsewhere
-	if (promptFlag) {
-		clearScrollBuffer();
-	}
-
-	std::string input;
-
-	// Append the initial directory if provided
-	if (!initialDir.empty()) {
-		input = initialDir;
-	} else {
-		// Load history from file
-		loadHistory(historyPattern);
-		maxDepth = -1;
-		// Prompt the user to enter directory paths for manual cache refresh
+    // Centralize input handling
+    std::string input = initialDir;
+    if (input.empty()) {
+        if (promptFlag) {
+            clearScrollBuffer();
+        }
+        
+        loadHistory(historyPattern);
+        maxDepth = -1;
+        
+        // Prompt the user to enter directory paths for manual cache refresh
 		std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;92m\002.iso\001\033[1;94m\002 files (>= 5MB) and import into \001\033[1;92m\002on-disk\001\033[1;94m\002 cache (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002),\001\033[1;93m\002 clr\001\033[1;94m\002 ↵ clear \001\033[1m\002\001\033[1;92m\002on-disk\001\033[1m\002\001\033[1;94m\002 cache, \001\033[1;95m\002stats\001\033[1;94m\002 ↵ cache\001\033[1m\002\001\033[1;94m\002 stats, ↵ return:\n\001\033[0;1m\002";
-		// Prompt user for input
-		char* rawSearchQuery = readline(prompt.c_str());
-
-		// Use std::unique_ptr to manage memory for rawSearchQuery
-		std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
-		std::string inputSearch(searchQuery.get());
-		 
-		 delCacheAndShowStats (inputSearch, promptFlag, maxDepth, historyPattern);
-		 
-		 if (!inputSearch.empty()) {
-			input = inputSearch;
-			add_history(searchQuery.get()); // Add to history
-		}
-	}
-
-	// Check if the input line is empty or contains only spaces
-	bool onlySpaces = std::all_of(input.begin(), input.end(), [](char c) { return std::isspace(static_cast<unsigned char>(c)); });
-
-	if (input.empty() || onlySpaces) {
-		return;
-	}
-
-    // Create an input string stream to parse directory paths
-    std::istringstream iss(input);
-    std::string path;
-
-    // Vector to store all ISO files from multiple directories
-    std::vector<std::string> allIsoFiles;
-
-    // Vector to store valid directory paths
-    std::vector<std::string> validPaths;
-
-    // Vector to store invalid paths
-    std::set<std::string> invalidPaths;
-
-    // Set to store processed invalid paths
-    std::set<std::string> processedInvalidPaths;
-
-    // Set to store processed valid paths
-    std::set<std::string> processedValidPaths;
-    // Vector to store ISO unique input errors
-    std::set<std::string> uniqueErrorMessages;
-
-    std::vector<std::future<void>> futures;
-
-    // Iterate through the entered directory paths and print invalid paths
-    while (std::getline(iss, path, ';')) {
-        // Check if the directory path is valid
-        if (isValidDirectory(path)) {
-            validPaths.push_back(path); // Store valid paths
-        } else {
-            // Check if the path has already been processed
-            if (processedInvalidPaths.find(path) == processedInvalidPaths.end()) {
-                // Print the error message and mark the path as processed
-                if (promptFlag){
-					invalidPaths.insert(path);
-					processedInvalidPaths.insert(path);
-				}
-            }
+        char* rawSearchQuery = readline(prompt.c_str());
+        
+        std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
+        input = searchQuery.get();
+        
+        delCacheAndShowStats(input, promptFlag, maxDepth, historyPattern);
+        
+        if (!input.empty()) {
+			std::cout << "\n";
+            add_history(searchQuery.get());
         }
     }
 
-    // Check if any invalid paths were encountered and add a gap
-    if ((!invalidPaths.empty() || !validPaths.empty()) && promptFlag) {
-        std::cout << "\n";
-    }
-    
-    if (validPaths.empty() && promptFlag) {
-       std::cout << "\033[1A\033[K";
+    // Early exit for empty or whitespace-only input
+    if (std::all_of(input.begin(), input.end(), [](char c) { return std::isspace(static_cast<unsigned char>(c)); })) {
+        return;
     }
 
-    // Start the timer
-    auto start_time = std::chrono::high_resolution_clock::now();
-    
-    // Disable input before processing
-	disableInput();
-
-    // Create a task for each valid directory to refresh the cache and pass the vector by reference
-    std::istringstream iss2(input); // Reset the string stream
-    std::size_t runningTasks = 0;  // Track the number of running tasks
+    // Combine path validation and processing
+    std::vector<std::string> validPaths;
+    std::set<std::string> invalidPaths;
+    std::set<std::string> uniqueErrorMessages;
+    std::vector<std::string> allIsoFiles;
     std::atomic<size_t> totalFiles{0};
 
-    // Disable input before processing
-	disableInput();
+    disableInput();
+    auto start_time = std::chrono::high_resolution_clock::now();
+
+    // Single-pass path processing with concurrent file traversal
+    std::vector<std::future<void>> futures;
+    std::mutex processMutex;
+    std::mutex traverseErrorMutex;
+
+    std::istringstream iss(input);
+    std::string path;
+    std::size_t runningTasks = 0;
 	
-	std::mutex traverseFilesMutex;
-	std::mutex traverseErrorsMutex;
-
-	std::mutex pathsMutex; // For protecting processedValidPaths and runningTasks
-	std::mutex futuresMutex; // For protecting futures
-
-	// Use thread-local storage for temporary path tracking
-	thread_local std::set<std::string> localProcessedPaths;
-
-	while (std::getline(iss2, path, ';')) {
-		bool shouldProcess = false;
-    
-		// Minimize the critical section for checking and marking unique paths
-		{
-			std::lock_guard<std::mutex> lock(pathsMutex);
-			if (isValidDirectory(path) && 
-				processedValidPaths.find(path) == processedValidPaths.end()) {
-				processedValidPaths.insert(path);
-				shouldProcess = true;
-			}
-		}
-    
-		// Process the path outside the lock if it's valid
-		if (shouldProcess) {
-			// Use thread-local tracking to reduce contention
-			localProcessedPaths.insert(path);
-        
-			// Minimal locking
-			{
-				std::lock_guard<std::mutex> lock(futuresMutex);
-				futures.emplace_back(std::async(std::launch::async, 
-					[path, &allIsoFiles, &uniqueErrorMessages, &totalFiles, 
-					&traverseFilesMutex, &traverseErrorsMutex, &maxDepth, &promptFlag]() {
-						// Perform traversal with minimal global locking
-						traverse(path, allIsoFiles, uniqueErrorMessages, 
-								totalFiles, traverseFilesMutex, 
-								traverseErrorsMutex, maxDepth, promptFlag) ;
-                    
-						// Remove path from local tracking after processing
-						localProcessedPaths.erase(path);
-					}
-				));
-				++runningTasks;
-			}
-        
-			// Task management with reduced locking
-			if (runningTasks >= maxThreads) {
-				std::vector<std::future<void>> localFutures;
-				{
-					std::lock_guard<std::mutex> lock(futuresMutex);
-					localFutures = std::move(futures);
-					futures.clear();
-					runningTasks = 0;
-				}
-            
-				// Wait outside the lock
-				for (auto &future : localFutures) {
-					future.wait();
-				}
-				std::cout << "\n";
-			}
-		}
-	}
-
-	// Final wait for remaining tasks
-	for (auto &future : futures) {
-			future.wait();
-	}
 	
-	if (promptFlag && !processedValidPaths.empty()) {
-		// Save history
-		saveHistory(historyPattern);
-	}
-	
-    if (promptFlag){
-		verboseIsoCacheRefresh(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, promptFlag, maxDepth, historyPattern, start_time);
-	}
     
-	uniqueErrorMessages.clear();
-	promptFlag = true;
+    while (std::getline(iss, path, ';')) {
+        if (!isValidDirectory(path)) {
+            if (promptFlag) {
+                std::lock_guard<std::mutex> lock(processMutex);
+                invalidPaths.insert(path);
+            }
+            continue;
+        }
+
+        validPaths.push_back(path);
+        futures.emplace_back(std::async(std::launch::async, 
+            [path, &allIsoFiles, &uniqueErrorMessages, &totalFiles, &processMutex, &traverseErrorMutex, &maxDepth, &promptFlag]() {
+                traverse(path, allIsoFiles, uniqueErrorMessages, 
+                         totalFiles, processMutex, traverseErrorMutex, maxDepth, promptFlag);
+            }
+        ));
+
+        if (++runningTasks >= maxThreads) {
+            for (auto& future : futures) {
+                future.wait();
+            }
+            futures.clear();
+            runningTasks = 0;
+        }
+    }
+
+    // Wait for remaining tasks
+    for (auto& future : futures) {
+        future.wait();
+    }
+
+    // Post-processing
+    if (promptFlag) {
+        if (!invalidPaths.empty() || !validPaths.empty()) {
+            std::cout << "\n";
+        }
+
+        if (validPaths.empty()) {
+            std::cout << "\033[1A\033[K";
+        }
+
+        saveHistory(historyPattern);
+        verboseIsoCacheRefresh(allIsoFiles, totalFiles, validPaths, invalidPaths, 
+                               uniqueErrorMessages, promptFlag, maxDepth, historyPattern, start_time);
+    }
+    promptFlag = true;
 	maxDepth = -1;
 }
 
