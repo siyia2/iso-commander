@@ -269,7 +269,7 @@ bool isValidDirectory(const std::string& path) {
 
 
 // Function that can delete or show stats for ISO cache it is called from within manualRefreshCache
-void delCacheAndShowStats (std::string& inputSearch, const bool& promptFlag, const int& maxDepth, const bool& historyPattern) {
+void delCacheAndShowStats (std::string& inputSearch, bool& promptFlag, int& maxDepth, bool& historyPattern) {
 	if (inputSearch == "stats") {
 		try {
 			// Get the file size in bytes
@@ -321,7 +321,7 @@ void verboseIsoCacheRefresh(std::vector<std::string>& allIsoFiles, std::atomic<s
     if ((!uniqueErrorMessages.empty() || !invalidPaths.empty()) && promptFlag) {
 		if (!invalidPaths.empty()) {
 			if (totalFiles == 0 && validPaths.empty()) {
-				std::cout << "\r\033[0;1mTotal files processed: 0\n" << std::flush;
+				std::cout << "\n\r\033[0;1mTotal files processed: 0" << std::flush;
 			}
 			std::cout << "\n\033[0;1mInvalid paths omitted from search: \033[1;91m";
 			auto it = invalidPaths.begin();
@@ -490,9 +490,8 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
         if (validPaths.empty()) {
             std::cout << "\033[1A\033[K";
         }
-		if (!validPaths.empty()) {
-			saveHistory(historyPattern);
-		}
+
+        saveHistory(historyPattern);
         verboseIsoCacheRefresh(allIsoFiles, totalFiles, validPaths, invalidPaths, 
                                uniqueErrorMessages, promptFlag, maxDepth, historyPattern, start_time);
     }
