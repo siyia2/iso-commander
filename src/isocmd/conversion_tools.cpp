@@ -211,6 +211,7 @@ void searchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFlag, int
     mdfMdsFilesCache.reserve(100);
     nrgFilesCache.reserve(100);
     
+    // To keep track the number of prior cached files
     int currentCacheOld = 0;
     
     // Tracking sets and vectors
