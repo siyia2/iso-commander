@@ -341,14 +341,8 @@ void unmountISOs(bool& historyPattern, bool& verbose) {
                 }
 
                 std::string inputSearch(searchQuery.get());
-                std::cout << "\033[1m\n";
-                if (searchQuery && searchQuery.get()[0] != '\0') {
-                    add_history(searchQuery.get());
-                    saveHistory(historyPattern);
-                }
-
-                historyPattern = false;
-                clear_history();
+                std::cout << "\033[1m\n"; 
+                    
 
                 // Call the new filterMountPoints function
                 filteredIsoDirs = filterFiles(baseSearchList, inputSearch);
@@ -367,11 +361,16 @@ void unmountISOs(bool& historyPattern, bool& verbose) {
                 } else {
                     // Successful filter
                     if (lastSuccessfulFilteredIsoDirs != filteredIsoDirs) {
+						add_history(searchQuery.get());
+						saveHistory(historyPattern);
+ 
                         lastSuccessfulFilteredIsoDirs = filteredIsoDirs;
                         hadSuccessfulFilter = true;
                         clr = true;
                         isFiltered = true;
                     }
+                      historyPattern = false;
+					  clear_history();
                     break; // Exit loop after successful filtering
                 }
             }

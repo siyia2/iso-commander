@@ -148,13 +148,7 @@ void select_and_mount_files_by_number(bool& historyPattern, bool& verbose) {
                 }
 
                 std::string inputSearch(searchQuery.get());
-
-                if (strcmp(searchQuery.get(), "/") != 0) {
-                    add_history(searchQuery.get());
-                    saveHistory(historyPattern);
-                }
-                historyPattern = false;
-                clear_history();
+                    
 				// Decide the current list to filter
 				std::vector<std::string>& currentFiles = isFiltered ? filteredFiles : globalIsoFileList;
 				// Apply the filter on the current list
@@ -167,11 +161,15 @@ void select_and_mount_files_by_number(bool& historyPattern, bool& verbose) {
 				}
 
                 if (!newFilteredFiles.empty()) {
+					add_history(searchQuery.get());
+                    saveHistory(historyPattern);
 					needsClrScrn = true;
                     filteredFiles = std::move(newFilteredFiles);
                     isFiltered = true;
                     break;
                 }
+                historyPattern = false;
+                clear_history();
 
             }
 

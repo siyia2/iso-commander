@@ -136,12 +136,7 @@ void applyFilter(std::vector<std::string>& files, std::string& fileTypeName, boo
 
         std::unique_ptr<char, decltype(&std::free)> rawSearchQuery(readline(filterPrompt.c_str()), &std::free);
         std::string inputSearch(rawSearchQuery.get());
-        if (!inputSearch.empty() && inputSearch != "/") {
-            add_history(rawSearchQuery.get());
-            saveHistory(historyPattern);
-        }
-        historyPattern = false;
-        clear_history();
+    
         if (inputSearch.empty() || inputSearch == "/") {
             break;
         }
@@ -150,6 +145,13 @@ void applyFilter(std::vector<std::string>& files, std::string& fileTypeName, boo
             std::cout << "\033[K";  // Clear the previous input line
             continue;
         }
+        if (!filteredFiles.empty()) {
+			add_history(rawSearchQuery.get());
+            saveHistory(historyPattern);
+		}
+		
+		historyPattern = false;
+		clear_history();
         files = filteredFiles;
         break;
     }

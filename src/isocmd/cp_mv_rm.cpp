@@ -192,14 +192,6 @@ void select_and_operate_files_by_number(const std::string& operation, bool& prom
                 std::string inputSearch(searchQuery.get());
                 std::cout << "\033[1m\n";
 
-                if (strcmp(searchQuery.get(), "/") != 0) {
-                    add_history(searchQuery.get());
-                    saveHistory(historyPattern);
-                }
-
-                historyPattern = false;
-                clear_history();
-
                 // Filter based on current active list instead of always using global list
                 const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : globalIsoFileList;
                 auto newFilteredFiles = filterFiles(sourceList, inputSearch);
@@ -211,11 +203,15 @@ void select_and_operate_files_by_number(const std::string& operation, bool& prom
 				}
 
                 if (!newFilteredFiles.empty()) {
+					add_history(searchQuery.get());
+                    saveHistory(historyPattern);
                     filteredFiles = std::move(newFilteredFiles);
                     needsClrScrn = true;
                     isFiltered = true;
                     break;
                 }
+                historyPattern = false;
+                clear_history();
                 std::cout << "\033[1A\033[K";  // Clear the previous input line
             }
         } else {
