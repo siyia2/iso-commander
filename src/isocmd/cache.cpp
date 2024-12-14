@@ -272,20 +272,22 @@ bool isValidDirectory(const std::string& path) {
 void delCacheAndShowStats (std::string& inputSearch, bool& promptFlag, int& maxDepth, bool& historyPattern) {
 	if (inputSearch == "stats") {
 		try {
-				// Get the file size in bytes
-				std::filesystem::path filePath(cacheFilePath);
-				std::uintmax_t fileSizeInBytes = std::filesystem::file_size(filePath);
+			// Get the file size in bytes
+			std::filesystem::path filePath(cacheFilePath);
+			std::uintmax_t fileSizeInBytes = std::filesystem::file_size(filePath);
         
-				// Convert to MB
-				double fileSizeInMB = fileSizeInBytes / (1024.0 * 1024.0);
+			// Convert to MB
+			double fileSizeInMB = fileSizeInBytes / (1024.0 * 1024.0);
         
-				std::cout << "\nSize: " << std::fixed << std::setprecision(1) << fileSizeInMB << "MB" << "/10MB." << " \nEntries: "<< countNonEmptyLines(cacheFilePath) << "\nLocation: " << "'" << cacheFilePath << "'\033[0;1m." <<std::endl;
-			} catch (const std::filesystem::filesystem_error& e) {
-					std::cerr << "\n\033[1;91mError: " << e.what() << std::endl;
-			}
-			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-			manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+			std::cout << "\nSize: " << std::fixed << std::setprecision(1) << fileSizeInMB << "MB" << "/10MB." << " \nEntries: "<< countNonEmptyLines(cacheFilePath) << "\nLocation: " << "'" << cacheFilePath << "'\033[0;1m." <<std::endl;
+		} catch (const std::filesystem::filesystem_error& e) {
+			std::cerr << "\n\033[1;91mError: " << e.what() << std::endl;
+		}
+		
+		std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+		manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+		
 	} else if (inputSearch == "clr") {
 		if (std::remove(cacheFilePath.c_str()) != 0) {
 			std::cerr << "\n\001\033[1;91mError deleting IsoCache: '\001\033[1;93m" << cacheFilePath << "\001\033[1;91m'. File missing or inaccessible." << std::endl;
@@ -302,6 +304,7 @@ void delCacheAndShowStats (std::string& inputSearch, bool& promptFlag, int& maxD
 						++it;  // move to the next element
 					}
 			}
+			
 			std::cout << "\n\001\033[1;92mIsoCache deleted successfully: '\001\033[0;1m" << cacheFilePath <<"\001\033[1;92m'." << std::endl;
 			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
