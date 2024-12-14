@@ -203,7 +203,7 @@ void clearRamCache (bool& modeMdf, bool& modeNrg) {
 
 
 // Function to select and convert files based on user's choice of file type
-void searchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
+void promptForsearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
     // Prepare containers for files and caches
     std::vector<std::string> files;
     files.reserve(100);
@@ -552,12 +552,7 @@ void processInput( const std::string& input, std::vector<std::string>& fileList,
 
 
 // Function to process a single batch of paths and find files for findFiles
-std::set<std::string> processBatchPaths(
-    const std::vector<std::string>& batchPaths, 
-    const std::string& mode, 
-    const std::function<void(const std::string&, const std::string&)>& callback,
-    std::set<std::string>& processedErrorsFind
-) {
+std::set<std::string> processBatchPaths(const std::vector<std::string>& batchPaths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback,std::set<std::string>& processedErrorsFind) {
     std::mutex fileNamesMutex;
     std::atomic<size_t> totalFiles{0};
     std::set<std::string> localFileNames;
