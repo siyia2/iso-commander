@@ -311,6 +311,7 @@ void delCacheAndShowStats (std::string& inputSearch, bool& promptFlag, int& maxD
 			manualRefreshCache("", promptFlag, maxDepth, historyPattern);
 		}
 	}
+	return;
 }
 
 
@@ -411,8 +412,12 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
         std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
         input = searchQuery.get();
         
-        delCacheAndShowStats(input, promptFlag, maxDepth, historyPattern);
         
+        if (input == "stats" || input == "clr") {
+			delCacheAndShowStats(input, promptFlag, maxDepth, historyPattern);
+			return;
+		}
+		
         if (!input.empty()) {
 			std::cout << "\n";
             add_history(searchQuery.get());
