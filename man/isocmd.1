@@ -1,5 +1,5 @@
 .\" Manpage for isocmd
-.TH ISOCMD 1 "December 2024" "Iso Commander 5.4.2" "Iso-Commander Manual"
+.TH ISOCMD 1 "December 2024" "Iso Commander 5.4.3" "Iso-Commander Manual"
 .SH NAME
 Iso Commander or isocmd.
 
@@ -30,6 +30,17 @@ Iso Commander provides the following key functionalities:
 
 - NRG2ISO: Converts .nrg files to .iso.
 
+The conversion tools were originally written in C. I ported them to C++ and integrated them into Iso Commander. 
+While I would have liked to enhance their functionality, my lack of knowledge about proprietary CD/DVD formats and the absence of good samples of multisession .bin or .img files prevented further development. 
+As a result, any limitations from the original code remain unchanged.
+
+Thus any credits or curses belong to the original authors:
+
+Salvatore Santagati (mdf2iso).
+Grégory Kokanosky (nrg2iso).
+Danny Kurniawan and Kerry Harris (ccd2iso).
+
+
 .TP
 .B ImportISO
 Creates and updates an ISO cache for fast and organized access:
@@ -56,8 +67,6 @@ Notes:
 - Files smaller than 5MB are excluded from the above operations.
 
 - Partial conversions to .iso are automatically deleted.
-
-- The limitations of the original conversion tools ccd2iso, mdf2iso, nrg2iso remain.
 
 - Converted and moved/deleted/copied .iso files in root mode are automatically assigned to the current logged-in user.
 
