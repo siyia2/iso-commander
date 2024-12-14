@@ -272,6 +272,7 @@ void searchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFlag, int
 
         // Exit condition
         if (std::isspace(mainSearch.get()[0]) || mainSearch.get()[0] == '\0') {
+			clear_history();
             break;
         }
 
@@ -305,11 +306,7 @@ void searchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFlag, int
         // Manage command history
         if (!inputSearch.empty() && !list && !clr) {
             std::cout << " " << std::endl;
-            add_history(mainSearch.get());
-            saveHistory(historyPattern);
         }
-
-        clear_history();
 
         // Timing setup
         auto start_time = std::chrono::high_resolution_clock::now();
@@ -359,6 +356,11 @@ void searchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFlag, int
 				processedErrorsFind 
 			);
 		}
+		if (!directoryPaths.empty()) {
+			add_history(mainSearch.get());
+            saveHistory(historyPattern);       
+		}
+		
 		
 		if (!fileNames.empty() && !list) {
 			verboseSearchResults(fileExtension, fileNames, invalidDirectoryPaths, newFilesFound, list, currentCacheOld, files, start_time, processedErrorsFind);
@@ -740,6 +742,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
 
     return *currentCache;
 }
+
 
 // Blacklist function for MDF BIN IMG NRG
 bool blacklist(const std::filesystem::path& entry, bool blacklistMdf, bool blacklistNrg) {

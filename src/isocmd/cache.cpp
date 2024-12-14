@@ -345,11 +345,6 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 		return;
 	}
 
-	if (promptFlag) {
-		// Save history
-		saveHistory(historyPattern);
-	}
-
     // Create an input string stream to parse directory paths
     std::istringstream iss(input);
     std::string path;
@@ -480,6 +475,11 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 	// Final wait for remaining tasks
 	for (auto &future : futures) {
 			future.wait();
+	}
+	
+	if (promptFlag && !processedValidPaths.empty()) {
+		// Save history
+		saveHistory(historyPattern);
 	}
     
     // Print invalid paths
