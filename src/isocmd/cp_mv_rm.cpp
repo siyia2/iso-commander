@@ -122,7 +122,7 @@ void select_and_operate_files_by_number(const std::string& operation, bool& prom
 			std::cout << "\n\n\n";
 		}
 
-		// Move the cursor up 3 lines and clear them
+		// Move the cursor up 1 line and clear them
         std::cout << "\033[1A\033[K";
 
 		std::string prompt;
@@ -173,7 +173,7 @@ void select_and_operate_files_by_number(const std::string& operation, bool& prom
                 clear_history();
                 historyPattern = true;
                 loadHistory(historyPattern);
-                // Move the cursor up 3 lines and clear them
+                // Move the cursor up 1 line and clear them
                 std::cout << "\033[1A\033[K";
                 std::string filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + " \001\033[1;94m\002list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
 
