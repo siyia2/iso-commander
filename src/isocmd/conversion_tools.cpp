@@ -894,11 +894,24 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
     for (const std::string& inputPath : imageFiles) {
         auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath);
 
-        // Check file existence and readability
-        if (!std::filesystem::exists(inputPath) || !std::ifstream(inputPath).good()) {
-            std::string failedMessage = "\033[1;91mThe specified file \033[1;93m'" + inputPath + "'\033[1;91m cannot be read. Check file permissions.\033[0;1m";
-            std::lock_guard<std::mutex> lock(Mutex4Low);
-            failedOuts.insert(failedMessage);
+        // Check if the input file exists
+        if (!std::filesystem::exists(inputPath)) {
+            std::string failedMessage = "\033[1;91mThe specified input file \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m does not exist anymore.\033[0;1m";
+            {
+                std::lock_guard<std::mutex> lock(Mutex4Low);
+                failedOuts.insert(failedMessage);
+            }
+            continue;
+        }
+
+        // Attempt to open the file to check readability
+        std::ifstream file(inputPath);
+        if (!file.good()) {
+            std::string failedMessage = "\033[1;91mThe specified file \033[1;93m'" + inputPath + "'\033[1;91m cannot be read. Check permissions.\033[0;1m";
+            {
+                std::lock_guard<std::mutex> lock(Mutex4Low);
+                failedOuts.insert(failedMessage);
+            }
             continue;
         }
 
