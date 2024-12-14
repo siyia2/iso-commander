@@ -1,3 +1,4 @@
+
 .\" Manpage for isocmd
 .TH ISOCMD 1 "December 2024" "Iso Commander 5.4.3" "Iso-Commander Manual"
 .SH NAME
@@ -88,21 +89,21 @@ Iso Commander leverages the readline library for enhanced line-editing capabilit
   This is useful for quickly deleting a prompt line.
 
 .TP
-.B File Path and Filter token history
+.B File path&Filter token history
 Iso Commander uses readline history for saving file paths at scan prompts and at filter prompts for saving tokens.
 History can be browsed with up and down arrows at associated user prompts.
 
-History file location for file paths:
-- User mode: \fI~/.cache/iso_commander_history_cache.txt\fR
-- Root mode: \fI/root/.cache/iso_commander_cache.txt\fR
+- History file location for file paths:
+  - User mode: \fI~/.cache/iso_commander_history_cache.txt\fR
+  - Root mode: \fI/root/.cache/iso_commander_cache.txt\fR
 
-History file location for filter tokens:
-- User mode: \fI~/.cache/iso_commander_pattern_cache.txt\fR
-- Root mode: \fI/root/.cache/iso_commander_pattern_cache.txt\fR
+- History file location for filter tokens:
+  - User mode: \fI~/.cache/iso_commander_pattern_cache.txt\fR
+  - Root mode: \fI/root/.cache/iso_commander_pattern_cache.txt\fR
 
-Max unique history entries:
-- File paths: 25
-- Filter tokens: 25
+- Max unique history entries:
+  - File paths: 25
+  - Filter tokens: 25
 
 When the limit of 25 entries is reached, the oldest entries are replaced with new ones.
   
