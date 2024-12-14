@@ -49,7 +49,7 @@ void verboseConversion(std::set<std::string>& processedErrors, std::set<std::str
 
 
 // Function to print invalid directory paths from search
-void verboseFind(std::set<std::string>& invalidDirectoryPaths, std::vector<std::string>& directoryPaths, std::set<std::string>& processedErrorsFind) {
+void verboseFind(std::set<std::string>& invalidDirectoryPaths, const std::vector<std::string>& directoryPaths, std::set<std::string>& processedErrorsFind) {
 	
 	if (directoryPaths.empty() && !invalidDirectoryPaths.empty()){
 		std::cout << "\r\033[0;1mTotal files processed: 0" << std::flush;
@@ -483,7 +483,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 
 
 // Function to process user input and convert selected BIN/MDF/NRG files to ISO format
-void processInput( const std::string& input, std::vector<std::string>& fileList, bool modeMdf, bool modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
+void processInput(const std::string& input, std::vector<std::string>& fileList, const bool& modeMdf, const bool& modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
     // Set of selected file paths for processing
     std::set<std::string> selectedFilePaths;
     std::string concatenatedFilePaths;
@@ -617,7 +617,7 @@ std::set<std::string> processBatchPaths(const std::vector<std::string>& batchPat
 
 
 // Function to search for .bin .img .nrg and mdf files over 5MB
-std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, std::set<std::string>& fileNames, int& currentCacheOld, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, std::vector<std::string>& directoryPaths, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrorsFind) {
+std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, std::set<std::string>& fileNames, int& currentCacheOld, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, const std::vector<std::string>& directoryPaths, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrorsFind) {
     // Thread-safe synchronization primitives
     std::mutex pathsMutex;
     
@@ -740,7 +740,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
 
 
 // Blacklist function for MDF BIN IMG NRG
-bool blacklist(const std::filesystem::path& entry, bool blacklistMdf, bool blacklistNrg) {
+bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, const bool& blacklistNrg) {
     const std::string filenameLower = entry.filename().string();
     const std::string ext = entry.extension().string();
     std::string extLower = ext;
@@ -854,7 +854,7 @@ void printFileList(const std::vector<std::string>& fileList) {
 
 
 // Function to convert a BIN/IMG/MDF/NRG file to ISO format
-void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool modeMdf, bool modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern, std::mutex& Mutex4Low) {
+void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, const bool& modeMdf, const bool& modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern, std::mutex& Mutex4Low) {
     
     std::set<std::string> uniqueDirectories;
     for (const auto& filePath : imageFiles) {
