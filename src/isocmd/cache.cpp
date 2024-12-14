@@ -571,8 +571,10 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 		// Save history
 		saveHistory(historyPattern);
 	}
-    
-    verboseIsoCacheRefresh(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, promptFlag, maxDepth, historyPattern, start_time);
+	
+    if (promptFlag){
+		verboseIsoCacheRefresh(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, promptFlag, maxDepth, historyPattern, start_time);
+	}
     
 	uniqueErrorMessages.clear();
 	promptFlag = true;
