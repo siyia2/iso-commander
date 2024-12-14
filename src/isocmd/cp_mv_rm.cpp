@@ -417,7 +417,7 @@ std::string promptCpMvRm(std::vector<std::string>& isoFiles, std::vector<std::ve
                 } else {
 					add_history(input.get());
                     saveHistory(historyPattern);
-                    std::cout << "\n\033[1;91mThe paths must start and end with \033[0;1m'/'\033[1;91m.\033[0;1m\n";
+                    std::cout << "\n\033[1;92mcp \033[1;91mand\001\033[1;93m mv\001\033[1;91m require all the paths to end with \033[0;1m'/'\033[1;91m.\033[0;1m\n";
                 }
             } else {
                 std::cout << "\n\033[1;91mInvalid paths are not allowed for \033[1;92mcp\033[1;91m and \033[1;93mmv\033[1;91m operations.\033[0;1m\n";
