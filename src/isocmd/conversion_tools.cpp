@@ -127,7 +127,7 @@ void verboseSearchResults(const std::string& fileExtension, std::set<std::string
 
 
 // Function to apply input filtering
-void applyFilter(std::vector<std::string>& files, const std::vector<std::string>& originalFiles, const std::string& fileTypeName, bool& historyPattern) {
+void applyFilter(std::vector<std::string>& files, const std::string& fileTypeName, bool& historyPattern) {
     while (true) {
 		clear_history();
         historyPattern = true;
@@ -145,7 +145,7 @@ void applyFilter(std::vector<std::string>& files, const std::vector<std::string>
         if (inputSearch.empty() || inputSearch == "/") {
             break;
         }
-        std::vector<std::string> filteredFiles = filterFiles(originalFiles, inputSearch); // Filter the original list
+        std::vector<std::string> filteredFiles = filterFiles(files, inputSearch); // Filter the original list
         if (filteredFiles.empty()) {
             std::cout << "\033[K";  // Clear the previous input line
             continue;
@@ -154,6 +154,7 @@ void applyFilter(std::vector<std::string>& files, const std::vector<std::string>
         break;
     }
 }
+
 
 // Function to clear Ram Cache and memory transformations for bin/img mdf nrg files
 void clearRamCache (bool& modeMdf, bool& modeNrg) {
@@ -372,19 +373,15 @@ void searchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFlag, int
 		}
 	
 
-        // Determine original files based on file type
-        originalFiles = (!modeMdf && !modeNrg) ? binImgFilesCache :
-                       (modeMdf ? mdfMdsFilesCache : nrgFilesCache);
-
         // File conversion workflow (using new modular function)
-        select_and_convert_to_iso(fileType, files, originalFiles, verbose, 
+        select_and_convert_to_iso(fileType, files, verbose, 
                                 promptFlag, maxDepth, historyPattern);
     }
 }
 
 
 // Function to handle conversions for select_and_convert_to_iso
-void select_and_convert_to_iso(const std::string& fileType, std::vector<std::string>& files, std::vector<std::string>& originalFiles, bool& verbose, bool& promptFlag, int& maxDepth, bool& historyPattern) {
+void select_and_convert_to_iso(const std::string& fileType, std::vector<std::string>& files, bool& verbose, bool& promptFlag, int& maxDepth, bool& historyPattern) {
     
     std::set<std::string> processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts;
     
@@ -452,16 +449,12 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
             std::vector<std::string> beforeFilterFiles = files;
             std::string fileTypeName = (fileType == "bin" || fileType == "img" ? "BIN/IMG" : (fileType == "mdf" ? "MDF" : "NRG"));
 
-            if (isFiltered || isFilteredButUnchanged) {
-                applyFilter(files, files, fileTypeName, historyPattern);
-            } else {
-                applyFilter(files, originalFiles, fileTypeName, historyPattern);
-            }
+            applyFilter(files, fileTypeName, historyPattern);
 
             // Update filter status based on file type
             std::vector<std::string>& cacheRef = (fileType == "bin" || fileType == "img") ? binImgFilesCache : (fileType == "mdf" ? mdfMdsFilesCache : nrgFilesCache);
 
-            if (cacheRef.size() == files.size() || files.size() == originalFiles.size()) {
+            if (cacheRef.size() == files.size()) {
                 isFilteredButUnchanged = true;
             } else {
                 isFiltered = true;
