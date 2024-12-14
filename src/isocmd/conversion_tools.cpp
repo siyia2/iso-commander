@@ -127,62 +127,6 @@ void verboseSearchResults(const std::string& fileExtension, std::set<std::string
 }
 
 
-void verboseConversions(const std::string& type, const std::string& directory, const std::string& fileName, const std::string& additionalInfo, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, std::mutex& Mutex4Low) {
-    std::string message;
-    
-    if (type == "FILE_NOT_EXISTS") {
-        message = "\033[1;91mThe specified input file \033[1;93m'" + directory + "/" + fileName + "'\033[1;91m does not exist anymore.\033[0;1m";
-        std::lock_guard<std::mutex> lock(Mutex4Low);
-        failedOuts.insert(message);
-    }
-    else if (type == "FILE_UNREADABLE") {
-        message = "\033[1;91mThe specified file \033[1;93m'" + fileName + "'\033[1;91m cannot be read. Check file permissions.\033[0;1m";
-        std::lock_guard<std::mutex> lock(Mutex4Low);
-        failedOuts.insert(message);
-    }
-    else if (type == "SKIPPED_EXISTING_ISO") {
-        message = "\033[1;93mThe corresponding .iso file already exists for: \033[1;92m'" + directory + "/" + fileName + "'\033[1;93m. Skipped conversion.\033[0;1m";
-        std::lock_guard<std::mutex> lock(Mutex4Low);
-        skippedOuts.insert(message);
-    }
-    else if (type == "CONVERSION_SUCCESS") {
-        message = "\033[1mImage file converted to ISO:\033[0;1m \033[1;92m'" + directory + "/" + fileName + "'\033[0;1m.\033[0;1m";
-        std::lock_guard<std::mutex> lock(Mutex4Low);
-        successOuts.insert(message);
-    }
-    else if (type == "OWNERSHIP_CHANGE_FAILED") {
-        message = "\033[1;91mFailed to change ownership of \033[1;93m'" + directory + "/" + fileName + "'\033[1;91m: " + additionalInfo + "\033[0;1m";
-        std::lock_guard<std::mutex> lock(Mutex4Low);
-        failedOuts.insert(message);
-    }
-    else if (type == "FILE_STAT_FAILED") {
-        message = "\033[1;91mFailed to get file information for \033[1;93m'" + directory + "/" + fileName + "'\033[1;91m: " + additionalInfo + "\033[0;1m";
-        std::lock_guard<std::mutex> lock(Mutex4Low);
-        failedOuts.insert(message);
-    }
-    else if (type == "CONVERSION_FAILED") {
-        message = "\033[1;91mConversion of \033[1;93m'" + directory + "/" + fileName + "'\033[1;91m failed.\033[0;1m";
-        std::lock_guard<std::mutex> lock(Mutex4Low);
-        failedOuts.insert(message);
-    }
-    else if (type == "ISO_DELETED") {
-        message = "\033[1;92mDeleted incomplete ISO file:\033[1;91m '" + directory + "/" + fileName + "'\033[0;1m";
-        std::lock_guard<std::mutex> lock(Mutex4Low);
-        deletedOuts.insert(message);
-    }
-    else if (type == "ISO_DELETE_FAILED") {
-        message = "\033[1;91mFailed to delete incomplete ISO file: \033[1;93m'" + fileName + "'\033[0;1m";
-        std::lock_guard<std::mutex> lock(Mutex4Low);
-        deletedOuts.insert(message);
-    }
-    else {
-        // Fallback for unknown type
-        return;
-    }
-
-}
-
-
 // Function to apply input filtering
 void applyFilter(std::vector<std::string>& files, const std::vector<std::string>& originalFiles, const std::string& fileTypeName, bool& historyPattern) {
     while (true) {
@@ -925,11 +869,8 @@ void printFileList(const std::vector<std::string>& fileList) {
 // Function to convert a BIN/IMG/MDF/NRG file to ISO format
 void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool modeMdf, bool modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern, std::mutex& Mutex4Low) {
     
-    // Prepare environment variables
     std::set<std::string> uniqueDirectories;
-    // Iterate over image files
     for (const auto& filePath : imageFiles) {
-        // Use std::filesystem to get the directory path
         std::filesystem::path path(filePath);
         if (path.has_parent_path()) {
             uniqueDirectories.insert(path.parent_path().string());
@@ -937,14 +878,10 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
     }
 
     // Concatenate unique directory paths with ';'
-    std::string result;
-    for (const auto& dir : uniqueDirectories) {
-        if (!result.empty()) {
-            result += ";";
-        }
-        result += dir;
-    }
-	
+    std::string result = std::accumulate(uniqueDirectories.begin(), uniqueDirectories.end(), std::string(), [](const std::string& a, const std::string& b) {
+        return a.empty() ? b : a + ";" + b;
+    });
+
     // Get the real user ID and group ID (of the user who invoked sudo)
     uid_t real_uid;
     gid_t real_gid;
@@ -953,31 +890,26 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
     
     getRealUserId(real_uid, real_gid, real_username, real_groupname, failedOuts, Mutex4Low);
 
-
     // Iterate over each image file
     for (const std::string& inputPath : imageFiles) {
-        // Extract directory and filename
         auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath);
 
-        // Check if the input file exists
-        if (!std::filesystem::exists(inputPath)) {
-            verboseConversions("FILE_NOT_EXISTS", directory, fileNameOnly, "", successOuts, skippedOuts, failedOuts, deletedOuts, Mutex4Low);
+        // Check file existence and readability
+        if (!std::filesystem::exists(inputPath) || !std::ifstream(inputPath).good()) {
+            std::string failedMessage = "\033[1;91mThe specified file \033[1;93m'" + inputPath + "'\033[1;91m cannot be read. Check file permissions.\033[0;1m";
+            std::lock_guard<std::mutex> lock(Mutex4Low);
+            failedOuts.insert(failedMessage);
             continue;
         }
 
-        // Attempt to open the file to check readability
-        std::ifstream file(inputPath);
-        if (!file.good()) {
-            verboseConversions("FILE_UNREADABLE", "", inputPath, "", successOuts, skippedOuts, failedOuts, deletedOuts, Mutex4Low);
-            continue;
-        }
-
-        // Determine the output ISO file path
+        // Determine output ISO file path
         std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
 
-        // Check if the corresponding .iso file already exists
+        // Skip if ISO file already exists
         if (fileExists(outputPath)) {
-            verboseConversions("SKIPPED_EXISTING_ISO", directory, fileNameOnly, "", successOuts, skippedOuts, failedOuts, deletedOuts, Mutex4Low);
+            std::string skipMessage = "\033[1;93mThe corresponding .iso file already exists for: \033[1;92m'" + directory + "/" + fileNameOnly + "'\033[1;93m. Skipped conversion.\033[0;1m";
+            std::lock_guard<std::mutex> lock(Mutex4Low);
+            skippedOuts.insert(skipMessage);
             continue;
         }
 
@@ -991,38 +923,35 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
             conversionSuccess = convertNrgToIso(inputPath, outputPath);
         }
 
-        // Extract output directory and filename
+        // Handle output results
         auto [outDirectory, outFileNameOnly] = extractDirectoryAndFilename(outputPath);
 
         if (conversionSuccess) {
-            // Change ownership of the created ISO file
-            struct stat file_stat;
-            if (stat(outputPath.c_str(), &file_stat) == 0) {
-                // Only change ownership if it's different from the current user
-                if (file_stat.st_uid != real_uid || file_stat.st_gid != real_gid) {
-                    if (chown(outputPath.c_str(), real_uid, real_gid) != 0) {
-                        verboseConversions("OWNERSHIP_CHANGE_FAILED", outDirectory, outFileNameOnly, strerror(errno), successOuts, skippedOuts, failedOuts, deletedOuts, Mutex4Low);
-                    }
-                }
-            } else {
-                verboseConversions("FILE_STAT_FAILED", outDirectory, outFileNameOnly, strerror(errno), successOuts, skippedOuts, failedOuts, deletedOuts, Mutex4Low);
+            // Change ownership if needed
+            if (chown(outputPath.c_str(), real_uid, real_gid) != 0) {
+                std::string errorMessage = "\033[1;91mFailed to change ownership of \033[1;93m'" + outDirectory + "/" + outFileNameOnly + "'\033[1;91m: " + strerror(errno) + "\033[0;1m";
+                std::lock_guard<std::mutex> lock(Mutex4Low);
+                failedOuts.insert(errorMessage);
             }
 
-            // Log success message
-            verboseConversions("CONVERSION_SUCCESS", outDirectory, outFileNameOnly, "", successOuts, skippedOuts, failedOuts, deletedOuts, Mutex4Low);
+            std::string successMessage = "\033[1mImage file converted to ISO:\033[0;1m \033[1;92m'" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m.\033[0;1m";
+            std::lock_guard<std::mutex> lock(Mutex4Low);
+            successOuts.insert(successMessage);
         } else {
-            // Log conversion failure
-            verboseConversions("CONVERSION_FAILED", directory, fileNameOnly, "", successOuts, skippedOuts, failedOuts, deletedOuts, Mutex4Low);
+            std::string failedMessage = "\033[1;91mConversion of \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m failed.\033[0;1m";
+            std::lock_guard<std::mutex> lock(Mutex4Low);
+            failedOuts.insert(failedMessage);
 
-            // Attempt to delete the partially created ISO file
             if (std::remove(outputPath.c_str()) == 0) {
-                verboseConversions("ISO_DELETED", outDirectory, outFileNameOnly, "", successOuts, skippedOuts, failedOuts, deletedOuts, Mutex4Low);
+                std::string deletedMessage = "\033[1;92mDeleted incomplete ISO file:\033[1;91m '" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m";
+                deletedOuts.insert(deletedMessage);
             } else if (!modeNrg){
-                verboseConversions("ISO_DELETE_FAILED", "", outputPath, "", successOuts, skippedOuts, failedOuts, deletedOuts, Mutex4Low);
+                std::string deleteFailMessage = "\033[1;91mFailed to delete incomplete ISO file: \033[1;93m'" + outputPath + "'\033[0;1m";
+                deletedOuts.insert(deleteFailMessage);
             }
         }
     }
-    // Reset flags and update cache
+
     promptFlag = false;
     maxDepth = 0;
     if (!successOuts.empty()) {
