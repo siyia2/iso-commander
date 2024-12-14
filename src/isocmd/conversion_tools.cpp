@@ -49,7 +49,11 @@ void verboseConversion(std::set<std::string>& processedErrors, std::set<std::str
 
 
 // Function to print invalid directory paths from search
-void verboseFind(std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrorsFind) {
+void verboseFind(std::set<std::string>& invalidDirectoryPaths, std::vector<std::string>& directoryPaths, std::set<std::string>& processedErrorsFind) {
+	
+	if (directoryPaths.empty() && !invalidDirectoryPaths.empty()){
+		std::cout << "\r\033[0;1mTotal files processed: 0" << std::flush;
+	}
 			
 	if (!invalidDirectoryPaths.empty()) {
 				std::cout << "\n\n";
@@ -83,7 +87,7 @@ void verboseFind(std::set<std::string>& invalidDirectoryPaths, std::set<std::str
 
 
 // Function that handles verbose results and timing from select select_and_convert_files_to_iso
-void verboseSearchResults(const std::string& fileExtension, std::set<std::string>& fileNames, std::set<std::string>& invalidDirectoryPaths, bool newFilesFound, bool list, int currentCacheOld, const std::vector<std::string>& files, const std::chrono::high_resolution_clock::time_point& start_time, std::set<std::string>& processedErrorsFind) {
+void verboseSearchResults(const std::string& fileExtension, std::set<std::string>& fileNames, std::set<std::string>& invalidDirectoryPaths, bool newFilesFound, bool list, int currentCacheOld, const std::vector<std::string>& files, const std::chrono::high_resolution_clock::time_point& start_time, std::set<std::string>& processedErrorsFind, std::vector<std::string>& directoryPaths) {
 
     auto end_time = std::chrono::high_resolution_clock::now();
 
@@ -99,7 +103,7 @@ void verboseSearchResults(const std::string& fileExtension, std::set<std::string
 
     // Case: No new files were found, but files exist in cache
     if (!newFilesFound && !files.empty() && !list) {
-        verboseFind(invalidDirectoryPaths, processedErrorsFind);
+        verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
         if (processedErrorsFind.empty()) {
 			std::cout << "\n\n";
 		}
@@ -109,7 +113,7 @@ void verboseSearchResults(const std::string& fileExtension, std::set<std::string
 
     // Case: No files were found
     if (files.empty() && !list) {
-        verboseFind(invalidDirectoryPaths, processedErrorsFind);
+        verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
 		if (processedErrorsFind.empty()) {
 			std::cout << "\n\n";
 		}
@@ -203,7 +207,7 @@ void clearRamCache (bool& modeMdf, bool& modeNrg) {
 
 
 // Function to select and convert files based on user's choice of file type
-void promptForsearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
+void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
     // Prepare containers for files and caches
     std::vector<std::string> files;
     files.reserve(100);
@@ -354,11 +358,13 @@ void promptForsearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& prompt
 			files = findFiles(directoryPaths, fileNames, currentCacheOld, fileType, 
 				[&](const std::string&, const std::string&) {
 					newFilesFound = true;
-				}, 
+				},
+				directoryPaths,
 				invalidDirectoryPaths, 
 				processedErrorsFind 
 			);
 		}
+		
 		if (!directoryPaths.empty()) {
 			add_history(mainSearch.get());
             saveHistory(historyPattern);       
@@ -366,7 +372,7 @@ void promptForsearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& prompt
 		
 		
 		if (!list) {
-			verboseSearchResults(fileExtension, fileNames, invalidDirectoryPaths, newFilesFound, list, currentCacheOld, files, start_time, processedErrorsFind);
+			verboseSearchResults(fileExtension, fileNames, invalidDirectoryPaths, newFilesFound, list, currentCacheOld, files, start_time, processedErrorsFind, directoryPaths);
 			if (!newFilesFound) {
 				continue;
 			}
@@ -568,10 +574,9 @@ std::set<std::string> processBatchPaths(const std::vector<std::string>& batchPat
                 if (entry.is_regular_file()) {
                     totalFiles++;
                     std::cout << "\r\033[0;1mTotal files processed: " << totalFiles << std::flush;
-
+                    
                     if (blacklist(entry, blacklistMdf, blacklistNrg)) {
                         std::string fileName = entry.path().string();
-
                         // Thread-safe insertion
                         {
                             std::lock_guard<std::mutex> lock(fileNamesMutex);
@@ -583,7 +588,7 @@ std::set<std::string> processBatchPaths(const std::vector<std::string>& batchPat
                             } else if (mode == "bin") {
                                 isInCache = (std::find(binImgFilesCache.begin(), binImgFilesCache.end(), fileName) != binImgFilesCache.end());
                             }
-
+                            
                             if (!isInCache) {
                                 if (localFileNames.insert(fileName).second) {
                                     callback(fileName, entry.path().parent_path().string());
@@ -593,6 +598,8 @@ std::set<std::string> processBatchPaths(const std::vector<std::string>& batchPat
                     }
                 }
             }
+
+            
         } catch (const std::filesystem::filesystem_error& e) {
             std::string errorMessage = "\033[1;91mError traversing path: " 
                 + path + " - " + e.what() + "\033[0;1m";
@@ -600,12 +607,17 @@ std::set<std::string> processBatchPaths(const std::vector<std::string>& batchPat
         }
     }
 
+    // If no files were processed at all
+    if (totalFiles == 0) {
+        std::cout << "\r\033[0;1mTotal files processed: 0\033[0m" << std::flush;
+    }
+
     return localFileNames;
 }
 
 
 // Function to search for .bin .img .nrg and mdf files over 5MB
-std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, std::set<std::string>& fileNames, int& currentCacheOld, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrorsFind) {
+std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, std::set<std::string>& fileNames, int& currentCacheOld, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, std::vector<std::string>& directoryPaths, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrorsFind) {
     // Thread-safe synchronization primitives
     std::mutex pathsMutex;
     
@@ -680,7 +692,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
     // Update invalid directory paths
     invalidDirectoryPaths.insert(invalidPaths.begin(), invalidPaths.end());
     
-    verboseFind(invalidDirectoryPaths, processedErrorsFind);
+    verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
 
     // Choose the appropriate cache
     std::set<std::string> currentCacheSet;

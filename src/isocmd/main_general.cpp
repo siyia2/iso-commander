@@ -257,19 +257,19 @@ void submenu2(bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbo
              case '1':
 				clearScrollBuffer();
 				operation = "bin";
-					promptForsearchBinImgMdfNrg(operation, promptFlag, maxDepth, historyPattern, verbose);
+					promptSearchBinImgMdfNrg(operation, promptFlag, maxDepth, historyPattern, verbose);
                 clearScrollBuffer();
                 break;
              case '2':
 				clearScrollBuffer();
 				operation = "mdf";
-					promptForsearchBinImgMdfNrg(operation, promptFlag, maxDepth, historyPattern, verbose);
+					promptSearchBinImgMdfNrg(operation, promptFlag, maxDepth, historyPattern, verbose);
                 clearScrollBuffer();
                 break;
              case '3':
 				clearScrollBuffer();
 				operation = "nrg";
-					promptForsearchBinImgMdfNrg(operation, promptFlag, maxDepth, historyPattern, verbose);
+					promptSearchBinImgMdfNrg(operation, promptFlag, maxDepth, historyPattern, verbose);
                 clearScrollBuffer();
                 break;
 			}
