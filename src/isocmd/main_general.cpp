@@ -35,7 +35,7 @@ int main(int argc, char *argv[]) {
 	bool verbose = false;
 	// Traverse depth for cache refresh
 	int maxDepth = -1;
-
+	
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
         printVersionNumber("5.4.5");
         return 0;
@@ -70,6 +70,10 @@ int main(int argc, char *argv[]) {
     std::string choice;
 
     while (!exitProgram) {
+		// Calls prevent_clear_screen and tab completion
+		rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
+		rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
+
 		globalIsoFileList.reserve(100);
         clearScrollBuffer();
         print_ascii();
@@ -156,7 +160,9 @@ std::cout << Color << R"((   (       )            )    *      *              ) (
 
 // Function to print submenu1
 void submenu1(bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
-
+	// Calls prevent_clear_screen and tab completion
+    rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
+    rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
     while (true) {
         clearScrollBuffer();
         std::cout << "\033[1;32m+-------------------------+\n";
@@ -225,6 +231,9 @@ void submenu1(bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbo
 
 // Function to print submenu2
 void submenu2(bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
+	// Calls prevent_clear_screen and tab completion
+    rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
+    rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
 	while (true) {
 		clearScrollBuffer();
 		std::cout << "\033[1;32m+-------------------------+\n";
@@ -297,8 +306,9 @@ void printMenu() {
 
 // GENERAL STUFF
 
+// Function to negate original readline bindings
 int prevent_clear_screen_and_tab_completion(int, int) {
-    // Do nothing and return 0 to prevent clearing the screen
+    // Do nothing and return 0 
     return 0;
 }
 
