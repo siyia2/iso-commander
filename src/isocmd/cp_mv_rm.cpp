@@ -38,41 +38,6 @@ bool isValidLinuxPathFormat(const std::string& path) {
 }
 
 
-// Print verbose output for cp_mv_rm
-void verbose_cp_mv_rm(std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages) {
-    clearScrollBuffer();
-
-    if (!operationIsos.empty()) {
-        std::cout << "\n";
-    }
-    for (const auto& operationIso : operationIsos) {
-        std::cout << operationIso << "\n\033[0;1m";
-    }
-
-    if (!operationErrors.empty()) {
-        std::cout << "\n";
-    }
-
-    for (const auto& operationError : operationErrors) {
-        std::cout << operationError << "\n\033[0;1m";
-    }
-
-    if (!uniqueErrorMessages.empty()) {
-        std::cout << "\n";
-    }
-    for (const auto& uniqueErrorMessage : uniqueErrorMessages) {
-        std::cout << uniqueErrorMessage << "\033[0;1m\n";
-    }
-
-    // Clear the vector after each iteration
-    operationIsos.clear();
-    operationErrors.clear();
-    uniqueErrorMessages.clear();
-    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-}
-
-
 // Main function to select and operate on files by number
 void select_and_operate_files_by_number(const std::string& operation, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
 	
@@ -226,7 +191,7 @@ void select_and_operate_files_by_number(const std::string& operation, bool& prom
 
             if (verbose) {
 				needsClrScrn = true;
-                verbose_cp_mv_rm(operationIsos, operationErrors, uniqueErrorMessages);
+                verbosePrint(operationIsos, operationErrors, {}, {}, uniqueErrorMessages, 1);
             }
 
             if (process != "cp" && isFiltered && mvDelBreak) {

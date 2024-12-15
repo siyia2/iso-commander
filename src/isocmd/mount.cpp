@@ -202,60 +202,10 @@ void select_and_mount_files_by_number(bool& historyPattern, bool& verbose) {
             } else if (verbose) {
 				clearScrollBuffer();
 				needsClrScrn = true;
-                printMountedAndErrors(mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages);
+                    verbosePrint(mountedFiles, skippedMessages, mountedFails, {}, uniqueErrorMessages, 2);
             }
         }
     }
-}
-
-
-// Function to print mount verbose messages
-void printMountedAndErrors( std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages) {
-
-    // Print all mounted files
-    for (const auto& mountedFile : mountedFiles) {
-        std::cout << "\n" << mountedFile << "\033[0;1m";
-    }
-
-    if (!mountedFiles.empty()) {
-        std::cout << "\n";
-    }
-
-    // Print all the stored skipped messages
-    for (const auto& skippedMessage : skippedMessages) {
-        std::cerr << "\n" << skippedMessage << "\033[0;1m";
-    }
-
-    if (!skippedMessages.empty()) {
-        std::cout << "\n";
-    }
-
-    // Print all the stored error messages
-    for (const auto& mountedFail : mountedFails) {
-        std::cerr << "\n" << mountedFail << "\033[0;1m";
-    }
-
-    if (!mountedFails.empty()) {
-        std::cout << "\n";
-    }
-
-    // Print all the stored error messages
-    for (const auto& errorMessage : uniqueErrorMessages) {
-        std::cerr << "\n" << errorMessage << "\033[0;1m";
-    }
-
-    if (!uniqueErrorMessages.empty()) {
-        std::cout << "\n";
-    }
-
-    // Clear the vectors after each iteration
-    mountedFiles.clear();
-    skippedMessages.clear();
-    mountedFails.clear();
-    uniqueErrorMessages.clear();
-
-	std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-	std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
 

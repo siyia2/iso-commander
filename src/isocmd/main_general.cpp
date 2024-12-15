@@ -307,6 +307,88 @@ void printMenu() {
 
 // GENERAL STUFF
 
+void verbosePrint(
+    const std::set<std::string>& primarySet, 
+    const std::set<std::string>& secondarySet = {}, 
+    const std::set<std::string>& tertiarySet = {}, 
+    const std::set<std::string>& quaternarySet = {}, 
+    const std::set<std::string>& errorSet = {}, 
+    int printType = 0) 
+{
+    clearScrollBuffer(); // Assuming this function is defined elsewhere
+
+    // Helper lambda to print a set with optional color and output stream
+    auto printSet = [](const std::set<std::string>& set, bool isError = false, bool addNewLineBefore = false) {
+        if (!set.empty()) {
+            if (addNewLineBefore) {
+                std::cout << "\n";
+            }
+            for (const auto& item : set) {
+                if (isError) {
+                    // Red color for errors
+                    std::cerr << "\n\033[1;91m" << item << "\033[0m\033[1m";
+                } else {
+                    std::cout << "\n" << item;
+                }
+            }
+        }
+    };
+
+    // Determine print behavior based on type
+    switch (printType) {
+        case 0: // Unmounted
+            // Unmounted: primarySet = unmounted files, secondarySet = unmounted errors, errorSet = error messages
+            printSet(primarySet);
+            printSet(secondarySet, false, !primarySet.empty());
+            printSet(errorSet, true, !primarySet.empty() || !secondarySet.empty());
+            break;
+
+        case 1: // Operation
+            // Operation: primarySet = operation ISOs, secondarySet = operation errors, errorSet = unique error messages
+            printSet(primarySet, false);
+            printSet(secondarySet, false, !primarySet.empty());
+            printSet(errorSet, false, !primarySet.empty() || !secondarySet.empty());
+            break;
+
+        case 2: // Mounted
+            // Mounted: primarySet = mounted files, secondarySet = skipped messages, 
+            // tertiarySet = mounted fails, errorSet = unique error messages
+            printSet(primarySet);
+            printSet(secondarySet, true, !primarySet.empty());
+            printSet(tertiarySet, true, !primarySet.empty() || !secondarySet.empty());
+            printSet(errorSet, true, !primarySet.empty() || !secondarySet.empty() || !tertiarySet.empty());
+            break;
+
+        case 3: // Conversion
+            // Conversion: 
+            // primarySet = processed errors
+            // secondarySet = success outputs
+            // tertiarySet = skipped outputs
+            // quaternarySet = failed outputs
+            // errorSet = deleted outputs
+            auto printWithNewline = [](const std::set<std::string>& outs) {
+                for (const auto& out : outs) {
+                    std::cout << out << "\033[0;1m\n";
+                }
+                if (!outs.empty()) {
+                    std::cout << "\n";
+                }
+            };
+
+            printWithNewline(secondarySet);   // Success outputs
+            printWithNewline(tertiarySet);    // Skipped outputs
+            printWithNewline(quaternarySet);  // Failed outputs
+            printWithNewline(errorSet);       // Deleted outputs
+            printWithNewline(primarySet);     // Processed errors
+            break;
+    }
+
+    // Continuation prompt
+    std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+}
+
+
 // Function to negate original readline bindings
 int prevent_clear_screen_and_tab_completion(int, int) {
     // Do nothing and return 0 

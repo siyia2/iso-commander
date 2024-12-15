@@ -170,36 +170,6 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
 }
 
 
-// Function to print unmounted ISOs and errors
-void printUnmountedAndErrors(std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors, std::set<std::string>& errorMessages) {
-	clearScrollBuffer();
-
-    // Print unmounted files
-    for (const auto& unmountedFile : unmountedFiles) {
-        std::cout << "\n" << unmountedFile;
-    }
-
-    if (!unmountedErrors.empty() && !unmountedFiles.empty()) {
-				std::cout << "\n";
-			}
-
-	for (const auto& unmountedError : unmountedErrors) {
-        std::cout << "\n" << unmountedError;
-    }
-
-    if (!errorMessages.empty()) {
-				std::cout << "\n";
-			}
-	unmountedFiles.clear();
-	unmountedErrors.clear();
-    // Print unique error messages
-    for (const auto& errorMessage : errorMessages) {
-            std::cerr << "\n\033[1;91m" << errorMessage << "\033[0m\033[1m";
-        }
-    errorMessages.clear();
-}
-
-
 // Main function for unmounting ISOs
 void unmountISOs(bool& historyPattern, bool& verbose) {
 	
@@ -275,11 +245,9 @@ void unmountISOs(bool& historyPattern, bool& verbose) {
 
         isComplete.store(true, std::memory_order_release);
         progressThread.join();
-
         if (verbose) {
-            printUnmountedAndErrors(unmountedFiles, unmountedErrors, errorMessages);
-            std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            verbosePrint(unmountedFiles, unmountedErrors, {}, {}, errorMessages, 0);
+            
         }
     };
 
@@ -299,6 +267,7 @@ void unmountISOs(bool& historyPattern, bool& verbose) {
 	};
 
     while (true) {
+		verbose = false;
         // Reset state
         unmountedFiles.clear();
         unmountedErrors.clear();
