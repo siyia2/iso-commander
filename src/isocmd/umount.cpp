@@ -244,7 +244,7 @@ void unmountISOs(bool& historyPattern, bool& verbose) {
 
     auto performUnmount = [&](const std::vector<std::string>& selectedIsoDirs) {
 		clearScrollBuffer();
-		std::cout << "\033[0;1m";
+		std::cout << "\n\033[0;1m";
         std::mutex umountMutex, lowLevelMutex;
         unsigned int numThreads = std::min(static_cast<unsigned int>(selectedIsoDirs.size()), maxThreads);
         ThreadPool pool(numThreads);
