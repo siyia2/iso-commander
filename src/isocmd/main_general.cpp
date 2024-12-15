@@ -160,10 +160,12 @@ std::cout << Color << R"((   (       )            )    *      *              ) (
 
 // Function to print submenu1
 void submenu1(bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
-	// Calls prevent_clear_screen and tab completion
-    rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
-    rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
+	
     while (true) {
+		// Calls prevent_clear_screen and tab completion
+		rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
+		rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
+		
         clearScrollBuffer();
         std::cout << "\033[1;32m+-------------------------+\n";
         std::cout << "\033[1;32m|↵ Manage ISO              |\n";
@@ -236,6 +238,7 @@ void submenu2(bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbo
 		// Calls prevent_clear_screen and tab completion
 		rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
 		rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
+		
 		clearScrollBuffer();
 		std::cout << "\033[1;32m+-------------------------+\n";
 		std::cout << "\033[1;32m|↵ Convert2ISO             |\n";

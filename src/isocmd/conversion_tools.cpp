@@ -452,9 +452,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 
 // Function to process user input and convert selected BIN/MDF/NRG files to ISO format
 void processInput(const std::string& input, std::vector<std::string>& fileList, const bool& modeMdf, const bool& modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
-	// Calls prevent_clear_screen and tab completion
-    rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
-    rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
+    
     // Set of selected file paths for processing
     std::set<std::string> selectedFilePaths;
     std::string concatenatedFilePaths;
