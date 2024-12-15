@@ -66,7 +66,6 @@ bool fileExists(const std::string& fullPath);
 //	voids
 
 // General
-void verbose_cp_mv_rm(std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages);
 void select_and_operate_files_by_number(const std::string& operation, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose);
 void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& mvDelBreak, bool& historyPattern, bool& verbose);
 void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete, std::mutex& Mutex4Low);
@@ -107,12 +106,14 @@ void submenu2(bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbo
 void print_ascii();
 
 // General functions
+void printList(const std::vector<std::string>& items, const std::string& listType);
 void flushStdin();
 void disableInput();
 void restoreInput();
 void loadHistory(bool& historyPattern);
 void saveHistory(bool& historyPattern);
 void signalHandler(int signum);
+void verbosePrint(const std::set<std::string>& primarySet, const std::set<std::string>& secondarySet , const std::set<std::string>& tertiarySet, const std::set<std::string>& quaternarySet, const std::set<std::string>& errorSet, int printType);
 void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname,std::set<std::string>& uniqueErrors,std::mutex& Mutex4Low);
 void tokenizeInput(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, std::vector<int>& processedIndices);
 void displayProgressBar(const std::atomic<size_t>& completedIsos, const size_t& totalIsos, std::atomic<bool>& isComplete, bool& verbose);
@@ -124,7 +125,6 @@ int prevent_clear_screen_and_tab_completion(int, int);
 
 // Mount functions
 void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, bool& verbose, std::mutex& Mutex4Low);
-void printMountedAndErrors(std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages);
 void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::mutex& Mutex4Low);
 void select_and_mount_files_by_number(bool& historyPattern, bool& verbose);
 void printIsoFileList(const std::vector<std::string>& isoFiles);
@@ -143,10 +143,9 @@ void toLowerInPlace(std::string& str);
 void sortFilesCaseInsensitive(std::vector<std::string>& files);
 
 // Unmount functions
-void printUnmountedAndErrors(std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors);
-void listMountedISOs(std::vector<std::string>& isoDirs);
 void unmountISOs(bool& historyPattern, bool& verbose);
 void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors, std::mutex& Mutex4Low);
+
 
 //	stds
 
@@ -177,15 +176,13 @@ std::set<std::string> processBatchPaths(const std::vector<std::string>& batchPat
 std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, std::set<std::string>& fileNames, int& currentCacheOld, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, const std::vector<std::string>& directoryPaths, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrorsFind);
 
 // voids
-void applyFilter(std::vector<std::string>& files, const std::string& fileTypeName, bool& historyPattern);
+void applyFilter(std::vector<std::string>& files, std::string& fileTypeName, bool& historyPattern);
 void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, const bool& modeMdf, const bool& modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern, std::mutex& Mutex4Low);
 void verboseFind(std::set<std::string>& invalidDirectoryPaths, const std::vector<std::string>& directoryPaths,std::set<std::string>& processedErrorsFind);
-void verboseConversion(std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts);
 void verboseSearchResults(const std::string& fileExtension, std::set<std::string>& fileNames, std::set<std::string>& invalidDirectoryPaths, bool newFilesFound, bool list, int currentCacheOld, const std::vector<std::string>& files, const std::chrono::high_resolution_clock::time_point& start_time, std::set<std::string>& processedErrorsFind,std::vector<std::string>& directoryPaths);
 void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose);
 void select_and_convert_to_iso(const std::string& fileType, std::vector<std::string>& files, bool& verbose, bool& promptFlag, int& maxDepth, bool& historyPattern);
 void processInput(const std::string& input, std::vector<std::string>& fileList, const bool& modeMdf, const bool& modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose);
-void printFileList(const std::vector<std::string>& fileList);
 void clearRamCache (bool& modeMdf, bool& modeNrg);
 
 
