@@ -238,6 +238,7 @@ void unmountISOs(bool& verbose, bool& historyPattern) {
     };
 
     auto performUnmount = [&](const std::vector<std::string>& selectedIsoDirs) {
+		clearScrollBuffer();
         std::mutex umountMutex, lowLevelMutex;
         unsigned int numThreads = std::min(static_cast<unsigned int>(selectedIsoDirs.size()), maxThreads);
         ThreadPool pool(numThreads);
@@ -331,6 +332,9 @@ void unmountISOs(bool& verbose, bool& historyPattern) {
 
         // Handle filtering
         if (inputString == "/") {
+		clear_history();
+        historyPattern = true;
+        loadHistory(historyPattern);
         std::cout << "\033[1A\033[K";
         std::string filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
 
@@ -343,10 +347,15 @@ void unmountISOs(bool& verbose, bool& historyPattern) {
                 break;
             }
             if (filterISOs(searchInput)) {
+				add_history(searchQuery.get());
+				saveHistory(historyPattern);
+				
                 // Exit loop if valid filter terms yield results
                 break;
-            }
+            }   
         }
+         historyPattern = false;
+		clear_history();
         continue; // Return to the main prompt
     }
 
