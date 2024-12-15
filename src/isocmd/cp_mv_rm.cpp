@@ -40,40 +40,32 @@ bool isValidLinuxPathFormat(const std::string& path) {
 
 // Main function to select and operate on files by number
 void select_and_operate_files_by_number(const std::string& operation, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
-	
-	// Calls prevent_clear_screen and tab completion
     rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
     rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
-	
+    
     std::set<std::string> operationIsos, operationErrors, uniqueErrorMessages;
     std::vector<std::string> isoFiles, filteredFiles;
     isoFiles.reserve(100);
+
     bool isFiltered = false;
     bool needsClrScrn = true;
     bool mvDelBreak = false;
-
     std::string operationColor = (operation == "rm") ? "\033[1;91m" :
                                  (operation == "cp") ? "\033[1;92m" : "\033[1;93m";
-
     std::string process = operation;
 
-    while (true) {
-		// Verbose output is to be disabled unless specified by progressbar function downstream
-        verbose = false;
+    // Utility function to clear screen buffer and load/compare file lists
+    auto clear_and_load_files = [&]() {
         removeNonExistentPathsFromCache();
         loadCache(isoFiles);
-
-        if (needsClrScrn) clearScrollBuffer();
-
         if (isoFiles.empty()) {
             clearScrollBuffer();
             std::cout << "\n\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n";
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            break;
+            return false;
         }
 
-        // Check if the loaded cache differs from the global list
         if (globalIsoFileList.size() != isoFiles.size() ||
             !std::equal(globalIsoFileList.begin(), globalIsoFileList.end(), isoFiles.begin())) {
             sortFilesCaseInsensitive(isoFiles);
@@ -82,115 +74,94 @@ void select_and_operate_files_by_number(const std::string& operation, bool& prom
             isoFiles = globalIsoFileList;
         }
 
+        return true;
+    };
+
+    while (true) {
+        verbose = false;
+        if (!clear_and_load_files()) break;
+
         operationIsos.clear();
         operationErrors.clear();
         uniqueErrorMessages.clear();
 
+        if (needsClrScrn) {
+			clearScrollBuffer();
+            printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES");
+            std::cout << "\n\n";
+            std::cout << "\033[1A\033[K";  // Move the cursor up 1 line and clear them
+        }
 
-		if (needsClrScrn) {
-			printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES");
-			std::cout << "\n\n";
-		}
-
-		// Move the cursor up 1 line and clear them
-        std::cout << "\033[1A\033[K";
-
-		std::string prompt;
-		if (isFiltered) {
-			prompt = "\001\033[1;96m\002Filtered \001\033[1;92m\002ISO"
-            "\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation
-            + "\001\033[1;94m\002 (e.g., 1-3,1 5), ~ ↵ (un)fold, / ↵ filter, ↵ return:\001\033[0;1m\002 ";
-        } else {
-			prompt = "\001\033[1;92m\002\002ISO"
-            "\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation
-            + "\001\033[1;94m\002 (e.g., 1-3,1 5), ~ ↵ (un)fold, / ↵ filter, ↵ return:\001\033[0;1m\002 ";
-		}
+        std::string prompt = isFiltered ? 
+            "\001\033[1;96m\002Filtered \001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + 
+            "\001\033[1;94m\002 (e.g., 1-3,1 5), ~ ↵ (un)fold, / ↵ filter, ↵ return:\001\033[0;1m\002 " : 
+            "\001\033[1;92m\002\002ISO\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + 
+            "\001\033[1;94m\002 (e.g., 1-3,1 5), ~ ↵ (un)fold, / ↵ filter, ↵ return:\001\033[0;1m\002 ";
 
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         std::string inputString(input.get());
         
         if (inputString == "~") {
-			if (toggleFullList) {
-				toggleFullList = false;
-			} else {
-				toggleFullList = true;
-			}
-			
-			needsClrScrn = true;
-			continue;
-		}
-
-        if (!inputString.empty() && inputString != "/") {
-            std::cout << "\033[1m\n";
+            toggleFullList = !toggleFullList;
+            needsClrScrn = true;
+            continue;
         }
 
         if (inputString.empty()) {
             if (isFiltered) {
                 isFiltered = false;
-                continue;  // Return to the original list
+                continue;
             } else {
-                return;  // Exit the function only if we're already on the original list
+                return;
             }
         } else if (inputString == "/") {
             while (true) {
-                // Verbose output is to be disabled unless specified by progressbar function downstream
-				verbose = false;
+                verbose = false;
                 operationIsos.clear();
                 operationErrors.clear();
                 uniqueErrorMessages.clear();
-                
-
                 clear_history();
                 historyPattern = true;
                 loadHistory(historyPattern);
-                // Move the cursor up 1 line and clear them
-                std::cout << "\033[1A\033[K";
-                std::string filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + " \001\033[1;94m\002list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
+                std::cout << "\033[1A\033[K";  // Clear the previous input line
+                
+                std::string filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + 
+                                           " \001\033[1;94m\002list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
 
                 std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
-
                 if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
                     historyPattern = false;
-                    if (isFiltered) {
-                        needsClrScrn = true;
-                    } else {
-                        needsClrScrn = false;
-                    }
                     clear_history();
                     break;
                 }
+                
                 std::string inputSearch(searchQuery.get());
-                std::cout << "\033[1m\n";
-
-                // Filter based on current active list instead of always using global list
+                
                 const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : globalIsoFileList;
                 auto newFilteredFiles = filterFiles(sourceList, inputSearch);
                 sortFilesCaseInsensitive(newFilteredFiles);
 
                 if (newFilteredFiles.size() == globalIsoFileList.size()) {
-					isFiltered = false;
-					break;
-				}
+                    isFiltered = false;
+                    break;
+                }
 
                 if (!newFilteredFiles.empty()) {
-					add_history(searchQuery.get());
+                    add_history(searchQuery.get());
                     saveHistory(historyPattern);
                     filteredFiles = std::move(newFilteredFiles);
                     needsClrScrn = true;
                     isFiltered = true;
                     break;
                 }
-                historyPattern = false;
                 clear_history();
-                std::cout << "\033[1A\033[K";  // Clear the previous input line
             }
         } else {
             std::vector<std::string>& currentFiles = isFiltered ? filteredFiles : globalIsoFileList;
-            needsClrScrn =true;
+            needsClrScrn = true;
             processOperationInput(inputString, currentFiles, process, operationIsos, operationErrors, uniqueErrorMessages, promptFlag, maxDepth, mvDelBreak, historyPattern, verbose);
 
             if (verbose) {
-				needsClrScrn = true;
                 verbosePrint(operationIsos, operationErrors, {}, {}, uniqueErrorMessages, 1);
             }
 
@@ -198,7 +169,7 @@ void select_and_operate_files_by_number(const std::string& operation, bool& prom
                 historyPattern = false;
                 clear_history();
                 isFiltered = false;
-                needsClrScrn =true;
+                needsClrScrn = true;
             }
 
             if (currentFiles.empty()) {
