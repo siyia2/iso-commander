@@ -342,6 +342,7 @@ void verbosePrint(
             printSet(primarySet);
             printSet(secondarySet, false, !primarySet.empty());
             printSet(errorSet, true, !primarySet.empty() || !secondarySet.empty());
+            std::cout << "\n\n";
             break;
 
         case 1: // Operation
@@ -349,6 +350,7 @@ void verbosePrint(
             printSet(primarySet, false);
             printSet(secondarySet, false, !primarySet.empty());
             printSet(errorSet, false, !primarySet.empty() || !secondarySet.empty());
+            std::cout << "\n\n";
             break;
 
         case 2: // Mounted
@@ -358,6 +360,7 @@ void verbosePrint(
             printSet(secondarySet, true, !primarySet.empty());
             printSet(tertiarySet, true, !primarySet.empty() || !secondarySet.empty());
             printSet(errorSet, true, !primarySet.empty() || !secondarySet.empty() || !tertiarySet.empty());
+            std::cout << "\n\n";
             break;
 
         case 3: // Conversion
@@ -367,6 +370,7 @@ void verbosePrint(
             // tertiarySet = skipped outputs
             // quaternarySet = failed outputs
             // errorSet = deleted outputs
+            std::cout << "\n";
             auto printWithNewline = [](const std::set<std::string>& outs) {
                 for (const auto& out : outs) {
                     std::cout << out << "\033[0;1m\n";
@@ -385,7 +389,7 @@ void verbosePrint(
     }
 
     // Continuation prompt
-    std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
+    std::cout << "\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
@@ -650,7 +654,7 @@ void displayProgressBar(const std::atomic<size_t>& completedIsos, const size_t& 
 }
 
 
-// Function to print ISO files with alternating colors for sequence numbers
+// Function to print all required lists
 void printList(const std::vector<std::string>& items, const std::string& listType) {
     static const char* defaultColor = "\033[0m";
     static const char* bold = "\033[1m";
