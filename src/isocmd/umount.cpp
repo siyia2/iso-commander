@@ -13,7 +13,7 @@ void listMountedISOs(std::vector<std::string>& isoDirs) {
     static const char* greenBold = "\033[32;1m";
     static const char* blueBold = "\033[94;1m";
     static const char* magentaBold = "\033[95;1m";
-    static const char* resetColor = "\033[0m";
+    static const char* resetColor = "\033[0;1m";
 
     size_t maxIndex = isoDirs.size();
     size_t numDigits = std::to_string(maxIndex).length();
@@ -213,9 +213,9 @@ void unmountISOs(bool& historyPattern, bool& verbose) {
     filteredIsoDirs.reserve(100);
     isoDirs.reserve(100);
 
-   while (true) {
-	   // Reset flags and prepare for selection
-	    unmountedFiles.clear();
+    while (true) {
+	// Reset flags and prepare for selection
+	unmountedFiles.clear();
         unmountedErrors.clear();
         errorMessages.clear();
         
