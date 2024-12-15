@@ -140,7 +140,7 @@ void sortFilesCaseInsensitive(std::vector<std::string>& files);
 
 // Unmount functions
 void printUnmountedAndErrors(std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors);
-void listMountedISOs();
+void listMountedISOs(std::vector<std::string>& isoDirs);
 void unmountISOs(bool& historyPattern, bool& verbose);
 void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors, std::mutex& Mutex4Low);
 
