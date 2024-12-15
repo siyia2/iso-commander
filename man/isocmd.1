@@ -5,7 +5,7 @@
 Iso Commander or isocmd.
 
 .SH DESCRIPTION
-A versatile command-line utility designed for efficiently managing .iso files and converting various image formats into the .iso format.
+Iso Commander (isocmd) is a command-line utility designed for efficiently managing .iso files and converting various image formats to .iso using asynchronous I/O operations.
 
 .SH OPTIONS
 .TP
@@ -17,7 +17,7 @@ Iso Commander provides the following key functionalities:
 
 .TP
 .B ManageISO
-- Mount: Efficiently mounts .iso files using direct libmount calls. Root access is required for successful mounts.
+- Mount: Efficiently mounts .iso files using direct libmount calls under /mnt/_iso{name}. Root access is required for successful mounts.
 
 - Umount: Unmounts groups of .iso files using sanitized shell commands. Root access is required for sucessful unmounts.
 
@@ -32,7 +32,8 @@ Iso Commander provides the following key functionalities:
 - NRG2ISO: Converts .nrg files to .iso.
 
 The conversion tools were originally written in C. I ported them to C++ and integrated them into Iso Commander. 
-While I would have liked to enhance their functionality, my lack of knowledge about proprietary CD/DVD formats and the absence of good samples of multisession .bin or .img files prevented further development. 
+.br
+Although I wanted to enhance their functionality, my limited knowledge of proprietary CD/DVD formats and the lack of multisession .bin or .img samples halted further development.
 As a result, any limitations from the original code remain unchanged.
 
 Thus any credits or curses belong to the original authors:
@@ -65,20 +66,20 @@ Creates and updates an ISO cache for fast and organized access:
 
 .SH
 Notes:
-- Files smaller than 5MB are excluded from the above operations.
+- Files smaller than 5MB are excluded from all operations.
 
 - Partial conversions to .iso are automatically deleted.
 
 - Converted and moved/deleted/copied .iso files in root mode are automatically assigned to the current logged-in user.
 
-- Ranges and single numbers can be used simultaneously in for all selections e.g. 1-3 5 7-6.
+- Ranges and single numbers can be used simultaneously for all list selections e.g. 1-3 5 7-6.
 
 .SH USAGE TIPS
 Iso Commander leverages the readline library for enhanced line-editing capabilities:
 
 .TP
 .B Tab completion
-- At a scan prompt, pressing the Tab key once attempts to autocomplete paths. Pressing it twice or more lists available local files.
+- Pressing Tab once at a scan prompt autocompletes paths, pressing it twice or more lists available local files.
 
 .TP
 .B Useful Keyboard Shortcuts
@@ -91,6 +92,7 @@ Iso Commander leverages the readline library for enhanced line-editing capabilit
 .TP
 .B File path&Filter token history
 Iso Commander uses readline history for saving file paths at scan prompts and at filter prompts for saving tokens.
+.br
 History can be browsed with up and down arrows at associated user prompts.
 
 - History file location for file paths:
@@ -105,7 +107,7 @@ History can be browsed with up and down arrows at associated user prompts.
   - File paths: 25
   - Filter tokens: 25
 
-When the limit of 25 entries is reached, the oldest entries are replaced with new ones.
+When the history limit is reached, the oldest entries are replaced by new ones.
   
 .SH SEE ALSO
 .BR readline (3)
