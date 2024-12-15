@@ -297,6 +297,11 @@ void printMenu() {
 
 // GENERAL STUFF
 
+int prevent_clear_screen_and_tab_completion(int, int) {
+    // Do nothing and return 0 to prevent clearing the screen
+    return 0;
+}
+
 // Function to clear scrollbuffer
 void clearScrollBuffer() {
         std::cout << "\033[3J\033[2J\033[H\033[0m" << std::flush;

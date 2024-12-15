@@ -47,6 +47,11 @@ void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::st
 
 // Function to select and mount ISO files by number
 void select_and_mount_files_by_number(bool& historyPattern, bool& verbose) {
+	
+	// Calls prevent_clear_screen and tab completion
+    rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
+    rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
+	
     std::set<std::string> mountedFiles, skippedMessages, mountedFails, uniqueErrorMessages;
     std::vector<std::string> isoFiles, filteredFiles;
     isoFiles.reserve(100);
@@ -96,6 +101,7 @@ void select_and_mount_files_by_number(bool& historyPattern, bool& verbose) {
 		} else {
 			prompt = "\001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001\033[1;92m\002mount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), ~ ↵ (un)fold, / ↵ filter, ↵ return:\001\033[0;1m\002 ";
 		}
+	
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         std::string inputString(input.get());
         

@@ -75,6 +75,11 @@ void verbose_cp_mv_rm(std::set<std::string>& operationIsos, std::set<std::string
 
 // Main function to select and operate on files by number
 void select_and_operate_files_by_number(const std::string& operation, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
+	
+	// Calls prevent_clear_screen and tab completion
+    rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
+    rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
+	
     std::set<std::string> operationIsos, operationErrors, uniqueErrorMessages;
     std::vector<std::string> isoFiles, filteredFiles;
     isoFiles.reserve(100);

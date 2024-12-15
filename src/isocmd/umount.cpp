@@ -202,6 +202,11 @@ void printUnmountedAndErrors(std::set<std::string>& unmountedFiles, std::set<std
 
 // Main function for unmounting ISOs
 void unmountISOs(bool& historyPattern, bool& verbose) {
+	
+	// Calls prevent_clear_screen and tab completion
+    rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
+    rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
+	
     std::vector<std::string> isoDirs;
     std::set<std::string> errorMessages, unmountedFiles, unmountedErrors;
     std::mutex umountMutex;

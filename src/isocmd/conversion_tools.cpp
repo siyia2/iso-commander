@@ -132,6 +132,11 @@ void verboseSearchResults(const std::string& fileExtension, std::set<std::string
 
 // Function to apply input filtering
 void applyFilter(std::vector<std::string>& files, std::string& fileTypeName, bool& historyPattern) {
+	
+	// Calls prevent_clear_screen and tab completion
+    rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
+    rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
+    
     while (true) {
 		clear_history();
         historyPattern = true;
@@ -266,7 +271,11 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
         clear_history();
         historyPattern = false;
         loadHistory(historyPattern);
-
+		
+		// Restore readline autocomplete and screen clear bindings
+		rl_bind_key('\f', rl_clear_screen);
+		rl_bind_key('\t', rl_complete);
+        
         // Interactive prompt setup (similar to original code)
         std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m ↵ to scan for \001\033[1;38;5;208m\002" + fileExtension +
                              "\001\033[1;94m files (>= 5MB) and import into \001\033[1;93m\002RAM\001\033[1;94m\002 cache (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002), \001\033[1;92m\002ls \001\033[1;94m\002↵ open \001\033[1;93m\002RAM\001\033[1;94m\002 cache, "
@@ -387,6 +396,9 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
 
 // Function to handle conversions for select_and_convert_to_iso
 void select_and_convert_to_iso(const std::string& fileType, std::vector<std::string>& files, bool& verbose, bool& promptFlag, int& maxDepth, bool& historyPattern) {
+	// Calls prevent_clear_screen and tab completion
+    rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
+    rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
     
     std::set<std::string> processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts;
     
@@ -484,6 +496,9 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 
 // Function to process user input and convert selected BIN/MDF/NRG files to ISO format
 void processInput(const std::string& input, std::vector<std::string>& fileList, const bool& modeMdf, const bool& modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
+	// Calls prevent_clear_screen and tab completion
+    rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
+    rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
     // Set of selected file paths for processing
     std::set<std::string> selectedFilePaths;
     std::string concatenatedFilePaths;
