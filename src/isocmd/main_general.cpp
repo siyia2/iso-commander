@@ -691,7 +691,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
             }
             size_t underscorePos = dirName.find('_');
             displayPath = ((underscorePos != std::string::npos) ? dirName.substr(underscorePos + 1) : dirName);
-        } else if (listType == "GENERIC_FILES") {
+        } else if (listType == "IMAGE_FILES") {
             auto [dir, fname] = extractDirectoryAndFilename(items[i]);
 
             bool isSpecialExtension = false;
@@ -722,7 +722,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
             output << sequenceColor << indexStrings[i] << ". "
                    << blueBold << "/mnt/iso_"
                    << magentaBold << displayPath << reset << "\n";
-        } else if (listType == "GENERIC_FILES") {
+        } else if (listType == "IMAGE_FILES") {
 		// Alternate sequence color like in "ISO_FILES"
 		const char* sequenceColor = (i % 2 == 0) ? red : green;
     

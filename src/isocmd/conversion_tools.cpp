@@ -17,7 +17,6 @@ bool fileExists(const std::string& fullPath) {
 }
 
 
-
 // Function to print invalid directory paths from search
 void verboseFind(std::set<std::string>& invalidDirectoryPaths, const std::vector<std::string>& directoryPaths, std::set<std::string>& processedErrorsFind) {
 	
@@ -366,7 +365,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
 
 // Function to handle conversions for select_and_convert_to_iso
 void select_and_convert_to_iso(const std::string& fileType, std::vector<std::string>& files, bool& verbose, bool& promptFlag, int& maxDepth, bool& historyPattern) {
-	// Calls prevent_clear_screen and tab completion
+    // Bind keys for preventing clear screen and enabling tab completion
     rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
     rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
     
@@ -375,47 +374,38 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
     bool isFiltered = false;
     bool isFilteredButUnchanged = false;
     bool needsScrnClr = true;
-        std::string fileExtension;
-    if (fileType == "bin" || fileType == "img") {
-        fileExtension = ".bin/.img";
-    } else if (fileType == "mdf") {
-        fileExtension = ".mdf";
-    } else if (fileType == "nrg") {
-        fileExtension = ".nrg";
-    }
+    std::string fileExtension = (fileType == "bin" || fileType == "img") ? ".bin/.img" : (fileType == "mdf") ? ".mdf" : ".nrg";
 
     while (true) {
         verbose = false;
-        processedErrors.clear(); 
-        successOuts.clear(); 
-        skippedOuts.clear(); 
-        failedOuts.clear(); 
-        deletedOuts.clear();
+        processedErrors.clear(); successOuts.clear(); skippedOuts.clear(); failedOuts.clear(); deletedOuts.clear();
 
+        // Update screen and print files if needed
         if (needsScrnClr) {
             clearScrollBuffer();
-            std::cout << "\n";
             sortFilesCaseInsensitive(files);
-            printList(files, "GENERIC_FILES");
+            printList(files, "IMAGE_FILES");
         }
 
         clear_history();
-        std::string prompt = std::string(isFiltered ? "\n\001\033[1;96m\002Filtered \001\033[1;92m\002" : "\n\001\033[1;92m\002") + 
-                             (fileType == "bin" || fileType == "img" ? "BIN/IMG" : (fileType == "mdf" ? "MDF" : "NRG")) + 
-                             "\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion (e.g., 1-3,1 5), ~ ↵ (un)fold, / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+        std::string prompt = std::string("\n") + 
+                     (isFiltered ? "\001\033[1;96m\002Filtered " : "\033[1;38;5;208m") + 
+                     (fileType == "bin" || fileType == "img" ? "BIN/IMG" : (fileType == "mdf" ? "MDF" : "NRG")) + 
+                     "\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion, ~ ↵ fold, / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+
         
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
         std::string mainInputString(rawInput.get());
 
-        // Toggle list folding logic
+        // Handle list folding
         if (mainInputString == "~") {
             toggleFullList = !toggleFullList;
             clearScrollBuffer();
-            printList(files, "GENERIC_FILES");
+            printList(files, "IMAGE_FILES");
             continue;
         }
 
-        // Exit conditions and list reset logic
+        // Exit or reset filtered list
         if (std::isspace(rawInput.get()[0]) || rawInput.get()[0] == '\0') {
             clearScrollBuffer();
             if (isFiltered && !isFilteredButUnchanged) {
@@ -431,22 +421,17 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
             }
         }
 
-        // Filtering logic
+        // Handle filtering input
         if (strcmp(rawInput.get(), "/") == 0) {
-            std::vector<std::string> beforeFilterFiles = files;
             std::string fileTypeName = (fileType == "bin" || fileType == "img" ? "BIN/IMG" : (fileType == "mdf" ? "MDF" : "NRG"));
+			
+			applyFilter(files, fileTypeName, historyPattern);
 
-            applyFilter(files, fileTypeName, historyPattern);
 
-            // Update filter status based on file type
-            std::vector<std::string>& cacheRef = (fileType == "bin" || fileType == "img") ? binImgFilesCache : (fileType == "mdf" ? mdfMdsFilesCache : nrgFilesCache);
-
-            if (cacheRef.size() == files.size()) {
-                isFilteredButUnchanged = true;
-            } else {
-                isFiltered = true;
-                isFilteredButUnchanged = false;
-            }
+            std::vector<std::string>& cacheRef = (fileType == "bin" || fileType == "img") ? binImgFilesCache : 
+                                                 (fileType == "mdf" ? mdfMdsFilesCache : nrgFilesCache);
+            isFiltered = (cacheRef.size() != files.size());
+            isFilteredButUnchanged = !isFiltered;
         } else {
             clearScrollBuffer();
             std::cout << "\033[1m" << std::endl;
@@ -462,6 +447,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         }
     }
 }
+
 
 
 // Function to process user input and convert selected BIN/MDF/NRG files to ISO format
