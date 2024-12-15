@@ -282,7 +282,6 @@ void unmountISOs(bool& verbose, bool& historyPattern) {
     
 		if (newFilteredIsoDirs.empty()) {
 			std::cout << "\033[1A\033[K";
-			std::cout << "\033[1;31mNo results found. Continue filtering or press enter to return to full list.\033[0m\n";
 			return false;
 		}
     
@@ -332,18 +331,24 @@ void unmountISOs(bool& verbose, bool& historyPattern) {
 
         // Handle filtering
         if (inputString == "/") {
-			std::cout << "\033[1A\033[K";
-            std::string filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 list (multi-term separator: 001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
-            
-            std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
-            
-            if (!searchQuery || searchQuery.get()[0] == '\0') {
-                continue;
-            }
+        std::cout << "\033[1A\033[K";
+        std::string filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
 
-            filterISOs(searchQuery.get());
-            continue;
+        while (true) {
+            std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
+            std::string searchInput(searchQuery.get() ? searchQuery.get() : "");
+
+            if (searchInput.empty()) {
+                // Exit filter mode on blank Enter
+                break;
+            }
+            if (filterISOs(searchInput)) {
+                // Exit loop if valid filter terms yield results
+                break;
+            }
         }
+        continue; // Return to the main prompt
+    }
 
         // Prepare for unmounting
         std::vector<std::string>& currentDirs = isFiltered ? filteredIsoDirs : isoDirs;
