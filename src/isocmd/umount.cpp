@@ -6,67 +6,61 @@
 
 // UMOUNT STUFF
 
-// Function to list mounted ISOs in the /mnt directory
-void listMountedISOs() {
-    static const char* isoPath = "/mnt";
+// Function to print isoDirs formatting
+void listMountedISOs(std::vector<std::string>& isoDirs) {
+    // ANSI color codes
     static const char* redBold = "\033[31;1m";
     static const char* greenBold = "\033[32;1m";
     static const char* blueBold = "\033[94;1m";
     static const char* magentaBold = "\033[95;1m";
-    static const char* resetBold = "\033[0;1m";
+    static const char* resetColor = "\033[0m";
 
-    std::vector<std::string> isoDirs;
-    isoDirs.reserve(100);  // Pre-allocate space for 100 entries
+    size_t maxIndex = isoDirs.size();
+    size_t numDigits = std::to_string(maxIndex).length();
 
-    DIR* dir = opendir(isoPath);
-    if (dir == nullptr) {
-        std::cerr << "\033[1;91mError opening the /mnt directory.\033[0m\n";
-        return;
-    }
-
-    struct dirent* entry;
-    while ((entry = readdir(dir)) != nullptr) {
-        if (entry->d_type == DT_DIR && strncmp(entry->d_name, "iso_", 4) == 0) {
-            isoDirs.emplace_back(entry->d_name + 4);
+    // Precompute padded index strings to avoid recalculating them
+    std::vector<std::string> indexStrings(maxIndex);
+    for (size_t i = 0; i < maxIndex; ++i) {
+        indexStrings[i] = std::to_string(i + 1);
+        if (indexStrings[i].length() < numDigits) {
+            indexStrings[i].insert(0, numDigits - indexStrings[i].length(), ' ');
         }
     }
-    closedir(dir);
 
-    if (isoDirs.empty()) {
-        return;
-    }
+    // Use an ostringstream for buffered output
+    std::ostringstream output;
 
-    sortFilesCaseInsensitive(isoDirs);
-
-    std::string output;
-    output.reserve(isoDirs.size() * 50);  // Adjust based on average line length
-
-    output.append("\n");
-    size_t numDigits = std::to_string(isoDirs.size()).length();
-
-    // Precompute formatted indices
-    std::vector<std::string> indexStrings(isoDirs.size());
+    // Iterate through ISO directories
     for (size_t i = 0; i < isoDirs.size(); ++i) {
-        indexStrings[i] = std::to_string(i + 1);
-        indexStrings[i].insert(0, numDigits - indexStrings[i].length(), ' ');  // Right-align with padding
-    }
+        // Extract the directory name after the last '/'
+        size_t lastSlashPos = isoDirs[i].find_last_of('/');
+        std::string dirName = (lastSlashPos != std::string::npos) 
+                                ? isoDirs[i].substr(lastSlashPos + 1) 
+                                : isoDirs[i];
 
-    for (size_t i = 0; i < isoDirs.size(); ++i) {
+        // Extract the part after the first '_'
+        size_t underscorePos = dirName.find('_');
+        std::string afterUnderscore = (underscorePos != std::string::npos) 
+                                        ? dirName.substr(underscorePos + 1) 
+                                        : dirName;
+
+        // Alternate colors for sequences
         const char* sequenceColor = (i % 2 == 0) ? redBold : greenBold;
 
-        // Append formatted output
-        output.append(sequenceColor)
-              .append(indexStrings[i])
-              .append(". ")
-              .append(blueBold)
-              .append("/mnt/iso_")
-              .append(magentaBold)
-              .append(isoDirs[i])
-              .append(resetBold)
-              .append("\n");
+        // Append formatted output to the buffer
+        output << sequenceColor
+               << indexStrings[i]
+               << ". "
+               << blueBold
+               << "/mnt/iso_"
+               << magentaBold
+               << afterUnderscore
+               << resetColor
+               << "\n";
     }
 
-    std::cout << output;
+    // Flush the buffered output at once
+    std::cout << output.str();
 }
 
 
@@ -219,28 +213,20 @@ void unmountISOs(bool& historyPattern, bool& verbose) {
     filteredIsoDirs.reserve(100);
     isoDirs.reserve(100);
 
-    while (true) {
-		// Verbose output is to be disabled unless specified by progressbar function downstream
-        verbose = false;
+   while (true) {
+	   // Reset flags and prepare for selection
+	    unmountedFiles.clear();
+        unmountedErrors.clear();
+        errorMessages.clear();
         
+        verbose = false;
         historyPattern = false;
         std::vector<std::string> selectedIsoDirs;
         selectedIsoDirs.reserve(maxThreads);
-
-        if (clr) {
-            clearScrollBuffer();
-            listMountedISOs();
-            std::cout << "\n\n";
-        }
-
+        
+        // Populate or use existing ISO directories
         if (!isFiltered) {
             isoDirs.clear();
-        }
-        unmountedFiles.clear();
-        unmountedErrors.clear();
-        errorMessages.clear();
-
-        if (!isFiltered) {
             for (const auto& entry : std::filesystem::directory_iterator(isoPath)) {
                 if (entry.is_directory() && entry.path().filename().string().find("iso_") == 0) {
                     isoDirs.push_back(entry.path().string());
@@ -248,21 +234,20 @@ void unmountISOs(bool& historyPattern, bool& verbose) {
             }
             sortFilesCaseInsensitive(isoDirs);
         } else {
-            clearScrollBuffer();
+            // If using filtered directories, ensure they're sorted
             sortFilesCaseInsensitive(filteredIsoDirs);
-            std::cout << "\n";
-            size_t maxIndex = filteredIsoDirs.size();
-            size_t numDigits = std::to_string(maxIndex).length();
+        }
 
-            for (size_t i = 0; i < filteredIsoDirs.size(); ++i) {
-                std::string afterSlash = filteredIsoDirs[i].substr(filteredIsoDirs[i].find_last_of("/") + 1);
-                std::string afterUnderscore = afterSlash.substr(afterSlash.find("_") + 1);
-                std::string color = (i % 2 == 0) ? "\033[1;31m" : "\033[1;32m"; // Red if even, Green if odd
+        // Determine which directory list to use
+        std::vector<std::string>& currentIsoDirs = isFiltered ? filteredIsoDirs : isoDirs;
 
-                std::cout << color << "\033[1m"
-                          << std::setw(numDigits) << std::setfill(' ') << (i + 1) << ".\033[1;94m /mnt/iso_"
-                          << "\033[1;95m" << afterUnderscore << "\033[0;1m\n";
-            }
+        // Clear screen and list ISOs if specified
+        if (clr) {
+            clearScrollBuffer();
+            listMountedISOs(currentIsoDirs);
+            if (!isFiltered){
+				std::cout << "\n\n";
+			}
         }
 
         if (isoDirs.empty() && !isFiltered) {
