@@ -201,7 +201,7 @@ void printUnmountedAndErrors(std::set<std::string>& unmountedFiles, std::set<std
 
 
 // Main function for unmounting ISOs
-void unmountISOs(bool& verbose, bool& historyPattern) {
+void unmountISOs(bool& historyPattern, bool& verbose) {
 	
 	// Calls prevent_clear_screen and tab completion
     rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
