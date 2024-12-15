@@ -307,6 +307,7 @@ void printMenu() {
 
 // GENERAL STUFF
 
+// Main verbose print function
 void verbosePrint(
     const std::set<std::string>& primarySet, 
     const std::set<std::string>& secondarySet = {}, 
@@ -650,49 +651,98 @@ void displayProgressBar(const std::atomic<size_t>& completedIsos, const size_t& 
 
 
 // Function to print ISO files with alternating colors for sequence numbers
-void printIsoFileList(const std::vector<std::string>& isoFiles) {
+void printList(const std::vector<std::string>& items, const std::string& listType) {
     static const char* defaultColor = "\033[0m";
     static const char* bold = "\033[1m";
+    static const char* reset = "\033[0m";
     static const char* red = "\033[31;1m";
     static const char* green = "\033[32;1m";
+    static const char* blueBold = "\033[94;1m";
     static const char* magenta = "\033[95m";
-
-    size_t maxIndex = isoFiles.size();
+    static const char* magentaBold = "\033[95;1m";
+    static const char* orangeBold = "\033[1;38;5;208m";
+    
+    size_t maxIndex = items.size();
     size_t numDigits = std::to_string(maxIndex).length();
 
-    // Precompute index strings to avoid using ostringstream
+    // Precompute padded index strings
     std::vector<std::string> indexStrings(maxIndex);
     for (size_t i = 0; i < maxIndex; ++i) {
         indexStrings[i] = std::to_string(i + 1);
-        indexStrings[i].insert(0, numDigits - indexStrings[i].length(), ' ');  // Right-align with padding
+        indexStrings[i].insert(0, numDigits - indexStrings[i].length(), ' ');
     }
 
-    std::ostringstream output;  // Use ostringstream for faster output
+    std::ostringstream output;
+    output << "\n"; // Initial newline for visual spacing
 
-    for (size_t i = 0; i < isoFiles.size(); ++i) {
+    for (size_t i = 0; i < items.size(); ++i) {
         const char* sequenceColor = (i % 2 == 0) ? red : green;
+        std::string directory, filename, displayPath;
 
-        output << "\n"
-               << sequenceColor
-               << indexStrings[i]
-               << ". "
-               << defaultColor
-               << bold;
+        if (listType == "ISO_FILES") {
+            auto [dir, fname] = extractDirectoryAndFilename(items[i]);
+            directory = dir;
+            filename = fname;
+        } else if (listType == "MOUNTED_ISOS") {
+            std::string dirName = items[i];
+            size_t lastSlashPos = dirName.find_last_of('/');
+            if (lastSlashPos != std::string::npos) {
+                dirName = dirName.substr(lastSlashPos + 1);
+            }
+            size_t underscorePos = dirName.find('_');
+            displayPath = ((underscorePos != std::string::npos) ? dirName.substr(underscorePos + 1) : dirName);
+        } else if (listType == "GENERIC_FILES") {
+            auto [dir, fname] = extractDirectoryAndFilename(items[i]);
 
-        auto [directory, filename] = extractDirectoryAndFilename(isoFiles[i]);
+            bool isSpecialExtension = false;
+            std::string extension = fname;
+            size_t dotPos = extension.rfind('.');
 
-        output << directory
-               << defaultColor
-               << bold
-               << "/"
-               << magenta
-               << filename
-               << defaultColor;
+            if (dotPos != std::string::npos) {
+                extension = extension.substr(dotPos);
+                toLowerInPlace(extension);
+                isSpecialExtension = (extension == ".bin" || extension == ".img" ||
+                                      extension == ".mdf" || extension == ".nrg");
+            }
+
+            if (isSpecialExtension) {
+                directory = dir;
+                filename = fname;
+                sequenceColor = orangeBold;
+            }
+        }
+
+        // Build output based on listType
+        if (listType == "ISO_FILES") {
+            output << sequenceColor << indexStrings[i] << ". "
+                   << defaultColor << bold << directory
+                   << defaultColor << bold << "/"
+                   << magenta << filename << defaultColor << "\n";
+        } else if (listType == "MOUNTED_ISOS") {
+            output << sequenceColor << indexStrings[i] << ". "
+                   << blueBold << "/mnt/iso_"
+                   << magentaBold << displayPath << reset << "\n";
+        } else if (listType == "GENERIC_FILES") {
+		// Alternate sequence color like in "ISO_FILES"
+		const char* sequenceColor = (i % 2 == 0) ? red : green;
+    
+			if (directory.empty() && filename.empty()) {
+				// Standard case
+				output << sequenceColor << indexStrings[i] << ". "
+				<< reset << bold << items[i] << defaultColor << "\n";
+			} else {
+				// Special extension case (keep the filename sequence as orange bold)
+				output << sequenceColor << indexStrings[i] << ". "
+					<< reset << bold << directory << "/"
+					<< orangeBold << filename << defaultColor << "\n";
+			}
+        }
     }
 
-    // Output the whole result at once
     std::cout << output.str();
 }
+
+
 
 
 //	SANITISATION AND STRING STUFF

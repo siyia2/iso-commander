@@ -6,63 +6,6 @@
 
 // UMOUNT STUFF
 
-// Function to print isoDirs formatting
-void listMountedISOs(std::vector<std::string>& isoDirs) {
-    // ANSI color codes
-    static const char* redBold = "\033[31;1m";
-    static const char* greenBold = "\033[32;1m";
-    static const char* blueBold = "\033[94;1m";
-    static const char* magentaBold = "\033[95;1m";
-    static const char* resetColor = "\033[0;1m";
-	std::cout << "\n";
-    size_t maxIndex = isoDirs.size();
-    size_t numDigits = std::to_string(maxIndex).length();
-
-    // Precompute padded index strings to avoid recalculating them
-    std::vector<std::string> indexStrings(maxIndex);
-    for (size_t i = 0; i < maxIndex; ++i) {
-        indexStrings[i] = std::to_string(i + 1);
-        if (indexStrings[i].length() < numDigits) {
-            indexStrings[i].insert(0, numDigits - indexStrings[i].length(), ' ');
-        }
-    }
-
-    // Use an ostringstream for buffered output
-    std::ostringstream output;
-
-    // Iterate through ISO directories
-    for (size_t i = 0; i < isoDirs.size(); ++i) {
-        // Extract the directory name after the last '/'
-        size_t lastSlashPos = isoDirs[i].find_last_of('/');
-        std::string dirName = (lastSlashPos != std::string::npos) 
-                                ? isoDirs[i].substr(lastSlashPos + 1) 
-                                : isoDirs[i];
-
-        // Extract the part after the first '_'
-        size_t underscorePos = dirName.find('_');
-        std::string afterUnderscore = (underscorePos != std::string::npos) 
-                                        ? dirName.substr(underscorePos + 1) 
-                                        : dirName;
-
-        // Alternate colors for sequences
-        const char* sequenceColor = (i % 2 == 0) ? redBold : greenBold;
-
-        // Append formatted output to the buffer
-        output << sequenceColor
-               << indexStrings[i]
-               << ". "
-               << blueBold
-               << "/mnt/iso_"
-               << magentaBold
-               << afterUnderscore
-               << resetColor
-               << "\n";
-    }
-
-    // Flush the buffered output at once
-    std::cout << output.str();
-}
-
 
 // Function to check if directory is empty for unmountISO
 bool isDirectoryEmpty(const std::string& path) {
@@ -202,7 +145,7 @@ void unmountISOs(bool& historyPattern, bool& verbose) {
 
     auto displayMountedISOs = [&]() {
         clearScrollBuffer();
-        listMountedISOs(isFiltered ? filteredIsoDirs : isoDirs);
+        printList(isFiltered ? filteredIsoDirs : isoDirs, "MOUNTED_ISOS");
     };
 
     auto handleNoMountedISOs = []() {

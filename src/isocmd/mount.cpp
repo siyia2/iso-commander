@@ -89,8 +89,8 @@ void select_and_mount_files_by_number(bool& historyPattern, bool& verbose) {
         uniqueErrorMessages.clear();
 
         if (needsClrScrn) {
-			printIsoFileList(isFiltered ? filteredFiles : globalIsoFileList);
-			std::cout << "\n\n\n";
+			printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES");
+			std::cout << "\n\n";
 		}
 		// Move the cursor up 1 line and clear them
         std::cout << "\033[1A\033[K";

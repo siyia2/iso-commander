@@ -88,8 +88,8 @@ void select_and_operate_files_by_number(const std::string& operation, bool& prom
 
 
 		if (needsClrScrn) {
-			printIsoFileList(isFiltered ? filteredFiles : globalIsoFileList);
-			std::cout << "\n\n\n";
+			printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES");
+			std::cout << "\n\n";
 		}
 
 		// Move the cursor up 1 line and clear them

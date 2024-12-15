@@ -17,36 +17,6 @@ bool fileExists(const std::string& fullPath) {
 }
 
 
-// Function to print verbose conversion messages
-void verboseConversion(std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts) {
-    // Lambda function to print each element in a set followed by a newline
-    auto printWithNewline = [](const std::set<std::string>& outs) {
-        for (const auto& out : outs) {
-            std::cout << out << "\033[0;1m\n"; // Print each element in the set
-        }
-        if (!outs.empty()) {
-            std::cout << "\n"; // Print an additional newline if the set is not empty
-        }
-    };
-
-    // Print each set of messages with a newline after each set
-    printWithNewline(successOuts);   // Print success messages
-    printWithNewline(skippedOuts);   // Print skipped messages
-    printWithNewline(failedOuts);	 // Print failed messages
-    printWithNewline(deletedOuts);   // Print deleted messages
-    printWithNewline(processedErrors); // Print error messages
-
-    std::cout << "\033[1;32m↵ to continue...\033[0;1m"; // Prompt user to continue
-	std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-
-    // Clear all sets after printing
-    successOuts.clear();   // Clear the set of success messages
-    skippedOuts.clear();   // Clear the set of skipped messages
-    failedOuts.clear();		// Clear the set of failed messages
-    deletedOuts.clear();   // Clear the set of deleted messages
-    processedErrors.clear(); // Clear the set of error messages
-}
-
 
 // Function to print invalid directory paths from search
 void verboseFind(std::set<std::string>& invalidDirectoryPaths, const std::vector<std::string>& directoryPaths, std::set<std::string>& processedErrorsFind) {
@@ -131,6 +101,40 @@ void verboseSearchResults(const std::string& fileExtension, std::set<std::string
 
 
 // Function to apply input filtering
+void applyFilter(std::vector<std::string>& files, std::string& fileTypeName, bool& historyPattern) {
+	
+	// Calls prevent_clear_screen and tab completion
+    rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
+    rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
+    
+    while (true) {
+		clear_history();
+        historyPattern = true;
+        loadHistory(historyPattern);
+        std::string filterPrompt = "\001\033[1A\002\001\033[K\002\001\033[1A\002\001\033[K\002\n\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;38;5;208m\002" + fileTypeName + "\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
+
+        std::unique_ptr<char, decltype(&std::free)> rawSearchQuery(readline(filterPrompt.c_str()), &std::free);
+        std::string inputSearch(rawSearchQuery.get());
+    
+        if (inputSearch.empty() || inputSearch == "/") {
+            break;
+        }
+        std::vector<std::string> filteredFiles = filterFiles(files, inputSearch);
+        if (filteredFiles.empty()) {
+            std::cout << "\033[K";  // Clear the previous input line
+            continue;
+        }
+        if (!filteredFiles.empty()) {
+			add_history(rawSearchQuery.get());
+            saveHistory(historyPattern);
+		}
+		
+		historyPattern = false;
+		clear_history();
+        files = filteredFiles;
+        break;
+    }
+}
 
 
 // Function to clear Ram Cache and memory transformations for bin/img mdf nrg files
@@ -392,7 +396,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
             clearScrollBuffer();
             std::cout << "\n";
             sortFilesCaseInsensitive(files);
-            printFileList(files);
+            printList(files, "GENERIC_FILES");
         }
 
         clear_history();
@@ -407,7 +411,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         if (mainInputString == "~") {
             toggleFullList = !toggleFullList;
             clearScrollBuffer();
-            printFileList(files);
+            printList(files, "GENERIC_FILES");
             continue;
         }
 
@@ -766,71 +770,6 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
     }
 
     return true;
-}
-
-
-// Function to print found BIN/IMG files with alternating colored sequence numbers
-void printFileList(const std::vector<std::string>& fileList) {
-    static const char* bold = "\033[1m";
-    static const char* reset = "\033[0m";
-    static const char* red = "\033[31;1m";
-    static const char* green = "\033[32;1m";
-    static const char* orangeBold = "\033[1;38;5;208m";
-    
-    size_t maxIndex = fileList.size();
-    size_t numDigits = std::to_string(maxIndex).length();
-
-    // Precompute formatted indices
-    std::vector<std::string> indexStrings(maxIndex);
-    for (size_t i = 0; i < maxIndex; ++i) {
-        indexStrings[i] = std::to_string(i + 1);
-        indexStrings[i].insert(0, numDigits - indexStrings[i].length(), ' ');  // Right-align with padding
-    }
-
-    std::string output;
-    output.reserve(fileList.size() * 100);  // Estimate buffer size
-
-    for (size_t i = 0; i < fileList.size(); ++i) {
-        const auto& filename = fileList[i];
-        auto [directory, fileNameOnly] = extractDirectoryAndFilename(filename);
-        std::string_view fileNameView(fileNameOnly);
-        size_t dotPos = fileNameView.rfind('.');
-        bool isSpecialExtension = false;
-        
-        if (dotPos != std::string_view::npos) {
-            std::string_view extensionView = fileNameView.substr(dotPos);
-            std::string extension(extensionView);
-            toLowerInPlace(extension);
-            isSpecialExtension = (extension == ".bin" || extension == ".img" || 
-                                  extension == ".mdf" || extension == ".nrg");
-        }
-
-        const char* sequenceColor = (i % 2 == 0) ? red : green;
-
-        // Add index and colors
-        output.append(isSpecialExtension ? sequenceColor : "")
-              .append(indexStrings[i])
-              .append(". ")
-              .append(reset)
-              .append(bold);
-
-        // Add directory and filename
-        if (isSpecialExtension) {
-            output.append(directory)
-                  .append("/")
-                  .append(orangeBold)
-                  .append(fileNameOnly);
-        } else {
-            output.append(filename);
-        }
-
-        // Final reset and newline
-        output.append(reset)
-              .append(bold)
-              .append("\n");
-    }
-
-    std::cout << output;
 }
 
 
