@@ -118,6 +118,10 @@ void tokenizeInput(const std::string& input, std::vector<std::string>& isoFiles,
 void displayProgressBar(const std::atomic<size_t>& completedIsos, const size_t& totalIsos, std::atomic<bool>& isComplete, bool& verbose);
 void clearScrollBuffer();
 
+//ints
+
+int prevent_clear_screen_and_tab_completion(int, int);
+
 // Mount functions
 void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, bool& verbose, std::mutex& Mutex4Low);
 void printMountedAndErrors(std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages);
