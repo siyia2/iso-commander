@@ -201,251 +201,175 @@ void printUnmountedAndErrors(std::set<std::string>& unmountedFiles, std::set<std
 
 
 // Main function for unmounting ISOs
-void unmountISOs(bool& historyPattern, bool& verbose) {
-	
-	// Calls prevent_clear_screen and tab completion
-    rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
-    rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
-	
+void unmountISOs(bool& verbose, bool& historyPattern) {
+    const std::string ISO_PATH = "/mnt";
+
     std::vector<std::string> isoDirs;
-    std::set<std::string> errorMessages, unmountedFiles, unmountedErrors;
-    std::mutex umountMutex;
-    std::mutex Mutex4Low; // Mutex for low-level processing
-    const std::string isoPath = "/mnt";
-    bool isFiltered = false;
-    bool clr = true;
     std::vector<std::string> filteredIsoDirs;
-    filteredIsoDirs.reserve(100);
-    isoDirs.reserve(100);
+    std::set<std::string> unmountedFiles;
+    std::set<std::string> unmountedErrors;
+    std::set<std::string> errorMessages;
+
+    bool isFiltered = false;
+
+    auto loadMountedISOs = [&]() {
+        isoDirs.clear();
+        for (const auto& entry : std::filesystem::directory_iterator(ISO_PATH)) {
+            if (entry.is_directory() && entry.path().filename().string().find("iso_") == 0) {
+                isoDirs.push_back(entry.path().string());
+            }
+        }
+        std::sort(isoDirs.begin(), isoDirs.end(), 
+            [](const std::string& a, const std::string& b) {
+                return strcasecmp(a.c_str(), b.c_str()) < 0;
+            });
+    };
+
+    auto displayMountedISOs = [&]() {
+        clearScrollBuffer();
+        listMountedISOs(isFiltered ? filteredIsoDirs : isoDirs);
+    };
+
+    auto handleNoMountedISOs = []() {
+        clearScrollBuffer();
+        std::cerr << "\n\033[1;93mNo paths matching the '/mnt/iso_*' pattern found.\033[0m\033[1m\n";
+        std::cout << "\n\033[1;32m↵ to continue...";
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    };
+
+    auto performUnmount = [&](const std::vector<std::string>& selectedIsoDirs) {
+        std::mutex umountMutex, lowLevelMutex;
+        unsigned int numThreads = std::min(static_cast<unsigned int>(selectedIsoDirs.size()), maxThreads);
+        ThreadPool pool(numThreads);
+        std::vector<std::future<void>> unmountFutures;
+
+        std::atomic<size_t> completedIsos(0);
+        size_t totalIsos = selectedIsoDirs.size();
+        std::atomic<bool> isComplete(false);
+
+        std::thread progressThread(displayProgressBar, 
+            std::ref(completedIsos), 
+            std::cref(totalIsos), 
+            std::ref(isComplete), 
+            std::ref(verbose)
+        );
+
+        for (const auto& iso : selectedIsoDirs) {
+            unmountFutures.emplace_back(pool.enqueue([&]() {
+                std::lock_guard<std::mutex> lock(umountMutex);
+                unmountISO({iso}, unmountedFiles, unmountedErrors, lowLevelMutex);
+                completedIsos.fetch_add(1, std::memory_order_relaxed);
+            }));
+        }
+
+        for (auto& future : unmountFutures) {
+            future.wait();
+        }
+
+        isComplete.store(true, std::memory_order_release);
+        progressThread.join();
+
+        if (verbose) {
+            printUnmountedAndErrors(unmountedFiles, unmountedErrors, errorMessages);
+            std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        }
+    };
+
+	auto filterISOs = [&](const std::string& filterTerms) {
+		// If filtering results in an empty list, keep the previous filtered list
+		std::vector<std::string> newFilteredIsoDirs = filterFiles(isFiltered ? filteredIsoDirs : isoDirs, filterTerms);
+    
+		if (newFilteredIsoDirs.empty()) {
+			std::cout << "\033[1A\033[K";
+			std::cout << "\033[1;31mNo results found. Continue filtering or press enter to return to full list.\033[0m\n";
+			return false;
+		}
+    
+		// Update the filtered list
+		filteredIsoDirs = newFilteredIsoDirs;
+		isFiltered = true;
+		return true;
+	};
 
     while (true) {
-	// Reset flags and prepare for selection
-	unmountedFiles.clear();
+        // Reset state
+        unmountedFiles.clear();
         unmountedErrors.clear();
         errorMessages.clear();
-        
-        verbose = false;
-        historyPattern = false;
-        std::vector<std::string> selectedIsoDirs;
-        selectedIsoDirs.reserve(maxThreads);
-        
-        // Populate or use existing ISO directories
+
+        // Load mounted ISOs if not filtered
         if (!isFiltered) {
-            isoDirs.clear();
-            for (const auto& entry : std::filesystem::directory_iterator(isoPath)) {
-                if (entry.is_directory() && entry.path().filename().string().find("iso_") == 0) {
-                    isoDirs.push_back(entry.path().string());
-                }
-            }
-            sortFilesCaseInsensitive(isoDirs);
-        } else {
-            // If using filtered directories, ensure they're sorted
-            sortFilesCaseInsensitive(filteredIsoDirs);
+            loadMountedISOs();
         }
 
-        // Determine which directory list to use
-        std::vector<std::string>& currentIsoDirs = isFiltered ? filteredIsoDirs : isoDirs;
+        // Display ISOs
+        displayMountedISOs();
 
-        // Clear screen and list ISOs if specified
-        if (clr) {
-            clearScrollBuffer();
-            listMountedISOs(currentIsoDirs);
-            if (!isFiltered){
-				std::cout << "\n\n";
-			}
-        }
-
+        // Handle case with no ISOs
         if (isoDirs.empty() && !isFiltered) {
-            clearScrollBuffer();
-            std::cout << "\033[1A\033[K";
-            std::cerr << "\n\033[1;93mNo paths matching the '/mnt/iso_*' pattern found.\033[0m\033[1m\n";
-            std::cout << "\n\033[1;32m↵ to continue...";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            handleNoMountedISOs();
             return;
         }
 
-        std::string prompt;
-        if (isFiltered) {
-            std::cout << "\033[K";
-            prompt = "\n\001\033[1;96m\002Filtered \001\033[1;92m\002ISO"
-                     "\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
-        } else {
-            std::cout << "\033[1A\033[K";
-            prompt = "\001\033[1;92m\002ISO"
-                     "\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
-        }
+        // Get user input
+        std::string prompt = isFiltered 
+            ? "\n\001\033[1;96m\002Filtered \001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 "
+            : "\n\001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 (e.g., 1-3,1 5,00=all), / ↵ filter, ↵ return:\001\033[0;1m\002 ";
 
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
-        std::string inputString(input.get());
+        std::string inputString(input.get() ? input.get() : "");
 
-        if (!inputString.empty() && inputString != "/") {
-            clearScrollBuffer();
-            std::cout << "\033[1m\n";
-        }
-
+        // Handle empty input
         if (inputString.empty()) {
             if (isFiltered) {
                 isFiltered = false;
-                filteredIsoDirs.clear(); // Clear the filtered list when returning to unfiltered mode
+                filteredIsoDirs.clear();
                 continue;
-            } else {
-                return;
             }
-        } else if (inputString == "/") {
-            std::vector<std::string> baseSearchList = isFiltered ? filteredIsoDirs : isoDirs;
-            std::vector<std::string> lastSuccessfulFilteredIsoDirs = filteredIsoDirs; // Initialize with unfiltered list
-            static bool hadSuccessfulFilter = false;
+            return;
+        }
 
-            while (true) {
-				// Verbose output is to be disabled unless specified by progressbar function downstream
-                verbose = false;
-                
-                unmountedFiles.clear();
-                unmountedErrors.clear();
-                errorMessages.clear();
-                
-                clear_history();
-                historyPattern = true;
-                loadHistory(historyPattern);
-                std::cout << "\033[1A\033[K";
-
-                std::string filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
-                std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
-
-                if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
-                    historyPattern = false;
-                    clear_history();
-                    // Revert to the last successful filter or the full list
-                    if (hadSuccessfulFilter && !lastSuccessfulFilteredIsoDirs.empty()) {
-                        filteredIsoDirs = lastSuccessfulFilteredIsoDirs;
-                        clr = true;
-                        isFiltered = true;
-                    } else {
-                        filteredIsoDirs = isoDirs;
-                        historyPattern = false;
-                        hadSuccessfulFilter = false;
-                        clr = false;
-                        isFiltered = false;
-                    }
-                    break;
-                }
-
-                std::string inputSearch(searchQuery.get());
-                std::cout << "\033[1m\n"; 
-                    
-
-                // Call the new filterMountPoints function
-                filteredIsoDirs = filterFiles(baseSearchList, inputSearch);
-
-                if (filteredIsoDirs.size() == isoDirs.size()) {
-                    // No filtering applied
-                    std::cout << "\033[1A\033[K";
-                    lastSuccessfulFilteredIsoDirs.clear();
-                    filteredIsoDirs.clear();
-                    isFiltered = false;
-                    break;
-                } else if (filteredIsoDirs.empty()) {
-                    // No matches found; continue the loop
-                    std::cout << "\033[1A\033[K";
-                    continue;
-                } else {
-                    // Successful filter
-                    if (lastSuccessfulFilteredIsoDirs != filteredIsoDirs) {
-						add_history(searchQuery.get());
-						saveHistory(historyPattern);
- 
-                        lastSuccessfulFilteredIsoDirs = filteredIsoDirs;
-                        hadSuccessfulFilter = true;
-                        clr = true;
-                        isFiltered = true;
-                    }
-                      historyPattern = false;
-					  clear_history();
-                    break; // Exit loop after successful filtering
-                }
+        // Handle filtering
+        if (inputString == "/") {
+			std::cout << "\033[1A\033[K";
+            std::string filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;93m\002umount\001\033[1;94m\002 list (multi-term separator: 001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
+            
+            std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
+            
+            if (!searchQuery || searchQuery.get()[0] == '\0') {
+                continue;
             }
+
+            filterISOs(searchQuery.get());
+            continue;
+        }
+
+        // Prepare for unmounting
+        std::vector<std::string>& currentDirs = isFiltered ? filteredIsoDirs : isoDirs;
+        std::vector<int> selectedIndices;
+        std::vector<std::string> selectedIsoDirs;
+
+        // Handle selection logic
+        if (inputString == "00") {
+            selectedIsoDirs = currentDirs;
         } else {
-			std::vector<std::string>& currentDirs = isFiltered ? filteredIsoDirs : isoDirs;
-			// Continue with other logic
-			std::vector<int> selectedIndices;
-
-            if (inputString == "00") {
-                selectedIsoDirs = currentDirs;
-            } else {
+            tokenizeInput(inputString, currentDirs, errorMessages, selectedIndices);
             
-				// Tokenize the input string
-				tokenizeInput(inputString, currentDirs, errorMessages, selectedIndices);
-			}
-			
-			for (int index : selectedIndices) {
-				// Subtract 1 to convert from 1-based to 0-based indexing
-				selectedIsoDirs.push_back(currentDirs[index - 1]);
-			}
-            
-
-            if (!selectedIsoDirs.empty()) {
-                unsigned int numThreads = std::min(static_cast<int>(selectedIsoDirs.size()), static_cast<int>(maxThreads));
-                ThreadPool pool(numThreads);
-                std::vector<std::future<void>> futuresUmount;
-                futuresUmount.reserve(numThreads);
-
-                size_t maxBatchSize = 100;  // Maximum number of items per batch
-
-                // Calculate batch size ensuring it's at most maxBatchSize
-                size_t batchSize = std::min(maxBatchSize, (selectedIsoDirs.size() + numThreads - 1) / numThreads);
-
-                // Ensure batchSize is at least 1
-                batchSize = std::max(batchSize, static_cast<size_t>(1));
-
-                std::vector<std::vector<std::string>> batches;
-                for (size_t i = 0; i < selectedIsoDirs.size(); i += batchSize) {
-                    batches.emplace_back(selectedIsoDirs.begin() + i,
-                                         std::min(selectedIsoDirs.begin() + i + batchSize,
-                                         selectedIsoDirs.end()));
-                }
-
-                std::atomic<size_t> completedIsos(0);
-                size_t totalIsos = selectedIsoDirs.size();
-                std::atomic<bool> isComplete(false);
-                std::thread progressThread(displayProgressBar, std::ref(completedIsos), std::cref(totalIsos), std::ref(isComplete), std::ref(verbose));
-
-                for (auto& batch : batches) {
-                    futuresUmount.emplace_back(pool.enqueue([batch = std::move(batch), &unmountedFiles, &unmountedErrors, &completedIsos, &umountMutex, &Mutex4Low]() {
-                        std::lock_guard<std::mutex> umountLock(umountMutex);
-                        std::for_each(batch.begin(), batch.end(), [&](const auto& iso) {
-                            unmountISO({iso}, unmountedFiles, unmountedErrors, Mutex4Low);
-                            completedIsos.fetch_add(1, std::memory_order_relaxed);
-                        });
-                    }));
-                }
-
-                for (auto& future : futuresUmount) {
-                    future.wait();
-                }
-
-                isComplete.store(true, std::memory_order_release);
-                progressThread.join();
-
-				filteredIsoDirs.clear();
-
-                if (verbose) {
-                    printUnmountedAndErrors(unmountedFiles, unmountedErrors, errorMessages);
-                    std::cout << "\n\n\033[1;32m↵ to continue...\033[0;1m";
-                    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                } else {
-                    unmountedFiles.clear();
-                    unmountedErrors.clear();
-                    errorMessages.clear();
-                }
-
-                isFiltered = false;
-            } else {
-                clearScrollBuffer();
-                std::cerr << "\n\033[1;91mNo valid input provided for umount.\n";
-                std::cout << "\n\033[1;32m↵ to continue...";
-                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            for (int index : selectedIndices) {
+                selectedIsoDirs.push_back(currentDirs[index - 1]);
             }
-            clr = true;
+        }
+
+        // Perform unmounting
+        if (!selectedIsoDirs.empty()) {
+            performUnmount(selectedIsoDirs);
+            filteredIsoDirs.clear();
+            isFiltered = false;
+        } else {
+            std::cerr << "\n\033[1;91mNo valid input provided for umount.\n";
+            std::cout << "\n\033[1;32m↵ to continue...";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         }
     }
 }
