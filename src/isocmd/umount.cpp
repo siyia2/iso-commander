@@ -14,7 +14,7 @@ void listMountedISOs(std::vector<std::string>& isoDirs) {
     static const char* blueBold = "\033[94;1m";
     static const char* magentaBold = "\033[95;1m";
     static const char* resetColor = "\033[0;1m";
-
+	std::cout << "\n";
     size_t maxIndex = isoDirs.size();
     size_t numDigits = std::to_string(maxIndex).length();
 
@@ -202,6 +202,11 @@ void printUnmountedAndErrors(std::set<std::string>& unmountedFiles, std::set<std
 
 // Main function for unmounting ISOs
 void unmountISOs(bool& verbose, bool& historyPattern) {
+	
+	// Calls prevent_clear_screen and tab completion
+    rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
+    rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
+	
     const std::string ISO_PATH = "/mnt";
 
     std::vector<std::string> isoDirs;
