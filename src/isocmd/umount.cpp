@@ -381,6 +381,7 @@ void unmountISOs(bool& verbose, bool& historyPattern) {
             filteredIsoDirs.clear();
             isFiltered = false;
         } else {
+			clearScrollBuffer();
             std::cerr << "\n\033[1;91mNo valid input provided for umount.\n";
             std::cout << "\n\033[1;32m↵ to continue...";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
