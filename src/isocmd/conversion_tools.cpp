@@ -99,43 +99,6 @@ void verboseSearchResults(const std::string& fileExtension, std::set<std::string
 }
 
 
-// Function to apply input filtering
-void applyFilter(std::vector<std::string>& files, std::string& fileTypeName, bool& historyPattern) {
-	
-	// Calls prevent_clear_screen and tab completion
-    rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
-    rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
-    
-    while (true) {
-		clear_history();
-        historyPattern = true;
-        loadHistory(historyPattern);
-        std::string filterPrompt = "\001\033[1A\002\001\033[K\002\001\033[1A\002\001\033[K\002\n\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;38;5;208m\002" + fileTypeName + "\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
-
-        std::unique_ptr<char, decltype(&std::free)> rawSearchQuery(readline(filterPrompt.c_str()), &std::free);
-        std::string inputSearch(rawSearchQuery.get());
-    
-        if (inputSearch.empty() || inputSearch == "/") {
-            break;
-        }
-        std::vector<std::string> filteredFiles = filterFiles(files, inputSearch);
-        if (filteredFiles.empty()) {
-            std::cout << "\033[K";  // Clear the previous input line
-            continue;
-        }
-        if (!filteredFiles.empty()) {
-			add_history(rawSearchQuery.get());
-            saveHistory(historyPattern);
-		}
-		
-		historyPattern = false;
-		clear_history();
-        files = filteredFiles;
-        break;
-    }
-}
-
-
 // Function to clear Ram Cache and memory transformations for bin/img mdf nrg files
 void clearRamCache (bool& modeMdf, bool& modeNrg) {
 
@@ -369,12 +332,44 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
     rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
     rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
     
+    
     std::set<std::string> processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts;
     
     bool isFiltered = false;
     bool isFilteredButUnchanged = false;
     bool needsScrnClr = true;
     std::string fileExtension = (fileType == "bin" || fileType == "img") ? ".bin/.img" : (fileType == "mdf") ? ".mdf" : ".nrg";
+    std::string filterPrompt;
+    auto filterQuery = [&files, &historyPattern, &fileType, &filterPrompt]() {
+        while (true) {
+			std::string prompt;
+            clear_history();
+            historyPattern = true;
+            loadHistory(historyPattern);
+
+            std::unique_ptr<char, decltype(&std::free)> rawSearchQuery(readline(filterPrompt.c_str()), &std::free);
+            std::string inputSearch(rawSearchQuery.get());
+
+            if (inputSearch.empty() || inputSearch == "/") {
+                break;
+            }
+
+            std::vector<std::string> filteredFiles = filterFiles(files, inputSearch);
+
+            if (filteredFiles.empty()) {
+                std::cout << "\033[K";  // Clear the previous input line
+                continue;
+            }
+
+            add_history(rawSearchQuery.get());
+            saveHistory(historyPattern);
+
+            historyPattern = false;
+            clear_history();
+            files = filteredFiles;
+            break;
+        }
+    };
 
     while (true) {
         verbose = false;
@@ -425,7 +420,9 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         if (strcmp(rawInput.get(), "/") == 0) {
             std::string fileTypeName = (fileType == "bin" || fileType == "img" ? "BIN/IMG" : (fileType == "mdf" ? "MDF" : "NRG"));
 			
-			applyFilter(files, fileTypeName, historyPattern);
+			filterPrompt = "\001\033[1A\002\001\033[K\002\001\033[1A\002\001\033[K\002\n\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;38;5;208m\002" + fileType + "\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
+			    
+			filterQuery();
 
 
             std::vector<std::string>& cacheRef = (fileType == "bin" || fileType == "img") ? binImgFilesCache : 
@@ -447,7 +444,6 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         }
     }
 }
-
 
 
 // Function to process user input and convert selected BIN/MDF/NRG files to ISO format
