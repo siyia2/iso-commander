@@ -98,7 +98,7 @@ int main(int argc, char *argv[]) {
         std::string choice(mainInputString);
 
         if (choice == "1") {
-            submenu1(promptFlag, maxDepth, historyPattern, verbose);
+            submenu1(maxDepth, historyPattern, verbose);
         } else {
             // Check if the input length is exactly 1
             if (choice.length() == 1) {
@@ -159,7 +159,7 @@ std::cout << Color << R"((   (       )            )    *      *              ) (
 
 
 // Function to print submenu1
-void submenu1(bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
+void submenu1(int& maxDepth, bool& historyPattern, bool& verbose) {
 	
     while (true) {
 		// Calls prevent_clear_screen and tab completion
@@ -195,11 +195,10 @@ void submenu1(bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbo
           std::string submenu_choice(mainInputString);
          // Check if the input length is exactly 1
         if (submenu_choice.empty() || submenu_choice.length() == 1) {
-		std::string operation;
 		switch (submenu_choice[0]) {
         case '1':
 			clearScrollBuffer();
-            select_and_mount_files_by_number(historyPattern, verbose);
+            select_and_operate_files("mount", historyPattern, maxDepth, verbose);
             clearScrollBuffer();
             break;
         case '2':
@@ -209,20 +208,18 @@ void submenu1(bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbo
             break;
         case '3':
 			clearScrollBuffer();
-            operation = "rm";
-            select_and_operate_files_by_number(operation, promptFlag, maxDepth, historyPattern, verbose);
+            select_and_operate_files("rm", historyPattern, maxDepth, verbose);
             clearScrollBuffer();
             break;
         case '4':
 			clearScrollBuffer();
-            operation = "mv";
-            select_and_operate_files_by_number(operation, promptFlag, maxDepth, historyPattern, verbose);
+            select_and_operate_files("mv", historyPattern, maxDepth, verbose);
+
             clearScrollBuffer();
             break;
         case '5':
 			clearScrollBuffer();
-            operation = "cp";
-            select_and_operate_files_by_number(operation, promptFlag, maxDepth, historyPattern, verbose);
+            select_and_operate_files("cp", historyPattern, maxDepth, verbose);
             clearScrollBuffer();
             break;
 			}
@@ -493,6 +490,180 @@ void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username,
         return;
     }
     real_groupname = gr->gr_name;
+}
+
+
+// Main function to select and operate on files by number for mount cp mv and rm
+void select_and_operate_files(const std::string& operation, bool& historyPattern, int& maxDepth, bool& verbose) {
+    // Calls prevent_clear_screen and tab completion
+    rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
+    rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
+    
+    std::set<std::string> operationFiles, skippedMessages, operationFails, uniqueErrorMessages;
+    std::vector<std::string> filteredFiles;
+    globalIsoFileList.reserve(100);
+    bool isFiltered = false;
+    bool needsClrScrn = true;
+    bool mvDelBreak = false;
+    std::mutex Mutex4Low; // Mutex for low-level processing
+    
+    // Determine operation color based on operation type
+    std::string operationColor = (operation == "rm") ? "\033[1;91m" :
+                                 (operation == "cp") ? "\033[1;92m" : 
+                                 (operation == "mv") ? "\033[1;93m" :
+                                 (operation == "mount") ? "\033[1;92m" : "\033[1;95m";
+    std::string process = operation;
+    bool isMount = (operation == "mount");
+    bool promptFlag = false; // Default to false for move and other operations
+    
+    while (true) {
+        // Verbose output is to be disabled unless specified by progressbar function downstream
+        verbose = false;
+
+        operationFiles.clear();
+        skippedMessages.clear();
+        operationFails.clear();
+        uniqueErrorMessages.clear();
+
+        if (needsClrScrn) {
+            if (!clearAndLoadFiles(filteredFiles, isFiltered)) break;
+            std::cout << "\n\n";
+        }
+        
+        // Move the cursor up 1 line and clear them
+        std::cout << "\033[1A\033[K";
+
+        std::string prompt;
+        if (isFiltered) {
+            prompt = "\001\033[1;96m\002Filtered \001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + 
+                     "\001\033[1;94m\002 (e.g., 1-3,1 5," + (isMount ? "00=all" : "") + "), ~ ↵ (un)fold, / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+        } else {
+            prompt = "\001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + 
+                     "\001\033[1;94m\002 (e.g., 1-3,1 5," + (isMount ? "00=all" : "") + "), ~ ↵ (un)fold, / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+        }
+
+        std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
+        std::string inputString(input.get());
+
+        if (inputString == "~") {
+            toggleFullList = !toggleFullList;
+            needsClrScrn = true;
+            continue;
+        }
+
+        if (inputString.empty()) {
+            if (isFiltered) {
+                isFiltered = false;
+                continue;
+            } else {
+                return;
+            }
+        } else if (inputString == "/") {
+            while (true) {
+                verbose = false;
+                operationFiles.clear();
+                skippedMessages.clear();
+                operationFails.clear();
+                uniqueErrorMessages.clear();
+
+                clear_history();
+                historyPattern = true;
+                loadHistory(historyPattern);
+                // Move the cursor up 1 line and clear them
+                std::cout << "\033[1A\033[K";
+
+                std::string filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + 
+                                           " \001\033[1;94m\002list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
+
+                std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
+
+                if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
+                    historyPattern = false;
+                    clear_history();
+                    if (isFiltered) {
+                        needsClrScrn = true;
+                    } else {
+                        needsClrScrn = false;
+                    }
+                    break;
+                }
+
+                std::string inputSearch(searchQuery.get());
+                
+                // Decide the current list to filter
+                std::vector<std::string>& currentFiles = isFiltered ? filteredFiles : globalIsoFileList;
+                // Apply the filter on the current list
+                auto newFilteredFiles = filterFiles(currentFiles, inputSearch);
+                sortFilesCaseInsensitive(newFilteredFiles);
+
+                if (newFilteredFiles.size() == globalIsoFileList.size()) {
+                    isFiltered = false;
+                    break;
+                }
+
+                if (!newFilteredFiles.empty()) {
+                    add_history(searchQuery.get());
+                    saveHistory(historyPattern);
+                    needsClrScrn = true;
+                    filteredFiles = std::move(newFilteredFiles);
+                    isFiltered = true;
+                    break;
+                }
+                historyPattern = false;
+                clear_history();
+            }
+        } else {
+            std::vector<std::string>& currentFiles = isFiltered ? filteredFiles : globalIsoFileList;
+            clearScrollBuffer();
+            std::cout << "\033[1m\n";
+            needsClrScrn = true;
+
+            if (isMount && inputString == "00") {
+                // Special case for mounting all files
+                mountAllIsoFiles(currentFiles, operationFiles, skippedMessages, operationFails, verbose, Mutex4Low);
+            } else if (isMount){
+				clearScrollBuffer();
+                needsClrScrn = true;
+					processAndMountIsoFiles(inputString, currentFiles, operationFiles, skippedMessages, operationFails, uniqueErrorMessages, verbose, Mutex4Low);
+			} else {
+                // Generic operation processing
+                processOperationInput(inputString, currentFiles, process, operationFiles, 
+                                      operationFails, uniqueErrorMessages, 
+                                      promptFlag, maxDepth, mvDelBreak, 
+                                      historyPattern, verbose);
+            }
+
+            // Check and print results
+            if (!uniqueErrorMessages.empty() && operationFiles.empty() && skippedMessages.empty() && operationFails.empty()) {
+                clearScrollBuffer();
+                needsClrScrn = true;
+                std::cout << "\n\033[1;91mNo valid input provided for " << operation << "\033[0;1m\n\n\033[1;32m↵ to continue...\033[0;1m";
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            } else if (verbose) {
+                clearScrollBuffer();
+                needsClrScrn = true;
+                verbosePrint(operationFiles, skippedMessages, operationFails, {}, uniqueErrorMessages, 
+                             isMount ? 2 : 1);
+            }
+
+            // Additional logic for non-mount operations
+            if ((process == "mv" || process == "rm") && isFiltered && mvDelBreak) {
+                historyPattern = false;
+                clear_history();
+                isFiltered = false;
+                needsClrScrn = true;
+            }
+
+            if (currentFiles.empty()) {
+                clearScrollBuffer();
+                needsClrScrn = true;
+                std::cout << "\n\033[1;93mNo ISO available for " << operation << ".\033[0m\n\n";
+                std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                return;
+            }
+        }
+    }
 }
 
 
