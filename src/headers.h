@@ -109,7 +109,7 @@ void submenu2(bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbo
 void print_ascii();
 
 // General functions
-void select_and_operate_files(const std::string& operation, bool& historyPattern, int& maxDepth, bool& verbose);
+void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& maxDepth, bool& verbose);
 void printList(const std::vector<std::string>& items, const std::string& listType);
 void flushStdin();
 void disableInput();
