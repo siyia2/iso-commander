@@ -24,7 +24,6 @@ For best experience execute with: `sudo isocmd`.
 
 🖥️ Advanced Terminal Interface:
 
-* Sanitized shell commands.
 * Robust tab completion.
 * Comprehensive command history.
 
