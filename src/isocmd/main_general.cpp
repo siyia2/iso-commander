@@ -620,13 +620,16 @@ void select_and_operate_files(const std::string& operation, bool& historyPattern
 
             if (isMount && inputString == "00") {
                 // Special case for mounting all files
+                std::cout << "\033[0;1m\n";
                 mountAllIsoFiles(currentFiles, operationFiles, skippedMessages, operationFails, verbose, Mutex4Low);
             } else if (isMount){
 				clearScrollBuffer();
                 needsClrScrn = true;
+                std::cout << "\033[0;1m\n";
 					processAndMountIsoFiles(inputString, currentFiles, operationFiles, skippedMessages, operationFails, uniqueErrorMessages, verbose, Mutex4Low);
 			} else {
                 // Generic operation processing
+                std::cout << "\033[0;1m\n";
                 processOperationInput(inputString, currentFiles, process, operationFiles, 
                                       operationFails, uniqueErrorMessages, 
                                       promptFlag, maxDepth, mvDelBreak, 
@@ -642,8 +645,11 @@ void select_and_operate_files(const std::string& operation, bool& historyPattern
             } else if (verbose) {
                 clearScrollBuffer();
                 needsClrScrn = true;
-                verbosePrint(operationFiles, skippedMessages, operationFails, {}, uniqueErrorMessages, 
-                             isMount ? 2 : 1);
+                if (isMount){
+					verbosePrint(operationFiles, operationFails, {}, {}, uniqueErrorMessages, 2);
+				} else {
+					verbosePrint(operationFiles, operationFails, {}, {}, uniqueErrorMessages, 1);
+				}
             }
 
             // Additional logic for non-mount operations
