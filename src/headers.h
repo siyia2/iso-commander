@@ -46,6 +46,9 @@ extern unsigned int maxThreads;
 // For storing isoFiles in RAM cache
 extern std::vector<std::string> globalIsoFileList; 
 
+// Holds IsoCache directory path
+extern const std::string cacheFileName;
+
 // For toggling between full and shortened paths in lists
 extern bool toggleFullList;
 
@@ -82,6 +85,7 @@ std::string promptCpMvRm(std::vector<std::string>& isoFiles, std::vector<std::ve
 // Iso cache functions
 bool iequals(const std::string_view& a, const std::string_view& b);
 bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize);
+bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered);
 
 // Mount functions
 bool isAlreadyMounted(const std::string& mountPoint);
@@ -137,6 +141,7 @@ void loadCache(std::vector<std::string>& isoFiles);
 void manualRefreshCache(const std::string& initialDir = "", bool promptFlag = true, int maxDepth = -1, bool historyPattern = false);
 void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, std::atomic<size_t>& totalFiles, std::mutex& traverseFilesMutex, std::mutex& traverseErrorsMutex, int& maxDepth, bool& promptFlag);
 void removeNonExistentPathsFromCache();
+
 
 // Filter functions
 void toLowerInPlace(std::string& str);
