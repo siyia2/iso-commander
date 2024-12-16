@@ -11,6 +11,7 @@ const std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/iso_com
 const std::string cacheFileName = "iso_commander_cache.txt";
 const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
+
 // Function to remove non-existent paths from cache
 void removeNonExistentPathsFromCache() {
     // Check if the cache file exists
