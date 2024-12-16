@@ -69,7 +69,6 @@ bool fileExists(const std::string& fullPath);
 //	voids
 
 // General
-void select_and_operate_files_by_number(const std::string& operation, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose);
 void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& mvDelBreak, bool& historyPattern, bool& verbose);
 void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete, std::mutex& Mutex4Low);
 
@@ -105,11 +104,12 @@ bool isNumeric(const std::string& str);
 // Art
 void printVersionNumber(const std::string& version);
 void printMenu();
-void submenu1(bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose);
+void submenu1(int& maxDepth, bool& historyPattern, bool& verbose);
 void submenu2(bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose);
 void print_ascii();
 
 // General functions
+void select_and_operate_files(const std::string& operation, bool& historyPattern, int& maxDepth, bool& verbose);
 void printList(const std::vector<std::string>& items, const std::string& listType);
 void flushStdin();
 void disableInput();
@@ -130,7 +130,6 @@ int prevent_clear_screen_and_tab_completion(int, int);
 // Mount functions
 void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, bool& verbose, std::mutex& Mutex4Low);
 void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::mutex& Mutex4Low);
-void select_and_mount_files_by_number(bool& historyPattern, bool& verbose);
 void printIsoFileList(const std::vector<std::string>& isoFiles);
 void processAndMountIsoFiles(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles,std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages, bool& verbose, std::mutex& Mutex4Low);
 
