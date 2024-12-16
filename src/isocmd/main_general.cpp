@@ -607,6 +607,8 @@ void select_and_operate_files(const std::string& operation, bool& historyPattern
                     needsClrScrn = true;
                     filteredFiles = std::move(newFilteredFiles);
                     isFiltered = true;
+                    historyPattern = false;
+					clear_history();
                     break;
                 }
                 historyPattern = false;
@@ -630,10 +632,7 @@ void select_and_operate_files(const std::string& operation, bool& historyPattern
 			} else {
                 // Generic operation processing
                 std::cout << "\033[0;1m\n";
-                processOperationInput(inputString, currentFiles, process, operationFiles, 
-                                      operationFails, uniqueErrorMessages, 
-                                      promptFlag, maxDepth, mvDelBreak, 
-                                      historyPattern, verbose);
+                processOperationInput(inputString, currentFiles, process, operationFiles, operationFails, uniqueErrorMessages, promptFlag, maxDepth, mvDelBreak, historyPattern, verbose);
             }
 
             // Check and print results
