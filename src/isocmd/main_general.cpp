@@ -307,7 +307,6 @@ void printMenu() {
 
 // GENERAL STUFF
 
-
 // Main verbose print function
 void verbosePrint(const std::set<std::string>& primarySet, const std::set<std::string>& secondarySet = {}, const std::set<std::string>& tertiarySet = {}, const std::set<std::string>& quaternarySet = {}, const std::set<std::string>& errorSet = {}, int printType = 0) {
     clearScrollBuffer(); // Assuming this function is defined elsewhere
@@ -921,8 +920,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
 }
 
 
-// STRING STUFF
-
+// HISTORY&STRING STUFF
 
 // Function to extract directory and filename from a given path
 std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view path) {
