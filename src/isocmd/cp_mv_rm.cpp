@@ -53,52 +53,7 @@ void select_and_operate_files_by_number(const std::string& operation, bool& prom
     std::string operationColor = (operation == "rm") ? "\033[1;91m" :
                                  (operation == "cp") ? "\033[1;92m" : "\033[1;93m";
     std::string process = operation;
-
-    // Utility function to clear screen buffer and load IsoFiles from cache to a global vector only the first time and only if the cache has been modified.
-    auto clear_and_load_files = [&]() {
-    static std::filesystem::file_time_type lastModifiedTime;
     
-    clearScrollBuffer();
-    
-    // Check if the cache file exists and has been modified
-    bool needToReload = false;
-    if (std::filesystem::exists(cacheFileName)) {
-        std::filesystem::file_time_type currentModifiedTime = 
-            std::filesystem::last_write_time(cacheFileName);
-        
-        if (lastModifiedTime == std::filesystem::file_time_type{}) {
-            // First time checking, always load
-            needToReload = true;
-        } else if (currentModifiedTime > lastModifiedTime) {
-            // Cache file has been modified since last load
-            needToReload = true;
-        }
-        
-        // Update last modified time
-        lastModifiedTime = currentModifiedTime;
-    } else {
-        // Cache file doesn't exist, need to load
-        needToReload = true;
-    }
-    
-    if (needToReload) {
-        removeNonExistentPathsFromCache();
-        loadCache(globalIsoFileList);
-        sortFilesCaseInsensitive(globalIsoFileList);
-    }
-    
-    printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES");
-    
-    if (globalIsoFileList.empty()) {
-        clearScrollBuffer();
-        std::cout << "\n\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n";
-        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        return false;
-		}
-		return true;
-	};
-
     while (true) {
         verbose = false;
 
@@ -107,7 +62,7 @@ void select_and_operate_files_by_number(const std::string& operation, bool& prom
         uniqueErrorMessages.clear();
 
         if (needsClrScrn) {
-            if (!clear_and_load_files()) break;
+            if (!clearAndLoadFiles(filteredFiles, isFiltered)) break;
             std::cout << "\n\n";
             std::cout << "\033[1A\033[K";  // Move the cursor up 1 line and clear them
         }

@@ -13,6 +13,12 @@ const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
 // Function to remove non-existent paths from cache
 void removeNonExistentPathsFromCache() {
+    // Check if the cache file exists
+    if (!std::filesystem::exists(cacheFilePath)) {
+        // If the file is missing, clear the cache by creating an empty file
+        std::ofstream clearCacheFile(cacheFilePath, std::ios::out | std::ios::trunc);
+        return;
+    }
 
     // Open the cache file for reading
     int fd = open(cacheFilePath.c_str(), O_RDONLY);
@@ -33,8 +39,14 @@ void removeNonExistentPathsFromCache() {
         close(fd);
         return;
     }
-
     size_t fileSize = sb.st_size;
+
+    // If file is empty, just return
+    if (fileSize == 0) {
+        flock(fd, LOCK_UN);
+        close(fd);
+        return;
+    }
 
     // Memory map the file
     char* mappedFile = static_cast<char*>(mmap(nullptr, fileSize, PROT_READ, MAP_PRIVATE, fd, 0));
@@ -50,7 +62,9 @@ void removeNonExistentPathsFromCache() {
     char* end = mappedFile + fileSize;
     while (start < end) {
         char* lineEnd = std::find(start, end, '\n');
-        cache.emplace_back(start, lineEnd);
+        if (lineEnd > start) {  // Ensure non-empty lines
+            cache.emplace_back(start, lineEnd);
+        }
         start = lineEnd + 1;
     }
 
@@ -58,6 +72,11 @@ void removeNonExistentPathsFromCache() {
     munmap(mappedFile, fileSize);
     flock(fd, LOCK_UN);
     close(fd);
+
+    // If no paths in the cache, return
+    if (cache.empty()) {
+        return;
+    }
 
     // Determine batch size
     const size_t maxThreads = std::thread::hardware_concurrency();
@@ -70,7 +89,7 @@ void removeNonExistentPathsFromCache() {
     for (size_t i = 0; i < cache.size(); i += batchSize) {
         auto begin = cache.begin() + i;
         auto end = std::min(begin + batchSize, cache.end());
-            futures.push_back(std::async(std::launch::async, [begin, end]() {
+        futures.push_back(std::async(std::launch::async, [begin, end]() {
             std::vector<std::string> result;
             for (auto it = begin; it != end; ++it) {
                 if (std::filesystem::exists(*it)) {
@@ -85,11 +104,13 @@ void removeNonExistentPathsFromCache() {
     std::vector<std::string> retainedPaths;
     for (auto& future : futures) {
         auto result = future.get();
-        retainedPaths.insert(retainedPaths.end(), std::make_move_iterator(result.begin()), std::make_move_iterator(result.end()));
+        retainedPaths.insert(retainedPaths.end(), 
+            std::make_move_iterator(result.begin()), 
+            std::make_move_iterator(result.end()));
     }
 
     // Open the cache file for writing
-    fd = open(cacheFilePath.c_str(), O_WRONLY);
+    fd = open(cacheFilePath.c_str(), O_WRONLY | O_TRUNC);
     if (fd == -1) {
         return;
     }
@@ -109,10 +130,8 @@ void removeNonExistentPathsFromCache() {
     }
 
     for (const std::string& path : retainedPaths) {
-		if (std::filesystem::exists(path)) {
-			updatedCacheFile << path << '\n';
-		}
-	}
+        updatedCacheFile << path << '\n';
+    }
 
     // RAII: Close the file and release the lock
     flock(fd, LOCK_UN);
@@ -148,6 +167,52 @@ std::string getHomeDirectory() {
         return std::string(homeDir);
     }
     return "";
+}
+
+// Utility function to clear screen buffer and load IsoFiles from cache to a global vector only for the first time and only for if the cache has been modified.
+bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered) {
+    static std::filesystem::file_time_type lastModifiedTime;
+
+    clearScrollBuffer();
+
+    // Check if the cache file exists and has been modified
+    bool needToReload = false;
+    if (std::filesystem::exists(cacheFileName)) {
+        std::filesystem::file_time_type currentModifiedTime = 
+            std::filesystem::last_write_time(cacheFileName);
+
+        if (lastModifiedTime == std::filesystem::file_time_type{}) {
+            // First time checking, always load
+            needToReload = true;
+        } else if (currentModifiedTime > lastModifiedTime) {
+            // Cache file has been modified since last load
+            needToReload = true;
+        }
+
+        // Update last modified time
+        lastModifiedTime = currentModifiedTime;
+    } else {
+        // Cache file doesn't exist, need to load
+        needToReload = true;
+    }
+
+    if (needToReload) {
+        removeNonExistentPathsFromCache();
+        loadCache(globalIsoFileList);
+        sortFilesCaseInsensitive(globalIsoFileList);
+    }
+
+    printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES");
+
+    if (globalIsoFileList.empty()) {
+        clearScrollBuffer();
+        std::cout << "\n\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n";
+        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        return false;
+    }
+
+    return true;
 }
 
 
@@ -419,8 +484,8 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 		}
 		
         if (!input.empty()) {
+			add_history(searchQuery.get());
 			std::cout << "\n";
-            add_history(searchQuery.get());
         }
     }
 
@@ -492,10 +557,13 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
         }
 
         if (validPaths.empty()) {
+			input = "";
+			clear_history();
             std::cout << "\033[1A\033[K";
         }
-		if (!validPaths.empty()) {
+		if (!validPaths.empty() && !input.empty()) {
 			saveHistory(historyPattern);
+			clear_history();
 		}
         verboseIsoCacheRefresh(allIsoFiles, totalFiles, validPaths, invalidPaths, 
                                uniqueErrorMessages, promptFlag, maxDepth, historyPattern, start_time);
