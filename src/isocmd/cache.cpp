@@ -14,10 +14,10 @@ const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
 // Function to remove non-existent paths from cache
 void removeNonExistentPathsFromCache() {
-    // Check if the cache file exists
-    if (!std::filesystem::exists(cacheFilePath)) {
-        // If the file is missing, clear the cache by creating an empty file
-        std::ofstream clearCacheFile(cacheFilePath, std::ios::out | std::ios::trunc);
+	
+	if (!std::filesystem::exists(cacheFilePath)) {
+        // If the file is missing, clear the ISO cache and return
+        globalIsoFileList.clear();
         return;
     }
 
@@ -40,14 +40,8 @@ void removeNonExistentPathsFromCache() {
         close(fd);
         return;
     }
-    size_t fileSize = sb.st_size;
 
-    // If file is empty, just return
-    if (fileSize == 0) {
-        flock(fd, LOCK_UN);
-        close(fd);
-        return;
-    }
+    size_t fileSize = sb.st_size;
 
     // Memory map the file
     char* mappedFile = static_cast<char*>(mmap(nullptr, fileSize, PROT_READ, MAP_PRIVATE, fd, 0));
@@ -63,9 +57,7 @@ void removeNonExistentPathsFromCache() {
     char* end = mappedFile + fileSize;
     while (start < end) {
         char* lineEnd = std::find(start, end, '\n');
-        if (lineEnd > start) {  // Ensure non-empty lines
-            cache.emplace_back(start, lineEnd);
-        }
+        cache.emplace_back(start, lineEnd);
         start = lineEnd + 1;
     }
 
@@ -73,11 +65,6 @@ void removeNonExistentPathsFromCache() {
     munmap(mappedFile, fileSize);
     flock(fd, LOCK_UN);
     close(fd);
-
-    // If no paths in the cache, return
-    if (cache.empty()) {
-        return;
-    }
 
     // Determine batch size
     const size_t maxThreads = std::thread::hardware_concurrency();
@@ -90,7 +77,7 @@ void removeNonExistentPathsFromCache() {
     for (size_t i = 0; i < cache.size(); i += batchSize) {
         auto begin = cache.begin() + i;
         auto end = std::min(begin + batchSize, cache.end());
-        futures.push_back(std::async(std::launch::async, [begin, end]() {
+            futures.push_back(std::async(std::launch::async, [begin, end]() {
             std::vector<std::string> result;
             for (auto it = begin; it != end; ++it) {
                 if (std::filesystem::exists(*it)) {
@@ -105,13 +92,11 @@ void removeNonExistentPathsFromCache() {
     std::vector<std::string> retainedPaths;
     for (auto& future : futures) {
         auto result = future.get();
-        retainedPaths.insert(retainedPaths.end(), 
-            std::make_move_iterator(result.begin()), 
-            std::make_move_iterator(result.end()));
+        retainedPaths.insert(retainedPaths.end(), std::make_move_iterator(result.begin()), std::make_move_iterator(result.end()));
     }
 
     // Open the cache file for writing
-    fd = open(cacheFilePath.c_str(), O_WRONLY | O_TRUNC);
+    fd = open(cacheFilePath.c_str(), O_WRONLY);
     if (fd == -1) {
         return;
     }
@@ -131,8 +116,10 @@ void removeNonExistentPathsFromCache() {
     }
 
     for (const std::string& path : retainedPaths) {
-        updatedCacheFile << path << '\n';
-    }
+		if (std::filesystem::exists(path)) {
+			updatedCacheFile << path << '\n';
+		}
+	}
 
     // RAII: Close the file and release the lock
     flock(fd, LOCK_UN);
