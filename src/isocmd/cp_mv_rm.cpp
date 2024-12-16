@@ -42,10 +42,10 @@ bool isValidLinuxPathFormat(const std::string& path) {
 void select_and_operate_files_by_number(const std::string& operation, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
     rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
     rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
-    
+
     std::set<std::string> operationIsos, operationErrors, uniqueErrorMessages;
     std::vector<std::string> isoFiles, filteredFiles;
-    isoFiles.reserve(100);
+    filteredFiles.reserve(100);
 
     bool isFiltered = false;
     bool needsClrScrn = true;
@@ -56,8 +56,10 @@ void select_and_operate_files_by_number(const std::string& operation, bool& prom
 
     // Utility function to clear screen buffer and load/compare file lists
     auto clear_and_load_files = [&]() {
+        clearScrollBuffer();
         removeNonExistentPathsFromCache();
-        loadCache(isoFiles);
+        loadCache(isoFiles);  // Use isoFiles directly
+        printList(isFiltered ? filteredFiles : isoFiles, "ISO_FILES");
         if (isoFiles.empty()) {
             clearScrollBuffer();
             std::cout << "\n\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n";
@@ -66,28 +68,18 @@ void select_and_operate_files_by_number(const std::string& operation, bool& prom
             return false;
         }
 
-        if (globalIsoFileList.size() != isoFiles.size() ||
-            !std::equal(globalIsoFileList.begin(), globalIsoFileList.end(), isoFiles.begin())) {
-            sortFilesCaseInsensitive(isoFiles);
-            globalIsoFileList = isoFiles;
-        } else {
-            isoFiles = globalIsoFileList;
-        }
-
         return true;
     };
 
     while (true) {
         verbose = false;
-        if (!clear_and_load_files()) break;
 
         operationIsos.clear();
         operationErrors.clear();
         uniqueErrorMessages.clear();
 
         if (needsClrScrn) {
-			clearScrollBuffer();
-            printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES");
+            if (!clear_and_load_files()) break;
             std::cout << "\n\n";
             std::cout << "\033[1A\033[K";  // Move the cursor up 1 line and clear them
         }
@@ -100,7 +92,7 @@ void select_and_operate_files_by_number(const std::string& operation, bool& prom
 
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         std::string inputString(input.get());
-        
+
         if (inputString == "~") {
             toggleFullList = !toggleFullList;
             needsClrScrn = true;
@@ -124,7 +116,7 @@ void select_and_operate_files_by_number(const std::string& operation, bool& prom
                 historyPattern = true;
                 loadHistory(historyPattern);
                 std::cout << "\033[1A\033[K";  // Clear the previous input line
-                
+
                 std::string filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + 
                                            " \001\033[1;94m\002list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
 
@@ -134,14 +126,14 @@ void select_and_operate_files_by_number(const std::string& operation, bool& prom
                     clear_history();
                     break;
                 }
-                
+
                 std::string inputSearch(searchQuery.get());
-                
-                const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : globalIsoFileList;
+
+                const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : isoFiles;
                 auto newFilteredFiles = filterFiles(sourceList, inputSearch);
                 sortFilesCaseInsensitive(newFilteredFiles);
 
-                if (newFilteredFiles.size() == globalIsoFileList.size()) {
+                if (newFilteredFiles.size() == isoFiles.size()) {
                     isFiltered = false;
                     break;
                 }
@@ -157,7 +149,7 @@ void select_and_operate_files_by_number(const std::string& operation, bool& prom
                 clear_history();
             }
         } else {
-            std::vector<std::string>& currentFiles = isFiltered ? filteredFiles : globalIsoFileList;
+            std::vector<std::string>& currentFiles = isFiltered ? filteredFiles : isoFiles;
             needsClrScrn = true;
             processOperationInput(inputString, currentFiles, process, operationIsos, operationErrors, uniqueErrorMessages, promptFlag, maxDepth, mvDelBreak, historyPattern, verbose);
 
@@ -183,6 +175,7 @@ void select_and_operate_files_by_number(const std::string& operation, bool& prom
         }
     }
 }
+
 
 
 // Function to process either mv or cp indices
