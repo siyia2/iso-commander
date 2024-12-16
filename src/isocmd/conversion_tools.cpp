@@ -332,55 +332,66 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
     rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
     rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
     
+    // Containers to track file processing results
     std::set<std::string> processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts;
     
-    bool isFiltered = false;
-    std::string fileExtension = (fileType == "bin" || fileType == "img") ? ".bin/.img" : (fileType == "mdf") ? ".mdf" : ".nrg";
-    std::string filterPrompt;
+    bool isFiltered = false; // Indicates if the file list is currently filtered
+    std::string fileExtension = (fileType == "bin" || fileType == "img") ? ".bin/.img" 
+                                   : (fileType == "mdf") ? ".mdf" : ".nrg"; // Determine file extension based on type
+    std::string filterPrompt; // Stores the prompt for filter input
     
+    // Lambda function for filtering the file list
     auto filterQuery = [&files, &historyPattern, &fileType, &filterPrompt]() {
         while (true) {
-            clear_history();
+            clear_history(); // Clear the input history
             historyPattern = true;
-            loadHistory(historyPattern);
+            loadHistory(historyPattern); // Load input history if available
 
+            // Prompt the user for a search query
             std::unique_ptr<char, decltype(&std::free)> rawSearchQuery(readline(filterPrompt.c_str()), &std::free);
             std::string inputSearch(rawSearchQuery.get());
 
+            // Exit the filter loop if input is empty or "/"
             if (inputSearch.empty() || inputSearch == "/") break;
 
+            // Filter files based on the input search query
             auto filteredFiles = filterFiles(files, inputSearch);
-            if (filteredFiles.empty()) continue;
+            if (filteredFiles.empty()) continue; // Skip if no files match the filter
 
+            // Save the search query to history and update the file list
             add_history(rawSearchQuery.get());
             saveHistory(historyPattern);
             historyPattern = false;
-            clear_history();
-            files = filteredFiles;
+            clear_history(); // Clear history to reset for future inputs
+            files = filteredFiles; // Update the file list with the filtered results
             break;
         }
     };
 
+    // Main processing loop
     while (true) {
-        verbose = false;
+        verbose = false; // Reset verbose mode
         processedErrors.clear(); 
         successOuts.clear(); 
         skippedOuts.clear(); 
         failedOuts.clear(); 
         deletedOuts.clear();
 
-        clearScrollBuffer();
-        sortFilesCaseInsensitive(files);
-        printList(files, "IMAGE_FILES");
+        clearScrollBuffer(); // Clear the screen for new content
+        sortFilesCaseInsensitive(files); // Sort the files case-insensitively
+        printList(files, "IMAGE_FILES"); // Print the current list of files
 
+        // Build the user prompt string dynamically
         std::string prompt = std::string("\n") + 
                      (isFiltered ? "\001\033[1;96m\002Filtered " : "\033[1;38;5;208m") + 
                      (fileType == "bin" || fileType == "img" ? "BIN/IMG" : (fileType == "mdf" ? "MDF" : "NRG")) + 
                      "\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion, ~ ↵ fold, / ↵ filter, ↵ return:\001\033[0;1m\002 ";
                      
+        // Get user input
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
         std::string mainInputString(rawInput.get());
 
+        // Handle user input for toggling the full list display
         if (mainInputString == "~") {
             toggleFullList = !toggleFullList;
             clearScrollBuffer();
@@ -388,26 +399,31 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
             continue;
         }
 
+        // Handle input for returning to the unfiltered list or exiting
         if (std::isspace(rawInput.get()[0]) || rawInput.get()[0] == '\0') {
             clearScrollBuffer();
             if (isFiltered) {
+                // Restore the original file list
                 files = (fileType == "bin" || fileType == "img") ? binImgFilesCache :
                         (fileType == "mdf" ? mdfMdsFilesCache : nrgFilesCache);
-                isFiltered = false;
+                isFiltered = false; // Reset filter status
                 continue;
             } else {
-                break;
+                break; // Exit the loop if no input
             }
         }
 
+        // Handle filter command
         if (strcmp(rawInput.get(), "/") == 0) {
             filterPrompt = "\001\033[1A\002\001\033[K\002\001\033[1A\002\001\033[K\002\n\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;38;5;208m\002" + fileType + "\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
-            filterQuery();
+            filterQuery(); // Call the filter query function
             isFiltered = files.size() != (fileType == "bin" || fileType == "img" ? binImgFilesCache.size() : (fileType == "mdf" ? mdfMdsFilesCache.size() : nrgFilesCache.size()));
         } else {
+            // Process other input commands for file processing
             clearScrollBuffer();
+            std::cout << "\n\033[0;1m";
             processInput(mainInputString, files, (fileType == "mdf"), (fileType == "nrg"), processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, promptFlag, maxDepth, historyPattern, verbose);
-            if (verbose) verbosePrint(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, 3);
+            if (verbose) verbosePrint(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, 3); // Print detailed logs if verbose mode is enabled
         }
     }
 }
