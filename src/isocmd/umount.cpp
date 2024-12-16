@@ -137,14 +137,14 @@ void unmountISOs(bool& historyPattern, bool& verbose) {
                 isoDirs.push_back(entry.path().string());
             }
         }
-        std::sort(isoDirs.begin(), isoDirs.end(), 
-            [](const std::string& a, const std::string& b) {
-                return strcasecmp(a.c_str(), b.c_str()) < 0;
-            });
+        sortFilesCaseInsensitive(isoDirs);
     };
 
     auto displayMountedISOs = [&]() {
         clearScrollBuffer();
+        if (filteredIsoDirs.size() == isoDirs.size()) {
+				isFiltered = false;
+		}
         printList(isFiltered ? filteredIsoDirs : isoDirs, "MOUNTED_ISOS");
     };
 
@@ -205,6 +205,7 @@ void unmountISOs(bool& historyPattern, bool& verbose) {
     
 		// Update the filtered list
 		filteredIsoDirs = newFilteredIsoDirs;
+		sortFilesCaseInsensitive(filteredIsoDirs);
 		isFiltered = true;
 		return true;
 	};
@@ -270,7 +271,7 @@ void unmountISOs(bool& historyPattern, bool& verbose) {
 				
                 // Exit loop if valid filter terms yield results
                 break;
-            }   
+            }
         }
          historyPattern = false;
 		clear_history();
