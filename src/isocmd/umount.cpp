@@ -266,8 +266,10 @@ void unmountISOs(bool& historyPattern, bool& verbose) {
                 break;
             }
             if (filterISOs(searchInput)) {
-				add_history(searchQuery.get());
-				saveHistory(historyPattern);
+				if (strcmp(searchQuery.get(), "/") != 0){
+					add_history(searchQuery.get());
+					saveHistory(historyPattern);
+				}
 				
                 // Exit loop if valid filter terms yield results
                 break;
