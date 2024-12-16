@@ -160,6 +160,7 @@ int countNonEmptyLines(const std::string& filePath) {
     return nonEmptyLineCount;
 }
 
+
 // Set default cache dir
 std::string getHomeDirectory() {
     const char* homeDir = getenv("HOME");
@@ -168,6 +169,7 @@ std::string getHomeDirectory() {
     }
     return "";
 }
+
 
 // Utility function to clear screen buffer and load IsoFiles from cache to a global vector only for the first time and only for if the cache has been modified.
 bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered) {
