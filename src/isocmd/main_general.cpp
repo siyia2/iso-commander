@@ -198,7 +198,7 @@ void submenu1(int& maxDepth, bool& historyPattern, bool& verbose) {
 		switch (submenu_choice[0]) {
         case '1':
 			clearScrollBuffer();
-            select_and_operate_files("mount", historyPattern, maxDepth, verbose);
+            selectForIsoFiles("mount", historyPattern, maxDepth, verbose);
             clearScrollBuffer();
             break;
         case '2':
@@ -208,18 +208,18 @@ void submenu1(int& maxDepth, bool& historyPattern, bool& verbose) {
             break;
         case '3':
 			clearScrollBuffer();
-            select_and_operate_files("rm", historyPattern, maxDepth, verbose);
+            selectForIsoFiles("rm", historyPattern, maxDepth, verbose);
             clearScrollBuffer();
             break;
         case '4':
 			clearScrollBuffer();
-            select_and_operate_files("mv", historyPattern, maxDepth, verbose);
+            selectForIsoFiles("mv", historyPattern, maxDepth, verbose);
 
             clearScrollBuffer();
             break;
         case '5':
 			clearScrollBuffer();
-            select_and_operate_files("cp", historyPattern, maxDepth, verbose);
+            selectForIsoFiles("cp", historyPattern, maxDepth, verbose);
             clearScrollBuffer();
             break;
 			}
@@ -494,7 +494,7 @@ void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username,
 
 
 // Main function to select and operate on files by number for mount cp mv and rm
-void select_and_operate_files(const std::string& operation, bool& historyPattern, int& maxDepth, bool& verbose) {
+void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& maxDepth, bool& verbose) {
     // Calls prevent_clear_screen and tab completion
     rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
     rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
