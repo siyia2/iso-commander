@@ -37,7 +37,7 @@ int main(int argc, char *argv[]) {
 	int maxDepth = -1;
 	
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
-        printVersionNumber("5.4.7");
+        printVersionNumber("5.4.8");
         return 0;
     }
 
