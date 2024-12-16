@@ -307,6 +307,7 @@ void printMenu() {
 
 // GENERAL STUFF
 
+
 // Main verbose print function
 void verbosePrint(const std::set<std::string>& primarySet, const std::set<std::string>& secondarySet = {}, const std::set<std::string>& tertiarySet = {}, const std::set<std::string>& quaternarySet = {}, const std::set<std::string>& errorSet = {}, int printType = 0) {
     clearScrollBuffer(); // Assuming this function is defined elsewhere
@@ -493,7 +494,7 @@ void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username,
 }
 
 
-// Main function to select and operate on files by number for mount cp mv and rm
+// Main function to select and operate on ISOs by number for mount cp mv and rm
 void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& maxDepth, bool& verbose) {
     // Calls prevent_clear_screen and tab completion
     rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
