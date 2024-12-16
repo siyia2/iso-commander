@@ -744,8 +744,6 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
 }
 
 
-
-
 //	SANITISATION AND STRING STUFF
 
 // Function to escape characters in a string for shell usage
