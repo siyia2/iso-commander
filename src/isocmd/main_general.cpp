@@ -179,9 +179,9 @@ void submenu1(int& maxDepth, bool& historyPattern, bool& verbose) {
         std::cout << "\033[1;32m|4. Move                  |\n";
         std::cout << "\033[1;32m+-------------------------+\n";
         std::cout << "\033[1;32m|5. Copy                  |\n";
-        std::cout << "\033[1;32m+-------------------------+";
+        std::cout << "\033[1;32m+-------------------------+\n";
         std::cout << "\n";
-        char* rawInput = readline("\n\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
+        char* rawInput = readline("\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
 
         // Use std::unique_ptr to manage memory for input
 		std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
@@ -247,7 +247,7 @@ void submenu2(bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbo
         std::cout << "\033[1;32m|3. NRG2ISO++             |\n";
         std::cout << "\033[1;32m+-------------------------+\n";
         std::cout << "\n";
-        char* rawInput = readline("\n\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
+        char* rawInput = readline("\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
 
         // Use std::unique_ptr to manage memory for input
 		std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
