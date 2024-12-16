@@ -634,7 +634,7 @@ void select_and_operate_files(const std::string& operation, bool& historyPattern
             }
 
             // Check and print results
-            if (!uniqueErrorMessages.empty() && operationFiles.empty() && skippedMessages.empty() && operationFails.empty()) {
+            if (!uniqueErrorMessages.empty() && operationFiles.empty() && skippedMessages.empty() && operationFails.empty() && isMount) {
                 clearScrollBuffer();
                 needsClrScrn = true;
                 std::cout << "\n\033[1;91mNo valid input provided for " << operation << "\033[0;1m\n\n\033[1;32m↵ to continue...\033[0;1m";
