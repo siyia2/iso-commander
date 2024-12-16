@@ -515,7 +515,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
                                  (operation == "mount") ? "\033[1;92m" : "\033[1;95m";
     std::string process = operation;
     bool isMount = (operation == "mount");
-    bool promptFlag = false; // Default to false for move and other operations
+    bool promptFlag = false; // PromptFlag for cache refresh, defaults to false for move and other operations
     
     while (true) {
         // Verbose output is to be disabled unless specified by progressbar function downstream
@@ -646,7 +646,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
                 clearScrollBuffer();
                 needsClrScrn = true;
                 if (isMount){
-					verbosePrint(operationFiles, operationFails, {}, {}, uniqueErrorMessages, 2);
+					verbosePrint(operationFiles, operationFails, skippedMessages, {}, uniqueErrorMessages, 2);
 				} else {
 					verbosePrint(operationFiles, operationFails, {}, {}, uniqueErrorMessages, 1);
 				}
