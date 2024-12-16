@@ -227,10 +227,11 @@ std::string promptCpMvRm(std::vector<std::string>& isoFiles, std::vector<std::ve
         displaySelectedIsos();
 
         std::string confirmation;
-        std::cout << "\n\001\033[1;94m\002The selected \001\033[1;92m\002ISO\001\033[1;94m\002 will be \001\033[1;91m\002*PERMANENTLY DELETED FROM DISK*\001\033[1;94m\002. Proceed? (y/n):\001\033[0;1m\002 ";
-        std::getline(std::cin, confirmation);
+        std::string prompt = "\n\001\033[1;94m\002The selected \001\033[1;92m\002ISO\001\033[1;94m\002 will be \001\033[1;91m\002*PERMANENTLY DELETED FROM DISK*\001\033[1;94m\002. Proceed? (y/n):\001\033[0;1m\002 ";
+        std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
+        std::string mainInputString(input.get());
 
-        if (!(confirmation == "y" || confirmation == "Y")) {
+        if (!(mainInputString == "y" || mainInputString == "Y")) {
             mvDelBreak = false;
             abortDel = true;
             userDestDir = "";
