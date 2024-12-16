@@ -37,7 +37,7 @@ int main(int argc, char *argv[]) {
 	int maxDepth = -1;
 	
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
-        printVersionNumber("5.4.6");
+        printVersionNumber("5.4.5");
         return 0;
     }
 
@@ -311,14 +311,7 @@ void printMenu() {
 // GENERAL STUFF
 
 // Main verbose print function
-void verbosePrint(
-    const std::set<std::string>& primarySet, 
-    const std::set<std::string>& secondarySet = {}, 
-    const std::set<std::string>& tertiarySet = {}, 
-    const std::set<std::string>& quaternarySet = {}, 
-    const std::set<std::string>& errorSet = {}, 
-    int printType = 0) 
-{
+void verbosePrint(const std::set<std::string>& primarySet, const std::set<std::string>& secondarySet = {}, const std::set<std::string>& tertiarySet = {}, const std::set<std::string>& quaternarySet = {}, const std::set<std::string>& errorSet = {}, int printType = 0) {
     clearScrollBuffer(); // Assuming this function is defined elsewhere
 
     // Helper lambda to print a set with optional color and output stream
@@ -402,6 +395,7 @@ int prevent_clear_screen_and_tab_completion(int, int) {
     // Do nothing and return 0 
     return 0;
 }
+
 
 // Function to clear scrollbuffer
 void clearScrollBuffer() {
