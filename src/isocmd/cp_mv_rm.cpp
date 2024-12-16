@@ -177,6 +177,9 @@ std::string promptCpMvRm(std::vector<std::string>& isoFiles, std::vector<std::ve
             std::string prompt = "\n\001\033[1;92m\002DestinationDirs\001\033[1;94m\002 ↵ for selected \001\033[1;92m\002ISO\001\033[1;94m\002 to be " + operationColor + operationDescription + "\001\033[1;94m\002 into (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002), ↵ return:\n\001\033[0;1m\002";
             std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
             std::string mainInputString(input.get());
+            
+            rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
+			rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
 
             if (mainInputString.empty()) {
                 mvDelBreak = false;
