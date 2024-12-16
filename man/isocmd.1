@@ -1,6 +1,6 @@
 
 .\" Manpage for isocmd
-.TH ISOCMD 1 "December 2024" "Iso Commander 5.4.6" "Iso-Commander Manual"
+.TH ISOCMD 1 "December 2024" "Iso Commander 5.4.7" "Iso-Commander Manual"
 .SH NAME
 Iso Commander or isocmd.
 
@@ -19,7 +19,7 @@ Iso Commander provides the following key functionalities:
 .B ManageISO
 - Mount: Efficiently mounts .iso files using direct libmount calls under /mnt/_iso{name}. Root access is required for successful mounts.
 
-- Umount: Unmounts groups of .iso files using sanitized shell commands. Root access is required for sucessful unmounts.
+- Umount: Unmounts groups of .iso files using direct umount2 calls. Root access is required for sucessful unmounts.
 
 - Delete/Move/Copy: Deletes, moves, or copies groups of .iso files using native C++ calls.
 
