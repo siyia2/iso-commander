@@ -69,13 +69,13 @@ bool fileExists(const std::string& fullPath);
 //	voids
 
 // General
-void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& mvDelBreak, bool& historyPattern, bool& verbose);
+void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& umountMvRmBreak, bool& historyPattern, bool& verbose);
 void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete, std::mutex& Mutex4Low);
 
 // stds
 
 // General
-std::string promptCpMvRm(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& mvDelBreak, bool& historyPattern, bool& isDelete, bool& isCopy, bool& abortDel);
+std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& historyPattern, bool& isDelete, bool& isCopy, bool& abortDel);
 
 //	ISO COMMANDER
 
@@ -147,7 +147,7 @@ void toLowerInPlace(std::string& str);
 void sortFilesCaseInsensitive(std::vector<std::string>& files);
 
 // Unmount functions
-void prepareUnmount(std::vector<std::string>& selectedIsoDirs, std::set<std::string>& operationFiles, std::set<std::string>& operationFails, bool& verbose);
+void prepareUnmount(std::vector<std::string>& selectedIsoDirs, std::set<std::string>& operationFiles, std::set<std::string>& operationFails, bool& umountMvRmBreak, bool& verbose);
 void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors, std::mutex& Mutex4Low);
 
 
