@@ -4,17 +4,7 @@
 #include "../threadpool.h"
 
 
-// Sorts items in a case-insensitive manner
-void sortFilesCaseInsensitive(std::vector<std::string>& files) {
-    std::sort(files.begin(), files.end(), 
-        [](const std::string& a, const std::string& b) {
-            return strcasecmp(a.c_str(), b.c_str()) < 0;
-        }
-    );
-}
-
-
-// Conver string s to lowercase efficiently
+// Conver strings to lowercase efficiently
 void toLowerInPlace(std::string& str) {
     for (char& c : str) {
         c = std::tolower(static_cast<unsigned char>(c));

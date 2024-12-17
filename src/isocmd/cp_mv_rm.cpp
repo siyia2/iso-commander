@@ -3,11 +3,6 @@
 #include "../headers.h"
 #include "../threadpool.h"
 
-
-// For breaking mv&rm gracefully
-
-// General
-
 // Function to check if a linux path is valid
 bool isValidLinuxPathFormat(const std::string& path) {
     // Check if the path is empty or does not start with '/'
@@ -243,16 +238,6 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
         umountMvRmBreak = true;
     }
     return userDestDir;
-}
-
-
-// Function to check if directory exists
-bool directoryExists(const std::string& path) {
-    struct stat info;
-    if (stat(path.c_str(), &info) != 0) {
-        return false;
-    }
-    return info.st_mode & S_IFDIR; // Check if it's a directory
 }
 
 

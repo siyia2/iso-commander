@@ -6,26 +6,37 @@
 
 // UMOUNT STUFF
 
+const std::string MOUNTED_ISO_PATH = "/mnt";
 
-// Function to check if directory is empty for unmountISO
-bool isDirectoryEmpty(const std::string& path) {
-    DIR* dir = opendir(path.c_str());
-    if (dir == nullptr) {
-        return false;  // Unable to open directory
-    }
-
-    errno = 0;
-    struct dirent* entry;
-    int count = 0;
-    while ((entry = readdir(dir)) != nullptr) {
-        if (++count > 2) {
-            closedir(dir);
-            return false;  // Directory not empty
+bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<std::string>& filteredFiles, bool& isFiltered) {
+     isoDirs.clear();
+        for (const auto& entry : std::filesystem::directory_iterator(MOUNTED_ISO_PATH)) {
+            if (entry.is_directory() && entry.path().filename().string().find("iso_") == 0) {
+                isoDirs.push_back(entry.path().string());
+            }
         }
+        sortFilesCaseInsensitive(isoDirs);
+
+    // Check if ISOs exist
+    if (isoDirs.empty()) {
+		clearScrollBuffer();
+        std::cerr << "\n\033[1;93mNo paths matching the '/mnt/iso_*' pattern found.\033[0m\033[0;1m\n";
+        std::cout << "\n\033[1;32m↵ to continue...";
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        return false;
     }
 
-    closedir(dir);
-    return errno == 0 && count <= 2;  // Empty if only "." and ".." entries and no errors
+    // Sort ISOs case-insensitively
+    sortFilesCaseInsensitive(isoDirs);
+
+    // Display ISOs
+    clearScrollBuffer();
+        if (filteredFiles.size() == isoDirs.size()) {
+				isFiltered = false;
+		}
+        printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS");
+
+    return true;
 }
 
 
