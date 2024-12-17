@@ -147,7 +147,7 @@ void toLowerInPlace(std::string& str);
 void sortFilesCaseInsensitive(std::vector<std::string>& files);
 
 // Unmount functions
-void unmountISOs(bool& historyPattern, bool& verbose);
+void prepareUnmount(std::vector<std::string>& selectedIsoDirs, std::set<std::string>& operationFiles, std::set<std::string>& operationFails, bool& verbose);
 void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors, std::mutex& Mutex4Low);
 
 
