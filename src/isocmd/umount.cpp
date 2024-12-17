@@ -114,11 +114,8 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
 }
 
 
-// Main function for unmounting ISOs
-void prepareUnmount(std::vector<std::string>& selectedIsoDirs, 
-                    std::set<std::string>& operationFiles, 
-                    std::set<std::string>& operationFails, 
-                    bool& verbose) {
+// Main function to send ISOs for unmount
+void prepareUnmount(std::vector<std::string>& selectedIsoDirs, std::set<std::string>& operationFiles, std::set<std::string>& operationFails, bool& verbose) {
 
     // Check if input is empty
     if (selectedIsoDirs.empty()) {
