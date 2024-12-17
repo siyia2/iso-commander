@@ -17,11 +17,11 @@ Iso Commander provides the following key functionalities:
 
 .TP
 .B ManageISO
-- Mount: Efficiently mounts .iso files using direct libmount calls under /mnt/_iso{name}. Root access is required for successful mounts.
+- Mount: Efficiently chunks of .iso files using direct libmount calls under /mnt/_iso{name}. Root access is required for successful mounts.
 
-- Umount: Unmounts groups of .iso files using direct umount2 calls. Root access is required for sucessful unmounts.
+- Umount: Unmounts chunks of .iso files using direct umount2 calls. Root access is required for sucessful unmounts.
 
-- Delete/Move/Copy: Deletes, moves, or copies groups of .iso files using native C++ calls.
+- Delete/Move/Copy: Deletes, moves, or copies chunks of .iso files using native C++ calls.
 
 .TP
 .B Convert2ISO
