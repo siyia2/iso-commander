@@ -175,12 +175,15 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
     // Remove duplicate indices and sort them
     std::set<int> uniqueIndices(indicesToProcess.begin(), indicesToProcess.end());
     indicesToProcess.assign(uniqueIndices.begin(), uniqueIndices.end());
+    
     std::atomic<size_t> completedTasks(0); // Number of completed tasks
     std::atomic<bool> isProcessingComplete(false); // Flag to indicate processing completion
     unsigned int numThreads = std::min(static_cast<unsigned int>(indicesToProcess.size()), static_cast<unsigned int>(maxThreads));
     ThreadPool pool(numThreads); // Create a thread pool with the determined number of threads
+    
     size_t totalTasks = indicesToProcess.size();
     size_t chunkSize = std::max(size_t(1), std::min(size_t(50), (totalTasks + numThreads - 1) / numThreads)); // Determine chunk size for tasks
+    
     std::atomic<size_t> activeTaskCount(0); // Track the number of active tasks
     std::condition_variable taskCompletionCV; // Condition variable to notify when all tasks are done
     std::mutex taskCompletionMutex; // Mutex to protect the condition variable
