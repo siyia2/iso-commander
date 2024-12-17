@@ -537,7 +537,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
     globalIsoFileList.reserve(100);
     bool isFiltered = false;
     bool needsClrScrn = true;
-    bool umountMvDelBreak = false;
+    bool umountMvRmBreak = false;
     std::mutex Mutex4Low; // Mutex for low-level processing
     
     // Determine operation color based on operation type
@@ -561,11 +561,11 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         uniqueErrorMessages.clear();
 
         if (needsClrScrn && !isUnmount) {
-			umountMvDelBreak = false;
+			umountMvRmBreak = false;
             if (!clearAndLoadFiles(filteredFiles, isFiltered)) break;
             std::cout << "\n\n";
         } else if (needsClrScrn && isUnmount) {
-			umountMvDelBreak = false;
+			umountMvRmBreak = false;
             if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered)) break;
             std::cout << "\n\n";
 		}
@@ -679,24 +679,24 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
             
             if (inputString == "00") {
                 selectedIsoDirs = currentFiles;
-                umountMvDelBreak = true;
+                umountMvRmBreak = true;
             } else {
                 std::vector<int> selectedIndices;
                 tokenizeInput(inputString, currentFiles, uniqueErrorMessages, selectedIndices);
-                umountMvDelBreak = true;
+                umountMvRmBreak = true;
                 for (int index : selectedIndices) {
                     selectedIsoDirs.push_back(currentFiles[index - 1]);
                 }
             }
             
-			prepareUnmount(selectedIsoDirs, operationFiles, operationFails, umountMvDelBreak, verbose);
+			prepareUnmount(selectedIsoDirs, operationFiles, operationFails, umountMvRmBreak, verbose);
             needsClrScrn = true;
             
             
         } else {
             // Generic operation processing for copy, move, remove
             std::cout << "\033[0;1m\n";
-            processOperationInput(inputString, currentFiles, operation, operationFiles, operationFails, uniqueErrorMessages, promptFlag, maxDepth, umountMvDelBreak, historyPattern, verbose);
+            processOperationInput(inputString, currentFiles, operation, operationFiles, operationFails, uniqueErrorMessages, promptFlag, maxDepth, umountMvRmBreak, historyPattern, verbose);
         }
 
             // Check and print results
@@ -718,7 +718,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
             }
 
             // Additional logic for non-mount operations
-            if ((process == "mv" || process == "rm" || process == "umount") && isFiltered && umountMvDelBreak) {
+            if ((process == "mv" || process == "rm" || process == "umount") && isFiltered && umountMvRmBreak) {
                 historyPattern = false;
                 clear_history();
                 isFiltered = false;
