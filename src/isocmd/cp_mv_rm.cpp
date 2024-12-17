@@ -88,7 +88,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 		}
 
     bool abortDel = false;
-	std::string processedUserDestDir = promptCpMvRm(isoFiles, indexChunks, userDestDir, operationColor, operationDescription, umountMvRmBreak, historyPattern, isDelete, isCopy, abortDel);
+	std::string processedUserDestDir = userDestDirRm(isoFiles, indexChunks, userDestDir, operationColor, operationDescription, umountMvRmBreak, historyPattern, isDelete, isCopy, abortDel);
 	
 	// Early exit if Deletion is aborted or userDestDir is empty for mv or cp
 	if ((processedUserDestDir == "" && (isCopy || isMove)) || abortDel) {
@@ -146,8 +146,8 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 }
 
 
-// Function to promtp for userDestDir and Delete confirmation
-std::string promptCpMvRm(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& historyPattern, bool& isDelete, bool& isCopy, bool& abortDel) {
+// Function to prompt for userDestDir and Delete confirmation
+std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& historyPattern, bool& isDelete, bool& isCopy, bool& abortDel) {
 	
 	    auto displaySelectedIsos = [&]() {
         std::cout << "\n";
