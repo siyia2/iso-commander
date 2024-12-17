@@ -202,18 +202,11 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
     std::set<std::string> processedRanges; // To keep track of processed ranges
     std::mutex errorMutex; // Mutex to protect access to the error messages
 
-    // Lambda function to add an error message in a thread-safe manner
-    auto addError = [&](const std::string& error) {
-        std::lock_guard<std::mutex> lock(errorMutex);
-        uniqueErrorMessages.insert(error);
-        invalidInput.store(true, std::memory_order_release);
-    };
-
     // Tokenize the input string
     tokenizeInput(input, isoFiles, uniqueErrorMessages, indicesToProcess);
 
     if (indicesToProcess.empty()) {
-        addError("\033[1;91mNo valid input provided for mount.\033[0;1m");
+        std::cout << "\033[1;91mNo valid input provided for mount.\033[0;1m";
         return; // Exit if no valid indices are provided
     }
 
