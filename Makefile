@@ -12,7 +12,7 @@ MAKEFLAGS = -j$(NUM_PROCESSORS)
 SRC_DIR = $(CURDIR)/src
 OBJ_DIR = $(CURDIR)/obj
 INSTALL_DIR = $(CURDIR)/bin
-SRC_FILES = isocmd/main.cpp isocmd/history.cpp  isocmd/general.cpp  isocmd/verbose.cpp isocmd/cache.cpp isocmd/filtering.cpp isocmd/mount.cpp isocmd/umount.cpp isocmd/cp_mv_rm.cpp isocmd/conversion_tools.cpp isocmd/ccd2iso_mdf2iso_nrg2iso.cpp
+SRC_FILES = isocmd/main.cpp isocmd/history.cpp  isocmd/general.cpp  isocmd/verbose.cpp isocmd/cache.cpp isocmd/filtering.cpp isocmd/mount.cpp isocmd/umount.cpp isocmd/cp_mv_rm.cpp isocmd/conversions.cpp isocmd/ccd2iso_mdf2iso_nrg2iso.cpp
 OBJ_FILES = $(patsubst %.cpp,$(OBJ_DIR)/%.o,$(SRC_FILES))
 
 all: isocmd
