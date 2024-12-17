@@ -159,18 +159,12 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
                 selectedIsoDirs = currentFiles;
                 umountMvRmBreak = true;
             } else {
-                std::vector<int> selectedIndices;
-                tokenizeInput(inputString, currentFiles, uniqueErrorMessages, selectedIndices);
                 umountMvRmBreak = true;
-                for (int index : selectedIndices) {
-                    selectedIsoDirs.push_back(currentFiles[index - 1]);
-                }
             }
             
-			prepareUnmount(selectedIsoDirs, operationFiles, operationFails, umountMvRmBreak, verbose);
+			prepareUnmount(inputString, selectedIsoDirs, currentFiles, operationFiles, operationFails, uniqueErrorMessages, umountMvRmBreak, verbose);
             needsClrScrn = true;
-            
-            
+                 
         } else {
             // Generic operation processing for copy, move, remove
             std::cout << "\033[0;1m\n";
