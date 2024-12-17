@@ -623,7 +623,8 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
             if (isMount && inputString == "00") {
                 // Special case for mounting all files
                 std::cout << "\033[0;1m\n";
-                mountAllIsoFiles(currentFiles, operationFiles, skippedMessages, operationFails, verbose, Mutex4Low);
+                currentFiles = globalIsoFileList;
+                processAndMountIsoFiles(inputString, currentFiles, operationFiles, skippedMessages, operationFails, uniqueErrorMessages, verbose, Mutex4Low);
             } else if (isMount){
 				clearScrollBuffer();
                 needsClrScrn = true;

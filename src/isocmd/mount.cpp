@@ -9,42 +9,6 @@ std::vector<std::string> globalIsoFileList;
 
 //	MOUNT STUFF
 
-// Function to mount all ISOs indiscriminately
-void mountAllIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, bool& verbose, std::mutex& Mutex4Low) {
-    size_t maxChunkSize = 50;  // Maximum number of files per chunk
-    size_t totalIsos = isoFiles.size();
-    std::atomic<size_t> completedIsos(0);
-    std::atomic<bool> isComplete(false);
-    // Determine the number of threads to use
-    size_t numThreads = std::min(totalIsos, static_cast<size_t>(maxThreads));
-    // Adjust chunk size based on the number of files
-    size_t chunkSize = std::min(maxChunkSize, (totalIsos + numThreads - 1) / numThreads);
-    // Ensure chunkSize is at least 1
-    chunkSize = std::max(chunkSize, static_cast<size_t>(1));
-    ThreadPool pool(numThreads);
-    std::thread progressThread(displayProgressBar, std::ref(completedIsos), totalIsos, std::ref(isComplete), std::ref(verbose));
-    std::vector<std::future<void>> futures;
-    futures.reserve((totalIsos + chunkSize - 1) / chunkSize);  // Reserve enough space for all future tasks
-
-    for (size_t i = 0; i < totalIsos; i += chunkSize) {
-        size_t end = std::min(i + chunkSize, totalIsos);
-        futures.emplace_back(pool.enqueue([&, i, end]() {
-            // Optimization: Replace loop with efficient vector construction
-            std::vector<std::string> chunkFiles(isoFiles.begin() + i, isoFiles.begin() + end);
-            mountIsoFiles(chunkFiles, mountedFiles, skippedMessages, mountedFails, Mutex4Low);
-            completedIsos.fetch_add(chunkFiles.size(), std::memory_order_relaxed);
-        }));
-    }
-
-    for (auto& future : futures) {
-        future.wait();
-    }
-
-    isComplete.store(true, std::memory_order_release);
-    progressThread.join();
-}
-
-
 // Function to check if a mountpoint isAlreadyMounted
 bool isAlreadyMounted(const std::string& mountPoint) {
     struct statvfs vfs;
@@ -194,35 +158,34 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
 
 // Function to process input and mount ISO files asynchronously
 void processAndMountIsoFiles(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages, bool& verbose, std::mutex& Mutex4Low) {
-    
     std::vector<int> indicesToProcess; // To store indices parsed from the input
     indicesToProcess.reserve(100); // Reserve space for indices to improve performance
-
     std::atomic<bool> invalidInput(false); // Flag to track if there's any invalid input
     std::set<std::string> processedRanges; // To keep track of processed ranges
     std::mutex errorMutex; // Mutex to protect access to the error messages
 
-    // Tokenize the input string
-    tokenizeInput(input, isoFiles, uniqueErrorMessages, indicesToProcess);
-
-    if (indicesToProcess.empty()) {
-        std::cout << "\033[1;91mNo valid input provided for mount.\033[0;1m";
-        return; // Exit if no valid indices are provided
+    if (input == "00") {
+        // If input is "00", create indices for all ISO files
+        indicesToProcess.resize(isoFiles.size());
+        std::iota(indicesToProcess.begin(), indicesToProcess.end(), 1); // Fill with 1, 2, 3, ...
+    } else {
+        // Existing tokenization logic for specific inputs
+        tokenizeInput(input, isoFiles, uniqueErrorMessages, indicesToProcess);
+        if (indicesToProcess.empty()) {
+            std::cout << "\033[1;91mNo valid input provided for mount.\033[0;1m";
+            return; // Exit if no valid indices are provided
+        }
     }
-
+    
     // Remove duplicate indices and sort them
     std::set<int> uniqueIndices(indicesToProcess.begin(), indicesToProcess.end());
     indicesToProcess.assign(uniqueIndices.begin(), uniqueIndices.end());
-
     std::atomic<size_t> completedTasks(0); // Number of completed tasks
     std::atomic<bool> isProcessingComplete(false); // Flag to indicate processing completion
-
     unsigned int numThreads = std::min(static_cast<unsigned int>(indicesToProcess.size()), static_cast<unsigned int>(maxThreads));
     ThreadPool pool(numThreads); // Create a thread pool with the determined number of threads
-
     size_t totalTasks = indicesToProcess.size();
     size_t chunkSize = std::max(size_t(1), std::min(size_t(50), (totalTasks + numThreads - 1) / numThreads)); // Determine chunk size for tasks
-
     std::atomic<size_t> activeTaskCount(0); // Track the number of active tasks
     std::condition_variable taskCompletionCV; // Condition variable to notify when all tasks are done
     std::mutex taskCompletionMutex; // Mutex to protect the condition variable
@@ -230,7 +193,6 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
     for (size_t i = 0; i < totalTasks; i += chunkSize) {
         size_t end = std::min(i + chunkSize, totalTasks); // Determine the end index for this chunk
         activeTaskCount.fetch_add(1, std::memory_order_relaxed); // Increment active task count
-
         // Enqueue a task to the thread pool
         pool.enqueue([&, i, end]() {
             std::vector<std::string> filesToMount;
@@ -240,25 +202,20 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
             }
             
             mountIsoFiles(filesToMount, mountedFiles, skippedMessages, mountedFails, Mutex4Low); // Mount ISO files            
-
             completedTasks.fetch_add(end - i, std::memory_order_relaxed); // Update completed tasks count
-
             // Notify if all tasks are done
             if (activeTaskCount.fetch_sub(1, std::memory_order_release) == 1) {
                 taskCompletionCV.notify_one();
             }
         });
     }
-
     // Create a thread to display progress
     std::thread progressThread(displayProgressBar, std::ref(completedTasks), totalTasks, std::ref(isProcessingComplete), std::ref(verbose));
-
     // Wait for all tasks to complete
     {
         std::unique_lock<std::mutex> lock(taskCompletionMutex);
         taskCompletionCV.wait(lock, [&]() { return activeTaskCount.load(std::memory_order_acquire) == 0; });
     }
-
     isProcessingComplete.store(true, std::memory_order_release); // Set processing completion flag
     progressThread.join(); // Wait for the progress thread to finish
 }
