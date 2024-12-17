@@ -41,14 +41,14 @@ void verbosePrint(const std::set<std::string>& primarySet, const std::set<std::s
             break;
 
         case 2: // Mounted
-            // Mounted: primarySet = mounted files, secondarySet = skipped messages, 
-            // tertiarySet = mounted fails, errorSet = unique error messages
-            printSet(primarySet);
-            printSet(secondarySet, true, !primarySet.empty());
-            printSet(tertiarySet, true, !primarySet.empty() || !secondarySet.empty());
-            printSet(errorSet, true, !primarySet.empty() || !secondarySet.empty() || !tertiarySet.empty());
-            std::cout << "\n\n";
-            break;
+			// Mounted: primarySet = mounted files, secondarySet = skipped messages, 
+			// tertiarySet = mounted fails, errorSet = unique error messages
+			printSet(primarySet);
+			printSet(tertiarySet, true, !primarySet.empty());
+			printSet(secondarySet, true, !primarySet.empty());
+			printSet(errorSet, true, !primarySet.empty() || !secondarySet.empty() || !tertiarySet.empty());
+			std::cout << "\n\n";
+			break;
 
         case 3: // Conversion
             // Conversion: 
