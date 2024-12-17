@@ -505,6 +505,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
 
     // Check if ISOs exist
     if (isoDirs.empty()) {
+		clearScrollBuffer();
         std::cerr << "\n\033[1;93mNo paths matching the '/mnt/iso_*' pattern found.\033[0m\033[0;1m\n";
         std::cout << "\n\033[1;32m↵ to continue...";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -559,7 +560,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         operationFails.clear();
         uniqueErrorMessages.clear();
 
-        if (needsClrScrn && isMount) {
+        if (needsClrScrn && !isUnmount) {
             if (!clearAndLoadFiles(filteredFiles, isFiltered)) break;
             std::cout << "\n\n";
         } else if (needsClrScrn && isUnmount) {
@@ -686,8 +687,9 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
             }
             
 			prepareUnmount(selectedIsoDirs, operationFiles, operationFails, verbose);
-            filteredFiles.clear();
-            isoDirs.clear();
+            mvDelBreak = true;
+            needsClrScrn = true;
+            
             
         } else {
             // Generic operation processing for copy, move, remove
@@ -714,7 +716,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
             }
 
             // Additional logic for non-mount operations
-            if ((process == "mv" || process == "rm") && isFiltered && mvDelBreak) {
+            if ((process == "mv" || process == "rm" || process == "umount") && isFiltered && mvDelBreak) {
                 historyPattern = false;
                 clear_history();
                 isFiltered = false;
