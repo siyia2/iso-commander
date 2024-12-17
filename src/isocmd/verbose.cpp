@@ -157,7 +157,7 @@ void verboseIsoCacheRefresh(std::vector<std::string>& allIsoFiles, std::atomic<s
 }
 
 
-// CONVERSION TOOLS
+// CONVERSIONS
 
 // Function to print invalid directory paths from search
 void verboseFind(std::set<std::string>& invalidDirectoryPaths, const std::vector<std::string>& directoryPaths, std::set<std::string>& processedErrorsFind) {
