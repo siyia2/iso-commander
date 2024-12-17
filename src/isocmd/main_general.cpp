@@ -706,6 +706,8 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
                 needsClrScrn = true;
                 if (isMount){
 					verbosePrint(operationFiles, operationFails, skippedMessages, {}, uniqueErrorMessages, 2);
+				} else if (isUnmount){
+					verbosePrint(operationFiles, operationFails, {}, {}, uniqueErrorMessages, 1);
 				} else {
 					verbosePrint(operationFiles, operationFails, {}, {}, uniqueErrorMessages, 1);
 				}
