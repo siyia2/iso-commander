@@ -45,6 +45,9 @@ void verbosePrint(const std::set<std::string>& primarySet, const std::set<std::s
 			// tertiarySet = mounted fails, errorSet = unique error messages
 			printSet(primarySet);
 			printSet(tertiarySet, true, !primarySet.empty());
+			if (primarySet.empty() && !tertiarySet.empty() && !secondarySet.empty()) {
+				std::cout << "\n";
+			}
 			printSet(secondarySet, true, !primarySet.empty());
 			printSet(errorSet, true, !primarySet.empty() || !secondarySet.empty() || !tertiarySet.empty());
 			std::cout << "\n\n";
