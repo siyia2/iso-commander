@@ -52,29 +52,16 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
         return;
     }
 
-    // Parallel execution for unmounting
+    // Sequential processing of unmounts
     std::vector<std::pair<std::string, int>> unmountResults;
-    {
-        std::vector<std::thread> threads;
-        std::mutex resultMutex;
-
-        for (const auto& isoDir : isoDirs) {
-            threads.emplace_back([&](const std::string& dir) {
-                int result = umount2(dir.c_str(), MNT_DETACH);
-                std::lock_guard<std::mutex> lock(resultMutex);
-                unmountResults.emplace_back(dir, result);
-            }, isoDir);
-        }
-
-        for (auto& thread : threads) {
-            thread.join();
-        }
+    for (const auto& isoDir : isoDirs) {
+        int result = umount2(isoDir.c_str(), MNT_DETACH);
+        unmountResults.emplace_back(isoDir, result);
     }
 
     // Process unmount results
     std::vector<std::string> successfulUnmounts;
     std::vector<std::string> failedUnmounts;
-
     for (const auto& [dir, result] : unmountResults) {
         bool isEmpty = isDirectoryEmpty(dir);
         
@@ -125,18 +112,18 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
 
 // Main function to send ISOs for unmount
 void prepareUnmount(const std::string& input, std::vector<std::string>& selectedIsoDirs, std::vector<std::string>& currentFiles, std::set<std::string>& operationFiles, std::set<std::string>& operationFails, std::set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& verbose) {
-		
-	std::vector<int> selectedIndices;
-		
-	if (input != "00" && selectedIsoDirs.empty()) {
-		tokenizeInput(input, currentFiles, uniqueErrorMessages, selectedIndices);
-		for (int index : selectedIndices) {
-				selectedIsoDirs.push_back(currentFiles[index - 1]);
-		}
-	}
+    std::vector<int> selectedIndices;
+    
+    if (input != "00" && selectedIsoDirs.empty()) {
+        tokenizeInput(input, currentFiles, uniqueErrorMessages, selectedIndices);
+        for (int index : selectedIndices) {
+            selectedIsoDirs.push_back(currentFiles[index - 1]);
+        }
+    }
+
     // Check if input is empty
     if (selectedIsoDirs.empty()) {
-		umountMvRmBreak = false;
+        umountMvRmBreak = false;
         clearScrollBuffer();
         std::cerr << "\n\033[1;91mNo valid input provided for umount.\n";
         std::cout << "\n\033[1;32m↵ to continue...";
@@ -148,12 +135,25 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& selected
     clearScrollBuffer();
     std::cout << "\n\033[0;1m";
 
+    // Chunking logic
+    unsigned int numThreads = std::min(static_cast<unsigned int>(selectedIsoDirs.size()), maxThreads);
+    std::vector<std::vector<std::string>> isoChunks;
+    const size_t maxMountPointsPerChunk = 100;
+    
+    // Distribute ISOs evenly among threads, but not exceeding maxISOsPerChunk
+    size_t totalMountPoints = selectedIsoDirs.size();
+    size_t mountPointsPerThread = (totalMountPoints + numThreads - 1) / numThreads;
+    size_t chunkSize = std::min(maxMountPointsPerChunk, mountPointsPerThread);
+
+    for (size_t i = 0; i < totalMountPoints; i += chunkSize) {
+        auto chunkEnd = std::min(selectedIsoDirs.begin() + i + chunkSize, selectedIsoDirs.end());
+        isoChunks.emplace_back(selectedIsoDirs.begin() + i, chunkEnd);
+    }
+
     // Initialization
     std::mutex umountMutex, lowLevelMutex;
-    unsigned int numThreads = std::min(static_cast<unsigned int>(selectedIsoDirs.size()), maxThreads);
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> unmountFutures;
-
     std::atomic<size_t> completedIsos(0);
     size_t totalIsos = selectedIsoDirs.size();
     std::atomic<bool> isComplete(false);
@@ -167,11 +167,13 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& selected
     );
 
     // Submit tasks to the thread pool
-    for (const auto& iso : selectedIsoDirs) {
+    for (const auto& isoChunk : isoChunks) {
         unmountFutures.emplace_back(pool.enqueue([&]() {
             std::lock_guard<std::mutex> lock(umountMutex);
-            unmountISO({iso}, operationFiles, operationFails, lowLevelMutex);
-            completedIsos.fetch_add(1, std::memory_order_relaxed);
+            for (const auto& iso : isoChunk) {
+                unmountISO({iso}, operationFiles, operationFails, lowLevelMutex);
+                completedIsos.fetch_add(1, std::memory_order_relaxed);
+            }
         }));
     }
 
