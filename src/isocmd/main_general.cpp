@@ -573,9 +573,9 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
 
         std::string prompt = isFiltered 
             ? "\001\033[1;96m\002Filtered \001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + 
-              "\001\033[1;94m\002 (e.g., 1-3,1 5," + (isMount ? "00=all" : "") + "), ~ ↵ (un)fold, / ↵ filter, ↵ return:\001\033[0;1m\002 "
+              "\001\033[1;94m\002 (e.g., 1-3,1 5," + (isMount || isUnmount ? "00=all" : "") + "), ~ ↵ (un)fold, / ↵ filter, ↵ return:\001\033[0;1m\002 "
             : "\001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + 
-              "\001\033[1;94m\002 (e.g., 1-3,1 5," + (isMount ? "00=all" : "") + "), ~ ↵ (un)fold, / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+              "\001\033[1;94m\002 (e.g., 1-3,1 5," + (isMount || isUnmount ? "00=all" : "") + "), ~ ↵ (un)fold, / ↵ filter, ↵ return:\001\033[0;1m\002 ";
 
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         std::string inputString(input.get());
