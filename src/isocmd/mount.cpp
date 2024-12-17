@@ -4,11 +4,6 @@
 #include "../threadpool.h"
 
 
-// For storing isoFiles in RAM
-std::vector<std::string> globalIsoFileList;
-
-//	MOUNT STUFF
-
 // Function to check if a mountpoint isAlreadyMounted
 bool isAlreadyMounted(const std::string& mountPoint) {
     struct statvfs vfs;

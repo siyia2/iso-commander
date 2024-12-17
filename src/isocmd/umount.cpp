@@ -4,8 +4,6 @@
 #include "../threadpool.h"
 
 
-// UMOUNT STUFF
-
 const std::string MOUNTED_ISO_PATH = "/mnt";
 
 bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<std::string>& filteredFiles, bool& isFiltered) {

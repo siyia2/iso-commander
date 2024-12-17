@@ -1,6 +1,9 @@
 #include "../headers.h"
 
 
+// For storing isoFiles in RAM
+std::vector<std::string> globalIsoFileList;
+
 // Main function to select and operate on ISOs by number for mount cp mv and rm
 void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& maxDepth, bool& verbose) {
     // Calls prevent_clear_screen and tab completion

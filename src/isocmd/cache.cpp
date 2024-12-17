@@ -2,7 +2,6 @@
 
 #include "../headers.h"
 
-//	CACHE STUFF
 
 // Cache Variables
 
