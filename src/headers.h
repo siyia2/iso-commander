@@ -52,7 +52,7 @@ extern const std::string cacheFileName;
 // For toggling between full and shortened paths in lists
 extern bool toggleFullList;
 
-// Caching the results of directory and filename transformations
+// Cache for directory and filename transformations
 extern std::unordered_map<std::string, std::string> transformationCache;
 
 // Max cache size limit for IsoCache
