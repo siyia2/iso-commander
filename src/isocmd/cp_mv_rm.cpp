@@ -39,7 +39,7 @@ bool isValidLinuxPathFormat(const std::string& path) {
 
 
 // Function to process either mv or cp indices
-void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& mvDelBreak, bool& historyPattern, bool& verbose) {
+void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& umountMvDelBreak, bool& historyPattern, bool& verbose) {
     std::string userDestDir;
     std::vector<int> processedIndices;
     processedIndices.reserve(maxThreads);
@@ -64,7 +64,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
     if (processedIndices.empty()) {
         clearScrollBuffer();
-        mvDelBreak = false;
+        umountMvDelBreak = false;
         std::cout << "\n\033[1;91mNo valid indices to be " << operationDescription << ".\033[1;91m\n";
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -88,7 +88,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 		}
 
     bool abortDel = false;
-	std::string processedUserDestDir = promptCpMvRm(isoFiles, indexChunks, userDestDir, operationColor, operationDescription, mvDelBreak, historyPattern, isDelete, isCopy, abortDel);
+	std::string processedUserDestDir = promptCpMvRm(isoFiles, indexChunks, userDestDir, operationColor, operationDescription, umountMvDelBreak, historyPattern, isDelete, isCopy, abortDel);
 	
 	// Early exit if Deletion is aborted or userDestDir is empty for mv or cp
 	if ((processedUserDestDir == "" && (isCopy || isMove)) || abortDel) {
@@ -147,7 +147,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
 
 // Function to promtp for userDestDir and Delete confirmation
-std::string promptCpMvRm(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& mvDelBreak, bool& historyPattern, bool& isDelete, bool& isCopy, bool& abortDel) {
+std::string promptCpMvRm(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvDelBreak, bool& historyPattern, bool& isDelete, bool& isCopy, bool& abortDel) {
 	
 	    auto displaySelectedIsos = [&]() {
         std::cout << "\n";
@@ -165,7 +165,7 @@ std::string promptCpMvRm(std::vector<std::string>& isoFiles, std::vector<std::ve
 			rl_bind_key('\f', rl_clear_screen);
 			rl_bind_key('\t', rl_complete);
 			if (!isCopy) {
-				mvDelBreak = true;
+				umountMvDelBreak = true;
 			}
             clearScrollBuffer();
             displaySelectedIsos();
@@ -182,7 +182,7 @@ std::string promptCpMvRm(std::vector<std::string>& isoFiles, std::vector<std::ve
 			rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
 
             if (mainInputString.empty()) {
-                mvDelBreak = false;
+                umountMvDelBreak = false;
                 userDestDir = "";
                 clear_history();
                 return userDestDir;
@@ -232,7 +232,7 @@ std::string promptCpMvRm(std::vector<std::string>& isoFiles, std::vector<std::ve
         std::string mainInputString(input.get());
 
         if (!(mainInputString == "y" || mainInputString == "Y")) {
-            mvDelBreak = false;
+            umountMvDelBreak = false;
             abortDel = true;
             userDestDir = "";
             std::cout << "\n\033[1;93mDelete operation aborted by user.\033[0;1m\n";
@@ -240,7 +240,7 @@ std::string promptCpMvRm(std::vector<std::string>& isoFiles, std::vector<std::ve
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             return userDestDir;
         }
-        mvDelBreak = true;
+        umountMvDelBreak = true;
     }
     return userDestDir;
 }

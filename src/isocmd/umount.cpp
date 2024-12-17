@@ -115,10 +115,11 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
 
 
 // Main function to send ISOs for unmount
-void prepareUnmount(std::vector<std::string>& selectedIsoDirs, std::set<std::string>& operationFiles, std::set<std::string>& operationFails, bool& verbose) {
+void prepareUnmount(std::vector<std::string>& selectedIsoDirs, std::set<std::string>& operationFiles, std::set<std::string>& operationFails, bool& umountMvDelBreak, bool& verbose) {
 
     // Check if input is empty
     if (selectedIsoDirs.empty()) {
+		umountMvDelBreak = false;
         clearScrollBuffer();
         std::cerr << "\n\033[1;91mNo valid input provided for umount.\n";
         std::cout << "\n\033[1;32m↵ to continue...";
