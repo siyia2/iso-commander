@@ -172,10 +172,6 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
         }
     }
     
-    // Remove duplicate indices and sort them
-    std::set<int> uniqueIndices(indicesToProcess.begin(), indicesToProcess.end());
-    indicesToProcess.assign(uniqueIndices.begin(), uniqueIndices.end());
-    
     std::atomic<size_t> completedTasks(0); // Number of completed tasks
     std::atomic<bool> isProcessingComplete(false); // Flag to indicate processing completion
     unsigned int numThreads = std::min(static_cast<unsigned int>(indicesToProcess.size()), static_cast<unsigned int>(maxThreads));
