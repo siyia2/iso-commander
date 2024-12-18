@@ -126,17 +126,47 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
         mnt_free_context(ctx);
 
         if (mountSuccess) {
-            std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m"
-                                        + "\033[1m mnt@: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename
-                                        + "\033[1;94m'\033[0;1m.";
-            if (successfulFsType != "auto") {
-                mountedFileInfo += " {" + successfulFsType + "}";
-            }
-            mountedFileInfo += "\033[0m";
-            {
-                std::lock_guard<std::mutex> lowLock(Mutex4Low);
-                mountedFiles.insert(mountedFileInfo);
-            }
+			// Attempt to determine the filesystem type more reliably
+			struct stat st;
+			std::string detectedFsType;
+
+			if (stat(mountPoint.c_str(), &st) == 0) {
+				FILE* mountFile = fopen("/proc/mounts", "r");
+				if (mountFile) {
+				char line[1024];
+				while (fgets(line, sizeof(line), mountFile)) {
+					char sourcePath[PATH_MAX];
+					char mountPath[PATH_MAX];
+					char fsType[256];
+                
+					// Parse /proc/mounts line
+					if (sscanf(line, "%s %s %s", sourcePath, mountPath, fsType) == 3) {
+						if (strcmp(mountPath, mountPoint.c_str()) == 0) {
+							detectedFsType = fsType;
+							break;
+						}
+					}
+				}
+				fclose(mountFile);
+			}
+		}
+
+		std::string mountedFileInfo = "\033[1mISO: \033[1;92m'" + isoDirectory + "/" + isoFilename + "'\033[0m"
+									+ "\033[1m mnt@: \033[1;94m'" + mountisoDirectory + "/" + mountisoFilename
+									+ "\033[1;94m'\033[0;1m.";
+    
+		// Only add filesystem type if detected and not empty
+		if (!detectedFsType.empty()) {
+			mountedFileInfo += " {" + detectedFsType + "}";
+		}
+    
+		mountedFileInfo += "\033[0m";
+    
+		{
+			std::lock_guard<std::mutex> lowLock(Mutex4Low);
+			mountedFiles.insert(mountedFileInfo);
+		}
+
         } else {
             std::stringstream errorMessage;
             errorMessage << "\033[1;91mFailed to mnt: \033[1;93m'" << isoDirectory << "/" << isoFilename
