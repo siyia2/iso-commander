@@ -155,9 +155,6 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
 void processAndMountIsoFiles(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages, bool& verbose, std::mutex& Mutex4Low) {
     std::vector<int> indicesToProcess; // To store indices parsed from the input
     indicesToProcess.reserve(100); // Reserve space for indices to improve performance
-    std::atomic<bool> invalidInput(false); // Flag to track if there's any invalid input
-    std::set<std::string> processedRanges; // To keep track of processed ranges
-    std::mutex errorMutex; // Mutex to protect access to the error messages
 
     if (input == "00") {
         // If input is "00", create indices for all ISO files
@@ -171,6 +168,7 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
             return; // Exit if no valid indices are provided
         }
     }
+    
     
     std::atomic<size_t> completedTasks(0); // Number of completed tasks
     std::atomic<bool> isProcessingComplete(false); // Flag to indicate processing completion
