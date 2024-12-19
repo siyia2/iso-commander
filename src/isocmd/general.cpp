@@ -510,7 +510,7 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view
             path.find('-', start) - start,
             path.find('_', start) - start,
             path.find('.', start) - start,
-            size_t(14)
+            size_t(16)
         });
 
         processedDir.append(path.substr(start, truncatePos));
