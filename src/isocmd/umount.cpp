@@ -169,11 +169,9 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& selected
     // Submit tasks to the thread pool
     for (const auto& isoChunk : isoChunks) {
 		unmountFutures.emplace_back(pool.enqueue([&]() {
-			for (const auto& iso : isoChunk) {
-				// Move lock inside unmountISO or only around critical sections
-				unmountISO({iso}, operationFiles, operationFails, lowLevelMutex);
-				completedIsos.fetch_add(1, std::memory_order_relaxed);
-			}
+			// Process the entire chunk at once
+			unmountISO(isoChunk, operationFiles, operationFails, lowLevelMutex);
+			completedIsos.fetch_add(isoChunk.size(), std::memory_order_relaxed); // Increment for all ISOs in the chunk
 		}));
 	}
 
