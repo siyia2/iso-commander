@@ -171,13 +171,13 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
 
 // Function to process input and mount ISO files asynchronously
 void processAndMountIsoFiles(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages, bool& verbose, std::mutex& Mutex4Low) {
-    std::vector<int> indicesToProcess; // To store indices parsed from the input
-    indicesToProcess.reserve(100); // Reserve space for indices to improve performance
+    std::set<int> indicesToProcess; // To store indices parsed from the input
 
     if (input == "00") {
         // If input is "00", create indices for all ISO files
-        indicesToProcess.resize(isoFiles.size());
-        std::iota(indicesToProcess.begin(), indicesToProcess.end(), 1); // Fill with 1, 2, 3, ...
+        for (size_t i = 0; i < isoFiles.size(); ++i) {
+		indicesToProcess.insert(i + 1);  // Insert elements 1, 2, 3, ...
+		}
     } else {
         // Existing tokenization logic for specific inputs
         tokenizeInput(input, isoFiles, uniqueErrorMessages, indicesToProcess);
@@ -201,24 +201,33 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
     std::mutex taskCompletionMutex; // Mutex to protect the condition variable
 
     for (size_t i = 0; i < totalTasks; i += chunkSize) {
-        size_t end = std::min(i + chunkSize, totalTasks); // Determine the end index for this chunk
-        activeTaskCount.fetch_add(1, std::memory_order_relaxed); // Increment active task count
-        // Enqueue a task to the thread pool
-        pool.enqueue([&, i, end]() {
-            std::vector<std::string> filesToMount;
-            filesToMount.reserve(end - i);
-            for (size_t j = i; j < end; ++j) {
-                filesToMount.push_back(isoFiles[indicesToProcess[j] - 1]); // Collect files for this chunk
-            }
+    size_t end = std::min(i + chunkSize, totalTasks); // Determine the end index for this chunk
+    activeTaskCount.fetch_add(1, std::memory_order_relaxed); // Increment active task count
+    
+    // Enqueue a task to the thread pool
+    pool.enqueue([&, i, end]() {
+        std::vector<std::string> filesToMount;
+        filesToMount.reserve(end - i);
+        
+        // Use an iterator to iterate over the set
+        auto it = std::next(indicesToProcess.begin(), i); // Get the iterator to the i-th element in the set
+        for (size_t j = i; j < end; ++j) {
+            int index = *it; // Dereference the iterator to get the value in the set
+            filesToMount.push_back(isoFiles[index - 1]); // Collect files for this chunk
             
-            mountIsoFiles(filesToMount, mountedFiles, skippedMessages, mountedFails, Mutex4Low); // Mount ISO files            
-            completedTasks.fetch_add(end - i, std::memory_order_relaxed); // Update completed tasks count
-            // Notify if all tasks are done
-            if (activeTaskCount.fetch_sub(1, std::memory_order_release) == 1) {
-                taskCompletionCV.notify_one();
-            }
-        });
-    }
+            ++it; // Move the iterator to the next element
+        }
+        
+        mountIsoFiles(filesToMount, mountedFiles, skippedMessages, mountedFails, Mutex4Low); // Mount ISO files        
+        completedTasks.fetch_add(end - i, std::memory_order_relaxed); // Update completed tasks count
+        
+        // Notify if all tasks are done
+        if (activeTaskCount.fetch_sub(1, std::memory_order_release) == 1) {
+            taskCompletionCV.notify_one();
+        }
+    });
+}
+
     // Create a thread to display progress
     std::thread progressThread(displayProgressBar, std::ref(completedTasks), totalTasks, std::ref(isProcessingComplete), std::ref(verbose));
     // Wait for all tasks to complete

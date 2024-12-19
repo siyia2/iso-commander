@@ -112,7 +112,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
 
 // Main function to send ISOs for unmount
 void prepareUnmount(const std::string& input, std::vector<std::string>& selectedIsoDirs, std::vector<std::string>& currentFiles, std::set<std::string>& operationFiles, std::set<std::string>& operationFails, std::set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& verbose) {
-    std::vector<int> selectedIndices;
+    std::set<int> selectedIndices;
     
     if (input != "00" && selectedIsoDirs.empty()) {
         tokenizeInput(input, currentFiles, uniqueErrorMessages, selectedIndices);

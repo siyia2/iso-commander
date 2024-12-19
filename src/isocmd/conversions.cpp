@@ -347,7 +347,7 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
     std::string concatenatedFilePaths;
 
     // Tokenize the input string to identify files to process
-    std::vector<int> processedIndices;
+    std::set<int> processedIndices;
     tokenizeInput(input, fileList, processedErrors, processedIndices);
     
     if (processedIndices.empty()) {
@@ -360,54 +360,63 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
     }
 
     unsigned int numThreads = std::min(static_cast<unsigned int>(processedIndices.size()), std::thread::hardware_concurrency());
-    std::vector<std::vector<size_t>> indexChunks;
-    const size_t maxFilesPerChunk = 5;
+	std::vector<std::vector<size_t>> indexChunks;
+	const size_t maxFilesPerChunk = 5;
 
-    // Distribute files evenly among threads with chunk size limits
-    size_t totalFiles = processedIndices.size();
-    size_t filesPerThread = (totalFiles + numThreads - 1) / numThreads;
-    size_t chunkSize = std::min(maxFilesPerChunk, filesPerThread);
+	// Distribute files evenly among threads with chunk size limits
+	size_t totalFiles = processedIndices.size();
+	size_t filesPerThread = (totalFiles + numThreads - 1) / numThreads;
+	size_t chunkSize = std::min(maxFilesPerChunk, filesPerThread);
 
-    for (size_t i = 0; i < totalFiles; i += chunkSize) {
-        auto chunkEnd = std::min(processedIndices.begin() + i + chunkSize, processedIndices.end());
-        indexChunks.emplace_back(processedIndices.begin() + i, chunkEnd);
-    }
+	// Use iterators to iterate over the set directly
+	auto it = processedIndices.begin();
+	for (size_t i = 0; i < totalFiles; i += chunkSize) {
+		// Calculate the end iterator for the current chunk
+		auto chunkEnd = std::next(it, std::min(chunkSize, static_cast<size_t>(std::distance(it, processedIndices.end()))));
+    
+		// Create a chunk using iterators
+		indexChunks.emplace_back(it, chunkEnd);
+    
+		// Move the iterator to the next chunk
+		it = chunkEnd;
+	}
 
-    std::atomic<size_t> totalTasks(static_cast<int>(processedIndices.size()));
-    std::atomic<size_t> completedTasks(0);
-    std::atomic<bool> isProcessingComplete(false);
 
-    int totalTasksValue = totalTasks.load();
-    std::thread progressThread(displayProgressBar, std::ref(completedTasks), std::cref(totalTasksValue), std::ref(isProcessingComplete), std::ref(verbose));
+	std::atomic<size_t> totalTasks(static_cast<int>(processedIndices.size()));
+	std::atomic<size_t> completedTasks(0);
+	std::atomic<bool> isProcessingComplete(false);
 
-    ThreadPool pool(numThreads);
-    std::vector<std::future<void>> futures;
-    futures.reserve(indexChunks.size());
-    std::mutex Mutex4Low; // Mutex for low-level processing
+	int totalTasksValue = totalTasks.load();
+	std::thread progressThread(displayProgressBar, std::ref(completedTasks), std::cref(totalTasksValue), std::ref(isProcessingComplete), std::ref(verbose));
 
-    for (const auto& chunk : indexChunks) {
-        // Gather files for this chunk
-        std::vector<std::string> imageFilesInChunk;
-        imageFilesInChunk.reserve(chunk.size());
-        std::transform(
-            chunk.begin(),
-            chunk.end(),
-            std::back_inserter(imageFilesInChunk),
-            [&fileList](size_t index) { return fileList[index - 1]; }
-        );
+	ThreadPool pool(numThreads);
+	std::vector<std::future<void>> futures;
+	futures.reserve(indexChunks.size());
+	std::mutex Mutex4Low; // Mutex for low-level processing
 
-        // Enqueue task for the thread pool
-        futures.emplace_back(pool.enqueue([imageFilesInChunk = std::move(imageFilesInChunk), &fileList, &successOuts, &skippedOuts, &failedOuts, &deletedOuts, modeMdf, modeNrg, &maxDepth, &promptFlag, &historyPattern, &Mutex4Low, &completedTasks]() {
-            // Process each file
-            convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts, deletedOuts, modeMdf, modeNrg, maxDepth, promptFlag, historyPattern, Mutex4Low);
-            completedTasks.fetch_add(imageFilesInChunk.size(), std::memory_order_relaxed);
-        }));
-    }
+	for (const auto& chunk : indexChunks) {
+		// Gather files for this chunk
+		std::vector<std::string> imageFilesInChunk;
+		imageFilesInChunk.reserve(chunk.size());
+		std::transform(
+			chunk.begin(),
+			chunk.end(),
+			std::back_inserter(imageFilesInChunk),
+			[&fileList](size_t index) { return fileList[index - 1]; }
+		);
 
-    // Wait for all threads to complete
-    for (auto& future : futures) {
-        future.wait();
-    }
+		// Enqueue task for the thread pool
+		futures.emplace_back(pool.enqueue([imageFilesInChunk = std::move(imageFilesInChunk), &fileList, &successOuts, &skippedOuts, &failedOuts, &deletedOuts, modeMdf, modeNrg, &maxDepth, &promptFlag, &historyPattern, &Mutex4Low, &completedTasks]() {
+			// Process each file
+			convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts, deletedOuts, modeMdf, modeNrg, maxDepth, promptFlag, historyPattern, Mutex4Low);
+			completedTasks.fetch_add(imageFilesInChunk.size(), std::memory_order_relaxed);
+		}));
+	}
+
+	// Wait for all threads to complete
+	for (auto& future : futures) {
+		future.wait();
+	}
 
     isProcessingComplete.store(true);
     progressThread.join();

@@ -36,8 +36,7 @@ bool isValidLinuxPathFormat(const std::string& path) {
 // Function to process either mv or cp indices
 void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& umountMvRmBreak, bool& historyPattern, bool& verbose) {
     std::string userDestDir;
-    std::vector<int> processedIndices;
-    processedIndices.reserve(maxThreads);
+    std::set<int> processedIndices;
 
     bool isDelete = (process == "rm");
     bool isMove = (process == "mv");
@@ -68,19 +67,27 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     }
 
 
-		unsigned int numThreads = std::min(static_cast<unsigned int>(processedIndices.size()), maxThreads);
-		std::vector<std::vector<int>> indexChunks;
-		const size_t maxFilesPerChunk = 5;
+	unsigned int numThreads = std::min(static_cast<unsigned int>(processedIndices.size()), maxThreads);
+	std::vector<std::vector<int>> indexChunks;
+	const size_t maxFilesPerChunk = 5;
 
-		// Distribute files evenly among threads, but not exceeding maxFilesPerChunk
-		size_t totalFiles = processedIndices.size();
-		size_t filesPerThread = (totalFiles + numThreads - 1) / numThreads;
-		size_t chunkSize = std::min(maxFilesPerChunk, filesPerThread);
+	// Distribute files evenly among threads, but not exceeding maxFilesPerChunk
+	size_t totalFiles = processedIndices.size();
+	size_t filesPerThread = (totalFiles + numThreads - 1) / numThreads;
+	size_t chunkSize = std::min(maxFilesPerChunk, filesPerThread);
 
-		for (size_t i = 0; i < totalFiles; i += chunkSize) {
-			auto chunkEnd = std::min(processedIndices.begin() + i + chunkSize, processedIndices.end());
-			indexChunks.emplace_back(processedIndices.begin() + i, chunkEnd);
-		}
+	// Use iterators to iterate over the set directly
+	auto it = processedIndices.begin();
+	for (size_t i = 0; i < totalFiles; i += chunkSize) {
+		// Find the end iterator for the current chunk
+		auto chunkEnd = std::next(it, std::min(chunkSize, static_cast<size_t>(std::distance(it, processedIndices.end()))));
+    
+		// Create a chunk using iterators
+		indexChunks.emplace_back(it, chunkEnd);
+    
+		// Move the iterator to the next chunk
+		it = chunkEnd;
+	}
 
     bool abortDel = false;
 	std::string processedUserDestDir = userDestDirRm(isoFiles, indexChunks, userDestDir, operationColor, operationDescription, umountMvRmBreak, historyPattern, isDelete, isCopy, abortDel);
