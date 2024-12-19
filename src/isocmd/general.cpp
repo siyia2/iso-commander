@@ -508,7 +508,9 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view
             componentLength, 
             path.find(' ', start) - start,
             path.find('-', start) - start,
-            size_t(28)
+            path.find('_', start) - start,
+            path.find('.', start) - start,
+            size_t(14)
         });
 
         processedDir.append(path.substr(start, truncatePos));
