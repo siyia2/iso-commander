@@ -392,7 +392,6 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
 	ThreadPool pool(numThreads);
 	std::vector<std::future<void>> futures;
 	futures.reserve(indexChunks.size());
-	std::mutex Mutex4Low; // Mutex for low-level processing
 
 	for (const auto& chunk : indexChunks) {
 		// Gather files for this chunk
@@ -406,9 +405,9 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
 		);
 
 		// Enqueue task for the thread pool
-		futures.emplace_back(pool.enqueue([imageFilesInChunk = std::move(imageFilesInChunk), &fileList, &successOuts, &skippedOuts, &failedOuts, &deletedOuts, modeMdf, modeNrg, &maxDepth, &promptFlag, &historyPattern, &Mutex4Low, &completedTasks]() {
+		futures.emplace_back(pool.enqueue([imageFilesInChunk = std::move(imageFilesInChunk), &fileList, &successOuts, &skippedOuts, &failedOuts, &deletedOuts, modeMdf, modeNrg, &maxDepth, &promptFlag, &historyPattern, &completedTasks]() {
 			// Process each file
-			convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts, deletedOuts, modeMdf, modeNrg, maxDepth, promptFlag, historyPattern, Mutex4Low);
+			convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts, deletedOuts, modeMdf, modeNrg, maxDepth, promptFlag, historyPattern);
 			completedTasks.fetch_add(imageFilesInChunk.size(), std::memory_order_relaxed);
 		}));
 	}
@@ -656,7 +655,7 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
 
 
 // Function to convert a BIN/IMG/MDF/NRG file to ISO format
-void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, const bool& modeMdf, const bool& modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern, std::mutex& Mutex4Low) {
+void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, const bool& modeMdf, const bool& modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern) {
     
     std::set<std::string> uniqueDirectories;
     for (const auto& filePath : imageFiles) {
@@ -677,7 +676,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
     std::string real_username;
     std::string real_groupname;
     
-    getRealUserId(real_uid, real_gid, real_username, real_groupname, failedOuts, Mutex4Low);
+    getRealUserId(real_uid, real_gid, real_username, real_groupname, failedOuts);
 
     // Iterate over each image file
     for (const std::string& inputPath : imageFiles) {
@@ -686,10 +685,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
         // Check if the input file exists
         if (!std::filesystem::exists(inputPath)) {
             std::string failedMessage = "\033[1;91mThe specified input file \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m does not exist anymore.\033[0;1m";
-            {
-                std::lock_guard<std::mutex> lock(Mutex4Low);
                 failedOuts.insert(failedMessage);
-            }
             continue;
         }
 
@@ -697,10 +693,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
         std::ifstream file(inputPath);
         if (!file.good()) {
             std::string failedMessage = "\033[1;91mThe specified file \033[1;93m'" + inputPath + "'\033[1;91m cannot be read. Check permissions.\033[0;1m";
-            {
-                std::lock_guard<std::mutex> lock(Mutex4Low);
                 failedOuts.insert(failedMessage);
-            }
             continue;
         }
 
@@ -710,7 +703,6 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
         // Skip if ISO file already exists
         if (fileExists(outputPath)) {
             std::string skipMessage = "\033[1;93mThe corresponding .iso file already exists for: \033[1;92m'" + directory + "/" + fileNameOnly + "'\033[1;93m. Skipped conversion.\033[0;1m";
-            std::lock_guard<std::mutex> lock(Mutex4Low);
             skippedOuts.insert(skipMessage);
             continue;
         }
@@ -732,16 +724,13 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
             // Change ownership if needed
             if (chown(outputPath.c_str(), real_uid, real_gid) != 0) {
                 std::string errorMessage = "\033[1;91mFailed to change ownership of \033[1;93m'" + outDirectory + "/" + outFileNameOnly + "'\033[1;91m: " + strerror(errno) + "\033[0;1m";
-                std::lock_guard<std::mutex> lock(Mutex4Low);
                 failedOuts.insert(errorMessage);
             }
 
             std::string successMessage = "\033[1mImage file converted to ISO:\033[0;1m \033[1;92m'" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m.\033[0;1m";
-            std::lock_guard<std::mutex> lock(Mutex4Low);
             successOuts.insert(successMessage);
         } else {
             std::string failedMessage = "\033[1;91mConversion of \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m failed.\033[0;1m";
-            std::lock_guard<std::mutex> lock(Mutex4Low);
             failedOuts.insert(failedMessage);
 
             if (std::remove(outputPath.c_str()) == 0) {

@@ -39,10 +39,9 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
 
 
 // Function to unmount ISO files asynchronously
-void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors, std::mutex& Mutex4Low) {
+void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors) {
     // Early root privilege check
     if (geteuid() != 0) {
-        std::lock_guard<std::mutex> lowLock(Mutex4Low);
         for (const auto& isoDir : isoDirs) {
             std::stringstream errorMessage;
             errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDir
@@ -75,7 +74,6 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
 
     // Handle successful and unsuccessful unmounts, with special focus on /mnt/iso_ directories
     {
-        std::lock_guard<std::mutex> lowLock(Mutex4Low);
         
         // Try to remove all successful unmount directories
         for (const auto& dir : successfulUnmounts) {
@@ -170,7 +168,7 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& selected
     for (const auto& isoChunk : isoChunks) {
 		unmountFutures.emplace_back(pool.enqueue([&]() {
 			// Process the entire chunk at once
-			unmountISO(isoChunk, operationFiles, operationFails, lowLevelMutex);
+			unmountISO(isoChunk, operationFiles, operationFails);
 			completedIsos.fetch_add(isoChunk.size(), std::memory_order_relaxed); // Increment for all ISOs in the chunk
 		}));
 	}

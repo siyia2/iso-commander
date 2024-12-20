@@ -110,7 +110,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
     futures.reserve(indexChunks.size());
-    std::mutex Mutex4Low; // Mutex for low-level processing
 
     for (const auto& chunk : indexChunks) {
         std::vector<std::string> isoFilesInChunk;
@@ -122,8 +121,8 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             [&isoFiles](size_t index) { return isoFiles[index - 1]; }
         );
 
-        futures.emplace_back(pool.enqueue([isoFilesInChunk = std::move(isoFilesInChunk), &isoFiles, &operationIsos, &operationErrors, &userDestDir, isMove, isCopy, isDelete, &completedTasks, &Mutex4Low]() {
-			handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors, userDestDir, isMove, isCopy, isDelete, Mutex4Low);
+        futures.emplace_back(pool.enqueue([isoFilesInChunk = std::move(isoFilesInChunk), &isoFiles, &operationIsos, &operationErrors, &userDestDir, isMove, isCopy, isDelete, &completedTasks]() {
+			handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors, userDestDir, isMove, isCopy, isDelete);
 			completedTasks.fetch_add(isoFilesInChunk.size(), std::memory_order_relaxed); // No need for static_cast to int
 		}));
     }
@@ -249,7 +248,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
 
 
 // Function to handle the deletion of ISO files in batches
-void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete, std::mutex& Mutex4Low) {
+void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete) {
     namespace fs = std::filesystem;
 
     // Error flag to track overall operation success
@@ -260,7 +259,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
     gid_t real_gid;
     std::string real_username;
     std::string real_groupname;
-    getRealUserId(real_uid, real_gid, real_username, real_groupname, operationErrors, Mutex4Low);
+    getRealUserId(real_uid, real_gid, real_username, real_groupname, operationErrors);
 
     // Vector to store ISO files to operate on
     std::vector<std::string> isoFilesToOperate;
@@ -282,20 +281,15 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                 if (chown(path.c_str(), real_uid, real_gid) != 0) {
                     std::string errorMessage = "\033[1;91mFailed to change ownership of '" + path.string() + "': " + 
                                                std::string(strerror(errno)) + "\033[0;1m";
-                    {
-                        std::lock_guard<std::mutex> lowLock(Mutex4Low);
                         operationErrors.emplace(errorMessage);
-                    }
+                        
                     return false;
                 }
             }
         } else {
             std::string errorMessage = "\033[1;91mFailed to get file information for '" + path.string() + "': " + 
                                        std::string(strerror(errno)) + "\033[0;1m";
-            {
-                std::lock_guard<std::mutex> lowLock(Mutex4Low);
                 operationErrors.emplace(errorMessage);
-            }
             return false;
         }
         return true;
@@ -312,17 +306,12 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                 std::error_code ec;
                 if (fs::remove(srcPath, ec)) {
                     std::string operationInfo = "\033[1mDeleted: \033[1;92m'" + srcDir + "/" + srcFile + "'\033[1m\033[0;1m.";
-                    {
-                        std::lock_guard<std::mutex> lowLock(Mutex4Low);
                         operationIsos.emplace(operationInfo);
-                    }
                 } else {
                     std::string errorMessageInfo = "\033[1;91mError deleting: \033[1;93m'" + srcDir + "/" + srcFile +
                         "'\033[1;91m: " + ec.message() + "\033[1;91m.\033[0;1m";
-                    {
-                        std::lock_guard<std::mutex> lowLock(Mutex4Low);
                         operationErrors.emplace(errorMessageInfo);
-                    }
+
                     operationSuccessful = false;
                 }
             } else {
@@ -339,10 +328,8 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         if (ec) {
                             std::string errorMessage = "\033[1;91mFailed to create destination directory: " + 
                                                        destDir + " : " + ec.message() + "\033[0;1m";
-                            {
-                                std::lock_guard<std::mutex> lowLock(Mutex4Low);
                                 operationErrors.emplace(errorMessage);
-                            }
+                                
                             operationSuccessful = false;
                             continue;
                         }
@@ -371,10 +358,8 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                             std::string(isCopy ? "copying" : (i < destDirs.size() - 1 ? "moving" : "moving")) +
                             ": \033[1;93m'" + srcDir + "/" + srcFile + "'\033[1;91m" +
                             " to '" + destDirProcessed + "/': " + ec.message() + "\033[1;91m.\033[0;1m";
-                        {
-                            std::lock_guard<std::mutex> lowLock(Mutex4Low);
                             operationErrors.emplace(errorMessageInfo);
-                        }
+                            
                         operationSuccessful = false;
                         continue;
                     }
@@ -389,10 +374,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         std::string(isCopy ? "Copied" : (i < destDirs.size() - 1 ? "Moved" : "Moved")) +
                         ": \033[1;92m'" + srcDir + "/" + srcFile + "'\033[1m\033[0;1m" +
                         " to \033[1;94m'" + destDirProcessed + "/" + destFile + "'\033[0;1m.";
-                    {
-                        std::lock_guard<std::mutex> lowLock(Mutex4Low);
                         operationIsos.emplace(operationInfo);
-                    }
                 }
             }
         }
@@ -414,20 +396,16 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                 // Print message if file not found
                 std::string errorMessageInfo = "\033[1;35mFile not found: \033[0;1m'" +
                     isoDir + "/" + isoFile + "'\033[1;35m.\033[0;1m";
-                {
-                    std::lock_guard<std::mutex> lowLock(Mutex4Low);
                     operationErrors.emplace(errorMessageInfo);
-                }
                 operationSuccessful = false;
             }
         } else {
             // Print message if file not found in cache
             std::string errorMessageInfo = "\033[1;93mFile not found in cache: \033[0;1m'" +
                 isoDir + "/" + isoFile + "'\033[1;93m.\033[0;1m";
-            {
-                std::lock_guard<std::mutex> lowLock(Mutex4Low);
+
                 operationErrors.emplace(errorMessageInfo);
-            }
+                
             operationSuccessful = false;
         }
     }

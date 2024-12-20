@@ -16,7 +16,6 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
     bool isFiltered = false;
     bool needsClrScrn = true;
     bool umountMvRmBreak = false;
-    std::mutex Mutex4Low; // Mutex for low-level processing
     
     // Determine operation color based on operation type
     std::string operationColor = (operation == "rm") ? "\033[1;91m" :
@@ -145,12 +144,12 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
                 // Special case for mounting all files
                 std::cout << "\033[0;1m";
                 currentFiles = globalIsoFileList;
-                processAndMountIsoFiles(inputString, currentFiles, operationFiles, skippedMessages, operationFails, uniqueErrorMessages, verbose, Mutex4Low);
+                processAndMountIsoFiles(inputString, currentFiles, operationFiles, skippedMessages, operationFails, uniqueErrorMessages, verbose);
             } else if (isMount){
 				clearScrollBuffer();
                 needsClrScrn = true;
                 std::cout << "\033[0;1m\n";
-					processAndMountIsoFiles(inputString, currentFiles, operationFiles, skippedMessages, operationFails, uniqueErrorMessages, verbose, Mutex4Low);
+					processAndMountIsoFiles(inputString, currentFiles, operationFiles, skippedMessages, operationFails, uniqueErrorMessages, verbose);
 			} else if (isUnmount) {
             // Unmount-specific logic
             std::vector<std::string> selectedIsoDirs;

@@ -17,7 +17,7 @@ bool isAlreadyMounted(const std::string& mountPoint) {
 
 
 // Function to mount selected ISO files called from processAndMountIsoFiles
-void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::mutex& Mutex4Low) {
+void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
     for (const auto& isoFile : isoFiles) {
         namespace fs = std::filesystem;
         fs::path isoPath(isoFile);
@@ -48,7 +48,6 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
                          << (useFullPath ? isoDirectory : (isoDirectory + "/" + isoFilename))
                          << "'\033[0m\033[1;91m.\033[0;1m " << errorType << "\033[0m";
             
-            std::lock_guard<std::mutex> lowLock(Mutex4Low);
             mountedFails.insert(errorMessage.str());
         };
 
@@ -65,7 +64,6 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
                            << "'\033[1;93m already mnt@: \033[1;94m'" << mountisoDirectory
                            << "/" << mountisoFilename << "\033[1;94m'\033[1;93m.\033[0m";
             
-            std::lock_guard<std::mutex> lowLock(Mutex4Low);
             skippedMessages.insert(skippedMessage.str());
             continue;
         }
@@ -85,7 +83,6 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
                 errorMessage << "\033[1;91mFailed to create mount point: \033[1;93m'" << mountPoint
                              << "'\033[0m\033[1;91m. Error: " << e.what() << "\033[0m";
                 
-                std::lock_guard<std::mutex> lowLock(Mutex4Low);
                 mountedFails.insert(errorMessage.str());
                 continue;
             }
@@ -97,7 +94,6 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
             std::stringstream errorMessage;
             errorMessage << "\033[1;91mFailed to create mount context for: \033[1;93m'" << isoFile << "'\033[0m";
             
-            std::lock_guard<std::mutex> lowLock(Mutex4Low);
             mountedFails.insert(errorMessage.str());
             continue;
         }
@@ -157,7 +153,6 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
 
             // Thread-safe insertion of mounted file info
             {
-                std::lock_guard<std::mutex> lowLock(Mutex4Low);
                 mountedFiles.insert(mountedFileInfo);
             }
         } else {
@@ -170,7 +165,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
 
 
 // Function to process input and mount ISO files asynchronously
-void processAndMountIsoFiles(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages, bool& verbose, std::mutex& Mutex4Low) {
+void processAndMountIsoFiles(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages, bool& verbose) {
     std::set<int> indicesToProcess; // To store indices parsed from the input
 
     if (input == "00") {
@@ -218,7 +213,7 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
 				++it; // Move the iterator to the next element
 			}
         
-			mountIsoFiles(filesToMount, mountedFiles, skippedMessages, mountedFails, Mutex4Low); // Mount ISO files        
+			mountIsoFiles(filesToMount, mountedFiles, skippedMessages, mountedFails); // Mount ISO files        
 			completedTasks.fetch_add(end - i, std::memory_order_relaxed); // Update completed tasks count
         
 			// Notify if all tasks are done

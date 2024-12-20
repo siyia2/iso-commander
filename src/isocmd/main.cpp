@@ -402,7 +402,7 @@ void sortFilesCaseInsensitive(std::vector<std::string>& files) {
 
 
 // Function to get the sudo invoker ID
-void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname,std::set<std::string>& uniqueErrors,std::mutex& Mutex4Low) {
+void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname,std::set<std::string>& uniqueErrors) {
 
     // Get the real user ID and group ID (of the user who invoked sudo)
     const char* sudo_uid = std::getenv("SUDO_UID");
@@ -413,7 +413,6 @@ void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username,
             real_uid = static_cast<uid_t>(std::stoul(sudo_uid));
             real_gid = static_cast<gid_t>(std::stoul(sudo_gid));
         } catch (const std::exception& e) {
-            std::lock_guard<std::mutex> lock(Mutex4Low);
             uniqueErrors.insert("\033[1;91mError parsing SUDO_UID or SUDO_GID environment variables.\033[0;1m");
             return;
         }
@@ -426,7 +425,6 @@ void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username,
     // Get real user's name
     struct passwd *pw = getpwuid(real_uid);
     if (pw == nullptr) {
-        std::lock_guard<std::mutex> lock(Mutex4Low);
         uniqueErrors.insert("\033[1;91mError getting user information: " + std::string(strerror(errno)) + "\033[0;1m");
         return;
     }
@@ -435,7 +433,6 @@ void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username,
     // Get real group name
     struct group *gr = getgrgid(real_gid);
     if (gr == nullptr) {
-        std::lock_guard<std::mutex> lock(Mutex4Low);
         uniqueErrors.insert("\033[1;91mError getting group information: " + std::string(strerror(errno)) + "\033[0;1m");
         return;
     }
