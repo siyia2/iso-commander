@@ -31,13 +31,14 @@ For best experience execute with: `sudo isocmd`.
 ⚡ High-Performance Architecture:
 
 * Native C++ implementation.
-* Direct libmount system calls.
+* Direct libmount and umount2 system calls.
 * Zero external library dependencies for terminal control.
 
 
 🔀 Concurrent Processing:
 
 * Multithreaded asynchronous task handling.
+* Lock-free operations.
 * Scalable from 1 to 100,000 ISO files.
 * Implements cutting-edge concurrent programming practices.
 
