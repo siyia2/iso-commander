@@ -329,11 +329,13 @@ void delCacheAndShowStats (std::string& inputSearch, const bool& promptFlag, con
 			// Get the file size in bytes
 			std::filesystem::path filePath(cacheFilePath);
 			std::uintmax_t fileSizeInBytes = std::filesystem::file_size(filePath);
+			std::uintmax_t cachesizeInBytes = maxCacheSize;
         
 			// Convert to MB
 			double fileSizeInMB = fileSizeInBytes / (1024.0 * 1024.0);
+			double cachesizeInMb = cachesizeInBytes / (1024.0 * 1024.0);
         
-			std::cout << "\nSize: " << std::fixed << std::setprecision(1) << fileSizeInMB << "MB" << "/10MB" << " \nEntries: "<< countNonEmptyLines(cacheFilePath) << "\nLocation: " << "'" << cacheFilePath << "'\033[0;1m" <<std::endl;
+			std::cout << "\nSize: " << std::fixed << std::setprecision(1) << fileSizeInMB << "MB" << "/" << std::setprecision(0) << cachesizeInMb << "MB" << " \nEntries: "<< countNonEmptyLines(cacheFilePath) << "\nLocation: " << "'" << cacheFilePath << "'\033[0;1m" <<std::endl;
 		} catch (const std::filesystem::filesystem_error& e) {
 			std::cerr << "\n\033[1;91mError: " << e.what() << std::endl;
 		}
