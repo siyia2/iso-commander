@@ -321,24 +321,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     fs::path destPath = fs::path(destDir) / srcPath.filename();
                     auto [destDirProcessed, destFile] = extractDirectoryAndFilename(destPath.string());
 
-                    std::error_code ec;
-                    // Create destination directory if it doesn't exist
-                    if (!fs::exists(destDir)) {
-                        fs::create_directories(destDir, ec);
-                        if (ec) {
-                            std::string errorMessage = "\033[1;91mFailed to create destination directory: " + 
-                                                       destDir + " : " + ec.message() + "\033[0;1m";
-                                operationErrors.emplace(errorMessage);
-                                
-                            operationSuccessful = false;
-                            continue;
-                        }
-                        
-                        if (!changeOwnership(fs::path(destDir))) {
-                            operationSuccessful = false;
-                            continue;
-                        }
-                    }
+                    std::error_code ec;                   
 
                     if (isCopy) {
                         // Copy operation
