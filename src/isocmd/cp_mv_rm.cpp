@@ -3,35 +3,6 @@
 #include "../headers.h"
 #include "../threadpool.h"
 
-// Function to check if a linux path is valid
-bool isValidLinuxPathFormat(const std::string& path) {
-    // Check if the path is empty or does not start with '/'
-    if (path[0] != '/') {
-        return false; // Linux paths must start with '/'
-    }
-
-    bool previousWasSlash = false;
-
-    // Iterate through each character in the path
-    for (char c : path) {
-        if (c == '/') {
-            if (previousWasSlash) {
-                return false; // Consecutive slashes are not allowed
-            }
-            previousWasSlash = true;
-        } else {
-            previousWasSlash = false;
-
-            // Check for invalid characters: '\0', '\n', '\r', '\t'
-            if (c == '\0' || c == '\n' || c == '\r' || c == '\t') {
-                return false; // Invalid characters in Linux path
-            }
-        }
-    }
-
-    return true; // Path format is valid
-}
-
 
 // Function to process either mv or cp indices
 void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& umountMvRmBreak, bool& historyPattern, bool& verbose) {
@@ -159,7 +130,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
             }
         }
     };
-	
+	namespace fs = std::filesystem;
 	if (!isDelete) {
         while (true) {
 			// Restore readline autocomplete and screen clear bindings
@@ -189,33 +160,14 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
                 return userDestDir;
             }
 
-            if (isValidLinuxPathFormat(mainInputString)) {
-                bool slashBeforeSemicolon = mainInputString.find(";") == std::string::npos
-                                            || mainInputString.find(";/") != std::string::npos
-                                            || mainInputString.find("/;") != std::string::npos;
-                bool semicolonSurroundedBySlash = true;
+            if (fs::exists(mainInputString)) {
+                userDestDir = mainInputString;
+                add_history(input.get());
+                saveHistory(historyPattern);
+                clear_history();
+                break;
 
-                // Check if semicolon is surrounded by slashes
-                for (size_t i = 0; i < mainInputString.size(); ++i) {
-                    if (mainInputString[i] == ';') {
-                        if (i == 0 || i == mainInputString.size() - 1 || mainInputString[i - 1] != '/' || mainInputString[i + 1] != '/') {
-                            semicolonSurroundedBySlash = false;
-                            break;
-                        }
-                    }
-                }
-
-                if (mainInputString.back() == '/' && mainInputString.front() == '/' && slashBeforeSemicolon && semicolonSurroundedBySlash) {
-                    userDestDir = mainInputString;
-                    add_history(input.get());
-                    saveHistory(historyPattern);
-                    clear_history();
-                    break;
-                } else {
-					add_history(input.get());
-                    saveHistory(historyPattern);
-                    std::cout << "\n\033[1;92mcp \033[1;91mand\001\033[1;93m mv\001\033[1;91m require all the paths to end with \033[0;1m'/'\033[1;91m.\033[0;1m\n";
-                }
+                
             } else {
                 std::cout << "\n\033[1;91mInvalid paths are not allowed for \033[1;92mcp\033[1;91m and \033[1;93mmv\033[1;91m operations.\033[0;1m\n";
             }
