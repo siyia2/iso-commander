@@ -130,7 +130,6 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
             }
         }
     };
-	namespace fs = std::filesystem;
 	if (!isDelete) {
         while (true) {
 			// Restore readline autocomplete and screen clear bindings
