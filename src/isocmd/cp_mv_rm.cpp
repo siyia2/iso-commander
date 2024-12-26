@@ -158,21 +158,14 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
                 userDestDir = "";
                 clear_history();
                 return userDestDir;
-            }
-
-            if (fs::exists(mainInputString)) {
+            } else {
                 userDestDir = mainInputString;
                 add_history(input.get());
                 saveHistory(historyPattern);
                 clear_history();
                 break;
-            
-            } else {
-                std::cout << "\n\033[1;91mInvalid paths are not allowed for \033[1;92mcp\033[1;91m and \033[1;93mmv\033[1;91m operations.\033[0;1m\n";
             }
 
-            std::cout << "\n\033[1;32m↵ to try again...\033[0;1m";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         }
     } else {
         clearScrollBuffer();
