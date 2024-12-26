@@ -166,8 +166,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
                 saveHistory(historyPattern);
                 clear_history();
                 break;
-
-                
+            
             } else {
                 std::cout << "\n\033[1;91mInvalid paths are not allowed for \033[1;92mcp\033[1;91m and \033[1;93mmv\033[1;91m operations.\033[0;1m\n";
             }
