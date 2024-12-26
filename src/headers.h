@@ -135,7 +135,6 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
 // CACHE
 
 // bools
-
 bool iequals(const std::string_view& a, const std::string_view& b);
 bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize);
 bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered);
@@ -154,9 +153,6 @@ void removeNonExistentPathsFromCache();
 
 
 //	CP&MV&RM
-
-//	bools
-bool isValidLinuxPathFormat(const std::string& path);
 
 // stds
 std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& historyPattern, bool& isDelete, bool& isCopy, bool& abortDel);
