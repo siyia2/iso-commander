@@ -111,6 +111,10 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
        if (!isDelete) {
                manualRefreshCache(userDestDir, promptFlag, maxDepth, historyPattern);
        }
+       if (!isDelete && !operationIsos.empty()) {
+		   saveHistory(historyPattern);
+           clear_history();
+	   }
 
     clear_history();
     promptFlag = true;
@@ -160,8 +164,6 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
             } else {
                 userDestDir = mainInputString;
                 add_history(input.get());
-                saveHistory(historyPattern);
-                clear_history();
                 break;
             }
 
