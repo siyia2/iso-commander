@@ -24,6 +24,8 @@ int main(int argc, char *argv[]) {
         printVersionNumber("5.5.3");
         return 0;
     }
+    // Readline use semicolon as delimiter
+    rl_completer_word_break_characters = (char *)";";
 
     const char* lockFile = "/tmp/isocmd.lock";
 
