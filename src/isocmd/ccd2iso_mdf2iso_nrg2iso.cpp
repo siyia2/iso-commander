@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GNU General Public License v3.0 or later
+
 #include "../headers.h"
 
 // Special thanks to the original authors of the conversion tools:
