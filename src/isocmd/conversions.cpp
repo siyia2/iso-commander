@@ -247,7 +247,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
     
     bool isFiltered = false; // Indicates if the file list is currently filtered
     std::string fileExtension = (fileType == "bin" || fileType == "img") ? ".bin/.img" 
-                                   : (fileType == "mdf") ? "mdf" : ".nrg"; // Determine file extension based on type
+                                   : (fileType == "mdf") ? ".mdf" : ".nrg"; // Determine file extension based on type
     std::string filterPrompt; // Stores the prompt for filter input
     
     std::string fileExtensionWithOutDots;
