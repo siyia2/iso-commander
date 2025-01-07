@@ -294,6 +294,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         skippedOuts.clear(); 
         failedOuts.clear(); 
         deletedOuts.clear();
+        clear_history();	
 
         clearScrollBuffer(); // Clear the screen for new content
         sortFilesCaseInsensitive(files); // Sort the files case-insensitively
