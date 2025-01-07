@@ -487,9 +487,9 @@ void help() {
     
     // Special commands
     std::cout << "2. Special Commands:\n"
-              << "   • Press '/' - Filter the current list\n"
-              << "   • Press '~' - Switch between short and full paths\n"
-              << "   • Press '?' - Show this help message\n" << std::endl;
+              << "   • Enter '/' - Filter the current list\n"
+              << "   • Enter '~' - Switch between short and full paths\n"
+              << "   • Enter '?' - Show this help message\n" << std::endl;
     
     // Prompt to continue
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
