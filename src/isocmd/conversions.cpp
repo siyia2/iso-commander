@@ -301,7 +301,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 
         // Build the user prompt string dynamically
         std::string prompt = std::string("\n") + 
-                     (isFiltered ? "\001\033[1;96m\002Filtered " : "\033[1;38;5;208m") + 
+                     (isFiltered ? "\001\033[1;96m\002Filtered \001\033[1;38;5;208m\002" : "\001\033[1;38;5;208m\002") + 
                      (fileType == "bin" || fileType == "img" ? "BIN/IMG" : (fileType == "mdf" ? "MDF" : "NRG")) + 
                      "\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion, ? ↵ for help, ↵ to return:\001\033[0;1m\002 ";
                      
