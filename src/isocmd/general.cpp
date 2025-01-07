@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: GNU General Public License v3.0 or later
-
 #include "../headers.h"
 
 
@@ -54,15 +52,23 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
 
         std::string prompt = isFiltered 
             ? "\001\033[1;96m\002Filtered \001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + 
-              "\001\033[1;94m\002 (e.g., 1-3,1 5," + (isMount || isUnmount ? "00=all" : "") + "), ~ ↵ (un)fold, / ↵ filter, ↵ return:\001\033[0;1m\002 "
+              "\001\033[1;94m\002, ? ↵ for help, ↵ to return:\001\033[0;1m\002 "
             : "\001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + 
-              "\001\033[1;94m\002 (e.g., 1-3,1 5," + (isMount || isUnmount ? "00=all" : "") + "), ~ ↵ (un)fold, / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+              "\001\033[1;94m\002, ? ↵ for help, ↵ to return:\001\033[0;1m\002 ";
 
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         std::string inputString(input.get());
+        
+        if (inputString == "?") {
+            help();
+            needsClrScrn = true;
+            continue;
+        }
 
         if (inputString == "~") {
-            toggleFullList = !toggleFullList;
+			if (!isUnmount) {
+				toggleFullList = !toggleFullList;
+			}
             needsClrScrn = true;
             continue;
         }
@@ -90,7 +96,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
 
                 // Generate prompt
 				std::string filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + 
-                                           " \001\033[1;94m\002list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
+                                           " \001\033[1;94m\002(multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ to return: \001\033[0;1m\002";
                 std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
 
                 if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
@@ -459,6 +465,35 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     }
 
     std::cout << output.str();
+}
+
+
+void help() {
+    clearScrollBuffer();
+    
+    // Title
+    std::cout << "\n=== Help Guide ===\n" << std::endl;
+    
+    // Main instructions section
+    std::cout << "How to Use the Program:\n" << std::endl;
+    
+    // Working with indices
+    std::cout << "1. Selecting Items:\n"
+              << "   • Single item: Enter a number (e.g., '1')\n"
+              << "   • Multiple items: Separate with spaces (e.g., '1 5 6')\n"
+              << "   • Range of items: Use hyphen (e.g., '1-3')\n"
+              << "   • Combine methods: '1-3 5 7-9'\n"
+              << "   • Select all: Enter '00' (for mount/umount only)\n" << std::endl;
+    
+    // Special commands
+    std::cout << "2. Special Commands:\n"
+              << "   • Press '/' - Filter the current list\n"
+              << "   • Press '~' - Switch between short and full paths\n"
+              << "   • Press '?' - Show this help message\n" << std::endl;
+    
+    // Prompt to continue
+    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
 

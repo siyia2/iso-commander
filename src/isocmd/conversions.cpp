@@ -121,7 +121,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
         // Interactive prompt setup (similar to original code)
         std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m ↵ to scan for \001\033[1;38;5;208m\002" + fileExtension +
                              "\001\033[1;94m files (>= 5MB) and import into \001\033[1;93m\002RAM\001\033[1;94m\002 cache (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002), \001\033[1;92m\002ls \001\033[1;94m\002↵ open \001\033[1;93m\002RAM\001\033[1;94m\002 cache, "
-                             "\001\033[1;93m\002clr\001\033[1;94m\002 ↵ clear \001\033[1;93m\002RAM\001\033[1;94m\002 cache, ↵ return:\n\001\033[0;1m\002";
+                             "\001\033[1;93m\002clr\001\033[1;94m\002 ↵ clear \001\033[1;93m\002RAM\001\033[1;94m\002 cache, ↵ to return:\n\001\033[0;1m\002";
 
         // Get user input
         char* rawinput = readline(prompt.c_str());
@@ -295,11 +295,16 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         std::string prompt = std::string("\n") + 
                      (isFiltered ? "\001\033[1;96m\002Filtered " : "\033[1;38;5;208m") + 
                      (fileType == "bin" || fileType == "img" ? "BIN/IMG" : (fileType == "mdf" ? "MDF" : "NRG")) + 
-                     "\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion, ~ ↵ fold, / ↵ filter, ↵ return:\001\033[0;1m\002 ";
+                     "\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion, ? ↵ for help, ↵ to return:\001\033[0;1m\002 ";
                      
         // Get user input
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
         std::string mainInputString(rawInput.get());
+        
+        if (mainInputString == "?") {
+            help();
+            continue;
+        }
 
         // Handle user input for toggling the full list display
         if (mainInputString == "~") {
@@ -325,7 +330,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 
         // Handle filter command
         if (strcmp(rawInput.get(), "/") == 0) {
-            filterPrompt = "\001\033[1A\002\001\033[K\002\001\033[1A\002\001\033[K\002\n\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;38;5;208m\002" + fileType + "\001\033[1;94m\002 list (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ return: \001\033[0;1m\002";
+            filterPrompt = "\001\033[1A\002\001\033[K\002\001\033[1A\002\001\033[K\002\n\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;38;5;208m\002" + fileType + "\001\033[1;94m\002 (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ to return: \001\033[0;1m\002";
             filterQuery(); // Call the filter query function
             isFiltered = files.size() != (fileType == "bin" || fileType == "img" ? binImgFilesCache.size() : (fileType == "mdf" ? mdfMdsFilesCache.size() : nrgFilesCache.size()));
         } else {
