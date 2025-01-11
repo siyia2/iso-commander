@@ -298,15 +298,12 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                 fileSize = st.st_size;
             }
 
-            bool operationCompleted = false;
-
             if (isDelete) {
                 std::error_code ec;
                 if (fs::remove(srcPath, ec)) {
                     completedBytes->fetch_add(fileSize, std::memory_order_relaxed);
                     std::string operationInfo = "\033[1mDeleted: \033[1;92m'" + srcDir + "/" + srcFile + "'\033[1m\033[0;1m.";
                     operationIsos.emplace(operationInfo);
-                    operationCompleted = true;
                 } else {
                     std::string errorMessageInfo = "\033[1;91mError deleting: \033[1;93m'" + srcDir + "/" + srcFile +
                         "'\033[1;91m: " + ec.message() + "\033[1;91m.\033[0;1m";
@@ -314,7 +311,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     operationSuccessful = false;
                 }
             } else {
-                bool allDestinationsSuccessful = true;
                 for (size_t i = 0; i < destDirs.size(); ++i) {
                     const auto& destDir = destDirs[i];
                     fs::path destPath = fs::path(destDir) / srcPath.filename();
@@ -344,13 +340,11 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                             " to '" + destDirProcessed + "/': " + ec.message() + "\033[1;91m.\033[0;1m";
                         operationErrors.emplace(errorMessageInfo);
                         operationSuccessful = false;
-                        allDestinationsSuccessful = false;
                         continue;
                     }
 
                     if (!changeOwnership(destPath)) {
                         operationSuccessful = false;
-                        allDestinationsSuccessful = false;
                         continue;
                     }
 
@@ -360,7 +354,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         " to \033[1;94m'" + destDirProcessed + "/" + destFile + "'\033[0;1m.";
                     operationIsos.emplace(operationInfo);
                 }
-                operationCompleted = allDestinationsSuccessful;
             }
 
             // Increment task counter regardless of success or failure
