@@ -302,6 +302,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         clear_history();	
 
         clearScrollBuffer(); // Clear the screen for new content
+        // Assist in automatic removal of non-existent enries from cache
         if ((fileType == "bin" || fileType == "img") && !binImgFilesCache.empty() && !isFiltered) {
 			files = binImgFilesCache;
 		} else if ((fileType == "mdf") && !mdfMdsFilesCache.empty() && !isFiltered) {
