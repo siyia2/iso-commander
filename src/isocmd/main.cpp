@@ -357,13 +357,13 @@ void saveUserChoice(const std::string& filePath) {
 	rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
 	while (true) {
 		clearScrollBuffer();
-    std::string prompt = "\001\033[1;94m\002Scans isocmd's folder history (up to 25 entries) for new ISO files and imports them to the \001\033[1;92m\002on-disk cache\001\033[1;94m\002 at every startup.\n"
+    std::string prompt = "\001\033[1;94m\002Scans isocmd's folder history (up to 25 entries) for new ISO files and imports them into \001\033[1;92m\002on-disk \001\033[1;94m\002cache at every startup.\n"
 						"\001\033[1;93m\002Note: This feature may be slow for older drives and is disabled by default.\001\033[0;1m\002"
-						"\n\001\033[1;94m\002Toggle automatic ISO cache updates on startup (1/0), or ↵ to return: ";
+						"\n\001\033[1;94m\002Toggle automatic ISO cache updates on startup (\001\033[1;92m\0021\001\033[1;94m\002/\001\033[1;91m\0020\001\033[1;94m\002), or anyKey ↵ to return: \001\033[0;1m\002";
     std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
     std::string mainInputString(input.get());
     
-    if (!input.get() || std::strlen(input.get()) == 0) {
+    if (!input.get() || std::strlen(input.get()) == 0 || (mainInputString != "1" && mainInputString != "0")) {
 			break; // Exit the submenu if input is empty or NULL
 	}
 
