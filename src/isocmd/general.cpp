@@ -310,12 +310,14 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
     bool enterPressed = false;
     auto startTime = std::chrono::high_resolution_clock::now();
     
+    // Set up non-blocking input
     struct termios oldt, newt;
     tcgetattr(STDIN_FILENO, &oldt);
     newt = oldt;
     newt.c_lflag &= ~(ICANON | ECHO);
     tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-    
+
+    // Set stdin to non-blocking mode
     int oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
     fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
 
@@ -409,8 +411,8 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         while (read(STDIN_FILENO, &ch, 1) > 0) {
             // Discard any input during progress
         }
-        tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-        fcntl(STDIN_FILENO, F_SETFL, oldf);
+       // tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+       // fcntl(STDIN_FILENO, F_SETFL, oldf);
         throw;
     }
     
