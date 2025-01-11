@@ -359,7 +359,7 @@ void saveUserChoice(const std::string& filePath) {
 		clearScrollBuffer();
     std::string prompt = "\001\033[1;94m\002Scans isocmd's folder history (up to 25 entries) for new ISO files and imports them into \001\033[1;92m\002on-disk \001\033[1;94m\002cache at every startup.\n"
 						"\001\033[1;93m\002Note: This feature may be slow for older drives and is disabled by default.\001\033[0;1m\002"
-						"\n\n\001\033[1;94m\002Configure automatic ISO cache updates on startup, (\001\033[1;92m\0021\001\033[1;94m\002/\001\033[1;91m\0020\001\033[1;94m\002), or anyKey ↵ to return: \001\033[0;1m\002";
+						"\n\n\001\033[1;94m\002Configure automatic ISO cache updates on startup (\001\033[1;92m\0021\001\033[1;94m\002/\001\033[1;91m\0020\001\033[1;94m\002), or anyKey ↵ to return: \001\033[0;1m\002";
     std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
     std::string mainInputString(input.get());
     
