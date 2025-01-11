@@ -513,6 +513,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
 }
 
 
+// Function to display help guide
 void help() {
     clearScrollBuffer();
     
@@ -537,7 +538,7 @@ void help() {
               << "   • Enter '?' - Show this help message\n" << std::endl;
     
     // Prompt to continue
-    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+    std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
