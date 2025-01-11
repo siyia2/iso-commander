@@ -53,7 +53,12 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
 
         // Root privilege check
         if (geteuid() != 0) {
-            logError("{needsRoot}", true);
+            std::stringstream errorMessage;
+            errorMessage << "\033[1;91mFailed to mnt: \033[1;93m'" << isoDirectory << "/" << isoFilename
+                         << "'\033[0m\033[1;91m.\033[0;1m {needsRoot}\033[0m";
+            {
+                mountedFails.insert(errorMessage.str());
+            }
             continue;
         }
 
