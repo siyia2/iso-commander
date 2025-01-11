@@ -75,7 +75,7 @@ bool fileExists(const std::string& fullPath);
 bool startsWithZero(const std::string& str);
 bool isNumeric(const std::string& str);
 bool isDirectoryEmpty(const std::string& path);
-bool readUserChoice(const std::string& filePath);
+bool readUserConfigForAutoImport(const std::string& filePath);
 
 // ints
 int prevent_clear_screen_and_tab_completion(int, int);
@@ -92,7 +92,7 @@ void disableInput();
 void restoreInput();
 void signalHandler(int signum);
 void clearScrollBuffer();
-void saveUserChoice(const std::string& filePath);
+void saveAutomaticImportConfig(const std::string& filePath);
 void sortFilesCaseInsensitive(std::vector<std::string>& files);
 void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname,std::set<std::string>& uniqueErrors);
 
