@@ -13,6 +13,7 @@
 
 // Note: Their original code has been modernized and ported to C++.
 
+
 // MDF2ISO
 
 bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std::atomic<size_t>* completedBytes) {
@@ -23,18 +24,52 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
         return false;
     }
 
-    MdfTypeInfo mdfInfo;
-    if (!mdfInfo.determineMdfType(mdfFile)) {
+    size_t seek_ecc = 0, sector_size = 0, seek_head = 0, sector_data = 0;
+    char buf[12];
+
+    // Check if file is valid MDF
+    mdfFile.seekg(32768);
+    if (!mdfFile.read(buf, 8) || std::memcmp("CD001", buf + 1, 5) == 0) {
         return false; // Not an MDF file or unsupported format
+    }
+
+    mdfFile.seekg(0);
+    if (!mdfFile.read(buf, 12)) {
+        return false;
+    }
+
+    // Determine MDF type based on sync patterns
+    if (std::memcmp("\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00", buf, 12) == 0) {
+        mdfFile.seekg(2352);
+        if (!mdfFile.read(buf, 12)) {
+            return false;
+        }
+
+        if (std::memcmp("\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00", buf, 12) == 0) {
+            seek_ecc = 288;
+            sector_size = 2352;
+            sector_data = 2048;
+            seek_head = 16;
+        } else {
+            seek_ecc = 384;
+            sector_size = 2448;
+            sector_data = 2048;
+            seek_head = 16;
+        }
+    } else {
+        seek_head = 0;
+        sector_size = 2448;
+        seek_ecc = 96;
+        sector_data = 2352;
     }
 
     // Calculate the number of sectors
     mdfFile.seekg(0, std::ios::end);
-    size_t source_length = static_cast<size_t>(mdfFile.tellg()) / mdfInfo.sector_size;
+    size_t source_length = static_cast<size_t>(mdfFile.tellg()) / sector_size;
     mdfFile.seekg(0, std::ios::beg);
 
     // Pre-allocate the ISO file to optimize file write performance
-    isoFile.seekp(source_length * mdfInfo.sector_data);
+    isoFile.seekp(source_length * sector_data);
     isoFile.put(0); // Write a dummy byte to allocate space
     isoFile.seekp(0); // Reset the pointer to the beginning of the file
 
@@ -43,22 +78,31 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
     std::vector<char> buffer(bufferSize);
     size_t bufferIndex = 0;
 
+    // Initialize completedBytes
+    if (completedBytes) {
+        *completedBytes = 0;
+    }
+
     while (source_length > 0) {
         // Read sector data
-        mdfFile.seekg(static_cast<std::streamoff>(mdfInfo.seek_head), std::ios::cur);
-        if (!mdfFile.read(buffer.data() + bufferIndex, mdfInfo.sector_data)) {
+        mdfFile.seekg(static_cast<std::streamoff>(seek_head), std::ios::cur);
+        if (!mdfFile.read(buffer.data() + bufferIndex, sector_data)) {
             return false;
         }
-        mdfFile.seekg(static_cast<std::streamoff>(mdfInfo.seek_ecc), std::ios::cur);
+        mdfFile.seekg(static_cast<std::streamoff>(seek_ecc), std::ios::cur);
 
-        bufferIndex += mdfInfo.sector_data;
+        bufferIndex += sector_data;
+
+        // Update completedBytes
+        if (completedBytes) {
+            *completedBytes += sector_data;
+        }
 
         // Write full buffer if filled
         if (bufferIndex >= bufferSize) {
             if (!isoFile.write(buffer.data(), bufferIndex)) {
                 return false;
             }
-            completedBytes->fetch_add(bufferIndex, std::memory_order_relaxed);
             bufferIndex = 0;
         }
 
@@ -70,9 +114,6 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
         if (!isoFile.write(buffer.data(), bufferIndex)) {
             return false;
         }
-        if (completedBytes) {
-			completedBytes->fetch_add(bufferIndex, std::memory_order_relaxed);
-		}
     }
 
     return true;
