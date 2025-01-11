@@ -26,6 +26,7 @@ For best experience execute with: `sudo isocmd`.
 
 * Robust tab completion.
 * Comprehensive command history.
+* Advanced progress tracking.
 
 
 ⚡ High-Performance Architecture:
@@ -58,8 +59,6 @@ For best experience execute with: `sudo isocmd`.
 * ccd2iso
 * mdf2iso
 * nrg2iso
-
-Conversions are enhanced with an 8MB read/write buffer for improved performance.
 
 ## Make dependencies
 - Archlinux: `readline util-linux`.
