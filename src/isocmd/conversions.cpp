@@ -352,6 +352,8 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
     }
 }
 
+// Function type definition for ProgressBarFunction
+using ProgressBarFunction = void(*)(std::atomic<size_t>*, size_t, std::atomic<bool>*, bool*);
 
 // Function to process user input and convert selected BIN/MDF/NRG files to ISO format
 void processInput(const std::string& input, std::vector<std::string>& fileList, const bool& modeMdf, const bool& modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
@@ -394,18 +396,25 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
 		// Move the iterator to the next chunk
 		it = chunkEnd;
 	}
+	
+	std::vector<std::string> filesToProcess;
+    for (const auto& index : processedIndices) {
+        filesToProcess.push_back(fileList[index - 1]);
+    }
 
 
-	std::atomic<size_t> totalTasks(static_cast<int>(processedIndices.size()));
-	std::atomic<size_t> completedTasks(0);
-	std::atomic<bool> isProcessingComplete(false);
+	std::atomic<size_t> completedBytes(0);
+    size_t totalBytes = getTotalFileSize(filesToProcess);
+	
+    std::atomic<bool> isProcessingComplete(false);
 
-	int totalTasksValue = totalTasks.load();
-	std::thread progressThread(displayProgressBar, std::ref(completedTasks), std::cref(totalTasksValue), std::ref(isProcessingComplete), std::ref(verbose));
+    ProgressBarFunction progressFunc = displayProgressBarSize;
+    std::thread progressThread(progressFunc, &completedBytes, 
+        totalBytes, &isProcessingComplete, &verbose);
 
-	ThreadPool pool(numThreads);
-	std::vector<std::future<void>> futures;
-	futures.reserve(indexChunks.size());
+    ThreadPool pool(numThreads);
+    std::vector<std::future<void>> futures;
+    futures.reserve(indexChunks.size());
 
 	for (const auto& chunk : indexChunks) {
 		// Gather files for this chunk
@@ -419,10 +428,9 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
 		);
 
 		// Enqueue task for the thread pool
-		futures.emplace_back(pool.enqueue([imageFilesInChunk = std::move(imageFilesInChunk), &fileList, &successOuts, &skippedOuts, &failedOuts, &deletedOuts, modeMdf, modeNrg, &maxDepth, &promptFlag, &historyPattern, &completedTasks]() {
+		futures.emplace_back(pool.enqueue([imageFilesInChunk = std::move(imageFilesInChunk), &fileList, &successOuts, &skippedOuts, &failedOuts, &deletedOuts, modeMdf, modeNrg, &maxDepth, &promptFlag, &historyPattern, &completedBytes]() {
 			// Process each file
-			convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts, deletedOuts, modeMdf, modeNrg, maxDepth, promptFlag, historyPattern);
-			completedTasks.fetch_add(imageFilesInChunk.size(), std::memory_order_relaxed);
+			convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts, deletedOuts, modeMdf, modeNrg, maxDepth, promptFlag, historyPattern, &completedBytes);
 		}));
 	}
 
@@ -665,8 +673,9 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
 
 
 // Function to convert a BIN/IMG/MDF/NRG file to ISO format
-void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, const bool& modeMdf, const bool& modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern) {
+void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, const bool& modeMdf, const bool& modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern, std::atomic<size_t>* completedBytes) {
     
+    // Collect unique directories from the input file paths
     std::set<std::string> uniqueDirectories;
     for (const auto& filePath : imageFiles) {
         std::filesystem::path path(filePath);
@@ -695,7 +704,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
         // Check if the input file exists
         if (!std::filesystem::exists(inputPath)) {
             std::string failedMessage = "\033[1;91mThe specified input file \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m does not exist anymore.\033[0;1m";
-                failedOuts.insert(failedMessage);
+            failedOuts.insert(failedMessage);
             continue;
         }
 
@@ -703,7 +712,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
         std::ifstream file(inputPath);
         if (!file.good()) {
             std::string failedMessage = "\033[1;91mThe specified file \033[1;93m'" + inputPath + "'\033[1;91m cannot be read. Check permissions.\033[0;1m";
-                failedOuts.insert(failedMessage);
+            failedOuts.insert(failedMessage);
             continue;
         }
 
@@ -720,11 +729,11 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
         // Perform the conversion based on the mode
         bool conversionSuccess = false;
         if (modeMdf) {
-            conversionSuccess = convertMdfToIso(inputPath, outputPath);
+            conversionSuccess = convertMdfToIso(inputPath, outputPath); // Pass completedBytes
         } else if (!modeMdf && !modeNrg) {
-            conversionSuccess = convertCcdToIso(inputPath, outputPath);
+            conversionSuccess = convertCcdToIso(inputPath, outputPath, completedBytes);
         } else if (modeNrg) {
-            conversionSuccess = convertNrgToIso(inputPath, outputPath);
+            conversionSuccess = convertNrgToIso(inputPath, outputPath); // Pass completedBytes
         }
 
         // Handle output results
@@ -746,13 +755,14 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
             if (std::remove(outputPath.c_str()) == 0) {
                 std::string deletedMessage = "\033[1;92mDeleted incomplete ISO file:\033[1;91m '" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m";
                 deletedOuts.insert(deletedMessage);
-            } else if (!modeNrg){
+            } else if (!modeNrg) {
                 std::string deleteFailMessage = "\033[1;91mFailed to delete incomplete ISO file: \033[1;93m'" + outputPath + "'\033[0;1m";
                 deletedOuts.insert(deleteFailMessage);
             }
         }
     }
 
+    // Update cache and prompt flags
     promptFlag = false;
     maxDepth = 0;
     if (!successOuts.empty()) {

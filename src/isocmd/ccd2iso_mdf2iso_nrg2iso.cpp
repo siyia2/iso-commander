@@ -144,7 +144,7 @@ struct __attribute__((packed)) CcdSector {
 };
 
 
-bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
+bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std::atomic<size_t>* completedBytes) {
     std::ifstream ccdFile(ccdPath, std::ios::binary | std::ios::ate);
     if (!ccdFile) return false;
 
@@ -174,6 +174,10 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
 
                 if (bufferPos + DATA_SIZE > BUFFER_SIZE) {
                     isoFile.write(reinterpret_cast<char*>(buffer.data()), bufferPos);
+                    if (!isoFile) {
+                        return false;
+                    }
+                    completedBytes->fetch_add(bufferPos, std::memory_order_relaxed);
                     bufferPos = 0;
                 }
 
@@ -193,6 +197,10 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath) {
     // Flush remaining data
     if (bufferPos > 0) {
         isoFile.write(reinterpret_cast<char*>(buffer.data()), bufferPos);
+        if (!isoFile) {
+            return false;
+        }
+        completedBytes->fetch_add(bufferPos, std::memory_order_relaxed);
     }
 
     return true;
