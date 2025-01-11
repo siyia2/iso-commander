@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GNU General Public License v3.0 or later
 
 #include "../headers.h"
+#include "../mdf.h"
+#include "../ccd.h"
+
 
 // Special thanks to the original authors of the conversion tools:
 
@@ -12,7 +15,7 @@
 
 // MDF2ISO
 
-bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath) {
+bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std::atomic<size_t>* completedBytes) {
     std::ifstream mdfFile(mdfPath, std::ios::binary);
     std::ofstream isoFile(isoPath, std::ios::binary);
 
@@ -20,52 +23,18 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath) {
         return false;
     }
 
-    size_t seek_ecc = 0, sector_size = 0, seek_head = 0, sector_data = 0;
-    char buf[12];
-
-    // Check if file is valid MDF
-    mdfFile.seekg(32768);
-    if (!mdfFile.read(buf, 8) || std::memcmp("CD001", buf + 1, 5) == 0) {
+    MdfTypeInfo mdfInfo;
+    if (!mdfInfo.determineMdfType(mdfFile)) {
         return false; // Not an MDF file or unsupported format
-    }
-
-    mdfFile.seekg(0);
-    if (!mdfFile.read(buf, 12)) {
-        return false;
-    }
-
-    // Determine MDF type based on sync patterns
-    if (std::memcmp("\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00", buf, 12) == 0) {
-        mdfFile.seekg(2352);
-        if (!mdfFile.read(buf, 12)) {
-            return false;
-        }
-
-        if (std::memcmp("\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00", buf, 12) == 0) {
-            seek_ecc = 288;
-            sector_size = 2352;
-            sector_data = 2048;
-            seek_head = 16;
-        } else {
-            seek_ecc = 384;
-            sector_size = 2448;
-            sector_data = 2048;
-            seek_head = 16;
-        }
-    } else {
-        seek_head = 0;
-        sector_size = 2448;
-        seek_ecc = 96;
-        sector_data = 2352;
     }
 
     // Calculate the number of sectors
     mdfFile.seekg(0, std::ios::end);
-    size_t source_length = static_cast<size_t>(mdfFile.tellg()) / sector_size;
+    size_t source_length = static_cast<size_t>(mdfFile.tellg()) / mdfInfo.sector_size;
     mdfFile.seekg(0, std::ios::beg);
 
     // Pre-allocate the ISO file to optimize file write performance
-    isoFile.seekp(source_length * sector_data);
+    isoFile.seekp(source_length * mdfInfo.sector_data);
     isoFile.put(0); // Write a dummy byte to allocate space
     isoFile.seekp(0); // Reset the pointer to the beginning of the file
 
@@ -76,19 +45,20 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath) {
 
     while (source_length > 0) {
         // Read sector data
-        mdfFile.seekg(static_cast<std::streamoff>(seek_head), std::ios::cur);
-        if (!mdfFile.read(buffer.data() + bufferIndex, sector_data)) {
+        mdfFile.seekg(static_cast<std::streamoff>(mdfInfo.seek_head), std::ios::cur);
+        if (!mdfFile.read(buffer.data() + bufferIndex, mdfInfo.sector_data)) {
             return false;
         }
-        mdfFile.seekg(static_cast<std::streamoff>(seek_ecc), std::ios::cur);
+        mdfFile.seekg(static_cast<std::streamoff>(mdfInfo.seek_ecc), std::ios::cur);
 
-        bufferIndex += sector_data;
+        bufferIndex += mdfInfo.sector_data;
 
         // Write full buffer if filled
         if (bufferIndex >= bufferSize) {
             if (!isoFile.write(buffer.data(), bufferIndex)) {
                 return false;
             }
+            completedBytes->fetch_add(bufferIndex, std::memory_order_relaxed);
             bufferIndex = 0;
         }
 
@@ -100,6 +70,9 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath) {
         if (!isoFile.write(buffer.data(), bufferIndex)) {
             return false;
         }
+        if (completedBytes) {
+			completedBytes->fetch_add(bufferIndex, std::memory_order_relaxed);
+		}
     }
 
     return true;
@@ -107,42 +80,6 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath) {
 
 
 // CCD2ISO
-
-const size_t DATA_SIZE = 2048;
-const size_t BUFFER_SIZE = 8 * 1024 * 1024;  // 8 MB buffer
-
-struct __attribute__((packed)) CcdSectheaderSyn {
-    uint8_t data[12];
-};
-
-struct __attribute__((packed)) CcdSectheaderHeader {
-    uint8_t sectaddr_min, sectaddr_sec, sectaddr_frac;
-    uint8_t mode;
-};
-
-struct __attribute__((packed)) CcdSectheader {
-    CcdSectheaderSyn syn;
-    CcdSectheaderHeader header;
-};
-
-struct __attribute__((packed)) CcdSector {
-    CcdSectheader sectheader;
-    union {
-        struct {
-            uint8_t data[DATA_SIZE];
-            uint8_t edc[4];
-            uint8_t unused[8];
-            uint8_t ecc[276];
-        } mode1;
-        struct {
-            uint8_t sectsubheader[8];
-            uint8_t data[DATA_SIZE];
-            uint8_t edc[4];
-            uint8_t ecc[276];
-        } mode2;
-    } content;
-};
-
 
 bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std::atomic<size_t>* completedBytes) {
     std::ifstream ccdFile(ccdPath, std::ios::binary | std::ios::ate);
@@ -200,7 +137,9 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
         if (!isoFile) {
             return false;
         }
-        completedBytes->fetch_add(bufferPos, std::memory_order_relaxed);
+         if (completedBytes) {
+			completedBytes->fetch_add(bufferPos, std::memory_order_relaxed);
+		 }
     }
 
     return true;
@@ -209,7 +148,7 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
 
 // NRG2ISO
 
-bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile) {
+bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile, std::atomic<size_t>* completedBytes) {
     std::ifstream nrgFile(inputFile, std::ios::binary | std::ios::ate);  // Open for reading, with positioning at the end
     if (!nrgFile) {
         return false;
@@ -245,6 +184,11 @@ bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile
     constexpr size_t BUFFER_SIZE = 8 * 1024 * 1024;  // 8MB buffer
     std::vector<char> buffer(BUFFER_SIZE);
 
+    // Initialize completedBytes to 0 if provided
+    if (completedBytes) {
+        *completedBytes = 0;
+    }
+
     // Read and write in chunks
     while (nrgFile) {
         nrgFile.read(buffer.data(), BUFFER_SIZE);
@@ -252,6 +196,11 @@ bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile
         
         if (bytesRead > 0) {
             isoFile.write(buffer.data(), bytesRead);
+
+            // Update completedBytes if the pointer is not null
+            if (completedBytes) {
+                completedBytes->fetch_add(bytesRead, std::memory_order_relaxed);
+            }
         }
     }
 

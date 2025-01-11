@@ -406,21 +406,20 @@ void processInput(const std::string& input, std::vector<std::string>& fileList,
     size_t totalTasks = filesToProcess.size();  // Each file is a task
 
     if (modeNrg) {
-        totalBytes = getTotalFileSize(filesToProcess);
-    } else if (modeMdf) {
-        for (const auto& file : filesToProcess) {
-            std::ifstream mdfFile(file, std::ios::binary);
-            if (mdfFile) {
-                MdfTypeInfo mdfInfo;
-                if (!mdfInfo.determineMdfType(mdfFile)) {
-                    continue;
-                }
-                mdfFile.seekg(0, std::ios::end);
-                size_t fileSize = mdfFile.tellg();
-                size_t numSectors = fileSize / mdfInfo.sector_size;
-                totalBytes += numSectors * mdfInfo.sector_data;
-            }
+    for (const auto& file : filesToProcess) {
+        std::ifstream nrgFile(file, std::ios::binary);
+        if (nrgFile) {
+            // Seek to the end of the file to get the total size
+            nrgFile.seekg(0, std::ios::end);
+            size_t nrgFileSize = nrgFile.tellg();
+
+            // The ISO data starts after the 307,200-byte header
+            size_t isoDataSize = nrgFileSize - 307200;
+
+            // Add the ISO data size to the total bytes
+            totalBytes += isoDataSize;
         }
+    }
     } else {
         for (const auto& file : filesToProcess) {
             std::ifstream ccdFile(file, std::ios::binary | std::ios::ate);
@@ -764,7 +763,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
         } else if (!modeMdf && !modeNrg) {
             conversionSuccess = convertCcdToIso(inputPath, outputPath, completedBytes);
         } else if (modeNrg) {
-            conversionSuccess = convertNrgToIso(inputPath, outputPath);
+            conversionSuccess = convertNrgToIso(inputPath, outputPath, completedBytes);
         }
 
         // Handle output results
