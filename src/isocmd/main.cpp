@@ -324,7 +324,7 @@ void printMenu() {
     std::cout << "\033[1;32m+-------------------------+\n";
     std::cout << "\033[1;32m|3. ImportISO             |\n";
     std::cout << "\033[1;32m+-------------------------+\n";
-    std::cout << "\033[1;32m|4. SetAutoCache          |\n";
+    std::cout << "\033[1;32m|4. AutoImportISO         |\n";
     std::cout << "\033[1;32m+-------------------------+\n";
     std::cout << "\033[1;32m|5. Exit                  |\n";
     std::cout << "\033[1;32m+-------------------------+";
@@ -357,9 +357,9 @@ void saveUserChoice(const std::string& filePath) {
 	rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
 	while (true) {
 		clearScrollBuffer();
-    std::string prompt = "\001\033[1;94m\002This will attempt to scan the directory paths from isocmd's history (up to 25 entries) and import any new ISO files to the on-disk cache at every startup.\n"
+    std::string prompt = "\001\033[1;94m\002This will attempt to scan the directory paths from isocmd's history (up to 25 entries) and import any new ISO files to the \001\033[1;92m\002on-disk cache\001\033[1;94m\002 at every startup.\n"
 						"\001\033[1;93m\002Note: This feature may be slow for older drives and is disabled by default.\001\033[0;1m\002"
-						"\n\001\033[1;94m\002Toggle automatic ISO cache updates on startup (1/0), ↵ to return: ";
+						"\n\001\033[1;94m\002Toggle automatic ISO cache updates on startup (1/0) or ↵ to return: ";
     std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
     std::string mainInputString(input.get());
     
