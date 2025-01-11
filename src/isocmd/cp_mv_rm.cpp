@@ -4,8 +4,119 @@
 #include "../threadpool.h"
 
 
-// Function to process either mv or cp indices
-void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& umountMvRmBreak, bool& historyPattern, bool& verbose) {
+size_t getTotalFileSize(const std::vector<std::string>& files) {
+    size_t totalSize = 0;
+    for (const auto& file : files) {
+        struct stat st;
+        if (stat(file.c_str(), &st) == 0) {
+            totalSize += st.st_size;
+        }
+    }
+    return totalSize;
+}
+
+// Function type definition for ProgressBarFunction
+using ProgressBarFunction = void(*)(std::atomic<size_t>*, size_t, std::atomic<bool>*, bool*);
+
+void displayProgressBarSize(std::atomic<size_t>* completedBytes, size_t totalBytes, 
+    std::atomic<bool>* isComplete, bool* verbose) {
+    const int barWidth = 50;
+    bool enterPressed = false;
+    auto startTime = std::chrono::high_resolution_clock::now();
+    
+    struct termios oldt, newt;
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    
+    int oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
+    fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
+    auto formatSize = [](size_t bytes) -> std::string {
+        const char* units[] = {"B", "KB", "MB", "GB"};
+        int unit = 0;
+        double size = static_cast<double>(bytes);
+        
+        while (size >= 1024 && unit < 3) {
+            size /= 1024;
+            unit++;
+        }
+        
+        std::stringstream ss;
+        ss << std::fixed << std::setprecision(2) << size << units[unit];
+        return ss.str();
+    };
+    
+    try {
+        while (!isComplete->load() || !enterPressed) {
+            char ch;
+            while (read(STDIN_FILENO, &ch, 1) > 0) {
+                // Discard any input during progress
+            }
+            
+            size_t completedValue = completedBytes->load();
+            double progress = static_cast<double>(completedValue) / totalBytes;
+            int pos = static_cast<int>(barWidth * progress);
+            
+            auto currentTime = std::chrono::high_resolution_clock::now();
+            auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime);
+            double elapsedSeconds = elapsedTime.count() / 1000.0;
+            
+            double speed = completedValue / elapsedSeconds;
+                        
+            std::cout << "\r[";
+            for (int i = 0; i < barWidth; ++i) {
+                if (i < pos) std::cout << "=";
+                else if (i == pos) std::cout << ">";
+                else std::cout << " ";
+            }
+            
+            std::cout << "] " << std::setw(3) << std::fixed << std::setprecision(1)
+                     << (progress * 100.0) << "% ("
+                     << formatSize(completedValue) << "/"
+                     << formatSize(totalBytes) << ") "
+                     << formatSize(static_cast<size_t>(speed)) << "/s "
+                     << "Time Elapsed: " << elapsedSeconds << "s";
+            
+            // Clear the rest of the line and ensure the cursor is at the end
+            std::cout << "\033[K"; // ANSI escape sequence to clear the rest of the line
+            std::cout.flush();
+            
+            if (completedValue == totalBytes && !enterPressed) {
+                enterPressed = true;
+                
+                tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+                fcntl(STDIN_FILENO, F_SETFL, oldf);
+                
+                std::string confirmation;
+                std::cout << "\n\n\033[1;94mDisplay verbose output? (y/n):\033[0;1m ";
+                std::getline(std::cin, confirmation);
+                
+                *verbose = (confirmation == "y" || confirmation == "Y");
+            } else {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+        }
+    } catch (...) {
+        char ch;
+        while (read(STDIN_FILENO, &ch, 1) > 0) {
+            // Discard any input during progress
+        }
+        tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+        fcntl(STDIN_FILENO, F_SETFL, oldf);
+        throw;
+    }
+    
+    std::cout << std::endl;
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    fcntl(STDIN_FILENO, F_SETFL, oldf);
+}
+
+void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, 
+    const std::string& process, std::set<std::string>& operationIsos, 
+    std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, 
+    bool& promptFlag, int& maxDepth, bool& umountMvRmBreak, bool& historyPattern, bool& verbose) {
+    
     std::string userDestDir;
     std::set<int> processedIndices;
 
@@ -13,10 +124,8 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     bool isMove = (process == "mv");
     bool isCopy = (process == "cp");
     std::string operationDescription = isDelete ? "*PERMANENTLY DELETED*" : (isMove ? "*MOVED*" : "*COPIED*");
-
     std::string operationColor = isDelete ? "\033[1;91m" : (isCopy ? "\033[1;92m" : "\033[1;93m");
 
-    // Tokenize the input string
     tokenizeInput(input, isoFiles, uniqueErrorMessages, processedIndices);
     
     if (!uniqueErrorMessages.empty()) {
@@ -37,46 +146,52 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         return;
     }
 
+    unsigned int numThreads = std::min(static_cast<unsigned int>(processedIndices.size()), maxThreads);
+    std::vector<std::vector<int>> indexChunks;
+    const size_t maxFilesPerChunk = 5;
 
-	unsigned int numThreads = std::min(static_cast<unsigned int>(processedIndices.size()), maxThreads);
-	std::vector<std::vector<int>> indexChunks;
-	const size_t maxFilesPerChunk = 5;
+    size_t totalFiles = processedIndices.size();
+    size_t filesPerThread = (totalFiles + numThreads - 1) / numThreads;
+    size_t chunkSize = std::min(maxFilesPerChunk, filesPerThread);
 
-	// Distribute files evenly among threads, but not exceeding maxFilesPerChunk
-	size_t totalFiles = processedIndices.size();
-	size_t filesPerThread = (totalFiles + numThreads - 1) / numThreads;
-	size_t chunkSize = std::min(maxFilesPerChunk, filesPerThread);
-
-	// Use iterators to iterate over the set directly
-	auto it = processedIndices.begin();
-	for (size_t i = 0; i < totalFiles; i += chunkSize) {
-		// Find the end iterator for the current chunk
-		auto chunkEnd = std::next(it, std::min(chunkSize, static_cast<size_t>(std::distance(it, processedIndices.end()))));
-    
-		// Create a chunk using iterators
-		indexChunks.emplace_back(it, chunkEnd);
-    
-		// Move the iterator to the next chunk
-		it = chunkEnd;
-	}
+    auto it = processedIndices.begin();
+    for (size_t i = 0; i < totalFiles; i += chunkSize) {
+        auto chunkEnd = std::next(it, std::min(chunkSize, 
+            static_cast<size_t>(std::distance(it, processedIndices.end()))));
+        indexChunks.emplace_back(it, chunkEnd);
+        it = chunkEnd;
+    }
 
     bool abortDel = false;
-	std::string processedUserDestDir = userDestDirRm(isoFiles, indexChunks, userDestDir, operationColor, operationDescription, umountMvRmBreak, historyPattern, isDelete, isCopy, abortDel);
-	
-	// Early exit if Deletion is aborted or userDestDir is empty for mv or cp
-	if ((processedUserDestDir == "" && (isCopy || isMove)) || abortDel) {
-		return;
-	}
-	
+    std::string processedUserDestDir = userDestDirRm(isoFiles, indexChunks, userDestDir, 
+        operationColor, operationDescription, umountMvRmBreak, historyPattern, isDelete, isCopy, abortDel);
+    
+    if ((processedUserDestDir == "" && (isCopy || isMove)) || abortDel) {
+        return;
+    }
+
     clearScrollBuffer();
     std::cout << "\033[1m\n";
 
-    std::atomic<size_t> totalTasks(static_cast<int>(processedIndices.size()));
-    std::atomic<size_t> completedTasks(0);
+    std::vector<std::string> filesToProcess;
+    for (const auto& index : processedIndices) {
+        filesToProcess.push_back(isoFiles[index - 1]);
+    }
+
+    std::atomic<size_t> completedBytes(0);
+    size_t totalBytes = getTotalFileSize(filesToProcess);
+    
+    // Adjust total bytes for copy operations with multiple destinations
+    if (isCopy || isMove) {
+        size_t destCount = std::count(processedUserDestDir.begin(), processedUserDestDir.end(), ';') + 1;
+        totalBytes *= destCount;
+    }
+    
     std::atomic<bool> isProcessingComplete(false);
 
-    int totalTasksValue = totalTasks.load();
-    std::thread progressThread(displayProgressBar, std::ref(completedTasks), std::cref(totalTasksValue), std::ref(isProcessingComplete), std::ref(verbose));
+    ProgressBarFunction progressFunc = displayProgressBarSize;
+    std::thread progressThread(progressFunc, &completedBytes, 
+        totalBytes, &isProcessingComplete, &verbose);
 
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
@@ -92,10 +207,12 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             [&isoFiles](size_t index) { return isoFiles[index - 1]; }
         );
 
-        futures.emplace_back(pool.enqueue([isoFilesInChunk = std::move(isoFilesInChunk), &isoFiles, &operationIsos, &operationErrors, &userDestDir, isMove, isCopy, isDelete, &completedTasks]() {
-			handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors, userDestDir, isMove, isCopy, isDelete);
-			completedTasks.fetch_add(isoFilesInChunk.size(), std::memory_order_relaxed); // No need for static_cast to int
-		}));
+        futures.emplace_back(pool.enqueue([isoFilesInChunk = std::move(isoFilesInChunk), 
+            &isoFiles, &operationIsos, &operationErrors, &userDestDir, 
+            isMove, isCopy, isDelete, &completedBytes]() {
+            handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, 
+                operationErrors, userDestDir, isMove, isCopy, isDelete, &completedBytes);
+        }));
     }
 
     for (auto& future : futures) {
@@ -105,16 +222,17 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     isProcessingComplete.store(true);
     progressThread.join();
 
-       promptFlag = false;
-       maxDepth = 0;
-       // Refresh cache for all destination directories if not a delete operation
-       if (!isDelete) {
-               manualRefreshCache(userDestDir, promptFlag, maxDepth, historyPattern);
-       }
-       if (!isDelete && !operationIsos.empty()) {
-		   saveHistory(historyPattern);
-           clear_history();
-	   }
+    promptFlag = false;
+    maxDepth = 0;
+    
+    if (!isDelete) {
+        manualRefreshCache(userDestDir, promptFlag, maxDepth, historyPattern);
+    }
+    
+    if (!isDelete && !operationIsos.empty()) {
+        saveHistory(historyPattern);
+        clear_history();
+    }
 
     clear_history();
     promptFlag = true;
@@ -190,26 +308,60 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
     }
     return userDestDir;
 }
+namespace fs = std::filesystem;
 
 
-// Function to handle the deletion of ISO files in batches
-void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete) {
-    namespace fs = std::filesystem;
+bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, 
+    std::atomic<size_t>* completedBytes, std::error_code& ec) {
+    const size_t bufferSize = 8 * 1024 * 1024; // 8MB buffer
+    std::vector<char> buffer(bufferSize);
+    
+    std::ifstream input(src, std::ios::binary);
+    if (!input) {
+        ec = std::make_error_code(std::errc::no_such_file_or_directory);
+        return false;
+    }
+    
+    std::ofstream output(dst, std::ios::binary);
+    if (!output) {
+        ec = std::make_error_code(std::errc::permission_denied);
+        return false;
+    }
+    
+    while (true) {
+        input.read(buffer.data(), buffer.size());
+        std::streamsize bytesRead = input.gcount();
+        
+        if (bytesRead == 0) {
+            break;
+        }
+        
+        output.write(buffer.data(), bytesRead);
+        if (!output) {
+            ec = std::make_error_code(std::errc::io_error);
+            return false;
+        }
+        
+        completedBytes->fetch_add(bytesRead, std::memory_order_relaxed);
+    }
+    
+    return true;
+}
 
-    // Error flag to track overall operation success
+void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, 
+    std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, 
+    const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete, 
+    std::atomic<size_t>* completedBytes) {
+    
+
     bool operationSuccessful = true;
-
-    // Get the real user ID and group ID (of the user who invoked sudo)
     uid_t real_uid;
     gid_t real_gid;
     std::string real_username;
     std::string real_groupname;
     getRealUserId(real_uid, real_gid, real_username, real_groupname, operationErrors);
 
-    // Vector to store ISO files to operate on
     std::vector<std::string> isoFilesToOperate;
-
-    // Split userDestDir into multiple paths
     std::vector<std::string> destDirs;
     std::istringstream iss(userDestDir);
     std::string destDir;
@@ -217,77 +369,80 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
         destDirs.push_back(fs::path(destDir).string());
     }
 
-    // Lambda function to change ownership
     auto changeOwnership = [&](const fs::path& path) -> bool {
         struct stat file_stat;
         if (stat(path.c_str(), &file_stat) == 0) {
-            // Only change ownership if it's different from the current user
             if (file_stat.st_uid != real_uid || file_stat.st_gid != real_gid) {
                 if (chown(path.c_str(), real_uid, real_gid) != 0) {
                     std::string errorMessage = "\033[1;91mFailed to change ownership of '" + path.string() + "': " + 
                                                std::string(strerror(errno)) + "\033[0;1m";
-                        operationErrors.emplace(errorMessage);
-                        
+                    operationErrors.emplace(errorMessage);
                     return false;
                 }
             }
         } else {
             std::string errorMessage = "\033[1;91mFailed to get file information for '" + path.string() + "': " + 
                                        std::string(strerror(errno)) + "\033[0;1m";
-                operationErrors.emplace(errorMessage);
+            operationErrors.emplace(errorMessage);
             return false;
         }
         return true;
     };
 
-    // Lambda function to execute the operation
     auto executeOperation = [&](const std::vector<std::string>& files) {
         for (const auto& operateIso : files) {
             fs::path srcPath(operateIso);
             auto [srcDir, srcFile] = extractDirectoryAndFilename(srcPath.string());
+            
+            struct stat st;
+            size_t fileSize = 0;
+            if (stat(srcPath.c_str(), &st) == 0) {
+                fileSize = st.st_size;
+            }
 
             if (isDelete) {
-                // Handle delete operation
                 std::error_code ec;
                 if (fs::remove(srcPath, ec)) {
+                    completedBytes->fetch_add(fileSize, std::memory_order_relaxed);
                     std::string operationInfo = "\033[1mDeleted: \033[1;92m'" + srcDir + "/" + srcFile + "'\033[1m\033[0;1m.";
-                        operationIsos.emplace(operationInfo);
+                    operationIsos.emplace(operationInfo);
                 } else {
                     std::string errorMessageInfo = "\033[1;91mError deleting: \033[1;93m'" + srcDir + "/" + srcFile +
                         "'\033[1;91m: " + ec.message() + "\033[1;91m.\033[0;1m";
-                        operationErrors.emplace(errorMessageInfo);
-
+                    operationErrors.emplace(errorMessageInfo);
                     operationSuccessful = false;
                 }
             } else {
-                // Handle copy and move operations
                 for (size_t i = 0; i < destDirs.size(); ++i) {
                     const auto& destDir = destDirs[i];
                     fs::path destPath = fs::path(destDir) / srcPath.filename();
                     auto [destDirProcessed, destFile] = extractDirectoryAndFilename(destPath.string());
 
-                    std::error_code ec;                   
-
+                    std::error_code ec;
+                    bool success = false;
+                    
                     if (isCopy) {
-                        // Copy operation
-                        fs::copy(srcPath, destPath, fs::copy_options::overwrite_existing, ec);
+                        success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec);
                     } else if (isMove) {
                         if (i < destDirs.size() - 1) {
-                            // For all but the last destination, copy the file
-                            fs::copy(srcPath, destPath, fs::copy_options::overwrite_existing, ec);
+                            // For intermediate copies in move operation
+                            success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec);
                         } else {
-                            // For the last destination, move the file
+                            // For final move operation
                             fs::rename(srcPath, destPath, ec);
+                            if (!ec) {
+                                completedBytes->fetch_add(fileSize, std::memory_order_relaxed);
+                                success = true;
+                            }
                         }
                     }
 
-                    if (ec) {
+                    if (!success || ec) {
                         std::string errorMessageInfo = "\033[1;91mError " +
                             std::string(isCopy ? "copying" : (i < destDirs.size() - 1 ? "moving" : "moving")) +
                             ": \033[1;93m'" + srcDir + "/" + srcFile + "'\033[1;91m" +
                             " to '" + destDirProcessed + "/': " + ec.message() + "\033[1;91m.\033[0;1m";
-                            operationErrors.emplace(errorMessageInfo);
-                            
+                        operationErrors.emplace(errorMessageInfo);
                         operationSuccessful = false;
                         continue;
                     }
@@ -297,47 +452,37 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         continue;
                     }
 
-                    // Store operation success info
                     std::string operationInfo = "\033[1m" +
                         std::string(isCopy ? "Copied" : (i < destDirs.size() - 1 ? "Moved" : "Moved")) +
                         ": \033[1;92m'" + srcDir + "/" + srcFile + "'\033[1m\033[0;1m" +
                         " to \033[1;94m'" + destDirProcessed + "/" + destFile + "'\033[0;1m.";
-                        operationIsos.emplace(operationInfo);
+                    operationIsos.emplace(operationInfo);
                 }
             }
         }
     };
 
-    // Iterate over each ISO file
     for (const auto& iso : isoFiles) {
         fs::path isoPath(iso);
         auto [isoDir, isoFile] = extractDirectoryAndFilename(isoPath.string());
 
-        // Check if ISO file is present in the copy list
         auto it = std::find(isoFilesCopy.begin(), isoFilesCopy.end(), iso);
         if (it != isoFilesCopy.end()) {
-            // Check if the file exists
             if (fs::exists(isoPath)) {
-                // Add ISO file to the list of files to operate on
                 isoFilesToOperate.push_back(iso);
             } else {
-                // Print message if file not found
                 std::string errorMessageInfo = "\033[1;35mFile not found: \033[0;1m'" +
                     isoDir + "/" + isoFile + "'\033[1;35m.\033[0;1m";
-                    operationErrors.emplace(errorMessageInfo);
+                operationErrors.emplace(errorMessageInfo);
                 operationSuccessful = false;
             }
         } else {
-            // Print message if file not found in cache
             std::string errorMessageInfo = "\033[1;93mFile not found in cache: \033[0;1m'" +
                 isoDir + "/" + isoFile + "'\033[1;93m.\033[0;1m";
-
-                operationErrors.emplace(errorMessageInfo);
-                
+            operationErrors.emplace(errorMessageInfo);
             operationSuccessful = false;
         }
     }
 
-    // Execute the operation for all files
     executeOperation(isoFilesToOperate);
 }
