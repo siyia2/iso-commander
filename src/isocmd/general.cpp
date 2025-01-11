@@ -291,7 +291,7 @@ void tokenizeInput(const std::string& input, std::vector<std::string>& isoFiles,
 }
 
 
-// Function to get total size of files
+// Function to get the total size of files
 size_t getTotalFileSize(const std::vector<std::string>& files) {
     size_t totalSize = 0;
     for (const auto& file : files) {
