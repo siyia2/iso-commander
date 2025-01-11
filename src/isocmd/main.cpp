@@ -54,6 +54,40 @@ int main(int argc, char *argv[]) {
 
     bool exitProgram = false;
     std::string choice;
+    
+    // Open the file
+    std::ifstream file(historyFilePath);
+    if (!file.is_open()) {
+        std::cerr << "Failed to open file: " << historyFilePath << std::endl;
+        return 1;
+    }
+    
+    const std::string automaticFilePath = std::string(getenv("HOME")) + "/.cache/iso_commander_automatic.txt";
+    bool search = readUserChoice(historyFilePath);
+	if (search) {
+    // String to store all paths
+    std::string allPaths;
+
+    // Read the file line by line
+    std::string line;
+    while (std::getline(file, line)) {
+        std::istringstream iss(line);
+        std::string path;
+        while (std::getline(iss, path, ';')) {
+            if (!path.empty()) {
+                if (!allPaths.empty()) {
+                    allPaths += ";";
+                }
+                allPaths += path;
+            }
+        }
+    }
+
+    // Close the file
+    file.close();
+    
+		manualRefreshCache(allPaths, false, maxDepth, historyPattern);
+	}
 
     while (!exitProgram) {
 		// Calls prevent_clear_screen and tab completion
@@ -97,6 +131,11 @@ int main(int argc, char *argv[]) {
                         clearScrollBuffer();
                         break;
                     case '4':
+						clearScrollBuffer();
+                        saveUserChoice(automaticFilePath);
+                        clearScrollBuffer();
+                        break;
+                    case '5':
                         exitProgram = true; // Exit the program
                         clearScrollBuffer();
                         break;
@@ -285,13 +324,72 @@ void printMenu() {
     std::cout << "\033[1;32m+-------------------------+\n";
     std::cout << "\033[1;32m|3. ImportISO             |\n";
     std::cout << "\033[1;32m+-------------------------+\n";
-    std::cout << "\033[1;32m|4. Exit                  |\n";
+    std::cout << "\033[1;32m|4. SetAutoCache          |\n";
+    std::cout << "\033[1;32m+-------------------------+\n";
+    std::cout << "\033[1;32m|5. Exit                  |\n";
     std::cout << "\033[1;32m+-------------------------+";
     std::cout << "\n";
 }
 
 
 // GENERAL STUFF
+
+bool readUserChoice(const std::string& filePath) {
+    std::ifstream inFile(filePath);
+    int userChoice;
+
+    if (inFile.is_open()) {
+        inFile >> userChoice;
+        inFile.close();
+    } else {
+        return false; // Default to false if file cannot be read
+    }
+
+    return (userChoice == 1); // Return true if userChoice is 1, otherwise false
+}
+
+void saveUserChoice(const std::string& filePath) {
+	// Calls prevent_clear_screen and tab completion
+	rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
+	rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
+	while (true) {
+		clearScrollBuffer();
+    std::string prompt = "\001\033[1;94m\002This will attempt to scan the directory paths from isocmd's history (25 entries max) and import any new ISO files to the cache on startup.\n"
+                     "\001\033[1;93m\002Note: This feature may be slow for older drives and is disabled by default.\001\033[0;1m\002"
+                     "\n\001\033[1;94m\002Toggle automatic ISO cache updates on startup (1/0), ↵ to return: ";
+    std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
+    std::string mainInputString(input.get());
+    
+    if (!input.get() || std::strlen(input.get()) == 0) {
+			break; // Exit the submenu if input is empty or NULL
+	}
+
+    // Convert input to lowercase and check if it's 'y'
+    int valueToSave = (!mainInputString.empty() && (mainInputString[0] == '1' || mainInputString[0] == '1')) ? 1 : 0;
+
+    std::ofstream outFile(filePath);
+    if (outFile.is_open()) {
+        outFile << valueToSave;
+        outFile.close();
+        if (valueToSave == 1) {
+			std::cout << "\n\033[0;1mAutomatic ISO cache updates have been \033[1;92menabled\033[0;1m.\033[0;1m\n";
+            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            continue;
+		} else {
+			std::cout << "\n\033[0;1mAutomatic ISO cache updates have been \033[1;91mdisabled\033[0;1m.\033[0;1m\n";
+            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            continue;
+		}
+    } else {
+        std::cerr << "\n\033[1;91mUnable to open file for writing: \n\033[1;93m" << filePath << "\033[1;91m.\033[0;1m";
+        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        continue;
+    }
+	}
+}
 
 // Function to negate original readline bindings
 int prevent_clear_screen_and_tab_completion(int, int) {

@@ -400,7 +400,7 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 			return;
 		}
 		
-        if (!input.empty()) {
+        if (!input.empty() && promptFlag) {
 			add_history(searchQuery.get());
 			std::cout << "\n";
         }
