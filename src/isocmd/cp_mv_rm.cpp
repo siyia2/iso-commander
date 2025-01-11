@@ -88,7 +88,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     std::atomic<bool> isProcessingComplete(false);
 
     // Create progress thread with both byte and task tracking
-    std::thread progressThread(displayProgressBarSize, &completedBytes, 
+    std::thread progressThread(displayProgressBarWithSize, &completedBytes, 
         totalBytes, &completedTasks, totalTasks, &isProcessingComplete, &verbose);
 
     ThreadPool pool(numThreads);
@@ -207,11 +207,11 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
     }
     return userDestDir;
 }
+
 namespace fs = std::filesystem;
 
+bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::atomic<size_t>* completedBytes, std::error_code& ec) {
 
-bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, 
-    std::atomic<size_t>* completedBytes, std::error_code& ec) {
     const size_t bufferSize = 8 * 1024 * 1024; // 8MB buffer
     std::vector<char> buffer(bufferSize);
     
@@ -246,6 +246,7 @@ bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst,
     
     return true;
 }
+
 
 void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, 
     std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, 

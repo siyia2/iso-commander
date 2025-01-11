@@ -229,7 +229,15 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
 	}
 
     // Create a thread to display progress
-    std::thread progressThread(displayProgressBar, std::ref(completedTasks), totalTasks, std::ref(isProcessingComplete), std::ref(verbose));
+	std::thread progressThread(
+        displayProgressBarWithSize, 
+        nullptr,       // Pass as raw pointer
+        static_cast<size_t>(0), // Pass as size_t
+        &completedTasks,       // Pass as raw pointer
+        totalTasks,            // Pass as size_t
+        &isProcessingComplete, // Pass as raw pointer
+        &verbose               // Pass as raw pointer
+    );
     // Wait for all tasks to complete
     {
         std::unique_lock<std::mutex> lock(taskCompletionMutex);

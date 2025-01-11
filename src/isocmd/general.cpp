@@ -302,10 +302,9 @@ size_t getTotalFileSize(const std::vector<std::string>& files) {
     return totalSize;
 }
 
+// Function to display progress bar for native operations
 
-void displayProgressBarSize(std::atomic<size_t>* completedBytes, size_t totalBytes,
-                           std::atomic<size_t>* completedTasks, size_t totalTasks,
-                           std::atomic<bool>* isComplete, bool* verbose) {
+void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t totalBytes, std::atomic<size_t>* completedTasks, size_t totalTasks, std::atomic<bool>* isComplete, bool* verbose) {
     const int barWidth = 50;
     bool enterPressed = false;
     auto startTime = std::chrono::high_resolution_clock::now();
@@ -341,13 +340,18 @@ void displayProgressBarSize(std::atomic<size_t>* completedBytes, size_t totalByt
                 // Discard any input during progress
             }
             
-            size_t completedBytesValue = completedBytes->load();
             size_t completedTasksValue = completedTasks->load();
+            size_t completedBytesValue = (completedBytes) ? completedBytes->load() : 0;
             
-            // Calculate progress based on either tasks or bytes
-            double bytesProgress = static_cast<double>(completedBytesValue) / totalBytes;
+            // Calculate progress based on tasks
             double tasksProgress = static_cast<double>(completedTasksValue) / totalTasks;
-            double overallProgress = std::max(bytesProgress, tasksProgress);
+            double overallProgress = tasksProgress; // Default to tasks progress
+            
+            // If bytes tracking is enabled, calculate progress based on bytes
+            if (completedBytes) {
+                double bytesProgress = static_cast<double>(completedBytesValue) / totalBytes;
+                overallProgress = std::max(bytesProgress, tasksProgress);
+            }
             
             int bytesPos = static_cast<int>(barWidth * overallProgress);
             
@@ -355,7 +359,7 @@ void displayProgressBarSize(std::atomic<size_t>* completedBytes, size_t totalByt
             auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime);
             double elapsedSeconds = elapsedTime.count() / 1000.0;
             
-            double speed = completedBytesValue / elapsedSeconds;
+            double speed = (completedBytes) ? (completedBytesValue / elapsedSeconds) : 0;
             
             // Display progress bar
             std::cout << "\r[";
@@ -368,19 +372,22 @@ void displayProgressBarSize(std::atomic<size_t>* completedBytes, size_t totalByt
             std::cout << "] " << std::setw(3) << std::fixed << std::setprecision(1)
                      << (overallProgress * 100.0) << "% ("
                      << completedTasksValue << "/"
-                     << totalTasks << ") ("
-                     << formatSize(completedBytesValue) << "/"
-                     << formatSize(totalBytes) << ") "
-                     << formatSize(static_cast<size_t>(speed)) << "/s"
-                     << " Time Elapsed: " << std::setprecision(1) << elapsedSeconds << "s";
-                     
+                     << totalTasks << ")";
             
+            // Display bytes information only if bytes tracking is enabled
+            if (completedBytes) {
+                std::cout << " ("
+                          << formatSize(completedBytesValue) << "/"
+                          << formatSize(totalBytes) << ") "
+                          << formatSize(static_cast<size_t>(speed)) << "/s";
+            }
+            
+            std::cout << " Time Elapsed: " << std::setprecision(1) << elapsedSeconds << "s";
             std::cout << "\033[K"; // ANSI escape sequence to clear the rest of the line
             std::cout.flush();
             
-            // Check if either the total bytes or total tasks are completed
-            if ((completedBytesValue >= totalBytes || completedTasksValue >= totalTasks) && 
-                !enterPressed) {
+            // Check if either the total tasks are completed
+            if ((completedTasksValue >= totalTasks) && !enterPressed) {
                 enterPressed = true;
                 std::cout << "\n\n"; // Move past both progress bars
                 
@@ -409,92 +416,6 @@ void displayProgressBarSize(std::atomic<size_t>* completedBytes, size_t totalByt
     std::cout << std::endl;
     tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
     fcntl(STDIN_FILENO, F_SETFL, oldf);
-}
-
-
-// Function to display progress bar for native operations
-void displayProgressBar(const std::atomic<size_t>& completedIsos, const size_t& totalIsos, std::atomic<bool>& isComplete, bool& verbose) {
-    const int barWidth = 50;
-    bool enterPressed = false;
-    auto startTime = std::chrono::high_resolution_clock::now();
-
-    // Set up non-blocking input
-    struct termios oldt, newt;
-    tcgetattr(STDIN_FILENO, &oldt);
-    newt = oldt;
-    newt.c_lflag &= ~(ICANON | ECHO);
-    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-
-    // Set stdin to non-blocking mode
-    int oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
-    fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
-
-    try {
-        while (!isComplete.load() || !enterPressed) {
-            // Flush any pending input
-            char ch;
-            while (read(STDIN_FILENO, &ch, 1) > 0) {
-                // Discard any input during progress
-            }
-
-            size_t completedValue = completedIsos.load();
-            double progress = static_cast<double>(completedValue) / totalIsos;
-            int pos = static_cast<int>(barWidth * progress);
-            auto currentTime = std::chrono::high_resolution_clock::now();
-            auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime);
-            double elapsedSeconds = elapsedTime.count() / 1000.0;
-
-            std::cout << "\r[";
-            for (int i = 0; i < barWidth; ++i) {
-                if (i < pos) std::cout << "=";
-                else if (i == pos) std::cout << ">";
-                else std::cout << " ";
-            }
-            std::cout << "] " << std::setw(3) << std::fixed << std::setprecision(1)
-                      << (progress * 100.0) << "% (" << completedValue << "/" << totalIsos << ") "
-                      << "Time Elapsed: " << std::setprecision(1) << elapsedSeconds << "s";
-
-            if (completedValue == totalIsos && !enterPressed) {
-                enterPressed = true;
-                
-                // Restore terminal to original settings before getting input
-                tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-                fcntl(STDIN_FILENO, F_SETFL, oldf);
-
-                std::string confirmation;
-                std::cout << "\n\n\033[1;94mDisplay verbose output? (y/n):\033[0;1m ";
-                std::getline(std::cin, confirmation);
-                
-                if (confirmation == "y" || confirmation == "Y") {
-                    verbose = true;
-                } else {
-                    verbose = false;
-                }
-            } else {
-                std::cout.flush();
-                std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Update every 100ms
-            }
-        }
-    }
-    catch (...) {
-		// Flush any pending input in case of any exceptions
-		char ch;
-		while (read(STDIN_FILENO, &ch, 1) > 0) {
-			// Discard any input during progress
-		}
-        // Ensure terminal is restored in case of any exceptions
-        tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-        fcntl(STDIN_FILENO, F_SETFL, oldf);
-        throw;
-    }
-
-    // Print a newline after completion
-    std::cout << std::endl;
-
-    // Ensure terminal is restored to original settings
-    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-    fcntl(STDIN_FILENO, F_SETFL, oldf);
-    
 }
 
 

@@ -157,11 +157,14 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& selected
     std::atomic<bool> isComplete(false);
 
     // Start progress display thread
-    std::thread progressThread(displayProgressBar, 
-        std::ref(completedIsos), 
-        std::cref(totalIsos), 
-        std::ref(isComplete), 
-        std::ref(verbose)
+    std::thread progressThread(
+        displayProgressBarWithSize, 
+        nullptr,       // Pass as raw pointer
+        static_cast<size_t>(0), // Pass as size_t
+        &completedIsos,       // Pass as raw pointer
+        totalIsos,            // Pass as size_t
+        &isComplete, 			// Pass as raw pointer
+        &verbose               // Pass as raw pointer
     );
 
     // Submit tasks to the thread pool

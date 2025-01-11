@@ -431,7 +431,7 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
     std::atomic<bool> isProcessingComplete(false);
 
     // Use the enhanced progress bar with task tracking
-    std::thread progressThread(displayProgressBarSize, &completedBytes, 
+    std::thread progressThread(displayProgressBarWithSize, &completedBytes, 
         totalBytes, &completedTasks, totalTasks, &isProcessingComplete, &verbose);
 
     ThreadPool pool(numThreads);
