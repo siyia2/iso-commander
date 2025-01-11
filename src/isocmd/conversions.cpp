@@ -742,9 +742,6 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
 				if (it != nrgFilesCache.end()) {
 					nrgFilesCache.erase(it);
 				}
-				if (completedTasks) {
-					(*completedTasks)++; // Increment completed tasks counter for failed conversions
-				}
 			}
 			if (completedTasks) {
 				(*completedTasks)++; // Increment completed tasks counter for failed conversions
