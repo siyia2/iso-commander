@@ -2,6 +2,8 @@
 
 #include "../headers.h"
 #include "../threadpool.h"
+#include "../mdf.h"
+#include "../ccd.h"
 
 
 static std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles here
@@ -354,40 +356,6 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 
 // Function type definition for ProgressBarFunction
 using ProgressBarFunction = void(*)(std::atomic<size_t>*, size_t, std::atomic<bool>*, bool*);
-const size_t DATA_SIZE = 2048;
-const size_t BUFFER_SIZE = 8 * 1024 * 1024;  // 8 MB buffer
-
-struct __attribute__((packed)) CcdSectheaderSyn {
-    uint8_t data[12];
-};
-
-struct __attribute__((packed)) CcdSectheaderHeader {
-    uint8_t sectaddr_min, sectaddr_sec, sectaddr_frac;
-    uint8_t mode;
-};
-
-struct __attribute__((packed)) CcdSectheader {
-    CcdSectheaderSyn syn;
-    CcdSectheaderHeader header;
-};
-
-struct __attribute__((packed)) CcdSector {
-    CcdSectheader sectheader;
-    union {
-        struct {
-            uint8_t data[DATA_SIZE];
-            uint8_t edc[4];
-            uint8_t unused[8];
-            uint8_t ecc[276];
-        } mode1;
-        struct {
-            uint8_t sectsubheader[8];
-            uint8_t data[DATA_SIZE];
-            uint8_t edc[4];
-            uint8_t ecc[276];
-        } mode2;
-    } content;
-};
 
 // Function to process user input and convert selected BIN/MDF/NRG files to ISO format
 void processInput(const std::string& input, std::vector<std::string>& fileList, const bool& modeMdf, const bool& modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
@@ -445,54 +413,20 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
     for (const auto& file : filesToProcess) {
         std::ifstream mdfFile(file, std::ios::binary);
         if (mdfFile) {
-            // Read the first 12 bytes to check the sync pattern
-            char buf[12];
-            if (!mdfFile.read(buf, 12)) {
+            // Use the MdfTypeInfo struct to determine the MDF type
+            MdfTypeInfo mdfInfo;
+            if (!mdfInfo.determineMdfType(mdfFile)) {
                 continue; // Skip this file if reading fails
-            }
-
-            // Determine MDF type based on sync patterns
-            size_t seek_ecc = 0;
-            size_t sector_size = 0;
-            size_t sector_data = 0;
-            size_t seek_head = 0;
-
-            if (std::memcmp("\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00", buf, 12) == 0) {
-                // Check the next sector to confirm the type
-                mdfFile.seekg(2352, std::ios::beg);
-                if (!mdfFile.read(buf, 12)) {
-                    continue; // Skip this file if reading fails
-                }
-
-                if (std::memcmp("\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00", buf, 12) == 0) {
-                    // Type 1: 2352-byte sectors with 2048-byte user data
-                    seek_ecc = 288;
-                    sector_size = 2352;
-                    sector_data = 2048;
-                    seek_head = 16;
-                } else {
-                    // Type 2: 2448-byte sectors with 2048-byte user data
-                    seek_ecc = 384;
-                    sector_size = 2448;
-                    sector_data = 2048;
-                    seek_head = 16;
-                }
-            } else {
-                // Type 3: 2448-byte sectors with 2352-byte user data
-                seek_head = 0;
-                sector_size = 2448;
-                seek_ecc = 96;
-                sector_data = 2352;
             }
 
             // Calculate the number of sectors
             mdfFile.seekg(0, std::ios::end);
             size_t fileSize = mdfFile.tellg();
-            size_t numSectors = fileSize / sector_size;
+            size_t numSectors = fileSize / mdfInfo.sector_size;
 
             // Calculate totalBytes based on the number of sectors and sector_data size
-            totalBytes += numSectors * sector_data;
-        }
+            totalBytes += numSectors * mdfInfo.sector_data;
+	}
     }
 		
     } else {
