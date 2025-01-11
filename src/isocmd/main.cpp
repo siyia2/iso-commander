@@ -85,6 +85,7 @@ int main(int argc, char *argv[]) {
 
     // Close the file
     file.close();
+		clearScrollBuffer();
 		std::cout << "\n\033[0;1mPlease wait until isocmd's automatic ISO cache update finishes...\n\033[0m";
 		manualRefreshCache(allPaths, false, maxDepth, historyPattern);
 	}
