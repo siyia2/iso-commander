@@ -63,7 +63,7 @@ int main(int argc, char *argv[]) {
     }
     
     const std::string automaticFilePath = std::string(getenv("HOME")) + "/.cache/iso_commander_automatic.txt";
-    bool search = readUserChoice(automaticFilePath);
+    bool search = readUserConfigForAutoImport(automaticFilePath);
 	if (search) {
     // String to store all paths
     std::string allPaths;
@@ -133,7 +133,7 @@ int main(int argc, char *argv[]) {
                         break;
                     case '4':
 						clearScrollBuffer();
-                        saveUserChoice(automaticFilePath);
+                        saveAutomaticImportConfig(automaticFilePath);
                         clearScrollBuffer();
                         break;
                     case '5':
@@ -335,7 +335,7 @@ void printMenu() {
 
 // GENERAL STUFF
 
-bool readUserChoice(const std::string& filePath) {
+bool readUserConfigForAutoImport(const std::string& filePath) {
     std::ifstream inFile(filePath);
     if (!inFile) {
         return false; // Default to false if file cannot be opened
@@ -352,46 +352,46 @@ bool readUserChoice(const std::string& filePath) {
     return (userChoice == 1); // Return true if userChoice is 1, otherwise false
 }
 
-void saveUserChoice(const std::string& filePath) {
+void saveAutomaticImportConfig(const std::string& filePath) {
 	// Calls prevent_clear_screen and tab completion
 	rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
 	rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
 	while (true) {
 		clearScrollBuffer();
-    std::string prompt = "\001\033[1;94m\002Scans isocmd's folder history (up to 25 entries) for new ISO files and imports them into \001\033[1;92m\002on-disk \001\033[1;94m\002cache at every startup.\n"
-						"\001\033[1;93m\002Note: This feature may be slow for older drives and is disabled by default.\001\033[0;1m\002"
-						"\n\n\001\033[1;94m\002Configure automatic ISO cache updates on startup (\001\033[1;92m\0021\001\033[1;94m\002/\001\033[1;91m\0020\001\033[1;94m\002), or anyKey ↵ to return: \001\033[0;1m\002";
-    std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
-    std::string mainInputString(input.get());
+		std::string prompt = "\001\033[1;94m\002Scans isocmd's folder history (up to 25 entries) for new ISO files and imports them into \001\033[1;92m\002on-disk \001\033[1;94m\002cache at every startup.\n"
+							"\001\033[1;93m\002Note: This feature may be slow for older drives and is disabled by default.\001\033[0;1m\002"
+							"\n\n\001\033[1;94m\002Configure automatic ISO cache updates on startup (\001\033[1;92m\0021\001\033[1;94m\002/\001\033[1;91m\0020\001\033[1;94m\002), or anyKey ↵ to return: \001\033[0;1m\002";
+		std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
+		std::string mainInputString(input.get());
     
-    if (!input.get() || std::strlen(input.get()) == 0 || (mainInputString != "1" && mainInputString != "0")) {
+		if (!input.get() || std::strlen(input.get()) == 0 || (mainInputString != "1" && mainInputString != "0")) {
 			break; // Exit the submenu if input is empty or NULL
-	}
-
-    // Convert input to lowercase and check if it's 'y'
-    int valueToSave = (!mainInputString.empty() && (mainInputString[0] == '1' || mainInputString[0] == '1')) ? 1 : 0;
-
-    std::ofstream outFile(filePath);
-    if (outFile.is_open()) {
-        outFile << valueToSave;
-        outFile.close();
-        if (valueToSave == 1) {
-			std::cout << "\n\033[0;1mAutomatic ISO cache updates have been \033[1;92menabled\033[0;1m.\033[0;1m\n";
-            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            continue;
-		} else {
-			std::cout << "\n\033[0;1mAutomatic ISO cache updates have been \033[1;91mdisabled\033[0;1m.\033[0;1m\n";
-            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            continue;
 		}
-    } else {
-        std::cerr << "\n\033[1;91mFailed to set configuration for automatic ISO cache updates, unable to access: \033[1;91m'\033[1;93m" << filePath << "\033[1;91m'.\033[0;1m\n";
-        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        continue;
-    }
+
+		// Convert input to lowercase and check if it's 'y'
+		int valueToSave = (!mainInputString.empty() && (mainInputString[0] == '1' || mainInputString[0] == '1')) ? 1 : 0;
+
+		std::ofstream outFile(filePath);
+		if (outFile.is_open()) {
+			outFile << valueToSave;
+			outFile.close();
+			if (valueToSave == 1) {
+				std::cout << "\n\033[0;1mAutomatic ISO cache updates have been \033[1;92menabled\033[0;1m.\033[0;1m\n";
+				std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+				continue;
+			} else {
+				std::cout << "\n\033[0;1mAutomatic ISO cache updates have been \033[1;91mdisabled\033[0;1m.\033[0;1m\n";
+				std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+				continue;
+			}
+		} else {
+			std::cerr << "\n\033[1;91mFailed to set configuration for automatic ISO cache updates, unable to access: \033[1;91m'\033[1;93m" << filePath << "\033[1;91m'.\033[0;1m\n";
+			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			continue;
+		}
 	}
 }
 
