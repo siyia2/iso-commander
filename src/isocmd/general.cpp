@@ -291,6 +291,7 @@ void tokenizeInput(const std::string& input, std::vector<std::string>& isoFiles,
 }
 
 
+// Function to get total size of files
 size_t getTotalFileSize(const std::vector<std::string>& files) {
     size_t totalSize = 0;
     for (const auto& file : files) {
@@ -303,7 +304,6 @@ size_t getTotalFileSize(const std::vector<std::string>& files) {
 }
 
 // Function to display progress bar for native operations
-
 void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t totalBytes, std::atomic<size_t>* completedTasks, size_t totalTasks, std::atomic<bool>* isComplete, bool* verbose) {
     const int barWidth = 50;
     bool enterPressed = false;
