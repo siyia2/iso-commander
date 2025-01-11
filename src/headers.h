@@ -55,6 +55,9 @@ extern bool toggleFullList;
 // Cache for directory and filename transformations
 extern std::unordered_map<std::string, std::string> transformationCache;
 
+// For automatic ISO cache refresh from history paths
+extern const std::string historyFilePath;
+
 // Max cache size limit for IsoCache
 extern const uintmax_t maxCacheSize;
 
@@ -72,6 +75,7 @@ bool fileExists(const std::string& fullPath);
 bool startsWithZero(const std::string& str);
 bool isNumeric(const std::string& str);
 bool isDirectoryEmpty(const std::string& path);
+bool readUserChoice(const std::string& filePath);
 
 // ints
 int prevent_clear_screen_and_tab_completion(int, int);
@@ -88,6 +92,7 @@ void disableInput();
 void restoreInput();
 void signalHandler(int signum);
 void clearScrollBuffer();
+void saveUserChoice(const std::string& filePath);
 void sortFilesCaseInsensitive(std::vector<std::string>& files);
 void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname,std::set<std::string>& uniqueErrors);
 
