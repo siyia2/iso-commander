@@ -354,7 +354,40 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 
 // Function type definition for ProgressBarFunction
 using ProgressBarFunction = void(*)(std::atomic<size_t>*, size_t, std::atomic<bool>*, bool*);
+const size_t DATA_SIZE = 2048;
+const size_t BUFFER_SIZE = 8 * 1024 * 1024;  // 8 MB buffer
 
+struct __attribute__((packed)) CcdSectheaderSyn {
+    uint8_t data[12];
+};
+
+struct __attribute__((packed)) CcdSectheaderHeader {
+    uint8_t sectaddr_min, sectaddr_sec, sectaddr_frac;
+    uint8_t mode;
+};
+
+struct __attribute__((packed)) CcdSectheader {
+    CcdSectheaderSyn syn;
+    CcdSectheaderHeader header;
+};
+
+struct __attribute__((packed)) CcdSector {
+    CcdSectheader sectheader;
+    union {
+        struct {
+            uint8_t data[DATA_SIZE];
+            uint8_t edc[4];
+            uint8_t unused[8];
+            uint8_t ecc[276];
+        } mode1;
+        struct {
+            uint8_t sectsubheader[8];
+            uint8_t data[DATA_SIZE];
+            uint8_t edc[4];
+            uint8_t ecc[276];
+        } mode2;
+    } content;
+};
 // Function to process user input and convert selected BIN/MDF/NRG files to ISO format
 void processInput(const std::string& input, std::vector<std::string>& fileList, const bool& modeMdf, const bool& modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
     
@@ -402,10 +435,23 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
         filesToProcess.push_back(fileList[index - 1]);
     }
 
+    // Calculate totalBytes based on the mode
+    size_t totalBytes = 0;
+    if (modeMdf || modeNrg) {
+        // Use original file size for MDF or NRG modes
+        totalBytes = getTotalFileSize(filesToProcess);
+    } else {
+        // Calculate expected ISO size for CCD files
+        for (const auto& file : filesToProcess) {
+            std::ifstream ccdFile(file, std::ios::binary | std::ios::ate);
+            if (ccdFile) {
+                size_t fileSize = ccdFile.tellg();
+                totalBytes += (fileSize / sizeof(CcdSector)) * DATA_SIZE; // Expected ISO size
+            }
+        }
+    }
 
-	std::atomic<size_t> completedBytes(0);
-    size_t totalBytes = getTotalFileSize(filesToProcess);
-	
+    std::atomic<size_t> completedBytes(0);
     std::atomic<bool> isProcessingComplete(false);
 
     ProgressBarFunction progressFunc = displayProgressBarSize;
@@ -441,7 +487,6 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
 
     isProcessingComplete.store(true);
     progressThread.join();
-
 }
 
 
