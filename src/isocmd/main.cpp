@@ -61,9 +61,11 @@ int main(int argc, char *argv[]) {
     
     const std::string automaticFilePath = std::string(getenv("HOME")) + "/.cache/iso_commander_automatic.txt";
     bool search = readUserConfigForAutoImport(automaticFilePath);
+    
     if (!file.is_open()) {
         search = false;
     }
+    
 	if (search) {
     // String to store all paths
     std::string allPaths;
