@@ -57,13 +57,13 @@ int main(int argc, char *argv[]) {
     
     // Open the file
     std::ifstream file(historyFilePath);
-    if (!file.is_open()) {
-        std::cerr << "Failed to open file: " << historyFilePath << std::endl;
-        return 1;
-    }
+    
     
     const std::string automaticFilePath = std::string(getenv("HOME")) + "/.cache/iso_commander_automatic.txt";
     bool search = readUserConfigForAutoImport(automaticFilePath);
+    if (!file.is_open()) {
+        search = false;
+    }
 	if (search) {
     // String to store all paths
     std::string allPaths;
