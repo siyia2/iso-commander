@@ -344,9 +344,12 @@ void displayProgressBarSize(std::atomic<size_t>* completedBytes, size_t totalByt
             size_t completedBytesValue = completedBytes->load();
             size_t completedTasksValue = completedTasks->load();
             
+            // Calculate progress based on either tasks or bytes
             double bytesProgress = static_cast<double>(completedBytesValue) / totalBytes;
+            double tasksProgress = static_cast<double>(completedTasksValue) / totalTasks;
+            double overallProgress = std::max(bytesProgress, tasksProgress);
             
-            int bytesPos = static_cast<int>(barWidth * bytesProgress);
+            int bytesPos = static_cast<int>(barWidth * overallProgress);
             
             auto currentTime = std::chrono::high_resolution_clock::now();
             auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime);
@@ -354,7 +357,7 @@ void displayProgressBarSize(std::atomic<size_t>* completedBytes, size_t totalByt
             
             double speed = completedBytesValue / elapsedSeconds;
             
-            // Display bytes progress bar
+            // Display progress bar
             std::cout << "\r[";
             for (int i = 0; i < barWidth; ++i) {
                 if (i < bytesPos) std::cout << "=";
@@ -363,7 +366,7 @@ void displayProgressBarSize(std::atomic<size_t>* completedBytes, size_t totalByt
             }
             
             std::cout << "] " << std::setw(3) << std::fixed << std::setprecision(1)
-                     << (bytesProgress * 100.0) << "% ("
+                     << (overallProgress * 100.0) << "% ("
                      << completedTasksValue << "/"
                      << totalTasks << ") ("
                      << formatSize(completedBytesValue) << "/"
