@@ -63,7 +63,7 @@ int main(int argc, char *argv[]) {
     }
     
     const std::string automaticFilePath = std::string(getenv("HOME")) + "/.cache/iso_commander_automatic.txt";
-    bool search = readUserChoice(historyFilePath);
+    bool search = readUserChoice(automaticFilePath);
 	if (search) {
     // String to store all paths
     std::string allPaths;
@@ -336,13 +336,16 @@ void printMenu() {
 
 bool readUserChoice(const std::string& filePath) {
     std::ifstream inFile(filePath);
-    int userChoice;
+    if (!inFile) {
+        return false; // Default to false if file cannot be opened
+    }
 
-    if (inFile.is_open()) {
-        inFile >> userChoice;
-        inFile.close();
-    } else {
-        return false; // Default to false if file cannot be read
+    int userChoice;
+    inFile >> userChoice;
+
+    // Check if the read operation succeeded and the value is either 0 or 1
+    if (inFile.fail() || (userChoice != 0 && userChoice != 1)) {
+        return false; // Default to false if the content is invalid
     }
 
     return (userChoice == 1); // Return true if userChoice is 1, otherwise false
@@ -354,9 +357,9 @@ void saveUserChoice(const std::string& filePath) {
 	rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
 	while (true) {
 		clearScrollBuffer();
-    std::string prompt = "\001\033[1;94m\002This will attempt to scan the directory paths from isocmd's history (25 entries max) and import any new ISO files to the cache on startup.\n"
-                     "\001\033[1;93m\002Note: This feature may be slow for older drives and is disabled by default.\001\033[0;1m\002"
-                     "\n\001\033[1;94m\002Toggle automatic ISO cache updates on startup (1/0), ↵ to return: ";
+    std::string prompt = "\001\033[1;94m\002This will attempt to scan the directory paths from isocmd's history (up to 25 entries) and import any new ISO files to the on-disk cache at every startup.\n"
+						"\001\033[1;93m\002Note: This feature may be slow for older drives and is disabled by default.\001\033[0;1m\002"
+						"\n\001\033[1;94m\002Toggle automatic ISO cache updates on startup (1/0), ↵ to return: ";
     std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
     std::string mainInputString(input.get());
     
