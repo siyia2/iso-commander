@@ -1,6 +1,15 @@
 #ifndef MDF_H
 #define MDF_H
 
+
+// Special thanks to the original authors of the conversion tools:
+
+// Salvatore Santagati (mdf2iso).
+// Grégory Kokanosky (nrg2iso).
+// Danny Kurniawan and Kerry Harris (ccd2iso).
+
+// Note: Their original code has been modernized and ported to C++.
+
 struct MdfTypeInfo {
     size_t seek_ecc;
     size_t sector_size;
