@@ -4,9 +4,7 @@
 #include "../threadpool.h"
 
 
-// Function type definition for ProgressBarFunction
-using ProgressBarFunction = void(*)(std::atomic<size_t>*, size_t, std::atomic<bool>*, bool*);
-
+// Function to process selected indices for cpMvDel accordingly
 void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, 
     const std::string& process, std::set<std::string>& operationIsos, 
     std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, 
