@@ -53,18 +53,20 @@ int main(int argc, char *argv[]) {
     signal(SIGTERM, signalHandler); // Handle termination signals
 
     bool exitProgram = false;
+    
+    // Automatic ISO  cache Import
+    bool search;
+    const std::string automaticFilePath = std::string(getenv("HOME")) + "/.cache/iso_commander_automatic.txt";
+    
     std::string choice;
     
-    // Open the file
+    // Open the history file for automatic ISO cache imports
     std::ifstream file(historyFilePath);
-    
-    
-    const std::string automaticFilePath = std::string(getenv("HOME")) + "/.cache/iso_commander_automatic.txt";
-    bool search = readUserConfigForAutoImport(automaticFilePath);
-    
     if (!file.is_open()) {
         search = false;
-    }
+    } else {
+		search = readUserConfigForAutoImport(automaticFilePath);
+	}    
     
 	if (search) {
     // String to store all paths
