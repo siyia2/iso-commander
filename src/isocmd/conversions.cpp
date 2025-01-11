@@ -277,6 +277,9 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
             // Filter files based on the input search query
             auto filteredFiles = filterFiles(files, inputSearch);
             if (filteredFiles.empty()) continue; // Skip if no files match the filter
+            if (filteredFiles.size() == files.size()) {
+				break;
+			}
 
             // Save the search query to history and update the file list
             add_history(rawSearchQuery.get());
@@ -299,6 +302,13 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         clear_history();	
 
         clearScrollBuffer(); // Clear the screen for new content
+        if ((fileType == "bin" || fileType == "img") && !binImgFilesCache.empty() && !isFiltered) {
+			files = binImgFilesCache;
+		} else if ((fileType == "mdf") && !mdfMdsFilesCache.empty() && !isFiltered) {
+			files = mdfMdsFilesCache;
+		} else if ((fileType == "nrg") && !nrgFilesCache.empty() && !isFiltered) {
+			files = nrgFilesCache;
+		}
         sortFilesCaseInsensitive(files); // Sort the files case-insensitively
         printList(files, "IMAGE_FILES"); // Print the current list of files
 
