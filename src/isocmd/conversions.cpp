@@ -789,6 +789,9 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
                 std::string deleteFailMessage = "\033[1;91mFailed to delete incomplete ISO file: \033[1;93m'" + outputPath + "'\033[0;1m";
                 deletedOuts.insert(deleteFailMessage);
             }
+            if (completedTasks) {
+                (*completedTasks)++; // Increment completed tasks counter for failed conversions
+            }
         }
     }
 
