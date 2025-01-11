@@ -414,6 +414,20 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
 				totalBytes += isoDataSize;
 			}
 		}
+	} else if (modeMdf) {
+		for (const auto& file : filesToProcess) {
+			std::ifstream mdfFile(file, std::ios::binary);
+			if (mdfFile) {
+				MdfTypeInfo mdfInfo;
+				if (!mdfInfo.determineMdfType(mdfFile)) {
+					continue;
+				}
+				mdfFile.seekg(0, std::ios::end);
+				size_t fileSize = mdfFile.tellg();
+				size_t numSectors = fileSize / mdfInfo.sector_size;
+				totalBytes += numSectors * mdfInfo.sector_data;
+			}
+		}
     } else {
         for (const auto& file : filesToProcess) {
             std::ifstream ccdFile(file, std::ios::binary | std::ios::ate);
