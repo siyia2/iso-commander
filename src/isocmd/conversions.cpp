@@ -358,13 +358,15 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 using ProgressBarFunction = void(*)(std::atomic<size_t>*, size_t, std::atomic<bool>*, bool*);
 
 // Function to process user input and convert selected BIN/MDF/NRG files to ISO format
-void processInput(const std::string& input, std::vector<std::string>& fileList, const bool& modeMdf, const bool& modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
+void processInput(const std::string& input, std::vector<std::string>& fileList, 
+    const bool& modeMdf, const bool& modeNrg, std::set<std::string>& processedErrors, 
+    std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, 
+    std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, 
+    bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
     
-    // Set of selected file paths for processing
     std::set<std::string> selectedFilePaths;
     std::string concatenatedFilePaths;
 
-    // Tokenize the input string to identify files to process
     std::set<int> processedIndices;
     tokenizeInput(input, fileList, processedErrors, processedIndices);
     
@@ -377,102 +379,94 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
         return;
     }
 
-    unsigned int numThreads = std::min(static_cast<unsigned int>(processedIndices.size()), std::thread::hardware_concurrency());
-	std::vector<std::vector<size_t>> indexChunks;
-	const size_t maxFilesPerChunk = 5;
+    unsigned int numThreads = std::min(static_cast<unsigned int>(processedIndices.size()), 
+        std::thread::hardware_concurrency());
+    std::vector<std::vector<size_t>> indexChunks;
+    const size_t maxFilesPerChunk = 5;
 
-	// Distribute files evenly among threads with chunk size limits
-	size_t totalFiles = processedIndices.size();
-	size_t filesPerThread = (totalFiles + numThreads - 1) / numThreads;
-	size_t chunkSize = std::min(maxFilesPerChunk, filesPerThread);
+    size_t totalFiles = processedIndices.size();
+    size_t filesPerThread = (totalFiles + numThreads - 1) / numThreads;
+    size_t chunkSize = std::min(maxFilesPerChunk, filesPerThread);
 
-	// Use iterators to iterate over the set directly
-	auto it = processedIndices.begin();
-	for (size_t i = 0; i < totalFiles; i += chunkSize) {
-		// Calculate the end iterator for the current chunk
-		auto chunkEnd = std::next(it, std::min(chunkSize, static_cast<size_t>(std::distance(it, processedIndices.end()))));
+    auto it = processedIndices.begin();
+    for (size_t i = 0; i < totalFiles; i += chunkSize) {
+        auto chunkEnd = std::next(it, std::min(chunkSize, 
+            static_cast<size_t>(std::distance(it, processedIndices.end()))));
+        indexChunks.emplace_back(it, chunkEnd);
+        it = chunkEnd;
+    }
     
-		// Create a chunk using iterators
-		indexChunks.emplace_back(it, chunkEnd);
-    
-		// Move the iterator to the next chunk
-		it = chunkEnd;
-	}
-	
-	std::vector<std::string> filesToProcess;
+    std::vector<std::string> filesToProcess;
     for (const auto& index : processedIndices) {
         filesToProcess.push_back(fileList[index - 1]);
     }
 
-    // Calculate totalBytes based on the mode
+    // Calculate total bytes and tasks
     size_t totalBytes = 0;
+    size_t totalTasks = filesToProcess.size();  // Each file is a task
+
     if (modeNrg) {
-        // Use original file size for MDF or NRG modes
         totalBytes = getTotalFileSize(filesToProcess);
     } else if (modeMdf) {
-    for (const auto& file : filesToProcess) {
-        std::ifstream mdfFile(file, std::ios::binary);
-        if (mdfFile) {
-            // Use the MdfTypeInfo struct to determine the MDF type
-            MdfTypeInfo mdfInfo;
-            if (!mdfInfo.determineMdfType(mdfFile)) {
-                continue; // Skip this file if reading fails
+        for (const auto& file : filesToProcess) {
+            std::ifstream mdfFile(file, std::ios::binary);
+            if (mdfFile) {
+                MdfTypeInfo mdfInfo;
+                if (!mdfInfo.determineMdfType(mdfFile)) {
+                    continue;
+                }
+                mdfFile.seekg(0, std::ios::end);
+                size_t fileSize = mdfFile.tellg();
+                size_t numSectors = fileSize / mdfInfo.sector_size;
+                totalBytes += numSectors * mdfInfo.sector_data;
             }
-
-            // Calculate the number of sectors
-            mdfFile.seekg(0, std::ios::end);
-            size_t fileSize = mdfFile.tellg();
-            size_t numSectors = fileSize / mdfInfo.sector_size;
-
-            // Calculate totalBytes based on the number of sectors and sector_data size
-            totalBytes += numSectors * mdfInfo.sector_data;
-	}
-    }
-		
+        }
     } else {
-        // Calculate expected ISO size for CCD files
         for (const auto& file : filesToProcess) {
             std::ifstream ccdFile(file, std::ios::binary | std::ios::ate);
             if (ccdFile) {
                 size_t fileSize = ccdFile.tellg();
-                totalBytes += (fileSize / sizeof(CcdSector)) * DATA_SIZE; // Expected ISO size
+                totalBytes += (fileSize / sizeof(CcdSector)) * DATA_SIZE;
             }
         }
     }
 
     std::atomic<size_t> completedBytes(0);
+    std::atomic<size_t> completedTasks(0);
     std::atomic<bool> isProcessingComplete(false);
 
-    ProgressBarFunction progressFunc = displayProgressBarSize;
-    std::thread progressThread(progressFunc, &completedBytes, 
-        totalBytes, &isProcessingComplete, &verbose);
+    // Use the enhanced progress bar with task tracking
+    std::thread progressThread(displayProgressBarSize, &completedBytes, 
+        totalBytes, &completedTasks, totalTasks, &isProcessingComplete, &verbose);
 
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
     futures.reserve(indexChunks.size());
 
-	for (const auto& chunk : indexChunks) {
-		// Gather files for this chunk
-		std::vector<std::string> imageFilesInChunk;
-		imageFilesInChunk.reserve(chunk.size());
-		std::transform(
-			chunk.begin(),
-			chunk.end(),
-			std::back_inserter(imageFilesInChunk),
-			[&fileList](size_t index) { return fileList[index - 1]; }
-		);
+    for (const auto& chunk : indexChunks) {
+        std::vector<std::string> imageFilesInChunk;
+        imageFilesInChunk.reserve(chunk.size());
+        std::transform(
+            chunk.begin(),
+            chunk.end(),
+            std::back_inserter(imageFilesInChunk),
+            [&fileList](size_t index) { return fileList[index - 1]; }
+        );
 
-		// Enqueue task for the thread pool
-		futures.emplace_back(pool.enqueue([imageFilesInChunk = std::move(imageFilesInChunk), &fileList, &successOuts, &skippedOuts, &failedOuts, &deletedOuts, modeMdf, modeNrg, &maxDepth, &promptFlag, &historyPattern, &completedBytes]() {
-			// Process each file
-			convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts, deletedOuts, modeMdf, modeNrg, maxDepth, promptFlag, historyPattern, &completedBytes);
-		}));
-	}
+        futures.emplace_back(pool.enqueue([imageFilesInChunk = std::move(imageFilesInChunk), 
+            &fileList, &successOuts, &skippedOuts, &failedOuts, &deletedOuts, 
+            modeMdf, modeNrg, &maxDepth, &promptFlag, &historyPattern, 
+            &completedBytes, &completedTasks]() {
+            // Process each file with task tracking
+            convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts, 
+                deletedOuts, modeMdf, modeNrg, maxDepth, promptFlag, historyPattern, 
+                &completedBytes, &completedTasks);
+        }));
+    }
 
-	// Wait for all threads to complete
-	for (auto& future : futures) {
-		future.wait();
-	}
+    for (auto& future : futures) {
+        future.wait();
+    }
 
     isProcessingComplete.store(true);
     progressThread.join();
@@ -707,7 +701,7 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
 
 
 // Function to convert a BIN/IMG/MDF/NRG file to ISO format
-void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, const bool& modeMdf, const bool& modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern, std::atomic<size_t>* completedBytes) {
+void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, const bool& modeMdf, const bool& modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks) {
     
     // Collect unique directories from the input file paths
     std::set<std::string> uniqueDirectories;
@@ -757,17 +751,20 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
         if (fileExists(outputPath)) {
             std::string skipMessage = "\033[1;93mThe corresponding .iso file already exists for: \033[1;92m'" + directory + "/" + fileNameOnly + "'\033[1;93m. Skipped conversion.\033[0;1m";
             skippedOuts.insert(skipMessage);
+            if (completedTasks) {
+                (*completedTasks)++; // Count skipped files as completed tasks
+            }
             continue;
         }
 
         // Perform the conversion based on the mode
         bool conversionSuccess = false;
         if (modeMdf) {
-            conversionSuccess = convertMdfToIso(inputPath, outputPath, completedBytes); // Pass completedBytes
+            conversionSuccess = convertMdfToIso(inputPath, outputPath, completedBytes);
         } else if (!modeMdf && !modeNrg) {
             conversionSuccess = convertCcdToIso(inputPath, outputPath, completedBytes);
         } else if (modeNrg) {
-            conversionSuccess = convertNrgToIso(inputPath, outputPath); // Pass completedBytes
+            conversionSuccess = convertNrgToIso(inputPath, outputPath);
         }
 
         // Handle output results
@@ -782,6 +779,10 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
 
             std::string successMessage = "\033[1mImage file converted to ISO:\033[0;1m \033[1;92m'" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m.\033[0;1m";
             successOuts.insert(successMessage);
+            
+            if (completedTasks) {
+                (*completedTasks)++; // Increment completed tasks counter for successful conversions
+            }
         } else {
             std::string failedMessage = "\033[1;91mConversion of \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m failed.\033[0;1m";
             failedOuts.insert(failedMessage);

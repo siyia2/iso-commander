@@ -303,8 +303,9 @@ size_t getTotalFileSize(const std::vector<std::string>& files) {
 }
 
 
-void displayProgressBarSize(std::atomic<size_t>* completedBytes, size_t totalBytes, 
-    std::atomic<bool>* isComplete, bool* verbose) {
+void displayProgressBarSize(std::atomic<size_t>* completedBytes, size_t totalBytes,
+                           std::atomic<size_t>* completedTasks, size_t totalTasks,
+                           std::atomic<bool>* isComplete, bool* verbose) {
     const int barWidth = 50;
     bool enterPressed = false;
     auto startTime = std::chrono::high_resolution_clock::now();
@@ -317,6 +318,7 @@ void displayProgressBarSize(std::atomic<size_t>* completedBytes, size_t totalByt
     
     int oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
     fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
+
     auto formatSize = [](size_t bytes) -> std::string {
         const char* units[] = {"B", "KB", "MB", "GB"};
         int unit = 0;
@@ -339,42 +341,51 @@ void displayProgressBarSize(std::atomic<size_t>* completedBytes, size_t totalByt
                 // Discard any input during progress
             }
             
-            size_t completedValue = completedBytes->load();
-            double progress = static_cast<double>(completedValue) / totalBytes;
-            int pos = static_cast<int>(barWidth * progress);
+            size_t completedBytesValue = completedBytes->load();
+            size_t completedTasksValue = completedTasks->load();
+            
+            double bytesProgress = static_cast<double>(completedBytesValue) / totalBytes;
+            
+            int bytesPos = static_cast<int>(barWidth * bytesProgress);
             
             auto currentTime = std::chrono::high_resolution_clock::now();
             auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime);
             double elapsedSeconds = elapsedTime.count() / 1000.0;
             
-            double speed = completedValue / elapsedSeconds;
-                        
+            double speed = completedBytesValue / elapsedSeconds;
+            
+            // Display bytes progress bar
             std::cout << "\r[";
             for (int i = 0; i < barWidth; ++i) {
-                if (i < pos) std::cout << "=";
-                else if (i == pos) std::cout << ">";
+                if (i < bytesPos) std::cout << "=";
+                else if (i == bytesPos) std::cout << ">";
                 else std::cout << " ";
             }
             
             std::cout << "] " << std::setw(3) << std::fixed << std::setprecision(1)
-                     << (progress * 100.0) << "% ("
-                     << formatSize(completedValue) << "/"
+                     << (bytesProgress * 100.0) << "% ("
+                     << completedTasksValue << "/"
+                     << totalTasks << ") ("
+                     << formatSize(completedBytesValue) << "/"
                      << formatSize(totalBytes) << ") "
-                     << formatSize(static_cast<size_t>(speed)) << "/s "
-                     << "Time Elapsed: " << elapsedSeconds << "s";
+                     << formatSize(static_cast<size_t>(speed)) << "/s"
+                     << " Time Elapsed: " << std::setprecision(1) << elapsedSeconds << "s";
+                     
             
-            // Clear the rest of the line and ensure the cursor is at the end
             std::cout << "\033[K"; // ANSI escape sequence to clear the rest of the line
             std::cout.flush();
             
-            if (completedValue == totalBytes && !enterPressed) {
+            // Check if either the total bytes or total tasks are completed
+            if ((completedBytesValue >= totalBytes || completedTasksValue >= totalTasks) && 
+                !enterPressed) {
                 enterPressed = true;
+                std::cout << "\n\n"; // Move past both progress bars
                 
                 tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
                 fcntl(STDIN_FILENO, F_SETFL, oldf);
                 
                 std::string confirmation;
-                std::cout << "\n\n\033[1;94mDisplay verbose output? (y/n):\033[0;1m ";
+                std::cout << "\033[1;94mDisplay verbose output? (y/n):\033[0;1m ";
                 std::getline(std::cin, confirmation);
                 
                 *verbose = (confirmation == "y" || confirmation == "Y");
