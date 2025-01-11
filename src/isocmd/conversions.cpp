@@ -388,6 +388,7 @@ struct __attribute__((packed)) CcdSector {
         } mode2;
     } content;
 };
+
 // Function to process user input and convert selected BIN/MDF/NRG files to ISO format
 void processInput(const std::string& input, std::vector<std::string>& fileList, const bool& modeMdf, const bool& modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
     
@@ -437,9 +438,63 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
 
     // Calculate totalBytes based on the mode
     size_t totalBytes = 0;
-    if (modeMdf || modeNrg) {
+    if (modeNrg) {
         // Use original file size for MDF or NRG modes
         totalBytes = getTotalFileSize(filesToProcess);
+    } else if (modeMdf) {
+    for (const auto& file : filesToProcess) {
+        std::ifstream mdfFile(file, std::ios::binary);
+        if (mdfFile) {
+            // Read the first 12 bytes to check the sync pattern
+            char buf[12];
+            if (!mdfFile.read(buf, 12)) {
+                continue; // Skip this file if reading fails
+            }
+
+            // Determine MDF type based on sync patterns
+            size_t seek_ecc = 0;
+            size_t sector_size = 0;
+            size_t sector_data = 0;
+            size_t seek_head = 0;
+
+            if (std::memcmp("\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00", buf, 12) == 0) {
+                // Check the next sector to confirm the type
+                mdfFile.seekg(2352, std::ios::beg);
+                if (!mdfFile.read(buf, 12)) {
+                    continue; // Skip this file if reading fails
+                }
+
+                if (std::memcmp("\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00", buf, 12) == 0) {
+                    // Type 1: 2352-byte sectors with 2048-byte user data
+                    seek_ecc = 288;
+                    sector_size = 2352;
+                    sector_data = 2048;
+                    seek_head = 16;
+                } else {
+                    // Type 2: 2448-byte sectors with 2048-byte user data
+                    seek_ecc = 384;
+                    sector_size = 2448;
+                    sector_data = 2048;
+                    seek_head = 16;
+                }
+            } else {
+                // Type 3: 2448-byte sectors with 2352-byte user data
+                seek_head = 0;
+                sector_size = 2448;
+                seek_ecc = 96;
+                sector_data = 2352;
+            }
+
+            // Calculate the number of sectors
+            mdfFile.seekg(0, std::ios::end);
+            size_t fileSize = mdfFile.tellg();
+            size_t numSectors = fileSize / sector_size;
+
+            // Calculate totalBytes based on the number of sectors and sector_data size
+            totalBytes += numSectors * sector_data;
+        }
+    }
+		
     } else {
         // Calculate expected ISO size for CCD files
         for (const auto& file : filesToProcess) {
@@ -774,7 +829,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
         // Perform the conversion based on the mode
         bool conversionSuccess = false;
         if (modeMdf) {
-            conversionSuccess = convertMdfToIso(inputPath, outputPath); // Pass completedBytes
+            conversionSuccess = convertMdfToIso(inputPath, outputPath, completedBytes); // Pass completedBytes
         } else if (!modeMdf && !modeNrg) {
             conversionSuccess = convertCcdToIso(inputPath, outputPath, completedBytes);
         } else if (modeNrg) {
