@@ -726,6 +726,29 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
         if (!std::filesystem::exists(inputPath)) {
             std::string failedMessage = "\033[1;91mThe specified input file \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m does not exist anymore.\033[0;1m";
             failedOuts.insert(failedMessage);
+            // Remove the non-existent files from Cache
+            if (!modeMdf && !modeNrg) {
+				auto it = std::find(binImgFilesCache.begin(), binImgFilesCache.end(), inputPath);
+				if (it != binImgFilesCache.end()) {
+					binImgFilesCache.erase(it);
+				}
+			} else if (modeMdf) {
+				auto it = std::find(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end(), inputPath);
+				if (it != mdfMdsFilesCache.end()) {
+					mdfMdsFilesCache.erase(it);
+				}
+			} else if (modeNrg) {
+				auto it = std::find(nrgFilesCache.begin(), nrgFilesCache.end(), inputPath);
+				if (it != nrgFilesCache.end()) {
+					nrgFilesCache.erase(it);
+				}
+				if (completedTasks) {
+					(*completedTasks)++; // Increment completed tasks counter for failed conversions
+				}
+			}
+			if (completedTasks) {
+				(*completedTasks)++; // Increment completed tasks counter for failed conversions
+			}
             continue;
         }
 
@@ -734,6 +757,9 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
         if (!file.good()) {
             std::string failedMessage = "\033[1;91mThe specified file \033[1;93m'" + inputPath + "'\033[1;91m cannot be read. Check permissions.\033[0;1m";
             failedOuts.insert(failedMessage);
+            if (completedTasks) {
+                (*completedTasks)++; // Increment completed tasks counter for failed conversions
+            }
             continue;
         }
 
