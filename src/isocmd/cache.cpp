@@ -417,8 +417,11 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
     std::set<std::string> uniqueErrorMessages;
     std::vector<std::string> allIsoFiles;
     std::atomic<size_t> totalFiles{0};
-
-    disableInput();
+	
+	if (promptFlag) {
+		disableInput();
+	}
+    
     auto start_time = std::chrono::high_resolution_clock::now();
 
     // Single-pass path processing with concurrent file traversal
@@ -463,12 +466,11 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
         future.wait();
     }
     
-     // Flush and Restore input after processing
-    flushStdin();
-    restoreInput();
-
     // Post-processing
     if (promptFlag) {
+		// Flush and Restore input after processing
+		flushStdin();
+		restoreInput();
         if (!invalidPaths.empty() || !validPaths.empty()) {
             std::cout << "\n";
         }
