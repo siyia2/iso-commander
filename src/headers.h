@@ -95,6 +95,7 @@ void clearScrollBuffer();
 void saveAutomaticImportConfig(const std::string& filePath);
 void sortFilesCaseInsensitive(std::vector<std::string>& files);
 void autoCacheImport(const std::string& filePath, int& maxDepth, bool& historyPattern);
+void backgroundCacheImport(int maxDepthParam);
 void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname,std::set<std::string>& uniqueErrors);
 
 
