@@ -497,21 +497,21 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 
 // Function to traverse a directory and find ISO files
 void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, std::atomic<size_t>& totalFiles, std::mutex& traverseFilesMutex, std::mutex& traverseErrorsMutex, int& maxDepth, bool& promptFlag) {
-    const size_t BATCH_SIZE = 100; // Adjust batch size as needed
+    const size_t BATCH_SIZE = 100;
     std::vector<std::string> localIsoFiles;
     std::vector<std::string> localErrors;
 
-    // Case-insensitive string comparison (optimized)
     auto iequals = [](const std::string_view& a, const std::string_view& b) {
         return std::equal(a.begin(), a.end(), b.begin(), b.end(),
-                          [](unsigned char a, unsigned char b) {
-                              return std::tolower(a) == std::tolower(b);
-                          });
+                         [](unsigned char a, unsigned char b) {
+                             return std::tolower(a) == std::tolower(b);
+                         });
     };
 
     try {
         auto options = std::filesystem::directory_options::none;
-        for (auto it = std::filesystem::recursive_directory_iterator(path, options); it != std::filesystem::recursive_directory_iterator(); ++it) {
+        for (auto it = std::filesystem::recursive_directory_iterator(path, options); 
+             it != std::filesystem::recursive_directory_iterator(); ++it) {
             try {
                 if (maxDepth >= 0 && it.depth() > maxDepth) {
                     it.disable_recursion_pending();
@@ -520,8 +520,10 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
 
                 const auto& entry = *it;
                 if (promptFlag && entry.is_regular_file()) {
-                    totalFiles++;
-                    std::cout << "\r\033[0;1mTotal files processed: " << totalFiles << std::flush;
+                    totalFiles++;  // Simple increment of atomic counter
+                    if (totalFiles % 100 == 0) {  // Update display periodically
+                        std::cout << "\r\033[0;1mTotal files processed: " << totalFiles << std::flush;
+                    }
                 }
 
                 if (!entry.is_regular_file()) continue;
@@ -537,12 +539,15 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
                     localIsoFiles.clear();
                 }
             } catch (const std::filesystem::filesystem_error& entryError) {
-                localErrors.push_back("\n\033[1;91mError processing path: " + it->path().string() + " - " + entryError.what() + "\033[0;1m");
+                localErrors.push_back("\n\033[1;91mError processing path: " + 
+                                    it->path().string() + " - " + 
+                                    entryError.what() + "\033[0;1m");
             }
         }
 
-        if (promptFlag && totalFiles == 0) {
-            std::cout << "\r\033[0;1mTotal files processed: 0" << std::flush;
+        // Update display one final time if needed
+        if (promptFlag && totalFiles > 0) {
+            std::cout << "\r\033[0;1mTotal files processed: " << totalFiles << std::flush;
         }
 
         // Merge leftovers
@@ -557,7 +562,8 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
             uniqueErrorMessages.insert(localErrors.begin(), localErrors.end());
         }
     } catch (const std::filesystem::filesystem_error& e) {
-        std::string formattedError = "\n\033[1;91mError traversing directory: " + path.string() + " - " + e.what() + "\033[0;1m";
+        std::string formattedError = "\n\033[1;91mError traversing directory: " + 
+                                    path.string() + " - " + e.what() + "\033[0;1m";
         if (promptFlag) {
             std::lock_guard<std::mutex> errorLock(traverseErrorsMutex);
             uniqueErrorMessages.insert(formattedError);
