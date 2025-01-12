@@ -318,6 +318,20 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     fs::path destPath = fs::path(destDir) / srcPath.filename();
                     auto [destDirProcessed, destFile] = extractDirectoryAndFilename(destPath.string());
 
+                    // Check if the destination directory exists and is valid
+                    if (!fs::exists(destDir) || !fs::is_directory(destDir)) {
+                        std::string errorMessageInfo = "\033[1;91mError " +
+                            std::string(isCopy ? "copying" : "moving") +
+                            ": \033[1;93m'" + srcDir + "/" + srcFile + "'\033[1;91m" +
+                            " to '" + destDir + "': Invalid or non-existent destination directory\033[1;91m.\033[0;1m";
+                        operationErrors.emplace(errorMessageInfo);
+                        operationSuccessful = false;
+
+                        // Increment task counter even for invalid directories
+                        completedTasks->fetch_add(1, std::memory_order_relaxed);
+                        continue;
+                    }
+
                     std::error_code ec;
                     bool success = false;
                     
@@ -342,21 +356,19 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                             " to '" + destDirProcessed + "/': " + ec.message() + "\033[1;91m.\033[0;1m";
                         operationErrors.emplace(errorMessageInfo);
                         operationSuccessful = false;
-                        continue;
+                    } else {
+                        if (!changeOwnership(destPath)) {
+                            operationSuccessful = false;
+                        } else {
+                            std::string operationInfo = "\033[1m" +
+                                std::string(isCopy ? "Copied" : (i < destDirs.size() - 1 ? "Moved" : "Moved")) +
+                                ": \033[1;92m'" + srcDir + "/" + srcFile + "'\033[1m\033[0;1m" +
+                                " to \033[1;94m'" + destDirProcessed + "/" + destFile + "'\033[0;1m.";
+                            operationIsos.emplace(operationInfo);
+                        }
                     }
 
-                    if (!changeOwnership(destPath)) {
-                        operationSuccessful = false;
-                        continue;
-                    }
-
-                    std::string operationInfo = "\033[1m" +
-                        std::string(isCopy ? "Copied" : (i < destDirs.size() - 1 ? "Moved" : "Moved")) +
-                        ": \033[1;92m'" + srcDir + "/" + srcFile + "'\033[1m\033[0;1m" +
-                        " to \033[1;94m'" + destDirProcessed + "/" + destFile + "'\033[0;1m.";
-                    operationIsos.emplace(operationInfo);
-
-                    // Increment task counter for each destination path
+                    // Increment task counter for each destination path, regardless of success or failure
                     completedTasks->fetch_add(1, std::memory_order_relaxed);
                 }
             }
