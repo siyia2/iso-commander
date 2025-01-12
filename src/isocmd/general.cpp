@@ -306,11 +306,8 @@ size_t getTotalFileSize(const std::vector<std::string>& files) {
 
 // Function to display progress bar for native operations
 void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t totalBytes, std::atomic<size_t>* completedTasks, size_t totalTasks, std::atomic<bool>* isComplete, bool* verbose) {
-    const int barWidth = 50;
-    bool enterPressed = false;
-    auto startTime = std::chrono::high_resolution_clock::now();
-    
-    // Set up non-blocking input
+	
+	// Set up non-blocking input
     struct termios oldt, newt;
     tcgetattr(STDIN_FILENO, &oldt);
     newt = oldt;
@@ -320,6 +317,10 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
     // Set stdin to non-blocking mode
     int oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
     fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
+    
+    const int barWidth = 50;
+    bool enterPressed = false;
+    auto startTime = std::chrono::high_resolution_clock::now();
 
     auto formatSize = [](size_t bytes) -> std::string {
         const char* units[] = {"B", "KB", "MB", "GB"};
