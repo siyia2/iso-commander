@@ -248,6 +248,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
     std::set<std::string> processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts;
     
     bool isFiltered = false; // Indicates if the file list is currently filtered
+    bool needsScrnClr = true;
     std::string fileExtension = (fileType == "bin" || fileType == "img") ? ".bin/.img" 
                                    : (fileType == "mdf") ? ".mdf" : ".nrg"; // Determine file extension based on type
     std::string filterPrompt; // Stores the prompt for filter input
@@ -261,7 +262,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 	}
     
     // Lambda function for filtering the file list
-    auto filterQuery = [&files, &historyPattern, &fileType, &filterPrompt]() {
+    auto filterQuery = [&files, &historyPattern, &fileType, &filterPrompt, &needsScrnClr]() {
         while (true) {
             clear_history(); // Clear the input history
             historyPattern = true;
@@ -272,12 +273,18 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
             std::string inputSearch(rawSearchQuery.get());
 
             // Exit the filter loop if input is empty or "/"
-            if (inputSearch.empty() || inputSearch == "/") break;
+            if (inputSearch.empty() || inputSearch == "/") {
+				std::cout << "\033[2A\033[K";
+				needsScrnClr = false;
+				break;
+			}
 
             // Filter files based on the input search query
             auto filteredFiles = filterFiles(files, inputSearch);
             if (filteredFiles.empty()) continue; // Skip if no files match the filter
             if (filteredFiles.size() == files.size()) {
+				std::cout << "\033[2A\033[K";
+				needsScrnClr = false;
 				break;
 			}
 
@@ -287,6 +294,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
             historyPattern = false;
             clear_history(); // Clear history to reset for future inputs
             files = filteredFiles; // Update the file list with the filtered results
+            needsScrnClr = true;
             break;
         }
     };
@@ -300,7 +308,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         failedOuts.clear(); 
         deletedOuts.clear();
         clear_history();	
-
+		if (needsScrnClr) {
         clearScrollBuffer(); // Clear the screen for new content
         // Assist in automatic removal of non-existent entries from cache
         if ((fileType == "bin" || fileType == "img") && !binImgFilesCache.empty() && !isFiltered) {
@@ -312,9 +320,11 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 		}
         sortFilesCaseInsensitive(files); // Sort the files case-insensitively
         printList(files, "IMAGE_FILES"); // Print the current list of files
-
+		}
+		std::cout << "\n\n";
+		std::cout << "\033[1A\033[K";
         // Build the user prompt string dynamically
-        std::string prompt = std::string("\n") + 
+        std::string prompt = std::string("") + 
                      (isFiltered ? "\001\033[1;96m\002Filtered \001\033[1;38;5;208m\002" : "\001\033[1;38;5;208m\002") + 
                      (fileType == "bin" || fileType == "img" ? "BIN/IMG" : (fileType == "mdf" ? "MDF" : "NRG")) + 
                      "\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion, ? ↵ for help, ↵ to return:\001\033[0;1m\002 ";
@@ -343,6 +353,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
                 // Restore the original file list
                 files = (fileType == "bin" || fileType == "img") ? binImgFilesCache :
                         (fileType == "mdf" ? mdfMdsFilesCache : nrgFilesCache);
+                needsScrnClr = true;
                 isFiltered = false; // Reset filter status
                 continue;
             } else {
@@ -352,7 +363,8 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 
         // Handle filter command
         if (strcmp(rawInput.get(), "/") == 0) {
-            filterPrompt = "\001\033[1A\002\001\033[K\002\001\033[1A\002\001\033[K\002\n\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;38;5;208m\002" + fileExtensionWithOutDots + "\001\033[1;94m\002 (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ to return: \001\033[0;1m\002";
+		std::cout << "\033[1A\033[K";
+            filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;38;5;208m\002" + fileExtensionWithOutDots + "\001\033[1;94m\002 (multi-term separator: \001\033[1;93m\002;\001\033[1;94m\002), ↵ to return: \001\033[0;1m\002";
             filterQuery(); // Call the filter query function
             isFiltered = files.size() != (fileType == "bin" || fileType == "img" ? binImgFilesCache.size() : (fileType == "mdf" ? mdfMdsFilesCache.size() : nrgFilesCache.size()));
         } else {
