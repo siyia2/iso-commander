@@ -21,7 +21,7 @@ int main(int argc, char *argv[]) {
 	int maxDepth = -1;
 	
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
-        printVersionNumber("5.5.5");
+        printVersionNumber("5.5.4");
         return 0;
     }
     // Readline use semicolon as delimiter
@@ -69,30 +69,10 @@ int main(int argc, char *argv[]) {
 	}    
     
 	if (search) {
-    // String to store all paths
-    std::string allPaths;
-
-    // Read the file line by line
-    std::string line;
-    while (std::getline(file, line)) {
-        std::istringstream iss(line);
-        std::string path;
-        while (std::getline(iss, path, ';')) {
-            if (!path.empty()) {
-                if (!allPaths.empty()) {
-                    allPaths += ";";
-                }
-                allPaths += path;
-            }
-        }
-    }
-
-    // Close the file
-    file.close();
-		clearScrollBuffer();
-		std::cout << "\n\033[0;1mPlease wait until isocmd's automatic ISO cache update finishes...\n\033[0m";
-		manualRefreshCache(allPaths, false, maxDepth, historyPattern);
+		autoCacheImport(historyFilePath, maxDepth, historyPattern);
 	}
+	
+	// End of automatic cache import
 
     while (!exitProgram) {
 		// Calls prevent_clear_screen and tab completion
@@ -339,6 +319,7 @@ void printMenu() {
 
 // GENERAL STUFF
 
+// Function to get AutomaticImportConfig status
 bool readUserConfigForAutoImport(const std::string& filePath) {
     std::ifstream inFile(filePath);
     if (!inFile) {
@@ -356,6 +337,8 @@ bool readUserConfigForAutoImport(const std::string& filePath) {
     return (userChoice == 1); // Return true if userChoice is 1, otherwise false
 }
 
+
+// Function enable/disable auto-import to ISO cache
 void saveAutomaticImportConfig(const std::string& filePath) {
 	// Calls prevent_clear_screen and tab completion
 	rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
@@ -398,6 +381,77 @@ void saveAutomaticImportConfig(const std::string& filePath) {
 		}
 	}
 }
+
+
+// Function to auto-import ISO files in cache
+void autoCacheImport(const std::string& filePath, int& maxDepth, bool& historyPattern) {
+    // Open the file
+    std::ifstream file(filePath);
+    if (!file.is_open()) {
+        return;
+    }
+
+    // Vector to store all paths
+    std::vector<std::string> paths;
+
+    // Read the file line by line
+    std::string line;
+    while (std::getline(file, line)) {
+        std::istringstream iss(line);
+        std::string path;
+        while (std::getline(iss, path, ';')) {
+            if (!path.empty() && path[0] == '/') { // Ensure paths start with '/'
+                paths.push_back(path);
+            }
+        }
+    }
+
+    // Close the file
+    file.close();
+
+    // Sort paths by length (shortest first)
+    std::sort(paths.begin(), paths.end(), [](const std::string& a, const std::string& b) {
+        return a.size() < b.size();
+    });
+
+    // Filter out subdirectories
+    std::vector<std::string> finalPaths;
+    for (const auto& path : paths) {
+        bool isSubdir = false;
+        for (const auto& parent : finalPaths) {
+            // Check if the current path is a subdirectory of any parent path
+            if (path.size() > parent.size() && path.substr(0, parent.size()) == parent && path[parent.size()] == '/') {
+                isSubdir = true;
+                break;
+            }
+        }
+        if (!isSubdir) {
+            finalPaths.push_back(path);
+        }
+    }
+
+    // Build allPaths from final paths
+    std::string allPaths;
+    for (const auto& path : finalPaths) {
+        if (!allPaths.empty()) {
+            allPaths += ";";
+        }
+        allPaths += path;
+    }
+
+    // Clear scroll buffer and display message
+    clearScrollBuffer();
+    disableInput();
+    std::cout << "\n\033[0;1mPlease wait until isocmd's automatic ISO cache update finishes...\n\033[0m";
+
+    // Call manualRefreshCache with the filtered paths
+    manualRefreshCache(allPaths, false, maxDepth, historyPattern);
+
+    // Flush and Restore input after processing
+    flushStdin();
+    restoreInput();
+}
+
 
 // Function to negate original readline bindings
 int prevent_clear_screen_and_tab_completion(int, int) {
