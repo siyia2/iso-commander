@@ -320,7 +320,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         std::string errorMessageInfo = "\033[1;91mError " +
                             std::string(isCopy ? "copying" : "moving") +
                             ": \033[1;93m'" + srcDir + "/" + srcFile + "'\033[1;91m" +
-                            " to '" + destDir + "': Invalid or non-existent destination directory\033[1;91m.\033[0;1m";
+                            " to '" + destDir + "': Destination directory does not exist\033[1;91m.\033[0;1m";
                         operationErrors.emplace(errorMessageInfo);
                         operationSuccessful = false;
 
