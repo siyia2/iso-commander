@@ -193,7 +193,7 @@ void verboseFind(std::set<std::string>& invalidDirectoryPaths, const std::vector
 			std::cout << "\n";
 		std::cout << "\n";
 		for (const auto& errorMsg : processedErrorsFind) {
-			std::cout << errorMsg;
+			std::cout << errorMsg << "\n";
 		}
 	}
 		
@@ -211,7 +211,7 @@ void verboseSearchResults(const std::string& fileExtension, std::set<std::string
     if (!fileNames.empty()) {
 
 		if (processedErrorsFind.empty()) {
-			std::cout << "\n\n";
+			std::cout << "\n";
 		}
         std::cout << "\033[1;92mFound " << fileNames.size() << " matching files.\033[1;93m " << currentCacheOld << " matching files cached in RAM from previous searches.\033[0;1m\n\n";
 
@@ -221,7 +221,7 @@ void verboseSearchResults(const std::string& fileExtension, std::set<std::string
     if (!newFilesFound && !files.empty() && !list) {
         verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
         if (processedErrorsFind.empty()) {
-			std::cout << "\n\n";
+			std::cout << "\n";
 		}
         std::cout << "\033[1;91mNo new " << fileExtension << " files over 5MB found. \033[1;92m";
         std::cout << files.size() << " files are cached in RAM from previous searches.\033[0;1m\n\n";
@@ -231,7 +231,7 @@ void verboseSearchResults(const std::string& fileExtension, std::set<std::string
     if (files.empty() && !list) {
         verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
 		if (processedErrorsFind.empty()) {
-			std::cout << "\n\n";
+			std::cout << "\n";
 		}
         std::cout << "\033[1;91mNo " << fileExtension << " files over 5MB found in the specified paths or cached in RAM.\n\033[0;1m\n";
     }
