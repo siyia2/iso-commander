@@ -175,9 +175,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
         bool newFilesFound = false;
 
         // File collection (integrated file search logic)
-        if (!list) {
-			disableInput();
-    
+        if (!list) { 
 			// Parse input search paths
 			std::istringstream ss(inputSearch);
 			std::string path;
@@ -508,6 +506,8 @@ std::set<std::string> processBatchPaths(const std::vector<std::string>& batchPat
     std::mutex fileNamesMutex;
     std::atomic<size_t> totalFiles{0};
     std::set<std::string> localFileNames;
+    
+    disableInput();
 
     for (const auto& path : batchPaths) {
         try {
@@ -564,6 +564,8 @@ std::set<std::string> processBatchPaths(const std::vector<std::string>& batchPat
 
 // Function to search for .bin .img .nrg and mdf files
 std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, std::set<std::string>& fileNames, int& currentCacheOld, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, const std::vector<std::string>& directoryPaths, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrorsFind) {
+	disableInput();
+	
     // Thread-safe synchronization primitives
     std::mutex pathsMutex;
     
@@ -631,10 +633,6 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
         fileNames.insert(batchResults.begin(), batchResults.end());
     }
 
-    // Restore input
-    flushStdin();
-    restoreInput();
-
     // Update invalid directory paths
     invalidDirectoryPaths.insert(invalidPaths.begin(), invalidPaths.end());
     
@@ -680,6 +678,10 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
     if (!batch.empty()) {
         currentCache->insert(currentCache->end(), batch.begin(), batch.end());
     }
+    
+    // Restore input
+    flushStdin();
+    restoreInput();
 
     return *currentCache;
 }
