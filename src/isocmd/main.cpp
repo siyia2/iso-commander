@@ -5,9 +5,11 @@
 // Get max available CPU cores for global use, fallback is 2 cores
 unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
+// Indicator for AutoImportISO
+std::atomic<bool> isImportRunning{false};
+
 // Global variables for cleanup
 int lockFileDescriptor = -1;
-
 
 // Main function
 int main(int argc, char *argv[]) {
@@ -69,8 +71,11 @@ int main(int argc, char *argv[]) {
 	}    
     
 	if (search) {
-		autoCacheImport(historyFilePath, maxDepth, historyPattern);
-	}
+    isImportRunning = true;
+    std::thread([maxDepth]() {
+        backgroundCacheImport(maxDepth);
+    }).detach();
+}
 	
 	// End of automatic cache import
 
@@ -82,6 +87,11 @@ int main(int argc, char *argv[]) {
 		globalIsoFileList.reserve(100);
         clearScrollBuffer();
         print_ascii();
+        
+        if (isImportRunning.load()) {
+			std::cout << "\033[2m[ISO Cache update running in the background...]\033[0m\n";
+		}
+        
         // Display the main menu options
         printMenu();
 
@@ -347,7 +357,7 @@ void saveAutomaticImportConfig(const std::string& filePath) {
     while (true) {
         clearScrollBuffer();
         std::string prompt = "\001\033[1;94m\002Scans isocmd's folder history (up to 25 entries) for new ISO files and imports them into \001\033[1;92m\002on-disk \001\033[1;94m\002cache at every startup.\n"
-                             "\001\033[1;93m\002Note: This feature may be slow for older drives and is disabled by default.\001\033[0;1m\002"
+                             "\001\033[1;93m\002Note: This feature may be resource intensive for older systems and is disabled by default.\001\033[0;1m\002"
                              "\n\n\001\033[1;94m\002Configure automatic ISO cache updates on startup (\001\033[1;92m\0021\001\033[1;94m\002/\001\033[1;91m\0020\001\033[1;94m\002), or anyKey ↵ to return: \001\033[0;1m\002";
         std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         std::string mainInputString(input.get());
@@ -397,77 +407,80 @@ void saveAutomaticImportConfig(const std::string& filePath) {
 }
 
 
-// Function to auto-import ISO files in cache
-void autoCacheImport(const std::string& filePath, int& maxDepth, bool& historyPattern) {
-    // Open the file
-    std::ifstream file(filePath);
-    if (!file.is_open()) {
-        return;
-    }
-
-    // Vector to store unique paths
+// Function to auto-import ISO files in cache withotu blocking the UI
+void backgroundCacheImport(int maxDepthParam) {
+    // Make local copies of parameters we need
     std::vector<std::string> paths;
-
-    // Read the file line by line
-    std::string line;
-    while (std::getline(file, line)) {
-        std::istringstream iss(line);
-        std::string path;
-        while (std::getline(iss, path, ';')) {
-            if (!path.empty() && path[0] == '/') { // Ensure paths start with '/'
-                if (path.back() != '/') {
-                    path += '/';
-                }
-                if (std::find(paths.begin(), paths.end(), path) == paths.end()) {
-                    paths.push_back(path);
+    int localMaxDepth = maxDepthParam;
+    bool localPromptFlag = false;  // Local bool for traverse
+    
+    // Read paths from file
+    {
+        std::ifstream file(historyFilePath);  // Use global directly
+        if (!file.is_open()) {
+            isImportRunning = false;
+            return;
+        }
+        
+        std::string line;
+        while (std::getline(file, line)) {
+            std::istringstream iss(line);
+            std::string path;
+            while (std::getline(iss, path, ';')) {
+                if (!path.empty() && path[0] == '/') {
+                    if (path.back() != '/') {
+                        path += '/';
+                    }
+                    if (std::find(paths.begin(), paths.end(), path) == paths.end()) {
+                        paths.push_back(path);
+                    }
                 }
             }
         }
     }
-    file.close();
 
-	// Sort paths by length in ascending order for subdirectory check
-	std::sort(paths.begin(), paths.end(), [](const std::string& a, const std::string& b) {
-		return a.size() < b.size();
-	});
-
-	std::vector<std::string> finalPaths;
-	for (const auto& path : paths) {
-		bool isSubdir = false;
-		for (const auto& existingPath : finalPaths) {
-			if (path.size() >= existingPath.size() && 
-				path.compare(0, existingPath.size(), existingPath) == 0 && 
-				(existingPath.back() == '/' || path[existingPath.size()] == '/')) {
-				// Ensure the current path is a subdirectory or equal to an existing path
-				isSubdir = true;
-				break;
-			}
-		}
-		if (!isSubdir) {
-			finalPaths.push_back(path);
-		}
-	}
-
-    // Build allPaths from final paths
-    std::string allPaths;
-    for (const auto& path : finalPaths) {
-        if (!allPaths.empty()) {
-            allPaths += ";";
+    // Sort and filter paths
+    std::sort(paths.begin(), paths.end(), 
+        [](const std::string& a, const std::string& b) { return a.size() < b.size(); });
+    
+    std::vector<std::string> finalPaths;
+    for (const auto& path : paths) {
+        bool isSubdir = false;
+        for (const auto& existingPath : finalPaths) {
+            if (path.size() >= existingPath.size() && 
+                path.compare(0, existingPath.size(), existingPath) == 0 && 
+                (existingPath.back() == '/' || path[existingPath.size()] == '/')) {
+                isSubdir = true;
+                break;
+            }
         }
-        allPaths += path;
+        if (!isSubdir) {
+            finalPaths.push_back(path);
+        }
     }
 
-    // Clear scroll buffer and display message
-    clearScrollBuffer();
-    disableInput();
-    std::cout << "\n\033[0;1mPlease wait until isocmd's automatic ISO cache update finishes...\n\033[0m";
-
-    // Call manualRefreshCache with the filtered paths
-    manualRefreshCache(allPaths, false, maxDepth, historyPattern);
-
-    // Flush and Restore input after processing
-    flushStdin();
-    restoreInput();
+    // Process paths in background
+    std::vector<std::string> allIsoFiles;
+    std::atomic<size_t> totalFiles{0};
+    std::set<std::string> uniqueErrorMessages;
+    
+    // Create local mutexes for thread safety
+    std::mutex processMutex;
+    std::mutex traverseErrorMutex;
+    
+    // Process each path
+    for (const auto& path : finalPaths) {
+        if (isValidDirectory(path)) {
+            traverse(path, allIsoFiles, uniqueErrorMessages, 
+                    totalFiles, processMutex, traverseErrorMutex, 
+                    localMaxDepth, localPromptFlag);
+        }
+    }
+    
+    // Save cache without UI updates
+    saveCache(allIsoFiles, maxCacheSize);
+    
+    isImportRunning = false;
 }
 
 
