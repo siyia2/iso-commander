@@ -309,11 +309,11 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 		if (needsScrnClr) {
         clearScrollBuffer(); // Clear the screen for new content
         // Assist in automatic removal of non-existent entries from cache
-        if ((fileType == "bin" || fileType == "img") && !binImgFilesCache.empty() && !isFiltered) {
+        if ((fileType == "bin" || fileType == "img") && !binImgFilesCache.empty() && binImgFilesCache.size() != files.size() && !isFiltered) {
 			files = binImgFilesCache;
-		} else if ((fileType == "mdf") && !mdfMdsFilesCache.empty() && !isFiltered) {
+		} else if ((fileType == "mdf") && !mdfMdsFilesCache.empty() && mdfMdsFilesCache.size() != files.size() && !isFiltered) {
 			files = mdfMdsFilesCache;
-		} else if ((fileType == "nrg") && !nrgFilesCache.empty() && !isFiltered) {
+		} else if ((fileType == "nrg") && !nrgFilesCache.empty() && nrgFilesCache.size() != files.size() && !isFiltered) {
 			files = nrgFilesCache;
 		}
         sortFilesCaseInsensitive(files); // Sort the files case-insensitively
