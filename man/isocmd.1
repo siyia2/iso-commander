@@ -46,11 +46,18 @@ Danny Kurniawan and Kerry Harris (ccd2iso).
 .TP
 .B ImportISO
 Creates and updates an ISO cache for fast and organized access:
+
 - The cache file has a maximum size of 10MB and supports up to 100,000 ISO entries.
 
 - Cache file locations:
   - User mode: \fI~/.cache/iso_commander_cache.txt\fR
   - Root mode: \fI/root/.cache/iso_commander_cache.txt\fR
+
+.TP
+.B AutoImportISO
+Automatically updates ISO cache by scanning all stored folder paths from readline history at every startup:
+
+- Enter 1 to enable or 0 to disable (default is 0).
 
 .TP
 .B Automatic ISO Cache Management
