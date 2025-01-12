@@ -1,6 +1,6 @@
 
 .\" Manpage for isocmd
-.TH ISOCMD 1 "January 2024" "Iso Commander 5.5.5" "Iso-Commander Manual"
+.TH ISOCMD 1 "January 2025" "Iso Commander 5.5.5" "Iso-Commander Manual"
 .SH NAME
 Iso Commander or isocmd.
 
@@ -50,14 +50,19 @@ Creates and updates an ISO cache for fast and organized access:
 - The cache file has a maximum size of 10MB and supports up to 100,000 ISO entries.
 
 - Cache file locations:
-  - User mode: \fI~/.cache/iso_commander_cache.txt\fR
-  - Root mode: \fI/root/.cache/iso_commander_cache.txt\fR
+  - User mode: \fI~/.local/share/isocmd/database/iso_commander_cache.txt\fR
+  - Root mode: \fI/root/.local/share/isocmd/database/iso_commander_cache.txt\fR
 
 .TP
 .B AutoImportISO
 Automatically updates ISO cache by scanning all stored folder paths from readline history at every startup:
 
 - Enter 1 to enable or 0 to disable (default is 0).
+
+- Configuration file location for AutoImportISO:
+  - User mode: \fI~/.config/isocmd/config/iso_commander_automatic.txt\fR
+  - Root mode: \fI/root/.config/isocmd/config/iso_commander_automatic.txt\fR
+
 
 .TP
 .B Automatic ISO Cache Management
@@ -101,12 +106,12 @@ Iso Commander uses readline history for saving file paths at scan prompts and at
 History can be browsed with up and down arrows at associated user prompts.
 
 - History file location for file paths:
-  - User mode: \fI~/.cache/iso_commander_history_cache.txt\fR
-  - Root mode: \fI/root/.cache/iso_commander_cache.txt\fR
+  - User mode: \fI~/.local/share/isocmd/database/iso_commander_history_cache.txt\fR
+  - Root mode: \fI/root/.local/share/isocmd/database/iso_commander_cache.txt\fR
 
 - History file location for filter tokens:
-  - User mode: \fI~/.cache/iso_commander_pattern_cache.txt\fR
-  - Root mode: \fI/root/.cache/iso_commander_pattern_cache.txt\fR
+  - User mode: \fI~/.local/share/isocmd/database/iso_commander_pattern_cache.txt\fR
+  - Root mode: \fI/root/.local/share/isocmd/database/iso_commander_pattern_cache.txt\fR
 
 - Max unique history entries:
   - File paths: 25
