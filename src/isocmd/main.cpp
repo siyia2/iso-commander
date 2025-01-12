@@ -391,7 +391,7 @@ void autoCacheImport(const std::string& filePath, int& maxDepth, bool& historyPa
         return;
     }
 
-    // Vector to store all paths
+    // Vector to store unique paths
     std::vector<std::string> paths;
 
     // Read the file line by line
@@ -401,38 +401,38 @@ void autoCacheImport(const std::string& filePath, int& maxDepth, bool& historyPa
         std::string path;
         while (std::getline(iss, path, ';')) {
             if (!path.empty() && path[0] == '/') { // Ensure paths start with '/'
-                // Add a trailing slash if it doesn't already have one
                 if (path.back() != '/') {
                     path += '/';
                 }
-                paths.push_back(path);
+                if (std::find(paths.begin(), paths.end(), path) == paths.end()) {
+                    paths.push_back(path);
+                }
             }
         }
     }
-
-    // Close the file
     file.close();
 
-    // Sort paths by length (shortest first)
-    std::sort(paths.begin(), paths.end(), [](const std::string& a, const std::string& b) {
-        return a.size() < b.size();
-    });
+	// Sort paths by length in ascending order for subdirectory check
+	std::sort(paths.begin(), paths.end(), [](const std::string& a, const std::string& b) {
+		return a.size() < b.size();
+	});
 
-    // Filter out subdirectories
-    std::vector<std::string> finalPaths;
-    for (const auto& path : paths) {
-        bool isSubdir = false;
-        for (const auto& parent : finalPaths) {
-            // Check if the current path is a subdirectory of any parent path
-            if (path.size() > parent.size() && path.substr(0, parent.size()) == parent && path[parent.size()] == '/') {
-                isSubdir = true;
-                break;
-            }
-        }
-        if (!isSubdir) {
-            finalPaths.push_back(path);
-        }
-    }
+	std::vector<std::string> finalPaths;
+	for (const auto& path : paths) {
+		bool isSubdir = false;
+		for (const auto& existingPath : finalPaths) {
+			if (path.size() >= existingPath.size() && 
+				path.compare(0, existingPath.size(), existingPath) == 0 && 
+				(existingPath.back() == '/' || path[existingPath.size()] == '/')) {
+				// Ensure the current path is a subdirectory or equal to an existing path
+				isSubdir = true;
+				break;
+			}
+		}
+		if (!isSubdir) {
+			finalPaths.push_back(path);
+		}
+	}
 
     // Build allPaths from final paths
     std::string allPaths;
