@@ -168,10 +168,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
 
 //	voids
 void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& umountMvRmBreak, bool& historyPattern, bool& verbose);
-void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, 
-    std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, 
-    const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete, 
-    std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks);
+void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks);
 
 // FILTER
 
