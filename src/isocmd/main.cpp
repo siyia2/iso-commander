@@ -401,6 +401,10 @@ void autoCacheImport(const std::string& filePath, int& maxDepth, bool& historyPa
         std::string path;
         while (std::getline(iss, path, ';')) {
             if (!path.empty() && path[0] == '/') { // Ensure paths start with '/'
+                // Add a trailing slash if it doesn't already have one
+                if (path.back() != '/') {
+                    path += '/';
+                }
                 paths.push_back(path);
             }
         }
