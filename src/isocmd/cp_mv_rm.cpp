@@ -310,6 +310,8 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     operationErrors.emplace(errorMessageInfo);
                     operationSuccessful = false;
                 }
+                // Increment task counter for delete operation
+                completedTasks->fetch_add(1, std::memory_order_relaxed);
             } else {
                 for (size_t i = 0; i < destDirs.size(); ++i) {
                     const auto& destDir = destDirs[i];
@@ -353,11 +355,11 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         ": \033[1;92m'" + srcDir + "/" + srcFile + "'\033[1m\033[0;1m" +
                         " to \033[1;94m'" + destDirProcessed + "/" + destFile + "'\033[0;1m.";
                     operationIsos.emplace(operationInfo);
+
+                    // Increment task counter for each destination path
+                    completedTasks->fetch_add(1, std::memory_order_relaxed);
                 }
             }
-
-            // Increment task counter regardless of success or failure
-            completedTasks->fetch_add(1, std::memory_order_relaxed);
         }
     };
 
