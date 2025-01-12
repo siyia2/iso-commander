@@ -208,7 +208,6 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
 
 namespace fs = std::filesystem;
 
-
 // Function to buffer file copying
 bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::atomic<size_t>* completedBytes, std::error_code& ec) {
 
