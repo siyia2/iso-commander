@@ -4,8 +4,8 @@
 
 
 // Default readline history save path
-const std::string historyFilePath = std::string(getenv("HOME")) + "/.cache/iso_commander_history_cache.txt";
-const std::string historyPatternFilePath = std::string(getenv("HOME")) + "/.cache/iso_commander_pattern_cache.txt";
+const std::string historyFilePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/iso_commander_history_cache.txt";
+const std::string historyPatternFilePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/iso_commander_pattern_cache.txt";
 
 //Maximum number of history entries at a time
 const int MAX_HISTORY_LINES = 25;
@@ -37,14 +37,24 @@ void loadHistory(bool& historyPattern) {
 // Function to save history from readline
 void saveHistory(bool& historyPattern) {
     std::ofstream historyFile;
-    
+
     // Choose file path based on historyPattern flag
     std::string targetFilePath = !historyPattern ? 
         historyFilePath : historyPatternFilePath;
-    
+
+    // Extract directory path from the target file path
+    std::filesystem::path dirPath = std::filesystem::path(targetFilePath).parent_path();
+
+    // Create the directory if it does not exist
+    if (!std::filesystem::exists(dirPath)) {
+        if (!std::filesystem::create_directories(dirPath)) {
+            return;  // Directory creation failed, exit function
+        }
+    }
+
     // Open file in truncate mode
     historyFile.open(targetFilePath, std::ios::out | std::ios::trunc);
-    
+
     if (!historyFile.is_open()) {
         return;
     }

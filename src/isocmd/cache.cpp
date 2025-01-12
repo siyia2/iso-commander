@@ -5,8 +5,8 @@
 
 // Cache Variables
 
-const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.cache"; // Construct the full path to the cache directory
-const std::string cacheFilePath = std::string(getenv("HOME")) + "/.cache/iso_commander_cache.txt";
+const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.local/share/isocmd/database/"; // Construct the full path to the cache directory
+const std::string cacheFilePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/iso_commander_cache.txt";
 const std::string cacheFileName = "iso_commander_cache.txt";
 const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
@@ -207,7 +207,7 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
 
 // Load cache
 void loadCache(std::vector<std::string>& isoFiles) {
-    std::string cacheFilePath = getHomeDirectory() + "/.cache/iso_commander_cache.txt";
+    std::string cacheFilePath = getHomeDirectory() + "/.local/share/isocmd/database/iso_commander_cache.txt";
 
     // Check if the cache file exists
     struct stat fileStat;
@@ -275,8 +275,15 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
     std::filesystem::path cachePath = cacheDirectory;
     cachePath /= cacheFileName;
 
-    // Check if cache directory exists
-    if (!std::filesystem::exists(cacheDirectory) || !std::filesystem::is_directory(cacheDirectory)) {
+    // Create the cache directory if it does not exist
+    if (!std::filesystem::exists(cacheDirectory)) {
+        if (!std::filesystem::create_directories(cacheDirectory)) {
+            return false;  // Directory creation failed
+        }
+    }
+
+    // Check if cache directory exists and is a directory
+    if (!std::filesystem::is_directory(cacheDirectory)) {
         return false;  // Cache save failed
     }
 
