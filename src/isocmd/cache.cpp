@@ -285,7 +285,8 @@ void backgroundCacheImport(int maxDepthParam) {
     isImportRunning.store(false);
 }
 
-// Load ISO cache
+
+// Function to load ISO cache from file
 void loadCache(std::vector<std::string>& isoFiles) {
     std::string cacheFilePath = getHomeDirectory() + "/.local/share/isocmd/database/iso_commander_cache.txt";
 
@@ -332,7 +333,7 @@ void loadCache(std::vector<std::string>& isoFiles) {
 }
 
 
-// Save ISO cache
+// Function to save ISO cache to file
 bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize) {
     std::filesystem::path cachePath = cacheDirectory;
     cachePath /= cacheFileName;
