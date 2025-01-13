@@ -412,8 +412,8 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         while (read(STDIN_FILENO, &ch, 1) > 0) {
             // Discard any input during progress
         }
-       // tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-       // fcntl(STDIN_FILENO, F_SETFL, oldf);
+       tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+       fcntl(STDIN_FILENO, F_SETFL, oldf);
         throw;
     }
     
@@ -434,7 +434,8 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     static const char* magenta = "\033[95m";
     static const char* magentaBold = "\033[95;1m";
     static const char* orangeBold = "\033[1;38;5;208m";
-    
+    static const char* grayBold = "\033[38;5;245m";
+        
     size_t maxIndex = items.size();
     size_t numDigits = std::to_string(maxIndex).length();
 
@@ -450,21 +451,37 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
 
     for (size_t i = 0; i < items.size(); ++i) {
         const char* sequenceColor = (i % 2 == 0) ? red : green;
-        std::string directory, filename, displayPath;
+        std::string directory, filename, displayPath, displayHash;
 
         if (listType == "ISO_FILES") {
             auto [dir, fname] = extractDirectoryAndFilename(items[i]);
             directory = dir;
             filename = fname;
         } else if (listType == "MOUNTED_ISOS") {
-            std::string dirName = items[i];
-            size_t lastSlashPos = dirName.find_last_of('/');
-            if (lastSlashPos != std::string::npos) {
-                dirName = dirName.substr(lastSlashPos + 1);
-            }
-            size_t underscorePos = dirName.find('_');
-            displayPath = ((underscorePos != std::string::npos) ? dirName.substr(underscorePos + 1) : dirName);
-        } else if (listType == "IMAGE_FILES") {
+			std::string dirName = items[i];
+    
+			// Find the position of the first underscore
+			size_t firstUnderscorePos = dirName.find('_');
+    
+			// Find the position of the last tilde
+			size_t lastTildePos = dirName.find_last_of('~');
+    
+			// Extract displayPath (after first underscore and before last tilde)
+			if (firstUnderscorePos != std::string::npos && lastTildePos != std::string::npos && lastTildePos > firstUnderscorePos) {
+				displayPath = dirName.substr(firstUnderscorePos + 1, lastTildePos - (firstUnderscorePos + 1));
+			} else {
+				// If the conditions are not met, use the entire dirName (or handle it as needed)
+				displayPath = dirName;
+			}
+    
+			// Extract displayHash (from last tilde to the end)
+			if (lastTildePos != std::string::npos) {
+				displayHash = dirName.substr(lastTildePos + 1);
+			} else {
+				// If no tilde is found, set displayHash to an empty string (or handle it as needed)
+				displayHash = "";
+			}
+		} else if (listType == "IMAGE_FILES") {
             auto [dir, fname] = extractDirectoryAndFilename(items[i]);
 
             bool isSpecialExtension = false;
@@ -494,7 +511,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         } else if (listType == "MOUNTED_ISOS") {
             output << sequenceColor << indexStrings[i] << ". "
                    << blueBold << "/mnt/iso_"
-                   << magentaBold << displayPath << reset << "\n";
+                   << magentaBold << displayPath << grayBold << "~" << displayHash << reset << "\n";
         } else if (listType == "IMAGE_FILES") {
 		// Alternate sequence color like in "ISO_FILES"
 		const char* sequenceColor = (i % 2 == 0) ? red : green;
