@@ -356,9 +356,9 @@ void saveAutomaticImportConfig(const std::string& filePath) {
 
     while (true) {
         clearScrollBuffer();
-        std::string prompt = "\001\033[0;1m\002Automatically scans isocmd's folder history (up to 25 entries) for ISO files and imports them into \001\033[1;92m\002on-disk \001\033[0;1m\002cache.\n"
+        std::string prompt = "\001\033[0;1m\002Automatically updates ISO cache in the background by scanning all stored folder paths from readline history (up to 25).\n"
                              "\001\033[1;93m\002Note: This feature may be resource intensive for older systems and is disabled by default.\001\033[0;1m\002"
-                             "\n\n\001\033[1;94m\002Configure automatic background ISO updates on startup (\001\033[1;92m\0021\001\033[1;94m\002/\001\033[1;91m\0020\001\033[1;94m\002), or \001\033[1;93m\002anyKey\001\033[1;94m\002 ↵ to return: \001\033[0;1m\002";
+                             "\n\n\001\033[1;94m\002Toggle automatic background ISO updates on every startup (\001\033[1;92m\0021\001\033[1;94m\002/\001\033[1;91m\0020\001\033[1;94m\002), or \001\033[1;93m\002anyKey\001\033[1;94m\002 ↵ to return: \001\033[0;1m\002";
         std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         std::string mainInputString(input.get());
 
