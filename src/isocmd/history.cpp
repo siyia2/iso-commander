@@ -16,13 +16,21 @@ const int MAX_HISTORY_PATTERN_LINES = 25;
 void loadHistory(bool& historyPattern) {
     // Only load history from file if it's not already populated in memory
     if (history_length == 0) {
-        std::ifstream file;
-        if (!historyPattern) {
-            file.open(historyFilePath);
-        } else {
-            file.open(historyPatternFilePath);
+        std::string targetFilePath = !historyPattern ? 
+            historyFilePath : historyPatternFilePath;
+
+        int fd = open(targetFilePath.c_str(), O_RDONLY);
+        if (fd == -1) {
+            return;  // File doesn't exist or couldn't be opened
         }
 
+        // Acquire a shared lock for reading
+        if (flock(fd, LOCK_SH) == -1) {
+            close(fd);
+            return;
+        }
+
+        std::ifstream file(targetFilePath);
         if (file.is_open()) {
             std::string line;
             while (std::getline(file, line)) {
@@ -30,15 +38,16 @@ void loadHistory(bool& historyPattern) {
             }
             file.close();
         }
+
+        // Release the lock and close the file descriptor
+        flock(fd, LOCK_UN);
+        close(fd);
     }
 }
 
 
 // Function to save history from readline
 void saveHistory(bool& historyPattern) {
-    std::ofstream historyFile;
-
-    // Choose file path based on historyPattern flag
     std::string targetFilePath = !historyPattern ? 
         historyFilePath : historyPatternFilePath;
 
@@ -52,15 +61,30 @@ void saveHistory(bool& historyPattern) {
         }
     }
 
-    // Open file in truncate mode
-    historyFile.open(targetFilePath, std::ios::out | std::ios::trunc);
+    int fd = open(targetFilePath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd == -1) {
+        return;  // Failed to open file
+    }
 
+    // Acquire an exclusive lock for writing
+    if (flock(fd, LOCK_EX) == -1) {
+        close(fd);
+        return;
+    }
+
+    std::ofstream historyFile(targetFilePath, std::ios::out | std::ios::trunc);
     if (!historyFile.is_open()) {
+        flock(fd, LOCK_UN);  // Release the lock
+        close(fd);
         return;
     }
 
     HIST_ENTRY **histList = history_list();
-    if (!histList) return;
+    if (!histList) {
+        flock(fd, LOCK_UN);  // Release the lock
+        close(fd);
+        return;
+    }
 
     std::unordered_map<std::string, size_t> lineIndices;
     std::vector<std::string> uniqueLines;
@@ -100,4 +124,8 @@ void saveHistory(bool& historyPattern) {
     }
 
     historyFile.close();
+
+    // Release the lock and close the file descriptor
+    flock(fd, LOCK_UN);
+    close(fd);
 }
