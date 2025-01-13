@@ -89,7 +89,7 @@ int main(int argc, char *argv[]) {
         print_ascii();
         
         if (isImportRunning.load()) {
-			std::cout << "\033[2m[AutoImportISO running in the background...]\033[0m\n";
+			std::cout << "\033[2m[AutoImportISO operates passively in the background...]\033[0m\n";
 		}
         
         // Display the main menu options
