@@ -204,8 +204,6 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
     return true;
 }
 
-// Global mutex for shared resources
-std::mutex cacheMutex;
 
 // Function to auto-import ISO files in cache withotu blocking the UI
 void backgroundCacheImport(int maxDepthParam) {
@@ -306,10 +304,17 @@ void loadCache(std::vector<std::string>& isoFiles) {
         return;
     }
 
+    // Acquire a shared lock using flock
+    if (flock(fd, LOCK_SH) == -1) {
+        close(fd);
+        return;
+    }
+
     const auto fileSize = fileStat.st_size;
 
     char* mappedFile = static_cast<char*>(mmap(nullptr, fileSize, PROT_READ, MAP_PRIVATE, fd, 0));
     if (mappedFile == MAP_FAILED) {
+        flock(fd, LOCK_UN);  // Release the lock
         close(fd);
         return;
     }
@@ -327,6 +332,7 @@ void loadCache(std::vector<std::string>& isoFiles) {
     }
 
     munmap(mappedFile, fileSize);
+    flock(fd, LOCK_UN);  // Release the lock
     close(fd);
 
     isoFiles.assign(uniqueIsoFiles.begin(), uniqueIsoFiles.end());
@@ -361,6 +367,17 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
         combinedCache.erase(combinedCache.begin());
     }
 
+    int fd = open(cachePath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd == -1) {
+        return false;
+    }
+
+    // Acquire an exclusive lock using flock
+    if (flock(fd, LOCK_EX) == -1) {
+        close(fd);
+        return false;
+    }
+
     std::ofstream cacheFile(cachePath, std::ios::out | std::ios::trunc);
     if (cacheFile.is_open()) {
         for (const std::string& iso : combinedCache) {
@@ -369,12 +386,18 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
 
         if (cacheFile.good()) {
             cacheFile.close();
+            flock(fd, LOCK_UN);  // Release the lock
+            close(fd);
             return true;
         } else {
             cacheFile.close();
+            flock(fd, LOCK_UN);  // Release the lock
+            close(fd);
             return false;
         }
     } else {
+        flock(fd, LOCK_UN);  // Release the lock
+        close(fd);
         return false;
     }
 }
