@@ -69,14 +69,14 @@ int main(int argc, char *argv[]) {
 			std::this_thread::sleep_for(std::chrono::milliseconds(500));
 		}
 		// Clear the line one last time after the loop exits
-		std::cout << "\033[1K";  // Clear the entire first line
+		std::cout << "\033[1K";  // Clear the first line
 		std::cout << "\033[2A";  // Move cursor up two lines
 		std::cout << "\033[2K";  // Clear the entire first line
 		std::cout << "\033[1A";  // Move cursor up one more line
 		std::cout << "\033[2K";  // Clear the entire second line (where your text is)
 		std::cout << "\033[2B";  // Move cursor back down to the original position
 		std::cout << "\033[2K";  // Clear the entire first line
-		std::cout << "\033[2A";  // Move cursor up one more line
+		std::cout << "\033[2A";  // Move cursor up two lines
 		rl_forced_update_display();
 	});
 
