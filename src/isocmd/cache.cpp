@@ -210,15 +210,20 @@ void backgroundCacheImport(int maxDepthParam) {
     std::vector<std::string> paths;
     int localMaxDepth = maxDepthParam;
     bool localPromptFlag = false;
-    
+
+    // Local condition variable and mutex
+    std::condition_variable cv;
+    std::mutex threadMutex;
+    std::atomic<size_t> activeThreads{0};
+
     // Read paths from file
     {
         std::ifstream file(historyFilePath);
         if (!file.is_open()) {
-			isImportRunning.store(false);  // Use atomic store instead of direct assignment
-			return;
-		}
-        
+            isImportRunning.store(false);
+            return;
+        }
+
         std::string line;
         while (std::getline(file, line)) {
             std::istringstream iss(line);
@@ -237,15 +242,15 @@ void backgroundCacheImport(int maxDepthParam) {
     }
 
     // Sort and filter paths
-    std::sort(paths.begin(), paths.end(), 
+    std::sort(paths.begin(), paths.end(),
         [](const std::string& a, const std::string& b) { return a.size() < b.size(); });
 
     std::vector<std::string> finalPaths;
     for (const auto& path : paths) {
         bool isSubdir = false;
         for (const auto& existingPath : finalPaths) {
-            if (path.size() >= existingPath.size() && 
-                path.compare(0, existingPath.size(), existingPath) == 0 && 
+            if (path.size() >= existingPath.size() &&
+                path.compare(0, existingPath.size(), existingPath) == 0 &&
                 (existingPath.back() == '/' || path[existingPath.size()] == '/')) {
                 isSubdir = true;
                 break;
@@ -256,26 +261,48 @@ void backgroundCacheImport(int maxDepthParam) {
         }
     }
 
-    // Process paths in background
+    // Process paths with thread limit
     std::vector<std::string> allIsoFiles;
     std::atomic<size_t> totalFiles{0};
     std::set<std::string> uniqueErrorMessages;
-    
-    // Create local mutexes for thread safety
     std::mutex processMutex;
     std::mutex traverseErrorMutex;
 
-    // Process each path
+    std::vector<std::future<void>> futures;
     for (const auto& path : finalPaths) {
         if (isValidDirectory(path)) {
-            traverse(path, allIsoFiles, uniqueErrorMessages, 
-                    totalFiles, processMutex, traverseErrorMutex, 
-                    localMaxDepth, localPromptFlag);
+            // Wait until the number of active threads is less than maxThreads
+            std::unique_lock<std::mutex> lock(threadMutex);
+            cv.wait(lock, [&]() { return activeThreads < maxThreads; });
+
+            // Increment the active thread count
+            activeThreads++;
+
+            // Launch the task asynchronously
+            futures.push_back(std::async(std::launch::async, [&, path]() {
+                traverse(path, allIsoFiles, uniqueErrorMessages,
+                         totalFiles, processMutex, traverseErrorMutex,
+                         localMaxDepth, localPromptFlag);
+
+                // Decrement the active thread count when done
+                {
+                    std::unique_lock<std::mutex> lock(threadMutex);
+                    activeThreads--;
+                }
+
+                // Notify the waiting thread that a thread has finished
+                cv.notify_one();
+            }));
         }
     }
-    
-	saveCache(allIsoFiles, maxCacheSize);
-    
+
+    // Wait for all tasks to complete
+    for (auto& future : futures) {
+        future.wait();
+    }
+
+    saveCache(allIsoFiles, maxCacheSize);
+
     isImportRunning.store(false);
 }
 
