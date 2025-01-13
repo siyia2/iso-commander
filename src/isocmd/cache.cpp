@@ -215,9 +215,9 @@ void backgroundCacheImport(int maxDepthParam) {
     {
         std::ifstream file(historyFilePath);
         if (!file.is_open()) {
-            isImportRunning.store(false);
-            return;
-        }
+			isImportRunning.store(false);  // Use atomic store instead of direct assignment
+			return;
+		}
         
         std::string line;
         while (std::getline(file, line)) {
@@ -235,10 +235,11 @@ void backgroundCacheImport(int maxDepthParam) {
             }
         }
     }
-    
+
     // Sort and filter paths
     std::sort(paths.begin(), paths.end(), 
         [](const std::string& a, const std::string& b) { return a.size() < b.size(); });
+
     std::vector<std::string> finalPaths;
     for (const auto& path : paths) {
         bool isSubdir = false;
@@ -254,15 +255,17 @@ void backgroundCacheImport(int maxDepthParam) {
             finalPaths.push_back(path);
         }
     }
-    
+
     // Process paths in background
     std::vector<std::string> allIsoFiles;
     std::atomic<size_t> totalFiles{0};
     std::set<std::string> uniqueErrorMessages;
     
+    // Create local mutexes for thread safety
     std::mutex processMutex;
     std::mutex traverseErrorMutex;
-    
+
+    // Process each path
     for (const auto& path : finalPaths) {
         if (isValidDirectory(path)) {
             traverse(path, allIsoFiles, uniqueErrorMessages, 
@@ -271,7 +274,8 @@ void backgroundCacheImport(int maxDepthParam) {
         }
     }
     
-    saveCache(allIsoFiles, maxCacheSize);
+	saveCache(allIsoFiles, maxCacheSize);
+    
     isImportRunning.store(false);
 }
 

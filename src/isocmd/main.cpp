@@ -11,27 +11,26 @@ std::atomic<bool> isImportRunning{false};
 // Global variables for cleanup
 int lockFileDescriptor = -1;
 
-
 // Main function
 int main(int argc, char *argv[]) {
-    // For enabling/disabling cache refresh prompt
-    bool promptFlag = true;
-    // For saving history to a differrent cache for FilterPatterns
-    bool historyPattern = false;
-    //Flag to enable/disable verboseoutput
-    bool verbose = false;
-    // Traverse depth for cache refresh
-    int maxDepth = -1;
-    
-    if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
+	// For enabling/disabling cache refresh prompt
+	bool promptFlag = true;
+	// For saving history to a differrent cache for FilterPatterns
+	bool historyPattern = false;
+	//Flag to enable/disable verboseoutput
+	bool verbose = false;
+	// Traverse depth for cache refresh
+	int maxDepth = -1;
+	
+	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
         printVersionNumber("5.5.5");
         return 0;
     }
-    
     // Readline use semicolon as delimiter
     rl_completer_word_break_characters = (char *)";";
 
     const char* lockFile = "/tmp/isocmd.lock";
+
     lockFileDescriptor = open(lockFile, O_CREAT | O_RDWR, 0666);
 
     if (lockFileDescriptor == -1) {
@@ -56,108 +55,92 @@ int main(int argc, char *argv[]) {
     signal(SIGTERM, signalHandler); // Handle termination signals
 
     bool exitProgram = false;
-    std::atomic<bool> shouldUpdateStatus{true};
     
-    // Create status update thread
-	std::thread statusThread([&]() {
-		while (shouldUpdateStatus.load()) {
-			if (isImportRunning.load()) {
-				// Move cursor to beginning of line and clear line
-				std::cout << "\r\033[K\033[2m[AutoImportISO running in the background...]\033[0m" << std::endl;
-			}
-			rl_forced_update_display();
-			std::this_thread::sleep_for(std::chrono::milliseconds(500));
-		}
-		// Clear the line one last time after the loop exits
-		std::cout << "\033[1K";  // Clear the first line
-		std::cout << "\033[2A";  // Move cursor up two lines
-		std::cout << "\033[2K";  // Clear the entire first line
-		std::cout << "\033[1A";  // Move cursor up one more line
-		std::cout << "\033[2K";  // Clear the entire second line (where your text is)
-		std::cout << "\033[2B";  // Move cursor back down to the original position
-		std::cout << "\033[2K";  // Clear the entire first line
-		std::cout << "\033[2A";  // Move cursor up two lines
-		rl_forced_update_display();
-	});
-
-	// Automatic ISO cache Import
-	bool search;
-	const std::string automaticFilePath = std::string(getenv("HOME")) + "/.config/isocmd/config/iso_commander_automatic.txt";
-
-	// Open the history file for automatic ISO cache imports
-	std::ifstream file(historyFilePath);
-	if (!file.is_open()) {
-		search = false;
-	} else {
+    // Automatic ISO  cache Import
+    bool search;
+    const std::string automaticFilePath = std::string(getenv("HOME")) + "/.config/isocmd/config/iso_commander_automatic.txt";
+    
+    std::string choice;
+    
+    // Open the history file for automatic ISO cache imports
+    std::ifstream file(historyFilePath);
+    if (!file.is_open()) {
+        search = false;
+    } else {
 		search = readUserConfigForAutoImport(automaticFilePath);
 	}    
-
+    
 	if (search) {
-		isImportRunning.store(true);
-		std::thread([maxDepth, &shouldUpdateStatus]() {
+		isImportRunning = true;
+		std::thread([maxDepth]() {
 			backgroundCacheImport(maxDepth);
-			isImportRunning.store(false); // Import is done
-			shouldUpdateStatus.store(false); // Signal status thread to stop
 		}).detach();
 	}
+	
+	// End of automatic cache import
 
     while (!exitProgram) {
-        // Calls prevent_clear_screen and tab completion
-        rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
-        rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
-        
-        globalIsoFileList.reserve(100);
+		// Calls prevent_clear_screen and tab completion
+		rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
+		rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
+
+		globalIsoFileList.reserve(100);
         clearScrollBuffer();
         print_ascii();
         
+        if (isImportRunning.load()) {
+			std::cout << "\033[2m[AutoImportISO running in the background...]\033[0m\n";
+		}
+        
         // Display the main menu options
         printMenu();
-        
+
         // Clear history
         clear_history();
-        
+
         // Prompt for the main menu choice
         char* rawInput = readline("\n\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
+
         std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
-        
+
+        std::string mainInputString(input.get());
+
         if (!input.get()) {
             break; // Exit the program if readline returns NULL (e.g., on EOF or Ctrl+D)
         }
-        
-        std::string choice(input.get());
-        
+
+
+        std::string choice(mainInputString);
+
         if (choice == "1") {
             submenu1(maxDepth, historyPattern, verbose);
-        } else if (choice.length() == 1) {
-            switch (choice[0]) {
-                case '2':
-                    submenu2(promptFlag, maxDepth, historyPattern, verbose);
-                    break;
-                case '3':
-                    manualRefreshCache("", promptFlag, maxDepth, historyPattern);
-                    clearScrollBuffer();
-                    break;
-                case '4':
-                    clearScrollBuffer();
-                    saveAutomaticImportConfig(automaticFilePath);
-                    clearScrollBuffer();
-                    break;
-                case '5':
-                    exitProgram = true;
-                    clearScrollBuffer();
-                    break;
-                default:
-                    break;
+        } else {
+            // Check if the input length is exactly 1
+            if (choice.length() == 1) {
+                switch (choice[0]) {
+                    case '2':
+                        submenu2(promptFlag, maxDepth, historyPattern, verbose);
+                        break;
+                    case '3':
+                        manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+                        clearScrollBuffer();
+                        break;
+                    case '4':
+						clearScrollBuffer();
+                        saveAutomaticImportConfig(automaticFilePath);
+                        clearScrollBuffer();
+                        break;
+                    case '5':
+                        exitProgram = true; // Exit the program
+                        clearScrollBuffer();
+                        break;
+                    default:
+                        break;
+                }
             }
         }
     }
-    
-    // Cleanup before exit
-    shouldUpdateStatus.store(false);
-    if (statusThread.joinable()) {
-        statusThread.join();
-    }
-    
+
     close(lockFileDescriptor); // Close the file descriptor, releasing the lock
     unlink(lockFile); // Remove the lock file
     return 0;
