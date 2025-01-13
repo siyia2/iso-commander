@@ -274,11 +274,7 @@ void backgroundCacheImport(int maxDepthParam) {
         }
     }
     
-    // Lock the shared cacheMutex before calling saveCache
-    {
-        std::lock_guard<std::mutex> lock(cacheMutex);
-        saveCache(allIsoFiles, maxCacheSize);
-    }
+	saveCache(allIsoFiles, maxCacheSize);
     
     isImportRunning.store(false);
 }
