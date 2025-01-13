@@ -204,46 +204,116 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
     return true;
 }
 
+// Global mutex for shared resources
+std::mutex cacheMutex;
 
-// Load cache
+// Function to auto-import ISO files in cache withotu blocking the UI
+void backgroundCacheImport(int maxDepthParam) {
+    std::vector<std::string> paths;
+    int localMaxDepth = maxDepthParam;
+    bool localPromptFlag = false;
+    
+    // Read paths from file
+    {
+        std::ifstream file(historyFilePath);
+        if (!file.is_open()) {
+			isImportRunning.store(false);  // Use atomic store instead of direct assignment
+			return;
+		}
+        
+        std::string line;
+        while (std::getline(file, line)) {
+            std::istringstream iss(line);
+            std::string path;
+            while (std::getline(iss, path, ';')) {
+                if (!path.empty() && path[0] == '/') {
+                    if (path.back() != '/') {
+                        path += '/';
+                    }
+                    if (std::find(paths.begin(), paths.end(), path) == paths.end()) {
+                        paths.push_back(path);
+                    }
+                }
+            }
+        }
+    }
+
+    // Sort and filter paths
+    std::sort(paths.begin(), paths.end(), 
+        [](const std::string& a, const std::string& b) { return a.size() < b.size(); });
+
+    std::vector<std::string> finalPaths;
+    for (const auto& path : paths) {
+        bool isSubdir = false;
+        for (const auto& existingPath : finalPaths) {
+            if (path.size() >= existingPath.size() && 
+                path.compare(0, existingPath.size(), existingPath) == 0 && 
+                (existingPath.back() == '/' || path[existingPath.size()] == '/')) {
+                isSubdir = true;
+                break;
+            }
+        }
+        if (!isSubdir) {
+            finalPaths.push_back(path);
+        }
+    }
+
+    // Process paths in background
+    std::vector<std::string> allIsoFiles;
+    std::atomic<size_t> totalFiles{0};
+    std::set<std::string> uniqueErrorMessages;
+    
+    // Create local mutexes for thread safety
+    std::mutex processMutex;
+    std::mutex traverseErrorMutex;
+
+    // Process each path
+    for (const auto& path : finalPaths) {
+        if (isValidDirectory(path)) {
+            traverse(path, allIsoFiles, uniqueErrorMessages, 
+                    totalFiles, processMutex, traverseErrorMutex, 
+                    localMaxDepth, localPromptFlag);
+        }
+    }
+    
+    // Lock the shared cacheMutex before calling saveCache
+    {
+        std::lock_guard<std::mutex> lock(cacheMutex);
+        saveCache(allIsoFiles, maxCacheSize);
+    }
+    
+    isImportRunning.store(false);
+}
+
+// Load ISO cache
 void loadCache(std::vector<std::string>& isoFiles) {
     std::string cacheFilePath = getHomeDirectory() + "/.local/share/isocmd/database/iso_commander_cache.txt";
 
     // Check if the cache file exists
     struct stat fileStat;
     if (stat(cacheFilePath.c_str(), &fileStat) == -1) {
-        // File doesn't exist, handle error or just return
         return;
     }
 
-    // Check if the file is empty
     if (fileStat.st_size == 0) {
-		isoFiles.clear();  // Clear the vector to ensure we don't retain old data
-        return;  // File is empty, no need to process
+        isoFiles.clear();
+        return;
     }
 
-    // Open the file for memory mapping
     int fd = open(cacheFilePath.c_str(), O_RDONLY);
     if (fd == -1) {
-        // Handle error if unable to open the file
         return;
     }
 
-    // Get the file size
     const auto fileSize = fileStat.st_size;
 
-    // Memory map the file
     char* mappedFile = static_cast<char*>(mmap(nullptr, fileSize, PROT_READ, MAP_PRIVATE, fd, 0));
     if (mappedFile == MAP_FAILED) {
-        // Handle error if unable to map the file
         close(fd);
         return;
     }
 
-    // Use a set to store unique lines
     std::set<std::string> uniqueIsoFiles;
-
-    // Process the memory-mapped file
     char* start = mappedFile;
     char* end = mappedFile + fileSize;
     while (start < end) {
@@ -255,22 +325,14 @@ void loadCache(std::vector<std::string>& isoFiles) {
         start = lineEnd + 1;
     }
 
-    // Unmap the file
     munmap(mappedFile, fileSize);
     close(fd);
 
-    // Convert the set to the vector reference
     isoFiles.assign(uniqueIsoFiles.begin(), uniqueIsoFiles.end());
 }
 
 
-// Function to check if filepath exists
-bool exists(const std::filesystem::path& path) {
-    return std::filesystem::exists(path);
-}
-
-
-// Save cache
+// Save ISO cache
 bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize) {
     std::filesystem::path cachePath = cacheDirectory;
     cachePath /= cacheFileName;
@@ -278,48 +340,48 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
     // Create the cache directory if it does not exist
     if (!std::filesystem::exists(cacheDirectory)) {
         if (!std::filesystem::create_directories(cacheDirectory)) {
-            return false;  // Directory creation failed
+            return false;
         }
     }
 
-    // Check if cache directory exists and is a directory
     if (!std::filesystem::is_directory(cacheDirectory)) {
-        return false;  // Cache save failed
+        return false;
     }
 
-    // Load the existing cache into a local vector
     std::vector<std::string> existingCache;
     loadCache(existingCache);
 
-    // Combine new and existing entries and remove duplicates
     std::set<std::string> combinedCache(existingCache.begin(), existingCache.end());
     for (const std::string& iso : isoFiles) {
         combinedCache.insert(iso);
     }
 
-    // Limit the cache size to the maximum allowed size
     while (combinedCache.size() > maxCacheSize) {
         combinedCache.erase(combinedCache.begin());
     }
 
-    // Open the cache file in write mode (truncating it)
     std::ofstream cacheFile(cachePath, std::ios::out | std::ios::trunc);
     if (cacheFile.is_open()) {
         for (const std::string& iso : combinedCache) {
             cacheFile << iso << "\n";
         }
 
-        // Check if writing to the file was successful
         if (cacheFile.good()) {
             cacheFile.close();
-            return true;  // Cache save successful
+            return true;
         } else {
             cacheFile.close();
-            return false;  // Cache save failed
+            return false;
         }
     } else {
-        return false;  // Cache save failed
+        return false;
     }
+}
+
+
+// Function to check if filepath exists
+bool exists(const std::filesystem::path& path) {
+    return std::filesystem::exists(path);
 }
 
 
