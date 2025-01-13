@@ -474,9 +474,9 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
 				displayPath = dirName;
 			}
     
-			// Extract displayHash (from last tilde to the end)
+			// Extract displayHash (from last tilde to the end, including the last tilde)
 			if (lastTildePos != std::string::npos) {
-				displayHash = dirName.substr(lastTildePos + 1);
+				displayHash = dirName.substr(lastTildePos); // Start at lastTildePos instead of lastTildePos + 1
 			} else {
 				// If no tilde is found, set displayHash to an empty string (or handle it as needed)
 				displayHash = "";
@@ -511,7 +511,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         } else if (listType == "MOUNTED_ISOS") {
             output << sequenceColor << indexStrings[i] << ". "
                    << blueBold << "/mnt/iso_"
-                   << magentaBold << displayPath << grayBold << "~" << displayHash << reset << "\n";
+                   << magentaBold << displayPath << grayBold << displayHash << reset << "\n";
         } else if (listType == "IMAGE_FILES") {
 		// Alternate sequence color like in "ISO_FILES"
 		const char* sequenceColor = (i % 2 == 0) ? red : green;
