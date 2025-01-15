@@ -64,7 +64,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     }
 
     clearScrollBuffer();
-    std::cout << "\033[1m\n";
+    std::cout << "\n\033[0;1m Processing " + operationColor + process + "\033[0;1m operations...\n";
 
     std::vector<std::string> filesToProcess;
     for (const auto& index : processedIndices) {

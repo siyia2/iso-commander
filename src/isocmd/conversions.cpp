@@ -368,7 +368,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         } else {
             // Process other input commands for file processing
             clearScrollBuffer();
-            std::cout << "\n\033[0;1m";
+            std::cout << "\n\033[0;1m Processing \001\033[1;38;5;208m\002" + fileExtensionWithOutDots + "\033[0;1m conversions...\n";
             processInput(mainInputString, files, (fileType == "mdf"), (fileType == "nrg"), processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, promptFlag, maxDepth, historyPattern, verbose);
             if (verbose) verbosePrint(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, 3); // Print detailed logs if verbose mode is enabled
         }

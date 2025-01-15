@@ -131,7 +131,7 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& selected
 
     // Clear buffer and print start message
     clearScrollBuffer();
-    std::cout << "\n\033[0;1m";
+    std::cout << "\n\033[0;1m Processing \033[1;93mumount\033[0;1m operations...\n";
 
     // Chunking logic
     unsigned int numThreads = std::min(static_cast<unsigned int>(selectedIsoDirs.size()), maxThreads);
