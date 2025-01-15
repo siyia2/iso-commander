@@ -8,7 +8,7 @@ const std::string historyFilePath = std::string(getenv("HOME")) + "/.local/share
 const std::string historyPatternFilePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/iso_commander_pattern_cache.txt";
 
 //Maximum number of history entries at a time
-const int MAX_HISTORY_LINES = 25;
+const int MAX_HISTORY_LINES = 50;
 
 const int MAX_HISTORY_PATTERN_LINES = 25;
 
