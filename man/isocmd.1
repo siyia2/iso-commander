@@ -101,21 +101,21 @@ Iso Commander leverages the readline library for enhanced line-editing capabilit
 
 .TP
 .B File path&Filter token history
-Iso Commander uses readline history for saving file paths at scan prompts and at filter prompts for saving tokens.
+Iso Commander uses readline history for saving folder paths and filter patterns at their respective prompts.
 .br
 History can be browsed with up and down arrows at associated user prompts.
 
-- History file location for file paths:
+- History file location for folder paths:
   - User mode: \fI~/.local/share/isocmd/database/iso_commander_history_cache.txt\fR
   - Root mode: \fI/root/.local/share/isocmd/database/iso_commander_cache.txt\fR
 
-- History file location for filter tokens:
+- History file location for filter patterns:
   - User mode: \fI~/.local/share/isocmd/database/iso_commander_pattern_cache.txt\fR
   - Root mode: \fI/root/.local/share/isocmd/database/iso_commander_pattern_cache.txt\fR
 
 - Max unique history entries:
-  - File paths: 25
-  - Filter tokens: 25
+  - Folder paths: 50
+  - Filter patterns: 25
 
 When the history limit is reached, the oldest entries are replaced by new ones.
   
