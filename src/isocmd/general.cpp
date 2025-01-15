@@ -147,7 +147,6 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
 			: (!isUnmount ? globalIsoFileList : isoDirs);
 
             clearScrollBuffer();
-            std::cout << "\033[1m\n";
             needsClrScrn = true;
 
             if (isMount && inputString == "00") {
@@ -158,7 +157,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
             } else if (isMount){
 				clearScrollBuffer();
                 needsClrScrn = true;
-                std::cout << "\033[0;1m\n";
+                std::cout << "\033[0;1m";
 					processAndMountIsoFiles(inputString, currentFiles, operationFiles, skippedMessages, operationFails, uniqueErrorMessages, verbose);
 			} else if (isUnmount) {
             // Unmount-specific logic
