@@ -210,6 +210,7 @@ void backgroundCacheImport(int maxDepthParam) {
     std::vector<std::string> paths;
     int localMaxDepth = maxDepthParam;
     bool localPromptFlag = false;
+    const size_t maxThreadsX2 = (std::thread::hardware_concurrency() == 0 ? 4 : std::thread::hardware_concurrency()) * 2;
 
     // Local condition variable and mutex
     std::condition_variable cv;
@@ -279,9 +280,9 @@ void backgroundCacheImport(int maxDepthParam) {
     std::vector<std::future<void>> futures;
     for (const auto& path : finalPaths) {
         if (isValidDirectory(path)) {
-            // Wait until the number of active threads is less than maxThreads
+            // Wait until the number of active threads is less than maxThreads * 2
             std::unique_lock<std::mutex> lock(threadMutex);
-            cv.wait(lock, [&]() { return activeThreads < maxThreads; });
+            cv.wait(lock, [&]() { return activeThreads < maxThreadsX2; });
 
             // Increment the active thread count
             activeThreads++;
