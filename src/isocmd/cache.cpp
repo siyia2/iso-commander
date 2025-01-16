@@ -240,6 +240,14 @@ void backgroundCacheImport(int maxDepthParam) {
             }
         }
     }
+    
+    // Exclude root path '/' only when there are other paths
+    if (paths.size() > 1) {
+        auto it = std::find(paths.begin(), paths.end(), "/");
+        if (it != paths.end()) {
+            paths.erase(it);
+        }
+    }
 
     // Sort and filter paths
     std::sort(paths.begin(), paths.end(),
