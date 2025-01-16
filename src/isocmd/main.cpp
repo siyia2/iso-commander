@@ -5,9 +5,6 @@
 // Get max available CPU cores for global use, fallback is 2 cores
 unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
-// Indicator for AutoImportISO
-std::atomic<bool> isImportRunning{false};
-
 // Global variables for cleanup
 int lockFileDescriptor = -1;
 
@@ -21,6 +18,8 @@ int main(int argc, char *argv[]) {
 	bool verbose = false;
 	// Traverse depth for cache refresh
 	int maxDepth = -1;
+	// Atomic flag for AutoImportISO
+	std::atomic<bool> isImportRunning;
 	
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
         printVersionNumber("5.5.6");
@@ -61,7 +60,7 @@ int main(int argc, char *argv[]) {
     const std::string automaticFilePath = std::string(getenv("HOME")) + "/.config/isocmd/config/iso_commander_automatic.txt";
     
     std::string choice;
-    
+    isImportRunning.store(false);
     // Open the history file for automatic ISO cache imports
     std::ifstream file(historyFilePath);
     if (!file.is_open()) {
@@ -71,9 +70,9 @@ int main(int argc, char *argv[]) {
 	}    
     
 	if (search) {
-		isImportRunning = true;
-		std::thread([maxDepth]() {
-			backgroundCacheImport(maxDepth);
+		isImportRunning.store(true);
+		std::thread([maxDepth, &isImportRunning]() {
+			backgroundCacheImport(maxDepth, isImportRunning);
 		}).detach();
 	}
 	

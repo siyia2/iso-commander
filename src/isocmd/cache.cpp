@@ -206,7 +206,7 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
 
 
 // Function to auto-import ISO files in cache without blocking the UI
-void backgroundCacheImport(int maxDepthParam) {
+void backgroundCacheImport(int maxDepthParam, std::atomic<bool>& isImportRunning) {
     std::vector<std::string> paths;
     int localMaxDepth = maxDepthParam;
     bool localPromptFlag = false;
