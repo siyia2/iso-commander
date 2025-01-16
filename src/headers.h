@@ -52,9 +52,6 @@ extern const std::string cacheFileName;
 // For toggling between full and shortened paths in lists
 extern bool toggleFullList;
 
-// Atomic flag for AutoImportISO
-extern std::atomic<bool> isImportRunning;
-
 // Cache for directory and filename transformations
 extern std::unordered_map<std::string, std::string> transformationCache;
 
@@ -160,7 +157,7 @@ void delCacheAndShowStats (std::string& inputSearch, const bool& promptFlag, con
 void loadCache(std::vector<std::string>& isoFiles);
 void manualRefreshCache(const std::string& initialDir = "", bool promptFlag = true, int maxDepth = -1, bool historyPattern = false);
 void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, std::atomic<size_t>& totalFiles, std::mutex& traverseFilesMutex, std::mutex& traverseErrorsMutex, int& maxDepth, bool& promptFlag);
-void backgroundCacheImport(int maxDepthParam);
+void backgroundCacheImport(int maxDepthParam, std::atomic<bool>& isImportRunning);
 void removeNonExistentPathsFromCache();
 
 
