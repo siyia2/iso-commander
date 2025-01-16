@@ -671,7 +671,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
         }
 
         // Update display one final time if needed
-        if (promptFlag && totalFiles > 0) {
+        if (promptFlag && totalFiles == 0) {
             std::cout << "\r\033[0;1mTotal files processed: " << totalFiles << std::flush;
         }
 
