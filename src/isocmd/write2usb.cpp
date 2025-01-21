@@ -156,7 +156,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
     bool validDevice = false;
     
     do {
-        std::string devicePrompt = "\n\001\033[1;92m\002UsbBlockDevice \001\033[1;94m\002↵ (e.g., /dev/sdc), or ↵ to return:\001\033[0;1m\002 ";
+        std::string devicePrompt = "\n\001\033[1;92m\002RemovableBlockDevice \001\033[1;94m\002↵ (e.g., /dev/sdc), or ↵ to return:\001\033[0;1m\002 ";
         std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(devicePrompt.c_str()), &std::free);
         
         if (!searchQuery || searchQuery.get()[0] == '\0') {
@@ -167,7 +167,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         add_history(device.c_str());  // Add to readline history
         
         if (!isUsbDevice(device)) {
-            std::cout << "\n\033[1;91mError: '\033[1;93m" << device << "\033[1;91m' is not a USB device.\033[0;1m\n";
+            std::cout << "\n\033[1;91mError: '\033[1;93m" << device << "\033[1;91m' is not a removable device.\033[0;1m\n";
             std::cout << "\033[1;92m\n↵ to try again...";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             clearScrollBuffer();
@@ -197,9 +197,9 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         
         // Display confirmation prompt
         clearScrollBuffer();
-        std::cout << "\033[1;94m\nWriting the following ISO file to the USB device will permanently erase all its data:\n\n";
+        std::cout << "\033[1;94m\nWriting the following ISO file to the removable device will permanently erase all its data:\n\n";
         std::cout << "\033[0;1mISO File: \033[1;92m" << isoPath << "\033[0;1m (\033[1;95m" << isoFileSizeStr << "\033[0;1m)\n";
-        std::cout << "\033[0;1mUSB Device: \033[1;93m" << device << " \033[0;1m(\033[1;95m" << std::fixed << std::setprecision(1) << deviceSizeGB << " GBb\033[0;1m)\n";
+        std::cout << "\033[0;1mRemovable Device: \033[1;93m" << device << " \033[0;1m(\033[1;95m" << std::fixed << std::setprecision(1) << deviceSizeGB << " GBb\033[0;1m)\n";
         
         rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
         rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
@@ -273,7 +273,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, con
     // Open the device with O_DIRECT
     int device_fd = open(device.c_str(), O_WRONLY | O_DIRECT);
     if (device_fd == -1) {
-        std::cerr << "\n\n\033[1;91mCannot open USB device: '\033[1;93m" << device << "\033[1;91m' (" << strerror(errno) << ").\n";
+        std::cerr << "\n\n\033[1;91mCannot open removable device: '\033[1;93m" << device << "\033[1;91m' (" << strerror(errno) << ").\n";
         return false;
     }
 
