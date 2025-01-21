@@ -62,9 +62,6 @@ extern const std::string historyFilePath;
 // Max cache size limit for IsoCache
 extern const uintmax_t maxCacheSize;
 
-// Global flag to track cancellation for write2usb
-extern std::atomic<bool> w_cancelOperation;
-
 
 //	ISO COMMANDER
 
@@ -191,7 +188,6 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, con
 bool isDeviceMounted(const std::string& device);
 
 //voids
-void asyncCleanup(int device_fd);
 bool writeIsoToDevice(const std::string& isoPath, const std::string& device);
 void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles);
 
