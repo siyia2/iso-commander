@@ -119,7 +119,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         bool validDevice = false;
         
         do {
-            std::string devicePrompt = "\n\033[1;94mEnter the block device (e.g., /dev/sdc) or press Enter to quit:\033[0;1m ";
+            std::string devicePrompt = "\n\001\033[1;92m\002UsbBlockDevice \001\033[1;94m\002↵ (e.g., /dev/sdc), or ↵ to return:\001\033[0;1m\002 ";
             std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(devicePrompt.c_str()), &std::free);
             
             if (!searchQuery || searchQuery.get()[0] == '\0') {
@@ -149,7 +149,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
             
             // Display confirmation prompt
             clearScrollBuffer();
-            std::cout << "\033[1;94m\nYou are about to write the following ISO to the USB device:\n\n";
+            std::cout << "\033[1;94m\nYou are about to write the following ISO file to the USB device:\n\n";
             std::cout << "\033[0;1mISO File: \033[1;92m" << isoPath << "\033[0;1m (\033[1;95m" << isoFileSizeStr << "\033[0;1m)\n";
             std::cout << "\033[0;1mUSB Device: \033[1;93m" << device << " \033[0;1m(\033[1;95m" << std::fixed << std::setprecision(1) << deviceSizeGB << " GBb\033[0;1m)\n";
             
@@ -169,10 +169,13 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
                 return;
             }
             
+            // Write ISO to device
+			std::cout << "\033[0;1m\nWriting: \033[1;92m" << isoPath << "\033[0;1m -> \033[1;93m" << device << "\033[0;1m\n";
+            
             if (writeIsoToDevice(isoPath, device)) {
-                std::cout << "\033[0;1mISO written to device successfully!\n";
+                std::cout << "\033[0;1mISO file written to device successfully!\n";
             } else {
-                std::cerr << "\033[1;91mFailed to write ISO to device.\033[0;1m\n";
+                std::cerr << "\033[1;91mFailed to write ISO file to device.\033[0;1m\n";
             }
             
         } while (!validDevice);
@@ -197,20 +200,20 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device) {
 
     std::ifstream iso(isoPath, std::ios::binary);
     if (!iso) {
-        std::cerr << "Cannot open ISO file: " << isoPath << " (" << strerror(errno) << ")\n";
+        std::cerr << "\n\n\033[1;91mCannot open ISO file: " << isoPath << " (" << strerror(errno) << ")\n";
         return false;
     }
 
     int device_fd = open(device.c_str(), O_WRONLY);
     if (device_fd == -1) {
-        std::cerr << "Cannot open USB device: " << device << " (" << strerror(errno) << ")\n";
+        std::cerr << "\n\n\033[1;91mCannot open USB device: " << device << " (" << strerror(errno) << ")\n";
         return false;
     }
 
     // Get ISO file size
     std::streamsize fileSize = std::filesystem::file_size(isoPath);
     if (fileSize <= 0) {
-        std::cerr << "Invalid ISO file size: " << fileSize << "\n";
+        std::cerr << "\n\n\033[1;91mInvalid ISO file size: " << fileSize << "\n";
         close(device_fd);
         return false;
     }
@@ -219,8 +222,6 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device) {
     std::vector<char> buffer(BUFFER_SIZE);
     std::streamsize totalWritten = 0;
 
-    // Write ISO to device
-    std::cout << "\nWriting ISO to device...\n";
 
     while (totalWritten < fileSize) {
         std::streamsize bytesToRead = std::min(BUFFER_SIZE, fileSize - totalWritten);
@@ -228,14 +229,14 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device) {
         std::streamsize bytesRead = iso.gcount();
 
         if (bytesRead <= 0) {
-            std::cerr << "Read error or end of file reached prematurely.\n";
+            std::cerr << "\n\n\033[1;91mRead error or end of file reached prematurely.\n";
             close(device_fd);
             return false;
         }
 
         ssize_t bytesWritten = write(device_fd, buffer.data(), bytesRead);
         if (bytesWritten == -1) {
-            std::cerr << "Write error: " << strerror(errno) << "\n";
+            std::cerr << "\n\n\033[1;91mWrite error: " << strerror(errno) << "\n";
             close(device_fd);
             return false;
         }
@@ -251,7 +252,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device) {
     fsync(device_fd);
     close(device_fd);
 
-    std::cout << "\nWrite completed successfully!\n";
+    std::cout << "\n\n\033[1;92mWrite completed successfully!\n";
     return true;
 }
 
