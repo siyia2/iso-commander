@@ -213,7 +213,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
             clear_history();
             // Display confirmation prompt
             clearScrollBuffer();
-            std::cout << "\033[1;94m\nYou are about to write the following ISO file to the USB device:\n\n";
+            std::cout << "\033[1;94m\nWriting the following ISO file to the USB device will permanently erase all its data:\n\n";
             std::cout << "\033[0;1mISO File: \033[1;92m" << isoPath << "\033[0;1m (\033[1;95m" << isoFileSizeStr << "\033[0;1m)\n";
             std::cout << "\033[0;1mUSB Device: \033[1;93m" << device << " \033[0;1m(\033[1;95m" << std::fixed << std::setprecision(1) << deviceSizeGB << " GBb\033[0;1m)\n";
             
@@ -221,7 +221,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
 			rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
             
             std::string confirmation;
-			std::string prompt = "\n\033[1;94mAre you sure you want to proceed? (y/n):\033[0;1m ";
+			std::string prompt = "\n\033[1;94mProceed? (y/n):\033[0;1m ";
             
             std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
 			std::string mainInputString(input.get());
