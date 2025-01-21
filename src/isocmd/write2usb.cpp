@@ -181,8 +181,10 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
             }
             disableInput();
 			std::cout << "\033[0;1m\nWriting: \033[1;92m" << isoPath << "\033[0;1m -> \033[1;93m" << device << "\033[0;1m, \033[1;91mCtrl + c\033[0;1m to cancel\033[0;1m\n";
-        
-			bool writeSuccess = writeIsoToDevice(isoPath, device);
+			// Start time measurement
+			auto start_time = std::chrono::high_resolution_clock::now();
+			
+			bool writeSuccess = writeIsoToDevice(isoPath, device, start_time);
         
 			// Restore signal handling to default
 			struct sigaction sa;
@@ -198,7 +200,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
 			} else {
 				std::cerr << "\n\033[1;91mFailed to write ISO file to device.\033[0;1m\n";
 			}
-        
+
 			// Flush and Restore input after processing
 			flushStdin();
 			restoreInput();
@@ -231,8 +233,9 @@ void asyncCleanup(int device_fd) {
 
 
 // Function to write ISO to usb device
-bool writeIsoToDevice(const std::string& isoPath, const std::string& device) {
+bool writeIsoToDevice(const std::string& isoPath, const std::string& device, const std::chrono::high_resolution_clock::time_point& start_time) {
     constexpr std::streamsize BUFFER_SIZE = 8 * 1024 * 1024; // 8 MB buffer
+    bool flushComplete = false;
     // Set up signal handler
     struct sigaction sa;
     sa.sa_handler = signalHandlerWrite;
@@ -265,13 +268,13 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device) {
 
     std::vector<char> buffer(BUFFER_SIZE);
     std::streamsize totalWritten = 0;
-	 // Start time measurement
-    auto startTime = std::chrono::high_resolution_clock::now();
+	
     while (totalWritten < fileSize) {
         // Check for cancellation
         if (w_cancelOperation.load()) {
             std::thread cleanupThread(asyncCleanup, device_fd);
             cleanupThread.detach(); // Detach the thread to run independently
+            flushComplete = false;
             return false;
         }
 
@@ -282,6 +285,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device) {
         if (bytesRead <= 0) {
             std::cerr << "\n\n\033[1;91mRead error or end of file reached prematurely.\n";
             close(device_fd);
+            flushComplete = true;
             return false;
         }
 
@@ -289,35 +293,34 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device) {
         if (bytesWritten == -1) {
             std::cerr << "\n\n\033[1;91mWrite error: " << strerror(errno) << "\n";
             close(device_fd);
+            flushComplete = true;
             return false;
         }
 
         totalWritten += bytesWritten;
-        
-        // Calculate elapsed time
-        auto currentTime = std::chrono::high_resolution_clock::now();
-        auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime);
-        double elapsedSeconds = elapsedTime.count() / 1000.0;
 
         // Show progress
         int progress = static_cast<int>((static_cast<double>(totalWritten) / fileSize) * 100);
-        std::cout << "\rProgress: " << progress << "%" 
-        << " Time Elapsed: " << std::setprecision(1) << elapsedSeconds << "s"
-        << std::flush;
+        std::cout << "\rProgress: " << progress << "%" << std::flush;
+        
         if (progress == 100) {
-			std::cout << "\n\n\033[0;1mFlushing the remaining data to \033[1;93m" << device << "\033[0;1m. Please wait..." << std::flush;
-		}
+            std::cout << "\n\n\033[0;1mFlushing any remaining data to \033[1;93m" << device << "\033[0;1m. Please wait..." << std::flush;
+        }
     }
 
-    // Only show completion message if not cancelled
-    if (!w_cancelOperation.load()) {
-		// Ensure all data is written
-		fsync(device_fd);
-		close(device_fd);
-        std::cout << "\n\n\033[1;92mWrite completed successfully!\n";
-        return true;
-    }
+    // Ensure all data is written
+    fsync(device_fd);
+    close(device_fd);
+    flushComplete = true;
 
-    return false;
+    // Calculate and print the elapsed time after flushing is complete
+    auto end_time = std::chrono::high_resolution_clock::now();
+    auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
+
+    // Print the time taken for the entire process in bold with one decimal place
+    std::cout << "\n\n\033[1;92mWrite completed successfully!\033[0;1m\n";
+    std::cout << "\n\033[0;1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n";
+
+    return true;
 }
 
