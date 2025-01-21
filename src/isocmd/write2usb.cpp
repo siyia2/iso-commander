@@ -221,12 +221,12 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
 
 // Function to async cleanup usb on cancel
 void asyncCleanup(int device_fd) {
-    // Perform cleanup tasks
-    fsync(device_fd); // Ensure all data is written
-    close(device_fd); // Close the device
-    
+    // Skip fsync for faster cleanup (if data integrity is not critical)
+    //fsync(device_fd);
+    close(device_fd);
+
     // Reset cancellation flag
-    w_cancelOperation.store(false);
+    w_cancelOperation.store(false, std::memory_order_release);
 }
 
 

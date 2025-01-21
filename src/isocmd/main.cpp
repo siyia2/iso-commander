@@ -134,7 +134,7 @@ int main(int argc, char *argv[]) {
                         clearScrollBuffer();
                         if (w_cancelOperation.load()) {
 							disableInput();
-							std::cerr << "\n\033[1;93mCleaning up after write2usb please wait...\033[0;1m\n";
+							std::cerr << "\n\033[1;93mCleaning up after write2usb please wait...\033[0m\n";
 						}
                         break;
                     default:
