@@ -35,52 +35,19 @@ uint64_t getBlockDeviceSize(const std::string& device) {
 
 // Function to check if block device is usb
 bool isUsbDevice(const std::string& device) {
-    struct udev *udev;
-    struct udev_device *dev;
-    const char *removable;
+    // Check if the device exists in /sys/block/
+    std::string deviceName = device.substr(device.find_last_of('/') + 1);
+    std::string sysPath = "/sys/block/" + deviceName + "/removable";
 
-    // Create the udev context
-    udev = udev_new();
-    if (!udev) {
+    // Check if it's removable
+    std::ifstream removableFile(sysPath);
+    if (!removableFile) {
         return false;
     }
 
-    // Extract the device name from the full path
-    size_t lastSlash = device.find_last_of('/');
-    if (lastSlash == std::string::npos) {
-        udev_unref(udev);
-        return false;
-    }
-    std::string deviceName = device.substr(lastSlash + 1);
-
-    // Create a udev device object from the device name
-    dev = udev_device_new_from_subsystem_sysname(udev, "block", deviceName.c_str());
-    if (!dev) {
-        udev_unref(udev);
-        return false;
-    }
-
-    // Check if the device is removable
-    removable = udev_device_get_sysattr_value(dev, "removable");
-    if (!removable || std::string(removable) != "1") {
-        udev_device_unref(dev);
-        udev_unref(udev);
-        return false;
-    }
-
-    // Traverse the device's parent hierarchy to check if it is connected via USB
-    struct udev_device *parent = udev_device_get_parent_with_subsystem_devtype(dev, "usb", "usb_device");
-    if (!parent) {
-        udev_device_unref(dev);
-        udev_unref(udev);
-        return false;
-    }
-
-    // Clean up
-    udev_device_unref(dev);
-    udev_unref(udev);
-
-    return true;
+    std::string removable;
+    std::getline(removableFile, removable);
+    return (removable == "1");
 }
 
 
