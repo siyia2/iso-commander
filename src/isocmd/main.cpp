@@ -132,6 +132,10 @@ int main(int argc, char *argv[]) {
                     case '5':
                         exitProgram = true; // Exit the program
                         clearScrollBuffer();
+                        if (w_cancelOperation.load()) {
+							disableInput();
+							std::cerr << "\n\033[1;93mCleaning up after write2usb please wait...\033[0;1m\n";
+						}
                         break;
                     default:
                         break;

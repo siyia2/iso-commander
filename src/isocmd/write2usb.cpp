@@ -1,12 +1,12 @@
 #include "../headers.h"
 
 // Global flag to track cancellation for write2usb
-std::atomic<bool> g_cancelOperation(false);
+std::atomic<bool> w_cancelOperation(false);
 
 // Signal handler for write2usb
 void signalHandlerWrite(int signum) {
     if (signum == SIGINT) {
-        g_cancelOperation.store(true);
+        w_cancelOperation.store(true);
     }
 }
 
@@ -193,8 +193,8 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         
 			if (writeSuccess) {
 				std::cout << "\n\033[0;1mISO file written to device successfully!\n";
-			} else if (g_cancelOperation.load()) {
-				std::cerr << "\n\n\033[1;93mOperation was cancelled, cleanup will run in the background...\033[0;1m\n";
+			} else if (w_cancelOperation.load()) {
+				std::cerr << "\n\n\033[1;93mOperation was cancelled, cleanup process will run in the background...\033[0;1m\n";
 			} else {
 				std::cerr << "\n\033[1;91mFailed to write ISO file to device.\033[0;1m\n";
 			}
@@ -224,10 +224,13 @@ void asyncCleanup(int device_fd) {
     // Perform cleanup tasks
     fsync(device_fd); // Ensure all data is written
     close(device_fd); // Close the device
+    
+    // Reset cancellation flag
+    w_cancelOperation.store(false);
 }
 
 
-// Function to write ISO to usb
+// Function to write ISO to usb device
 bool writeIsoToDevice(const std::string& isoPath, const std::string& device) {
     constexpr std::streamsize BUFFER_SIZE = 8 * 1024 * 1024; // 8 MB buffer
 
@@ -239,7 +242,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device) {
     sigaction(SIGINT, &sa, nullptr);
 
     // Reset cancellation flag
-    g_cancelOperation.store(false);
+    w_cancelOperation.store(false);
 
     std::ifstream iso(isoPath, std::ios::binary);
     if (!iso) {
@@ -266,7 +269,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device) {
 
     while (totalWritten < fileSize) {
         // Check for cancellation
-        if (g_cancelOperation.load()) {
+        if (w_cancelOperation.load()) {
             std::thread cleanupThread(asyncCleanup, device_fd);
             cleanupThread.detach(); // Detach the thread to run independently
             return false;
@@ -301,7 +304,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device) {
     close(device_fd);
 
     // Only show completion message if not cancelled
-    if (!g_cancelOperation.load()) {
+    if (!w_cancelOperation.load()) {
         std::cout << "\n\n\033[1;92mWrite completed successfully!\n";
         return true;
     }
