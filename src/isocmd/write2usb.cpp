@@ -247,7 +247,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
 			sigaction(SIGINT, &sa, nullptr);
         
 			if (writeSuccess) {
-				std::cout << "\n\033[1;92mWrite2Usb completed successfully!\033[0;1m\n";
+				std::cout << "\n\033[1;92mISO file written successfully to device!\033[0;1m\n";
 			} else if (w_cancelOperation.load()) {
 				std::cerr << "\n\n\033[1;93mWrite operation was cancelled...\033[0;1m\n";
 			} else {
