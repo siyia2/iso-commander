@@ -25,7 +25,17 @@ uint64_t getBlockDeviceSize(const std::string& device) {
 void processToken(const std::string& input, std::vector<std::string>& isoFiles) {
     clearScrollBuffer();
 
-    // Check if the input is a valid integer
+    // Check if the input is a valid integer and contains only digits
+    for (char ch : input) {
+        if (!isdigit(ch)) {
+			clearScrollBuffer();
+            std::cerr << "Error: Input must be a single integer. Aborting.\n";
+            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            return;
+        }
+    }
+
     try {
         int index = std::stoi(input);
         
