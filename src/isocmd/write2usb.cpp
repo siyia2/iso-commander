@@ -180,7 +180,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
                 return;
             }
             disableInput();
-			std::cout << "\033[0;1m\nWriting: \033[1;92m" << isoPath << "\033[0;1m -> \033[1;93m" << device << "\033[0;1m\n";
+			std::cout << "\033[0;1m\nWriting: \033[1;92m" << isoPath << "\033[0;1m -> \033[1;93m" << device << "\033[0;1m, \033[1;91mCtrl + c\033[0;1m to cancel\033[0;1m\n";
         
 			bool writeSuccess = writeIsoToDevice(isoPath, device);
         
@@ -233,7 +233,6 @@ void asyncCleanup(int device_fd) {
 // Function to write ISO to usb device
 bool writeIsoToDevice(const std::string& isoPath, const std::string& device) {
     constexpr std::streamsize BUFFER_SIZE = 8 * 1024 * 1024; // 8 MB buffer
-
     // Set up signal handler
     struct sigaction sa;
     sa.sa_handler = signalHandlerWrite;
@@ -266,7 +265,8 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device) {
 
     std::vector<char> buffer(BUFFER_SIZE);
     std::streamsize totalWritten = 0;
-
+	 // Start time measurement
+    auto startTime = std::chrono::high_resolution_clock::now();
     while (totalWritten < fileSize) {
         // Check for cancellation
         if (w_cancelOperation.load()) {
@@ -293,18 +293,27 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device) {
         }
 
         totalWritten += bytesWritten;
+        
+        // Calculate elapsed time
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime);
+        double elapsedSeconds = elapsedTime.count() / 1000.0;
 
         // Show progress
         int progress = static_cast<int>((static_cast<double>(totalWritten) / fileSize) * 100);
-        std::cout << "\rProgress: " << progress << "%" << std::flush;
+        std::cout << "\rProgress: " << progress << "%" 
+        << " Time Elapsed: " << std::setprecision(1) << elapsedSeconds << "s"
+        << std::flush;
+        if (progress == 100) {
+			std::cout << "\n\n\033[0;1mFlushing the remaining data to \033[1;93m" << device << "\033[0;1m. Please wait..." << std::flush;
+		}
     }
-
-    // Ensure all data is written
-    fsync(device_fd);
-    close(device_fd);
 
     // Only show completion message if not cancelled
     if (!w_cancelOperation.load()) {
+		// Ensure all data is written
+		fsync(device_fd);
+		close(device_fd);
         std::cout << "\n\n\033[1;92mWrite completed successfully!\n";
         return true;
     }
