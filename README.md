@@ -54,11 +54,13 @@ For best experience execute with: `sudo isocmd`.
 - ISOFs
 
 
-🔄 Powerful Conversion Toolkit Integrating:
+⚙️ Supported Operations:
 
-* ccd2iso
-* mdf2iso
-* nrg2iso
+* Mount/Unmount ISO
+* Copy/Move ISO
+* Delete ISO
+* Write ISO to USB
+* Convert (.bin/.img/.mdf/.nrg) to ISO
 
 ## Make dependencies
 - Archlinux: `readline util-linux`.
