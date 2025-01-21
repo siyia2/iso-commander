@@ -78,7 +78,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
     for (char ch : input) {
         if (!isdigit(ch)) {
             clearScrollBuffer();
-            std::cerr << "Error: Input must be a single integer. Aborting.\n";
+            std::cerr << "\033[1;91m\nInput must be a valid integer for write2usb.\n";
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             return;
@@ -94,7 +94,10 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         
         // Ensure the index is within the bounds of the isoFiles vector
         if (index < 1 || static_cast<size_t>(index) > isoFiles.size()) {
-            std::cerr << "\033[1;91mError: Invalid index. Aborting.\033[0;1m\n";
+			clearScrollBuffer();
+            std::cerr << "\n\033[1;91mInvalid input for write2usb.\033[0;1m\n";
+            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             return;
         }
         
