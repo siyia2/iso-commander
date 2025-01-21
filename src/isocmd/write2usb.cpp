@@ -2,14 +2,13 @@
 
 #include "../headers.h"
 
-
 // Global flag to track cancellation for write2usb
-std::atomic<bool> w_cancelOperation(false);
+std::atomic<bool> g_cancelOperation(false);
 
 // Signal handler for write2usb
 void signalHandlerWrite(int signum) {
     if (signum == SIGINT) {
-        w_cancelOperation.store(true);
+        g_cancelOperation.store(true);
     }
 }
 
@@ -127,6 +126,7 @@ bool isDeviceMounted(const std::string& device) {
 // Function to prepare writing ISO to usb
 void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
     clearScrollBuffer();
+    
     // Check if the input is a valid integer and contains only digits
     for (char ch : input) {
         if (!isdigit(ch)) {
@@ -248,7 +248,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         
 			if (writeSuccess) {
 				std::cout << "\n\033[1;92mISO file written successfully to device!\033[0;1m\n";
-			} else if (w_cancelOperation.load()) {
+			} else if (g_cancelOperation.load()) {
 				std::cerr << "\n\n\033[1;93mWrite operation was cancelled...\033[0;1m\n";
 			} else {
 				std::cerr << "\n\033[1;91mFailed to write ISO file to device.\033[0;1m\n";
@@ -286,7 +286,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, con
     sigaction(SIGINT, &sa, nullptr);
 
     // Reset cancellation flag
-    w_cancelOperation.store(false);
+    g_cancelOperation.store(false);
 
     std::ifstream iso(isoPath, std::ios::binary);
     if (!iso) {
@@ -318,7 +318,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, con
 
     while (totalWritten < fileSize) {
         // Check for cancellation
-        if (w_cancelOperation.load()) {
+        if (g_cancelOperation.load()) {
             close(device_fd);
             return false;
         }
