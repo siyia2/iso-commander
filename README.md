@@ -64,8 +64,8 @@ For best experience execute with: `sudo isocmd`.
 * Convert (.bin/.img/.mdf/.nrg) to ISO
 
 ## Make dependencies
-- Archlinux: `readline util-linux systemd`.
-- Debian: `libreadline-dev libmount-dev libudev-dev`.
+- Archlinux: `readline util-linux`.
+- Debian: `libreadline-dev libmount-dev`.
 
 ## Ways to Install
 * Download the binary from latest release.
