@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GNU General Public License v3.0 or later
+
 #include "../headers.h"
 
 // Global flag to track cancellation for write2usb
@@ -235,7 +237,6 @@ void asyncCleanup(int device_fd) {
 // Function to write ISO to usb device
 bool writeIsoToDevice(const std::string& isoPath, const std::string& device, const std::chrono::high_resolution_clock::time_point& start_time) {
     constexpr std::streamsize BUFFER_SIZE = 8 * 1024 * 1024; // 8 MB buffer
-    bool flushComplete = false;
     // Set up signal handler
     struct sigaction sa;
     sa.sa_handler = signalHandlerWrite;
@@ -274,7 +275,6 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, con
         if (w_cancelOperation.load()) {
             std::thread cleanupThread(asyncCleanup, device_fd);
             cleanupThread.detach(); // Detach the thread to run independently
-            flushComplete = false;
             return false;
         }
 
@@ -285,7 +285,6 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, con
         if (bytesRead <= 0) {
             std::cerr << "\n\n\033[1;91mRead error or end of file reached prematurely.\n";
             close(device_fd);
-            flushComplete = true;
             return false;
         }
 
@@ -293,7 +292,6 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, con
         if (bytesWritten == -1) {
             std::cerr << "\n\n\033[1;91mWrite error: " << strerror(errno) << "\n";
             close(device_fd);
-            flushComplete = true;
             return false;
         }
 
@@ -311,7 +309,6 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, con
     // Ensure all data is written
     fsync(device_fd);
     close(device_fd);
-    flushComplete = true;
 
     // Calculate and print the elapsed time after flushing is complete
     auto end_time = std::chrono::high_resolution_clock::now();
