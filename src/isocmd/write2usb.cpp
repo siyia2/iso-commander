@@ -290,21 +290,21 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, con
 
     std::ifstream iso(isoPath, std::ios::binary);
     if (!iso) {
-        std::cerr << "\n\n\033[1;91mCannot open ISO file: " << isoPath << " (" << strerror(errno) << ")\n";
+        std::cerr << "\n\n\033[1;91mCannot open ISO file: \033[1;93m" << isoPath << "\033[1;93m (" << strerror(errno) << ").\n";
         return false;
     }
 
     // Open the device with O_DIRECT
     int device_fd = open(device.c_str(), O_WRONLY | O_DIRECT);
     if (device_fd == -1) {
-        std::cerr << "\n\n\033[1;91mCannot open USB device: " << device << " (" << strerror(errno) << ")\n";
+        std::cerr << "\n\n\033[1;91mCannot open USB device: \033[1;93m" << device << "\033[1;91m (" << strerror(errno) << ").\n";
         return false;
     }
 
     // Get ISO file size
     std::streamsize fileSize = std::filesystem::file_size(isoPath);
     if (fileSize <= 0) {
-        std::cerr << "\n\n\033[1;91mInvalid ISO file size: " << fileSize << "\n";
+        std::cerr << "\n\n\033[1;91mInvalid ISO file size: \033[1;93m" << fileSize << "\033[1;91m.\n";
         close(device_fd);
         return false;
     }
@@ -335,7 +335,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, con
 
         ssize_t bytesWritten = write(device_fd, alignedBuffer, bytesRead);
         if (bytesWritten == -1) {
-            std::cerr << "\n\n\033[1;91mWrite error: " << strerror(errno) << "\n";
+            std::cerr << "\n\n\033[1;91mWrite error: " << strerror(errno) << ".\n";
             close(device_fd);
             return false;
         }
