@@ -274,14 +274,6 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
 }
 
 
-// Function to async cleanup usb on cancel
-void asyncCleanup(int device_fd) {
-    // Skip fsync for faster cleanup (if data integrity is not critical)
-    //fsync(device_fd);
-    close(device_fd);
-}
-
-
 // Function to write ISO to usb device
 bool writeIsoToDevice(const std::string& isoPath, const std::string& device, const std::chrono::high_resolution_clock::time_point& start_time) {
     constexpr std::streamsize BUFFER_SIZE = 8 * 1024 * 1024; // 8 MB buffer
@@ -380,8 +372,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, con
         if (w_cancelOperation.load()) {
             error_occurred.store(true);
             reader.join();
-            std::thread cleanupThread(asyncCleanup, device_fd);
-            cleanupThread.detach();
+            close(device_fd);
             
             // Cleanup aligned buffers
             for (void* buf : buffers) {
