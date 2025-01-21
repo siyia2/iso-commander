@@ -194,7 +194,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
             // Check if device or its partitions are mounted
             if (isDeviceMounted(device)) {
                 std::cout << "\n\033[1;91mError: \033[1;93m" << device << "\033[1;91m or its partitions are currently mounted.\033[0;1m\n";
-                std::cout << "\033[0;1mPlease unmount all partitions of " << device << " before proceeding.\n";
+                std::cout << "\n\033[0;1mPlease unmount all \033[1;93m" << device << "\033[0;1m partitions before proceeding.\n";
                 std::cout << "\033[1;92m\n↵ to try again...";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 clearScrollBuffer();
