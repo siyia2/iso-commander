@@ -16,6 +16,7 @@
 #include <fstream>
 #include <functional>
 #include <future>
+#include <libudev.h>
 #include <grp.h>
 #include <iostream>
 #include <libmount/libmount.h>
@@ -186,7 +187,7 @@ void toLowerInPlace(std::string& str);
 bool writeIsoToDevice(const std::string& isoPath, const std::string& device);
 
 //voids
-void processToken(const std::string& input, std::vector<std::string>& isoFiles);
+void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles);
 
 // CONVERSION TOOLS
 
