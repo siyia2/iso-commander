@@ -152,14 +152,13 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         isoFileSizeStr = oss.str();
     }
     
-    // Device selection loop
-    bool validDevice = false;
-    
+    // Device selection loop    
     do {
         std::string devicePrompt = "\n\001\033[1;92m\002RemovableBlockDevice \001\033[1;94m\002↵ (e.g., /dev/sdc), or ↵ to return:\001\033[0;1m\002 ";
         std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(devicePrompt.c_str()), &std::free);
         
         if (!searchQuery || searchQuery.get()[0] == '\0') {
+			clear_history();
             return;
         }
         
@@ -193,9 +192,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
             continue;
         }
         
-        validDevice = true;
         double deviceSizeGB = static_cast<double>(deviceSize) / (1024 * 1024 * 1024);
-        clear_history();
         
         // Display confirmation prompt
         clearScrollBuffer();
@@ -216,7 +213,8 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
             std::cout << "\n\033[1;93mOperation aborted by user.\033[0;1m\n";
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            return;
+            clearScrollBuffer();  // Clear the screen before looping back
+			continue;
         }
         
         disableInput();
@@ -245,8 +243,9 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         // Flush and Restore input after processing
         flushStdin();
         restoreInput();
-    } while (!validDevice);
+    } while (true);
     
+    clear_history();
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
