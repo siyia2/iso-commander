@@ -187,7 +187,8 @@ void toLowerInPlace(std::string& str);
 // WRITE2USB
 
 //bools
-bool writeIsoToDevice(const std::string& isoPath, const std::string& device);
+bool writeIsoToDevice(const std::string& isoPath, const std::string& device, const std::chrono::high_resolution_clock::time_point& start_time);
+bool isDeviceMounted(const std::string& device);
 
 //voids
 void asyncCleanup(int device_fd);
