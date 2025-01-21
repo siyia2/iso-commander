@@ -188,8 +188,8 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, con
 bool isDeviceMounted(const std::string& device);
 
 //voids
-bool writeIsoToDevice(const std::string& isoPath, const std::string& device);
 void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles);
+void signalHandlerWrite(int signum);
 
 // CONVERSION TOOLS
 
