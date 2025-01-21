@@ -233,7 +233,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
                 return;
             }
             disableInput();
-			std::cout << "\033[0;1m\nWriting: \033[1;92m" << isoPath << "\033[0;1m -> \033[1;93m" << device << "\033[0;1m, \033[1;91mCtrl + c\033[0;1m to cancel\033[0;1m\n";
+			std::cout << "\033[0;1m\nWriting: \033[1;92m" << isoPath << "\033[0;1m -> \033[1;93m" << device << "\033[0;1m || \033[1;91mCtrl + c\033[0;1m to cancel\033[0;1m\n";
 			// Start time measurement
 			auto start_time = std::chrono::high_resolution_clock::now();
 			
