@@ -177,7 +177,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
             needsClrScrn = true;
                  
         } else if (write2Usb) {
-				processToken(inputString, currentFiles);
+				writeToUsb(inputString, currentFiles);
 		} else {
             // Generic operation processing for copy, move, remove
             std::cout << "\033[0;1m\n";
