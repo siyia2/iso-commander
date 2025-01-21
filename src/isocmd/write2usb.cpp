@@ -186,8 +186,10 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         
         uint64_t deviceSize = getBlockDeviceSize(device);
         if (deviceSize == 0) {
+            std::cerr << "\n\033[1;91mError: Unable to determine block device size, cannot proceed. Ensure Root privileges are acquired.\033[0;1m\n";
+            std::cout << "\033[1;92m\n↵ to continue...";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             clearScrollBuffer();
-            std::cerr << "\n\033[1;91mError: Unable to determine block device size.\033[0;1m\n";
             continue;
         }
         
