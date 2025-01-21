@@ -1,6 +1,5 @@
 #include "../headers.h"
 
-constexpr size_t BUFFER_SIZE = 8 * 1024 * 1024;  // 8MB buffer
 
 // Function to get the size of a block device
 uint64_t getBlockDeviceSize(const std::string& device) {
@@ -151,8 +150,8 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
             // Display confirmation prompt
             clearScrollBuffer();
             std::cout << "\033[1;94m\nYou are about to write the following ISO to the USB device:\n\n";
-            std::cout << "\033[0;1mISO File: \033[1;92m" << isoPath << " (\033[1;95m" << isoFileSizeStr << "\033[0;1m)\n";
-            std::cout << "\033[0;1mUSB Device: \033[1;93m" << device << " (\033[1;95m" << std::fixed << std::setprecision(1) << deviceSizeGB << " GBb)\n";
+            std::cout << "\033[0;1mISO File: \033[1;92m" << isoPath << "\033[0;1m (\033[1;95m" << isoFileSizeStr << "\033[0;1m)\n";
+            std::cout << "\033[0;1mUSB Device: \033[1;93m" << device << " \033[0;1m(\033[1;95m" << std::fixed << std::setprecision(1) << deviceSizeGB << " GBb\033[0;1m)\n";
             
             rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
 			rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
@@ -188,29 +187,28 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         std::cerr << "\033[1;91mError: " << e.what() << ". Aborting.\033[0;1m\n";
         return;
     }
+    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
 
 bool writeIsoToDevice(const std::string& isoPath, const std::string& device) {
-    constexpr std::streamsize BUFFER_SIZE = 4096; // Define buffer size
+    constexpr std::streamsize BUFFER_SIZE = 8 * 1024 * 1024; // 8 MB buffer
 
     std::ifstream iso(isoPath, std::ios::binary);
     if (!iso) {
-        std::cerr << "Cannot open ISO file: " << isoPath << "\n";
+        std::cerr << "Cannot open ISO file: " << isoPath << " (" << strerror(errno) << ")\n";
         return false;
     }
 
-    int device_fd = open(device.c_str(), O_WRONLY | O_SYNC);
+    int device_fd = open(device.c_str(), O_WRONLY);
     if (device_fd == -1) {
-        std::cerr << "Cannot open USB device: " << device << "\n";
+        std::cerr << "Cannot open USB device: " << device << " (" << strerror(errno) << ")\n";
         return false;
     }
 
     // Get ISO file size
-    iso.seekg(0, std::ios::end);
-    std::streamsize fileSize = iso.tellg();
-    iso.seekg(0, std::ios::beg);
-
+    std::streamsize fileSize = std::filesystem::file_size(isoPath);
     if (fileSize <= 0) {
         std::cerr << "Invalid ISO file size: " << fileSize << "\n";
         close(device_fd);
@@ -218,18 +216,15 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device) {
     }
 
     // Buffer for copying
-    char buffer[BUFFER_SIZE];
+    std::vector<char> buffer(BUFFER_SIZE);
     std::streamsize totalWritten = 0;
 
     // Write ISO to device
-    std::cout << "Writing ISO to device...\n";
+    std::cout << "\nWriting ISO to device...\n";
 
     while (totalWritten < fileSize) {
-        // Calculate the number of bytes to read in this iteration
         std::streamsize bytesToRead = std::min(BUFFER_SIZE, fileSize - totalWritten);
-
-        // Read data from the ISO file
-        iso.read(buffer, bytesToRead);
+        iso.read(buffer.data(), bytesToRead);
         std::streamsize bytesRead = iso.gcount();
 
         if (bytesRead <= 0) {
@@ -238,8 +233,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device) {
             return false;
         }
 
-        // Write data to the device
-        ssize_t bytesWritten = write(device_fd, buffer, bytesRead);
+        ssize_t bytesWritten = write(device_fd, buffer.data(), bytesRead);
         if (bytesWritten == -1) {
             std::cerr << "Write error: " << strerror(errno) << "\n";
             close(device_fd);
@@ -249,7 +243,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device) {
         totalWritten += bytesWritten;
 
         // Show progress
-        int progress = (totalWritten * 100) / fileSize;
+        int progress = static_cast<int>((static_cast<double>(totalWritten) / fileSize) * 100);
         std::cout << "\rProgress: " << progress << "%" << std::flush;
     }
 
@@ -260,3 +254,4 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device) {
     std::cout << "\nWrite completed successfully!\n";
     return true;
 }
+
