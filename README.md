@@ -20,6 +20,7 @@ For best experience execute with: `sudo isocmd`.
 
 * Minimizes disk thrashing.
 * Optimizes file access performance.
+* Optional automatic cache updates.
 
 
 🖥️ Advanced Terminal Interface:
