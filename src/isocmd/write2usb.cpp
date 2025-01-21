@@ -2,6 +2,7 @@
 
 #include "../headers.h"
 
+
 // Global flag to track cancellation for write2usb
 std::atomic<bool> w_cancelOperation(false);
 
@@ -11,6 +12,7 @@ void signalHandlerWrite(int signum) {
         w_cancelOperation.store(true);
     }
 }
+
 
 // Function to get the size of a block device
 uint64_t getBlockDeviceSize(const std::string& device) {
