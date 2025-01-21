@@ -1,12 +1,12 @@
 CXX = g++
 CXXFLAGS = -O3 -Wall -Wextra -flto -fmerge-all-constants -fdata-sections -ffunction-sections -fno-plt -fno-rtti
-LIBS = -lreadline -lmount -ludev
-LDFLAGS = -lreadline -lmount -ludev -flto -ffunction-sections -fdata-sections -fno-plt -Wl,--gc-sections -Wl,--strip-all -Wl,--as-needed -Wl,-z,relro -Wl,-z,now
+LIBS = -lreadline -lmount
+LDFLAGS = -lreadline -lmount -flto -ffunction-sections -fdata-sections -fno-plt -Wl,--gc-sections -Wl,--strip-all -Wl,--as-needed -Wl,-z,relro -Wl,-z,now
 
 # Flags for static builds
 #CXX = g++
 #CXXFLAGS = -O3 -Wall -Wextra -flto -fmerge-all-constants -fdata-sections -ffunction-sections -fno-plt -fno-rtti
-#LIBS = -static -L/usr/lib -lreadline -lmount -ludev -lncurses -lblkid -leconf -lintl -flto -ffunction-sections -fdata-sections -fno-plt
+#LIBS = -static -L/usr/lib -lreadline -lmount -lncurses -lblkid -leconf -lintl -flto -ffunction-sections -fdata-sections -fno-plt
 #LDFLAGS = -Wl,--gc-sections -Wl,--strip-all -Wl,--as-needed -Wl,-z,relro -Wl,-z,now
 
 # Use the number of available processors from nproc
