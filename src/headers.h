@@ -180,6 +180,13 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
 // voids
 void toLowerInPlace(std::string& str);
 
+// WRITE2USB
+
+//bools
+bool writeIsoToDevice(const std::string& isoPath, const std::string& device);
+
+//voids
+void processToken(const std::string& input, std::vector<std::string>& isoFiles);
 
 // CONVERSION TOOLS
 
