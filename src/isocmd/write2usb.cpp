@@ -35,9 +35,26 @@ uint64_t getBlockDeviceSize(const std::string& device) {
 
 // Function to check if block device is usb
 bool isUsbDevice(const std::string& device) {
+    // Resolve symbolic links to get the actual device path
+    char resolvedPath[PATH_MAX];
+    if (realpath(device.c_str(), resolvedPath) == nullptr) {
+        return false;
+    }
+
+    // Extract the device name (e.g., "sdb" from "/dev/sdb")
+    std::string devicePath(resolvedPath);
+    std::string deviceName = devicePath.substr(devicePath.find_last_of('/') + 1);
+
+    // Reject partitions (e.g., "sdb1", "sda2")
+    if (deviceName.find_first_of("0123456789") != std::string::npos) {
+        return false; // Partitions are not allowed
+    }
+
     // Check if the device exists in /sys/block/
-    std::string deviceName = device.substr(device.find_last_of('/') + 1);
     std::string sysPath = "/sys/block/" + deviceName + "/removable";
+    if (!std::filesystem::exists(sysPath)) {
+        return false;
+    }
 
     // Check if it's removable
     std::ifstream removableFile(sysPath);
