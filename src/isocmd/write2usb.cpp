@@ -1,5 +1,14 @@
 #include "../headers.h"
 
+// Global flag to track cancellation for write2usb
+std::atomic<bool> g_cancelOperation(false);
+
+// Signal handler for write2usb
+void signalHandlerWrite(int signum) {
+    if (signum == SIGINT) {
+        g_cancelOperation.store(true);
+    }
+}
 
 // Function to get the size of a block device
 uint64_t getBlockDeviceSize(const std::string& device) {
@@ -21,6 +30,7 @@ uint64_t getBlockDeviceSize(const std::string& device) {
 }
 
 
+// Function to check if block device is usb
 bool isUsbDevice(const std::string& device) {
     struct udev *udev;
     struct udev_device *dev;
@@ -71,6 +81,7 @@ bool isUsbDevice(const std::string& device) {
 }
 
 
+// Function to prepare writing ISO to usb
 void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
     clearScrollBuffer();
     // Check if the input is a valid integer and contains only digits
@@ -146,7 +157,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
             
             validDevice = true;
             double deviceSizeGB = static_cast<double>(deviceSize) / (1024 * 1024 * 1024);
-            
+            clear_history();
             // Display confirmation prompt
             clearScrollBuffer();
             std::cout << "\033[1;94m\nYou are about to write the following ISO file to the USB device:\n\n";
@@ -168,16 +179,29 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 return;
             }
-            
-            // Write ISO to device
+            disableInput();
 			std::cout << "\033[0;1m\nWriting: \033[1;92m" << isoPath << "\033[0;1m -> \033[1;93m" << device << "\033[0;1m\n";
-            
-            if (writeIsoToDevice(isoPath, device)) {
-                std::cout << "\033[0;1mISO file written to device successfully!\n";
-            } else {
-                std::cerr << "\033[1;91mFailed to write ISO file to device.\033[0;1m\n";
-            }
-            
+        
+			bool writeSuccess = writeIsoToDevice(isoPath, device);
+        
+			// Restore signal handling to default
+			struct sigaction sa;
+			sa.sa_handler = SIG_DFL;
+			sigemptyset(&sa.sa_mask);
+			sa.sa_flags = 0;
+			sigaction(SIGINT, &sa, nullptr);
+        
+			if (writeSuccess) {
+				std::cout << "\n\033[0;1mISO file written to device successfully!\n";
+			} else if (g_cancelOperation.load()) {
+				std::cerr << "\n\n\033[1;93mOperation was cancelled, cleanup will run in the background...\033[0;1m\n";
+			} else {
+				std::cerr << "\n\033[1;91mFailed to write ISO file to device.\033[0;1m\n";
+			}
+        
+			// Flush and Restore input after processing
+			flushStdin();
+			restoreInput();
         } while (!validDevice);
         
     } catch (const std::invalid_argument&) {
@@ -195,8 +219,27 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
 }
 
 
+// Function to async cleanup usb on cancel
+void asyncCleanup(int device_fd) {
+    // Perform cleanup tasks
+    fsync(device_fd); // Ensure all data is written
+    close(device_fd); // Close the device
+}
+
+
+// Function to write ISO to usb
 bool writeIsoToDevice(const std::string& isoPath, const std::string& device) {
     constexpr std::streamsize BUFFER_SIZE = 8 * 1024 * 1024; // 8 MB buffer
+
+    // Set up signal handler
+    struct sigaction sa;
+    sa.sa_handler = signalHandlerWrite;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, nullptr);
+
+    // Reset cancellation flag
+    g_cancelOperation.store(false);
 
     std::ifstream iso(isoPath, std::ios::binary);
     if (!iso) {
@@ -218,12 +261,17 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device) {
         return false;
     }
 
-    // Buffer for copying
     std::vector<char> buffer(BUFFER_SIZE);
     std::streamsize totalWritten = 0;
 
-
     while (totalWritten < fileSize) {
+        // Check for cancellation
+        if (g_cancelOperation.load()) {
+            std::thread cleanupThread(asyncCleanup, device_fd);
+            cleanupThread.detach(); // Detach the thread to run independently
+            return false;
+        }
+
         std::streamsize bytesToRead = std::min(BUFFER_SIZE, fileSize - totalWritten);
         iso.read(buffer.data(), bytesToRead);
         std::streamsize bytesRead = iso.gcount();
@@ -252,7 +300,12 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device) {
     fsync(device_fd);
     close(device_fd);
 
-    std::cout << "\n\n\033[1;92mWrite completed successfully!\n";
-    return true;
+    // Only show completion message if not cancelled
+    if (!g_cancelOperation.load()) {
+        std::cout << "\n\n\033[1;92mWrite completed successfully!\n";
+        return true;
+    }
+
+    return false;
 }
 
