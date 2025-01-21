@@ -24,10 +24,13 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
                                  (operation == "cp") ? "\033[1;92m" : 
                                  (operation == "mv") ? "\033[1;93m" :
                                  (operation == "mount") ? "\033[1;92m" : 
+                                 (operation == "write2usb") ? "\033[1;93m" :
                                  (operation == "umount") ? "\033[1;93m" : "\033[1;95m";
+                                 
     std::string process = operation;
     bool isMount = (operation == "mount");
     bool isUnmount = (operation == "umount");
+    bool write2Usb = (operation == "write2usb");
     bool promptFlag = false; // PromptFlag for cache refresh, defaults to false for move and other operations
     
     while (true) {
@@ -148,7 +151,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
 
             clearScrollBuffer();
             needsClrScrn = true;
-
+			
             if (isMount && inputString == "00") {
                 // Special case for mounting all files
                 std::cout << "\033[0;1m";
@@ -173,7 +176,9 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
 			prepareUnmount(inputString, selectedIsoDirs, currentFiles, operationFiles, operationFails, uniqueErrorMessages, umountMvRmBreak, verbose);
             needsClrScrn = true;
                  
-        } else {
+        } else if (write2Usb) {
+				processToken(inputString, currentFiles);
+		} else {
             // Generic operation processing for copy, move, remove
             std::cout << "\033[0;1m\n";
             processOperationInput(inputString, currentFiles, operation, operationFiles, operationFails, uniqueErrorMessages, promptFlag, maxDepth, umountMvRmBreak, historyPattern, verbose);
