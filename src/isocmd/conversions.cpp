@@ -279,7 +279,10 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 
             // Filter files based on the input search query
             auto filteredFiles = filterFiles(files, inputSearch);
-            if (filteredFiles.empty()) continue; // Skip if no files match the filter
+            if (filteredFiles.empty()) {
+				std::cout << "\033[1A\033[K";
+				continue; // Skip if no files match the filter
+			}
             if (filteredFiles.size() == files.size()) {
 				std::cout << "\033[2A\033[K";
 				needsScrnClr = false;
