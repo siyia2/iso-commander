@@ -159,14 +159,16 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
             auto newFilteredFiles = filterFiles(currentFiles, inputSearch);
             sortFilesCaseInsensitive(newFilteredFiles);
 
-            if (!newFilteredFiles.empty()) {
+            if (!newFilteredFiles.empty() && !((newFilteredFiles.size() == globalIsoFileList.size() && isMount) || (newFilteredFiles.size() == isoDirs.size() && isUnmount))) {
 				historyPattern = true;
+                loadHistory(historyPattern);
 				add_history(inputSearch.c_str()); // Save the filter pattern to history
 				saveHistory(historyPattern);
                 filteredFiles = std::move(newFilteredFiles);
                 isFiltered = true;
                 needsClrScrn = true;
                 historyPattern = false;
+                clear_history();
             } else {
                 std::cout << "\033[K"; // Clear the line if no files match the filter
             }

@@ -371,23 +371,24 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 			// Directly filter the files based on the input without showing the filter prompt
 			std::string inputSearch(rawInput.get() + 1); // Skip the '/' character
 			auto filteredFiles = filterFiles(files, inputSearch);
-			if (!filteredFiles.empty()) {
+			if (!filteredFiles.empty() && !(filteredFiles.size() == files.size())) {
 				historyPattern = true;
+                loadHistory(historyPattern);
 				add_history(inputSearch.c_str()); // Save the filter pattern to history
 				saveHistory(historyPattern);
 				files = filteredFiles; // Update the file list with the filtered results
 				isFiltered = true;
 				needsScrnClr = true;
-				clear_history();
 				historyPattern = false;
+                clear_history();
 			} else {
-				std::cout << "\033[1A\033[K"; // Clear the line if no files match the filter
+				std::cout << "\033[2A\033[K"; // Clear the line if no files match the filter
 			}
 		} else {
 			// Process other input commands for file processing
 			clearScrollBuffer();
 			std::cout << "\n\033[0;1m Processing \001\033[1;38;5;208m\002" + fileExtensionWithOutDots + "\033[0;1m conversions...\n";
-			processInput(mainInputString, files, (fileType == "mdf"), (fileType == "nrg"), processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, promptFlag, maxDepth, historyPattern, verbose);
+			processInput(mainInputString, files, (fileType == "mdf"), (fileType == "nrg"), processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, promptFlag, maxDepth, historyPattern, verbose, needsScrnClr);
 			if (verbose) verbosePrint(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, 3); // Print detailed logs if verbose mode is enabled
 		}
     }
@@ -395,7 +396,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 
 
 // Function to process user input and convert selected BIN/MDF/NRG files to ISO format
-void processInput(const std::string& input, std::vector<std::string>& fileList, const bool& modeMdf, const bool& modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
+void processInput(const std::string& input, std::vector<std::string>& fileList, const bool& modeMdf, const bool& modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose, bool& needsScrnClr) {
     
     std::set<std::string> selectedFilePaths;
     std::string concatenatedFilePaths;
@@ -409,6 +410,7 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         clear_history();
+        needsScrnClr = true;
         return;
     }
 
