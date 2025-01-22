@@ -253,6 +253,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
     
     std::string fileExtensionWithOutDots;
     
+    
     for (char c : fileExtension) {
 		if (c != '.') {
 			fileExtensionWithOutDots += toupper(c);  // Capitalize the character and add it to the result
@@ -325,10 +326,8 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 		std::cout << "\n\n";
 		std::cout << "\033[1A\033[K";
         // Build the user prompt string dynamically
-        std::string prompt = std::string("") + 
-                     (isFiltered ? "\001\033[1;96m\002Filtered \001\033[1;38;5;208m\002" : "\001\033[1;38;5;208m\002") + 
-                     (fileType == "bin" || fileType == "img" ? "BIN/IMG" : (fileType == "mdf" ? "MDF" : "NRG")) + 
-                     "\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion, ? ↵ for help, ↵ to return:\001\033[0;1m\002 ";
+        std::string prompt = (isFiltered ? "\001\033[1;96m\002F⊳ \001\033[1;38;5;208m\002" : "\001\033[1;38;5;208m\002")
+                     + fileExtensionWithOutDots + "\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion, ? ↵ for help, ↵ to return:\001\033[0;1m\002 ";
                      
         // Get user input
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
