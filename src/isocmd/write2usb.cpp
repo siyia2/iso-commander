@@ -167,7 +167,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         add_history(device.c_str());  // Add to readline history
         
         if (!isUsbDevice(device)) {
-            std::cout << "\n\033[1;91mError: '\033[1;93m" << device << "\033[1;91m' is not a removable device.\033[0;1m\n";
+            std::cout << "\n\033[1;91mError: \033[1;93m'" << device << "'\033[1;91m is not a removable device.\033[0;1m\n";
             std::cout << "\033[1;92m\n↵ to try again...";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             clearScrollBuffer();
@@ -176,7 +176,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         
         // Check if device or its partitions are mounted
         if (isDeviceMounted(device)) {
-            std::cout << "\n\033[1;91mError: '\033[1;93m" << device << "\033[1;91m' or its partitions are currently mounted.\033[0;1m\n";
+            std::cout << "\n\033[1;91mError: \033[1;93m'" << device << "'\033[1;91m or its partitions are currently mounted.\033[0;1m\n";
             std::cout << "\n\033[0;1mPlease unmount all '\033[1;93m" << device << "\033[0;1m' partitions before proceeding.\n";
             std::cout << "\033[1;92m\n↵ to try again...";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -268,21 +268,21 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, con
 
     std::ifstream iso(isoPath, std::ios::binary);
     if (!iso) {
-        std::cerr << "\n\n\033[1;91mCannot open ISO file: '\033[1;93m" << isoPath << "\033[1;91m' (" << strerror(errno) << ").\n";
+        std::cerr << "\n\n\033[1;91mCannot open ISO file: '\033[1;93m" << isoPath << "'\033[1;91m (" << strerror(errno) << ").\n";
         return false;
     }
 
     // Open the device with O_DIRECT
     int device_fd = open(device.c_str(), O_WRONLY | O_DIRECT);
     if (device_fd == -1) {
-        std::cerr << "\n\n\033[1;91mCannot open removable device: '\033[1;93m" << device << "\033[1;91m' (" << strerror(errno) << ").\n";
+        std::cerr << "\n\n\033[1;91mCannot open removable device: '\033[1;93m" << device << "'\033[1;91m (" << strerror(errno) << ").\n";
         return false;
     }
 
     // Get ISO file size
     std::streamsize fileSize = std::filesystem::file_size(isoPath);
     if (fileSize <= 0) {
-        std::cerr << "\n\n\033[1;91mInvalid ISO file size: '\033[1;93m" << fileSize << "\033[1;91m'.\n";
+        std::cerr << "\n\n\033[1;91mInvalid ISO file size: '\033[1;93m" << fileSize << "'\033[1;91m.\n";
         close(device_fd);
         return false;
     }
