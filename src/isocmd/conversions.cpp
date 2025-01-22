@@ -409,7 +409,6 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
         std::cout << "\n\033[1;91mNo valid indices for conversion.\033[1;91m\n";
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        clear_history();
         needsScrnClr = true;
         return;
     }
