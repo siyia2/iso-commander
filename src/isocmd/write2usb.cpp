@@ -197,7 +197,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         
         // Display confirmation prompt
         clearScrollBuffer();
-        std::cout << "\033[1;94m\nWriting the following ISO file to the removable device will permanently erase all its data:\n\n";
+        std::cout << "\033[1;94m\nThis will \033[1;91m*ERASE*\033[1;94m the removable device and write to it the selected ISO file:\n\n";
         std::cout << "\033[0;1mISO File: \033[1;92m" << isoPath << "\033[0;1m (\033[1;95m" << isoFileSizeStr << "\033[0;1m)\n";
         std::cout << "\033[0;1mRemovable Device: \033[1;93m" << device << " \033[0;1m(\033[1;95m" << std::fixed << std::setprecision(1) << deviceSizeGB << " GBb\033[0;1m)\n";
         
