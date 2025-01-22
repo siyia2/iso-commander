@@ -581,7 +581,7 @@ void help() {
     // Special commands
     std::cout << "2. Special Commands:\n"
               << "   • Enter '/' - Filter the current list\n"
-              << "   • Enter '/some_name' - Directly filter the list for items containing 'some_name'\n"
+              << "   • Enter '/name1;name2' - Directly filter the list for items containing 'name1 and name2'\n"
               << "   • Enter '~' - Switch between short and full paths\n"
               << "   • Enter '?' - Show this help message\n";
               
