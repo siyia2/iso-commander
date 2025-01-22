@@ -199,7 +199,7 @@ void submenu1(int& maxDepth, bool& historyPattern, bool& verbose) {
         std::cout << "\033[1;32m+-------------------------+\n";
         std::cout << "\033[1;32m|5. Copy                  |\n";
         std::cout << "\033[1;32m+-------------------------+\n";
-        std::cout << "\033[1;32m|6. Write2Usb             |\n";
+        std::cout << "\033[1;32m|6. Write                 |\n";
         std::cout << "\033[1;32m+-------------------------+\n";
         std::cout << "\n";
         char* rawInput = readline("\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
@@ -245,7 +245,7 @@ void submenu1(int& maxDepth, bool& historyPattern, bool& verbose) {
             break;
         case '6':
 			clearScrollBuffer();
-            selectForIsoFiles("write2usb", historyPattern, maxDepth, verbose);
+            selectForIsoFiles("write", historyPattern, maxDepth, verbose);
             clearScrollBuffer();
             break;
 			}

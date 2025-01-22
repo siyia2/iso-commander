@@ -24,13 +24,13 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
                                  (operation == "cp") ? "\033[1;92m" : 
                                  (operation == "mv") ? "\033[1;93m" :
                                  (operation == "mount") ? "\033[1;92m" : 
-                                 (operation == "write2usb") ? "\033[1;93m" :
+                                 (operation == "write") ? "\033[1;93m" :
                                  (operation == "umount") ? "\033[1;93m" : "\033[1;95m";
                                  
     std::string process = operation;
     bool isMount = (operation == "mount");
     bool isUnmount = (operation == "umount");
-    bool write2Usb = (operation == "write2usb");
+    bool write = (operation == "write");
     bool promptFlag = false; // PromptFlag for cache refresh, defaults to false for move and other operations
     
     while (true) {
@@ -176,7 +176,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
 			prepareUnmount(inputString, selectedIsoDirs, currentFiles, operationFiles, operationFails, uniqueErrorMessages, umountMvRmBreak, verbose);
             needsClrScrn = true;
                  
-        } else if (write2Usb) {
+        } else if (write) {
 				writeToUsb(inputString, currentFiles);
 		} else {
             // Generic operation processing for copy, move, remove
@@ -555,7 +555,7 @@ void help() {
               << "   • Combine methods: '1-3 5 7-9'\n"
               << "   • Select all: Enter '00' (for mount/umount only)\n\n"
               
-              << "   - Note: Write2Usb accepts only a single item at a time\n" << std::endl;
+              << "   - Note: Write accepts only a single item at a time\n" << std::endl;
     
     // Special commands
     std::cout << "2. Special Commands:\n"
