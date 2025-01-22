@@ -372,9 +372,14 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 			std::string inputSearch(rawInput.get() + 1); // Skip the '/' character
 			auto filteredFiles = filterFiles(files, inputSearch);
 			if (!filteredFiles.empty()) {
+				historyPattern = true;
+				add_history(inputSearch.c_str()); // Save the filter pattern to history
+				saveHistory(historyPattern);
 				files = filteredFiles; // Update the file list with the filtered results
 				isFiltered = true;
 				needsScrnClr = true;
+				clear_history();
+				historyPattern = false;
 			} else {
 				std::cout << "\033[1A\033[K"; // Clear the line if no files match the filter
 			}

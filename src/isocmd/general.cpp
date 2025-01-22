@@ -160,9 +160,13 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
             sortFilesCaseInsensitive(newFilteredFiles);
 
             if (!newFilteredFiles.empty()) {
+				historyPattern = true;
+				add_history(inputSearch.c_str()); // Save the filter pattern to history
+				saveHistory(historyPattern);
                 filteredFiles = std::move(newFilteredFiles);
                 isFiltered = true;
                 needsClrScrn = true;
+                historyPattern = false;
             } else {
                 std::cout << "\033[K"; // Clear the line if no files match the filter
             }
