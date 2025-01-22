@@ -231,6 +231,14 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
 			continue;
         }
         
+        if ((mainInputString == "y" || mainInputString == "Y") && isoFileSize >= deviceSize) {
+            std::cout << "\n\033[1;92m'" << filename << "' \033[1;91mcannot fit into \033[1;93m'" << device << "'\033[1;91m aborting...\033[0;1m\n";
+            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            clearScrollBuffer();  // Clear the screen before looping back
+			continue;
+        }
+        
         disableInput();
         std::cout << "\033[0;1m\nWriting: \033[1;92m" << filename << "\033[0;1m -> \033[1;93m" << device << "\033[0;1m || \033[1;91mCtrl + c\033[0;1m to cancel\033[0;1m\n";
         
