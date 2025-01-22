@@ -2,6 +2,7 @@
 
 #include "../headers.h"
 
+
 // Global flag to track cancellation for write2usb
 std::atomic<bool> g_cancelOperation(false);
 
