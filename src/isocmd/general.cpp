@@ -583,7 +583,7 @@ void help() {
               << "   • Enter '/' - Filter the current list\n"
               << "   • Enter '/name1;name2' - Directly filter the list for items containing 'name1 and name2'\n"
               << "   • Enter '~' - Switch between short and full paths\n"
-              << "   • Enter '?' - Show this help message\n";
+              << "   • Enter '?' - Show this help message\n"
               
               << "   - Note: If filtering has no matches no message or list update is issued\n" << std::endl;
     
