@@ -168,7 +168,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
     bool isFinished = false;
     // Device selection loop    
     do {
-        std::string devicePrompt = "\n\001\033[1;92m\002RemovableBlockDrive \001\033[1;94m\002↵ (e.g., /dev/sdc), or ↵ to return:\001\033[0;1m\002 ";
+        std::string devicePrompt = "\n-> \001\033[1;95m\002" + filename + "\n\n\001\033[1;92m\002RemovableBlockDrive\001\033[1;94m\002 ↵ for \001\033[1;93m\002write\001\033[1;94m\002 (e.g., /dev/sdc), or ↵ to return:\001\033[0;1m\002 ";
         std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(devicePrompt.c_str()), &std::free);
         
         if (!searchQuery || searchQuery.get()[0] == '\0') {
