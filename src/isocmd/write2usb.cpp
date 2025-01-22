@@ -153,6 +153,19 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         isoFileSizeStr = oss.str();
     }
     
+    // Find the position of the last '/'
+    size_t lastSlashPos = isoPath.find_last_of('/');
+
+    // Extract everything after the last '/'
+    std::string filename;
+    if (lastSlashPos != std::string::npos) {
+        filename = isoPath.substr(lastSlashPos + 1);
+    } else {
+        // If there's no '/', the entire string is the filename
+        filename = isoPath;
+    }
+
+    bool isFinished = false;
     // Device selection loop    
     do {
         std::string devicePrompt = "\n\001\033[1;92m\002RemovableBlockDevice \001\033[1;94m\002↵ (e.g., /dev/sdc), or ↵ to return:\001\033[0;1m\002 ";
@@ -198,7 +211,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         // Display confirmation prompt
         clearScrollBuffer();
         std::cout << "\033[1;94m\nThis will \033[1;91m*ERASE*\033[1;94m the removable device and write to it the selected ISO file:\n\n";
-        std::cout << "\033[0;1mISO File: \033[1;92m" << isoPath << "\033[0;1m (\033[1;95m" << isoFileSizeStr << "\033[0;1m)\n";
+        std::cout << "\033[0;1mISO File: \033[1;92m" << filename << "\033[0;1m (\033[1;95m" << isoFileSizeStr << "\033[0;1m)\n";
         std::cout << "\033[0;1mRemovable Device: \033[1;93m" << device << " \033[0;1m(\033[1;95m" << std::fixed << std::setprecision(1) << deviceSizeGB << " GBb\033[0;1m)\n";
         
         rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
@@ -211,7 +224,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         std::string mainInputString(input.get());
         
         if (!(mainInputString == "y" || mainInputString == "Y")) {
-            std::cout << "\n\033[1;93mOperation aborted by user.\033[0;1m\n";
+            std::cout << "\n\033[1;93mWrite operation aborted by user.\033[0;1m\n";
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             clearScrollBuffer();  // Clear the screen before looping back
@@ -219,7 +232,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         }
         
         disableInput();
-        std::cout << "\033[0;1m\nWriting: \033[1;92m" << isoPath << "\033[0;1m -> \033[1;93m" << device << "\033[0;1m || \033[1;91mCtrl + c\033[0;1m to cancel\033[0;1m\n";
+        std::cout << "\033[0;1m\nWriting: \033[1;92m" << filename << "\033[0;1m -> \033[1;93m" << device << "\033[0;1m || \033[1;91mCtrl + c\033[0;1m to cancel\033[0;1m\n";
         
         // Start time measurement
         auto start_time = std::chrono::high_resolution_clock::now();
@@ -235,16 +248,19 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         
         if (writeSuccess) {
             std::cout << "\n\033[1;92mISO file written successfully to device!\033[0;1m\n";
+            isFinished = true;
         } else if (g_cancelOperation.load()) {
             std::cerr << "\n\n\033[1;93mWrite operation was cancelled...\033[0;1m\n";
+            isFinished = true;
         } else {
             std::cerr << "\n\033[1;91mFailed to write ISO file to device.\033[0;1m\n";
+            isFinished = true;
         }
         
         // Flush and Restore input after processing
         flushStdin();
         restoreInput();
-    } while (true);
+    } while (!isFinished);
     
     clear_history();
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
