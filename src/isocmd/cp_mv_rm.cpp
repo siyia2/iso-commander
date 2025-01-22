@@ -139,37 +139,41 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
 // Function to prompt for userDestDir and Delete confirmation
 std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& historyPattern, bool& isDelete, bool& isCopy, bool& abortDel) {
-	
-	    auto displaySelectedIsos = [&]() {
-        std::cout << "\n";
+
+    auto generateSelectedIsosPrompt = [&]() {
+        std::string prompt;
         for (const auto& chunk : indexChunks) {
             for (const auto& index : chunk) {
                 auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFiles[index - 1]);
-                std::cout << "\033[1m-> " << isoDirectory << "/\033[1;95m" << isoFilename << "\033[0;1m\n";
+                prompt += "\033[1m-> " + isoDirectory + "/\033[1;95m" + isoFilename + "\033[0;1m\n";
             }
         }
+        return prompt;
     };
-	if (!isDelete) {
+
+    if (!isDelete) {
         while (true) {
-			// Restore readline autocomplete and screen clear bindings
-			rl_bind_key('\f', rl_clear_screen);
-			rl_bind_key('\t', rl_complete);
-			if (!isCopy) {
-				umountMvRmBreak = true;
-			}
+            // Restore readline autocomplete and screen clear bindings
+            rl_bind_key('\f', rl_clear_screen);
+            rl_bind_key('\t', rl_complete);
+            if (!isCopy) {
+                umountMvRmBreak = true;
+            }
             clearScrollBuffer();
-            displaySelectedIsos();
             clear_history();
             historyPattern = false;
             loadHistory(historyPattern);
             userDestDir.clear();
-			
-            std::string prompt = "\n\001\033[1;92m\002DestinationDirs\001\033[1;94m\002 ↵ for selected \001\033[1;92m\002ISO\001\033[1;94m\002 to be " + operationColor + operationDescription + "\001\033[1;94m\002 into (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002), ↵ return:\n\001\033[0;1m\002";
+
+            // Generate the prompt with selected ISOs at the beginning
+            std::string selectedIsosPrompt = generateSelectedIsosPrompt();
+            std::string prompt = "\n" + selectedIsosPrompt + "\n\001\033[1;92m\002DestinationDirs\001\033[1;94m\002 ↵ for selected \001\033[1;92m\002ISO\001\033[1;94m\002 to be " + operationColor + operationDescription + "\001\033[1;94m\002 into (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002), ↵ return:\n\001\033[0;1m\002";
+
             std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
             std::string mainInputString(input.get());
-            
+
             rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
-			rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
+            rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
 
             if (mainInputString.empty()) {
                 umountMvRmBreak = false;
@@ -181,14 +185,14 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
                 add_history(input.get());
                 break;
             }
-
         }
     } else {
         clearScrollBuffer();
-        displaySelectedIsos();
 
-        std::string confirmation;
-        std::string prompt = "\n\001\033[1;94m\002The selected \001\033[1;92m\002ISO\001\033[1;94m\002 will be \001\033[1;91m\002*PERMANENTLY DELETED FROM DISK*\001\033[1;94m\002. Proceed? (y/n):\001\033[0;1m\002 ";
+        // Generate the prompt with selected ISOs at the beginning for deletion confirmation
+        std::string selectedIsosPrompt = generateSelectedIsosPrompt();
+        std::string prompt = "\n" + selectedIsosPrompt + "\n\001\033[1;94m\002The selected \001\033[1;92m\002ISO\001\033[1;94m\002 will be \001\033[1;91m\002*PERMANENTLY DELETED FROM DISK*\001\033[1;94m\002. Proceed? (y/n): \001\033[0;1m\002";
+
         std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         std::string mainInputString(input.get());
 
