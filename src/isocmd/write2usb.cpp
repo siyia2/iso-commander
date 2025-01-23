@@ -172,7 +172,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         if (!isUsbDevice(device) || isDeviceMounted(device)) {
             std::string errorMsg = !isUsbDevice(device) ? 
                 "Error: \033[1;93m'" + device + "'\033[1;91m is not a removable drive." :
-                "Error: \033[1;93m'" + device + "'\033[1;91m or its partitions are currently mounted.\n\nPlease unmount all \033[1;93m'" + device + "'\033[1;91m partitions before proceeding.";
+                "Error: \033[1;93m'" + device + "'\033[1;91m or its partitions are currently mounted. Please unmount all \033[1;93m'" + device + "'\033[1;91m partitions before proceeding.";
             std::cout << "\n\033[1;91m" << errorMsg << "\033[0;1m\n";
             std::cout << "\033[1;92m\n↵ to try again...";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -202,12 +202,12 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         std::string confirmation(input.get());
         
         if (!(confirmation == "y" || confirmation == "Y")) {
-            showErrorAndReturn("Write operation aborted by user.");
+            showErrorAndReturn("\033[1;93mWrite operation aborted by user.");
             continue;
         }
         
         if (isoFileSize >= deviceSize) {
-            showErrorAndReturn("'" + filename + "' cannot fit into '" + device + "' aborting...");
+            showErrorAndReturn("\033[1;92m'" + filename + "'\033[1;91m cannot fit into \033[1;93m'" + device + "'\033[1;91m aborting...");
             continue;
         }
         
