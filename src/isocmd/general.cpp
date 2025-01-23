@@ -57,11 +57,9 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         
         std::cout << "\n";
         
-        std::string prompt = isFiltered 
-            ? "\001\033[1;96m\002F⊳ \001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + 
-              "\001\033[1;94m\002, ? ↵ for help, ↵ to return:\001\033[0;1m\002 "
-            : "\001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + 
-              "\001\033[1;94m\002, ? ↵ for help, ↵ to return:\001\033[0;1m\002 ";
+        std::string prompt = (isFiltered ? "\001\033[1;96m\002F⊳ \001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001" : "\001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001")
+						    + operationColor + "\002" + operation 
+							+ "\001\033[1;94m\002, ? ↵ for help, ↵ to return:\001\033[0;1m\002 ";
 
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         std::string inputString(input.get());
