@@ -147,6 +147,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
     
     // Extract filename
     std::string filename = isoPath.substr(isoPath.find_last_of('/') + 1);
+    std::string directory = isoPath.substr(0, isoPath.find_last_of('/'));
     
     // Restore readline settings
     rl_bind_key('\f', rl_clear_screen);
@@ -154,7 +155,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
 
     bool isFinished = false;
     do {
-        std::string devicePrompt = "\n-> \001\033[1;95m\002" + filename + 
+        std::string devicePrompt = "\n-> \001\033[0;1m\002" + directory + "/" "\001\033[1;95m\002" + filename + 
             "\n\n\001\033[1;92m\002RemovableBlockDrive\001\033[1;94m\002 ↵ for " + 
             "\001\033[1;93m\002write\001\033[1;94m\002 (e.g., /dev/sdc), or ↵ to return:\001\033[0;1m\002 ";
             

@@ -143,10 +143,15 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
     auto generateSelectedIsosPrompt = [&]() {
         std::string prompt;
         for (const auto& chunk : indexChunks) {
-            for (const auto& index : chunk) {
-                auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFiles[index - 1]);
-                prompt += "\033[1m-> " + isoDirectory + "/\033[1;95m" + isoFilename + "\033[0;1m\n";
-            }
+            for (int index : chunk) {
+				std::string isoPath = isoFiles[index - 1];
+				size_t lastSlashPos = isoPath.find_last_of('/');
+				std::string isoDirectory = isoPath.substr(0, lastSlashPos + 1); // Include the last '/'
+				std::string isoFilename = isoPath.substr(lastSlashPos + 1); // Everything after the last '/'
+
+				// Construct the prompt with directory in bold and filename in magenta
+				prompt += "\033[1m-> " + isoDirectory + "\033[1;95m" + isoFilename + "\033[0;1m\n";
+			}
         }
         return prompt;
     };
