@@ -45,7 +45,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         if (needsClrScrn && !isUnmount) {
             umountMvRmBreak = false;
             if (!clearAndLoadFiles(filteredFiles, isFiltered)) break;
-            std::cout << "\n\n";
+            std::cout << "\n";
         } else if (needsClrScrn && isUnmount) {
             umountMvRmBreak = false;
             if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered)) break;
@@ -55,7 +55,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         // Move the cursor up 1 line and clear them
         std::cout << "\033[1A\033[K";
         
-        if (isUnmount) std::cout << "\n";
+        std::cout << "\n";
         
         std::string prompt = isFiltered 
             ? "\001\033[1;96m\002F⊳ \001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + 
