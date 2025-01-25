@@ -166,7 +166,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
                 historyPattern = false;
                 clear_history();
             } else {
-                std::cout << "\033[K"; // Clear the line if no files match the filter
+                needsClrScrn = false;
             }
         } else {
             std::vector<std::string>& currentFiles = isFiltered 

@@ -383,6 +383,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
                 clear_history();
 			} else {
 				std::cout << "\033[2A\033[K"; // Clear the line if no files match the filter
+				needsScrnClr = false;
 			}
 		} else {
 			// Process other input commands for file processing
