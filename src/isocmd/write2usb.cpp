@@ -139,11 +139,12 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
     // Size formatting
     std::string isoFileSizeStr;
     if (isoFileSize < 1024 * 1024 * 1024) {
-        isoFileSizeStr = std::to_string(isoFileSize / (1024 * 1024)) + " MB";
-    } else {
-        isoFileSizeStr = (std::ostringstream{} << std::fixed << std::setprecision(1) 
-            << static_cast<double>(isoFileSize) / (1024 * 1024 * 1024) << " GB").str();
-    }
+		isoFileSizeStr = (std::ostringstream{} << std::fixed << std::setprecision(2) 
+        << static_cast<double>(isoFileSize) / (1024 * 1024) << " MB").str();
+	} else {
+		isoFileSizeStr = (std::ostringstream{} << std::fixed << std::setprecision(2) 
+        << static_cast<double>(isoFileSize) / (1024 * 1024 * 1024) << " GB").str();
+	}
     
     // Extract filename
     std::string filename = isoPath.substr(isoPath.find_last_of('/') + 1);
@@ -194,7 +195,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         std::cout << "\033[1;94m\nThis will \033[1;91m*ERASE*\033[1;94m the removable drive and write to it the selected ISO file:\n\n"
                   << "\033[0;1mISO File: \033[1;92m" << filename << "\033[0;1m (\033[1;95m" << isoFileSizeStr << "\033[0;1m)\n"
                   << "\033[0;1mRemovable Drive: \033[1;93m" << device << " \033[0;1m(\033[1;95m" << std::fixed 
-                  << std::setprecision(1) << deviceSizeGB << " GB\033[0;1m)\n";
+                  << std::setprecision(2) << deviceSizeGB << " GB\033[0;1m)\n";
 
         rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
         rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
@@ -212,10 +213,19 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
             continue;
         }
         
+        // First, compute the total visible length of the message
+		int total_length = 35 + filename.length() + device.length();
+
+		// Create the underline string with the computed length
+		std::string underline(total_length, '_');
+        
         // Perform write operation
         disableInput();
+        clearScrollBuffer();
         std::cout << "\033[0;1m\nWriting: \033[1;92m" << filename << "\033[0;1m -> \033[1;93m" << device 
                   << "\033[0;1m || \033[1;91mCtrl + c\033[0;1m to cancel\033[0;1m\n";
+		// Print the underline in bold
+		std::cout << underline << "\n" << std::endl;
         
         auto start_time = std::chrono::high_resolution_clock::now();
         bool writeSuccess = writeIsoToDevice(isoPath, device, start_time);
@@ -247,31 +257,48 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
 
 // Function to write ISO to usb device
 bool writeIsoToDevice(const std::string& isoPath, const std::string& device, const std::chrono::high_resolution_clock::time_point& start_time) {
-    constexpr std::streamsize BUFFER_SIZE = 8 * 1024 * 1024; // 8 MB buffer
+    // Size formatting lambda
+    auto formatSize = [](size_t bytes) -> std::string {
+        const char* units[] = {"B", "KB", "MB", "GB"};
+        int unit = 0;
+        double size = static_cast<double>(bytes);
+        
+        while (size >= 1024 && unit < 4) {
+            size /= 1024;
+            unit++;
+        }
+        
+        std::ostringstream stream;
+        stream << std::fixed << std::setprecision(2) << size << " " << units[unit];
+        return stream.str();
+    };
 
+    constexpr std::streamsize BUFFER_SIZE = 8 * 1024 * 1024; // 8 MB buffer
+    
     // Set up signal handler
     struct sigaction sa;
     sa.sa_handler = signalHandlerWrite;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     sigaction(SIGINT, &sa, nullptr);
-
+    
     // Reset cancellation flag
     g_cancelOperation.store(false);
-
+    
+    // Open ISO file
     std::ifstream iso(isoPath, std::ios::binary);
     if (!iso) {
         std::cerr << "\n\n\033[1;91mCannot open ISO file: '\033[1;93m" << isoPath << "'\033[1;91m (" << strerror(errno) << ").\n";
         return false;
     }
-
+    
     // Open the device with O_DIRECT
     int device_fd = open(device.c_str(), O_WRONLY | O_DIRECT);
     if (device_fd == -1) {
         std::cerr << "\n\n\033[1;91mCannot open removable drive: '\033[1;93m" << device << "'\033[1;91m (" << strerror(errno) << ").\n";
         return false;
     }
-
+    
     // Get ISO file size
     std::streamsize fileSize = std::filesystem::file_size(isoPath);
     if (fileSize <= 0) {
@@ -279,55 +306,57 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, con
         close(device_fd);
         return false;
     }
-
+    
     // Allocate aligned buffer for O_DIRECT
     const size_t alignment = 4096; // Typical block size for O_DIRECT
     std::vector<char> buffer(BUFFER_SIZE + alignment - 1);
     char* alignedBuffer = reinterpret_cast<char*>((reinterpret_cast<uintptr_t>(buffer.data()) + alignment - 1) & ~(alignment - 1));
-
+    
     std::streamsize totalWritten = 0;
-
     while (totalWritten < fileSize) {
         // Check for cancellation
         if (g_cancelOperation.load()) {
             close(device_fd);
             return false;
         }
-
+        
+        // Read into buffer
         std::streamsize bytesToRead = std::min(BUFFER_SIZE, fileSize - totalWritten);
         iso.read(alignedBuffer, bytesToRead);
         std::streamsize bytesRead = iso.gcount();
-
+        
         if (bytesRead <= 0) {
             std::cerr << "\n\n\033[1;91mRead error or end of file reached prematurely.\n";
             close(device_fd);
             return false;
         }
-
+        
+        // Write to device
         ssize_t bytesWritten = write(device_fd, alignedBuffer, bytesRead);
         if (bytesWritten == -1) {
             std::cerr << "\n\n\033[1;91mWrite error: " << strerror(errno) << ".\n";
             close(device_fd);
             return false;
         }
-
+        
         totalWritten += bytesWritten;
-
+        
         // Show progress
         int progress = static_cast<int>((static_cast<double>(totalWritten) / fileSize) * 100);
-        std::cout << "\rProgress: " << progress << "%" << std::flush;
-
+        std::cout << "\033[1K"; // ANSI escape sequence to clear the rest of the line
+        std::cout << "\rProgress: " << progress << "% | Written: " 
+                  << formatSize(totalWritten) << "/" << formatSize(fileSize)
+                  << std::flush;
     }
-
+    
     // Ensure all data is written
     fsync(device_fd);
     close(device_fd);
-
+    
     // Calculate and print the elapsed time after flushing is complete
     auto end_time = std::chrono::high_resolution_clock::now();
     auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-
     std::cout << "\n\n\033[0;1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n";
-
+    
     return true;
 }
