@@ -216,10 +216,10 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
 }
 
 namespace fs = std::filesystem;
+std::atomic<bool> g_operationCancelled{false};
 
 // Function to buffer file copying
-bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::atomic<size_t>* completedBytes, std::error_code& ec) {
-
+bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::atomic<size_t>* completedBytes, std::error_code& ec, bool& cancelled) {
     const size_t bufferSize = 8 * 1024 * 1024; // 8MB buffer
     std::vector<char> buffer(bufferSize);
     
@@ -235,7 +235,7 @@ bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::ato
         return false;
     }
     
-    while (true) {
+    while (!g_operationCancelled) { // Check cancellation flag at each iteration
         input.read(buffer.data(), buffer.size());
         std::streamsize bytesRead = input.gcount();
         
@@ -251,12 +251,46 @@ bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::ato
         
         completedBytes->fetch_add(bytesRead, std::memory_order_relaxed);
     }
+
+    // Check if the operation was cancelled
+    if (g_operationCancelled) {
+		cancelled = true;
+        ec = std::make_error_code(std::errc::operation_canceled);
+        output.close(); // Close the output stream before attempting to delete
+        fs::remove(dst, ec); // Delete the partial file, ignore errors here
+        return false;
+    }
     
     return true;
 }
 
+
+// Signal handler for SIGINT (Ctrl+C)
+void signalHandlercp(int signal) {
+    if (signal == SIGINT) {
+        g_operationCancelled = true;
+    }
+}
+
+// Setup signal handling
+void setupSignalHandler() {
+    struct sigaction sa;
+    sa.sa_handler = signalHandlercp;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, nullptr);
+}
+
 // Function to handle cpMvDel
+
 void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks) {
+    
+    // Setup signal handler at the start of the operation
+    setupSignalHandler();
+    bool cancelled = false;
+    
+    // Reset cancellation flag
+    g_operationCancelled = false;
     
     bool operationSuccessful = true;
     uid_t real_uid;
@@ -265,7 +299,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
     std::string real_groupname;
     getRealUserId(real_uid, real_gid, real_username, real_groupname, operationErrors);
 
-    std::vector<std::string> isoFilesToOperate;
+    // Parse destination directories
     std::vector<std::string> destDirs;
     std::istringstream iss(userDestDir);
     std::string destDir;
@@ -273,6 +307,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
         destDirs.push_back(fs::path(destDir).string());
     }
 
+    // Ownership change lambda
     auto changeOwnership = [&](const fs::path& path) -> bool {
         struct stat file_stat;
         if (stat(path.c_str(), &file_stat) == 0) {
@@ -293,8 +328,22 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
         return true;
     };
 
+    // Operation execution lambda
     auto executeOperation = [&](const std::vector<std::string>& files) {
         for (const auto& operateIso : files) {
+            // Check for cancellation after each file
+            if (g_operationCancelled) {
+				cancelled = true;
+                // Mark remaining tasks as completed
+                completedTasks->fetch_add(files.size() - (&operateIso - files.data()), std::memory_order_relaxed);
+                
+                // Add a cancellation message
+                std::string cancelMessage = "\033[1;93mOperation cancelled by user.\033[0m";
+                operationErrors.emplace(cancelMessage);
+                
+                break;
+            }
+
             fs::path srcPath(operateIso);
             auto [srcDir, srcFile] = extractDirectoryAndFilename(srcPath.string());
             
@@ -342,10 +391,10 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     bool success = false;
                     
                     if (isCopy) {
-                        success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec);
+                        success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec, cancelled);
                     } else if (isMove) {
                         if (i < destDirs.size() - 1) {
-                            success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec);
+                            success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec, cancelled);
                         } else {
                             fs::rename(srcPath, destPath, ec);
                             if (!ec) {
@@ -354,25 +403,31 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                             }
                         }
                     }
-
+					
                     if (!success || ec) {
-                        std::string errorMessageInfo = "\033[1;91mError " +
-                            std::string(isCopy ? "copying" : (i < destDirs.size() - 1 ? "moving" : "moving")) +
-                            ": \033[1;93m'" + srcDir + "/" + srcFile + "'\033[1;91m" +
-                            " to '" + destDirProcessed + "/': " + ec.message() + "\033[1;91m.\033[0;1m";
-                        operationErrors.emplace(errorMessageInfo);
-                        operationSuccessful = false;
-                    } else {
-                        if (!changeOwnership(destPath)) {
-                            operationSuccessful = false;
-                        } else {
-                            std::string operationInfo = "\033[1m" +
-                                std::string(isCopy ? "Copied" : (i < destDirs.size() - 1 ? "Moved" : "Moved")) +
-                                ": \033[1;92m'" + srcDir + "/" + srcFile + "'\033[1m\033[0;1m" +
-                                " to \033[1;94m'" + destDirProcessed + "/" + destFile + "'\033[0;1m.";
-                            operationIsos.emplace(operationInfo);
-                        }
-                    }
+					// Only show cancellation message once across all threads
+						if (cancelled) {
+							operationErrors.emplace("\033[1;33mOperation cancelled by user - partial files cleaned up\033[0m");
+        
+						} else if (!cancelled){
+							std::string errorMessageInfo = "\033[1;91mError " +
+							std::string(isCopy ? "copying" : (i < destDirs.size() - 1 ? "moving" : "moving")) +
+							": \033[1;93m'" + srcDir + "/" + srcFile + "'\033[1;91m" +
+							" to '" + destDirProcessed + "/': " + ec.message() + "\033[1;91m.\033[0;1m";
+							operationErrors.emplace(errorMessageInfo);
+						}
+						operationSuccessful = false;
+					} else {
+					if (!changeOwnership(destPath)) {
+						operationSuccessful = false;
+						} else {
+							std::string operationInfo = "\033[1m" +
+							std::string(isCopy ? "Copied" : (i < destDirs.size() - 1 ? "Moved" : "Moved")) +
+							": \033[1;92m'" + srcDir + "/" + srcFile + "'\033[1m\033[0;1m" +
+							" to \033[1;94m'" + destDirProcessed + "/" + destFile + "'\033[0;1m.";
+							operationIsos.emplace(operationInfo);
+						}
+					}
 
                     // Increment task counter for each destination path, regardless of success or failure
                     completedTasks->fetch_add(1, std::memory_order_relaxed);
@@ -381,6 +436,8 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
         }
     };
 
+    // Prepare files for operation
+    std::vector<std::string> isoFilesToOperate;
     for (const auto& iso : isoFiles) {
         fs::path isoPath(iso);
         auto [isoDir, isoFile] = extractDirectoryAndFilename(isoPath.string());
@@ -407,5 +464,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
         }
     }
 
+    // Execute the operation
     executeOperation(isoFilesToOperate);
 }
