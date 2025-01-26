@@ -319,10 +319,12 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
             if (g_operationCancelled) {
                 // Mark remaining tasks as completed
                 completedTasks->fetch_add(files.size() - (&operateIso - files.data()), std::memory_order_relaxed);
-                
-                // Add a cancellation message
-                std::string cancelMessage = "\033[1;93mOperation cancelled by user - partial cleanup performed.\033[0m";
-                operationErrors.emplace(cancelMessage);
+                if (isDelete) {
+					operationErrors.clear();
+					// Add a cancellation message
+					std::string cancelMessage = "\033[1;93mOperation cancelled by user - partial cleanup performed.\033[0m";
+					operationErrors.emplace(cancelMessage);
+				}
                 
                 break;
             }
@@ -390,6 +392,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     if (!success || ec) {
 						// Only show cancellation message once across all threads
 						if (!g_CancelledMessageAdded.exchange(true)) {
+							operationErrors.clear();
 							operationErrors.emplace("\033[1;33mOperation cancelled by user - partial files cleaned up.\033[0m");
         
 						} else {
