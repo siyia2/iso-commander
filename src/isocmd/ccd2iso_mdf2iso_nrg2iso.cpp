@@ -4,6 +4,7 @@
 #include "../mdf.h"
 #include "../ccd.h"
 
+namespace fs = std::filesystem;
 
 // Special thanks to the original authors of the conversion tools:
 
@@ -84,6 +85,11 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
     }
 
     while (source_length > 0) {
+		
+		if (g_operationCancelled) {
+            break; // Check cancellation flag
+        }
+		
         // Read sector data
         mdfFile.seekg(static_cast<std::streamoff>(seek_head), std::ios::cur);
         if (!mdfFile.read(buffer.data() + bufferIndex, sector_data)) {
@@ -108,6 +114,13 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
 
         --source_length;
     }
+    
+    // Handle cancellation after loop exit
+    if (g_operationCancelled) {
+        isoFile.close();
+        fs::remove(isoPath); // ec is deliberately ignored here to avoid overriding cancellation code
+        return false;
+    }
 
     // Write any remaining data in the buffer
     if (bufferIndex > 0) {
@@ -122,27 +135,35 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
 
 // CCD2ISO
 
-bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std::atomic<size_t>* completedBytes) {
+bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, 
+                     std::atomic<size_t>* completedBytes) {
     std::ifstream ccdFile(ccdPath, std::ios::binary | std::ios::ate);
-    if (!ccdFile) return false;
+    if (!ccdFile) {
+        return false;
+    }
 
     std::ofstream isoFile(isoPath, std::ios::binary);
-    if (!isoFile) return false;
+    if (!isoFile) {
+        return false;
+    }
 
     size_t fileSize = ccdFile.tellg();
     ccdFile.seekg(0, std::ios::beg);
 
-    // Pre-allocate output file to reduce fragmentation
-    isoFile.seekp(fileSize / sizeof(CcdSector) * DATA_SIZE); // Preallocate based on expected data size
-    isoFile.put(0);  // Write a dummy byte to allocate space
-    isoFile.seekp(0); // Reset the pointer to the beginning
+    // Pre-allocate output file
+    isoFile.seekp(fileSize / sizeof(CcdSector) * DATA_SIZE);
+    isoFile.put(0);
+    isoFile.seekp(0);
 
     std::vector<uint8_t> buffer(BUFFER_SIZE);
     size_t bufferPos = 0;
     CcdSector sector;
-    int sessionCount = 0;
 
     while (ccdFile.read(reinterpret_cast<char*>(&sector), sizeof(CcdSector))) {
+        if (g_operationCancelled) {
+            break; // Check cancellation flag
+        }
+
         switch (sector.sectheader.header.mode) {
             case 1:
             case 2: {
@@ -155,37 +176,49 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
                     if (!isoFile) {
                         return false;
                     }
-                    completedBytes->fetch_add(bufferPos, std::memory_order_relaxed);
+                    if (completedBytes) {
+                        completedBytes->fetch_add(bufferPos, std::memory_order_relaxed);
+                    }
                     bufferPos = 0;
                 }
 
-                // Use faster memcpy
                 std::memcpy(&buffer[bufferPos], sectorData, DATA_SIZE);
                 bufferPos += DATA_SIZE;
                 break;
             }
             case 0xe2:
-                sessionCount++;
+                // Handle session count if needed
                 break;
             default:
                 return false;
         }
     }
 
-    // Flush remaining data
+    // Handle cancellation after loop exit
+    if (g_operationCancelled) {
+        isoFile.close();
+        fs::remove(isoPath); // ec is deliberately ignored here to avoid overriding cancellation code
+        return false;
+    }
+
+    // Check for read errors
+    if (!ccdFile.eof()) {
+        return false;
+    }
+
+    // Flush remaining data if not cancelled
     if (bufferPos > 0) {
         isoFile.write(reinterpret_cast<char*>(buffer.data()), bufferPos);
         if (!isoFile) {
             return false;
         }
-         if (completedBytes) {
-			completedBytes->fetch_add(bufferPos, std::memory_order_relaxed);
-		 }
+        if (completedBytes) {
+            completedBytes->fetch_add(bufferPos, std::memory_order_relaxed);
+        }
     }
 
     return true;
 }
-
 
 // NRG2ISO
 
@@ -232,6 +265,11 @@ bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile
 
     // Read and write in chunks
     while (nrgFile) {
+		
+		if (g_operationCancelled) {
+            break; // Check cancellation flag
+        }
+		
         nrgFile.read(buffer.data(), BUFFER_SIZE);
         std::streamsize bytesRead = nrgFile.gcount();
         
@@ -243,6 +281,13 @@ bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile
                 completedBytes->fetch_add(bytesRead, std::memory_order_relaxed);
             }
         }
+    }
+    
+    // Handle cancellation after loop exit
+    if (g_operationCancelled) {
+        isoFile.close();
+        fs::remove(outputFile);
+        return false;
     }
 
     return true;

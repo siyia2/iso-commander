@@ -40,69 +40,65 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
 
 // Function to unmount ISO files asynchronously
 void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors) {
-    // Early root privilege check
+    
+    std::atomic<bool> g_CancelledMessageAdded{false};
+    
+    // Early exit if cancelled before starting
+    if (g_operationCancelled) return;
+
+    // Root check with cancellation awareness
     if (geteuid() != 0) {
         for (const auto& isoDir : isoDirs) {
+            if (g_operationCancelled) break;
+            
             std::stringstream errorMessage;
             errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDir
-                         << "\033[1;93m'\033[1;91m.\033[0;1m {needsRoot}";
+                        << "\033[1;93m'\033[1;91m.\033[0;1m {needsRoot}";
             unmountedErrors.emplace(errorMessage.str());
         }
         return;
     }
 
-    // Sequential processing of unmounts
     std::vector<std::pair<std::string, int>> unmountResults;
     for (const auto& isoDir : isoDirs) {
+        if (g_operationCancelled) {
+            if (!g_CancelledMessageAdded.exchange(true)) {
+                unmountedErrors.emplace("\033[1;33mUnmount operation cancelled by user - partial cleanup performed.\033[0m");
+            }
+            break;
+        }
+        
         int result = umount2(isoDir.c_str(), MNT_DETACH);
         unmountResults.emplace_back(isoDir, result);
     }
 
-    // Process unmount results
-    std::vector<std::string> successfulUnmounts;
-    std::vector<std::string> failedUnmounts;
-    for (const auto& [dir, result] : unmountResults) {
-        bool isEmpty = isDirectoryEmpty(dir);
+    // Process results only if not cancelled
+    if (!g_operationCancelled) {
+        std::vector<std::string> successfulUnmounts;
+        std::vector<std::string> failedUnmounts;
         
-        // If unmount fails but directory is empty, treat it as a potential removal
-        if (result != 0 && !isEmpty) {
-            failedUnmounts.push_back(dir);
-        } else {
-            successfulUnmounts.push_back(dir);
+        for (const auto& [dir, result] : unmountResults) {
+            bool isEmpty = isDirectoryEmpty(dir);
+            (result == 0 || isEmpty) ? successfulUnmounts.push_back(dir) : failedUnmounts.push_back(dir);
         }
-    }
 
-    // Handle successful and unsuccessful unmounts, with special focus on /mnt/iso_ directories
-    {
-        
-        // Try to remove all successful unmount directories
+        // Handle successful unmounts
         for (const auto& dir : successfulUnmounts) {
-            if (isDirectoryEmpty(dir)) {
-                if (rmdir(dir.c_str()) == 0) {
-                    std::string removedDirInfo = "\033[0;1mUnmounted: \033[1;92m'" + dir + "\033[1;92m'\033[0m.";
-                    unmountedFiles.emplace(removedDirInfo);
-                }
+            if (isDirectoryEmpty(dir) && rmdir(dir.c_str()) == 0) {
+                unmountedFiles.emplace("\033[0;1mUnmounted: \033[1;92m'" + dir + "\033[1;92m'\033[0m.");
             }
         }
 
-        // Additional pass to remove empty /mnt/iso_* directories
+        // Additional cleanup pass
         for (const auto& dir : isoDirs) {
-            // Check if directory starts with /mnt/iso_ and is empty
-            if (dir.find("/mnt/iso_") == 0 && isDirectoryEmpty(dir)) {
-                if (rmdir(dir.c_str()) == 0) {
-                    std::string removedDirInfo = "\033[0;1mRemoved empty ISO directory: \033[1;92m'" + dir + "\033[1;92m'\033[0m.";
-                    unmountedFiles.emplace(removedDirInfo);
-                }
+            if (dir.find("/mnt/iso_") == 0 && isDirectoryEmpty(dir) && rmdir(dir.c_str()) == 0) {
+                unmountedFiles.emplace("\033[0;1mRemoved empty ISO directory: \033[1;92m'" + dir + "\033[1;92m'\033[0m.");
             }
         }
 
-        // Handle failed unmounts (now only for non-empty directories)
+        // Handle failures
         for (const auto& dir : failedUnmounts) {
-            std::stringstream errorMessage;
-            
-            errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << dir 
-                         << "\033[1;93m'\033[1;91m.\033[0;1m {notAnISO}";
-            unmountedErrors.emplace(errorMessage.str());
+            unmountedErrors.emplace("\033[1;91mFailed to unmount: \033[1;93m'" + dir + "'\033[1;91m.\033[0;1m {notAnISO}");
         }
     }
 }
@@ -112,14 +108,20 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
 void prepareUnmount(const std::string& input, std::vector<std::string>& selectedIsoDirs, std::vector<std::string>& currentFiles, std::set<std::string>& operationFiles, std::set<std::string>& operationFails, std::set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& verbose) {
     std::set<int> selectedIndices;
     
+    // Setup signal handler at the start of the operation
+    setupSignalHandlerCancellations();
+        
+    // Reset cancellation flag
+    g_operationCancelled = false;
+    
     if (input != "00" && selectedIsoDirs.empty()) {
         tokenizeInput(input, currentFiles, uniqueErrorMessages, selectedIndices);
         for (int index : selectedIndices) {
+            if (g_operationCancelled) break;
             selectedIsoDirs.push_back(currentFiles[index - 1]);
         }
     }
 
-    // Check if input is empty
     if (selectedIsoDirs.empty()) {
         umountMvRmBreak = false;
         clearScrollBuffer();
@@ -129,60 +131,56 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& selected
         return;
     }
 
-    // Clear buffer and print start message
     clearScrollBuffer();
     std::cout << "\n\033[0;1m Processing \033[1;93mumount\033[0;1m operations...\n";
 
-    // Chunking logic
+    // Thread pool setup
     unsigned int numThreads = std::min(static_cast<unsigned int>(selectedIsoDirs.size()), maxThreads);
     std::vector<std::vector<std::string>> isoChunks;
-    const size_t maxMountPointsPerChunk = 100;
-    
-    // Distribute ISOs evenly among threads, but not exceeding maxISOsPerChunk
-    size_t totalMountPoints = selectedIsoDirs.size();
-    size_t mountPointsPerThread = (totalMountPoints + numThreads - 1) / numThreads;
-    size_t chunkSize = std::min(maxMountPointsPerChunk, mountPointsPerThread);
+    const size_t chunkSize = std::min(size_t(100), selectedIsoDirs.size()/numThreads + 1);
 
-    for (size_t i = 0; i < totalMountPoints; i += chunkSize) {
-        auto chunkEnd = std::min(selectedIsoDirs.begin() + i + chunkSize, selectedIsoDirs.end());
-        isoChunks.emplace_back(selectedIsoDirs.begin() + i, chunkEnd);
+    for (size_t i = 0; i < selectedIsoDirs.size(); i += chunkSize) {
+        auto end = std::min(selectedIsoDirs.begin() + i + chunkSize, selectedIsoDirs.end());
+        isoChunks.emplace_back(selectedIsoDirs.begin() + i, end);
     }
 
-    // Initialization
-    std::mutex lowLevelMutex;
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> unmountFutures;
     std::atomic<size_t> completedIsos(0);
-    size_t totalIsos = selectedIsoDirs.size();
     std::atomic<bool> isComplete(false);
 
-    // Start progress display thread
+    // Progress thread
     std::thread progressThread(
         displayProgressBarWithSize, 
-        nullptr,       // Pass as raw pointer
-        static_cast<size_t>(0), // Pass as size_t
-        &completedIsos,       // Pass as raw pointer
-        totalIsos,            // Pass as size_t
-        &isComplete, 			// Pass as raw pointer
-        &verbose               // Pass as raw pointer
+        nullptr,
+        static_cast<size_t>(0),
+        &completedIsos,
+        selectedIsoDirs.size(),
+        &isComplete,
+        &verbose
     );
 
-    // Submit tasks to the thread pool
+    // Submit tasks with cancellation checks
     for (const auto& isoChunk : isoChunks) {
-		unmountFutures.emplace_back(pool.enqueue([&]() {
-			// Process the entire chunk at once
-			unmountISO(isoChunk, operationFiles, operationFails);
-			completedIsos.fetch_add(isoChunk.size(), std::memory_order_relaxed); // Increment for all ISOs in the chunk
-		}));
-	}
-
-    // Wait for all tasks to complete
-    for (auto& future : unmountFutures) {
-        future.wait();
+        unmountFutures.emplace_back(pool.enqueue([&, isoChunk]() {
+            if (g_operationCancelled) return;
+            
+            unmountISO(isoChunk, operationFiles, operationFails);
+            completedIsos.fetch_add(isoChunk.size(), std::memory_order_relaxed);
+            
+            if (g_operationCancelled) {
+                isComplete.store(true);
+            }
+        }));
     }
 
-    // Signal completion and join progress thread
-    isComplete.store(true, std::memory_order_release);
+    // Wait for completion or cancellation
+    for (auto& future : unmountFutures) {
+        future.wait();
+        if (g_operationCancelled) break;
+    }
+
+    isComplete.store(true);
     progressThread.join();
 }
 

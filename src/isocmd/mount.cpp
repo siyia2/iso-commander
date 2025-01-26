@@ -18,8 +18,20 @@ bool isAlreadyMounted(const std::string& mountPoint) {
 
 // Function to mount selected ISO files called from processAndMountIsoFiles
 void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
+	
+	std::atomic<bool> g_CancelledMessageAdded{false};
+
     for (const auto& isoFile : isoFiles) {
-        namespace fs = std::filesystem;
+		
+		// Check for cancellation before processing each ISO
+        if (g_operationCancelled) {
+            if (!g_CancelledMessageAdded.exchange(true)) {
+                mountedFails.insert("\033[1;33mMount operation cancelled by user - partial mounts cleaned up.\n\033[0m");
+            }
+            break;
+        }
+		
+		namespace fs = std::filesystem;
         fs::path isoPath(isoFile);
 
         // Prepare path and naming information
@@ -172,7 +184,14 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
 // Function to process input and mount ISO files asynchronously
 void processAndMountIsoFiles(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages, bool& verbose) {
     std::set<int> indicesToProcess; // To store indices parsed from the input
-
+   
+   // Setup signal handler at the start of the operation
+    setupSignalHandlerCancellations();
+        
+    // Reset cancellation flag
+    g_operationCancelled = false;
+    
+    
     if (input == "00") {
         // If input is "00", create indices for all ISO files
         for (size_t i = 0; i < isoFiles.size(); ++i) {

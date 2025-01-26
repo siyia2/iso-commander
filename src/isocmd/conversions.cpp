@@ -754,6 +754,14 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
 
 // Function to convert a BIN/IMG/MDF/NRG file to ISO format
 void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, const bool& modeMdf, const bool& modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks) {
+	
+	// Setup signal handler at the start of the operation
+    setupSignalHandlerCancellations();
+        
+    // Reset cancellation flag
+    g_operationCancelled = false;
+    
+    std::atomic<bool> g_CancelledMessageAdded{false};
     
     // Collect unique directories from the input file paths
     std::set<std::string> uniqueDirectories;
@@ -865,7 +873,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
             if (std::remove(outputPath.c_str()) == 0) {
                 std::string deletedMessage = "\033[1;92mDeleted incomplete ISO file:\033[1;91m '" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m";
                 deletedOuts.insert(deletedMessage);
-            } else if (!modeNrg) {
+            } else if (!modeNrg || !g_operationCancelled) {
                 std::string deleteFailMessage = "\033[1;91mFailed to delete incomplete ISO file: \033[1;93m'" + outputPath + "'\033[0;1m";
                 deletedOuts.insert(deleteFailMessage);
             }
@@ -874,6 +882,16 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
             }
         }
     }
+    
+     // Additional check for cancellation after processing each file
+    if (g_operationCancelled) {
+		if (!g_CancelledMessageAdded.exchange(true)) {
+			std::string cancelMsg = "\033[1;33mConversion operation cancelled by user - partial files cleaned up.\033[0;1m";
+			failedOuts.clear();
+			deletedOuts.clear();
+			failedOuts.insert(cancelMsg);
+		}
+	}
 
     // Update cache and prompt flags
     promptFlag = false;

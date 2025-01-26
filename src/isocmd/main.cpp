@@ -8,6 +8,9 @@ unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread:
 // Global variables for cleanup
 int lockFileDescriptor = -1;
 
+// Global flag to track cancellation for write2usb
+std::atomic<bool> g_cancelOperation(false);
+
 // Main function
 int main(int argc, char *argv[]) {
 	// For enabling/disabling cache refresh prompt
@@ -447,6 +450,23 @@ void restoreInput() {
     tcgetattr(STDIN_FILENO, &term);
     term.c_lflag |= ICANON | ECHO;
     tcsetattr(STDIN_FILENO, TCSANOW, &term);
+}
+
+
+// Signal handler for SIGINT (Ctrl+C)
+void signalHandlerCancellations(int signal) {
+    if (signal == SIGINT) {
+        g_operationCancelled = true;
+    }
+}
+
+// Setup signal handling
+void setupSignalHandlerCancellations() {
+    struct sigaction sa;
+    sa.sa_handler = signalHandlerCancellations;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, nullptr);
 }
 
 

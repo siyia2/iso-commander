@@ -139,7 +139,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
 // Function to prompt for userDestDir and Delete confirmation
 std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& historyPattern, bool& isDelete, bool& isCopy, bool& abortDel) {
-
+	
     auto generateSelectedIsosPrompt = [&]() {
         std::string prompt;
         for (const auto& chunk : indexChunks) {
@@ -219,7 +219,7 @@ namespace fs = std::filesystem;
 std::atomic<bool> g_operationCancelled{false};
 
 // Function to buffer file copying
-bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::atomic<size_t>* completedBytes, std::error_code& ec, bool& cancelled) {
+bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::atomic<size_t>* completedBytes, std::error_code& ec) {
     const size_t bufferSize = 8 * 1024 * 1024; // 8MB buffer
     std::vector<char> buffer(bufferSize);
     
@@ -254,7 +254,6 @@ bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::ato
 
     // Check if the operation was cancelled
     if (g_operationCancelled) {
-		cancelled = true;
         ec = std::make_error_code(std::errc::operation_canceled);
         output.close(); // Close the output stream before attempting to delete
         fs::remove(dst, ec); // Delete the partial file, ignore errors here
@@ -265,32 +264,17 @@ bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::ato
 }
 
 
-// Signal handler for SIGINT (Ctrl+C)
-void signalHandlercp(int signal) {
-    if (signal == SIGINT) {
-        g_operationCancelled = true;
-    }
-}
-
-// Setup signal handling
-void setupSignalHandler() {
-    struct sigaction sa;
-    sa.sa_handler = signalHandlercp;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
-    sigaction(SIGINT, &sa, nullptr);
-}
-
 // Function to handle cpMvDel
-
 void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks) {
     
     // Setup signal handler at the start of the operation
-    setupSignalHandler();
-    bool cancelled = false;
-    
+    setupSignalHandlerCancellations();
+        
     // Reset cancellation flag
     g_operationCancelled = false;
+    
+    std::atomic<bool> g_CancelledMessageAdded{false};
+
     
     bool operationSuccessful = true;
     uid_t real_uid;
@@ -333,7 +317,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
         for (const auto& operateIso : files) {
             // Check for cancellation after each file
             if (g_operationCancelled) {
-				cancelled = true;
                 // Mark remaining tasks as completed
                 completedTasks->fetch_add(files.size() - (&operateIso - files.data()), std::memory_order_relaxed);
                 
@@ -391,10 +374,10 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     bool success = false;
                     
                     if (isCopy) {
-                        success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec, cancelled);
+                        success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec);
                     } else if (isMove) {
                         if (i < destDirs.size() - 1) {
-                            success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec, cancelled);
+                            success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec);
                         } else {
                             fs::rename(srcPath, destPath, ec);
                             if (!ec) {
@@ -406,10 +389,10 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 					
                     if (!success || ec) {
 					// Only show cancellation message once across all threads
-						if (cancelled) {
-							operationErrors.emplace("\033[1;33mOperation cancelled by user - partial files cleaned up\033[0m");
+						if (!g_CancelledMessageAdded.exchange(true)) {
+							operationErrors.emplace("\033[1;33mOperation cancelled by user - partial files cleaned up.\033[0m");
         
-						} else if (!cancelled){
+						} else {
 							std::string errorMessageInfo = "\033[1;91mError " +
 							std::string(isCopy ? "copying" : (i < destDirs.size() - 1 ? "moving" : "moving")) +
 							": \033[1;93m'" + srcDir + "/" + srcFile + "'\033[1;91m" +

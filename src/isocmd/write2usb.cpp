@@ -3,17 +3,6 @@
 #include "../headers.h"
 
 
-// Global flag to track cancellation for write2usb
-std::atomic<bool> g_cancelOperation(false);
-
-// Signal handler for write2usb
-void signalHandlerWrite(int signum) {
-    if (signum == SIGINT) {
-        g_cancelOperation.store(true);
-    }
-}
-
-
 // Function to get the size of a block device
 uint64_t getBlockDeviceSize(const std::string& device) {
     struct stat st;
@@ -111,6 +100,11 @@ bool isDeviceMounted(const std::string& device) {
 // Function to prepare writing ISO to usb
 void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
     clearScrollBuffer();
+    
+    // Setup signal handler at the start of the operation
+    setupSignalHandlerCancellations();
+    
+    g_operationCancelled = false;
     
     // Validation helper lambda
     auto showErrorAndReturn = [](const std::string& message) {
@@ -230,15 +224,9 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         auto start_time = std::chrono::high_resolution_clock::now();
         bool writeSuccess = writeIsoToDevice(isoPath, device, start_time);
         
-        // Restore signal handling
-        struct sigaction sa{};
-        sa.sa_handler = SIG_DFL;
-        sigemptyset(&sa.sa_mask);
-        sigaction(SIGINT, &sa, nullptr);
-        
         if (writeSuccess) {
             std::cout << "\n\033[1;92mISO file written successfully to device!\033[0;1m\n";
-        } else if (g_cancelOperation.load()) {
+        } else if (g_operationCancelled) {
             std::cerr << "\n\n\033[1;93mWrite operation was cancelled...\033[0;1m\n";
         } else {
             std::cerr << "\n\033[1;91mFailed to write ISO file to device.\033[0;1m\n";
@@ -275,16 +263,6 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, con
 
     constexpr std::streamsize BUFFER_SIZE = 8 * 1024 * 1024; // 8 MB buffer
     
-    // Set up signal handler
-    struct sigaction sa;
-    sa.sa_handler = signalHandlerWrite;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
-    sigaction(SIGINT, &sa, nullptr);
-    
-    // Reset cancellation flag
-    g_cancelOperation.store(false);
-    
     // Open ISO file
     std::ifstream iso(isoPath, std::ios::binary);
     if (!iso) {
@@ -315,7 +293,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, con
     std::streamsize totalWritten = 0;
     while (totalWritten < fileSize) {
         // Check for cancellation
-        if (g_cancelOperation.load()) {
+        if (g_operationCancelled) {
             close(device_fd);
             return false;
         }
