@@ -150,6 +150,7 @@ std::string formatFileSize(uint64_t size) {
 }
 
 
+// IsoInfo structure
 struct IsoInfo {
     std::string path;
     std::string filename;
@@ -157,6 +158,7 @@ struct IsoInfo {
     std::string sizeStr;
     size_t originalIndex;
 };
+
 
 // Progress tracking structure
 struct ProgressInfo {
@@ -168,6 +170,7 @@ struct ProgressInfo {
     bool failed = false;
     bool completed = false;
 };
+
 
 // Shared progress data with mutex protection
 std::mutex progressMutex;
@@ -182,8 +185,6 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
     // Reset cancellation flag
     g_operationCancelled = false;
     
-    std::atomic<bool> g_CancelledMessageAdded{false};
-
     // Parse ISO selection
     std::vector<size_t> isoIndices;
     try {
@@ -300,6 +301,10 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         for (const auto& [index, device] : deviceMap) {
             const auto& iso = selectedIsos[index - 1];
 
+            // Get device size before other checks
+            uint64_t deviceSize = getBlockDeviceSize(device);
+            std::string deviceSizeStr = formatFileSize(deviceSize);
+
             if (!isUsbDevice(device)) {
                 validationErrors.push_back("\033[1;91m" + device + " not removable");
                 continue;
@@ -310,7 +315,6 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
                 continue;
             }
 
-            uint64_t deviceSize = getBlockDeviceSize(device);
             if (deviceSize == 0) {
                 validationErrors.push_back("\033[1;91mFailed to get size for " + device);
                 continue;
@@ -318,7 +322,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
 
             if (iso.size > deviceSize) {
                 validationErrors.push_back("\033[1;91m" + iso.filename + " too large for " + 
-                    device + " (" + formatFileSize(deviceSize) + ")");
+                    device + " (\033[1;95m" + deviceSizeStr + "\033[0m)");
                 continue;
             }
 
@@ -339,8 +343,12 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         // Confirmation
         std::cout << "\n\033[1;91mWARNING: This will ERASE ALL DATA on:\033[0m\n";
         for (const auto& [iso, device] : validPairs) {
-            std::cout << "  \033[1;93m" << device << "\033[0m ← \033[1;92m" 
-                     << iso.filename << " \033[0m(\033[1;95m" << iso.sizeStr << "\033[0m)\n";
+            // Get and display device size
+            uint64_t deviceSize = getBlockDeviceSize(device);
+            std::string deviceSizeStr = formatFileSize(deviceSize);
+
+            std::cout << "  \033[1;93m" << device << "\033[0m (\033[1;95m" << deviceSizeStr << "\033[0m)"
+                     << " ← \033[1;92m" << iso.filename << " \033[0m(\033[1;95m" << iso.sizeStr << "\033[0m)\n";
         }
 
         std::unique_ptr<char, decltype(&std::free)> confirmation(
@@ -398,13 +406,13 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
                 completed++;
             }
         };
-		auto startTime = std::chrono::high_resolution_clock::now();  // Add this line
+        auto startTime = std::chrono::high_resolution_clock::now();
 
         // Start operations
         disableInput();
         std::cout << "\n\033[1;94mStarting writes (\033[1;91mCtrl+C to cancel\033[1;94m)\033[0;1m\n";
         std::cout << "\033[s"; // Save cursor position
-		
+        
         std::vector<std::thread> threads;
         for (size_t i = 0; i < maxThreads; ++i) {
             threads.emplace_back(worker);
@@ -446,16 +454,14 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         auto endTime = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::seconds>(
             endTime - startTime).count();
-		
+        
         std::cout << "\n\033[1;94mCompleted: \033[1;92m" << successes 
                   << "\033[1;94m/\033[1;93m" << validPairs.size() 
                   << "\033[1;94m in \033[0;1m" << duration << "s\033[0;1m\n";
-                  
-        if (!g_CancelledMessageAdded.exchange(true)) {
-							
-			std::cout << "\n\033[1;33mOperation cancelled by user.\033[0;1m\n";
         
-		}
+        if (g_operationCancelled) {
+				std::cout << "\n\033[1;33mOperation cancelled by user.\033[0;1m\n";
+			}
         
         isFinished = true;
         flushStdin();
