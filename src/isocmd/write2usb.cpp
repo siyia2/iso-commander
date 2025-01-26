@@ -96,155 +96,358 @@ bool isDeviceMounted(const std::string& device) {
     return false;
 }
 
+std::vector<size_t> parseIsoSelection(const std::string& input, size_t maxIsos) {
+    std::vector<size_t> indices;
+    std::istringstream iss(input);
+    std::string token;
+    
+    while (iss >> token) {
+        size_t dashPos = token.find('-');
+        if (dashPos != std::string::npos) {
+            int start = std::stoi(token.substr(0, dashPos));
+            int end = std::stoi(token.substr(dashPos + 1));
+            
+            // Handle reverse ranges
+            if (start > end) std::swap(start, end);
+            
+            if (start < 1 || end > static_cast<int>(maxIsos)) {
+                throw std::invalid_argument("Invalid ISO range: " + token);
+            }
+            
+            for (int i = start; i <= end; ++i) {
+                indices.push_back(static_cast<size_t>(i));
+            }
+        } else {
+            int idx = std::stoi(token);
+            if (idx < 1 || idx > static_cast<int>(maxIsos)) {
+                throw std::invalid_argument("Invalid ISO index: " + token);
+            }
+            indices.push_back(static_cast<size_t>(idx));
+        }
+    }
+    
+    // Remove duplicates and sort
+    std::sort(indices.begin(), indices.end());
+    auto last = std::unique(indices.begin(), indices.end());
+    indices.erase(last, indices.end());
+    
+    return indices;
+}
+
+std::string formatFileSize(uint64_t size) {
+    std::ostringstream oss;
+    if (size < 1024 * 1024) {
+        oss << std::fixed << std::setprecision(1) 
+            << static_cast<double>(size) / 1024 << " KB";
+    } else if (size < 1024 * 1024 * 1024) {
+        oss << std::fixed << std::setprecision(1) 
+            << static_cast<double>(size) / (1024 * 1024) << " MB";
+    } else {
+        oss << std::fixed << std::setprecision(1) 
+            << static_cast<double>(size) / (1024 * 1024 * 1024) << " GB";
+    }
+    return oss.str();
+}
+
+
+struct IsoInfo {
+    std::string path;
+    std::string filename;
+    uint64_t size;
+    std::string sizeStr;
+    size_t originalIndex;
+};
+
 
 // Function to prepare writing ISO to usb
 void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
     clearScrollBuffer();
-    
-    // Setup signal handler at the start of the operation
     setupSignalHandlerCancellations();
-    
     g_operationCancelled = false;
-    
-    // Validation helper lambda
-    auto showErrorAndReturn = [](const std::string& message) {
-        std::cerr << "\n\033[1;91m" << message << "\033[0;1m\n";
-        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+
+    // Parse ISO selection
+    std::vector<size_t> isoIndices;
+    try {
+        isoIndices = parseIsoSelection(input, isoFiles.size());
+    } catch (const std::exception& e) {
+        std::cerr << "\033[1;91mError: " << e.what() << "\033[0m\n";
+        std::cout << "\n\033[1;32m↵ to continue...\033[0m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        clearScrollBuffer();
-        return;
-    };
-
-    // Input validation
-    if (!std::all_of(input.begin(), input.end(), ::isdigit)) {
-        showErrorAndReturn("Input must be a valid integer for write.");
         return;
     }
 
-    int index = std::stoi(input);
-    if (index < 1 || static_cast<size_t>(index) > isoFiles.size()) {
-        showErrorAndReturn("Invalid input for write.");
-        return;
+    // Collect selected ISOs with original indices
+    std::vector<IsoInfo> selectedIsos;
+    for (size_t pos = 0; pos < isoIndices.size(); ++pos) {
+        size_t idx = isoIndices[pos];
+        IsoInfo info;
+        info.path = isoFiles[idx - 1];
+        info.filename = info.path.substr(info.path.find_last_of('/') + 1);
+        info.size = std::filesystem::file_size(info.path);
+        info.sizeStr = formatFileSize(info.size);
+        info.originalIndex = idx;
+        selectedIsos.push_back(info);
     }
-
-    std::string isoPath = isoFiles[index - 1];
-    uint64_t isoFileSize = std::filesystem::file_size(isoPath);
-    
-    // Size formatting
-    std::string isoFileSizeStr;
-    if (isoFileSize < 1024 * 1024 * 1024) {
-		isoFileSizeStr = (std::ostringstream{} << std::fixed << std::setprecision(2) 
-        << static_cast<double>(isoFileSize) / (1024 * 1024) << " MB").str();
-	} else {
-		isoFileSizeStr = (std::ostringstream{} << std::fixed << std::setprecision(2) 
-        << static_cast<double>(isoFileSize) / (1024 * 1024 * 1024) << " GB").str();
-	}
-    
-    // Extract filename
-    std::string filename = isoPath.substr(isoPath.find_last_of('/') + 1);
-    std::string directory = isoPath.substr(0, isoPath.find_last_of('/'));
-    
-    // Restore readline settings
-    rl_bind_key('\f', rl_clear_screen);
-    rl_bind_key('\t', rl_complete);
 
     bool isFinished = false;
     do {
-        std::string devicePrompt = "\n-> \001\033[0;1m\002" + directory + "/" "\001\033[1;95m\002" + filename + 
-            "\n\n\001\033[1;92m\002RemovableBlockDrive\001\033[1;94m\002 ↵ for " + 
-            "\001\033[1;93m\002write\001\033[1;94m\002 (e.g., /dev/sdc), or ↵ to return:\001\033[0;1m\002 ";
-            
-        std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(devicePrompt.c_str()), &std::free);
-        
-        if (!searchQuery || searchQuery.get()[0] == '\0') {
+        // Device input prompt
+        std::string devicePrompt = "\n\033[1;94mAvailable ISO selections:\033[0m\n";
+        for (size_t i = 0; i < selectedIsos.size(); ++i) {
+            devicePrompt += "  \033[1;93m" + std::to_string(i+1) + ">\033[0m " +
+                          selectedIsos[i].filename + " (\033[1;95m" + 
+                          selectedIsos[i].sizeStr + "\033[0m)\n";
+        }
+        devicePrompt += "\n\033[1;94mEnter device mappings as \033[1;93mINDEX>DEVICE\033[1;94m separated by ';'\n"
+                      "Example: \033[1;93m1>/dev/sdc;2>/dev/sdd\033[1;94m\n"
+                      "\033[1;92m↵ to write\033[0m, \033[1;91m↵ to cancel:\033[0m ";
+
+        std::unique_ptr<char, decltype(&std::free)> deviceInput(
+            readline(devicePrompt.c_str()), &std::free
+        );
+
+        if (!deviceInput || deviceInput.get()[0] == '\0') {
             clear_history();
             return;
         }
-        
-        std::string device(searchQuery.get());
-        add_history(device.c_str());
 
-        // Device validation
-        if (!isUsbDevice(device) || isDeviceMounted(device)) {
-            std::string errorMsg = !isUsbDevice(device) ? 
-                "Error: \033[1;93m'" + device + "'\033[1;91m is not a removable drive." :
-                "Error: \033[1;93m'" + device + "'\033[1;91m or its partitions are currently mounted. Please unmount all \033[1;93m'" + device + "'\033[1;91m partitions before proceeding.";
-            std::cout << "\n\033[1;91m" << errorMsg << "\033[0;1m\n";
-            std::cout << "\033[1;92m\n↵ to try again...";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        // Parse device pairs
+        std::unordered_map<size_t, std::string> deviceMap;
+        std::set<std::string> usedDevices;
+        std::vector<std::string> errors;
+        std::istringstream pairStream(deviceInput.get());
+        std::string pair;
+
+        while (std::getline(pairStream, pair, ';')) {
+            // Trim whitespace
+            pair.erase(pair.find_last_not_of(" \t\n\r\f\v") + 1);
+            pair.erase(0, pair.find_first_not_of(" \t\n\r\f\v"));
+
+            if (pair.empty()) continue;
+
+            size_t sepPos = pair.find('>');
+            if (sepPos == std::string::npos) {
+                errors.push_back("Invalid pair format: '" + pair + "' - use INDEX>DEVICE");
+                continue;
+            }
+
+            std::string indexStr = pair.substr(0, sepPos);
+            std::string device = pair.substr(sepPos + 1);
+
+            // Validate index
+            try {
+                size_t index = std::stoul(indexStr);
+                if (index < 1 || index > selectedIsos.size()) {
+                    errors.push_back("Invalid index " + indexStr + 
+                                   " - valid range: 1-" + 
+                                   std::to_string(selectedIsos.size()));
+                    continue;
+                }
+
+                // Check duplicate index
+                if (deviceMap.count(index)) {
+                    errors.push_back("Duplicate index " + indexStr);
+                    continue;
+                }
+
+                // Check device usage
+                if (usedDevices.count(device)) {
+                    errors.push_back("Device " + device + " used multiple times");
+                    continue;
+                }
+
+                deviceMap[index] = device;
+                usedDevices.insert(device);
+            } catch (...) {
+                errors.push_back("Invalid index format: '" + indexStr + "'");
+            }
+        }
+
+        // Validate all ISOs are mapped
+        if (deviceMap.size() != selectedIsos.size()) {
+            errors.push_back("Missing mappings for " + 
+                std::to_string(selectedIsos.size() - deviceMap.size()) + " ISO(s)");
+        }
+
+        // Show parsing errors
+        if (!errors.empty()) {
+            std::cerr << "\n\033[1;91mMapping errors:\033[0m\n";
+            for (const auto& err : errors) {
+                std::cerr << "  • " << err << "\n";
+            }
+            std::cout << "\n\033[1;92m↵ to try again...\033[0m";
+            std::cin.ignore();
             clearScrollBuffer();
             continue;
         }
 
-        uint64_t deviceSize = getBlockDeviceSize(device);
-        if (deviceSize == 0) {
-            showErrorAndReturn("Error: Unable to determine block device size, cannot proceed. Ensure Root privileges are acquired.");
+        // Validate devices
+        std::vector<std::pair<IsoInfo, std::string>> validPairs;
+        std::vector<std::string> validationErrors;
+
+        for (const auto& [index, device] : deviceMap) {
+            const auto& iso = selectedIsos[index - 1];
+
+            if (!isUsbDevice(device)) {
+                validationErrors.push_back("\033[1;91m" + device + " is not a removable drive");
+                continue;
+            }
+            
+            if (isDeviceMounted(device)) {
+                validationErrors.push_back("\033[1;91m" + device + " has mounted partitions");
+                continue;
+            }
+
+            uint64_t deviceSize = getBlockDeviceSize(device);
+            if (deviceSize == 0) {
+                validationErrors.push_back("\033[1;91mFailed to get size for " + device);
+                continue;
+            }
+
+            if (iso.size >= deviceSize) {
+                validationErrors.push_back("\033[1;91m" + iso.filename + " (" + iso.sizeStr + 
+                               ") too large for " + device + " (" + 
+                               formatFileSize(deviceSize) + ")");
+                continue;
+            }
+
+            validPairs.emplace_back(iso, device);
+        }
+
+        if (!validationErrors.empty()) {
+            std::cerr << "\n\033[1;91mDevice validation errors:\033[0m\n";
+            for (const auto& err : validationErrors) {
+                std::cerr << "  • " << err << "\033[0m\n";
+            }
+            std::cout << "\n\033[1;92m↵ to try again...\033[0m";
+            std::cin.ignore();
+            clearScrollBuffer();
             continue;
         }
 
-        double deviceSizeGB = static_cast<double>(deviceSize) / (1024 * 1024 * 1024);
-        
-        // Display confirmation
-        clearScrollBuffer();
-        std::cout << "\033[1;94m\nThis will \033[1;91m*ERASE*\033[1;94m the removable drive and write to it the selected ISO file:\n\n"
-                  << "\033[0;1mISO File: \033[1;92m" << filename << "\033[0;1m (\033[1;95m" << isoFileSizeStr << "\033[0;1m)\n"
-                  << "\033[0;1mRemovable Drive: \033[1;93m" << device << " \033[0;1m(\033[1;95m" << std::fixed 
-                  << std::setprecision(2) << deviceSizeGB << " GB\033[0;1m)\n";
+        // Confirmation prompt
+        std::cout << "\n\033[1;91mWARNING: This will ERASE ALL DATA on:\033[0m\n";
+        for (const auto& [iso, device] : validPairs) {
+            std::cout << "  \033[1;93m" << device << "\033[0m ← \033[1;92m" 
+                     << iso.filename << " \033[0m(\033[1;95m" << iso.sizeStr << "\033[0m)\n";
+        }
 
-        rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
-        rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
-        
-        std::unique_ptr<char, decltype(&std::free)> input(readline("\n\033[1;94mProceed? (y/n):\033[0;1m "), &std::free);
-        std::string confirmation(input.get());
-        
-        if (!(confirmation == "y" || confirmation == "Y")) {
-            showErrorAndReturn("\033[1;93mWrite operation aborted by user.");
+        std::unique_ptr<char, decltype(&std::free)> confirmation(
+            readline("\n\033[1;94mProceed? (y/N): \033[0m"), &std::free
+        );
+
+        if (!confirmation || 
+            (confirmation.get()[0] != 'y' && confirmation.get()[0] != 'Y')) {
+            std::cout << "\033[1;93mOperation cancelled\033[0m\n";
+            std::cout << "\n\033[1;32m↵ to continue...\033[0m";
+            std::cin.ignore();
+            clearScrollBuffer();
             continue;
         }
-        
-        if (isoFileSize >= deviceSize) {
-            showErrorAndReturn("\033[1;92m'" + filename + "'\033[1;91m cannot fit into \033[1;93m'" + device + "'\033[1;91m aborting...");
-            continue;
-        }
-        
-        // First, compute the total visible length of the message
-		int total_length = 34 + filename.length() + device.length();
 
-		// Create the underline string with the computed length
-		std::string underline(total_length, '_');
+        // Prepare task queue
+        struct WriteTask {
+            std::string isoPath;
+            std::string device;
+            std::string filename;
+        };
+
+        std::queue<WriteTask> taskQueue;
+        for (const auto& [iso, device] : validPairs) {
+            taskQueue.push({iso.path, device, iso.filename});
+        }
+
+        // Thread pool setup
+        std::mutex coutMutex;
+        std::mutex queueMutex;
+        std::condition_variable cv;
+        std::atomic<size_t> completed(0);
+        std::atomic<size_t> successes(0);
         
-        // Perform write operation
+        auto startTime = std::chrono::high_resolution_clock::now();
+
+        auto worker = [&]() {
+            while (!g_operationCancelled) {
+                WriteTask task;
+                {
+                    std::unique_lock<std::mutex> lock(queueMutex);
+                    if (taskQueue.empty()) return;
+                    task = taskQueue.front();
+                    taskQueue.pop();
+                }
+
+                bool success = false;
+                
+                try {
+                    {
+                        std::lock_guard<std::mutex> lock(coutMutex);
+                        std::cout << "\n\033[1;94mStarting: \033[1;92m" << task.filename 
+                                 << "\033[1;94m → \033[1;93m" << task.device << "\033[0m\n";
+                    }
+                    
+                    success = writeIsoToDevice(task.isoPath, task.device);
+                } catch (...) {
+                    success = false;
+                }
+
+                {
+                    std::lock_guard<std::mutex> lock(coutMutex);
+                    if (success) {
+                        std::cout << "\033[1;92mSuccess: " << task.device << "\033[0m\n";
+                        successes++;
+                    } else if (g_operationCancelled) {
+                        std::cout << "\033[1;93mCancelled: " << task.device << "\033[0m\n";
+                    } else {
+                        std::cout << "\033[1;91mFailed: " << task.device << "\033[0m\n";
+                    }
+                }
+
+                completed++;
+            }
+        };
+
+        // Start workers
         disableInput();
         clearScrollBuffer();
-        std::cout << "\033[0;1m\nWriting: \033[1;92m" << filename << "\033[0;1m -> \033[1;93m" << device 
-                  << "\033[0;1m (\033[1;91mCtrl + c\033[0;1m:cancel)\033[0;1m\n";
-		// Print the underline in bold
-		std::cout << underline << "\n" << std::endl;
-        
-        auto start_time = std::chrono::high_resolution_clock::now();
-        bool writeSuccess = writeIsoToDevice(isoPath, device, start_time);
-        
-        if (writeSuccess) {
-            std::cout << "\n\033[1;92mISO file written successfully to device!\033[0;1m\n";
-        } else if (g_operationCancelled) {
-            std::cerr << "\n\n\033[1;93mWrite operation was cancelled...\033[0;1m\n";
-        } else {
-            std::cerr << "\n\033[1;91mFailed to write ISO file to device.\033[0;1m\n";
+        std::cout << "\033[1;94mStarting write operations (\033[1;91mCtrl+C to cancel\033[1;94m)\033[0m\n";
+
+        std::vector<std::thread> pool;
+        for (size_t i = 0; i < maxThreads; ++i) {
+            pool.emplace_back(worker);
         }
-        isFinished = true;
+
+        // Wait for completion
+        while (completed < validPairs.size() && !g_operationCancelled) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+
+        cv.notify_all();
+
+        for (auto& t : pool) {
+            if (t.joinable()) t.join();
+        }
+
+        // Show summary
+        std::cout << "\n\033[1;94mCompleted: \033[1;92m" << successes 
+                 << "\033[1;94m/\033[1;93m" << validPairs.size() 
+                 << "\033[1;94m devices\033[0m\n";
         
+        isFinished = true;
+        // Calculate and print the elapsed time after flushing is complete
+    auto end_time = std::chrono::high_resolution_clock::now();
+    auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - startTime).count();
+    std::cout << "\n\n\033[0;1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n";
         flushStdin();
         restoreInput();
     } while (!isFinished);
-    
-    clear_history();
-    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+
+    std::cout << "\n\033[1;32m↵ to continue...\033[0m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
 
 // Function to write ISO to usb device
-bool writeIsoToDevice(const std::string& isoPath, const std::string& device, const std::chrono::high_resolution_clock::time_point& start_time) {
+bool writeIsoToDevice(const std::string& isoPath, const std::string& device) {
     // Size formatting lambda
     auto formatSize = [](size_t bytes) -> std::string {
         const char* units[] = {"B", "KB", "MB", "GB"};
@@ -330,11 +533,6 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, con
     // Ensure all data is written
     fsync(device_fd);
     close(device_fd);
-    
-    // Calculate and print the elapsed time after flushing is complete
-    auto end_time = std::chrono::high_resolution_clock::now();
-    auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
-    std::cout << "\n\n\033[0;1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n";
     
     return true;
 }
