@@ -59,6 +59,9 @@ extern std::unordered_map<std::string, std::string> transformationCache;
 // For automatic ISO cache refresh from history paths
 extern const std::string historyFilePath;
 
+// For tracking cancellations
+extern std::atomic<bool> g_operationCancelled;
+
 // Max cache size limit for IsoCache
 extern const uintmax_t maxCacheSize;
 
@@ -92,6 +95,8 @@ void flushStdin();
 void disableInput();
 void restoreInput();
 void signalHandler(int signum);
+void setupSignalHandlerCancellations();
+void signalHandlerCancellations(int signal);
 void clearScrollBuffer();
 void saveAutomaticImportConfig(const std::string& filePath);
 void sortFilesCaseInsensitive(std::vector<std::string>& files);
