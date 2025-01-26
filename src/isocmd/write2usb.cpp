@@ -208,7 +208,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         }
         
         // First, compute the total visible length of the message
-		int total_length = 35 + filename.length() + device.length();
+		int total_length = 34 + filename.length() + device.length();
 
 		// Create the underline string with the computed length
 		std::string underline(total_length, '_');
@@ -217,7 +217,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         disableInput();
         clearScrollBuffer();
         std::cout << "\033[0;1m\nWriting: \033[1;92m" << filename << "\033[0;1m -> \033[1;93m" << device 
-                  << "\033[0;1m || \033[1;91mCtrl + c\033[0;1m to cancel\033[0;1m\n";
+                  << "\033[0;1m (\033[1;91mCtrl + c\033[0;1m to cancel)\033[0;1m\n";
 		// Print the underline in bold
 		std::cout << underline << "\n" << std::endl;
         
@@ -257,7 +257,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, con
         }
         
         std::ostringstream stream;
-        stream << std::fixed << std::setprecision(2) << size << " " << units[unit];
+        stream << std::fixed << std::setprecision(2) << size << units[unit];
         return stream.str();
     };
 
@@ -322,8 +322,8 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, con
         // Show progress
         int progress = static_cast<int>((static_cast<double>(totalWritten) / fileSize) * 100);
         std::cout << "\033[1K"; // ANSI escape sequence to clear the rest of the line
-        std::cout << "\rProgress: " << progress << "% | Written: " 
-                  << formatSize(totalWritten) << "/" << formatSize(fileSize)
+        std::cout << "\rProgress: " << progress << "% (" 
+                  << formatSize(totalWritten) << "/" << formatSize(fileSize) << ")"
                   << std::flush;
     }
     
