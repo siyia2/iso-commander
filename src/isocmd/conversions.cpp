@@ -873,7 +873,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
             if (std::remove(outputPath.c_str()) == 0) {
                 std::string deletedMessage = "\033[1;92mDeleted incomplete ISO file:\033[1;91m '" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m";
                 deletedOuts.insert(deletedMessage);
-            } else if (!modeNrg || !g_operationCancelled) {
+            } else if (!modeNrg) {
                 std::string deleteFailMessage = "\033[1;91mFailed to delete incomplete ISO file: \033[1;93m'" + outputPath + "'\033[0;1m";
                 deletedOuts.insert(deleteFailMessage);
             }
