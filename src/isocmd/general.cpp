@@ -576,9 +576,7 @@ void help() {
               << "   • Multiple items: Separate with spaces (e.g., '1 5 6')\n"
               << "   • Range of items: Use hyphen (e.g., '1-3')\n"
               << "   • Combine methods: '1-3 5 7-9'\n"
-              << "   • Select all: Enter '00' (for mount/umount only)\n\n"
-              
-              << "   - Note: Write accepts only a single item at a time\n" << std::endl;
+              << "   • Select all: Enter '00' (for mount/umount only)\n\n" << std::endl;
     
     // Special commands
     std::cout << "2. Special Commands:\n"
