@@ -26,6 +26,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
 		// Check for cancellation before processing each ISO
         if (g_operationCancelled) {
             if (!g_CancelledMessageAdded.exchange(true)) {
+				mountedFails.clear();
                 mountedFails.insert("\033[1;33mMount operation cancelled by user - partial mounts cleaned up.\n\033[0m");
             }
             break;
