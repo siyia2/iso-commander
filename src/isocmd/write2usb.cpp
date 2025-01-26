@@ -260,7 +260,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         rl_bind_key('\f', rl_clear_screen);
 		rl_bind_key('\t', rl_complete);
 		
-        devicePrompt += "\n\001\033[1;92m\002DrivePairing\001\033[1;94m\002 ↵ as \001\033[1;93m\002INDEX>DEVICE\001\033[1;94m\002 (e.g, \001\033[1;94m\0021>/dev/sdc;2>/dev/sdd\001\033[1;94m\002), or ↵ to return:\001\033[0;1m\002 ";
+        devicePrompt += "\n\001\033[1;92m\002DevicePairing\001\033[1;94m\002 ↵ as \001\033[1;93m\002INDEX>DEVICE\001\033[1;94m\002 (e.g, \001\033[1;94m\0021>/dev/sdc;2>/dev/sdd\001\033[1;94m\002), or ↵ to return:\001\033[0;1m\002 ";
 
         std::unique_ptr<char, decltype(&std::free)> deviceInput(
             readline(devicePrompt.c_str()), &std::free
@@ -354,7 +354,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
             std::string driveName = getDriveName(device);  // get drive name
 
             if (!isUsbDevice(device)) {
-                validationErrors.push_back("\033[1;93m'" + device + "'\033[0;1m is not a removable drive");
+                validationErrors.push_back("\033[1;93m'" + device + "'\033[0;1m is not a removable device");
                 continue;
             }
             
