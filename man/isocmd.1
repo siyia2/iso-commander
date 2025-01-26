@@ -23,7 +23,7 @@ Iso Commander provides the following key functionalities:
 
 - Delete/Move/Copy: Deletes, moves, or copies chunks of .iso files using native C++ calls.
 
-- Write: Writes .iso files to multiple removable block drives. It retains the bootable status of any linux or linux-based .iso file.
+- Write: Writes .iso files to multiple removable drives. It retains the bootable status of any linux-based .iso file. Root access is required for successful writes.
 
 .TP
 .B Convert2ISO
@@ -92,7 +92,7 @@ Notes:
 
 - Ranges and single numbers can be used simultaneously for all list selections e.g. 1-3 5 7-6.
 
-- Write checks if specified block drives are of Removable-type before proceeding.
+- The write function checks if specified drives are removable and have sufficient capacity before proceeding to prevent accidents.
 
 .SH USAGE TIPS
 Iso Commander leverages the readline library for enhanced line-editing capabilities:
