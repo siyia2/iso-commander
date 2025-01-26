@@ -430,7 +430,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         // Start operations
         disableInput();
         clearScrollBuffer();
-        std::cout << "\n\033[1;94mWriting... (\033[1;91mCtrl+C to cancel\033[1;94m)\033[0;1m\n\n";
+        std::cout << "\n\033[1;94mWriting... (\033[1;91mCtrl+c to cancel\033[1;94m)\033[0;1m\n\n";
         std::cout << "\033[s"; // Save cursor position
         
         std::vector<std::thread> threads;
@@ -449,8 +449,8 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
                 for (const auto& prog : progressData) {
                     std::cout << "\033[K"; // Clear line
                     std::cout << std::left << std::setw(40) 
-                              << (prog.filename + " → " + prog.device)
-                              << std::right << std::setw(6)
+                              << ("\033[1;95m" + prog.filename + " \033[0;1m→ " + "\033[1;93m" + prog.device + "\033[0;1m")
+                              << std::right << std::setw(5)
                               << (prog.completed ? "\033[1;92m DONE\033[0;1m" :
                                   prog.failed ? "\033[1;91m FAIL\033[0;1m" :
                                   std::to_string(prog.progress) + "%")
@@ -477,7 +477,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         
         std::cout << "\n\033[1;94mCompleted: \033[1;92m" << successes 
                   << "\033[1;94m/\033[1;93m" << validPairs.size() 
-                  << "\033[1;94m in \033[0;1m" << duration << "s\033[0;1m\n";
+                  << "\033[1;94m in \033[0;1m" << duration << "s.\033[0;1m\n";
         
         if (g_operationCancelled) {
 				std::cout << "\n\033[1;33mOperation cancelled by user.\033[0;1m\n";
