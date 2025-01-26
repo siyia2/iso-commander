@@ -64,7 +64,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     }
 
     clearScrollBuffer();
-    std::cout << "\n\033[0;1m Processing " + operationColor + process + "\033[0;1m operations...\n";
+    std::cout << "\n\033[0;1m Processing " + operationColor + process + "\033[0;1m operations... (\033[1;91mCtrl + c\033[0;1m:cancel)\n";
 
     std::vector<std::string> filesToProcess;
     for (const auto& index : processedIndices) {
@@ -343,10 +343,15 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     std::string operationInfo = "\033[1mDeleted: \033[1;92m'" + srcDir + "/" + srcFile + "'\033[1m\033[0;1m.";
                     operationIsos.emplace(operationInfo);
                 } else {
-                    std::string errorMessageInfo = "\033[1;91mError deleting: \033[1;93m'" + srcDir + "/" + srcFile +
-                        "'\033[1;91m: " + ec.message() + "\033[1;91m.\033[0;1m";
-                    operationErrors.emplace(errorMessageInfo);
-                    operationSuccessful = false;
+					if (!g_CancelledMessageAdded.exchange(true)) {
+							operationErrors.emplace("\033[1;33mOperation cancelled by user - partial files cleaned up.\033[0m");
+        
+					} else {
+						std::string errorMessageInfo = "\033[1;91mError deleting: \033[1;93m'" + srcDir + "/" + srcFile +
+						"'\033[1;91m: " + ec.message() + "\033[1;91m.\033[0;1m";
+						operationErrors.emplace(errorMessageInfo);
+						operationSuccessful = false;
+					}
                 }
                 // Increment task counter for delete operation
                 completedTasks->fetch_add(1, std::memory_order_relaxed);
@@ -388,7 +393,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     }
 					
                     if (!success || ec) {
-					// Only show cancellation message once across all threads
+						// Only show cancellation message once across all threads
 						if (!g_CancelledMessageAdded.exchange(true)) {
 							operationErrors.emplace("\033[1;33mOperation cancelled by user - partial files cleaned up.\033[0m");
         

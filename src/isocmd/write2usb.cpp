@@ -217,7 +217,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         disableInput();
         clearScrollBuffer();
         std::cout << "\033[0;1m\nWriting: \033[1;92m" << filename << "\033[0;1m -> \033[1;93m" << device 
-                  << "\033[0;1m (\033[1;91mCtrl + c\033[0;1m to cancel)\033[0;1m\n";
+                  << "\033[0;1m (\033[1;91mCtrl + c\033[0;1m:cancel)\033[0;1m\n";
 		// Print the underline in bold
 		std::cout << underline << "\n" << std::endl;
         

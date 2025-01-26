@@ -133,7 +133,7 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& selected
     }
 
     clearScrollBuffer();
-    std::cout << "\n\033[0;1m Processing \033[1;93mumount\033[0;1m operations...\n";
+    std::cout << "\n\033[0;1m Processing \033[1;93mumount\033[0;1m operations... (\033[1;91mCtrl + c\033[0;1m:cancel)\n";
 
     // Thread pool setup
     unsigned int numThreads = std::min(static_cast<unsigned int>(selectedIsoDirs.size()), maxThreads);

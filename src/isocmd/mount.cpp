@@ -207,7 +207,7 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
         }
     }
     
-    std::cout << "\n\033[0;1m Processing \033[1;92mmount\033[0;1m operations...\n";
+    std::cout << "\n\033[0;1m Processing \033[1;92mmount\033[0;1m operations... (\033[1;91mCtrl + c\033[0;1m:cancel)\n";
     std::atomic<size_t> completedTasks(0); // Number of completed tasks
     std::atomic<bool> isProcessingComplete(false); // Flag to indicate processing completion
     unsigned int numThreads = std::min(static_cast<unsigned int>(indicesToProcess.size()), static_cast<unsigned int>(maxThreads));
