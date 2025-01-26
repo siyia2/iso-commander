@@ -176,6 +176,26 @@ struct ProgressInfo {
 std::mutex progressMutex;
 std::vector<ProgressInfo> progressData;
 
+
+std::string getDriveName(const std::string& device) {
+    // Extract device name (e.g., sdc from /dev/sdc)
+    std::string deviceName = device.substr(device.find_last_of('/') + 1);
+    std::string sysfsPath = "/sys/block/" + deviceName + "/device/model";
+    
+    std::ifstream modelFile(sysfsPath);
+    std::string driveName;
+    
+    if (modelFile.is_open()) {
+        std::getline(modelFile, driveName);
+        // Trim whitespace
+        driveName.erase(0, driveName.find_first_not_of(" \t"));
+        driveName.erase(driveName.find_last_not_of(" \t") + 1);
+    }
+    
+    return driveName.empty() ? "Unknown Drive" : driveName;
+}
+
+
 // Function to prepare writing ISO to usb
 void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
     clearScrollBuffer();
@@ -360,15 +380,18 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         }
 
         // Confirmation
-        std::cout << "\n\033[1;93mWARNING: This will \033[1;91m*ERASE ALL DATA*\033[1;93m on selected devices:\033[0;1m\n\n";
-        for (const auto& [iso, device] : validPairs) {
-            // Get and display device size
-            uint64_t deviceSize = getBlockDeviceSize(device);
-            std::string deviceSizeStr = formatFileSize(deviceSize);
+        // Confirmation
+    std::cout << "\n\033[1;93mWARNING: This will \033[1;91m*ERASE ALL DATA*\033[1;93m on selected devices:\033[0;1m\n\n";
+    for (const auto& [iso, device] : validPairs) {
+        // Get and display device size and name
+        uint64_t deviceSize = getBlockDeviceSize(device);
+        std::string deviceSizeStr = formatFileSize(deviceSize);
+        std::string driveName = getDriveName(device);  // New function to get drive name
 
-            std::cout << "  \033[1;93m" << device << "\033[0;1m (\033[1;95m" << deviceSizeStr << "\033[0;1m)"
-                     << " ← \033[1;92m" << iso.filename << " \033[0;1m(\033[1;95m" << iso.sizeStr << "\033[0;1m)\n";
-        }
+        std::cout << "  \033[1;93m" << device << "\033[0;1m (\033[1;95m" << deviceSizeStr << "\033[0;1m)"
+                 << " \033[1;93m<" + driveName + ">\033[0;1m"
+                 << " ← \033[1;92m" << iso.filename << " \033[0;1m(\033[1;95m" << iso.sizeStr << "\033[0;1m)\n";
+    }
 
         std::unique_ptr<char, decltype(&std::free)> confirmation(
             readline("\n\001\033[1;94m\002Proceed? (y/n): \001\033[0;1m\002"), &std::free
@@ -440,29 +463,31 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
 
         // Progress display
         auto displayProgress = [&]() {
-            while (completed < validPairs.size() && !g_operationCancelled) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                
-                std::lock_guard<std::mutex> lock(progressMutex);
-                std::cout << "\033[u"; // Restore cursor
-                
-                for (const auto& prog : progressData) {
-                    std::cout << "\033[K"; // Clear line
-                    std::cout << std::left << std::setw(40) 
-                              << ("\033[1;95m" + prog.filename + " \033[0;1m→ " + "\033[1;93m" + prog.device + "\033[0;1m")
-                              << std::right << std::setw(5)
-                              << (prog.completed ? "\033[1;92m DONE\033[0;1m" :
-                                  prog.failed ? "\033[1;91m FAIL\033[0;1m" :
-                                  std::to_string(prog.progress) + "%")
-                              << " ["
-                              << std::setw(9) << prog.currentSize
-                              << "/"
-                              << std::setw(9) << prog.totalSize
-                              << "]\n";
-                }
-                std::cout << std::flush;
-            }
-        };
+			while (completed < validPairs.size() && !g_operationCancelled) {
+				std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            
+				std::lock_guard<std::mutex> lock(progressMutex);
+				std::cout << "\033[u"; // Restore cursor
+            
+				for (const auto& prog : progressData) {
+					std::string driveName = getDriveName(prog.device);  // Get drive name
+					std::cout << "\033[K"; // Clear line
+					std::cout << std::left << std::setw(40) 
+							<< ("\033[1;95m" + prog.filename + " \033[0;1m→ " + 
+								"\033[1;93m" + prog.device + "\033[0;1m \033[1;93m<" + driveName + ">\033[0;1m")
+							<< std::right << std::setw(5)
+							<< (prog.completed ? "\033[1;92m DONE\033[0;1m" :
+								prog.failed ? "\033[1;91m FAIL\033[0;1m" :
+								std::to_string(prog.progress) + "%")
+							<< " ["
+							<< std::setw(9) << prog.currentSize
+							<< "/"
+							<< std::setw(9) << prog.totalSize
+							<< "]\n";
+				}
+				std::cout << std::flush;
+			}
+		};
 
         std::thread displayThread(displayProgress);
 
