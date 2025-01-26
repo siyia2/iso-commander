@@ -190,8 +190,8 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
     try {
         isoIndices = parseIsoSelection(input, isoFiles.size());
     } catch (const std::exception& e) {
-        std::cerr << "\033[1;91mError: " << e.what() << "\033[0m\n";
-        std::cout << "\n\033[1;32m↵ to continue...\033[0m";
+        std::cerr << "\033[1;91mError: " << e.what() << "\033[0;1m\n";
+        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         return;
     }
@@ -212,15 +212,15 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
     bool isFinished = false;
     do {
         // Device mapping input
-        std::string devicePrompt = "\n\033[1;94mSelected ISOs:\033[0m\n";
+        std::string devicePrompt = "\n\033[1;94mSelected ISOs:\033[0;1m\n";
         for (size_t i = 0; i < selectedIsos.size(); ++i) {
-            devicePrompt += "  \033[1;93m" + std::to_string(i+1) + ">\033[0m " +
+            devicePrompt += "  \033[1;93m" + std::to_string(i+1) + ">\033[0;1m " +
                           selectedIsos[i].filename + " (\033[1;95m" + 
-                          selectedIsos[i].sizeStr + "\033[0m)\n";
+                          selectedIsos[i].sizeStr + "\033[0;1m)\n";
         }
         devicePrompt += "\n\033[1;94mEnter device mappings as \033[1;93mINDEX>DEVICE\033[1;94m separated by ';'\n"
                       "Example: \033[1;93m1>/dev/sdc;2>/dev/sdd\033[1;94m\n"
-                      "\033[1;92mEnter↵ to write\033[0m, \033[1;91mCtrl+C to cancel:\033[0m ";
+                      "\033[1;92mEnter↵ to write\033[0;1m, \033[1;91mCtrl+C to cancel:\033[0;1m ";
 
         std::unique_ptr<char, decltype(&std::free)> deviceInput(
             readline(devicePrompt.c_str()), &std::free
@@ -284,11 +284,11 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         }
 
         if (!errors.empty()) {
-            std::cerr << "\n\033[1;91mErrors:\033[0m\n";
+            std::cerr << "\n\033[1;91mErrors:\033[0;1m\n";
             for (const auto& err : errors) {
                 std::cerr << "  • " << err << "\n";
             }
-            std::cout << "\n\033[1;92m↵ to try again...\033[0m";
+            std::cout << "\n\033[1;92m↵ to try again...\033[0;1m";
             std::cin.ignore();
             clearScrollBuffer();
             continue;
@@ -322,7 +322,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
 
             if (iso.size > deviceSize) {
                 validationErrors.push_back("\033[1;91m" + iso.filename + " too large for " + 
-                    device + " (\033[1;95m" + deviceSizeStr + "\033[0m)");
+                    device + " (\033[1;95m" + deviceSizeStr + "\033[0;1m)");
                 continue;
             }
 
@@ -330,35 +330,35 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         }
 
         if (!validationErrors.empty()) {
-            std::cerr << "\n\033[1;91mValidation errors:\033[0m\n";
+            std::cerr << "\n\033[1;91mValidation errors:\033[0;1m\n";
             for (const auto& err : validationErrors) {
-                std::cerr << "  • " << err << "\033[0m\n";
+                std::cerr << "  • " << err << "\033[0;1m\n";
             }
-            std::cout << "\n\033[1;92m↵ to try again...\033[0m";
+            std::cout << "\n\033[1;92m↵ to try again...\033[0;1m";
             std::cin.ignore();
             clearScrollBuffer();
             continue;
         }
 
         // Confirmation
-        std::cout << "\n\033[1;93mWARNING: This will \033[1;91m*ERASE ALL DATA*\033[1;93m on selected devices:\033[0m\n\n";
+        std::cout << "\n\033[1;93mWARNING: This will \033[1;91m*ERASE ALL DATA*\033[1;93m on selected devices:\033[0;1m\n\n";
         for (const auto& [iso, device] : validPairs) {
             // Get and display device size
             uint64_t deviceSize = getBlockDeviceSize(device);
             std::string deviceSizeStr = formatFileSize(deviceSize);
 
-            std::cout << "  \033[1;93m" << device << "\033[0m (\033[1;95m" << deviceSizeStr << "\033[0m)"
-                     << " ← \033[1;92m" << iso.filename << " \033[0m(\033[1;95m" << iso.sizeStr << "\033[0m)\n";
+            std::cout << "  \033[1;93m" << device << "\033[0;1m (\033[1;95m" << deviceSizeStr << "\033[0;1m)"
+                     << " ← \033[1;92m" << iso.filename << " \033[0;1m(\033[1;95m" << iso.sizeStr << "\033[0;1m)\n";
         }
 
         std::unique_ptr<char, decltype(&std::free)> confirmation(
-            readline("\n\033[1;94mProceed? (y/N): \033[0m"), &std::free
+            readline("\n\033[1;94mProceed? (y/N): \033[0;1m"), &std::free
         );
 
         if (!confirmation || 
             (confirmation.get()[0] != 'y' && confirmation.get()[0] != 'Y')) {
-            std::cout << "\n\033[1;93mWrite operation aborted by user\033[0m\n";
-            std::cout << "\n\033[1;32m↵ to continue...\033[0m";
+            std::cout << "\n\033[1;93mWrite operation aborted by user\033[0;1m\n";
+            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore();
             clearScrollBuffer();
             continue;
@@ -432,8 +432,8 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
                     std::cout << std::left << std::setw(40) 
                               << (prog.filename + " → " + prog.device)
                               << std::right << std::setw(6)
-                              << (prog.completed ? "\033[1;92m DONE\033[0m" :
-                                  prog.failed ? "\033[1;91m FAIL\033[0m" :
+                              << (prog.completed ? "\033[1;92m DONE\033[0;1m" :
+                                  prog.failed ? "\033[1;91m FAIL\033[0;1m" :
                                   std::to_string(prog.progress) + "%")
                               << " ["
                               << std::setw(9) << prog.currentSize
@@ -469,7 +469,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         restoreInput();
     } while (!isFinished);
 
-    std::cout << "\n\033[1;32m↵ to continue...\033[0m";
+    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
