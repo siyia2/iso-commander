@@ -321,7 +321,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                 completedTasks->fetch_add(files.size() - (&operateIso - files.data()), std::memory_order_relaxed);
                 
                 // Add a cancellation message
-                std::string cancelMessage = "\033[1;93mOperation cancelled by user.\033[0m";
+                std::string cancelMessage = "\033[1;93mOperation cancelled by user - partial cleanup performed.\033[0m";
                 operationErrors.emplace(cancelMessage);
                 
                 break;
@@ -343,15 +343,10 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     std::string operationInfo = "\033[1mDeleted: \033[1;92m'" + srcDir + "/" + srcFile + "'\033[1m\033[0;1m.";
                     operationIsos.emplace(operationInfo);
                 } else {
-					if (!g_CancelledMessageAdded.exchange(true)) {
-							operationErrors.emplace("\033[1;33mOperation cancelled by user - partial files cleaned up.\033[0m");
-        
-					} else {
-						std::string errorMessageInfo = "\033[1;91mError deleting: \033[1;93m'" + srcDir + "/" + srcFile +
-						"'\033[1;91m: " + ec.message() + "\033[1;91m.\033[0;1m";
-						operationErrors.emplace(errorMessageInfo);
-						operationSuccessful = false;
-					}
+                    std::string errorMessageInfo = "\033[1;91mError deleting: \033[1;93m'" + srcDir + "/" + srcFile +
+                        "'\033[1;91m: " + ec.message() + "\033[1;91m.\033[0;1m";
+                    operationErrors.emplace(errorMessageInfo);
+                    operationSuccessful = false;
                 }
                 // Increment task counter for delete operation
                 completedTasks->fetch_add(1, std::memory_order_relaxed);
