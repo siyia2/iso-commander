@@ -379,12 +379,6 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
                 bool success = false;
                 
                 try {
-                    {
-                        std::lock_guard<std::mutex> lock(coutMutex);
-                        std::cout << "\n\033[1;94mStarting: \033[1;92m" << task.filename 
-                                 << "\033[1;94m → \033[1;93m" << task.device << "\033[0m\n";
-                    }
-                    
                     success = writeIsoToDevice(task.isoPath, task.device);
                 } catch (...) {
                     success = false;
@@ -393,12 +387,12 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
                 {
                     std::lock_guard<std::mutex> lock(coutMutex);
                     if (success) {
-                        std::cout << "\033[1;92mSuccess: " << task.device << "\033[0m\n";
+                        std::cout << "\033[0;1m | \033[1;92mSuccess: " << task.device << "\033[0;1m\n";
                         successes++;
                     } else if (g_operationCancelled) {
-                        std::cout << "\033[1;93mCancelled: " << task.device << "\033[0m\n";
+                        std::cout << "\033[0;1m | \033[1;93mCancelled: " << task.device << "\033[0;1m\n";
                     } else {
-                        std::cout << "\033[1;91mFailed: " << task.device << "\033[0m\n";
+                        std::cout << "\033[0;1m | \033[1;91mFailed: " << task.device << "\033[0;1m\n";
                     }
                 }
 
@@ -409,7 +403,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         // Start workers
         disableInput();
         clearScrollBuffer();
-        std::cout << "\033[1;94mStarting write operations (\033[1;91mCtrl+C to cancel\033[1;94m)\033[0m\n";
+        std::cout << "\033[1;94mStarting write operations (\033[1;91mCtrl+C to cancel\033[1;94m)\033[0;1m\n";
 
         std::vector<std::thread> pool;
         for (size_t i = 0; i < maxThreads; ++i) {
@@ -436,7 +430,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         // Calculate and print the elapsed time after flushing is complete
     auto end_time = std::chrono::high_resolution_clock::now();
     auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - startTime).count();
-    std::cout << "\n\n\033[0;1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n";
+    std::cout << "\n\033[0;1mTotal time taken: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n";
         flushStdin();
         restoreInput();
     } while (!isFinished);
@@ -463,6 +457,18 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device) {
         stream << std::fixed << std::setprecision(2) << size << units[unit];
         return stream.str();
     };
+    
+    // Find the position of the last '/'
+    size_t lastSlashPos = isoPath.find_last_of('/');
+    
+    // Extract everything after the last '/'
+    std::string filename;
+    if (lastSlashPos != std::string::npos) {
+        filename = isoPath.substr(lastSlashPos + 1);
+    } else {
+        // If there is no '/', the entire string is the filename
+        filename = isoPath;
+    }
 
     constexpr std::streamsize BUFFER_SIZE = 8 * 1024 * 1024; // 8 MB buffer
     
@@ -526,7 +532,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device) {
         int progress = static_cast<int>((static_cast<double>(totalWritten) / fileSize) * 100);
         std::cout << "\033[1K"; // ANSI escape sequence to clear the rest of the line
         std::cout << "\rProgress: " << progress << "% (" 
-                  << formatSize(totalWritten) << "/" << formatSize(fileSize) << ")"
+                  << formatSize(totalWritten) << "/" << formatSize(fileSize) << ") \033[1;92m" << filename << "\033[0;1m -> \033[1;93m" << device << "\033[0;1m"
                   << std::flush;
     }
     
