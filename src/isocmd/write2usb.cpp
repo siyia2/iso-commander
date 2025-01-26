@@ -326,13 +326,16 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
             errors.push_back("Missing mappings for " + 
                 std::to_string(selectedIsos.size() - deviceMap.size()) + " ISO(s)");
         }
-
+		bool permissions = false;
         if (!errors.empty()) {
             std::cerr << "\n\033[1;91mErrors:\033[0;1m\n";
             for (const auto& err : errors) {
                 std::cerr << "  • " << err << "\n";
             }
-            std::cout << "\n\033[1;92m↵ to try again...\033[0;1m";
+            if (!permissions) {
+				std::cout << "\n\033[1;92m↵ to try again...\033[0;1m";
+			}
+            
             std::cin.ignore();
             clearScrollBuffer();
             continue;
@@ -351,22 +354,23 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
             std::string driveName = getDriveName(device);  // get drive name
 
             if (!isUsbDevice(device)) {
-                validationErrors.push_back("\033[1;91m" + device + " not removable");
+                validationErrors.push_back("\033[1;93m'" + device + "'\033[0;1m is not a removable drive");
                 continue;
             }
             
             if (isDeviceMounted(device)) {
-                validationErrors.push_back("\033[1;91m" + device + " or its partitions are mounted");
+                validationErrors.push_back("\033[1;93m'" + device + "'\033[0;1m or its partitions are mounted");
                 continue;
             }
 
             if (deviceSize == 0) {
-                validationErrors.push_back("\033[1;91mFailed to get size for " + device + " check permissions ");
+                validationErrors.push_back("\033[0;1mFailed to get size for \033[1;93m'" + device + "'\033[0;1m check permissions ");
+                permissions = true;
                 continue;
             }
 
             if (iso.size > deviceSize) {
-                validationErrors.push_back("\033[1;91m" + iso.filename + " too large for \033[1;93m'" + 
+                validationErrors.push_back("\033[1;92m'" + iso.filename + "'\033[0;1m (\033[1;95m" + iso.sizeStr + "\033[0;1m) is too large for \033[1;93m'" + 
                     device + " <" + driveName  +">' \033[0;1m(\033[1;95m" + deviceSizeStr + "\033[0;1m)");
                 continue;
             }
@@ -379,7 +383,12 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
             for (const auto& err : validationErrors) {
                 std::cerr << "  • " << err << "\033[0;1m\n";
             }
-            std::cout << "\n\033[1;92m↵ to try again...\033[0;1m";
+            if (!permissions) {
+				std::cout << "\n\033[1;92m↵ to try again...\033[0;1m";
+			} else {
+				std::cout << "\n\033[1;92m↵ to continue...\033[0;1m";
+				permissions = false;
+			}
             std::cin.ignore();
             clearScrollBuffer();
             continue;
