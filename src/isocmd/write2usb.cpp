@@ -341,7 +341,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         }
 
         // Confirmation
-        std::cout << "\n\033[1;91mWARNING: This will ERASE ALL DATA on:\033[0m\n";
+        std::cout << "\n\033[1;93mWARNING: This will \033[1;91m*ERASE ALL DATA*\033[1;93m on selected devices:\033[0m\n\n";
         for (const auto& [iso, device] : validPairs) {
             // Get and display device size
             uint64_t deviceSize = getBlockDeviceSize(device);
@@ -357,7 +357,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
 
         if (!confirmation || 
             (confirmation.get()[0] != 'y' && confirmation.get()[0] != 'Y')) {
-            std::cout << "\033[1;93mOperation cancelled\033[0m\n";
+            std::cout << "\n\033[1;93mWrite operation aborted by user\033[0m\n";
             std::cout << "\n\033[1;32m↵ to continue...\033[0m";
             std::cin.ignore();
             clearScrollBuffer();
@@ -410,6 +410,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
 
         // Start operations
         disableInput();
+        clearScrollBuffer();
         std::cout << "\n\033[1;94mStarting writes (\033[1;91mCtrl+C to cancel\033[1;94m)\033[0;1m\n";
         std::cout << "\033[s"; // Save cursor position
         
