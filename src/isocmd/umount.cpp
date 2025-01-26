@@ -63,6 +63,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
     for (const auto& isoDir : isoDirs) {
         if (g_operationCancelled) {
             if (!g_CancelledMessageAdded.exchange(true)) {
+				unmountedErrors.clear();
                 unmountedErrors.emplace("\033[1;33mUnmount operation cancelled by user - partial cleanup performed.\033[0m");
             }
             break;
