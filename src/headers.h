@@ -188,13 +188,18 @@ void toLowerInPlace(std::string& str);
 
 // WRITE2USB
 
-//bools
-bool writeIsoToDevice(const std::string& isoPath, const std::string& device);
+// bools
+bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t& progressIndex);
 bool isDeviceMounted(const std::string& device);
 
-//voids
+// voids
 void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles);
 void signalHandlerWrite(int signum);
+
+// stds
+std::vector<size_t> parseIsoSelection(const std::string& input, size_t maxIsos);
+std::string formatFileSize(uint64_t size);
+std::string getDriveName(const std::string& device);
 
 // CONVERSION TOOLS
 
