@@ -348,6 +348,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
             // Get device size before other checks
             uint64_t deviceSize = getBlockDeviceSize(device);
             std::string deviceSizeStr = formatFileSize(deviceSize);
+            std::string driveName = getDriveName(device);  // get drive name
 
             if (!isUsbDevice(device)) {
                 validationErrors.push_back("\033[1;91m" + device + " not removable");
@@ -360,13 +361,13 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
             }
 
             if (deviceSize == 0) {
-                validationErrors.push_back("\033[1;91mFailed to get size for " + device);
+                validationErrors.push_back("\033[1;91mFailed to get size for " + device + " check permissions ");
                 continue;
             }
 
             if (iso.size > deviceSize) {
-                validationErrors.push_back("\033[1;91m" + iso.filename + " too large for " + 
-                    device + " (\033[1;95m" + deviceSizeStr + "\033[0;1m)");
+                validationErrors.push_back("\033[1;91m" + iso.filename + " too large for \033[1;93m'" + 
+                    device + " <" + driveName  +">' \033[0;1m(\033[1;95m" + deviceSizeStr + "\033[0;1m)");
                 continue;
             }
 
@@ -385,18 +386,17 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         }
 
         // Confirmation
-        // Confirmation
-    std::cout << "\n\033[1;93mWARNING: This will \033[1;91m*ERASE ALL DATA*\033[1;93m on selected devices:\033[0;1m\n\n";
-    for (const auto& [iso, device] : validPairs) {
-        // Get and display device size and name
-        uint64_t deviceSize = getBlockDeviceSize(device);
-        std::string deviceSizeStr = formatFileSize(deviceSize);
-        std::string driveName = getDriveName(device);  // New function to get drive name
+		std::cout << "\n\033[1;93mWARNING: This will \033[1;91m*ERASE ALL DATA*\033[1;93m on selected devices:\033[0;1m\n\n";
+		for (const auto& [iso, device] : validPairs) {
+			// Get and display device size and name
+			uint64_t deviceSize = getBlockDeviceSize(device);
+			std::string deviceSizeStr = formatFileSize(deviceSize);
+			std::string driveName = getDriveName(device);  // get drive name
 
-        std::cout << "  \033[1;93m" << device << "\033[0;1m (\033[1;95m" << deviceSizeStr << "\033[0;1m)"
-                 << " \033[1;93m<" + driveName + ">\033[0;1m"
-                 << " ← \033[1;92m" << iso.filename << " \033[0;1m(\033[1;95m" << iso.sizeStr << "\033[0;1m)\n";
-    }
+			std::cout << "  \033[1;93m" << device << "\033[0;1m (\033[1;95m" << deviceSizeStr << "\033[0;1m)"
+					<< " \033[1;93m<" + driveName + ">\033[0;1m"
+					<< " ← \033[1;92m" << iso.filename << " \033[0;1m(\033[1;95m" << iso.sizeStr << "\033[0;1m)\n";
+		}
 
         std::unique_ptr<char, decltype(&std::free)> confirmation(
             readline("\n\001\033[1;94m\002Proceed? (y/n): \001\033[0;1m\002"), &std::free
