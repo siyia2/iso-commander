@@ -212,19 +212,38 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
     bool isFinished = false;
     do {
         // Device mapping input
-        std::string devicePrompt = "\n\033[1;94mSelected ISOs:\033[0;1m\n";
+        std::string devicePrompt = "\n\033[0;1mSelected ISO:\033[0;1m\n\n";
         for (size_t i = 0; i < selectedIsos.size(); ++i) {
-            devicePrompt += "  \033[1;93m" + std::to_string(i+1) + ">\033[0;1m " +
-                          selectedIsos[i].filename + " (\033[1;95m" + 
-                          selectedIsos[i].sizeStr + "\033[0;1m)\n";
-        }
-        devicePrompt += "\n\033[1;94mEnter device mappings as \033[1;93mINDEX>DEVICE\033[1;94m separated by ';'\n"
-                      "Example: \033[1;93m1>/dev/sdc;2>/dev/sdd\033[1;94m\n"
-                      "\033[1;92mEnter↵ to write\033[0;1m, \033[1;91mCtrl+C to cancel:\033[0;1m ";
+			std::string path = selectedIsos[i].path;
+			size_t lastSlashPos = path.find_last_of('/');
+    
+			if (lastSlashPos != std::string::npos) {
+				// Split the path into the part before the last '/' and the part after
+				std::string beforeLastSlash = path.substr(0, lastSlashPos + 1);
+				std::string afterLastSlash = path.substr(lastSlashPos + 1);
+        
+				// Apply magenta color to the part after the last '/'
+				path = beforeLastSlash + "\033[1;95m" + afterLastSlash + "\033[0;1m";
+			}
+    
+			devicePrompt += "  \033[1;93m" + std::to_string(i+1) + ">\033[0;1m " +
+							path + " (\033[1;35m" + 
+							selectedIsos[i].sizeStr + "\033[0;1m)\n";
+		}
+		
+		// Restore readline autocomplete and screen clear bindings
+        rl_bind_key('\f', rl_clear_screen);
+		rl_bind_key('\t', rl_complete);
+		
+        devicePrompt += "\n\001\033[1;92m\002DrivePairing\001\033[1;94m\002 ↵ as \001\033[1;93m\002INDEX>DEVICE\001\033[1;94m\002 (e.g, \001\033[1;94m\0021>/dev/sdc;2>/dev/sdd\001\033[1;94m\002), or ↵ to return:\001\033[0;1m\002 ";
 
         std::unique_ptr<char, decltype(&std::free)> deviceInput(
             readline(devicePrompt.c_str()), &std::free
         );
+        
+        if (deviceInput && *deviceInput) {  // Check if the input is not null and not empty
+			add_history(deviceInput.get());  // Add the input to temp history
+		}
 
         if (!deviceInput || deviceInput.get()[0] == '\0') {
             clear_history();
@@ -311,7 +330,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
             }
             
             if (isDeviceMounted(device)) {
-                validationErrors.push_back("\033[1;91m" + device + " is mounted");
+                validationErrors.push_back("\033[1;91m" + device + " or its partitions are mounted");
                 continue;
             }
 
@@ -352,7 +371,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         }
 
         std::unique_ptr<char, decltype(&std::free)> confirmation(
-            readline("\n\033[1;94mProceed? (y/N): \033[0;1m"), &std::free
+            readline("\n\001\033[1;94m\002Proceed? (y/n): \001\033[0;1m\002"), &std::free
         );
 
         if (!confirmation || 
@@ -411,7 +430,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         // Start operations
         disableInput();
         clearScrollBuffer();
-        std::cout << "\n\033[1;94mStarting writes (\033[1;91mCtrl+C to cancel\033[1;94m)\033[0;1m\n";
+        std::cout << "\n\033[1;94mWriting... (\033[1;91mCtrl+C to cancel\033[1;94m)\033[0;1m\n\n";
         std::cout << "\033[s"; // Save cursor position
         
         std::vector<std::thread> threads;
@@ -467,6 +486,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         isFinished = true;
         flushStdin();
         restoreInput();
+        clear_history();
     } while (!isFinished);
 
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
