@@ -96,6 +96,8 @@ bool isDeviceMounted(const std::string& device) {
     return false;
 }
 
+
+// Function to parse selection for writes
 std::vector<size_t> parseIsoSelection(const std::string& input, size_t maxIsos) {
     std::vector<size_t> indices;
     std::istringstream iss(input);
@@ -134,6 +136,8 @@ std::vector<size_t> parseIsoSelection(const std::string& input, size_t maxIsos) 
     return indices;
 }
 
+
+// Function to foram fileSize
 std::string formatFileSize(uint64_t size) {
     std::ostringstream oss;
     if (size < 1024 * 1024) {
@@ -147,6 +151,26 @@ std::string formatFileSize(uint64_t size) {
             << static_cast<double>(size) / (1024 * 1024 * 1024) << " GB";
     }
     return oss.str();
+}
+
+
+// Function to get removable drive names
+std::string getDriveName(const std::string& device) {
+    // Extract device name (e.g., sdc from /dev/sdc)
+    std::string deviceName = device.substr(device.find_last_of('/') + 1);
+    std::string sysfsPath = "/sys/block/" + deviceName + "/device/model";
+    
+    std::ifstream modelFile(sysfsPath);
+    std::string driveName;
+    
+    if (modelFile.is_open()) {
+        std::getline(modelFile, driveName);
+        // Trim whitespace
+        driveName.erase(0, driveName.find_first_not_of(" \t"));
+        driveName.erase(driveName.find_last_not_of(" \t") + 1);
+    }
+    
+    return driveName.empty() ? "Unknown Drive" : driveName;
 }
 
 
@@ -172,28 +196,9 @@ struct ProgressInfo {
 };
 
 
-// Shared progress data with mutex protection
+// Shared progress data and mutex for protection
 std::mutex progressMutex;
 std::vector<ProgressInfo> progressData;
-
-
-std::string getDriveName(const std::string& device) {
-    // Extract device name (e.g., sdc from /dev/sdc)
-    std::string deviceName = device.substr(device.find_last_of('/') + 1);
-    std::string sysfsPath = "/sys/block/" + deviceName + "/device/model";
-    
-    std::ifstream modelFile(sysfsPath);
-    std::string driveName;
-    
-    if (modelFile.is_open()) {
-        std::getline(modelFile, driveName);
-        // Trim whitespace
-        driveName.erase(0, driveName.find_first_not_of(" \t"));
-        driveName.erase(driveName.find_last_not_of(" \t") + 1);
-    }
-    
-    return driveName.empty() ? "Unknown Drive" : driveName;
-}
 
 
 // Function to prepare writing ISO to usb
