@@ -538,6 +538,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         // Progress display
         auto displayProgress = [&]() {
             while (completed < validPairs.size() && !g_operationCancelled) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
             
                 std::lock_guard<std::mutex> lock(progressMutex);
                 std::cout << "\033[u"; // Restore cursor
@@ -545,7 +546,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
                 for (const auto& prog : progressData) {
                     std::string driveName = getDriveName(prog.device);
                     std::cout << "\033[K"; // Clear line
-                    std::cout << std::right << std::setw(40) 
+                    std::cout << std::right
                             << ("\033[1;95m" + prog.filename + " \033[0;1m→ " + 
                                 "\033[1;93m" + prog.device + "\033[0;1m \033[1;93m<" + driveName + ">\033[0;1m")
                             << std::right << std::setw(5)
