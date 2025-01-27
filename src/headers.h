@@ -190,12 +190,12 @@ void toLowerInPlace(std::string& str);
 // WRITE2USB
 
 // bools
-bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t& progressIndex);
+bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex);
+bool isUsbDevice(const std::string& device);
 bool isDeviceMounted(const std::string& device);
 
 // voids
 void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages);
-void signalHandlerWrite(int signum);
 
 // stds
 std::string formatFileSize(uint64_t size);
