@@ -524,8 +524,13 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
         char* rawSearchQuery = readline(prompt.c_str());
         
         std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
-        input = searchQuery.get();
         
+        // Check for EOF (Ctrl+D) or NULL input before processing
+        if (!searchQuery.get()) {
+            return; // Exit the loop on EOF
+        }
+
+        std::string input(searchQuery.get());
         
         if (input == "stats" || input == "clr") {
 			delCacheAndShowStats(input, promptFlag, maxDepth, historyPattern);

@@ -53,7 +53,7 @@ int main(int argc, char *argv[]) {
     }
 
     // Register signal handlers
-    signal(SIGINT, signalHandler);  // Handle Ctrl+C
+    signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
     signal(SIGTERM, signalHandler); // Handle termination signals
 
     bool exitProgram = false;
@@ -208,7 +208,13 @@ void submenu1(int& maxDepth, bool& historyPattern, bool& verbose) {
         // Use std::unique_ptr to manage memory for input
 		std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
 
+        // Check for EOF (Ctrl+D) or NULL input before processing
+        if (!input.get()) {
+            break; // Exit the loop on EOF
+        }
+
         std::string mainInputString(input.get());
+        std::string choice(mainInputString);
 
         if (!input.get() || std::strlen(input.get()) == 0) {
 			break; // Exit the submenu if input is empty or NULL
@@ -279,7 +285,13 @@ void submenu2(bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbo
         // Use std::unique_ptr to manage memory for input
 		std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
 
+        // Check for EOF (Ctrl+D) or NULL input before processing
+        if (!input.get()) {
+            break; // Exit the loop on EOF
+        }
+
         std::string mainInputString(input.get());
+        std::string choice(mainInputString);
 
 
         if (!input.get() || std::strlen(input.get()) == 0) {
@@ -367,6 +379,12 @@ void saveAutomaticImportConfig(const std::string& filePath) {
                              "\001\033[1;93m\002Note: This feature may be resource intensive for older systems and is disabled by default.\001\033[0;1m\002"
                              "\n\n\001\033[1;94m\002Toggle automatic background ISO updates at every startup (\001\033[1;92m\0021\001\033[1;94m\002/\001\033[1;91m\0020\001\033[1;94m\002), or \001\033[1;93m\002anyKey\001\033[1;94m\002 ↵ to return: \001\033[0;1m\002";
         std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
+        
+        // Check for EOF (Ctrl+D) or NULL input before processing
+        if (!input.get()) {
+            return; // Exit the loop on EOF
+        }
+
         std::string mainInputString(input.get());
 
         if (!input.get() || std::strlen(input.get()) == 0 || (mainInputString != "1" && mainInputString != "0")) {
@@ -451,11 +469,25 @@ void restoreInput() {
 }
 
 
+void setupReadlineToIgnoreCtrlC() {
+    // Prevent readline from catching/interrupting signals
+    rl_catch_signals = 0;
+
+    // Configure SIGINT (Ctrl+C) to be ignored
+    struct sigaction sa_ignore;
+    sa_ignore.sa_handler = SIG_IGN;   // Ignore signal
+    sigemptyset(&sa_ignore.sa_mask);  // Clear signal mask
+    sa_ignore.sa_flags = 0;           // No special flags
+    sigaction(SIGINT, &sa_ignore, nullptr);
+}
+
+
 // Signal handler for SIGINT (Ctrl+C)
 void signalHandlerCancellations(int signal) {
     if (signal == SIGINT) {
         g_operationCancelled = true;
     }
+    setupReadlineToIgnoreCtrlC();
 }
 
 // Setup signal handling

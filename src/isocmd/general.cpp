@@ -60,6 +60,12 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
 							+ "\001\033[1;94m\002, ? ↵ for help, ↵ to return:\001\033[0;1m\002 ";
 
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
+        
+        // Check for EOF (Ctrl+D) or NULL input before processing
+        if (!input.get()) {
+            break; // Exit the loop on EOF
+        }
+
         std::string inputString(input.get());
         
         if (inputString == "?") {
