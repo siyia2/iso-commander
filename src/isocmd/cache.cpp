@@ -498,6 +498,13 @@ void delCacheAndShowStats (std::string& inputSearch, const bool& promptFlag, con
 
 // Function for manual cache refresh
 void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxDepth, bool historyPattern) {
+	
+	// Setup signal handler at the start of the operation
+    setupSignalHandlerCancellations();
+        
+    // Reset cancellation flag
+    g_operationCancelled = false;
+	
     // Centralize input handling
     std::string input = initialDir;
     if (input.empty()) {
@@ -600,6 +607,9 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 		// Flush and Restore input after processing
 		flushStdin();
 		restoreInput();
+			
+        std::cout << "\r\033[0;1mTotal files processed: " << totalFiles;
+        
         if (!invalidPaths.empty() || !validPaths.empty()) {
             std::cout << "\n";
         }
@@ -633,6 +643,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
     std::vector<std::string> localErrors;
     std::atomic<bool> g_CancelledMessageAdded{false};
 
+
     auto iequals = [](const std::string_view& a, const std::string_view& b) {
         return std::equal(a.begin(), a.end(), b.begin(), b.end(),
                          [](unsigned char a, unsigned char b) {
@@ -643,16 +654,14 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
     try {
         auto options = std::filesystem::directory_options::none;
         for (auto it = std::filesystem::recursive_directory_iterator(path, options); 
-             it != std::filesystem::recursive_directory_iterator(); ++it) {
-				 
-				 if (g_operationCancelled) {
-					if (!g_CancelledMessageAdded.exchange(true)) {
-						uniqueErrorMessages.clear();
-						uniqueErrorMessages.insert("\n\033[1;33mISO cache update interrupted by user.\033[0;1m");
-					}
-					break;
+			it != std::filesystem::recursive_directory_iterator(); ++it) {
+			if (g_operationCancelled) {
+				if (!g_CancelledMessageAdded.exchange(true)) {
+					uniqueErrorMessages.clear();
+					uniqueErrorMessages.insert("\n\033[1;33mISO cache update interrupted by user.\033[0;1m");
 				}
-				 
+				break;
+			}
             try {
                 if (maxDepth >= 0 && it.depth() > maxDepth) {
                     it.disable_recursion_pending();
@@ -684,11 +693,6 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
                                     it->path().string() + " - " + 
                                     entryError.what() + "\033[0;1m");
             }
-        }
-
-        // Update display one final time if needed
-        if (promptFlag && totalFiles == 0) {
-            std::cout << "\r\033[0;1mTotal files processed: " << totalFiles << std::flush;
         }
 
         // Merge leftovers
