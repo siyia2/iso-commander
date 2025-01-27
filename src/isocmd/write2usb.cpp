@@ -201,6 +201,50 @@ std::mutex progressMutex;
 std::vector<ProgressInfo> progressData;
 
 
+// Get removable drives to display in selection
+std::vector<std::string> getRemovableDevices() {
+    std::vector<std::string> devices;
+    namespace fs = std::filesystem;
+    
+    try {
+        for (const auto& entry : fs::directory_iterator("/sys/block")) {
+            std::string deviceName = entry.path().filename();
+            
+            // Skip virtual devices, loopbacks, and drives with numbers like /dev/sr0
+            if (deviceName.find("loop") == 0 || 
+                deviceName.find("ram") == 0 ||
+                deviceName.find("zram") == 0) {
+                continue;
+            }
+
+            // Check if the device name contains any numeric characters
+            bool hasNumber = false;
+            for (char ch : deviceName) {
+                if (std::isdigit(ch)) {
+                    hasNumber = true;
+                    break;
+                }
+            }
+            if (hasNumber) {
+                continue; // Skip devices with numbers (e.g., sr0, sr1)
+            }
+
+            // Check removable status
+            std::ifstream removableFile(entry.path() / "removable");
+            std::string removable;
+            if (removableFile >> removable && removable == "1") {
+                devices.push_back("/dev/" + deviceName);
+            }
+        }
+    } catch (const fs::filesystem_error& e) {
+        // Handle filesystem error if needed
+        std::cerr << "Filesystem error: " << e.what() << std::endl;
+    }
+    
+    return devices;
+}
+
+
 // Function to prepare writing ISO to usb
 void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
     clearScrollBuffer();
@@ -236,8 +280,9 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
 
     bool isFinished = false;
     do {
+		clearScrollBuffer();
         // Device mapping input
-        std::string devicePrompt = "\033[0;1m\n";
+        std::string devicePrompt = "\n\033[0;1m Selected \033[1;92mISO\033[0;1m:\n\n";
         for (size_t i = 0; i < selectedIsos.size(); ++i) {
             // Extract the directory and filename
             auto [shortDir, filename] = extractDirectoryAndFilename(selectedIsos[i].path);
@@ -255,7 +300,32 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         rl_bind_key('\f', rl_clear_screen);
         rl_bind_key('\t', rl_complete);
         
-        devicePrompt += "\n\001\033[1;92m\002DevicePairing\001\033[1;94m\002 ↵ as \001\033[1;93m\002INDEX>DEVICE\001\033[1;94m\002 (e.g, \001\033[1;94m\0021>/dev/sdc;2>/dev/sdd\001\033[1;94m\002), or ↵ to return:\001\033[0;1m\002 ";
+        devicePrompt += "\n\033[0;1mAvailable Removable Drives:\033[0;1m\n\n";
+		std::vector<std::string> usbDevices = getRemovableDevices();
+
+		if (usbDevices.empty()) {
+			devicePrompt += "  \033[1;91mNo available Removable drives detected!\033[0;1m\n";
+		} else {
+			for (const auto& device : usbDevices) {
+				try {
+						std::string driveName = getDriveName(device);
+						uint64_t deviceSize = getBlockDeviceSize(device);
+						std::string sizeStr = formatFileSize(deviceSize);
+						bool mounted = isDeviceMounted(device);
+            
+						devicePrompt += "  \033[1;93m" + device + "\033[0;1m" +
+									" <" + driveName + ">" +
+									" (\033[1;35m" + sizeStr + "\033[0;1m)" +
+									(mounted ? " \033[1;91m(mounted)\033[0;1m" : "") + 
+									"\n";
+				} catch (const std::exception& e) {
+					devicePrompt += "  \033[1;91m" + device + " (error: " + e.what() + ")\033[0;1m\n";
+				}
+			}
+		}
+
+		// Add separator and instructions
+		devicePrompt += "\n\001\033[1;92m\002DevicePairing\001\033[1;94m\002 ↵ as \001\033[1;93m\002INDEX>DEVICE\001\033[1;94m\002 (e.g, \001\033[1;94m\0021>/dev/sdc;2>/dev/sdd\001\033[1;94m\002), or ↵ to return:\001\033[0;1m\002 ";
 
         std::unique_ptr<char, decltype(&std::free)> deviceInput(
             readline(devicePrompt.c_str()), &std::free
@@ -330,7 +400,6 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
             }
             std::cout << "\n\033[1;92m↵ to try again...\033[0;1m";
             std::cin.ignore();
-            clearScrollBuffer();
             continue;
         }
 
@@ -384,7 +453,6 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
                 permissions = false;
             }
             std::cin.ignore();
-            clearScrollBuffer();
             continue;
         }
 
@@ -409,7 +477,6 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
             std::cout << "\n\033[1;93mWrite operation aborted by user.\033[0;1m\n";
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore();
-            clearScrollBuffer();
             continue;
         }
 
