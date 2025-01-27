@@ -220,111 +220,70 @@ std::vector<std::string> getRemovableDevices() {
 }
 
 
-// Function to prepare writing ISO to usb
-void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages) {
-    clearScrollBuffer();
-    std::set<int> indicesToProcess;
-    
-    // Setup signal handler at the start of the operation
-    setupSignalHandlerCancellations();
-    // Reset cancellation flag
-    g_operationCancelled = false;
-    
-    tokenizeInput(input, isoFiles, uniqueErrorMessages, indicesToProcess);
-    if (indicesToProcess.empty()) {
-        std::cout << "\n\033[1;91mNo valid input provided for write.\n\033[0;1m";
-        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        return; // Exit if no valid indices are provided
-    }
-    // Parse ISO selection
-    std::set<int> isoIndices = indicesToProcess;
-    isoIndices = indicesToProcess;
-        
+// Function to handle device mapping collection and validation
+std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(
+    const std::vector<IsoInfo>& selectedIsos,
+    std::set<std::string>& uniqueErrorMessages
+) {
+    while (true) {
+        clearScrollBuffer();
 
-    // Collect selected ISOs
-	std::vector<IsoInfo> selectedIsos;
-	for (size_t pos = 0; pos < isoIndices.size(); ++pos) {
-		auto it = isoIndices.begin();
-		std::advance(it, pos);  // Move iterator to the desired position
-		size_t idx = *it;  // Dereference iterator to get the value
-
-		IsoInfo info;
-		info.path = isoFiles[idx - 1];
-		info.filename = info.path.substr(info.path.find_last_of('/') + 1);  // Extract filename
-		info.size = std::filesystem::file_size(info.path);  // Get the file size
-		info.sizeStr = formatFileSize(info.size);  // Assuming you have a function formatFileSize
-		info.originalIndex = idx;  // Store the original index
-		selectedIsos.push_back(info);  // Add to the result vector
-	}
-
-    bool isFinished = false;
-    do {
-		clearScrollBuffer();
-		
-		if (!uniqueErrorMessages.empty()) {
-			std::cout << "\n";
-			for (const auto& err : uniqueErrorMessages) {
-				std::cout << err << "\n";  // Newline ensures separate lines
-			}
-		}
-        // Device mapping input
-        std::string devicePrompt = "\n\033[0;1m Selected \033[1;92mISO\033[0;1m:\n\n";
-        for (size_t i = 0; i < selectedIsos.size(); ++i) {
-            // Extract the directory and filename
-            auto [shortDir, filename] = extractDirectoryAndFilename(selectedIsos[i].path);
-
-            // Highlight the filename in magenta
-            std::string highlightedPath = shortDir + "/\033[1;95m" + filename + "\033[0;1m";
-
-            // Append to the device prompt
-            devicePrompt += "  \033[1;93m" + std::to_string(i + 1) + ">\033[0;1m " +
-                            highlightedPath + " (\033[1;35m" + 
-                            selectedIsos[i].sizeStr + "\033[0;1m)\n";
+        // Display user input errors at top
+        if (!uniqueErrorMessages.empty()) {
+            std::cout << "\n";
+            for (const auto& err : uniqueErrorMessages) {
+                std::cout << err << "\n";
+            }
+            uniqueErrorMessages.clear();
         }
 
+        // Build device prompt
+        std::string devicePrompt = "\n\033[0;1m Selected \033[1;92mISO\033[0;1m:\n\n";
+        for (size_t i = 0; i < selectedIsos.size(); ++i) {
+            auto [shortDir, filename] = extractDirectoryAndFilename(selectedIsos[i].path);
+            devicePrompt += "  \033[1;93m" + std::to_string(i+1) + ">\033[0;1m " + 
+                          shortDir + "/\033[1;95m" + filename + "\033[0;1m (\033[1;35m" + 
+                          selectedIsos[i].sizeStr + "\033[0;1m)\n";
+        }
+
+        devicePrompt += "\n\033[0;1mAvailable Removable Devices:\033[0;1m\n\n";
+        std::vector<std::string> usbDevices = getRemovableDevices();
+
+        if (usbDevices.empty()) {
+            devicePrompt += "  \033[1;91mNo available Removable devices detected!\033[0;1m\n";
+        } else {
+            for (const auto& device : usbDevices) {
+                try {
+                    std::string driveName = getDriveName(device);
+                    uint64_t deviceSize = getBlockDeviceSize(device);
+                    std::string sizeStr = formatFileSize(deviceSize);
+                    bool mounted = isDeviceMounted(device);
+                    devicePrompt += "  \033[1;93m" + device + "\033[0;1m <" + driveName + 
+                                  "> (\033[1;35m" + sizeStr + "\033[0;1m)" +
+                                  (mounted ? " \033[1;91m(mounted)\033[0;1m" : "") + "\n";
+                } catch (...) {
+                    devicePrompt += "  \033[1;91m" + device + " (error)\033[0;1m\n";
+                }
+            }
+        }
+        
         // Restore readline autocomplete and screen clear bindings
         rl_bind_key('\f', rl_clear_screen);
         rl_bind_key('\t', rl_complete);
         
-        devicePrompt += "\n\033[0;1mAvailable Removable Devices:\033[0;1m\n\n";
-		std::vector<std::string> usbDevices = getRemovableDevices();
+        rl_bind_keyseq("\033[A", rl_get_previous_history); // Restore Up arrow
+		rl_bind_keyseq("\033[B", rl_get_next_history);     // Restore Down arrow
 
-		if (usbDevices.empty()) {
-			devicePrompt += "  \033[1;91mNo available Removable devices detected!\033[0;1m\n";
-		} else {
-			for (const auto& device : usbDevices) {
-				try {
-						std::string driveName = getDriveName(device);
-						uint64_t deviceSize = getBlockDeviceSize(device);
-						std::string sizeStr = formatFileSize(deviceSize);
-						bool mounted = isDeviceMounted(device);
-            
-						devicePrompt += "  \033[1;93m" + device + "\033[0;1m" +
-									" <" + driveName + ">" +
-									" (\033[1;35m" + sizeStr + "\033[0;1m)" +
-									(mounted ? " \033[1;91m(mounted)\033[0;1m" : "") + 
-									"\n";
-				} catch (const std::exception& e) {
-					devicePrompt += "  \033[1;91m" + device + " (error: " + e.what() + ")\033[0;1m\n";
-				}
-			}
-		}
+        devicePrompt += "\n\001\033[1;92m\002Pair\001\033[1;94m\002 ↵ as \001\033[1;93m\002INDEX>DEVICE\001\033[1;94m\002 (e.g, \001\033[1;94m\0021>/dev/sdc;2>/dev/sdd\001\033[1;94m\002), or ↵ to return:\001\033[0;1m\002 ";
 
-		// Add separator and instructions
-		devicePrompt += "\n\001\033[1;92m\002Pair\001\033[1;94m\002 ↵ as \001\033[1;93m\002INDEX>DEVICE\001\033[1;94m\002 (e.g, \001\033[1;94m\0021>/dev/sdc;2>/dev/sdd\001\033[1;94m\002), or ↵ to return:\001\033[0;1m\002 ";
-
+        // Get user input
         std::unique_ptr<char, decltype(&std::free)> deviceInput(
             readline(devicePrompt.c_str()), &std::free
         );
-        
-        if (deviceInput && *deviceInput) {
-            add_history(deviceInput.get());
-        }
+        if (deviceInput && *deviceInput) add_history(deviceInput.get());
 
         if (!deviceInput || deviceInput.get()[0] == '\0') {
-            clear_history();
-            return;
+            return {};
         }
 
         // Parse device mappings
@@ -443,167 +402,194 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles, st
             continue;
         }
 
-        // Confirmation
-        std::cout << "\n\033[1;93mWARNING: This will \033[1;91m*ERASE ALL DATA*\033[1;93m on selected devices:\033[0;1m\n\n";
+        // Final confirmation
+        std::cout << "\n\033[1;93mWARNING: This will \033[1;91m*ERASE ALL DATA*\033[1;93m on:\033[0;1m\n\n";
         for (const auto& [iso, device] : validPairs) {
-            uint64_t deviceSize = getBlockDeviceSize(device);
-            std::string deviceSizeStr = formatFileSize(deviceSize);
-            std::string driveName = getDriveName(device);
-
-            std::cout << "  \033[1;93m" << device << "\033[0;1m (\033[1;95m" << deviceSizeStr << "\033[0;1m)"
-                    << " \033[1;93m<" + driveName + ">\033[0;1m"
-                    << " ← \033[1;92m" << iso.filename << " \033[0;1m(\033[1;95m" << iso.sizeStr << "\033[0;1m)\n";
+            std::cout << "  \033[1;93m" << device << " <" << getDriveName(device) << "> \033[0;1m ← \033[1;92m" 
+                      << iso.filename << "\033[0;1m\n";
         }
+        
+        rl_bind_key('\f', prevent_readline_keybindings);
+		rl_bind_key('\t', prevent_readline_keybindings);
+		// Disable up/down arrow keys for history browsing
+		rl_bind_keyseq("\033[A", prevent_readline_keybindings); // Up arrow
+		rl_bind_keyseq("\033[B", prevent_readline_keybindings); // Down arrow
 
         std::unique_ptr<char, decltype(&std::free)> confirmation(
             readline("\n\001\033[1;94m\002Proceed? (y/n): \001\033[0;1m\002"), &std::free
         );
 
-        if (!confirmation || 
-            (confirmation.get()[0] != 'y' && confirmation.get()[0] != 'Y')) {
-            std::cout << "\n\033[1;93mWrite operation aborted by user.\033[0;1m\n";
-            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-            std::cin.ignore();
-            continue;
+        if (confirmation && (confirmation.get()[0] == 'y' || confirmation.get()[0] == 'Y')) {
+            return validPairs;
         }
 
-        // Initialize progress tracking
-        progressData.clear();
-        for (size_t i = 0; i < validPairs.size(); ++i) {
+        std::cout << "\n\033[1;93mOperation cancelled.\033[0;1m\n";
+        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+        std::cin.ignore();
+    }
+}
+
+
+// Function to handle the actual write operation
+void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& validPairs) {
+    progressData.clear();
+    for (size_t i = 0; i < validPairs.size(); ++i) {
+        const auto& [iso, device] = validPairs[i];
+        progressData.emplace_back(ProgressInfo{
+            iso.filename,
+            device,
+            0,
+            "0 B",
+            iso.sizeStr,
+            false,
+            false
+        });
+    }
+
+    std::atomic<size_t> completedTasks(0);
+    std::atomic<bool> isProcessingComplete(false);
+    const size_t totalTasks = validPairs.size();
+    const unsigned int numThreads = std::min(static_cast<unsigned int>(totalTasks), 
+                                           static_cast<unsigned int>(maxThreads));
+    ThreadPool pool(numThreads);
+
+    // Add completion tracking variables
+    std::mutex completionMutex;
+    std::condition_variable completionCV;
+    size_t tasksCompleted = 0;
+
+    disableInput();
+    clearScrollBuffer();
+    std::cout << "\n\033[0;1mWriting... (\033[1;91mCtrl+c to cancel\033[0;1m)\n\n";
+    std::cout << "\033[s";
+
+    auto startTime = std::chrono::high_resolution_clock::now();
+
+    for (size_t i = 0; i < totalTasks; ++i) {
+        pool.enqueue([&, i]() {
             const auto& [iso, device] = validPairs[i];
-            progressData.emplace_back(ProgressInfo{
-                iso.filename,
-                device,
-                0,
-                "0 B",
-                iso.sizeStr,
-                false,
-                false
-            });
-        }
-
-        // Thread pool setup
-        std::atomic<size_t> completedTasks(0);
-        std::atomic<bool> isProcessingComplete(false);
-        const size_t totalTasks = validPairs.size();
-        const unsigned int numThreads = std::min(static_cast<unsigned int>(totalTasks), 
-                                               static_cast<unsigned int>(maxThreads));
-        ThreadPool pool(numThreads);
-        
-        const size_t chunkSize = std::max(size_t(1), 
-            std::min(size_t(50), (totalTasks + numThreads - 1) / numThreads));
-
-        std::atomic<size_t> activeTaskCount(0);
-        std::condition_variable taskCompletionCV;
-        std::mutex taskCompletionMutex;
-
-        auto startTime = std::chrono::high_resolution_clock::now();
-
-        // Enqueue chunked tasks
-        for (size_t i = 0; i < totalTasks; i += chunkSize) {
-            const size_t end = std::min(i + chunkSize, totalTasks);
-            activeTaskCount.fetch_add(1, std::memory_order_relaxed);
-
-            pool.enqueue([&, i, end]() {
-                for (size_t j = i; j < end && !g_operationCancelled.load(std::memory_order_acquire); ++j) {
-                    const auto& [iso, device] = validPairs[j];
-                    bool success = false;
-                    
-                    try {
-                        success = writeIsoToDevice(iso.path, device, j);
-                    } catch (const std::exception& e) {
-                        std::lock_guard<std::mutex> lock(progressMutex);
-                        progressData[j].failed = true;
-                    }
-
-                    if (success) {
-                        std::lock_guard<std::mutex> lock(progressMutex);
-                        progressData[j].completed = true;
-                        completedTasks.fetch_add(1, std::memory_order_relaxed);
-                    }
-                }
-
-                if (activeTaskCount.fetch_sub(1, std::memory_order_release) == 1) {
-                    taskCompletionCV.notify_one();
-                }
-            });
-        }
-
-        // Start operations
-        disableInput();
-        clearScrollBuffer();
-        std::cout << "\n\033[0;1mWriting... (\033[1;91mCtrl+c to cancel\033[0;1m)\n\n";
-        std::cout << "\033[s"; // Save cursor position
-
-        // Progress display thread
-        auto displayProgress = [&]() {
-            while (!isProcessingComplete.load(std::memory_order_acquire) && 
-                  !g_operationCancelled.load(std::memory_order_acquire)) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            bool success = false;
+            try {
+                success = writeIsoToDevice(iso.path, device, i); // Fixed signature
+            } catch (...) {
                 std::lock_guard<std::mutex> lock(progressMutex);
-                
-                std::cout << "\033[u"; // Restore cursor
-                for (size_t i = 0; i < progressData.size(); ++i) {
-                    const auto& prog = progressData[i];
-                    std::string driveName = getDriveName(prog.device);
-                    std::cout << "\033[K" // Clear line
-                            << ("\033[1;95m" + prog.filename + " \033[0;1m→ " + 
-                                "\033[1;93m" + prog.device + "\033[0;1m \033[1;93m<" + driveName + "> \033[0;1m")
-                            << std::right
-                            << (prog.completed ? "\033[1;92mDONE\033[0;1m" :
-                                prog.failed ? "\033[1;91mFAIL\033[0;1m" :
-                                std::to_string(prog.progress) + "%")
-                            << " ["
-                            << prog.currentSize
-                            << "/"
-                            << prog.totalSize
-                            << "] "
-                            << (!prog.completed && !prog.failed ? "\033[0;1m" + formatSpeed(prog.speed) + "\033[0;1m" : "")
-                            << "\n";
-                }
-                std::cout << std::flush;
+                progressData[i].failed = true;
             }
-        };
+            
+            if (success) {
+                std::lock_guard<std::mutex> lock(progressMutex);
+                progressData[i].completed = true;
+                completedTasks.fetch_add(1);
+            }
 
-        std::thread progressThread(displayProgress);
+            // Update completion status
+            {
+                std::lock_guard<std::mutex> lock(completionMutex);
+                tasksCompleted++;
+            }
+            completionCV.notify_one();
+        });
+    }
 
-        // Wait for completion
-        {
-            std::unique_lock<std::mutex> lock(taskCompletionMutex);
-            taskCompletionCV.wait(lock, [&]() { 
-                return activeTaskCount.load(std::memory_order_acquire) == 0 || 
-                      g_operationCancelled.load(std::memory_order_acquire);
-            });
+    auto displayProgress = [&]() {
+        while (!isProcessingComplete.load(std::memory_order_acquire) && 
+              !g_operationCancelled.load(std::memory_order_acquire)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            std::lock_guard<std::mutex> lock(progressMutex);
+            
+            std::cout << "\033[u";
+            for (size_t i = 0; i < progressData.size(); ++i) {
+                const auto& prog = progressData[i];
+                std::string driveName = getDriveName(prog.device);
+                std::cout << "\033[K"
+                        << ("\033[1;95m" + prog.filename + " \033[0;1m→ " + 
+                            "\033[1;93m" + prog.device + "\033[0;1m \033[1;93m<" + driveName + "> \033[0;1m")
+                        << std::right
+                        << (prog.completed ? "\033[1;92mDONE\033[0;1m" :
+                            prog.failed ? "\033[1;91mFAIL\033[0;1m" :
+                            std::to_string(prog.progress) + "%")
+                        << " ["
+                        << prog.currentSize
+                        << "/"
+                        << prog.totalSize
+                        << "] "
+                        << (!prog.completed && !prog.failed ? "\033[0;1m" + formatSpeed(prog.speed) + "\033[0;1m" : "")
+                        << "\n";
+            }
+            std::cout << std::flush;
         }
-        isProcessingComplete.store(true, std::memory_order_release);
-        progressThread.join();
+    };
 
-        // Final status
-        auto endTime = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::seconds>(
-            endTime - startTime).count();
-        
-        std::cout << "\n\033[0;1mCompleted: \033[1;92m" << completedTasks.load(std::memory_order_relaxed)
-                << "\033[0;1m/\033[1;93m" << validPairs.size() 
-                << "\033[0;1m in \033[0;1m" << duration << " seconds.\033[0;1m\n";
-        
-        if (g_operationCancelled.load(std::memory_order_acquire)) {
-            std::cout << "\n\033[1;33mOperation interrupted by user.\033[0;1m\n";
-        }
+    std::thread progressThread(displayProgress);
 
-        isFinished = true;
-        flushStdin();
-        restoreInput();
+    // Wait for all tasks using condition variable
+    {
+        std::unique_lock<std::mutex> lock(completionMutex);
+        completionCV.wait(lock, [&] { 
+            return tasksCompleted == totalTasks || g_operationCancelled.load();
+        });
+    }
+    
+    isProcessingComplete.store(true, std::memory_order_release);
+    progressThread.join();
+
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::seconds>(
+        endTime - startTime).count();
+    
+    std::cout << "\n\033[0;1mCompleted: \033[1;92m" << completedTasks.load()
+            << "\033[0;1m/\033[1;93m" << validPairs.size() 
+            << "\033[0;1m in \033[0;1m" << duration << " seconds.\033[0;1m\n";
+    
+    if (g_operationCancelled.load()) {
+        std::cout << "\n\033[1;33mOperation interrupted by user.\033[0;1m\n";
+    }
+
+    restoreInput();
+}
+
+
+// Function to prepare selections for write
+void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages) {
+    clearScrollBuffer();
+    std::set<int> indicesToProcess;
+
+    setupSignalHandlerCancellations();
+    g_operationCancelled = false;
+
+    tokenizeInput(input, isoFiles, uniqueErrorMessages, indicesToProcess);
+    if (indicesToProcess.empty()) {
+        std::cout << "\n\033[1;91mNo valid input provided for write.\n\033[0;1m";
+        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+        std::cin.ignore();
+        return;
+    }
+
+    std::vector<IsoInfo> selectedIsos;
+    for (int idx : indicesToProcess) {
+        selectedIsos.emplace_back(IsoInfo{
+            isoFiles[idx-1],
+            std::filesystem::path(isoFiles[idx-1]).filename().string(),
+            std::filesystem::file_size(isoFiles[idx-1]),
+            formatFileSize(std::filesystem::file_size(isoFiles[idx-1])),
+            static_cast<size_t>(idx)  // Added cast here
+        });
+    }
+
+    auto validPairs = collectDeviceMappings(selectedIsos, uniqueErrorMessages);
+    if (validPairs.empty()) {
         clear_history();
-    } while (!isFinished);
+        return;
+    }
 
+    performWriteOperation(validPairs);
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    std::cin.ignore();
 }
 
 
 // Function to write ISO to usb device
-bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t& progressIndex) {
+bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex) {
     // Open ISO file
     std::ifstream iso(isoPath, std::ios::binary);
     if (!iso) {
