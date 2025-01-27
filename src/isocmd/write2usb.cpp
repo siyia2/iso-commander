@@ -154,6 +154,19 @@ std::string formatFileSize(uint64_t size) {
 }
 
 
+// Function to format speed
+std::string formatSpeed(double mbPerSec) {
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(1);
+    if (mbPerSec < 0.1) {
+        oss << (mbPerSec * 1024) << " KB/s";
+    } else {
+        oss << mbPerSec << " MB/s";
+    }
+    return oss.str();
+}
+
+
 // Function to get removable drive names
 std::string getDriveName(const std::string& device) {
     // Extract device name (e.g., sdc from /dev/sdc)
@@ -245,17 +258,6 @@ std::vector<std::string> getRemovableDevices() {
     return devices;
 }
 
-// Function to format speed
-std::string formatSpeed(double mbPerSec) {
-    std::ostringstream oss;
-    oss << std::fixed << std::setprecision(1);
-    if (mbPerSec < 0.1) {
-        oss << (mbPerSec * 1024) << " KB/s";
-    } else {
-        oss << mbPerSec << " MB/s";
-    }
-    return oss.str();
-}
 
 // Function to prepare writing ISO to usb
 void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
