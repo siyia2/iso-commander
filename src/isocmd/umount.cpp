@@ -64,7 +64,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
         if (g_operationCancelled) {
             if (!g_CancelledMessageAdded.exchange(true)) {
 				unmountedErrors.clear();
-                unmountedErrors.emplace("\033[1;33mUnmount operation cancelled by user - partial cleanup performed.\033[0m");
+                unmountedErrors.emplace("\033[1;33mUnmount Operation interrupted by user - partial cleanup performed.\033[0m");
             }
             break;
         }

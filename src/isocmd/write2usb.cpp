@@ -512,7 +512,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
                   << "\033[0;1m in \033[0;1m" << duration << "seconds.\033[0;1m\n";
         
         if (g_operationCancelled) {
-            std::cout << "\n\033[1;33mOperation cancelled by user.\033[0;1m\n";
+            std::cout << "\n\033[1;33mOperation interrupted by user.\033[0;1m\n";
         }
         
         isFinished = true;

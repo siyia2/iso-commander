@@ -181,8 +181,8 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
 
 			std::string mainInputString(input.get());
 
-            rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
-            rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
+            rl_bind_key('\f', prevent_readline_keybindings);
+            rl_bind_key('\t', prevent_readline_keybindings);
 
             if (mainInputString.empty()) {
                 umountMvRmBreak = false;
@@ -197,7 +197,6 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
         }
     } else {
         clearScrollBuffer();
-        clear_history();
 
         // Generate the prompt with selected ISOs at the beginning for deletion confirmation
         std::string selectedIsosPrompt = generateSelectedIsosPrompt();
@@ -334,7 +333,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                 if (isDelete) {
 					operationErrors.clear();
 					// Add a cancellation message
-					std::string cancelMessage = "\033[1;93mOperation cancelled by user - partial cleanup performed.\033[0m";
+					std::string cancelMessage = "\033[1;93mOperation interrupted by user - partial cleanup performed.\033[0m";
 					operationErrors.emplace(cancelMessage);
 				}
                 
@@ -405,7 +404,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 						// Only show cancellation message once across all threads
 						if (!g_CancelledMessageAdded.exchange(true)) {
 							operationErrors.clear();
-							operationErrors.emplace("\033[1;33mOperation cancelled by user - partial files cleaned up.\033[0m");
+							operationErrors.emplace("\033[1;33mOperation interrupted by user - partial files cleaned up.\033[0m");
         
 						} else {
 							std::string errorMessageInfo = "\033[1;91mError " +

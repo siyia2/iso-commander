@@ -9,8 +9,8 @@ std::vector<std::string> globalIsoFileList;
 // Main function to select and operate on ISOs by number for umount mount cp mv and rm
 void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& maxDepth, bool& verbose) {
     // Calls prevent_clear_screen and tab completion
-    rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
-    rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
+    rl_bind_key('\f', prevent_readline_keybindings);
+    rl_bind_key('\t', prevent_readline_keybindings);
     
     std::set<std::string> operationFiles, skippedMessages, operationFails, uniqueErrorMessages;
     std::vector<std::string> filteredFiles, isoDirs;
@@ -425,10 +425,11 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             
             // Check if either the total tasks are completed
             if ((completedTasksValue >= totalTasks) && !enterPressed) {
-				rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
-				rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
-				
-				clear_history();
+				rl_bind_key('\f', prevent_readline_keybindings);
+				rl_bind_key('\t', prevent_readline_keybindings);
+				// Disable up/down arrow keys for history browsing
+				rl_bind_keyseq("\033[A", prevent_readline_keybindings); // Up arrow
+				rl_bind_keyseq("\033[B", prevent_readline_keybindings); // Down arrow
                 
                 enterPressed = true;
                 std::cout << "\n\n"; // Move past both progress bars
@@ -447,6 +448,9 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 				std::string mainInputString(input.get());
 				                
                 *verbose = (mainInputString == "y" || mainInputString == "Y");
+                
+                rl_bind_keyseq("\033[A", rl_get_previous_history); // Restore Up arrow
+				rl_bind_keyseq("\033[B", rl_get_next_history);     // Restore Down arrow
             } else {
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }

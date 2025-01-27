@@ -83,8 +83,8 @@ int main(int argc, char *argv[]) {
 
     while (!exitProgram) {
 		// Calls prevent_clear_screen and tab completion
-		rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
-		rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
+		rl_bind_key('\f', prevent_readline_keybindings);
+		rl_bind_key('\t', prevent_readline_keybindings);
 
 		globalIsoFileList.reserve(100);
         clearScrollBuffer();
@@ -183,8 +183,8 @@ void submenu1(int& maxDepth, bool& historyPattern, bool& verbose) {
 	
     while (true) {
 		// Calls prevent_clear_screen and tab completion
-		rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
-		rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
+		rl_bind_key('\f', prevent_readline_keybindings);
+		rl_bind_key('\t', prevent_readline_keybindings);
 		
         clearScrollBuffer();
         std::cout << "\033[1;32m+-------------------------+\n";
@@ -266,8 +266,8 @@ void submenu2(bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbo
 	
 	while (true) {
 		// Calls prevent_clear_screen and tab completion
-		rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
-		rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
+		rl_bind_key('\f', prevent_readline_keybindings);
+		rl_bind_key('\t', prevent_readline_keybindings);
 		
 		clearScrollBuffer();
 		std::cout << "\033[1;32m+-------------------------+\n";
@@ -370,8 +370,8 @@ bool readUserConfigForAutoImport(const std::string& filePath) {
 // Function enable/disable auto-import to ISO cache
 void saveAutomaticImportConfig(const std::string& filePath) {
     // Calls prevent_clear_screen and tab completion
-    rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
-    rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
+    rl_bind_key('\f', prevent_readline_keybindings);
+    rl_bind_key('\t', prevent_readline_keybindings);
 
     while (true) {
         clearScrollBuffer();
@@ -433,7 +433,7 @@ void saveAutomaticImportConfig(const std::string& filePath) {
 
 
 // Function to negate original readline bindings
-int prevent_clear_screen_and_tab_completion(int, int) {
+int prevent_readline_keybindings(int, int) {
     // Do nothing and return 0 
     return 0;
 }
@@ -469,6 +469,7 @@ void restoreInput() {
 }
 
 
+// Function to ignore Ctrl+C
 void setupReadlineToIgnoreCtrlC() {
     // Prevent readline from catching/interrupting signals
     rl_catch_signals = 0;

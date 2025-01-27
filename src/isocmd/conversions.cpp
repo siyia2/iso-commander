@@ -245,8 +245,8 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
 // Function to handle conversions for select_and_convert_to_iso
 void select_and_convert_to_iso(const std::string& fileType, std::vector<std::string>& files, bool& verbose, bool& promptFlag, int& maxDepth, bool& historyPattern) {
     // Bind keys for preventing clear screen and enabling tab completion
-    rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
-    rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
+    rl_bind_key('\f', prevent_readline_keybindings);
+    rl_bind_key('\t', prevent_readline_keybindings);
     
     // Containers to track file processing results
     std::set<std::string> processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts;
@@ -908,7 +908,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
      // Additional check for cancellation after processing each file
     if (g_operationCancelled) {
 		if (!g_CancelledMessageAdded.exchange(true)) {
-			std::string cancelMsg = "\033[1;33mConversion operation cancelled by user - partial files cleaned up.\033[0;1m";
+			std::string cancelMsg = "\033[1;33mConversion Operation interrupted by user - partial files cleaned up.\033[0;1m";
 			failedOuts.clear();
 			deletedOuts.clear();
 			failedOuts.insert(cancelMsg);
