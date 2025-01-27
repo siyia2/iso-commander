@@ -616,7 +616,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     const std::string totalSize = formatFileSize(fileSize);
     uint64_t totalWritten = 0;
     int lastReportedProgress = -1;
-    constexpr size_t bufferSize = 16 * 1024 * 1024; // 16MB buffer
+    constexpr size_t bufferSize = 8 * 1024 * 1024; // 16MB buffer
 
     // Aligned buffer for O_DIRECT
     const size_t alignment = 4096;
