@@ -171,7 +171,7 @@ void removeNonExistentPathsFromCache();
 //	CP&MV&RM
 
 // stds
-std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& historyPattern, bool& isDelete, bool& isCopy, bool& abortDel);
+std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::set<std::string>& uniqueErrorMessages, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& historyPattern, bool& isDelete, bool& isCopy, bool& abortDel);
 
 //	voids
 void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& umountMvRmBreak, bool& historyPattern, bool& verbose);
@@ -194,13 +194,15 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
 bool isDeviceMounted(const std::string& device);
 
 // voids
-void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles);
+void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages);
 void signalHandlerWrite(int signum);
 
 // stds
-std::vector<size_t> parseIsoSelection(const std::string& input, size_t maxIsos);
 std::string formatFileSize(uint64_t size);
+std::string formatSpeed(double bytesPerSec);
 std::string getDriveName(const std::string& device);
+std::vector<std::string> getRemovableDevices();
+std::string formatSpeed(double mbPerSec);
 std::vector<std::string> getRemovableDevices();
 
 // CONVERSION TOOLS
