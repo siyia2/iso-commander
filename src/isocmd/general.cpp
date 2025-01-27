@@ -313,11 +313,12 @@ void tokenizeInput(const std::string& input, std::vector<std::string>& isoFiles,
         }
     }
 
-    // Create formatted messages for each category
-    auto formatCategory = [](const std::string& header, const std::set<std::string>& items) {
+    // Helper to format error messages with pluralization
+    auto formatCategory = [](const std::string& singular, const std::string& plural,
+                            const std::set<std::string>& items) {
         if (items.empty()) return std::string();
         std::ostringstream oss;
-        oss << "\033[1;91m" << header << ": '";
+        oss << "\033[1;91m" << (items.size() > 1 ? plural : singular) << ": '";
         for (auto it = items.begin(); it != items.end(); ++it) {
             if (it != items.begin()) oss << " ";
             oss << *it;
@@ -326,13 +327,16 @@ void tokenizeInput(const std::string& input, std::vector<std::string>& isoFiles,
         return oss.str();
     };
 
-    // Add formatted messages to output set
-    if (!invalidInputs.empty()) 
-        uniqueErrorMessages.insert(formatCategory("Invalid input", invalidInputs));
-    if (!invalidIndices.empty())
-        uniqueErrorMessages.insert(formatCategory("Invalid index", invalidIndices));
-    if (!invalidRanges.empty())
-        uniqueErrorMessages.insert(formatCategory("Invalid range", invalidRanges));
+    // Add formatted messages with conditional pluralization
+    if (!invalidInputs.empty()) {
+        uniqueErrorMessages.insert(formatCategory("Invalid input", "Invalid inputs", invalidInputs));
+    }
+    if (!invalidIndices.empty()) {
+        uniqueErrorMessages.insert(formatCategory("Invalid index", "Invalid indexes", invalidIndices));
+    }
+    if (!invalidRanges.empty()) {
+        uniqueErrorMessages.insert(formatCategory("Invalid range", "Invalid ranges", invalidRanges));
+    }
 }
 
 
