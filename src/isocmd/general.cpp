@@ -406,7 +406,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
                 else std::cout << " ";
             }
             
-            std::cout << "] " << std::setw(3) << std::fixed << std::setprecision(1)
+            std::cout << "] " << std::setw(3) << std::fixed << std::setprecision(0)
                      << (overallProgress * 100.0) << "% ("
                      << completedTasksValue << "/"
                      << totalTasks << ")";
