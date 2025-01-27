@@ -366,7 +366,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         }
         
         std::stringstream ss;
-        ss << std::fixed << std::setprecision(2) << size << units[unit];
+        ss << std::fixed << std::setprecision(1) << size << units[unit];
         return ss.str();
     };
     
