@@ -66,6 +66,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
     
     // To keep track the number of prior cached files
     int currentCacheOld = 0;
+    g_operationCancelled = false;
     
     // Tracking sets and vectors
     std::vector<std::string> directoryPaths;
@@ -234,10 +235,11 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
 				continue;
 			}
 		}
-
-        // File conversion workflow (using new modular function)
-        select_and_convert_to_iso(fileType, files, verbose, 
-                                promptFlag, maxDepth, historyPattern);
+		if (!g_operationCancelled) {
+			// File conversion workflow (using new modular function)
+			select_and_convert_to_iso(fileType, files, verbose, 
+									promptFlag, maxDepth, historyPattern);
+		}
     }
 }
 
