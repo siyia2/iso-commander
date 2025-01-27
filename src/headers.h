@@ -82,7 +82,7 @@ bool isDirectoryEmpty(const std::string& path);
 bool readUserConfigForAutoImport(const std::string& filePath);
 
 // ints
-int prevent_clear_screen_and_tab_completion(int, int);
+int prevent_readline_keybindings(int, int);
 
 // voids
 
