@@ -98,6 +98,7 @@ void signalHandler(int signum);
 void setupSignalHandlerCancellations();
 void signalHandlerCancellations(int signal);
 void clearScrollBuffer();
+void setupReadlineToIgnoreCtrlC();
 void saveAutomaticImportConfig(const std::string& filePath);
 void sortFilesCaseInsensitive(std::vector<std::string>& files);
 void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname,std::set<std::string>& uniqueErrors);
