@@ -576,16 +576,16 @@ void help() {
               << "   • Multiple items: Separate with spaces (e.g., '1 5 6')\n"
               << "   • Range of items: Use hyphen (e.g., '1-3')\n"
               << "   • Combine methods: '1-3 5 7-9'\n"
-              << "   • Select all: Enter '00' (for mount/umount only)\n\n" << std::endl;
+              << "   • Select all: Enter '00' (for mount/umount only)\n" << std::endl;
     
     // Special commands
     std::cout << "2. Special Commands:\n"
               << "   • Enter '/' - Filter the current list\n"
               << "   • Enter '/name1;name2' - Directly filter the list for items containing 'name1 and name2'\n"
               << "   • Enter '~' - Switch between short and full paths\n"
-              << "   • Enter '?' - Show this help message\n"
+              << "   • Enter '?' - Show this help message\n\n"
               
-              << "   - Note: If filtering has no matches no message or list update is issued\n" << std::endl;
+              << "   - Note: If filtering has no matches, no message or list update is issued" << std::endl;
     
     // Prompt to continue
     std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
