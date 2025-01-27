@@ -24,6 +24,8 @@ int main(int argc, char *argv[]) {
 	// Atomic flag for AutoImportISO
 	std::atomic<bool> isImportRunning;
 	
+	setupReadlineToIgnoreCtrlC();
+	
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
         printVersionNumber("5.5.8");
         return 0;
@@ -488,7 +490,6 @@ void signalHandlerCancellations(int signal) {
     if (signal == SIGINT) {
         g_operationCancelled = true;
     }
-    setupReadlineToIgnoreCtrlC();
 }
 
 // Setup signal handling
