@@ -425,17 +425,26 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             
             // Check if either the total tasks are completed
             if ((completedTasksValue >= totalTasks) && !enterPressed) {
+				rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
+				rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
+                
                 enterPressed = true;
                 std::cout << "\n\n"; // Move past both progress bars
                 
                 tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
                 fcntl(STDIN_FILENO, F_SETFL, oldf);
                 
-                std::string confirmation;
-                std::cout << "\033[1;94mDisplay verbose output? (y/n):\033[0;1m ";
-                std::getline(std::cin, confirmation);
+                std::string prompt = "\033[1;94mDisplay verbose output? (y/n):\033[0;1m ";
                 
-                *verbose = (confirmation == "y" || confirmation == "Y");
+                std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
+				// Check for EOF (Ctrl+D) or NULL input before processing
+				if (!input.get()) {
+					break; // Exit the loop on EOF
+				}
+
+				std::string mainInputString(input.get());
+				                
+                *verbose = (mainInputString == "y" || mainInputString == "Y");
             } else {
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }

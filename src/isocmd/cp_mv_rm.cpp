@@ -174,7 +174,12 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
             std::string prompt = "\n" + selectedIsosPrompt + "\n\001\033[1;92m\002DestinationDirs\001\033[1;94m\002 ↵ for selected \001\033[1;92m\002ISO\001\033[1;94m\002 to be " + operationColor + operationDescription + "\001\033[1;94m\002 into (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002), or ↵ to return:\n\001\033[0;1m\002";
 
             std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
-            std::string mainInputString(input.get());
+            // Check for EOF (Ctrl+D) or NULL input before processing
+			if (!input.get()) {
+				break; // Exit the loop on EOF
+			}
+
+			std::string mainInputString(input.get());
 
             rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
             rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
@@ -198,7 +203,14 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
         std::string prompt = "\n" + selectedIsosPrompt + "\n\001\033[1;94m\002The selected \001\033[1;92m\002ISO\001\033[1;94m\002 will be \001\033[1;91m\002*PERMANENTLY DELETED FROM DISK*\001\033[1;94m\002. Proceed? (y/n): \001\033[0;1m\002";
 
         std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
-        std::string mainInputString(input.get());
+        // Check for EOF (Ctrl+D) or NULL input before processing
+		if (!input.get()) {
+			userDestDir = "";
+			abortDel = true;
+			return userDestDir; // Exit on EOF
+		}
+
+		std::string mainInputString(input.get());
 
         if (!(mainInputString == "y" || mainInputString == "Y")) {
             umountMvRmBreak = false;
