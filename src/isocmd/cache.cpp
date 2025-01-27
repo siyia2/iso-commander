@@ -514,33 +514,32 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
         
         // Prompt the user to enter directory paths for manual cache refresh
 		std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;92m\002.iso\001\033[1;94m\002 files and import into \001\033[1;92m\002on-disk\001\033[1;94m\002 cache (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002),\001\033[1;93m\002 clr\001\033[1;94m\002 ↵ to clear \001\033[1m\002\001\033[1;92m\002on-disk\001\033[1m\002\001\033[1;94m\002 cache, \001\033[1;95m\002stats\001\033[1;94m\002 ↵ to display cache\001\033[1m\002\001\033[1;94m\002 stats, ↵ to return:\n\001\033[0;1m\002";
-        // Get user input
-		char* rawinput = readline(prompt.c_str());
-		std::unique_ptr<char, decltype(&std::free)> mainSearch(rawinput, &std::free);
+        char* rawSearchQuery = readline(prompt.c_str());
 
-		// Check for EOF (Ctrl+D) or NULL input before processing
-		if (!mainSearch.get()) {
-			return; // Exit the loop on EOF
-		}
+        // Handle EOF (Ctrl+D) scenario
+        if (!rawSearchQuery) {
+            input.clear();  // Explicitly clear input to trigger early exit
+        } else {
+            std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
+            input = searchQuery.get();
 
-		std::string input(mainSearch.get());
+            if (input == "stats" || input == "clr") {
+                delCacheAndShowStats(input, promptFlag, maxDepth, historyPattern);
+                return;
+            }
+            
+            if (!input.empty() && promptFlag) {
+                add_history(searchQuery.get());
+                std::cout << "\n";
+            }
+        }
+    }
 
-		if (input == "stats" || input == "clr") {
-			delCacheAndShowStats(input, promptFlag, maxDepth, historyPattern);
-			return;
-		}
+    // Early exit for empty or whitespace-only input
+    if (std::all_of(input.begin(), input.end(), [](char c) { return std::isspace(static_cast<unsigned char>(c)); })) {
+        return;
+    }
 
-		if (!input.empty() && promptFlag) {
-			add_history(mainSearch.get());
-			std::cout << "\n\n";
-		}
-
-		// Early exit for empty or whitespace-only input
-		if (std::isspace(mainSearch.get()[0]) || mainSearch.get()[0] == '\0') {
-			clear_history();
-			return;
-		}
-	}
     // Combine path validation and processing
     std::vector<std::string> validPaths;
     std::set<std::string> invalidPaths;
