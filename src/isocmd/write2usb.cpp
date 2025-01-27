@@ -4,6 +4,29 @@
 #include "../threadpool.h"
 
 
+// IsoInfo structure
+struct IsoInfo {
+    std::string path;
+    std::string filename;
+    uint64_t size;
+    std::string sizeStr;
+    size_t originalIndex;
+};
+
+
+// Progress tracking structure
+struct ProgressInfo {
+    std::string filename;
+    std::string device;
+    int progress = 0;
+    std::string currentSize;
+    std::string totalSize;
+    double speed = 0.0;  // Speed in MB/s
+    bool failed = false;
+    bool completed = false;
+};
+
+
 // Function to get the size of a block device
 uint64_t getBlockDeviceSize(const std::string& device) {
     struct stat st;
@@ -148,29 +171,6 @@ std::string getDriveName(const std::string& device) {
 }
 
 
-// IsoInfo structure
-struct IsoInfo {
-    std::string path;
-    std::string filename;
-    uint64_t size;
-    std::string sizeStr;
-    size_t originalIndex;
-};
-
-
-// Progress tracking structure
-struct ProgressInfo {
-    std::string filename;
-    std::string device;
-    int progress = 0;
-    std::string currentSize;
-    std::string totalSize;
-    double speed = 0.0;  // Speed in MB/s
-    bool failed = false;
-    bool completed = false;
-};
-
-
 // Shared progress data and mutex for protection
 std::mutex progressMutex;
 std::vector<ProgressInfo> progressData;
@@ -221,10 +221,7 @@ std::vector<std::string> getRemovableDevices() {
 
 
 // Function to handle device mapping collection and validation
-std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(
-    const std::vector<IsoInfo>& selectedIsos,
-    std::set<std::string>& uniqueErrorMessages
-) {
+std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::vector<IsoInfo>& selectedIsos,std::set<std::string>& uniqueErrorMessages) {
     while (true) {
         clearScrollBuffer();
 
