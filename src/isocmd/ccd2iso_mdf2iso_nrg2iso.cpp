@@ -4,7 +4,6 @@
 #include "../mdf.h"
 #include "../ccd.h"
 
-namespace fs = std::filesystem;
 
 // Special thanks to the original authors of the conversion tools:
 
@@ -18,6 +17,7 @@ namespace fs = std::filesystem;
 // MDF2ISO
 
 bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std::atomic<size_t>* completedBytes) {
+	namespace fs = std::filesystem;
     std::ifstream mdfFile(mdfPath, std::ios::binary);
     std::ofstream isoFile(isoPath, std::ios::binary);
     if (!mdfFile.is_open() || !isoFile.is_open()) {
@@ -113,6 +113,7 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
 // CCD2ISO
 
 bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std::atomic<size_t>* completedBytes) {
+	namespace fs = std::filesystem;
     std::ifstream ccdFile(ccdPath, std::ios::binary);
     if (!ccdFile) return false;
     
@@ -169,6 +170,7 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
 // NRG2ISO
 
 bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile, std::atomic<size_t>* completedBytes) {
+	namespace fs = std::filesystem;
     std::ifstream nrgFile(inputFile, std::ios::binary);
     if (!nrgFile) {
         return false;
