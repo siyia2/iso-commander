@@ -201,6 +201,7 @@ void signalHandlerWrite(int signum);
 std::vector<size_t> parseIsoSelection(const std::string& input, size_t maxIsos);
 std::string formatFileSize(uint64_t size);
 std::string getDriveName(const std::string& device);
+std::vector<std::string> getRemovableDevices();
 
 // CONVERSION TOOLS
 
