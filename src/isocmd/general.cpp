@@ -206,7 +206,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
                 prepareUnmount(inputString, selectedIsoDirs, currentFiles, operationFiles, operationFails, uniqueErrorMessages, umountMvRmBreak, verbose);
                 needsClrScrn = true;
             } else if (write) {
-                writeToUsb(inputString, currentFiles);
+                writeToUsb(inputString, currentFiles, uniqueErrorMessages);
             } else {
                 // Generic operation processing for copy, move, remove
                 std::cout << "\033[0;1m\n";
@@ -257,70 +257,82 @@ void tokenizeInput(const std::string& input, std::vector<std::string>& isoFiles,
     std::istringstream iss(input);
     std::string token;
 
+    std::set<std::string> invalidInputs;
+    std::set<std::string> invalidIndices;
+    std::set<std::string> invalidRanges;
+
     while (iss >> token) {
-
-        // Check if the token starts with zero and treat it as a non-existent index
         if (startsWithZero(token)) {
-            uniqueErrorMessages.emplace("\033[1;91mInvalid index: '0'.\033[0;1m");
+            invalidIndices.insert(token);
             continue;
         }
 
-        // Check if there is more than one hyphen in the token
         if (std::count(token.begin(), token.end(), '-') > 1) {
-            uniqueErrorMessages.emplace("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
+            invalidInputs.insert(token);
             continue;
         }
 
-        // Process ranges specified with hyphens
         size_t dashPos = token.find('-');
         if (dashPos != std::string::npos) {
             int start, end;
-
             try {
                 start = std::stoi(token.substr(0, dashPos));
                 end = std::stoi(token.substr(dashPos + 1));
-            } catch (const std::invalid_argument& e) {
-                // Handle the exception for invalid input
-                uniqueErrorMessages.emplace("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
+            } catch (const std::invalid_argument&) {
+                invalidInputs.insert(token);
                 continue;
-            } catch (const std::out_of_range& e) {
-                // Handle the exception for out-of-range input
-                uniqueErrorMessages.emplace("\033[1;91mInvalid range: '" + token + "'.\033[0;1m");
+            } catch (const std::out_of_range&) {
+                invalidRanges.insert(token);
                 continue;
             }
 
-            // Early range validity check
-            if ((start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size()) ||
-                (start == 0 || end == 0)) {
-                uniqueErrorMessages.emplace("\033[1;91mInvalid range: '" + std::to_string(start) + "-" + std::to_string(end) + "'.\033[0;1m");
+            if (start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size() || start == 0 || end == 0) {
+                invalidRanges.insert(token);
                 continue;
             }
 
-            // Mark indices within the specified range as valid
             int step = (start <= end) ? 1 : -1;
-            for (int i = start; ((start <= end) && (i <= end)) || ((start > end) && (i >= end)); i += step) {
-                if ((i >= 1) && (i <= static_cast<int>(isoFiles.size())) && processedIndices.find(i) == processedIndices.end()) {
-                    processedIndices.insert(i); // Mark as processed
-                } else if ((i < 1) || (i > static_cast<int>(isoFiles.size()))) {
-                    uniqueErrorMessages.emplace("\033[1;91mInvalid index '" + std::to_string(i) + "'.\033[0;1m");
+            for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
+                if (i >= 1 && i <= static_cast<int>(isoFiles.size())) {
+                    if (processedIndices.find(i) == processedIndices.end()) {
+                        processedIndices.insert(i);
+                    }
                 }
             }
         } else if (isNumeric(token)) {
-            // Process single numeric indices
             int num = std::stoi(token);
-
-            // Early range validity check for single index
             if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size()) {
                 if (processedIndices.find(num) == processedIndices.end()) {
-                    processedIndices.insert(num); // Mark index as processed
+                    processedIndices.insert(num);
                 }
             } else {
-                uniqueErrorMessages.emplace("\033[1;91mInvalid index: '" + std::to_string(num) + "'.\033[0;1m");
+                invalidIndices.insert(token);
             }
         } else {
-            uniqueErrorMessages.emplace("\033[1;91mInvalid input: '" + token + "'.\033[0;1m");
+            invalidInputs.insert(token);
         }
     }
+
+    // Create formatted messages for each category
+    auto formatCategory = [](const std::string& header, const std::set<std::string>& items) {
+        if (items.empty()) return std::string();
+        std::ostringstream oss;
+        oss << "\033[1;91m" << header << ": '";
+        for (auto it = items.begin(); it != items.end(); ++it) {
+            if (it != items.begin()) oss << " ";
+            oss << *it;
+        }
+        oss << "'.\033[0;1m";
+        return oss.str();
+    };
+
+    // Add formatted messages to output set
+    if (!invalidInputs.empty()) 
+        uniqueErrorMessages.insert(formatCategory("Invalid input", invalidInputs));
+    if (!invalidIndices.empty())
+        uniqueErrorMessages.insert(formatCategory("Invalid index", invalidIndices));
+    if (!invalidRanges.empty())
+        uniqueErrorMessages.insert(formatCategory("Invalid range", invalidRanges));
 }
 
 

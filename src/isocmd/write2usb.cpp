@@ -98,46 +98,6 @@ bool isDeviceMounted(const std::string& device) {
 }
 
 
-// Function to parse selection for writes
-std::vector<size_t> parseIsoSelection(const std::string& input, size_t maxIsos) {
-    std::vector<size_t> indices;
-    std::istringstream iss(input);
-    std::string token;
-    
-    while (iss >> token) {
-        size_t dashPos = token.find('-');
-        if (dashPos != std::string::npos) {
-            int start = std::stoi(token.substr(0, dashPos));
-            int end = std::stoi(token.substr(dashPos + 1));
-            
-            // Handle reverse ranges
-            if (start > end) std::swap(start, end);
-            
-            if (start < 1 || end > static_cast<int>(maxIsos)) {
-                throw std::invalid_argument("Invalid ISO range: " + token);
-            }
-            
-            for (int i = start; i <= end; ++i) {
-                indices.push_back(static_cast<size_t>(i));
-            }
-        } else {
-            int idx = std::stoi(token);
-            if (idx < 1 || idx > static_cast<int>(maxIsos)) {
-                throw std::invalid_argument("Invalid ISO index: " + token);
-            }
-            indices.push_back(static_cast<size_t>(idx));
-        }
-    }
-    
-    // Remove duplicates and sort
-    std::sort(indices.begin(), indices.end());
-    auto last = std::unique(indices.begin(), indices.end());
-    indices.erase(last, indices.end());
-    
-    return indices;
-}
-
-
 // Function to foram fileSize
 std::string formatFileSize(uint64_t size) {
     std::ostringstream oss;
@@ -261,41 +221,53 @@ std::vector<std::string> getRemovableDevices() {
 
 
 // Function to prepare writing ISO to usb
-void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
+void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages) {
     clearScrollBuffer();
+    std::set<int> indicesToProcess;
+    
     // Setup signal handler at the start of the operation
     setupSignalHandlerCancellations();
-        
     // Reset cancellation flag
     g_operationCancelled = false;
     
-    // Parse ISO selection
-    std::vector<size_t> isoIndices;
-    try {
-        isoIndices = parseIsoSelection(input, isoFiles.size());
-    } catch (const std::exception& e) {
-        std::cerr << "\033[1;91mError: " << e.what() << "\033[0;1m\n";
+    tokenizeInput(input, isoFiles, uniqueErrorMessages, indicesToProcess);
+    if (indicesToProcess.empty()) {
+        std::cout << "\n\033[1;91mNo valid input provided for write.\n\033[0;1m";
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        return;
+        return; // Exit if no valid indices are provided
     }
+    // Parse ISO selection
+    std::set<int> isoIndices = indicesToProcess;
+    isoIndices = indicesToProcess;
+        
 
     // Collect selected ISOs
-    std::vector<IsoInfo> selectedIsos;
-    for (size_t pos = 0; pos < isoIndices.size(); ++pos) {
-        size_t idx = isoIndices[pos];
-        IsoInfo info;
-        info.path = isoFiles[idx - 1];
-        info.filename = info.path.substr(info.path.find_last_of('/') + 1);
-        info.size = std::filesystem::file_size(info.path);
-        info.sizeStr = formatFileSize(info.size);
-        info.originalIndex = idx;
-        selectedIsos.push_back(info);
-    }
+	std::vector<IsoInfo> selectedIsos;
+	for (size_t pos = 0; pos < isoIndices.size(); ++pos) {
+		auto it = isoIndices.begin();
+		std::advance(it, pos);  // Move iterator to the desired position
+		size_t idx = *it;  // Dereference iterator to get the value
+
+		IsoInfo info;
+		info.path = isoFiles[idx - 1];
+		info.filename = info.path.substr(info.path.find_last_of('/') + 1);  // Extract filename
+		info.size = std::filesystem::file_size(info.path);  // Get the file size
+		info.sizeStr = formatFileSize(info.size);  // Assuming you have a function formatFileSize
+		info.originalIndex = idx;  // Store the original index
+		selectedIsos.push_back(info);  // Add to the result vector
+	}
 
     bool isFinished = false;
     do {
 		clearScrollBuffer();
+		
+		if (!uniqueErrorMessages.empty()) {
+			std::cout << "\n";
+			for (const auto& err : uniqueErrorMessages) {
+				std::cout << err << "\n";  // Newline ensures separate lines
+			}
+		}
         // Device mapping input
         std::string devicePrompt = "\n\033[0;1m Selected \033[1;92mISO\033[0;1m:\n\n";
         for (size_t i = 0; i < selectedIsos.size(); ++i) {
