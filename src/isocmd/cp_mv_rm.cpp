@@ -197,6 +197,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
         }
     } else {
         clearScrollBuffer();
+        clear_history();
 
         // Generate the prompt with selected ISOs at the beginning for deletion confirmation
         std::string selectedIsosPrompt = generateSelectedIsosPrompt();
