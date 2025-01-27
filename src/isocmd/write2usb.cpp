@@ -237,7 +237,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
     bool isFinished = false;
     do {
         // Device mapping input
-        std::string devicePrompt = "\n\033[0;1mSelected \033[1;92mISO\033[0;1m:\n\n";
+        std::string devicePrompt = "\033[0;1m\n";
         for (size_t i = 0; i < selectedIsos.size(); ++i) {
 			// Extract the directory and filename
 			auto [shortDir, filename] = extractDirectoryAndFilename(selectedIsos[i].path);
@@ -463,7 +463,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         // Start operations
         disableInput();
         clearScrollBuffer();
-        std::cout << "\n\033[1;94mWriting... (\033[1;91mCtrl+c to cancel\033[1;94m)\033[0;1m\n\n";
+        std::cout << "\n\033[0;1mWriting... (\033[1;91mCtrl+c to cancel\033[1;94m)\033[0;1m\n\n";
         std::cout << "\033[s"; // Save cursor position
         
         std::vector<std::thread> threads;
