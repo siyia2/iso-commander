@@ -507,9 +507,9 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         auto duration = std::chrono::duration_cast<std::chrono::seconds>(
             endTime - startTime).count();
         
-        std::cout << "\n\033[1;94mCompleted: \033[1;92m" << successes 
-                  << "\033[1;94m/\033[1;93m" << validPairs.size() 
-                  << "\033[1;94m in \033[0;1m" << duration << "s.\033[0;1m\n";
+        std::cout << "\n\033[0;1mCompleted: \033[1;92m" << successes 
+                  << "\033[0;1m/\033[1;93m" << validPairs.size() 
+                  << "\033[0;1m in \033[0;1m" << duration << "s.\033[0;1m\n";
         
         if (g_operationCancelled) {
             std::cout << "\n\033[1;33mOperation cancelled by user.\033[0;1m\n";
