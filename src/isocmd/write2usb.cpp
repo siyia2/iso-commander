@@ -406,7 +406,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
 
         if (!confirmation || 
             (confirmation.get()[0] != 'y' && confirmation.get()[0] != 'Y')) {
-            std::cout << "\n\033[1;93mWrite operation aborted by user\033[0;1m\n";
+            std::cout << "\n\033[1;93mWrite operation aborted by user.\033[0;1m\n";
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore();
             clearScrollBuffer();
