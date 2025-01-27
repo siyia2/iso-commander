@@ -141,13 +141,13 @@ std::vector<size_t> parseIsoSelection(const std::string& input, size_t maxIsos) 
 std::string formatFileSize(uint64_t size) {
     std::ostringstream oss;
     if (size < 1024 * 1024) {
-        oss << std::fixed << std::setprecision(1) 
+        oss << std::fixed << std::setprecision(2) 
             << static_cast<double>(size) / 1024 << " KB";
     } else if (size < 1024 * 1024 * 1024) {
-        oss << std::fixed << std::setprecision(1) 
+        oss << std::fixed << std::setprecision(2) 
             << static_cast<double>(size) / (1024 * 1024) << " MB";
     } else {
-        oss << std::fixed << std::setprecision(1) 
+        oss << std::fixed << std::setprecision(2) 
             << static_cast<double>(size) / (1024 * 1024 * 1024) << " GB";
     }
     return oss.str();
@@ -538,7 +538,6 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         // Progress display
         auto displayProgress = [&]() {
             while (completed < validPairs.size() && !g_operationCancelled) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
             
                 std::lock_guard<std::mutex> lock(progressMutex);
                 std::cout << "\033[u"; // Restore cursor
@@ -546,7 +545,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
                 for (const auto& prog : progressData) {
                     std::string driveName = getDriveName(prog.device);
                     std::cout << "\033[K"; // Clear line
-                    std::cout << std::left << std::setw(40) 
+                    std::cout << std::right << std::setw(40) 
                             << ("\033[1;95m" + prog.filename + " \033[0;1m→ " + 
                                 "\033[1;93m" + prog.device + "\033[0;1m \033[1;93m<" + driveName + ">\033[0;1m")
                             << std::right << std::setw(5)
@@ -554,9 +553,9 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
                                 prog.failed ? "\033[1;91m FAIL\033[0;1m" :
                                 std::to_string(prog.progress) + "%")
                             << " ["
-                            << std::setw(9) << prog.currentSize
+                            << prog.currentSize
                             << "/"
-                            << std::setw(9) << prog.totalSize
+                            << prog.totalSize
                             << "]\n";
                 }
                 std::cout << std::flush;
