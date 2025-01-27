@@ -339,7 +339,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
 		}
 
 		// Add separator and instructions
-		devicePrompt += "\n\001\033[1;92m\002DevicePairing\001\033[1;94m\002 ↵ as \001\033[1;93m\002INDEX>DEVICE\001\033[1;94m\002 (e.g, \001\033[1;94m\0021>/dev/sdc;2>/dev/sdd\001\033[1;94m\002), or ↵ to return:\001\033[0;1m\002 ";
+		devicePrompt += "\n\001\033[1;92m\002Pair\001\033[1;94m\002 ↵ as \001\033[1;93m\002INDEX>DEVICE\001\033[1;94m\002 (e.g, \001\033[1;94m\0021>/dev/sdc;2>/dev/sdd\001\033[1;94m\002), or ↵ to return:\001\033[0;1m\002 ";
 
         std::unique_ptr<char, decltype(&std::free)> deviceInput(
             readline(devicePrompt.c_str()), &std::free
