@@ -121,7 +121,7 @@ bool isDeviceMounted(const std::string& device) {
 }
 
 
-// Function to foram fileSize
+// Function to format fileSize
 std::string formatFileSize(uint64_t size) {
     std::ostringstream oss;
     if (size < 1024 * 1024) {
@@ -138,7 +138,7 @@ std::string formatFileSize(uint64_t size) {
 }
 
 
-// Function to format speed
+// Function to format write speed
 std::string formatSpeed(double mbPerSec) {
     std::ostringstream oss;
     oss << std::fixed << std::setprecision(1);
