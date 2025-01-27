@@ -191,6 +191,7 @@ struct ProgressInfo {
     int progress = 0;
     std::string currentSize;
     std::string totalSize;
+    double speed = 0.0;  // Speed in MB/s
     bool failed = false;
     bool completed = false;
 };
@@ -244,6 +245,17 @@ std::vector<std::string> getRemovableDevices() {
     return devices;
 }
 
+// Function to format speed
+std::string formatSpeed(double mbPerSec) {
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(1);
+    if (mbPerSec < 0.1) {
+        oss << (mbPerSec * 1024) << " KB/s";
+    } else {
+        oss << mbPerSec << " MB/s";
+    }
+    return oss.str();
+}
 
 // Function to prepare writing ISO to usb
 void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
@@ -300,11 +312,11 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         rl_bind_key('\f', rl_clear_screen);
         rl_bind_key('\t', rl_complete);
         
-        devicePrompt += "\n\033[0;1mAvailable Removable Drives:\033[0;1m\n\n";
+        devicePrompt += "\n\033[0;1mAvailable Removable Devices:\033[0;1m\n\n";
 		std::vector<std::string> usbDevices = getRemovableDevices();
 
 		if (usbDevices.empty()) {
-			devicePrompt += "  \033[1;91mNo available Removable drives detected!\033[0;1m\n";
+			devicePrompt += "  \033[1;91mNo available Removable devices detected!\033[0;1m\n";
 		} else {
 			for (const auto& device : usbDevices) {
 				try {
@@ -537,31 +549,33 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
 
         // Progress display
         auto displayProgress = [&]() {
-            while (completed < validPairs.size() && !g_operationCancelled) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            
-                std::lock_guard<std::mutex> lock(progressMutex);
-                std::cout << "\033[u"; // Restore cursor
-            
-                for (const auto& prog : progressData) {
-                    std::string driveName = getDriveName(prog.device);
-                    std::cout << "\033[K"; // Clear line
-                    std::cout << std::right
-                            << ("\033[1;95m" + prog.filename + " \033[0;1m→ " + 
-                                "\033[1;93m" + prog.device + "\033[0;1m \033[1;93m<" + driveName + ">\033[0;1m")
-                            << std::right << std::setw(5)
-                            << (prog.completed ? "\033[1;92m DONE\033[0;1m" :
-                                prog.failed ? "\033[1;91m FAIL\033[0;1m" :
-                                std::to_string(prog.progress) + "%")
-                            << " ["
-                            << prog.currentSize
-                            << "/"
-                            << prog.totalSize
-                            << "]\n";
-                }
-                std::cout << std::flush;
-            }
-        };
+		while (completed < validPairs.size() && !g_operationCancelled) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    
+			std::lock_guard<std::mutex> lock(progressMutex);
+			std::cout << "\033[u"; // Restore cursor
+    
+			for (const auto& prog : progressData) {
+				std::string driveName = getDriveName(prog.device);
+				std::cout << "\033[K"; // Clear line
+				std::cout << std::right
+						<< ("\033[1;95m" + prog.filename + " \033[0;1m→ " + 
+							"\033[1;93m" + prog.device + "\033[0;1m \033[1;93m<" + driveName + "> \033[0;1m")
+						<< std::right
+						<< (prog.completed ? "\033[1;92mDONE\033[0;1m" :
+							prog.failed ? "\033[1;91mFAIL\033[0;1m" :
+							std::to_string(prog.progress) + "%")
+						<< " ["
+						<< prog.currentSize
+						<< "/"
+						<< prog.totalSize
+						<< "] "
+						<< (!prog.completed && !prog.failed ? "\033[0;1m" + formatSpeed(prog.speed) + "\033[0;1m" : "")
+						<< "\n";
+			}
+			std::cout << std::flush;
+		}
+	};
 
         std::thread displayThread(displayProgress);
 
@@ -632,7 +646,6 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     // Initialize progress
     const std::string totalSize = formatFileSize(fileSize);
     uint64_t totalWritten = 0;
-    int lastReportedProgress = -1;
 
     // Set buffer size as multiple of sector size (8MB default)
     size_t bufferSize = 8 * 1024 * 1024;
@@ -648,6 +661,12 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
         return false;
     }
     std::unique_ptr<char, decltype(&free)> bufferGuard(alignedBuffer, &free);
+
+    // Initialize timing and speed calculation variables
+    auto startTime = std::chrono::high_resolution_clock::now();
+    auto lastUpdate = startTime;
+    uint64_t bytesInWindow = 0;
+    const int UPDATE_INTERVAL_MS = 500; // Update every 500ms for smoother readings
 
     try {
         while (totalWritten < fileSize && !g_operationCancelled) {
@@ -667,14 +686,27 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
             }
 
             totalWritten += bytesWritten;
+            bytesInWindow += bytesWritten;
 
-            // Update progress
+            // Update progress and speed
+            auto now = std::chrono::high_resolution_clock::now();
+            auto timeSinceLastUpdate = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate);
             const int progress = static_cast<int>((static_cast<double>(totalWritten) / fileSize) * 100);
-            if (progress != lastReportedProgress) {
+
+            // Update progress and speed every UPDATE_INTERVAL_MS
+            if (timeSinceLastUpdate.count() >= UPDATE_INTERVAL_MS) {
+                // Calculate current speed based on bytes written in the last window
+                double seconds = timeSinceLastUpdate.count() / 1000.0;
+                double mbPerSec = (static_cast<double>(bytesInWindow) / (1024 * 1024)) / seconds;
+
                 std::lock_guard<std::mutex> lock(progressMutex);
                 progressData[progressIndex].progress = progress;
                 progressData[progressIndex].currentSize = formatFileSize(totalWritten);
-                lastReportedProgress = progress;
+                progressData[progressIndex].speed = mbPerSec;
+                
+                // Reset window counters
+                lastUpdate = now;
+                bytesInWindow = 0;
             }
         }
     } catch (...) {
