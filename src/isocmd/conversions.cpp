@@ -526,10 +526,12 @@ std::set<std::string> processBatchPaths(const std::vector<std::string>& batchPat
     std::mutex fileNamesMutex;
     std::atomic<size_t> totalFiles{0};
     std::set<std::string> localFileNames;
+    std::atomic<bool> g_CancelledMessageAdded{false};
     
     disableInput();
 
     for (const auto& path : batchPaths) {
+		
         try {
             // Flags for blacklisting
             bool blacklistMdf = (mode == "mdf");
@@ -537,6 +539,13 @@ std::set<std::string> processBatchPaths(const std::vector<std::string>& batchPat
 
             // Traverse directory
             for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
+				if (g_operationCancelled) {
+					if (!g_CancelledMessageAdded.exchange(true)) {
+						processedErrorsFind.clear();
+						processedErrorsFind.insert("\033[1;33mCache update interrupted by user.\033[0;1m");
+					}
+					break;
+				}
                 if (entry.is_regular_file()) {
                     totalFiles++;
                     std::cout << "\r\033[0;1mTotal files processed: " << totalFiles << std::flush;
@@ -584,6 +593,13 @@ std::set<std::string> processBatchPaths(const std::vector<std::string>& batchPat
 
 // Function to search for .bin .img .nrg and mdf files
 std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, std::set<std::string>& fileNames, int& currentCacheOld, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, const std::vector<std::string>& directoryPaths, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrorsFind) {
+	
+	// Setup signal handler at the start of the operation
+    setupSignalHandlerCancellations();
+        
+    // Reset cancellation flag
+    g_operationCancelled = false;
+    
 	disableInput();
 	
     // Thread-safe synchronization primitives
