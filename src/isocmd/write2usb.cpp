@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GNU General Public License v3.0 or later
 
 #include "../headers.h"
+#include "../threadpool.h"
 
 
 // Function to get the size of a block device
@@ -496,7 +497,6 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
 
         // Initialize progress tracking
         progressData.clear();
-        std::queue<std::pair<size_t, std::pair<std::string, std::string>>> tasks;
         for (size_t i = 0; i < validPairs.size(); ++i) {
             const auto& [iso, device] = validPairs[i];
             progressData.emplace_back(ProgressInfo{
@@ -508,96 +508,117 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
                 false,
                 false
             });
-            tasks.emplace(i, std::make_pair(iso.path, device));
         }
 
         // Thread pool setup
-        std::mutex queueMutex;
-        std::atomic<size_t> completed{0};
-        std::atomic<size_t> successes{0};
+        std::atomic<size_t> completedTasks(0);
+        std::atomic<bool> isProcessingComplete(false);
+        const size_t totalTasks = validPairs.size();
+        const unsigned int numThreads = std::min(static_cast<unsigned int>(totalTasks), 
+                                               static_cast<unsigned int>(maxThreads));
+        ThreadPool pool(numThreads);
+        
+        const size_t chunkSize = std::max(size_t(1), 
+            std::min(size_t(50), (totalTasks + numThreads - 1) / numThreads));
 
-        auto worker = [&]() {
-            while (!g_operationCancelled) {
-                std::pair<size_t, std::pair<std::string, std::string>> task;
-                {
-                    std::unique_lock<std::mutex> lock(queueMutex);
-                    if (tasks.empty()) return;
-                    task = tasks.front();
-                    tasks.pop();
+        std::atomic<size_t> activeTaskCount(0);
+        std::condition_variable taskCompletionCV;
+        std::mutex taskCompletionMutex;
+
+        auto startTime = std::chrono::high_resolution_clock::now();
+
+        // Enqueue chunked tasks
+        for (size_t i = 0; i < totalTasks; i += chunkSize) {
+            const size_t end = std::min(i + chunkSize, totalTasks);
+            activeTaskCount.fetch_add(1, std::memory_order_relaxed);
+
+            pool.enqueue([&, i, end]() {
+                for (size_t j = i; j < end && !g_operationCancelled.load(std::memory_order_acquire); ++j) {
+                    const auto& [iso, device] = validPairs[j];
+                    bool success = false;
+                    
+                    try {
+                        success = writeIsoToDevice(iso.path, device, j);
+                    } catch (const std::exception& e) {
+                        std::lock_guard<std::mutex> lock(progressMutex);
+                        progressData[j].failed = true;
+                    }
+
+                    if (success) {
+                        std::lock_guard<std::mutex> lock(progressMutex);
+                        progressData[j].completed = true;
+                        completedTasks.fetch_add(1, std::memory_order_relaxed);
+                    }
                 }
 
-                bool success = writeIsoToDevice(
-                    task.second.first,
-                    task.second.second,
-                    task.first
-                );
-
-                if (success) successes++;
-                completed++;
-            }
-        };
-        auto startTime = std::chrono::high_resolution_clock::now();
+                if (activeTaskCount.fetch_sub(1, std::memory_order_release) == 1) {
+                    taskCompletionCV.notify_one();
+                }
+            });
+        }
 
         // Start operations
         disableInput();
         clearScrollBuffer();
         std::cout << "\n\033[0;1mWriting... (\033[1;91mCtrl+c to cancel\033[0;1m)\n\n";
         std::cout << "\033[s"; // Save cursor position
-        
-        std::vector<std::thread> threads;
-        for (size_t i = 0; i < maxThreads; ++i) {
-            threads.emplace_back(worker);
-        }
 
-        // Progress display
+        // Progress display thread
         auto displayProgress = [&]() {
-		while (completed < validPairs.size() && !g_operationCancelled) {
-			std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    
-			std::lock_guard<std::mutex> lock(progressMutex);
-			std::cout << "\033[u"; // Restore cursor
-    
-			for (const auto& prog : progressData) {
-				std::string driveName = getDriveName(prog.device);
-				std::cout << "\033[K"; // Clear line
-				std::cout << std::right
-						<< ("\033[1;95m" + prog.filename + " \033[0;1m→ " + 
-							"\033[1;93m" + prog.device + "\033[0;1m \033[1;93m<" + driveName + "> \033[0;1m")
-						<< std::right
-						<< (prog.completed ? "\033[1;92mDONE\033[0;1m" :
-							prog.failed ? "\033[1;91mFAIL\033[0;1m" :
-							std::to_string(prog.progress) + "%")
-						<< " ["
-						<< prog.currentSize
-						<< "/"
-						<< prog.totalSize
-						<< "] "
-						<< (!prog.completed && !prog.failed ? "\033[0;1m" + formatSpeed(prog.speed) + "\033[0;1m" : "")
-						<< "\n";
-			}
-			std::cout << std::flush;
-		}
-	};
+            while (!isProcessingComplete.load(std::memory_order_acquire) && 
+                  !g_operationCancelled.load(std::memory_order_acquire)) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                std::lock_guard<std::mutex> lock(progressMutex);
+                
+                std::cout << "\033[u"; // Restore cursor
+                for (size_t i = 0; i < progressData.size(); ++i) {
+                    const auto& prog = progressData[i];
+                    std::string driveName = getDriveName(prog.device);
+                    std::cout << "\033[K" // Clear line
+                            << ("\033[1;95m" + prog.filename + " \033[0;1m→ " + 
+                                "\033[1;93m" + prog.device + "\033[0;1m \033[1;93m<" + driveName + "> \033[0;1m")
+                            << std::right
+                            << (prog.completed ? "\033[1;92mDONE\033[0;1m" :
+                                prog.failed ? "\033[1;91mFAIL\033[0;1m" :
+                                std::to_string(prog.progress) + "%")
+                            << " ["
+                            << prog.currentSize
+                            << "/"
+                            << prog.totalSize
+                            << "] "
+                            << (!prog.completed && !prog.failed ? "\033[0;1m" + formatSpeed(prog.speed) + "\033[0;1m" : "")
+                            << "\n";
+                }
+                std::cout << std::flush;
+            }
+        };
 
-        std::thread displayThread(displayProgress);
+        std::thread progressThread(displayProgress);
 
-        // Cleanup
-        for (auto& t : threads) if (t.joinable()) t.join();
-        displayThread.join();
+        // Wait for completion
+        {
+            std::unique_lock<std::mutex> lock(taskCompletionMutex);
+            taskCompletionCV.wait(lock, [&]() { 
+                return activeTaskCount.load(std::memory_order_acquire) == 0 || 
+                      g_operationCancelled.load(std::memory_order_acquire);
+            });
+        }
+        isProcessingComplete.store(true, std::memory_order_release);
+        progressThread.join();
 
         // Final status
         auto endTime = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::seconds>(
             endTime - startTime).count();
         
-        std::cout << "\n\033[0;1mCompleted: \033[1;92m" << successes 
-                  << "\033[0;1m/\033[1;93m" << validPairs.size() 
-                  << "\033[0;1m in \033[0;1m" << duration << " seconds.\033[0;1m\n";
+        std::cout << "\n\033[0;1mCompleted: \033[1;92m" << completedTasks.load(std::memory_order_relaxed)
+                << "\033[0;1m/\033[1;93m" << validPairs.size() 
+                << "\033[0;1m in \033[0;1m" << duration << " seconds.\033[0;1m\n";
         
-        if (g_operationCancelled) {
+        if (g_operationCancelled.load(std::memory_order_acquire)) {
             std::cout << "\n\033[1;33mOperation interrupted by user.\033[0;1m\n";
         }
-        
+
         isFinished = true;
         flushStdin();
         restoreInput();
