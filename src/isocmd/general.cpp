@@ -427,6 +427,8 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             if ((completedTasksValue >= totalTasks) && !enterPressed) {
 				rl_bind_key('\f', prevent_clear_screen_and_tab_completion);
 				rl_bind_key('\t', prevent_clear_screen_and_tab_completion);
+				
+				clear_history();
                 
                 enterPressed = true;
                 std::cout << "\n\n"; // Move past both progress bars
