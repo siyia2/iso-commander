@@ -237,24 +237,20 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
     bool isFinished = false;
     do {
         // Device mapping input
-        std::string devicePrompt = "\n\033[0;1mSelected ISO:\033[0;1m\n\n";
+        std::string devicePrompt = "\n\033[0;1mSelected \033[1;92mISO\033[0;1m:\n\n";
         for (size_t i = 0; i < selectedIsos.size(); ++i) {
-			std::string path = selectedIsos[i].path;
-			size_t lastSlashPos = path.find_last_of('/');
-    
-			if (lastSlashPos != std::string::npos) {
-				// Split the path into the part before the last '/' and the part after
-				std::string beforeLastSlash = path.substr(0, lastSlashPos + 1);
-				std::string afterLastSlash = path.substr(lastSlashPos + 1);
-        
-				// Apply magenta color to the part after the last '/'
-				path = beforeLastSlash + "\033[1;95m" + afterLastSlash + "\033[0;1m";
-			}
-    
-			devicePrompt += "  \033[1;93m" + std::to_string(i+1) + ">\033[0;1m " +
-							path + " (\033[1;35m" + 
+			// Extract the directory and filename
+			auto [shortDir, filename] = extractDirectoryAndFilename(selectedIsos[i].path);
+
+			// Highlight the filename in magenta
+			std::string highlightedPath = shortDir + "/\033[1;95m" + filename + "\033[0;1m";
+
+			// Append to the device prompt
+			devicePrompt += "  \033[1;93m" + std::to_string(i + 1) + ">\033[0;1m " +
+							highlightedPath + " (\033[1;35m" + 
 							selectedIsos[i].sizeStr + "\033[0;1m)\n";
 		}
+
 		
 		// Restore readline autocomplete and screen clear bindings
         rl_bind_key('\f', rl_clear_screen);

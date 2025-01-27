@@ -141,20 +141,19 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& historyPattern, bool& isDelete, bool& isCopy, bool& abortDel) {
 	
     auto generateSelectedIsosPrompt = [&]() {
-        std::string prompt;
-        for (const auto& chunk : indexChunks) {
-            for (int index : chunk) {
-				std::string isoPath = isoFiles[index - 1];
-				size_t lastSlashPos = isoPath.find_last_of('/');
-				std::string isoDirectory = isoPath.substr(0, lastSlashPos + 1); // Include the last '/'
-				std::string isoFilename = isoPath.substr(lastSlashPos + 1); // Everything after the last '/'
+		std::string prompt;
+		for (const auto& chunk : indexChunks) {
+			for (int index : chunk) {
+				// Extract the directory and filename
+				auto [shortDir, filename] = extractDirectoryAndFilename(isoFiles[index - 1]);
 
-				// Construct the prompt with directory in bold and filename in magenta
-				prompt += "\033[1m-> " + isoDirectory + "\033[1;95m" + isoFilename + "\033[0;1m\n";
+				// Construct the prompt with the directory in bold and filename in magenta
+				prompt += "\033[1m-> " + shortDir + "/\033[1;95m" + filename + "\033[0;1m\n";
 			}
-        }
-        return prompt;
-    };
+		}
+		return prompt;
+	};
+
 
     if (!isDelete) {
         while (true) {
