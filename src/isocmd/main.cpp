@@ -102,16 +102,14 @@ int main(int argc, char *argv[]) {
 
         // Prompt for the main menu choice
         char* rawInput = readline("\n\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
-
         std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
 
-        std::string mainInputString(input.get());
-
+        // Check for EOF (Ctrl+D) or NULL input before processing
         if (!input.get()) {
-            break; // Exit the program if readline returns NULL (e.g., on EOF or Ctrl+D)
+            break; // Exit the loop on EOF
         }
 
-
+        std::string mainInputString(input.get());
         std::string choice(mainInputString);
 
         if (choice == "1") {
@@ -488,10 +486,12 @@ bool startsWithZero(const std::string& str) {
     return !str.empty() && str[0] == '0';
 }
 
+
 // Function to check if a file already exists
 bool fileExists(const std::string& fullPath) {
         return std::filesystem::exists(fullPath);
 }
+
 
 // Function to check if a string is numeric
 bool isNumeric(const std::string& str) {
