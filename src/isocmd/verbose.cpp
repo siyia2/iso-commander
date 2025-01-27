@@ -90,6 +90,8 @@ void verbosePrint(const std::set<std::string>& primarySet, const std::set<std::s
 
 // Function that provides verbose output for manualRefreshCache
 void verboseIsoCacheRefresh(std::vector<std::string>& allIsoFiles, std::atomic<size_t>& totalFiles, std::vector<std::string>& validPaths, std::set<std::string>& invalidPaths, std::set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& historyPattern, const std::chrono::high_resolution_clock::time_point& start_time) {
+	bool saveSuccess;
+	
 	// Print invalid paths
     if ((!uniqueErrorMessages.empty() || !invalidPaths.empty()) && promptFlag) {
 		if (!invalidPaths.empty()) {
@@ -116,9 +118,12 @@ void verboseIsoCacheRefresh(std::vector<std::string>& allIsoFiles, std::atomic<s
 			std::cout << "\n";
 		}
 	}
-
-    // Save the combined cache to disk
-    bool saveSuccess = saveCache(allIsoFiles, maxCacheSize);
+	
+	if (g_operationCancelled) {
+		saveSuccess = false;
+	} else {
+		saveSuccess = saveCache(allIsoFiles, maxCacheSize);
+	}
 
     // Stop the timer after completing the cache refresh and removal of non-existent paths
     auto end_time = std::chrono::high_resolution_clock::now();
@@ -150,9 +155,14 @@ void verboseIsoCacheRefresh(std::vector<std::string>& allIsoFiles, std::atomic<s
         std::cout << "\033[1;91mCache refresh failed due to lack of valid paths.\033[0;1m";
         std::cout << "\n";
     }
-    if (!saveSuccess) {
+    if (!saveSuccess && !g_operationCancelled) {
         std::cout << "\n";
         std::cout << "\033[1;91mCache refresh failed. Unable to write to the cache file.\033[0;1m";
+        std::cout << "\n";
+    }
+    if (!saveSuccess && g_operationCancelled) {
+        std::cout << "\n";
+        std::cout << "\033[1;93mCache refresh cancelled.\033[0;1m";
         std::cout << "\n";
     }
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";

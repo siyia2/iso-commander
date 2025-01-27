@@ -509,7 +509,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles) {
         
         std::cout << "\n\033[0;1mCompleted: \033[1;92m" << successes 
                   << "\033[0;1m/\033[1;93m" << validPairs.size() 
-                  << "\033[0;1m in \033[0;1m" << duration << "s.\033[0;1m\n";
+                  << "\033[0;1m in \033[0;1m" << duration << "seconds.\033[0;1m\n";
         
         if (g_operationCancelled) {
             std::cout << "\n\033[1;33mOperation cancelled by user.\033[0;1m\n";
