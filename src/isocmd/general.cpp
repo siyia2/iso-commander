@@ -630,8 +630,8 @@ void help() {
               
     std::cout << "4. Selecting Mappings:\n"
               << "   • Single mapping: Enter a mapping (e.g., '1>/dev/sdc')\n"
-              << "   • Single ISO index mapped to multiple devices: Separate with ; (e.g., '1>/dev/sdc;1>/dev/sdd;')\n"
-              << "   • Multiple ISO indexes mapped to multiple devices: Separate with ; (e.g., '1>/dev/sdc;2>/dev/sdd;')\n" << std::endl;
+              << "   • Single ISO index mapped to multiple devices: Separate with ; (e.g., '1>/dev/sdc;1>/dev/sdd')\n"
+              << "   • Multiple ISO indexes mapped to multiple devices: Separate with ; (e.g., '1>/dev/sdc;2>/dev/sdd')\n" << std::endl;
                   
     // Prompt to continue
     std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
