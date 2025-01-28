@@ -406,7 +406,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             std::string deviceSizeStr = formatFileSize(deviceSize);
             std::string driveName = getDriveName(device);
             
-            std::cout << "  \033[1;93m" << device << " \033[0;1m<" << driveName << "> (\033[1;35m" << deviceSizeStr << "\033[0;1m) ← \033[1;92m" 
+            std::cout << "  {\033[1;93m" << device << " \033[0;1m<" << driveName << "> (\033[1;35m" << deviceSizeStr << "\033[0;1m)} ← \033[1;92m" 
                       << iso.filename << "\033[0;1m\n";
         }
         
@@ -503,9 +503,12 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             for (size_t i = 0; i < progressData.size(); ++i) {
                 const auto& prog = progressData[i];
                 std::string driveName = getDriveName(prog.device);
+                uint64_t deviceSize = getBlockDeviceSize(prog.device);
+				std::string deviceSizeStr = formatFileSize(deviceSize);
+                
                 std::cout << "\033[K"
-                        << ("\033[1;95m" + prog.filename + " \033[0;1m→ " + 
-                            "\033[1;93m" + prog.device + "\033[0;1m \033[1;93m<" + driveName + "> \033[0;1m")
+                        << ("\033[1;95m" + prog.filename + " \033[0;1m→ {" + 
+                            "\033[1;93m" + prog.device + "\033[0;1m \033[0;1m<" + driveName + "> (\033[1;35m" + deviceSizeStr + "\033[0;1m)} \033[0;1m")
                         << std::right
                         << (prog.completed ? "\033[1;92mDONE\033[0;1m" :
                             prog.failed ? "\033[1;91mFAIL\033[0;1m" :
