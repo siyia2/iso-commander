@@ -196,21 +196,21 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
             } else {
                 userDestDir = mainInputString;
                 // Check if userDestDir ends with ";^O"
-				if (userDestDir.size() >= 3 && 
-					userDestDir.substr(userDestDir.size() - 3) == "|^O") {
+				if (userDestDir.size() >= 4 && 
+					userDestDir.substr(userDestDir.size() - 4) == " |^O") {
 					// Set overwriteExisting to true
 					overwriteExisting = true;
 					// Remove ";^O" from userDestDir
-					userDestDir = userDestDir.substr(0, userDestDir.size() - 3);
+					userDestDir = userDestDir.substr(0, userDestDir.size() - 4);
 				} else {
 					// Ensure overwriteExisting is false if the suffix is not present
 					overwriteExisting = false;
 				}
 				// Remove ";^O" from the input before adding to history
 				std::string historyInput = mainInputString;
-				if (historyInput.size() >= 3 && 
-					historyInput.substr(historyInput.size() - 3) == "|^O") {
-					historyInput = historyInput.substr(0, historyInput.size() - 3);
+				if (historyInput.size() >= 4 && 
+					historyInput.substr(historyInput.size() - 4) == " |^O") {
+					historyInput = historyInput.substr(0, historyInput.size() - 4);
 				}
                 add_history(historyInput.c_str());
                 break;
@@ -305,10 +305,7 @@ bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::ato
 
 
 // Function to handle cpMvDel
-void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy,
-                            std::set<std::string>& operationIsos, std::set<std::string>& operationErrors,
-                            const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete,
-                            std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, bool overwriteExisting) {
+void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy,std::set<std::string>& operationIsos, std::set<std::string>& operationErrors,const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, bool overwriteExisting) {
 
     setupSignalHandlerCancellations();
     g_operationCancelled = false;
