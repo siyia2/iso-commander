@@ -448,51 +448,89 @@ bool isValidDirectory(const std::string& path) {
 
 
 // Function that can delete or show stats for ISO cache it is called from within manualRefreshCache
-void delCacheAndShowStats (std::string& inputSearch, const bool& promptFlag, const int& maxDepth, const bool& historyPattern) {
-	if (inputSearch == "stats") {
-		try {
-			// Get the file size in bytes
-			std::filesystem::path filePath(cacheFilePath);
-			std::uintmax_t fileSizeInBytes = std::filesystem::file_size(filePath);
-			std::uintmax_t cachesizeInBytes = maxCacheSize;
-        
-			// Convert to MB
-			double fileSizeInMB = fileSizeInBytes / (1024.0 * 1024.0);
-			double cachesizeInMb = cachesizeInBytes / (1024.0 * 1024.0);
-        
-			std::cout << "\nSize: " << std::fixed << std::setprecision(1) << fileSizeInMB << "MB" << "/" << std::setprecision(0) << cachesizeInMb << "MB" << " \nEntries: "<< countNonEmptyLines(cacheFilePath) << "\nLocation: " << "'" << cacheFilePath << "'\033[0;1m" <<std::endl;
-		} catch (const std::filesystem::filesystem_error& e) {
-			std::cerr << "\n\033[1;91mError: " << e.what() << std::endl;
-		}
-		
-		std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-		manualRefreshCache("", promptFlag, maxDepth, historyPattern);
-		
-	} else if (inputSearch == "clr") {
-		if (std::remove(cacheFilePath.c_str()) != 0) {
-			std::cerr << "\n\001\033[1;91mError deleting IsoCache: '\001\033[1;93m" << cacheFilePath << "\001\033[1;91m'. File missing or inaccessible." << std::endl;
-			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-			manualRefreshCache("", promptFlag, maxDepth, historyPattern);
-		} else {
-			for (auto it = transformationCache.begin(); it != transformationCache.end();) {
-				const std::string& key = it->first;
-				if ((key.size() >= 4 && key.compare(key.size() - 4, 4, ".iso") == 0))
-					{
-						it = transformationCache.erase(it);  // erase and move to the next element
-					} else {
-						++it;  // move to the next element
-					}
-			}
-			
-			std::cout << "\n\001\033[1;92mIsoCache deleted successfully: '\001\033[0;1m" << cacheFilePath <<"\001\033[1;92m'." << std::endl;
-			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-			manualRefreshCache("", promptFlag, maxDepth, historyPattern);
-		}
-	}
-	return;
+void delCacheAndShowStats(std::string& inputSearch, const bool& promptFlag, const int& maxDepth, const bool& historyPattern) {
+    if (inputSearch == "stats") {
+        try {
+            // Get the file size in bytes
+            std::filesystem::path filePath(cacheFilePath);
+            std::uintmax_t fileSizeInBytes = std::filesystem::file_size(filePath);
+            std::uintmax_t cachesizeInBytes = maxCacheSize;
+
+            // Convert to MB
+            double fileSizeInMB = fileSizeInBytes / (1024.0 * 1024.0);
+            double cachesizeInMb = cachesizeInBytes / (1024.0 * 1024.0);
+
+            std::cout << "\nSize: " << std::fixed << std::setprecision(1) << fileSizeInMB << "MB" 
+                      << "/" << std::setprecision(0) << cachesizeInMb << "MB" 
+                      << " \nEntries: "<< countNonEmptyLines(cacheFilePath) 
+                      << "\nLocation: " << "'" << cacheFilePath << "'\033[0;1m" << std::endl;
+        } catch (const std::filesystem::filesystem_error& e) {
+            std::cerr << "\n\033[1;91mError: " << e.what() << std::endl;
+        }
+
+        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+
+    } else if (inputSearch == "clr") {
+        if (std::remove(cacheFilePath.c_str()) != 0) {
+            std::cerr << "\n\001\033[1;91mError clearing IsoCache: '\001\033[1;93m" 
+                      << cacheFilePath << "\001\033[1;91m'. File missing or inaccessible." << std::endl;
+            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+        } else {
+            // Clean transformation cache for .iso entries
+            for (auto it = transformationCache.begin(); it != transformationCache.end();) {
+                const std::string& key = it->first;
+                if (key.size() >= 4 && key.compare(key.size() - 4, 4, ".iso") == 0) {
+                    it = transformationCache.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+
+            std::cout << "\n\001\033[1;92mIsoCache cleared successfully: '\001\033[0;1m" 
+                      << cacheFilePath << "\001\033[1;92m'." << std::endl;
+            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+        }
+
+    } else if (inputSearch == "clr_paths") {
+        const std::string historyFilePath = std::string(getenv("HOME")) + 
+            "/.local/share/isocmd/database/iso_commander_history_cache.txt";
+
+        if (std::remove(historyFilePath.c_str()) != 0) {
+            std::cerr << "\n\001\033[1;91mError clearing folder path history: '\001\033[1;93m" 
+                      << historyFilePath << "\001\033[1;91m'. File missing or inaccessible." << std::endl;
+        } else {
+            std::cout << "\n\001\033[1;92mFolder path history cleared successfully: '\001\033[0;1m" 
+                      << historyFilePath << "\001\033[1;92m'." << std::endl;
+        }
+
+        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        return;
+
+    } else if (inputSearch == "clr_filter") {
+        const std::string historyPatternFilePath = std::string(getenv("HOME")) + 
+            "/.local/share/isocmd/database/iso_commander_filter_cache.txt";
+
+        if (std::remove(historyPatternFilePath.c_str()) != 0) {
+            std::cerr << "\n\001\033[1;91mError clearing filter history: '\001\033[1;93m" 
+                      << historyPatternFilePath << "\001\033[1;91m'. File missing or inaccessible." << std::endl;
+        } else {
+            std::cout << "\n\001\033[1;92mFilter history cleared successfully: '\001\033[0;1m" 
+                      << historyPatternFilePath << "\001\033[1;92m'." << std::endl;
+        }
+
+        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+    }
+
+    return;
 }
 
 
@@ -537,7 +575,7 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 				manualRefreshCache("", promptFlag, maxDepth, historyPattern);
 			}        
 			
-            if (input == "stats" || input == "clr") {
+            if (input == "stats" || input == "clr" || input == "clr_paths" || input == "clr_filter") {
                 delCacheAndShowStats(input, promptFlag, maxDepth, historyPattern);
                 return;
             }

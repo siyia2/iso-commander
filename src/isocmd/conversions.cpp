@@ -55,6 +55,37 @@ void clearRamCache (bool& modeMdf, bool& modeNrg) {
 }
 
 
+// Function to clear path and filter history
+void clearHistory(const std::string& inputSearch) {
+    const std::string basePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/";
+    std::string filePath;
+    std::string historyType;
+
+    if (inputSearch == "clr_paths") {
+        filePath = basePath + "iso_commander_history_cache.txt";
+        historyType = "Path";
+    } else if (inputSearch == "clr_filter") {
+        filePath = basePath + "iso_commander_filter_cache.txt";
+        historyType = "Filter";
+    } else {
+        std::cerr << "\n\001\033[1;91mInvalid command: '\001\033[1;93m" 
+                  << inputSearch << "\001\033[1;91m'." << std::endl;
+        return;
+    }
+
+    if (std::remove(filePath.c_str()) != 0) {
+        std::cerr << "\n\001\033[1;91mError clearing " << historyType << " history: '\001\033[1;93m" 
+                  << filePath << "\001\033[1;91m'. File missing or inaccessible." << std::endl;
+    } else {
+        std::cout << "\n\001\033[1;92m" << historyType << " history cleared successfully: '\001\033[0;1m" 
+                  << filePath << "\001\033[1;92m'." << std::endl;
+    }
+
+    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+}
+
+
 // Function to select and convert files based on user's choice of file type
 void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
     // Prepare containers for files and caches
@@ -136,6 +167,11 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
         }
 
         std::string inputSearch(mainSearch.get());
+        
+        if (inputSearch == "clr_paths" || inputSearch == "clr_filter") {
+			clearHistory(inputSearch);
+			continue;
+		}
         
         if (inputSearch == "?") {
             help();
