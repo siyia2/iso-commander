@@ -238,7 +238,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         std::vector<std::string> usbDevices = getRemovableDevices();
 
         if (usbDevices.empty()) {
-            devicePrompt += "  \033[1;91mNo available Removable devices detected!\033[0;1m\n";
+            devicePrompt += "  \033[1;91mNo available removable USB devices detected!\033[0;1m\n";
         } else {
             for (const auto& device : usbDevices) {
                 try {
@@ -357,7 +357,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             std::string driveName = getDriveName(device);
 
             if (!isUsbDevice(device)) {
-                validationErrors.push_back("\033[1;93m'" + device + "'\033[0;1m is not a removable device");
+                validationErrors.push_back("\033[1;93m'" + device + "'\033[0;1m is not a removable USB device");
                 continue;
             }
             
