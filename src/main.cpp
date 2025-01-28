@@ -25,7 +25,7 @@ int main(int argc, char *argv[]) {
 	std::atomic<bool> isImportRunning;
 	
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
-        printVersionNumber("5.5.8");
+        printVersionNumber("5.5.9");
         return 0;
     }
     // Readline use semicolon as delimiter
