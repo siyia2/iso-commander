@@ -446,8 +446,8 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             false
         });
     }
-	
-	std::mutex progressMutex;
+
+    std::mutex progressMutex; // Declare the mutex
     std::atomic<size_t> completedTasks(0);
     std::atomic<bool> isProcessingComplete(false);
     const size_t totalTasks = validPairs.size();
@@ -472,7 +472,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             const auto& [iso, device] = validPairs[i];
             bool success = false;
             try {
-                success = writeIsoToDevice(iso.path, device, i); // Fixed signature
+                success = writeIsoToDevice(iso.path, device, i, progressMutex); // Pass the mutex
             } catch (...) {
                 std::lock_guard<std::mutex> lock(progressMutex);
                 progressData[i].failed = true;
@@ -504,7 +504,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
                 const auto& prog = progressData[i];
                 std::string driveName = getDriveName(prog.device);
                 uint64_t deviceSize = getBlockDeviceSize(prog.device);
-				std::string deviceSizeStr = formatFileSize(deviceSize);
+                std::string deviceSizeStr = formatFileSize(deviceSize);
                 
                 std::cout << "\033[K"
                         << ("\033[1;95m" + prog.filename + " \033[0;1m→ {" + 
@@ -549,7 +549,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     if (g_operationCancelled.load()) {
         std::cout << "\n\033[1;33mOperation interrupted by user.\033[0;1m\n";
     }
-	flushStdin();
+    flushStdin();
     restoreInput();
 }
 
@@ -594,10 +594,11 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles, st
 
 
 // Function to write ISO to usb device
-bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex) {
+bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex, std::mutex& progressMutex) {
     // Open ISO file
     std::ifstream iso(isoPath, std::ios::binary);
     if (!iso) {
+        std::lock_guard<std::mutex> lock(progressMutex);
         progressData[progressIndex].failed = true;
         return false;
     }
@@ -605,6 +606,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     // Open device with O_DIRECT
     int device_fd = open(device.c_str(), O_WRONLY | O_DIRECT);
     if (device_fd == -1) {
+        std::lock_guard<std::mutex> lock(progressMutex);
         progressData[progressIndex].failed = true;
         return false;
     }
@@ -612,6 +614,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     // Get device sector size
     int sectorSize = 0;
     if (ioctl(device_fd, BLKSSZGET, &sectorSize) < 0 || sectorSize == 0) {
+        std::lock_guard<std::mutex> lock(progressMutex);
         progressData[progressIndex].failed = true;
         close(device_fd);
         return false;
@@ -620,6 +623,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     // Get ISO file size and check alignment
     const uint64_t fileSize = std::filesystem::file_size(isoPath);
     if (fileSize % sectorSize != 0) {
+        std::lock_guard<std::mutex> lock(progressMutex);
         progressData[progressIndex].failed = true;
         close(device_fd);
         return false;
@@ -637,6 +641,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     // Allocate aligned buffer
     char* alignedBuffer = nullptr;
     if (posix_memalign((void**)&alignedBuffer, sectorSize, bufferSize) != 0) {
+        std::lock_guard<std::mutex> lock(progressMutex);
         progressData[progressIndex].failed = true;
         close(device_fd);
         return false;
@@ -663,16 +668,16 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
 
             // Handle partial writes
             ssize_t bytesWritten = 0;
-			while (bytesWritten < static_cast<ssize_t>(bytesToRead)) {
-				size_t chunk = std::min(static_cast<size_t>(bytesToRead - bytesWritten), bufferSize);
-				chunk = (chunk / sectorSize) * sectorSize;  // Ensure chunk is sector-aligned
-				if (chunk == 0) break;  // Handle edge cases
-				ssize_t result = write(device_fd, alignedBuffer + bytesWritten, chunk);
-				if (result == -1) {
-					throw std::runtime_error("Write error");
-				}
-				bytesWritten += result;
-			}
+            while (bytesWritten < static_cast<ssize_t>(bytesToRead)) {
+                size_t chunk = std::min(static_cast<size_t>(bytesToRead - bytesWritten), bufferSize);
+                chunk = (chunk / sectorSize) * sectorSize;  // Ensure chunk is sector-aligned
+                if (chunk == 0) break;  // Handle edge cases
+                ssize_t result = write(device_fd, alignedBuffer + bytesWritten, chunk);
+                if (result == -1) {
+                    throw std::runtime_error("Write error");
+                }
+                bytesWritten += result;
+            }
 
             totalWritten += bytesWritten;
             bytesInWindow += bytesWritten;
@@ -688,16 +693,20 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
                 double seconds = timeSinceLastUpdate.count() / 1000.0;
                 double mbPerSec = (static_cast<double>(bytesInWindow) / (1024 * 1024)) / seconds;
 
-                progressData[progressIndex].progress = progress;
-                progressData[progressIndex].currentSize = formatFileSize(totalWritten);
-                progressData[progressIndex].speed = mbPerSec;
-                
+                {
+                    std::lock_guard<std::mutex> lock(progressMutex);
+                    progressData[progressIndex].progress = progress;
+                    progressData[progressIndex].currentSize = formatFileSize(totalWritten);
+                    progressData[progressIndex].speed = mbPerSec;
+                }
+
                 // Reset window counters
                 lastUpdate = now;
                 bytesInWindow = 0;
             }
         }
     } catch (...) {
+        std::lock_guard<std::mutex> lock(progressMutex);
         progressData[progressIndex].failed = true;
         close(device_fd);
         return false;
@@ -709,6 +718,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     close(device_fd);
 
     if (!g_operationCancelled && totalWritten == fileSize) {
+        std::lock_guard<std::mutex> lock(progressMutex);
         progressData[progressIndex].completed = true;
         return true;
     }
