@@ -413,7 +413,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         // Handle filter command
         if (strcmp(rawInput.get(), "/") == 0) {
 			std::cout << "\033[1A\033[K";
-			filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;38;5;208m\002" + fileExtensionWithOutDots + "\001\033[1;94m\002, ↵ to return: \001\033[0;1m\002";
+			filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;38;5;208m\002" + fileExtensionWithOutDots + "\001\033[1;94m\002, or ↵ to return: \001\033[0;1m\002";
 			filterQuery(); // Call the filter query function
 			isFiltered = files.size() != (fileType == "bin" || fileType == "img" ? binImgFilesCache.size() : (fileType == "mdf" ? mdfMdsFilesCache.size() : nrgFilesCache.size()));
 		} else if (rawInput.get()[0] == '/' && rawInput.get()[1] != '\0') {
