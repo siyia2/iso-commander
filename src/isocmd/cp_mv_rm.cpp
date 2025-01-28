@@ -172,10 +172,10 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
             // Generate the prompt with selected ISOs at the beginning
             std::string selectedIsosPrompt = generateSelectedIsosPrompt();
             std::string prompt = "\n" + selectedIsosPrompt + 
-			"\n\001\033[1;92m\002DestinationDirs\001\033[1;94m\002 ↵ for selected \001\033[1;92m\002ISO\001\033[1;94m\002 to be " + 
+			"\n\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ for selected \001\033[1;92m\002ISO\001\033[1;94m\002 to be " + 
 			operationColor + operationDescription + 
-			"\001\033[1;94m\002 into (multi-path separator: \001\033[1m\002\001\033[1;93m\002;\001\033[1;94m\002, append \001\033[1;93m\002|^O\001\033[1;94m\002 to allow overwrites), " +
-			"or ↵ to return:\n\001\033[0;1m\002";
+			"\001\033[1;94m\002 into, ? ↵ for help, " +
+			"↵ to return:\n\001\033[0;1m\002";
 
             std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
             // Check for EOF (Ctrl+D) or NULL input before processing
@@ -187,7 +187,12 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
 
             rl_bind_key('\f', prevent_readline_keybindings);
             rl_bind_key('\t', prevent_readline_keybindings);
-
+			
+			if (mainInputString == "?") {
+				help();
+				continue;
+			}
+			
             if (mainInputString.empty()) {
                 umountMvRmBreak = false;
                 userDestDir = "";

@@ -27,7 +27,7 @@ int main(int argc, char *argv[]) {
 	setupReadlineToIgnoreCtrlC();
 	
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
-        printVersionNumber("5.5.9");
+        printVersionNumber("5.5.8");
         return 0;
     }
     // Readline use semicolon as delimiter
@@ -306,19 +306,16 @@ void submenu2(bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbo
 		 if (submenu_choice.empty() || submenu_choice.length() == 1){
          switch (submenu_choice[0]) {
              case '1':
-				clearScrollBuffer();
 				operation = "bin";
 					promptSearchBinImgMdfNrg(operation, promptFlag, maxDepth, historyPattern, verbose);
                 clearScrollBuffer();
                 break;
              case '2':
-				clearScrollBuffer();
 				operation = "mdf";
 					promptSearchBinImgMdfNrg(operation, promptFlag, maxDepth, historyPattern, verbose);
                 clearScrollBuffer();
                 break;
              case '3':
-				clearScrollBuffer();
 				operation = "nrg";
 					promptSearchBinImgMdfNrg(operation, promptFlag, maxDepth, historyPattern, verbose);
                 clearScrollBuffer();

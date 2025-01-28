@@ -248,12 +248,18 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         rl_bind_keyseq("\033[A", rl_get_previous_history); // Restore Up arrow
 		rl_bind_keyseq("\033[B", rl_get_next_history);     // Restore Down arrow
 
-        devicePrompt += "\n\001\033[1;92m\002Mapping\001\033[1;94m\002 ↵ as \001\033[1;93m\002INDEX>DEVICE\001\033[1;94m\002 (e.g, \001\033[1;94m\0021>/dev/sdc;2>/dev/sdd\001\033[1;94m\002), or ↵ to return:\001\033[0;1m\002 ";
+        devicePrompt += "\n\001\033[1;92m\002Mapping\001\033[1;94m\002 ↵ as \001\033[1;93m\002INDEX>DEVICE\001\033[1;94m\002, ? ↵ for help, ↵ to return:\001\033[0;1m\002 ";
 
         // Get user input
         std::unique_ptr<char, decltype(&std::free)> deviceInput(
             readline(devicePrompt.c_str()), &std::free
         );
+        std::string mainInputString(deviceInput.get());
+        if (mainInputString == "?") {
+            help();
+            continue;
+        }
+        
         if (deviceInput && *deviceInput) add_history(deviceInput.get());
 
         if (!deviceInput || deviceInput.get()[0] == '\0') {

@@ -620,8 +620,19 @@ void help() {
               << "   • Enter '~' - Switch between short and full paths\n"
               << "   • Enter '?' - Show this help message\n\n"
               
-              << "   - Note: If filtering has no matches, no message or list update is issued" << std::endl;
-    
+              << "   - Note: If filtering has no matches, no message or list update is issued\n" << std::endl;
+              
+    std::cout << "3. Selecting FolderPaths:\n"
+              << "   • Single directory: Enter a directory (e.g., '/directory/')\n"
+              << "   • Multiple directories: Separate with ; (e.g., '/directory1/;/directory2/')\n"
+              << "   • Single directory with file overwrites for cp&mv: Enter a directory and append |^O (e.g.,/directory/ |^O)\n"
+              << "   • Multiple directories with file overwrites for cp&mv: Separate with ; and append |^O (e.g., '/directory1/;/directory2/ |^O')\n" << std::endl;
+              
+    std::cout << "4. Selecting Mappings:\n"
+              << "   • Single mapping: Enter a mapping (e.g., '1>/dev/sdc')\n"
+              << "   • Single ISO index mapped to multiple devices: Separate with ; (e.g., '1>/dev/sdc;1>/dev/sdd;')\n"
+              << "   • Multiple ISO indexes mapped to multiple devices: Separate with ; (e.g., '1>/dev/sdc;2>/dev/sdd;')\n" << std::endl;
+                  
     // Prompt to continue
     std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
