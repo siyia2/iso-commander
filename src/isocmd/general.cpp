@@ -372,7 +372,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
     auto startTime = std::chrono::high_resolution_clock::now();
 
     auto formatSize = [](size_t bytes) -> std::string {
-        const char* units[] = {"B", "KB", "MB", "GB"};
+        const char* units[] = {" B", " KB", " MB", " GB"};
         int unit = 0;
         double size = static_cast<double>(bytes);
         

@@ -433,7 +433,6 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 
 // Function to handle the actual write operation
 void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& validPairs) {
-    // Initialize progress data without mutex
     progressData.clear();
     for (size_t i = 0; i < validPairs.size(); ++i) {
         const auto& [iso, device] = validPairs[i];
@@ -447,19 +446,19 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             false
         });
     }
-
+	
+	std::mutex progressMutex;
+    std::atomic<size_t> completedTasks(0);
+    std::atomic<bool> isProcessingComplete(false);
     const size_t totalTasks = validPairs.size();
     const unsigned int numThreads = std::min(static_cast<unsigned int>(totalTasks), 
                                            static_cast<unsigned int>(maxThreads));
     ThreadPool pool(numThreads);
 
-    // Use atomic for tracking completion
-    std::atomic<size_t> completedTasks(0);
-    std::atomic<bool> isProcessingComplete(false);
-
-    // Vector to store futures for each write operation
-    std::vector<std::future<void>> futures;
-    futures.reserve(totalTasks);
+    // Add completion tracking variables
+    std::mutex completionMutex;
+    std::condition_variable completionCV;
+    size_t tasksCompleted = 0;
 
     disableInput();
     clearScrollBuffer();
@@ -468,82 +467,86 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
     auto startTime = std::chrono::high_resolution_clock::now();
 
-    // Launch write operations using async
     for (size_t i = 0; i < totalTasks; ++i) {
-        futures.push_back(std::async(std::launch::async, [&pool, &validPairs, &completedTasks, i]() {
+        pool.enqueue([&, i]() {
             const auto& [iso, device] = validPairs[i];
+            bool success = false;
+            try {
+                success = writeIsoToDevice(iso.path, device, i); // Fixed signature
+            } catch (...) {
+                std::lock_guard<std::mutex> lock(progressMutex);
+                progressData[i].failed = true;
+            }
             
-            // Use the thread pool to perform the actual write
-            pool.enqueue([&]() {
-                try {
-                    if (writeIsoToDevice(iso.path, device, i)) {
-                        progressData[i].completed = true;
-                        completedTasks.fetch_add(1, std::memory_order_release);
-                    }
-                } catch (...) {
-                    progressData[i].failed = true;
-                    completedTasks.fetch_add(1, std::memory_order_release);
-                }
-            });
-        }));
+            if (success) {
+                std::lock_guard<std::mutex> lock(progressMutex);
+                progressData[i].completed = true;
+                completedTasks.fetch_add(1);
+            }
+
+            // Update completion status
+            {
+                std::lock_guard<std::mutex> lock(completionMutex);
+                tasksCompleted++;
+            }
+            completionCV.notify_one();
+        });
     }
 
-    // Progress display using async
-    auto progressFuture = std::async(std::launch::async, [&]() {
+    auto displayProgress = [&]() {
         while (!isProcessingComplete.load(std::memory_order_acquire) && 
-               !g_operationCancelled.load(std::memory_order_acquire)) {
+              !g_operationCancelled.load(std::memory_order_acquire)) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            std::lock_guard<std::mutex> lock(progressMutex);
             
             std::cout << "\033[u";
             for (size_t i = 0; i < progressData.size(); ++i) {
                 const auto& prog = progressData[i];
                 std::string driveName = getDriveName(prog.device);
                 std::cout << "\033[K"
-                         << ("\033[1;95m" + prog.filename + " \033[0;1m→ " + 
-                             "\033[1;93m" + prog.device + "\033[0;1m \033[1;93m<" + driveName + "> \033[0;1m")
-                         << std::right
-                         << (prog.completed ? "\033[1;92mDONE\033[0;1m" :
-                             prog.failed ? "\033[1;91mFAIL\033[0;1m" :
-                             std::to_string(prog.progress) + "%")
-                         << " ["
-                         << prog.currentSize
-                         << "/"
-                         << prog.totalSize
-                         << "] "
-                         << (!prog.completed && !prog.failed ? "\033[0;1m" + formatSpeed(prog.speed) + "\033[0;1m" : "")
-                         << "\n";
+                        << ("\033[1;95m" + prog.filename + " \033[0;1m→ " + 
+                            "\033[1;93m" + prog.device + "\033[0;1m \033[1;93m<" + driveName + "> \033[0;1m")
+                        << std::right
+                        << (prog.completed ? "\033[1;92mDONE\033[0;1m" :
+                            prog.failed ? "\033[1;91mFAIL\033[0;1m" :
+                            std::to_string(prog.progress) + "%")
+                        << " ["
+                        << prog.currentSize
+                        << "/"
+                        << prog.totalSize
+                        << "] "
+                        << (!prog.completed && !prog.failed ? "\033[0;1m" + formatSpeed(prog.speed) + "\033[0;1m" : "")
+                        << "\n";
             }
             std::cout << std::flush;
         }
-    });
+    };
 
-    // Wait for completion or cancellation
-    while (completedTasks.load(std::memory_order_acquire) < totalTasks && 
-           !g_operationCancelled.load(std::memory_order_acquire)) {
-        std::this_thread::yield();
+    std::thread progressThread(displayProgress);
+
+    // Wait for all tasks using condition variable
+    {
+        std::unique_lock<std::mutex> lock(completionMutex);
+        completionCV.wait(lock, [&] { 
+            return tasksCompleted == totalTasks || g_operationCancelled.load();
+        });
     }
-
-    // Signal completion and wait for display thread
+    
     isProcessingComplete.store(true, std::memory_order_release);
-    progressFuture.wait();
-
-    // Wait for all async operations to complete
-    for (auto& future : futures) {
-        future.wait();
-    }
+    progressThread.join();
 
     auto endTime = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::seconds>(
         endTime - startTime).count();
     
-    std::cout << "\n\033[0;1mCompleted: \033[1;92m" << completedTasks.load(std::memory_order_acquire)
-              << "\033[0;1m/\033[1;93m" << validPairs.size() 
-              << "\033[0;1m in \033[0;1m" << duration << " seconds.\033[0;1m\n";
+    std::cout << "\n\033[0;1mCompleted: \033[1;92m" << completedTasks.load()
+            << "\033[0;1m/\033[1;93m" << validPairs.size() 
+            << "\033[0;1m in \033[0;1m" << duration << " seconds.\033[0;1m\n";
     
-    if (g_operationCancelled.load(std::memory_order_acquire)) {
+    if (g_operationCancelled.load()) {
         std::cout << "\n\033[1;33mOperation interrupted by user.\033[0;1m\n";
     }
-
+	flushStdin();
     restoreInput();
 }
 
