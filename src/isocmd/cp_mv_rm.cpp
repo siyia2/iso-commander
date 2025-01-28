@@ -450,7 +450,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
             if (fs::exists(isoPath)) {
                 isoFilesToOperate.push_back(iso);
             } else {
-                std::string errorMessageInfo = "\033[1;35mFile not found: \033[0;1m'" +
+                std::string errorMessageInfo = "\033[1;35mFile not found: \033[1;93m'" +
                     isoDir + "/" + isoFile + "'\033[1;35m.\033[0;1m";
                 operationErrors.emplace(errorMessageInfo);
                 operationSuccessful = false;
