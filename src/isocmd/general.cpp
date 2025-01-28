@@ -600,38 +600,42 @@ void help() {
     clearScrollBuffer();
     
     // Title
-    std::cout << "\n=== Help Guide ===\n" << std::endl;
+    std::cout << "\n\033[1;36m===== Help Guide =====\033[0m\n" << std::endl;
     
     // Main instructions section
-    std::cout << "How to Use the Program:\n" << std::endl;
+    std::cout << "\033[1;33mHow to Use the Program:\033[0m\n" << std::endl;
     
     // Working with indices
-    std::cout << "1. Selecting Items:\n"
+    std::cout << "\033[1;32m1. Selecting Items:\033[0m\n"
               << "   • Single item: Enter a number (e.g., '1')\n"
               << "   • Multiple items: Separate with spaces (e.g., '1 5 6')\n"
-              << "   • Range of items: Use hyphen (e.g., '1-3')\n"
+              << "   • Range of items: Use a hyphen (e.g., '1-3')\n"
               << "   • Combine methods: '1-3 5 7-9'\n"
               << "   • Select all: Enter '00' (for mount/umount only)\n" << std::endl;
     
     // Special commands
-    std::cout << "2. Special Commands:\n"
-              << "   • Enter '/' - Filter the current list\n"
-              << "   • Enter '/name1;name2' - Directly filter the list for items containing 'name1 and name2'\n"
-              << "   • Enter '~' - Switch between short and full paths\n"
-              << "   • Enter '?' - Show this help message\n\n"
-              
+    std::cout << "\033[1;32m2. Special Selection Commands:\033[0m\n"
+              << "   • Enter \033[1;34m/\033[0m - Filter the current list based on a search terms (e.g., 'term' or 'term1;term2')\n"
+              << "   • Enter \033[1;34m/term1;term2\033[0m - Directly filter the list for items containing 'term1' and 'term2'\n"
+              << "   • Enter \033[1;34m~\033[0m - Switch between short and full paths\n"
+              << "   • Enter \033[1;34m?\033[0m - Show this help message\n\n"
               << "   - Note: If filtering has no matches, no message or list update is issued\n" << std::endl;
               
-    std::cout << "3. Selecting FolderPaths:\n"
+    std::cout << "\033[1;32m5. Cache Management:\033[0m\n"
+              << "   • Enter \033[1;35mclr\033[0m - Clear cache:\n"
+              << "     - In conversion prompts: Clears RAM cache\n"
+              << "     - In ImportISO prompt: Clears on-disk cache\n"
+              << "   • Enter \033[1;35mls\033[0m - Lists cached image file entries (conversion search prompts only)\n"
+              << "   • Enter \033[1;35mstats\033[0m - View on-disk cache statistics (ImportISO search prompt only)\n" << std::endl;
+              
+    std::cout << "\033[1;32m4. Selecting Folder Paths:\033[0m\n"
               << "   • Single directory: Enter a directory (e.g., '/directory/')\n"
               << "   • Multiple directories: Separate with ; (e.g., '/directory1/;/directory2/')\n"
-              << "   • Single directory with file overwrites for cp&mv: Enter a directory and append |^O (e.g.,/directory/ |^O)\n"
-              << "   • Multiple directories with file overwrites for cp&mv: Separate with ; and append |^O (e.g., '/directory1/;/directory2/ |^O')\n" << std::endl;
+              << "   • Overwrite files during cp/mv: Append |^O (e.g., '/directory/ |^O' or '/directory1/;/directory2/ |^O')\n" << std::endl;
               
-    std::cout << "4. Selecting Mappings:\n"
+    std::cout << "\033[1;32m5. Selecting Mappings:\033[0m\n"
               << "   • Single mapping: Enter a mapping (e.g., '1>/dev/sdc')\n"
-              << "   • Single ISO index mapped to multiple devices: Separate with ; (e.g., '1>/dev/sdc;1>/dev/sdd')\n"
-              << "   • Multiple ISO indexes mapped to multiple devices: Separate with ; (e.g., '1>/dev/sdc;2>/dev/sdd')\n" << std::endl;
+              << "   • Multiple mappings: Separate with ; (e.g., '1>/dev/sdc;2>/dev/sdd' or '1>/dev/sdc;1>/dev/sdd')\n" << std::endl;
                   
     // Prompt to continue
     std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
