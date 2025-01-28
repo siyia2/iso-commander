@@ -468,7 +468,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 		}
 	};
 
-	// Modified display progress lambda
+	// Display progress lambda
 	auto displayProgress = [&]() {
 		// Initialize maps once
 		initDeviceMaps();
