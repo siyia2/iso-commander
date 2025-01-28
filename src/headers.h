@@ -190,7 +190,7 @@ void toLowerInPlace(std::string& str);
 // WRITE2USB
 
 // bools
-bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex);
+bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex, std::mutex& progressMutex);
 bool isUsbDevice(const std::string& device);
 bool isDeviceMounted(const std::string& device);
 
