@@ -26,8 +26,10 @@ struct ProgressInfo {
     bool completed = false;
 };
 
+
 // Shared progress data
 std::vector<ProgressInfo> progressData;
+
 
 // Function to get the size of a block device
 uint64_t getBlockDeviceSize(const std::string& device) {
