@@ -606,12 +606,12 @@ void help() {
     std::cout << "How to Use the Program:\n" << std::endl;
     
     // Working with indices
-    std::cout << "1. Selecting Items:\n"
-              << "   • Single item: Enter a number (e.g., '1')\n"
-              << "   • Multiple items: Separate with spaces (e.g., '1 5 6')\n"
-              << "   • Range of items: Use hyphen (e.g., '1-3')\n"
+    std::cout << "1. Selecting ISOs:\n"
+              << "   • Single ISO: Enter a number (e.g., '1')\n"
+              << "   • Multiple ISOs: Separate with spaces (e.g., '1 5 6')\n"
+              << "   • Range of ISOs: Use hyphen (e.g., '1-3')\n"
               << "   • Combine methods: '1-3 5 7-9'\n"
-              << "   • Select all: Enter '00' (for mount/umount only)\n" << std::endl;
+              << "   • Select all ISOs: Enter '00' (for mount/umount only)\n" << std::endl;
     
     // Special commands
     std::cout << "2. Special Commands:\n"
