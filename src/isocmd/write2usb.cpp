@@ -268,11 +268,11 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                           selectedIsos[i].sizeStr + "\033[0;1m)\n";
         }
 
-        devicePrompt += "\n\033[0;1mAvailable removable USB Devices:\033[0;1m\n\n";
+        devicePrompt += "\n\033[0;1mRemovable USB Devices:\033[0;1m\n\n";
         std::vector<std::string> usbDevices = getRemovableDevices();
 
         if (usbDevices.empty()) {
-            devicePrompt += "  \033[1;91mNo available removable USB devices detected!\033[0;1m\n";
+            devicePrompt += "  \033[1;91mNo removable USB devices detected!\033[0;1m\n";
         } else {
             for (const auto& device : usbDevices) {
                 try {
@@ -296,7 +296,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         rl_bind_keyseq("\033[A", rl_get_previous_history); // Restore Up arrow
 		rl_bind_keyseq("\033[B", rl_get_next_history);     // Restore Down arrow
 
-        devicePrompt += "\n\001\033[1;92m\002Mapping\001\033[1;94m\002 ↵ as \001\033[1;93m\002INDEX>DEVICE\001\033[1;94m\002, ? ↵ for help, ↵ to return:\001\033[0;1m\002 ";
+        devicePrompt += "\n\001\033[1;92m\002Mappings\001\033[1;94m\002 ↵ as \001\033[1;93m\002INDEX>DEVICE\001\033[1;94m\002, ? ↵ for help, ↵ to return:\001\033[0;1m\002 ";
 
         // Get user input
         std::unique_ptr<char, decltype(&std::free)> deviceInput(
@@ -456,7 +456,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             return validPairs;
         }
 
-        std::cout << "\n\033[1;93mOperation cancelled.\033[0;1m\n";
+        std::cout << "\n\033[1;93mWrite operation aborted by user.\033[0;1m\n";
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore();
     }
