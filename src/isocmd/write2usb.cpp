@@ -469,17 +469,20 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 }
 
 
+
 void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& validPairs) {
+    // Reset progress data before starting a new operation
+    progressData.clear();
     progressData.reserve(validPairs.size());
     
     // Initialize progress data
     for (const auto& [iso, device] : validPairs) {
-		progressData.push_back(ProgressInfo{
-			iso.filename,  // Pass filename
-			device,        // Pass device
-			iso.sizeStr    // Pass totalSize
-		});
-	}
+        progressData.push_back(ProgressInfo{
+            iso.filename,  // Pass filename
+            device,        // Pass device
+            iso.sizeStr    // Pass totalSize
+        });
+    }
 
     std::atomic<size_t> completedTasks(0);
     std::atomic<bool> isProcessingComplete(false);
@@ -605,8 +608,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles, st
     std::cin.ignore();
 }
 
-
-// Function to write ISO to usb device
+// Function to write ISO to USB device
 bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex) {
     // Open ISO file
     std::ifstream iso(isoPath, std::ios::binary);
