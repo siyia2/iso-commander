@@ -30,37 +30,51 @@ uint64_t getBlockDeviceSize(const std::string& device) {
 
 
 // Function to check if block device is usb
-bool isUsbDevice(const std::string& device) {
-    // Resolve symbolic links to get the actual device path
-    char resolvedPath[PATH_MAX];
-    if (realpath(device.c_str(), resolvedPath) == nullptr) {
+bool isUsbDevice(const std::string& devicePath) {
+    try {
+        // Extract device name (e.g., "sdb" from "/dev/sdb")
+        size_t lastSlash = devicePath.find_last_of('/');
+        std::string deviceName = (lastSlash == std::string::npos) ? 
+            devicePath : devicePath.substr(lastSlash + 1);
+            
+        // Skip if empty or is a partition (contains numbers)
+        if (deviceName.empty() || 
+            std::any_of(deviceName.begin(), deviceName.end(), ::isdigit)) {
+            return false;
+        }
+
+        // Check if removable
+        std::string removablePath = "/sys/block/" + deviceName + "/removable";
+        std::ifstream removableFile(removablePath);
+        std::string removable;
+        if (!removableFile || !std::getline(removableFile, removable) || 
+            removable != "1") {
+            return false;
+        }
+
+        // Check for USB indicators:
+        // 1. Check USB in path
+        std::error_code ec;
+        std::string sysPath = "/sys/block/" + deviceName;
+        bool hasUsb = std::filesystem::canonical(sysPath, ec).string().find("/usb") 
+            != std::string::npos;
+
+        // 2. Check uevent file for USB bus
+        std::string ueventPath = sysPath + "/device/uevent";
+        std::ifstream uevent(ueventPath);
+        std::string line;
+        while (std::getline(uevent, line)) {
+            if (line.find("ID_BUS=usb") != std::string::npos) {
+                hasUsb = true;
+                break;
+            }
+        }
+
+        return hasUsb;  // Device must be both removable and have USB indicators
+
+    } catch (const std::exception&) {
         return false;
     }
-
-    // Extract the device name (e.g., "sdb" from "/dev/sdb")
-    std::string devicePath(resolvedPath);
-    std::string deviceName = devicePath.substr(devicePath.find_last_of('/') + 1);
-
-    // Reject partitions (e.g., "sdb1", "sda2")
-    if (deviceName.find_first_of("0123456789") != std::string::npos) {
-        return false; // Partitions are not allowed
-    }
-
-    // Check if the device exists in /sys/block/
-    std::string sysPath = "/sys/block/" + deviceName + "/removable";
-    if (!std::filesystem::exists(sysPath)) {
-        return false;
-    }
-
-    // Check if it's removable
-    std::ifstream removableFile(sysPath);
-    if (!removableFile) {
-        return false;
-    }
-
-    std::string removable;
-    std::getline(removableFile, removable);
-    return (removable == "1");
 }
 
 
