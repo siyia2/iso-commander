@@ -43,34 +43,68 @@ bool isUsbDevice(const std::string& devicePath) {
             return false;
         }
 
-        // Check if removable
-        std::string removablePath = "/sys/block/" + deviceName + "/removable";
-        std::ifstream removableFile(removablePath);
-        std::string removable;
-        if (!removableFile || !std::getline(removableFile, removable) || 
-            removable != "1") {
+        // Base sysfs path
+        std::string sysPath = "/sys/block/" + deviceName;
+        if (!std::filesystem::exists(sysPath)) {
             return false;
         }
 
-        // Check for USB indicators:
-        // 1. Check USB in path
-        std::error_code ec;
-        std::string sysPath = "/sys/block/" + deviceName;
-        bool hasUsb = std::filesystem::canonical(sysPath, ec).string().find("/usb") 
-            != std::string::npos;
+        bool isUsb = false;
 
-        // 2. Check uevent file for USB bus
-        std::string ueventPath = sysPath + "/device/uevent";
-        std::ifstream uevent(ueventPath);
-        std::string line;
-        while (std::getline(uevent, line)) {
-            if (line.find("ID_BUS=usb") != std::string::npos) {
-                hasUsb = true;
+        // Method 1: Check device/vendor ID in device path
+        std::error_code ec;
+        std::string resolvedPath = std::filesystem::canonical(sysPath, ec).string();
+        if (!ec) {
+            // Look for patterns like "usb" or "0951" (common USB vendor IDs)
+            isUsb = resolvedPath.find("/usb") != std::string::npos;
+        }
+
+        // Method 2: Check various uevent locations
+        std::vector<std::string> ueventPaths = {
+            sysPath + "/device/uevent",
+            sysPath + "/uevent"
+        };
+
+        for (const auto& path : ueventPaths) {
+            std::ifstream uevent(path);
+            std::string line;
+            while (std::getline(uevent, line)) {
+                // Check for various USB indicators
+                if (line.find("ID_BUS=usb") != std::string::npos ||
+                    line.find("DRIVER=usb") != std::string::npos ||
+                    line.find("ID_USB") != std::string::npos) {
+                    isUsb = true;
+                    break;
+                }
+            }
+            if (isUsb) break;
+        }
+
+        // Method 3: Check if device has USB-specific attributes
+        std::vector<std::string> usbIndicators = {
+            sysPath + "/device/speed",      // USB speed attribute
+            sysPath + "/device/version",    // USB version
+            sysPath + "/device/manufacturer" // USB manufacturer
+        };
+
+        for (const auto& path : usbIndicators) {
+            if (std::filesystem::exists(path)) {
+                isUsb = true;
                 break;
             }
         }
 
-        return hasUsb;  // Device must be both removable and have USB indicators
+        // Only consider it a USB device if we found USB indicators AND
+        // can verify it's removable (if removable info is available)
+        std::string removablePath = sysPath + "/removable";
+        std::ifstream removableFile(removablePath);
+        std::string removable;
+        if (removableFile && std::getline(removableFile, removable)) {
+            return isUsb && (removable == "1");
+        }
+
+        // If we can't check removable status, rely on USB indicators alone
+        return isUsb;
 
     } catch (const std::exception&) {
         return false;
@@ -234,7 +268,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                           selectedIsos[i].sizeStr + "\033[0;1m)\n";
         }
 
-        devicePrompt += "\n\033[0;1mAvailable Removable Devices:\033[0;1m\n\n";
+        devicePrompt += "\n\033[0;1mAvailable removable USB Devices:\033[0;1m\n\n";
         std::vector<std::string> usbDevices = getRemovableDevices();
 
         if (usbDevices.empty()) {
