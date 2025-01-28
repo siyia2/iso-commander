@@ -18,12 +18,50 @@ struct IsoInfo {
 struct ProgressInfo {
     std::string filename;
     std::string device;
-    int progress = 0;
-    std::string currentSize;
     std::string totalSize;
-    double speed = 0.0;  // Speed in MB/s
-    bool failed = false;
-    bool completed = false;
+
+    // Atomic members for tracking progress
+    std::atomic<bool> completed{false};
+    std::atomic<bool> failed{false};
+    std::atomic<uint64_t> bytesWritten{0};
+    std::atomic<int> progress{0};
+    std::atomic<double> speed{0.0};
+
+    // Constructor to initialize members
+    ProgressInfo(std::string filename, std::string device, std::string totalSize)
+        : filename(std::move(filename)),
+          device(std::move(device)),
+          totalSize(std::move(totalSize)) {}
+
+    // Explicitly define the move constructor
+    ProgressInfo(ProgressInfo&& other) noexcept
+        : filename(std::move(other.filename)),
+          device(std::move(other.device)),
+          totalSize(std::move(other.totalSize)),
+          completed(other.completed.load()),
+          failed(other.failed.load()),
+          bytesWritten(other.bytesWritten.load()),
+          progress(other.progress.load()),
+          speed(other.speed.load()) {}
+
+    // Explicitly define the move assignment operator
+    ProgressInfo& operator=(ProgressInfo&& other) noexcept {
+        if (this != &other) {
+            filename = std::move(other.filename);
+            device = std::move(other.device);
+            totalSize = std::move(other.totalSize);
+            completed.store(other.completed.load());
+            failed.store(other.failed.load());
+            bytesWritten.store(other.bytesWritten.load());
+            progress.store(other.progress.load());
+            speed.store(other.speed.load());
+        }
+        return *this;
+    }
+
+    // Delete the copy constructor and copy assignment operator
+    ProgressInfo(const ProgressInfo&) = delete;
+    ProgressInfo& operator=(const ProgressInfo&) = delete;
 };
 
 
@@ -431,34 +469,24 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 }
 
 
-// Function to handle the actual write operation
 void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& validPairs) {
-    progressData.clear();
-    for (size_t i = 0; i < validPairs.size(); ++i) {
-        const auto& [iso, device] = validPairs[i];
-        progressData.emplace_back(ProgressInfo{
-            iso.filename,
-            device,
-            0,
-            "0 B",
-            iso.sizeStr,
-            false,
-            false
-        });
-    }
+    progressData.reserve(validPairs.size());
+    
+    // Initialize progress data
+    for (const auto& [iso, device] : validPairs) {
+		progressData.push_back(ProgressInfo{
+			iso.filename,  // Pass filename
+			device,        // Pass device
+			iso.sizeStr    // Pass totalSize
+		});
+	}
 
-    std::mutex progressMutex; // Declare the mutex
     std::atomic<size_t> completedTasks(0);
     std::atomic<bool> isProcessingComplete(false);
     const size_t totalTasks = validPairs.size();
     const unsigned int numThreads = std::min(static_cast<unsigned int>(totalTasks), 
                                            static_cast<unsigned int>(maxThreads));
     ThreadPool pool(numThreads);
-
-    // Add completion tracking variables
-    std::mutex completionMutex;
-    std::condition_variable completionCV;
-    size_t tasksCompleted = 0;
 
     disableInput();
     clearScrollBuffer();
@@ -467,59 +495,47 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
     auto startTime = std::chrono::high_resolution_clock::now();
 
+    // Launch tasks
+    std::vector<std::future<void>> futures;
     for (size_t i = 0; i < totalTasks; ++i) {
-        pool.enqueue([&, i]() {
+        futures.push_back(pool.enqueue([&, i]() {
             const auto& [iso, device] = validPairs[i];
-            bool success = false;
-            try {
-                success = writeIsoToDevice(iso.path, device, i, progressMutex); // Pass the mutex
-            } catch (...) {
-                std::lock_guard<std::mutex> lock(progressMutex);
-                progressData[i].failed = true;
-            }
+            bool success = writeIsoToDevice(iso.path, device, i);
             
             if (success) {
-                std::lock_guard<std::mutex> lock(progressMutex);
-                progressData[i].completed = true;
+                progressData[i].completed.store(true);
                 completedTasks.fetch_add(1);
             }
-
-            // Update completion status
-            {
-                std::lock_guard<std::mutex> lock(completionMutex);
-                tasksCompleted++;
-            }
-            completionCV.notify_one();
-        });
+        }));
     }
 
+    // Display progress
     auto displayProgress = [&]() {
         while (!isProcessingComplete.load(std::memory_order_acquire) && 
-              !g_operationCancelled.load(std::memory_order_acquire)) {
+               !g_operationCancelled.load(std::memory_order_acquire)) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            std::lock_guard<std::mutex> lock(progressMutex);
             
             std::cout << "\033[u";
             for (size_t i = 0; i < progressData.size(); ++i) {
                 const auto& prog = progressData[i];
                 std::string driveName = getDriveName(prog.device);
-                uint64_t deviceSize = getBlockDeviceSize(prog.device);
-                std::string deviceSizeStr = formatFileSize(deviceSize);
+                std::string currentSize = formatFileSize(prog.bytesWritten.load());
                 
                 std::cout << "\033[K"
-                        << ("\033[1;95m" + prog.filename + " \033[0;1m→ {" + 
-                            "\033[1;93m" + prog.device + "\033[0;1m \033[0;1m<" + driveName + "> (\033[1;35m" + deviceSizeStr + "\033[0;1m)} \033[0;1m")
-                        << std::right
-                        << (prog.completed ? "\033[1;92mDONE\033[0;1m" :
-                            prog.failed ? "\033[1;91mFAIL\033[0;1m" :
-                            std::to_string(prog.progress) + "%")
-                        << " ["
-                        << prog.currentSize
-                        << "/"
-                        << prog.totalSize
-                        << "] "
-                        << (!prog.completed && !prog.failed ? "\033[0;1m" + formatSpeed(prog.speed) + "\033[0;1m" : "")
-                        << "\n";
+                         << ("\033[1;95m" + prog.filename + " \033[0;1m→ {" + 
+                             "\033[1;93m" + prog.device + "\033[0;1m \033[0;1m<" + driveName + ">} \033[0;1m")
+                         << std::right
+                         << (prog.completed.load() ? "\033[1;92mDONE\033[0;1m" :
+                             prog.failed.load() ? "\033[1;91mFAIL\033[0;1m" :
+                             std::to_string(prog.progress.load()) + "%")
+                         << " ["
+                         << currentSize
+                         << "/"
+                         << prog.totalSize
+                         << "] "
+                         << (!prog.completed.load() && !prog.failed.load() ? 
+                             "\033[0;1m" + formatSpeed(prog.speed.load()) + "\033[0;1m" : "")
+                         << "\n";
             }
             std::cout << std::flush;
         }
@@ -527,12 +543,9 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
     std::thread progressThread(displayProgress);
 
-    // Wait for all tasks using condition variable
-    {
-        std::unique_lock<std::mutex> lock(completionMutex);
-        completionCV.wait(lock, [&] { 
-            return tasksCompleted == totalTasks || g_operationCancelled.load();
-        });
+    // Wait for all tasks to complete
+    for (auto& future : futures) {
+        future.wait();
     }
     
     isProcessingComplete.store(true, std::memory_order_release);
@@ -543,8 +556,8 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
         endTime - startTime).count();
     
     std::cout << "\n\033[0;1mCompleted: \033[1;92m" << completedTasks.load()
-            << "\033[0;1m/\033[1;93m" << validPairs.size() 
-            << "\033[0;1m in \033[0;1m" << duration << " seconds.\033[0;1m\n";
+              << "\033[0;1m/\033[1;93m" << validPairs.size() 
+              << "\033[0;1m in \033[0;1m" << duration << " seconds.\033[0;1m\n";
     
     if (g_operationCancelled.load()) {
         std::cout << "\n\033[1;33mOperation interrupted by user.\033[0;1m\n";
@@ -594,28 +607,25 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles, st
 
 
 // Function to write ISO to usb device
-bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex, std::mutex& progressMutex) {
+bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex) {
     // Open ISO file
     std::ifstream iso(isoPath, std::ios::binary);
     if (!iso) {
-        std::lock_guard<std::mutex> lock(progressMutex);
-        progressData[progressIndex].failed = true;
+        progressData[progressIndex].failed.store(true);
         return false;
     }
 
     // Open device with O_DIRECT
     int device_fd = open(device.c_str(), O_WRONLY | O_DIRECT);
     if (device_fd == -1) {
-        std::lock_guard<std::mutex> lock(progressMutex);
-        progressData[progressIndex].failed = true;
+        progressData[progressIndex].failed.store(true);
         return false;
     }
 
     // Get device sector size
     int sectorSize = 0;
     if (ioctl(device_fd, BLKSSZGET, &sectorSize) < 0 || sectorSize == 0) {
-        std::lock_guard<std::mutex> lock(progressMutex);
-        progressData[progressIndex].failed = true;
+        progressData[progressIndex].failed.store(true);
         close(device_fd);
         return false;
     }
@@ -623,26 +633,20 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     // Get ISO file size and check alignment
     const uint64_t fileSize = std::filesystem::file_size(isoPath);
     if (fileSize % sectorSize != 0) {
-        std::lock_guard<std::mutex> lock(progressMutex);
-        progressData[progressIndex].failed = true;
+        progressData[progressIndex].failed.store(true);
         close(device_fd);
         return false;
     }
 
-    // Initialize progress
-    const std::string totalSize = formatFileSize(fileSize);
-    uint64_t totalWritten = 0;
-
     // Set buffer size as multiple of sector size (8MB default)
     size_t bufferSize = 8 * 1024 * 1024;
     bufferSize = (bufferSize / sectorSize) * sectorSize;
-    if (bufferSize == 0) bufferSize = sectorSize;  // Handle large sector sizes
+    if (bufferSize == 0) bufferSize = sectorSize;
 
     // Allocate aligned buffer
     char* alignedBuffer = nullptr;
     if (posix_memalign((void**)&alignedBuffer, sectorSize, bufferSize) != 0) {
-        std::lock_guard<std::mutex> lock(progressMutex);
-        progressData[progressIndex].failed = true;
+        progressData[progressIndex].failed.store(true);
         close(device_fd);
         return false;
     }
@@ -652,10 +656,11 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     auto startTime = std::chrono::high_resolution_clock::now();
     auto lastUpdate = startTime;
     uint64_t bytesInWindow = 0;
-    const int UPDATE_INTERVAL_MS = 500; // Update every 500ms for smoother readings
+    const int UPDATE_INTERVAL_MS = 500;
 
     try {
-        while (totalWritten < fileSize && !g_operationCancelled) {
+        while (progressData[progressIndex].bytesWritten.load() < fileSize && !g_operationCancelled) {
+            const uint64_t totalWritten = progressData[progressIndex].bytesWritten.load();
             const uint64_t remaining = fileSize - totalWritten;
             const size_t bytesToRead = std::min(bufferSize, static_cast<size_t>(remaining));
 
@@ -670,8 +675,8 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
             ssize_t bytesWritten = 0;
             while (bytesWritten < static_cast<ssize_t>(bytesToRead)) {
                 size_t chunk = std::min(static_cast<size_t>(bytesToRead - bytesWritten), bufferSize);
-                chunk = (chunk / sectorSize) * sectorSize;  // Ensure chunk is sector-aligned
-                if (chunk == 0) break;  // Handle edge cases
+                chunk = (chunk / sectorSize) * sectorSize;
+                if (chunk == 0) break;
                 ssize_t result = write(device_fd, alignedBuffer + bytesWritten, chunk);
                 if (result == -1) {
                     throw std::runtime_error("Write error");
@@ -679,26 +684,23 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
                 bytesWritten += result;
             }
 
-            totalWritten += bytesWritten;
+            // Atomically update progress
+            progressData[progressIndex].bytesWritten.fetch_add(bytesWritten);
             bytesInWindow += bytesWritten;
 
             // Update progress and speed
             auto now = std::chrono::high_resolution_clock::now();
             auto timeSinceLastUpdate = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate);
-            const int progress = static_cast<int>((static_cast<double>(totalWritten) / fileSize) * 100);
 
-            // Update progress and speed every UPDATE_INTERVAL_MS
             if (timeSinceLastUpdate.count() >= UPDATE_INTERVAL_MS) {
-                // Calculate current speed based on bytes written in the last window
+                // Calculate and update progress atomically
+                const int progress = static_cast<int>((static_cast<double>(progressData[progressIndex].bytesWritten.load()) / fileSize) * 100);
+                progressData[progressIndex].progress.store(progress);
+
+                // Calculate and update speed atomically
                 double seconds = timeSinceLastUpdate.count() / 1000.0;
                 double mbPerSec = (static_cast<double>(bytesInWindow) / (1024 * 1024)) / seconds;
-
-                {
-                    std::lock_guard<std::mutex> lock(progressMutex);
-                    progressData[progressIndex].progress = progress;
-                    progressData[progressIndex].currentSize = formatFileSize(totalWritten);
-                    progressData[progressIndex].speed = mbPerSec;
-                }
+                progressData[progressIndex].speed.store(mbPerSec);
 
                 // Reset window counters
                 lastUpdate = now;
@@ -706,8 +708,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
             }
         }
     } catch (...) {
-        std::lock_guard<std::mutex> lock(progressMutex);
-        progressData[progressIndex].failed = true;
+        progressData[progressIndex].failed.store(true);
         close(device_fd);
         return false;
     }
@@ -717,9 +718,8 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     }
     close(device_fd);
 
-    if (!g_operationCancelled && totalWritten == fileSize) {
-        std::lock_guard<std::mutex> lock(progressMutex);
-        progressData[progressIndex].completed = true;
+    if (!g_operationCancelled && progressData[progressIndex].bytesWritten.load() == fileSize) {
+        progressData[progressIndex].completed.store(true);
         return true;
     }
     
