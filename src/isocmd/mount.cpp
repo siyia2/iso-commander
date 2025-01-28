@@ -184,86 +184,75 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
 
 // Function to process input and mount ISO files asynchronously
 void processAndMountIsoFiles(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages, bool& verbose) {
-    std::set<int> indicesToProcess; // To store indices parsed from the input
-   
-   // Setup signal handler at the start of the operation
+    std::set<int> indicesToProcess;
+    
+    // Setup signal handler and reset cancellation flag
     setupSignalHandlerCancellations();
-        
-    // Reset cancellation flag
     g_operationCancelled = false;
-    
-    
+
+    // Handle input ("00" = all files, else parse input)
     if (input == "00") {
-        // If input is "00", create indices for all ISO files
-        for (size_t i = 0; i < isoFiles.size(); ++i) {
-		indicesToProcess.insert(i + 1);  // Insert elements 1, 2, 3, ...
-		}
+        for (size_t i = 0; i < isoFiles.size(); ++i)
+            indicesToProcess.insert(i + 1);
     } else {
-        // Existing tokenization logic for specific inputs
         tokenizeInput(input, isoFiles, uniqueErrorMessages, indicesToProcess);
         if (indicesToProcess.empty()) {
             std::cout << "\033[1;91mNo valid input provided for mount.\033[0;1m";
-            return; // Exit if no valid indices are provided
+            return;
         }
     }
-    
+
+    // Create ISO paths vector from selected indices
+    std::vector<std::string> selectedIsoFiles;
+    selectedIsoFiles.reserve(indicesToProcess.size());
+    for (int index : indicesToProcess)
+        selectedIsoFiles.push_back(isoFiles[index - 1]);
+
     std::cout << "\n\033[0;1m Processing \033[1;92mmount\033[0;1m operations... (\033[1;91mCtrl + c\033[0;1m:cancel)\n";
-    std::atomic<size_t> completedTasks(0); // Number of completed tasks
-    std::atomic<bool> isProcessingComplete(false); // Flag to indicate processing completion
-    unsigned int numThreads = std::min(static_cast<unsigned int>(indicesToProcess.size()), static_cast<unsigned int>(maxThreads));
-    ThreadPool pool(numThreads); // Create a thread pool with the determined number of threads
-    
-    size_t totalTasks = indicesToProcess.size();
-    size_t chunkSize = std::max(size_t(1), std::min(size_t(50), (totalTasks + numThreads - 1) / numThreads)); // Determine chunk size for tasks
-    
-    std::atomic<size_t> activeTaskCount(0); // Track the number of active tasks
-    std::condition_variable taskCompletionCV; // Condition variable to notify when all tasks are done
-    std::mutex taskCompletionMutex; // Mutex to protect the condition variable
 
-    for (size_t i = 0; i < totalTasks; i += chunkSize) {
-		size_t end = std::min(i + chunkSize, totalTasks); // Determine the end index for this chunk
-		activeTaskCount.fetch_add(1, std::memory_order_relaxed); // Increment active task count
-    
-		// Enqueue a task to the thread pool
-		pool.enqueue([&, i, end]() {
-			std::vector<std::string> filesToMount;
-			filesToMount.reserve(end - i);
-        
-			// Use an iterator to iterate over the set
-			auto it = std::next(indicesToProcess.begin(), i); // Get the iterator to the i-th element in the set
-			for (size_t j = i; j < end; ++j) {
-				int index = *it; // Dereference the iterator to get the value in the set
-				filesToMount.push_back(isoFiles[index - 1]); // Collect files for this chunk
-            
-				++it; // Move the iterator to the next element
-			}
-        
-			mountIsoFiles(filesToMount, mountedFiles, skippedMessages, mountedFails); // Mount ISO files        
-			completedTasks.fetch_add(end - i, std::memory_order_relaxed); // Update completed tasks count
-        
-			// Notify if all tasks are done
-			if (activeTaskCount.fetch_sub(1, std::memory_order_release) == 1) {
-				taskCompletionCV.notify_one();
-			}
-		});
-	}
+    // Thread pool and task setup
+    unsigned int numThreads = std::min(static_cast<unsigned int>(selectedIsoFiles.size()), maxThreads);
+    const size_t chunkSize = std::min(size_t(100), selectedIsoFiles.size()/numThreads + 1);
+    std::vector<std::vector<std::string>> isoChunks;
 
-    // Create a thread to display progress
-	std::thread progressThread(
-        displayProgressBarWithSize, 
-        nullptr,       // Pass as raw pointer
-        static_cast<size_t>(0), // Pass as size_t
-        &completedTasks,       // Pass as raw pointer
-        totalTasks,            // Pass as size_t
-        &isProcessingComplete, // Pass as raw pointer
-        &verbose               // Pass as raw pointer
-    );
-    // Wait for all tasks to complete
-    {
-        std::unique_lock<std::mutex> lock(taskCompletionMutex);
-        taskCompletionCV.wait(lock, [&]() { return activeTaskCount.load(std::memory_order_acquire) == 0; });
+    // Split work into chunks
+    for (size_t i = 0; i < selectedIsoFiles.size(); i += chunkSize) {
+        auto end = std::min(selectedIsoFiles.begin() + i + chunkSize, selectedIsoFiles.end());
+        isoChunks.emplace_back(selectedIsoFiles.begin() + i, end);
     }
-    isProcessingComplete.store(true, std::memory_order_release); // Set processing completion flag
-    progressThread.join(); // Wait for the progress thread to finish
-}
 
+    ThreadPool pool(numThreads);
+    std::vector<std::future<void>> mountFutures;
+    std::atomic<size_t> completedTasks(0);
+    std::atomic<bool> isProcessingComplete(false);
+
+    // Enqueue chunk tasks
+    for (const auto& chunk : isoChunks) {
+        mountFutures.emplace_back(pool.enqueue([&, chunk]() {
+            if (g_operationCancelled) return;
+            mountIsoFiles(chunk, mountedFiles, skippedMessages, mountedFails);
+            completedTasks.fetch_add(chunk.size(), std::memory_order_relaxed);
+        }));
+    }
+
+    // Start progress thread
+    std::thread progressThread(
+        displayProgressBarWithSize, 
+        nullptr,
+        static_cast<size_t>(0),
+        &completedTasks,
+        selectedIsoFiles.size(),
+        &isProcessingComplete,
+        &verbose
+    );
+
+    // Wait for completion or cancellation
+    for (auto& future : mountFutures) {
+        future.wait();
+        if (g_operationCancelled) break;
+    }
+
+    // Cleanup
+    isProcessingComplete.store(true);
+    progressThread.join();
+}
