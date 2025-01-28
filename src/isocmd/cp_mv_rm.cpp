@@ -418,7 +418,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                             }
                         } else {
                             operationErrors.emplace("\033[1;91mFile exists: \033[1;93m'" +
-                                                  destDirProcessed + "/" + destFile + "'\033[1;91m (use overwrite).\033[0;1m");
+                                                  destDirProcessed + "/" + destFile + "'\033[1;91m (enable overwrites).\033[0;1m");
                             operationSuccessful = false;
                             completedTasks->fetch_add(1);
                             continue;
@@ -447,7 +447,12 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                                 operationErrors.emplace("\033[1;33mOperation interrupted by user - partial files cleaned up.\033[0;1m");
                             }
                         } else {
-                            operationErrors.emplace("\033[1;91mError: " + ec.message() + ".\033[0;1m");
+                            std::string errorMessageInfo = "\033[1;91mError " +
+                            std::string(isCopy ? "copying" : (i < destDirs.size() - 1 ? "moving" : "moving")) +
+								": \033[1;93m'" + srcDir + "/" + srcFile + "'\033[1;91m" +
+								" to '" + destDirProcessed + "/': " + ec.message() + "\033[1;91m.\033[0;1m";
+							operationErrors.emplace(errorMessageInfo);
+							operationSuccessful = false;
                         }
                         operationSuccessful = false;
                     } else {
