@@ -305,8 +305,11 @@ bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::ato
 
 
 // Function to handle cpMvDel
-void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy,std::set<std::string>& operationIsos, std::set<std::string>& operationErrors,const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, bool overwriteExisting) {
-    
+void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy,
+                            std::set<std::string>& operationIsos, std::set<std::string>& operationErrors,
+                            const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete,
+                            std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, bool overwriteExisting) {
+
     setupSignalHandlerCancellations();
     g_operationCancelled = false;
     std::atomic<bool> g_CancelledMessageAdded{false};
@@ -330,15 +333,15 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
         if (stat(path.c_str(), &file_stat) == 0) {
             if (file_stat.st_uid != real_uid || file_stat.st_gid != real_gid) {
                 if (chown(path.c_str(), real_uid, real_gid) != 0) {
-                    std::string errorMessage = "\033[1;91mFailed to change ownership of '" + 
-                                             path.string() + "': " + strerror(errno) + "\033[0m";
+                    auto [dir, file] = extractDirectoryAndFilename(path.string());
+                    std::string errorMessage = "\033[1;91mFailed to change ownership of '" + dir + "/" + file + "': " + strerror(errno) + "\033[0m";
                     operationErrors.emplace(errorMessage);
                     return false;
                 }
             }
         } else {
-            std::string errorMessage = "\033[1;91mFailed to get file info for '" + 
-                                     path.string() + "': " + strerror(errno) + "\033[0m";
+            auto [dir, file] = extractDirectoryAndFilename(path.string());
+            std::string errorMessage = "\033[1;91mFailed to get file info for '" + dir + "/" + file + "': " + strerror(errno) + "\033[0m";
             operationErrors.emplace(errorMessage);
             return false;
         }
@@ -358,7 +361,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 
             fs::path srcPath(operateIso);
             auto [srcDir, srcFile] = extractDirectoryAndFilename(srcPath.string());
-            
+
             struct stat st;
             size_t fileSize = 0;
             if (stat(srcPath.c_str(), &st) == 0) {
@@ -369,11 +372,9 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                 std::error_code ec;
                 if (fs::remove(srcPath, ec)) {
                     completedBytes->fetch_add(fileSize);
-                    operationIsos.emplace("\033[0;1mDeleted: \033[1;92m'" + 
-                                        srcDir + "/" + srcFile + "'\033[0;1m.");
+                    operationIsos.emplace("\033[0;1mDeleted: \033[1;92m'" + srcDir + "/" + srcFile + "'\033[0;1m.");
                 } else {
-                    operationErrors.emplace("\033[1;91mError deleting: \033[1;93m'" + 
-                                          srcDir + "/" + srcFile + "': " + ec.message() + "\033[1;91m.\033[0;1m");
+                    operationErrors.emplace("\033[1;91mError deleting: \033[1;93m'" + srcDir + "/" + srcFile + "': " + ec.message() + "\033[1;91m.\033[0;1m");
                     operationSuccessful = false;
                 }
                 completedTasks->fetch_add(1);
@@ -383,18 +384,18 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     fs::path destPath = fs::path(destDir) / srcPath.filename();
 
                     auto [destDirProcessed, destFile] = extractDirectoryAndFilename(destPath.string());
-                    
+
                     // Check if source and destination are the same
                     fs::path absSrcPath = fs::absolute(srcPath);
-					fs::path absDestPath = fs::absolute(destPath);
+                    fs::path absDestPath = fs::absolute(destPath);
 
-					if (absSrcPath == absDestPath) {
-						operationErrors.emplace("\033[1;91mCannot " + std::string(isMove ? "move" : "copy") + 
-							" file to itself: \033[1;93m'" + srcPath.string() + "'\033[1;91m.\033[0m");
-						operationSuccessful = false;
-						completedTasks->fetch_add(1);
-						continue;
-					}
+                    if (absSrcPath == absDestPath) {
+                        operationErrors.emplace("\033[1;91mCannot " + std::string(isMove ? "move" : "copy") +
+                                               " file to itself: \033[1;93m'" + srcDir + "/" + srcFile + "'\033[1;91m.\033[0m");
+                        operationSuccessful = false;
+                        completedTasks->fetch_add(1);
+                        continue;
+                    }
 
                     if (!fs::exists(destDir) || !fs::is_directory(destDir)) {
                         operationErrors.emplace("\033[1;91mInvalid destination: \033[1;93m'" + destDirProcessed + "'\033[1;91m.\033[0;1m");
@@ -407,14 +408,14 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         if (overwriteExisting) {
                             std::error_code ec;
                             if (!fs::remove(destPath, ec)) {
-                                operationErrors.emplace("\033[1;91mFailed to overwrite: \033[1;93m'" + 
-                                                  destDirProcessed + "/" + destFile + "'\033[1;91m - " + ec.message() + ".\033[0;1m");
+                                operationErrors.emplace("\033[1;91mFailed to overwrite: \033[1;93m'" +
+                                                       destDirProcessed + "/" + destFile + "'\033[1;91m - " + ec.message() + ".\033[0;1m");
                                 operationSuccessful = false;
                                 completedTasks->fetch_add(1);
                                 continue;
                             }
                         } else {
-                            operationErrors.emplace("\033[1;91mFile exists: \033[1;93m'" + 
+                            operationErrors.emplace("\033[1;91mFile exists: \033[1;93m'" +
                                                   destDirProcessed + "/" + destFile + "'\033[1;91m (use overwrite).\033[0;1m");
                             operationSuccessful = false;
                             completedTasks->fetch_add(1);
@@ -424,7 +425,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 
                     std::error_code ec;
                     bool success = false;
-                    
+
                     if (isCopy) {
                         success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec);
                     } else if (isMove) {
@@ -436,7 +437,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                             success = !ec;
                         }
                     }
-                    
+
                     if (!success || ec) {
                         if (g_operationCancelled) {
                             if (!g_CancelledMessageAdded.exchange(true)) {
@@ -451,10 +452,10 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         if (!changeOwnership(destPath)) {
                             operationSuccessful = false;
                         } else {
-                            operationIsos.emplace("\033[0;1m" + 
-                                std::string(isCopy ? "Copied" : "Moved") + ": \033[1;92m'" + 
-                                srcDir + "/" + srcFile + "'\033[1m to \033[1;94m'" + 
-                                destDirProcessed + "/" + destFile + "'\033[0;1m.");
+                            operationIsos.emplace("\033[0;1m" +
+                                                 std::string(isCopy ? "Copied" : "Moved") + ": \033[1;92m'" +
+                                                 srcDir + "/" + srcFile + "'\033[1m to \033[1;94m'" +
+                                                 destDirProcessed + "/" + destFile + "'\033[0;1m.");
                         }
                     }
 
