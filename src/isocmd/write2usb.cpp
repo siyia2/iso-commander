@@ -472,29 +472,28 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 	auto displayProgress = [&]() {
 		// Initialize maps once
 		initDeviceMaps();
-    
-		while (!isProcessingComplete.load(std::memory_order_acquire) && 
-			!g_operationCancelled.load(std::memory_order_acquire)) {
+
+		while (!isProcessingComplete.load(std::memory_order_acquire) && !g_operationCancelled.load(std::memory_order_acquire)) {
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        
+
 			std::cout << "\033[u";
 			for (size_t i = 0; i < progressData.size(); ++i) {
 				const auto& prog = progressData[i];
 				std::string currentSize = formatFileSize(prog.bytesWritten.load());
-            
+
 				std::cout << "\033[K"
 						<< ("\033[1;95m" + prog.filename + " \033[0;1m→ {" + 
-							"\033[1;93m" + prog.device + "\033[0;1m \033[0;1m<" + deviceNames[prog.device] + "> (\033[1;35m" + deviceSizeStrs[prog.device] + "\033[0;1m)} \033[0;1m")
+                          "\033[1;93m" + prog.device + "\033[0;1m \033[0;1m<" + deviceNames[prog.device] + "> (\033[1;35m" + deviceSizeStrs[prog.device] + "\033[0;1m)} \033[0;1m")
 						<< std::right
 						<< (prog.completed ? "\033[1;92mDONE\033[0;1m" :
 							prog.failed ? "\033[1;91mFAIL\033[0;1m" :
 							std::to_string(prog.progress) + "%")
 						<< " ["
 						<< currentSize
-						<< "/"
+						<< "/\033[1;35m"
 						<< prog.totalSize
-						<< "] "
-						<< (!prog.completed && !prog.failed ? "\033[0;1m" + formatSpeed(prog.speed) + "\033[0;1m" : "")
+						<< "\033[0;1m] "
+						<< "\033[0;1m" + formatSpeed(prog.speed) + "\033[0;1m" // Always display speed
 						<< "\n";
 			}
 			std::cout << std::flush;
