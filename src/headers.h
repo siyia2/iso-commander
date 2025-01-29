@@ -40,6 +40,7 @@
 #include <vector>
 #include <unistd.h>
 
+std::pair<std::string, std::string> extractDirectoryAndFilenameCutAtTilde(std::string_view path);
 
 // Get max available CPU cores for global use
 extern unsigned int maxThreads;
@@ -146,6 +147,9 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
 // voids
 void prepareUnmount(const std::string& input, std::vector<std::string>& selectedIsoDirs, std::vector<std::string>& currentFiles, std::set<std::string>& operationFiles, std::set<std::string>& operationFails, std::set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& verbose);
 void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors);
+
+// stds
+std::string modifyDirectoryPath(const std::string& dir);
 
 
 // CACHE
