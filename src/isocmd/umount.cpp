@@ -38,28 +38,36 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
 }
 
 
-// Function toggle between long and short vebose logging
+// Function toggle between long and short vebose logging in umount
 std::string modifyDirectoryPath(const std::string& dir) {
     if (toggleFullList) {
-        return dir; // Return the original directory if toggleFullList is true
-    }
-
-    // Find the position of the first '_'
-    size_t firstUnderscorePos = dir.find_first_of('_');
-    // Find the position of the last '~'
-    size_t lastTildePos = dir.find_last_of('~');
-
-    // If either '_' or '~' is not found, return the original directory
-    if (firstUnderscorePos == std::string::npos || lastTildePos == std::string::npos) {
         return dir;
     }
 
-    // Extract the substring between '_' and '~'
-    // Start at the character after '_' and end at the character before '~'
-    std::string newDir = dir.substr(firstUnderscorePos + 1, lastTildePos - (firstUnderscorePos + 1));
-
-    return newDir;
+    // We know:
+    // - "/mnt/iso_" is 9 characters
+    // - The total length including '~' at the end is 6 characters from the start
+    
+    // First check if string is long enough
+    if (dir.length() < 9) {  // Must be at least as long as "/mnt/iso_"
+        return dir;
+    }
+    
+    // Verify the '_' is where we expect it
+    if (dir[8] != '_') {
+        return dir;
+    }
+    
+    // Find the last '~'
+    size_t lastTildePos = dir.find_last_of('~');
+    if (lastTildePos == std::string::npos) {
+        return dir;
+    }
+    
+    // Extract everything between the known '_' position and the '~'
+    return dir.substr(9, lastTildePos - 9);
 }
+
 
 // Function to unmount ISO files asynchronously
 void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors) {
