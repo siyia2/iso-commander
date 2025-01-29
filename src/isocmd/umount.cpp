@@ -37,6 +37,8 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
     return true;
 }
 
+
+// Function toggle between long and short vebose logging
 std::string modifyDirectoryPath(const std::string& dir) {
     if (toggleFullList) {
         return dir; // Return the original directory if toggleFullList is true
