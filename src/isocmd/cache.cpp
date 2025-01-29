@@ -460,7 +460,7 @@ void delCacheAndShowStats(std::string& inputSearch, const bool& promptFlag, cons
             double fileSizeInMB = fileSizeInBytes / (1024.0 * 1024.0);
             double cachesizeInMb = cachesizeInBytes / (1024.0 * 1024.0);
 
-            std::cout << "\nSize: " << std::fixed << std::setprecision(1) << fileSizeInMB << "MB" 
+            std::cout << "\nCapacity: " << std::fixed << std::setprecision(1) << fileSizeInMB << "MB" 
                       << "/" << std::setprecision(0) << cachesizeInMb << "MB" 
                       << " \nEntries: "<< countNonEmptyLines(cacheFilePath) 
                       << "\nLocation: " << "'" << cacheFilePath << "'\033[0;1m" << std::endl;
@@ -510,6 +510,7 @@ void delCacheAndShowStats(std::string& inputSearch, const bool& promptFlag, cons
 
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        manualRefreshCache("", promptFlag, maxDepth, historyPattern);
 
     } else if (inputSearch == "clr_filter") {
         const std::string historyPatternFilePath = std::string(getenv("HOME")) + 
@@ -574,8 +575,7 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 			
             if (input == "stats" || input == "clr" || input == "clr_paths" || input == "clr_filter") {
                 delCacheAndShowStats(input, promptFlag, maxDepth, historyPattern);
-                input = "";
-				manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+                return;
             }
             
             if (!input.empty() && promptFlag) {
