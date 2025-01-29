@@ -622,7 +622,7 @@ void helpSelections() {
               << "   - Note: If filtering has no matches, no message or list update is issued\n" << std::endl;
               
     // Prompt to continue
-    std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
+    std::cout << "\033[1;32m↵ to return...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
@@ -634,7 +634,12 @@ void helpSearches() {
     // Title
     std::cout << "\n\033[1;36m===== Help Guide For FolderPath Prompts =====\033[0m\n" << std::endl;
     
-    std::cout << "\033[1;32m1. Cache Management:\033[0m\n"
+    std::cout << "\033[1;32m1. Selecting FolderPaths:\033[0m\n"
+              << "   • Single directory: Enter a directory (e.g., '/directory/')\n"
+              << "   • Multiple directories: Separate with ; (e.g., '/directory1/;/directory2/')\n"
+              << "   • Overwrite files for cp/mv: Append |^O (e.g., '/directory/ |^O' or '/directory1/;/directory2/ |^O')\n" << std::endl;
+    
+    std::cout << "\033[1;32m2. Cache Management:\033[0m\n"
               << "   • Enter \033[1;35m'clr'\033[0m - Clear cache:\n"
               << "     - In Convert2ISO search prompts: Clears corresponding RAM cache\n"
               << "     - In ImportISO search prompt: Clears on-disk cache\n"
@@ -642,14 +647,9 @@ void helpSearches() {
               << "   • Enter \033[1;35m'clr_filter'\033[0m - Clears filter history (Both ImportISO&Convert2ISO search prompts):\n"
               << "   • Enter \033[1;35m'ls'\033[0m - Lists cached image file entries (Convert2ISO search prompts only)\n"
               << "   • Enter \033[1;35m'stats'\033[0m - View on-disk cache statistics (ImportISO search prompt only)\n" << std::endl;
-              
-    std::cout << "\033[1;32m2. Selecting Folder Paths:\033[0m\n"
-              << "   • Single directory: Enter a directory (e.g., '/directory/')\n"
-              << "   • Multiple directories: Separate with ; (e.g., '/directory1/;/directory2/')\n"
-              << "   • Overwrite files for cp/mv: Append |^O (e.g., '/directory/ |^O' or '/directory1/;/directory2/ |^O')\n" << std::endl;
                 
     // Prompt to continue
-    std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
+    std::cout << "\033[1;32m↵ to return...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
@@ -661,13 +661,13 @@ void helpMappings() {
     // Title
     std::cout << "\n\033[1;36m===== Help Guide For Mappings =====\033[0m\n" << std::endl;
     
-    std::cout << "\033[1;32m1. Selecting Mappings:\033[0m\n"
+    std::cout << "\033[1;32m. Selecting Mappings:\033[0m\n"
 			  << "   • Mapping = NewISOIndex>RemovableUSBDevice\n"
               << "   • Single mapping: Enter a mapping (e.g., '1>/dev/sdc')\n"
               << "   • Multiple mappings: Separate with ; (e.g., '1>/dev/sdc;2>/dev/sdd' or '1>/dev/sdc;1>/dev/sdd')\n" << std::endl;
                   
     // Prompt to continue
-    std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
+    std::cout << "\033[1;32m↵ to return...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
     
