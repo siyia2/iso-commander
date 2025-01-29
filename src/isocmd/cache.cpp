@@ -474,8 +474,8 @@ void delCacheAndShowStats(std::string& inputSearch, const bool& promptFlag, cons
 
     } else if (inputSearch == "clr") {
         if (std::remove(cacheFilePath.c_str()) != 0) {
-            std::cerr << "\n\001\033[1;91mError clearing IsoCache: '\001\033[1;93m" 
-                      << cacheFilePath << "\001\033[1;91m'. File missing or inaccessible." << std::endl;
+            std::cerr << "\n\001\033[1;91mError clearing IsoCache: \001\033[1;93m'" 
+                      << cacheFilePath << "\001'\033[1;91m. File missing or inaccessible." << std::endl;
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             manualRefreshCache("", promptFlag, maxDepth, historyPattern);
@@ -501,8 +501,8 @@ void delCacheAndShowStats(std::string& inputSearch, const bool& promptFlag, cons
             "/.local/share/isocmd/database/iso_commander_history_cache.txt";
 
         if (std::remove(historyFilePath.c_str()) != 0) {
-            std::cerr << "\n\001\033[1;91mError clearing folder path history: '\001\033[1;93m" 
-                      << historyFilePath << "\001\033[1;91m'. File missing or inaccessible." << std::endl;
+            std::cerr << "\n\001\033[1;91mError clearing folder path history: \001\033[1;93m'" 
+                      << historyFilePath << "'\001\033[1;91m. File missing or inaccessible." << std::endl;
         } else {
             std::cout << "\n\001\033[1;92mFolder path history cleared successfully." << std::endl;
             clear_history();
@@ -517,8 +517,8 @@ void delCacheAndShowStats(std::string& inputSearch, const bool& promptFlag, cons
             "/.local/share/isocmd/database/iso_commander_filter_cache.txt";
 
         if (std::remove(historyPatternFilePath.c_str()) != 0) {
-            std::cerr << "\n\001\033[1;91mError clearing filter history: '\001\033[1;93m" 
-                      << historyPatternFilePath << "\001\033[1;91m'. File missing or inaccessible." << std::endl;
+            std::cerr << "\n\001\033[1;91mError clearing filter history: \001\033[1;93m'" 
+                      << historyPatternFilePath << "'\001\033[1;91m. File missing or inaccessible." << std::endl;
         } else {
             std::cout << "\n\001\033[1;92mFilter history cleared successfully." << std::endl;
         }

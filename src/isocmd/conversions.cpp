@@ -68,14 +68,14 @@ void clearHistory(const std::string& inputSearch) {
         filePath = basePath + "iso_commander_filter_cache.txt";
         historyType = "Filter";
     } else {
-        std::cerr << "\n\001\033[1;91mInvalid command: '\001\033[1;93m" 
-                  << inputSearch << "\001\033[1;91m'." << std::endl;
+        std::cerr << "\n\001\033[1;91mInvalid command: \001\033[1;93m'" 
+                  << inputSearch << "'\001\033[1;91m." << std::endl;
         return;
     }
 
     if (std::remove(filePath.c_str()) != 0) {
-        std::cerr << "\n\001\033[1;91mError clearing " << historyType << " history: '\001\033[1;93m" 
-                  << filePath << "\001\033[1;91m'. File missing or inaccessible." << std::endl;
+        std::cerr << "\n\001\033[1;91mError clearing " << historyType << " history: \001\033[1;93m'" 
+                  << filePath << "'\001\033[1;91m. File missing or inaccessible." << std::endl;
     } else {
         std::cout << "\n\001\033[1;92m" << historyType << " history cleared successfully." << std::endl;
         clear_history();
