@@ -625,8 +625,8 @@ void help() {
               << "   • Enter \033[1;35m'clr'\033[0m - Clear cache:\n"
               << "     - In conversion prompts: Clears RAM cache\n"
               << "     - In ImportISO prompt: Clears on-disk cache\n"
-              << "   • Enter \033[1;35m'clr_paths'\033[0m - Clears folder path history (Both ImportISO search&conversion search prompts):\n"
-              << "   • Enter \033[1;35m'clr_filter'\033[0m - Clears filter history (Both ImportISO search&conversion search prompts):\n"
+              << "   • Enter \033[1;35m'clr_paths'\033[0m - Clears folder path history (Both ImportISO&conversion search prompts):\n"
+              << "   • Enter \033[1;35m'clr_filter'\033[0m - Clears filter history (Both ImportISO&conversion search prompts):\n"
               << "   • Enter \033[1;35m'ls'\033[0m - Lists cached image file entries (conversion search prompts only)\n"
               << "   • Enter \033[1;35m'stats'\033[0m - View on-disk cache statistics (ImportISO search prompt only)\n" << std::endl;
               
