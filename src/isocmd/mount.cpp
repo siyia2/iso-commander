@@ -27,7 +27,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
         if (g_operationCancelled) {
             if (!g_CancelledMessageAdded.exchange(true)) {
 				mountedFails.clear();
-                mountedFails.insert("\033[1;33mMount Operation interrupted by user - partial mounts cleaned up.\n\033[0m");
+                mountedFails.insert("\033[1;33mMount Operation interrupted by user - partial mounts cleaned up.\033[0m");
             }
             break;
         }
