@@ -75,9 +75,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         }
 
         if (inputString == "~") {
-            if (!isUnmount) {
-                toggleFullList = !toggleFullList;
-            }
+            toggleFullList = !toggleFullList;
             needsClrScrn = true;
             continue;
         }
@@ -105,7 +103,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
 
                 // Generate prompt
                 std::string filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + 
-                                           "\001\033[1;94m\002, or ↵ to return: \001\033[0;1m\002";
+                                           "\001\033[1;94m\002, ↵ to return: \001\033[0;1m\002";
                 std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
 
                 if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
@@ -571,9 +569,14 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
                    << defaultColor << bold << "/"
                    << magenta << filename << defaultColor << "\n";
         } else if (listType == "MOUNTED_ISOS") {
+			if (toggleFullList){
             output << sequenceColor << indexStrings[i] << ". "
                    << blueBold << "/mnt/iso_"
                    << magentaBold << displayPath << grayBold << displayHash << reset << "\n";
+			} else {
+				output << sequenceColor << indexStrings[i] << ". "
+                   << magentaBold << displayPath << "\n";
+			}
         } else if (listType == "IMAGE_FILES") {
 		// Alternate sequence color like in "ISO_FILES"
 		const char* sequenceColor = (i % 2 == 0) ? red : green;
@@ -643,6 +646,7 @@ void help() {
     std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
+
 
 //For toggling long/short paths in lists and verbose
 bool toggleFullList = false;

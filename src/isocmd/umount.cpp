@@ -37,6 +37,27 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
     return true;
 }
 
+std::string modifyDirectoryPath(const std::string& dir) {
+    if (toggleFullList) {
+        return dir; // Return the original directory if toggleFullList is true
+    }
+
+    // Find the position of the first '_'
+    size_t firstUnderscorePos = dir.find_first_of('_');
+    // Find the position of the last '~'
+    size_t lastTildePos = dir.find_last_of('~');
+
+    // If either '_' or '~' is not found, return the original directory
+    if (firstUnderscorePos == std::string::npos || lastTildePos == std::string::npos) {
+        return dir;
+    }
+
+    // Extract the substring between '_' and '~'
+    // Start at the character after '_' and end at the character before '~'
+    std::string newDir = dir.substr(firstUnderscorePos + 1, lastTildePos - (firstUnderscorePos + 1));
+
+    return newDir;
+}
 
 // Function to unmount ISO files asynchronously
 void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors) {
@@ -50,9 +71,9 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
     if (geteuid() != 0) {
         for (const auto& isoDir : isoDirs) {
             if (g_operationCancelled) break;
-            
+            std::string modifiedDir = modifyDirectoryPath(isoDir);
             std::stringstream errorMessage;
-            errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << isoDir
+            errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << modifiedDir
                         << "\033[1;93m'\033[1;91m.\033[0;1m {needsRoot}";
             unmountedErrors.emplace(errorMessage.str());
         }
@@ -86,20 +107,23 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
         // Handle successful unmounts
         for (const auto& dir : successfulUnmounts) {
             if (isDirectoryEmpty(dir) && rmdir(dir.c_str()) == 0) {
-                unmountedFiles.emplace("\033[0;1mUnmounted: \033[1;92m'" + dir + "\033[1;92m'\033[0m.");
+				std::string modifiedDir = modifyDirectoryPath(dir);
+                unmountedFiles.emplace("\033[0;1mUnmounted: \033[1;92m'" + modifiedDir + "\033[1;92m'\033[0m.");
             }
         }
 
         // Additional cleanup pass
         for (const auto& dir : isoDirs) {
             if (dir.find("/mnt/iso_") == 0 && isDirectoryEmpty(dir) && rmdir(dir.c_str()) == 0) {
-                unmountedFiles.emplace("\033[0;1mRemoved empty ISO directory: \033[1;92m'" + dir + "\033[1;92m'\033[0m.");
+				std::string modifiedDir = modifyDirectoryPath(dir);
+                unmountedFiles.emplace("\033[0;1mRemoved empty ISO directory: \033[1;92m'" + modifiedDir + "\033[1;92m'\033[0m.");
             }
         }
 
         // Handle failures
         for (const auto& dir : failedUnmounts) {
-            unmountedErrors.emplace("\033[1;91mFailed to unmount: \033[1;93m'" + dir + "'\033[1;91m.\033[0;1m {notAnISO}");
+			std::string modifiedDir = modifyDirectoryPath(dir);
+            unmountedErrors.emplace("\033[1;91mFailed to unmount: \033[1;93m'" + modifiedDir + "'\033[1;91m.\033[0;1m {notAnISO}");
         }
     }
 }
