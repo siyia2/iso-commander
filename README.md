@@ -60,7 +60,7 @@ For best experience execute with: `sudo isocmd`.
 * Mount/Unmount ISO
 * Copy/Move ISO
 * Delete ISO
-* Write ISO to Removable Drive
+* Write ISO to Removable USB Drives
 * Convert (.bin/.img/.mdf/.nrg) to ISO
 
 ## Make dependencies
