@@ -615,20 +615,20 @@ void help() {
     
     // Special commands
     std::cout << "\033[1;32m2. Special Selection Commands:\033[0m\n"
-              << "   • Enter \033[1;34m/\033[0m - Filter the current list based on a search terms (e.g., 'term' or 'term1;term2')\n"
-              << "   • Enter \033[1;34m/term1;term2\033[0m - Directly filter the list for items containing 'term1' and 'term2'\n"
-              << "   • Enter \033[1;34m~\033[0m - Switch between short and full paths\n"
-              << "   • Enter \033[1;34m?\033[0m - Show this help message\n\n"
+              << "   • Enter \033[1;34m'/'\033[0m - Filter the current list based on a search terms (e.g., 'term' or 'term1;term2')\n"
+              << "   • Enter \033[1;34m'/term1;term2'\033[0m - Directly filter the list for items containing 'term1' and 'term2'\n"
+              << "   • Enter \033[1;34m'~'\033[0m - Switch between short and full paths\n"
+              << "   • Enter \033[1;34m'?'\033[0m - Show this help message\n\n"
               << "   - Note: If filtering has no matches, no message or list update is issued\n" << std::endl;
               
     std::cout << "\033[1;32m5. Cache Management:\033[0m\n"
-              << "   • Enter \033[1;35mclr\033[0m - Clear cache:\n"
+              << "   • Enter \033[1;35m'clr'\033[0m - Clear cache:\n"
               << "     - In conversion prompts: Clears RAM cache\n"
               << "     - In ImportISO prompt: Clears on-disk cache\n"
-              << "   • Enter \033[1;35mclr_paths\033[0m - Clears folder path history (Both ImportISO search&conversion search prompts):\n"
-              << "   • Enter \033[1;35mclr_filter\033[0m - Clears filter history (Both ImportISO search&conversion search prompts):\n"
-              << "   • Enter \033[1;35mls\033[0m - Lists cached image file entries (conversion search prompts only)\n"
-              << "   • Enter \033[1;35mstats\033[0m - View on-disk cache statistics (ImportISO search prompt only)\n" << std::endl;
+              << "   • Enter \033[1;35m'clr_paths'\033[0m - Clears folder path history (Both ImportISO search&conversion search prompts):\n"
+              << "   • Enter \033[1;35m'clr_filter'\033[0m - Clears filter history (Both ImportISO search&conversion search prompts):\n"
+              << "   • Enter \033[1;35m'ls'\033[0m - Lists cached image file entries (conversion search prompts only)\n"
+              << "   • Enter \033[1;35m'stats'\033[0m - View on-disk cache statistics (ImportISO search prompt only)\n" << std::endl;
               
     std::cout << "\033[1;32m4. Selecting Folder Paths:\033[0m\n"
               << "   • Single directory: Enter a directory (e.g., '/directory/')\n"
@@ -643,7 +643,6 @@ void help() {
     std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
-
 
 //For toggling long/short paths in lists and verbose
 bool toggleFullList = false;
