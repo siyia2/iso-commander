@@ -111,7 +111,9 @@ void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username,
 std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view path);
 
 // voids
-void help();
+void helpSelections();
+void helpSearches();
+void helpMappings();
 void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& maxDepth, bool& verbose);
 void printList(const std::vector<std::string>& items, const std::string& listType);
 void verbosePrint(const std::set<std::string>& primarySet, const std::set<std::string>& secondarySet , const std::set<std::string>& tertiarySet, const std::set<std::string>& quaternarySet,const std::set<std::string>& errorSet, int printType);
