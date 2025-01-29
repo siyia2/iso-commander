@@ -189,7 +189,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
             rl_bind_key('\t', prevent_readline_keybindings);
 			
 			if (mainInputString == "?") {
-				help();
+				helpSearches();
 				continue;
 			}
 			

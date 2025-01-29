@@ -568,7 +568,7 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
             input = searchQuery.get();
 			
 			if (input == "?") {
-				help();
+				helpSearches();
 				input = "";
 				manualRefreshCache("", promptFlag, maxDepth, historyPattern);
 			}        

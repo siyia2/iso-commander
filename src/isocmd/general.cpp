@@ -69,7 +69,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         std::string inputString(input.get());
         
         if (inputString == "?") {
-            help();
+            helpSelections();
             needsClrScrn = true;
             continue;
         }
@@ -598,15 +598,12 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
 }
 
 
-// Function to display help guide
-void help() {
+// Function to display how to select items from lists
+void helpSelections() {
     clearScrollBuffer();
     
     // Title
-    std::cout << "\n\033[1;36m===== Help Guide =====\033[0m\n" << std::endl;
-    
-    // Main instructions section
-    std::cout << "\033[1;33mHow to Use the Program:\033[0m\n" << std::endl;
+    std::cout << "\n\033[1;36m===== Help Guide For Lists =====\033[0m\n" << std::endl;
     
     // Working with indices
     std::cout << "\033[1;32m1. Selecting Items:\033[0m\n"
@@ -624,7 +621,20 @@ void help() {
               << "   • Enter \033[1;34m'?'\033[0m - Show this help message\n\n"
               << "   - Note: If filtering has no matches, no message or list update is issued\n" << std::endl;
               
-    std::cout << "\033[1;32m5. Cache Management:\033[0m\n"
+    // Prompt to continue
+    std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+}
+
+
+// Help guide for directory prompts
+void helpSearches() {
+    clearScrollBuffer();
+    
+    // Title
+    std::cout << "\n\033[1;36m===== Help Guide For FolderPath Prompts =====\033[0m\n" << std::endl;
+    
+    std::cout << "\033[1;32m1. Cache Management:\033[0m\n"
               << "   • Enter \033[1;35m'clr'\033[0m - Clear cache:\n"
               << "     - In Convert2ISO search prompts: Clears corresponding RAM cache\n"
               << "     - In ImportISO search prompt: Clears on-disk cache\n"
@@ -633,12 +643,26 @@ void help() {
               << "   • Enter \033[1;35m'ls'\033[0m - Lists cached image file entries (Convert2ISO search prompts only)\n"
               << "   • Enter \033[1;35m'stats'\033[0m - View on-disk cache statistics (ImportISO search prompt only)\n" << std::endl;
               
-    std::cout << "\033[1;32m4. Selecting Folder Paths:\033[0m\n"
+    std::cout << "\033[1;32m2. Selecting Folder Paths:\033[0m\n"
               << "   • Single directory: Enter a directory (e.g., '/directory/')\n"
               << "   • Multiple directories: Separate with ; (e.g., '/directory1/;/directory2/')\n"
-              << "   • Overwrite files during cp/mv: Append |^O (e.g., '/directory/ |^O' or '/directory1/;/directory2/ |^O')\n" << std::endl;
-              
-    std::cout << "\033[1;32m5. Selecting Mappings:\033[0m\n"
+              << "   • Overwrite files for cp/mv: Append |^O (e.g., '/directory/ |^O' or '/directory1/;/directory2/ |^O')\n" << std::endl;
+                
+    // Prompt to continue
+    std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+}
+
+
+// Help guide for iso and device mapping
+void helpMappings() {
+    clearScrollBuffer();
+    
+    // Title
+    std::cout << "\n\033[1;36m===== Help Guide For Mappings =====\033[0m\n" << std::endl;
+    
+    std::cout << "\033[1;32m1. Selecting Mappings:\033[0m\n"
+			  << "   • Mapping = NewISOIndex>RemovableUSBDevice\n"
               << "   • Single mapping: Enter a mapping (e.g., '1>/dev/sdc')\n"
               << "   • Multiple mappings: Separate with ; (e.g., '1>/dev/sdc;2>/dev/sdd' or '1>/dev/sdc;1>/dev/sdd')\n" << std::endl;
                   
@@ -646,6 +670,7 @@ void help() {
     std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
+    
 
 
 //For toggling long/short paths in lists and verbose

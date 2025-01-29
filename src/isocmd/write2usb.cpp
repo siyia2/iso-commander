@@ -304,7 +304,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         );
         std::string mainInputString(deviceInput.get());
         if (mainInputString == "?") {
-            help();
+            helpMappings();
             continue;
         }
         

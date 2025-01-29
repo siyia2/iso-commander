@@ -174,7 +174,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
 		}
         
         if (inputSearch == "?") {
-            help();
+            helpSearches();
             continue;
         }
 
@@ -383,7 +383,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         std::string mainInputString(rawInput.get());
         
         if (mainInputString == "?") {
-            help();
+            helpSelections();
             continue;
         }
 
