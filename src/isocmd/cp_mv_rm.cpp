@@ -376,7 +376,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     completedBytes->fetch_add(fileSize);
                     operationIsos.emplace("\033[0;1mDeleted: \033[1;92m'" + srcDir + "/" + srcFile + "'\033[0;1m.");
                 } else {
-                    operationErrors.emplace("\033[1;91mError deleting: \033[1;93m'" + srcDir + "/" + srcFile + "': " + ec.message() + "\033[1;91m.\033[0;1m");
+                    operationErrors.emplace("\033[1;91mError deleting: \033[1;93m'" + srcDir + "/" + srcFile + "'\033[1;91m: " + ec.message() + ".\033[0;1m");
                     operationSuccessful = false;
                 }
                 completedTasks->fetch_add(1);
