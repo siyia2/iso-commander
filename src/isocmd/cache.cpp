@@ -490,8 +490,7 @@ void delCacheAndShowStats(std::string& inputSearch, const bool& promptFlag, cons
                 }
             }
 
-            std::cout << "\n\001\033[1;92mIsoCache cleared successfully: '\001\033[0;1m" 
-                      << cacheFilePath << "\001\033[1;92m'." << std::endl;
+            std::cout << "\n\001\033[1;92mIsoCache cleared successfully\001\033[1;92m'." << std::endl;
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             manualRefreshCache("", promptFlag, maxDepth, historyPattern);
@@ -505,13 +504,12 @@ void delCacheAndShowStats(std::string& inputSearch, const bool& promptFlag, cons
             std::cerr << "\n\001\033[1;91mError clearing folder path history: '\001\033[1;93m" 
                       << historyFilePath << "\001\033[1;91m'. File missing or inaccessible." << std::endl;
         } else {
-            std::cout << "\n\001\033[1;92mFolder path history cleared successfully: '\001\033[0;1m" 
-                      << historyFilePath << "\001\033[1;92m'." << std::endl;
+            std::cout << "\n\001\033[1;92mFolder path history cleared successfully." << std::endl;
+            clear_history();
         }
 
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        return;
 
     } else if (inputSearch == "clr_filter") {
         const std::string historyPatternFilePath = std::string(getenv("HOME")) + 
@@ -521,8 +519,7 @@ void delCacheAndShowStats(std::string& inputSearch, const bool& promptFlag, cons
             std::cerr << "\n\001\033[1;91mError clearing filter history: '\001\033[1;93m" 
                       << historyPatternFilePath << "\001\033[1;91m'. File missing or inaccessible." << std::endl;
         } else {
-            std::cout << "\n\001\033[1;92mFilter history cleared successfully: '\001\033[0;1m" 
-                      << historyPatternFilePath << "\001\033[1;92m'." << std::endl;
+            std::cout << "\n\001\033[1;92mFilter history cleared successfully." << std::endl;
         }
 
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
@@ -577,7 +574,8 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 			
             if (input == "stats" || input == "clr" || input == "clr_paths" || input == "clr_filter") {
                 delCacheAndShowStats(input, promptFlag, maxDepth, historyPattern);
-                return;
+                input = "";
+				manualRefreshCache("", promptFlag, maxDepth, historyPattern);
             }
             
             if (!input.empty() && promptFlag) {

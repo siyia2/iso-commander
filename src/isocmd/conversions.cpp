@@ -77,8 +77,8 @@ void clearHistory(const std::string& inputSearch) {
         std::cerr << "\n\001\033[1;91mError clearing " << historyType << " history: '\001\033[1;93m" 
                   << filePath << "\001\033[1;91m'. File missing or inaccessible." << std::endl;
     } else {
-        std::cout << "\n\001\033[1;92m" << historyType << " history cleared successfully: '\001\033[0;1m" 
-                  << filePath << "\001\033[1;92m'." << std::endl;
+        std::cout << "\n\001\033[1;92m" << historyType << " history cleared successfully." << std::endl;
+        clear_history();
     }
 
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
