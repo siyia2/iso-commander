@@ -20,6 +20,7 @@
 #include <grp.h>
 #include <iostream>
 #include <libmount/libmount.h>
+#include <map>
 #include <memory>
 #include <mntent.h>
 #include <mutex>
@@ -60,6 +61,8 @@ extern std::unordered_map<std::string, std::string> transformationCache;
 // For automatic ISO cache refresh from history paths
 extern const std::string historyFilePath;
 
+extern const std::string configPath;
+
 // For tracking cancellations
 extern std::atomic<bool> g_operationCancelled;
 
@@ -80,7 +83,8 @@ bool fileExists(const std::string& fullPath);
 bool startsWithZero(const std::string& str);
 bool isNumeric(const std::string& str);
 bool isDirectoryEmpty(const std::string& path);
-bool readUserConfigForAutoImport(const std::string& filePath);
+bool readUserConfigUpdates(const std::string& filePath);
+bool readUserConfigLists(const std::string& filePath);
 
 // ints
 int prevent_readline_keybindings(int, int);
@@ -95,14 +99,17 @@ void print_ascii();
 void flushStdin();
 void disableInput();
 void restoreInput();
+void configMap();
 void signalHandler(int signum);
 void setupSignalHandlerCancellations();
 void signalHandlerCancellations(int signal);
 void clearScrollBuffer();
 void setupReadlineToIgnoreCtrlC();
-void saveAutomaticImportConfig(const std::string& filePath);
 void sortFilesCaseInsensitive(std::vector<std::string>& files);
 void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname,std::set<std::string>& uniqueErrors);
+
+// stds
+std::map<std::string, std::string> readConfig(const std::string& configPath);
 
 
 // GENERAL
@@ -166,7 +173,7 @@ std::vector<std::string> loadCache();
 
 // voids
 void verboseIsoCacheRefresh(std::vector<std::string>& allIsoFiles, std::atomic<size_t>& totalFiles, std::vector<std::string>& validPaths, std::set<std::string>& invalidPaths, std::set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& historyPattern, const std::chrono::high_resolution_clock::time_point& start_time);
-void delCacheAndShowStats (std::string& inputSearch, const bool& promptFlag, const int& maxDepth, const bool& historyPattern);
+void cacheAndMiscSwitches (std::string& inputSearch, const bool& promptFlag, const int& maxDepth, const bool& historyPattern);
 void loadCache(std::vector<std::string>& isoFiles);
 void manualRefreshCache(const std::string& initialDir = "", bool promptFlag = true, int maxDepth = -1, bool historyPattern = false);
 void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, std::atomic<size_t>& totalFiles, std::mutex& traverseFilesMutex, std::mutex& traverseErrorsMutex, int& maxDepth, bool& promptFlag);
@@ -222,6 +229,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
 
 // voids
 void clearHistory(const std::string& inputSearch);
+void setDisplayMode(const std::string& inputSearch);
 void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, const bool& modeMdf, const bool& modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks);
 void verboseFind(std::set<std::string>& invalidDirectoryPaths, const std::vector<std::string>& directoryPaths,std::set<std::string>& processedErrorsFind);
 void verboseSearchResults(const std::string& fileExtension, std::set<std::string>& fileNames, std::set<std::string>& invalidDirectoryPaths, bool newFilesFound, bool list, int currentCacheOld, const std::vector<std::string>& files, const std::chrono::high_resolution_clock::time_point& start_time, std::set<std::string>& processedErrorsFind,std::vector<std::string>& directoryPaths);
