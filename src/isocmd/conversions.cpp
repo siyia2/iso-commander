@@ -118,15 +118,15 @@ void setDisplayMode(const std::string& inputSearch) {
     std::string newValue = (inputSearch[0] == '*' && inputSearch[1] == 's') ? "short" : "long";
     bool validInput = true;
     
-    if (inputSearch == "*lml" || inputSearch == "*sml") {
+    if (inputSearch == "*ll_m" || inputSearch == "*sl_m") {
         settingKey = "mount_list";
-    } else if (inputSearch == "*lul" || inputSearch == "*sul") {
+    } else if (inputSearch == "*ll_u" || inputSearch == "*sl_u") {
         settingKey = "unmount_list";
-    } else if (inputSearch == "*lol" || inputSearch == "*sol") {
+    } else if (inputSearch == "*ll_fo" || inputSearch == "*sl_fo") {
         settingKey = "cp_mv_rm_list";
-    } else if (inputSearch == "*lcl" || inputSearch == "*scl") {
+    } else if (inputSearch == "*ll_c" || inputSearch == "*sl_c") {
         settingKey = "conversion_lists";
-    } else if (inputSearch == "*lwl" || inputSearch == "*swl") {
+    } else if (inputSearch == "*ll_w" || inputSearch == "*sl_w") {
         settingKey = "write_list";
     } else {
         std::cerr << "\n\033[1;91mInvalid input for list display mode. Please use '*l' or '*s' prefix.\033[0;1m\n";
@@ -269,7 +269,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
 			continue;
 		}
         
-        if (inputSearch == "*lml" || inputSearch == "*sml" || inputSearch == "*lul" || inputSearch == "*sul" || inputSearch == "*lol" || inputSearch == "*sol" || inputSearch == "*lwl" || inputSearch == "*swl" || inputSearch == "*lcl" || inputSearch == "*scl") {
+        if (inputSearch == "*ll_m" || inputSearch == "*sl_m" || inputSearch == "*ll_u" || inputSearch == "*sl_u" || inputSearch == "*ll_fo" || inputSearch == "*sl_fo" || inputSearch == "*ll_w" || inputSearch == "*sl_w" || inputSearch == "*ll_c" || inputSearch == "*sl_c") {
 			setDisplayMode(inputSearch);
 			continue;
 		}
