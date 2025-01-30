@@ -117,7 +117,7 @@ int main(int argc, char *argv[]) {
         print_ascii();
         
         if (isImportRunning.load()) {
-			std::cout << "\033[2m[AutoImportISO operates passively in the background...]\033[0m\n";
+			std::cout << "\033[2m[Auto-update operates in the background...]\033[0m\n";
 		}
         
         // Display the main menu options
@@ -471,7 +471,7 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
         // Check if the key is one of the required keys
         if (key == "mount_list" || key == "unmount_list" || key == "cp_mv_rm_list" || key == "write_list" || key == "conversion_lists") {
             // Check if the value is "short" or "long"
-            if (valueStr == "short" || valueStr == "long") {
+            if (valueStr == "short" || valueStr == "full") {
                 configMap[key] = valueStr;
             } else {
                 configMap.clear(); // Invalid value, return empty map
@@ -486,27 +486,27 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
     }
 
     // Set the boolean values based on the configMap
-    if (configMap["mount_list"] == "long") {
+    if (configMap["mount_list"] == "full") {
         toggleFullListMount = true;
     } else {
         toggleFullListMount = false;
     }
-    if (configMap["unmount_list"] == "long") {
+    if (configMap["unmount_list"] == "full") {
         toggleFullListUmount = true;
     } else {
         toggleFullListUmount = false;
     }
-    if (configMap["cp_mv_rm_list"] == "long") {
+    if (configMap["cp_mv_rm_list"] == "full") {
         toggleFullListCpMvRm = true;
     } else {
         toggleFullListCpMvRm = false;
     }
-    if (configMap["write_list"] == "long") {
+    if (configMap["write_list"] == "full") {
         toggleFullListWrite = true;
     } else {
         toggleFullListWrite = false;
     }
-    if (configMap["conversion_lists"] == "long") {
+    if (configMap["conversion_lists"] == "full") {
         toggleFullListConversions = true;
     } else {
         toggleFullListConversions = false;

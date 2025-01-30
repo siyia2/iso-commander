@@ -653,7 +653,6 @@ void helpSelections() {
               << "   • Enter \033[1;34m'/'\033[0m - Filter the current list based on a search terms (e.g., 'term' or 'term1;term2')\n"
               << "   • Enter \033[1;34m'/term1;term2'\033[0m - Directly filter the list for items containing 'term1' and 'term2'\n"
               << "   • Enter \033[1;34m'~'\033[0m - Switch between short and full paths\n"
-              << "   • Enter \033[1;34m'?'\033[0m - Show this help message\n\n"
               << "   - Note: If filtering has no matches, no message or list update is issued\n" << std::endl;
               
     // Prompt to continue
@@ -677,19 +676,40 @@ void helpSearches(bool isCpMv) {
 		std::cout << "\033[1;32m2. Special Cleanup Commands:\033[0m\n"
 				<< "   • Enter \033[1;35m'clr'\033[0m - Clear cache:\n"
 				<< "     - In Convert2ISO search prompts: Clears corresponding RAM cache\n"
-				<< "     - In ImportISO search prompt: Clears on-disk cache\n"
-				<< "   • Enter \033[1;35m'clr_paths'\033[0m - Clears folder path history (ImportISO&Convert2ISO search prompts)\n"
-				<< "   • Enter \033[1;35m'clr_filter'\033[0m - Clears filter history (ImportISO&Convert2ISO search prompts)\n" << std::endl;
+				<< "     - In ImportISO search prompt: Clears on-disk ISO cache\n"
+				<< "   • Enter \033[1;35m'clr_paths'\033[0m - Clears folder path history\n"
+				<< "   • Enter \033[1;35m'clr_filter'\033[0m - Clears filter history\n" << std::endl;
               
 		std::cout << "\033[1;32m3. Special Display Commands:\033[0m\n"
 				<< "   • Enter \033[1;35m'ls'\033[0m - Lists cached image file entries (Convert2ISO search prompts only)\n"
 				<< "   • Enter \033[1;35m'stats'\033[0m - View on-disk cache statistics (ImportISO search prompt only)\n" << std::endl;
               
-		std::cout << "\033[1;32m4. Special Configuration Commands:\033[0m\n"
-				<< "   • Enter \033[1;35m'auto on'\033[0m - Auto-update ISO cache on startup using stored readline paths (ImportISO search prompt only)\n"
-				<< "   • Enter \033[1;35m'auto off'\033[0m - Disable ISO cache auto-update (ImportISO search prompt only)\n"
-				<< "   • Enter \033[1;35m'long_lists'\033[0m - Set default display mode for selection lists to long (ImportISO&Convert2ISO search prompts)\n"
-				<< "   • Enter \033[1;35m'short_lists'\033[0m - Set default display mode for selection lists to short (ImportISO&Convert2ISO search prompts)\n" << std::endl;
+		std::cout << "\033[1;32m4. Special Configuration Commands:\033[0m\n\n"
+
+          << "\033[38;5;94mAuto-Update ISO Cache:\033[0m\n"
+          << "   • Enter \033[1;35m'*auto_on'\033[0m  - Enable auto-update of ISO cache at startup using stored readline paths (ImportISO search prompt only)\n"
+          << "   • Enter \033[1;35m'*auto_off'\033[0m - Disable ISO cache auto-update (ImportISO search prompt only)\n\n"
+
+          << "\033[38;5;94mMount List Display Modes:\033[0m\n"
+          << "   • Enter \033[1;35m'*ll_m'\033[0m - Set default display mode for mount list to long\n"
+          << "   • Enter \033[1;35m'*sl_m'\033[0m - Set default display mode for mount list to short\n\n"
+
+          << "\033[38;5;94mUnmount List Display Modes:\033[0m\n"
+          << "   • Enter \033[1;35m'*ll_u'\033[0m - Set default display mode for unmount list to long\n"
+          << "   • Enter \033[1;35m'*sl_u'\033[0m - Set default display mode for unmount list to short\n\n"
+
+          << "\033[38;5;94mFile Operations List Display Modes:\033[0m\n"
+          << "   • Enter \033[1;35m'*ll_fo'\033[0m - Set default display mode for cp/mv/rm list to long\n"
+          << "   • Enter \033[1;35m'*sl_fo'\033[0m - Set default display mode for cp/mv/rm list to short\n\n"
+
+          << "\033[38;5;94mWrite List Display Modes:\033[0m\n"
+          << "   • Enter \033[1;35m'*ll_w'\033[0m - Set default display mode for write list to long\n"
+          << "   • Enter \033[1;35m'*sl_w'\033[0m - Set default display mode for write list to short\n\n"
+
+          << "\033[38;5;94mConversion List Display Modes:\033[0m\n"
+          << "   • Enter \033[1;35m'*ll_c'\033[0m - Set default display mode for conversion lists to long\n"
+          << "   • Enter \033[1;35m'*sl_c'\033[0m - Set default display mode for conversion lists to short\n"
+          << std::endl;
 	}
                 
     // Prompt to continue
