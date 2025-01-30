@@ -527,43 +527,78 @@ void delCacheAndShowStats(std::string& inputSearch, const bool& promptFlag, cons
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         manualRefreshCache("", promptFlag, maxDepth, historyPattern);
         
-    } else if (inputSearch == "auto on" || inputSearch == "auto off") {
-		// Determine the value to save
-        int valueToSave = (inputSearch == "auto on") ? 1 : 0;
-
-        // Extract directory path from the file path
-        std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
+    } else if (inputSearch == "auto on" || inputSearch == "auto off" || 
+               inputSearch == "long" || inputSearch == "short") {
         
-        // Create the directory if it does not exist
+        // Create directory if it doesn't exist
+        std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
         if (!std::filesystem::exists(dirPath)) {
             if (!std::filesystem::create_directories(dirPath)) {
-                std::cerr << "\n\033[1;91mFailed to create directory: \033[1;91m'\033[1;93m" << dirPath.string() << "\033[1;91m'.\033[0;1m\n";
+                std::cerr << "\n\033[1;91mFailed to create directory: \033[1;91m'\033[1;93m" 
+                          << dirPath.string() << "\033[1;91m'.\033[0;1m\n";
                 std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+                return;
             }
         }
 
-        // Write the configuration in the new format
+        // Read existing configuration
+        std::map<std::string, std::string> config;
+        std::ifstream inFile(configPath);
+        if (inFile.is_open()) {
+            std::string line;
+            while (std::getline(inFile, line)) {
+                size_t equalPos = line.find('=');
+                if (equalPos != std::string::npos) {
+                    std::string key = line.substr(0, equalPos);
+                    std::string value = line.substr(equalPos + 1);
+                    
+                    // Trim whitespace
+                    key.erase(0, key.find_first_not_of(" "));
+                    key.erase(key.find_last_not_of(" ") + 1);
+                    value.erase(0, value.find_first_not_of(" "));
+                    value.erase(value.find_last_not_of(" ") + 1);
+                    
+                    config[key] = value;
+                }
+            }
+            inFile.close();
+        }
+
+        // Update the specific setting
+        if (inputSearch == "auto on" || inputSearch == "auto off") {
+            config["auto_ISO_updates"] = (inputSearch == "auto on") ? "1" : "0";
+        } else { // long or short
+            config["lists"] = inputSearch;
+        }
+
+        // Write all settings back to file
         std::ofstream outFile(configPath);
         if (outFile.is_open()) {
-            outFile << "auto_ISO_updates = " << valueToSave; // Write key-value pair
-            outFile.close();
-            if (valueToSave == 1) {
-                std::cout << "\n\033[0;1mAutomatic background updates have been \033[1;92menabled\033[0;1m.\033[0;1m\n";
-            } else {
-                std::cout << "\n\033[0;1mAutomatic background updates have been \033[1;91mdisabled\033[0;1m.\033[0;1m\n";
+            for (const auto& [key, value] : config) {
+                outFile << key << " = " << value << "\n";
             }
-            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+            outFile.close();
+
+            // Display appropriate message
+            if (inputSearch == "auto on" || inputSearch == "auto off") {
+                std::cout << "\n\033[0;1mAutomatic background updates have been "
+                          << (inputSearch == "auto on" ? "\033[1;92menabled" : "\033[1;91mdisabled")
+                          << "\033[0;1m.\033[0;1m\n";
+            } else {
+                std::cout << "\n\033[0;1mList display mode set to \033[1;92m" 
+                          << inputSearch << "\033[0;1m.\033[0;1m\n";
+            }
         } else {
-            std::cerr << "\n\033[1;91mFailed to set configuration for automatic ISO cache updates, unable to access: \033[1;91m'\033[1;93m" << configPath << "\033[1;91m'.\033[0;1m\n";
-            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+            std::cerr << "\n\033[1;91mFailed to write configuration, unable to access: \033[1;91m'\033[1;93m" 
+                      << configPath << "\033[1;91m'.\033[0;1m\n";
         }
-	}	
+
+        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+    }
     return;
 }
 
@@ -609,7 +644,7 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 				manualRefreshCache("", promptFlag, maxDepth, historyPattern);
 			}        
 			
-            if (input == "stats" || input == "clr" || input == "clr_paths" || input == "clr_filter" || input == "auto on" || input == "auto off") {
+            if (input == "stats" || input == "clr" || input == "clr_paths" || input == "clr_filter" || input == "auto on" || input == "auto off" || input == "long" || input == "short") {
                 delCacheAndShowStats(input, promptFlag, maxDepth, historyPattern);
                 return;
             }
