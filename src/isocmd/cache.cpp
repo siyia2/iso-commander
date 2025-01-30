@@ -526,8 +526,7 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         manualRefreshCache("", promptFlag, maxDepth, historyPattern);
-    } else if (inputSearch == "auto on" || inputSearch == "auto off" || 
-               inputSearch == "long_lists" || inputSearch == "short_lists") {
+    } else if (inputSearch == "auto on" || inputSearch == "auto off") {
         
         // Create directory if it doesn't exist
         std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
@@ -547,8 +546,6 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
         // Update the specific setting
         if (inputSearch == "auto on" || inputSearch == "auto off") {
             config["auto_update"] = (inputSearch == "auto on") ? "1" : "0";
-        } else { // long or short
-            config["lists"] = inputSearch;
         }
 
         // Write all settings back to file
@@ -564,14 +561,6 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
                 std::cout << "\n\033[0;1mAutomatic background updates have been "
                           << (inputSearch == "auto on" ? "\033[1;92menabled" : "\033[1;91mdisabled")
                           << "\033[0;1m.\033[0;1m\n";
-            } else {
-                std::cout << "\n\033[0;1mDefault list display mode set to \033[1;92m" 
-                          << inputSearch << "\033[0;1m.\033[0;1m\n";
-				if (inputSearch == "long_lists") {
-					toggleFullListMount = true;
-				} else {
-					toggleFullListMount = false;
-				}
             }
         } else {
             std::cerr << "\n\033[1;91mFailed to write configuration, unable to access: \033[1;91m'\033[1;93m" 

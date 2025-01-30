@@ -100,7 +100,7 @@ void setDisplayMode(const std::string& inputSearch) {
         }
         inFile.close();
     }
-
+    
     // Create directory if it doesn't exist
     std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
     if (!std::filesystem::exists(dirPath)) {
@@ -112,25 +112,27 @@ void setDisplayMode(const std::string& inputSearch) {
             return;
         }
     }
-
+    
     // Determine which setting to update and its new value
     std::string settingKey;
-    std::string newValue = (inputSearch.substr(0, 4) == "long") ? "long" : "short";
+    std::string newValue = (inputSearch[0] == '*' && inputSearch[1] == 's') ? "short" : "long";
     bool validInput = true;
-
-    if (inputSearch == "long_mount_list" || inputSearch == "short_mount_list") {
+    
+    if (inputSearch == "*lml" || inputSearch == "*sml") {
         settingKey = "mount_list";
-    } else if (inputSearch == "long_unmount_list" || inputSearch == "short_unmount_list") {
+    } else if (inputSearch == "*lul" || inputSearch == "*sul") {
         settingKey = "unmount_list";
-    } else if (inputSearch == "long_cp_mv_rm_list" || inputSearch == "short_cp_mv_rm_list") {
+    } else if (inputSearch == "*lol" || inputSearch == "*sol") {
         settingKey = "cp_mv_rm_list";
-    } else if (inputSearch == "long_conversion_lists" || inputSearch == "short_conversion_lists") {
+    } else if (inputSearch == "*lcl" || inputSearch == "*scl") {
         settingKey = "conversion_lists";
+    } else if (inputSearch == "*lwl" || inputSearch == "*swl") {
+        settingKey = "write_list";
     } else {
-        std::cerr << "\n\033[1;91mInvalid input for list display mode. Please use 'long_' or 'short_' prefix.\033[0;1m\n";
+        std::cerr << "\n\033[1;91mInvalid input for list display mode. Please use '*l' or '*s' prefix.\033[0;1m\n";
         validInput = false;
     }
-
+    
     if (validInput) {
         // Update or add the specified setting
         std::ofstream outFile(configPath);
@@ -152,11 +154,10 @@ void setDisplayMode(const std::string& inputSearch) {
             }
             
             outFile.close();
-
             // Display confirmation message
             std::cout << "\n\033[0;1mDisplay mode for " << settingKey << " set to \033[1;92m" 
                       << newValue << "\033[0;1m.\033[0;1m\n";
-
+            
             // Update only the relevant toggle flag
             if (settingKey == "mount_list") {
                 toggleFullListMount = (newValue == "long");
@@ -166,13 +167,14 @@ void setDisplayMode(const std::string& inputSearch) {
                 toggleFullListCpMvRm = (newValue == "long");
             } else if (settingKey == "conversion_lists") {
                 toggleFullListConversions = (newValue == "long");
+            } else if (settingKey == "write_list") {
+                toggleFullListWrite = (newValue == "long");
             }
         } else {
             std::cerr << "\n\033[1;91mFailed to write configuration, unable to access: \033[1;91m'\033[1;93m" 
                       << configPath << "\033[1;91m'.\033[0;1m\n";
         }
     }
-
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
@@ -267,7 +269,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
 			continue;
 		}
         
-        if (inputSearch == "long_mount_list" || inputSearch == "short_mount_list" || inputSearch == "long_unmount_list" || inputSearch == "short_unmount_list" || inputSearch == "long_cp_mv_rm_list" || inputSearch == "short_cp_mv_rm_list" || inputSearch == "long_conversion_lists" || inputSearch == "short_conversion_lists") {
+        if (inputSearch == "*lml" || inputSearch == "*sml" || inputSearch == "*lul" || inputSearch == "*sul" || inputSearch == "*lol" || inputSearch == "*sol" || inputSearch == "*lwl" || inputSearch == "*swl" || inputSearch == "*lcl" || inputSearch == "*scl") {
 			setDisplayMode(inputSearch);
 			continue;
 		}
