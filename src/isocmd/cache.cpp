@@ -448,7 +448,7 @@ bool isValidDirectory(const std::string& path) {
 
 
 // Function that can delete or show stats for ISO cache it is called from within manualRefreshCache
-void delCacheAndShowStats(std::string& inputSearch, const bool& promptFlag, const int& maxDepth, const bool& historyPattern) {
+void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, const int& maxDepth, const bool& historyPattern) {
     if (inputSearch == "stats") {
         try {
             // Get the file size in bytes
@@ -526,7 +526,6 @@ void delCacheAndShowStats(std::string& inputSearch, const bool& promptFlag, cons
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         manualRefreshCache("", promptFlag, maxDepth, historyPattern);
-        
     } else if (inputSearch == "auto on" || inputSearch == "auto off" || 
                inputSearch == "long" || inputSearch == "short") {
         
@@ -543,32 +542,11 @@ void delCacheAndShowStats(std::string& inputSearch, const bool& promptFlag, cons
             }
         }
 
-        // Read existing configuration
-        std::map<std::string, std::string> config;
-        std::ifstream inFile(configPath);
-        if (inFile.is_open()) {
-            std::string line;
-            while (std::getline(inFile, line)) {
-                size_t equalPos = line.find('=');
-                if (equalPos != std::string::npos) {
-                    std::string key = line.substr(0, equalPos);
-                    std::string value = line.substr(equalPos + 1);
-                    
-                    // Trim whitespace
-                    key.erase(0, key.find_first_not_of(" "));
-                    key.erase(key.find_last_not_of(" ") + 1);
-                    value.erase(0, value.find_first_not_of(" "));
-                    value.erase(value.find_last_not_of(" ") + 1);
-                    
-                    config[key] = value;
-                }
-            }
-            inFile.close();
-        }
+        std::map<std::string, std::string> config = readConfig(configPath);
 
         // Update the specific setting
         if (inputSearch == "auto on" || inputSearch == "auto off") {
-            config["auto_ISO_updates"] = (inputSearch == "auto on") ? "1" : "0";
+            config["auto_update"] = (inputSearch == "auto on") ? "1" : "0";
         } else { // long or short
             config["lists"] = inputSearch;
         }
@@ -587,7 +565,7 @@ void delCacheAndShowStats(std::string& inputSearch, const bool& promptFlag, cons
                           << (inputSearch == "auto on" ? "\033[1;92menabled" : "\033[1;91mdisabled")
                           << "\033[0;1m.\033[0;1m\n";
             } else {
-                std::cout << "\n\033[0;1mList display mode set to \033[1;92m" 
+                std::cout << "\n\033[0;1mDefault list display mode set to \033[1;92m" 
                           << inputSearch << "\033[0;1m.\033[0;1m\n";
             }
         } else {
@@ -644,8 +622,8 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 				manualRefreshCache("", promptFlag, maxDepth, historyPattern);
 			}        
 			
-            if (input == "stats" || input == "clr" || input == "clr_paths" || input == "clr_filter" || input == "auto on" || input == "auto off" || input == "long" || input == "short") {
-                delCacheAndShowStats(input, promptFlag, maxDepth, historyPattern);
+            if (input == "stats" || input == "clr" || input == "clr_paths" || input == "clr_filter" || input == "auto off" || input == "auto on" || input == "long" || input == "short") {
+                cacheAndMiscSwitches(input, promptFlag, maxDepth, historyPattern);
                 return;
             }
             

@@ -85,6 +85,34 @@ void clearHistory(const std::string& inputSearch) {
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
+void setDisplayMode(const std::string& inputSearch) {
+	
+	std::map<std::string, std::string> config = readConfig(configPath);
+        
+	// Update the lists setting
+	config["lists"] = inputSearch;
+
+	// Write all settings back to file
+	std::ofstream outFile(configPath);
+	if (outFile.is_open()) {
+		for (const auto& [key, value] : config) {
+			outFile << key << " = " << value << "\n";
+		}
+		outFile.close();
+    
+		// Display confirmation message
+		std::cout << "\n\033[0;1mDefault list display mode set to \033[1;92m" 
+				<< inputSearch << "\033[0;1m.\033[0;1m\n";
+	} else {
+		std::cerr << "\n\033[1;91mFailed to write configuration, unable to access: \033[1;91m'\033[1;93m" 
+				<< configPath << "\033[1;91m'.\033[0;1m\n";
+	}
+
+	std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+	std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+}
+
 
 // Function to select and convert files based on user's choice of file type
 void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
@@ -170,6 +198,11 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
         
         if (inputSearch == "clr_paths" || inputSearch == "clr_filter") {
 			clearHistory(inputSearch);
+			continue;
+		}
+        
+        if (inputSearch == "long" || inputSearch == "short") {
+			setDisplayMode(inputSearch);
 			continue;
 		}
         

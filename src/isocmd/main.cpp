@@ -5,7 +5,7 @@
 // Get max available CPU cores for global use, fallback is 2 cores
 unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
-const std::string configPath = std::string(getenv("HOME")) + "/.config/isocmd/config/config.txt";
+const std::string configPath = std::string(getenv("HOME")) + "/.config/isocmd/config/config";
 
 // Global variables for cleanup
 int lockFileDescriptor = -1;
@@ -72,7 +72,7 @@ int main(int argc, char *argv[]) {
     if (!file.is_open()) {
         search = false;
     } else {
-		search = readUserConfigForAutoImport(configPath);
+		search = readUserConfig(configPath);
 	}    
     
 	if (search) {
@@ -341,8 +341,35 @@ void printMenu() {
 
 // GENERAL STUFF
 
+// function to read and map config file
+std::map<std::string, std::string> readConfig(const std::string& configPath) {
+    std::map<std::string, std::string> config;
+    std::ifstream inFile(configPath);
+    
+    auto trim = [](std::string str) {
+        str.erase(0, str.find_first_not_of(" "));
+        str.erase(str.find_last_not_of(" ") + 1);
+        return str;
+    };
+    
+    if (inFile.is_open()) {
+        std::string line;
+        while (std::getline(inFile, line)) {
+            size_t equalPos = line.find('=');
+            if (equalPos != std::string::npos) {
+                std::string key = line.substr(0, equalPos);
+                std::string value = line.substr(equalPos + 1);
+                config[trim(key)] = trim(value);
+            }
+        }
+        inFile.close();
+    }
+    
+    return config;
+}
+
 // Function to get AutomaticImportConfig status
-bool readUserConfigForAutoImport(const std::string& filePath) {
+bool readUserConfig(const std::string& filePath) {
     std::ifstream inFile(filePath);
     if (!inFile) {
         return false; // Default to false if file cannot be opened
@@ -355,7 +382,7 @@ bool readUserConfigForAutoImport(const std::string& filePath) {
         line.erase(line.find_last_not_of(" \t") + 1);
 
         // Check if the line starts with "auto_ISO_updates"
-        if (line.find("auto_ISO_updates") == 0) {
+        if (line.find("auto_update") == 0) {
             // Find the position of the '=' character
             size_t equalsPos = line.find('=');
             if (equalsPos == std::string::npos) {
