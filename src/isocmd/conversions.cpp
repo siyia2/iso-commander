@@ -90,6 +90,17 @@ void clearHistory(const std::string& inputSearch) {
 void setDisplayMode(const std::string& inputSearch) {
 	
 	std::map<std::string, std::string> config = readConfig(configPath);
+	
+	// Create directory if it doesn't exist
+    std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
+    if (!std::filesystem::exists(dirPath)) {
+		if (!std::filesystem::create_directories(dirPath)) {
+			std::cerr << "\n\033[1;91mFailed to create directory: \033[1;91m'\033[1;93m" 
+                      << dirPath.string() << "\033[1;91m'.\033[0;1m\n";
+            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+		}
+	}
         
 	// Update the lists setting
 	config["lists"] = inputSearch;
