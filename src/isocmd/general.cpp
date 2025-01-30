@@ -677,11 +677,11 @@ void helpSearches(bool isCpMv) {
 				<< "   • Enter \033[1;35m'clr'\033[0m - Clear cache:\n"
 				<< "     - In Convert2ISO search prompts: Clears corresponding RAM cache\n"
 				<< "     - In ImportISO search prompt: Clears on-disk ISO cache\n"
-				<< "   • Enter \033[1;35m'clr_paths'\033[0m - Clears folder path history\n"
-				<< "   • Enter \033[1;35m'clr_filter'\033[0m - Clears filter history\n" << std::endl;
+				<< "   • Enter \033[1;35m'clr_paths'\033[0m - Clear folder path history\n"
+				<< "   • Enter \033[1;35m'clr_filter'\033[0m - Clear filter history\n" << std::endl;
               
 		std::cout << "\033[1;32m3. Special Display Commands:\033[0m\n"
-				<< "   • Enter \033[1;35m'ls'\033[0m - Lists cached image file entries (Convert2ISO search prompts only)\n"
+				<< "   • Enter \033[1;35m'ls'\033[0m - List cached image file entries (Convert2ISO search prompts only)\n"
 				<< "   • Enter \033[1;35m'stats'\033[0m - View on-disk ISO cache statistics (ImportISO search prompt only)\n" << std::endl;
               
 		std::cout << "\033[1;32m4. Special Configuration Commands:\033[0m\n\n"
