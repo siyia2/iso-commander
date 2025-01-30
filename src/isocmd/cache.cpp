@@ -526,8 +526,44 @@ void delCacheAndShowStats(std::string& inputSearch, const bool& promptFlag, cons
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         manualRefreshCache("", promptFlag, maxDepth, historyPattern);
-    }
+        
+    } else if (inputSearch == "auto on" || inputSearch == "auto off") {
+		// Determine the value to save
+        int valueToSave = (inputSearch == "auto on") ? 1 : 0;
 
+        // Extract directory path from the file path
+        std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
+        
+        // Create the directory if it does not exist
+        if (!std::filesystem::exists(dirPath)) {
+            if (!std::filesystem::create_directories(dirPath)) {
+                std::cerr << "\n\033[1;91mFailed to create directory: \033[1;91m'\033[1;93m" << dirPath.string() << "\033[1;91m'.\033[0;1m\n";
+                std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+            }
+        }
+
+        // Write the configuration in the new format
+        std::ofstream outFile(configPath);
+        if (outFile.is_open()) {
+            outFile << "auto_ISO_updates = " << valueToSave; // Write key-value pair
+            outFile.close();
+            if (valueToSave == 1) {
+                std::cout << "\n\033[0;1mAutomatic background updates have been \033[1;92menabled\033[0;1m.\033[0;1m\n";
+            } else {
+                std::cout << "\n\033[0;1mAutomatic background updates have been \033[1;91mdisabled\033[0;1m.\033[0;1m\n";
+            }
+            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+        } else {
+            std::cerr << "\n\033[1;91mFailed to set configuration for automatic ISO cache updates, unable to access: \033[1;91m'\033[1;93m" << configPath << "\033[1;91m'.\033[0;1m\n";
+            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+        }
+	}	
     return;
 }
 
@@ -573,7 +609,7 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 				manualRefreshCache("", promptFlag, maxDepth, historyPattern);
 			}        
 			
-            if (input == "stats" || input == "clr" || input == "clr_paths" || input == "clr_filter") {
+            if (input == "stats" || input == "clr" || input == "clr_paths" || input == "clr_filter" || input == "auto on" || input == "auto off") {
                 delCacheAndShowStats(input, promptFlag, maxDepth, historyPattern);
                 return;
             }
