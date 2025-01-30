@@ -88,47 +88,93 @@ void clearHistory(const std::string& inputSearch) {
 
 // Function to set display mode for lists
 void setDisplayMode(const std::string& inputSearch) {
-	
-	std::map<std::string, std::string> config = readConfig(configPath);
-	
-	// Create directory if it doesn't exist
+    // First read all existing lines from the config file to preserve them
+    std::vector<std::string> configLines;
+    bool settingFound = false;
+    
+    std::ifstream inFile(configPath);
+    if (inFile.is_open()) {
+        std::string line;
+        while (std::getline(inFile, line)) {
+            configLines.push_back(line);
+        }
+        inFile.close();
+    }
+
+    // Create directory if it doesn't exist
     std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
     if (!std::filesystem::exists(dirPath)) {
-		if (!std::filesystem::create_directories(dirPath)) {
-			std::cerr << "\n\033[1;91mFailed to create directory: \033[1;91m'\033[1;93m" 
-                      << dirPath.string() << "\033[1;91m'.\033[0;1m\n";
+        if (!std::filesystem::create_directories(dirPath)) {
+            std::cerr << "\n\033[1;91mFailed to create directory: \033[1;93m'" 
+                      << dirPath.string() << "'\033[1;91m.\033[0;1m\n";
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-		}
-	}
-        
-	// Update the lists setting
-	config["lists"] = inputSearch;
+            return;
+        }
+    }
 
-	// Write all settings back to file
-	std::ofstream outFile(configPath);
-	if (outFile.is_open()) {
-		for (const auto& [key, value] : config) {
-			outFile << key << " = " << value << "\n";
-		}
-		outFile.close();
-    
-		// Display confirmation message
-		std::cout << "\n\033[0;1mDefault list display mode set to \033[1;92m" 
-				<< inputSearch << "\033[0;1m.\033[0;1m\n";
-		if (inputSearch == "long_lists") {
-			toggleFullListConversions = true;
-		} else {
-			toggleFullListConversions = false;
-		}
-	} else {
-		std::cerr << "\n\033[1;91mFailed to write configuration, unable to access: \033[1;91m'\033[1;93m" 
-				<< configPath << "\033[1;91m'.\033[0;1m\n";
-	}
+    // Determine which setting to update and its new value
+    std::string settingKey;
+    std::string newValue = (inputSearch.substr(0, 4) == "long") ? "long" : "short";
+    bool validInput = true;
 
-	std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-	std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    if (inputSearch == "long_mount_list" || inputSearch == "short_mount_list") {
+        settingKey = "mount_list";
+    } else if (inputSearch == "long_unmount_list" || inputSearch == "short_unmount_list") {
+        settingKey = "unmount_list";
+    } else if (inputSearch == "long_cp_mv_rm_list" || inputSearch == "short_cp_mv_rm_list") {
+        settingKey = "cp_mv_rm_list";
+    } else if (inputSearch == "long_conversion_lists" || inputSearch == "short_conversion_lists") {
+        settingKey = "conversion_lists";
+    } else {
+        std::cerr << "\n\033[1;91mInvalid input for list display mode. Please use 'long_' or 'short_' prefix.\033[0;1m\n";
+        validInput = false;
+    }
 
+    if (validInput) {
+        // Update or add the specified setting
+        std::ofstream outFile(configPath);
+        if (outFile.is_open()) {
+            // First write all existing lines, updating the specific setting if found
+            for (size_t i = 0; i < configLines.size(); i++) {
+                std::string line = configLines[i];
+                if (line.find(settingKey + " =") == 0) {
+                    outFile << settingKey << " = " << newValue << "\n";
+                    settingFound = true;
+                } else {
+                    outFile << line << "\n";
+                }
+            }
+            
+            // If setting wasn't found in existing lines, add it
+            if (!settingFound) {
+                outFile << settingKey << " = " << newValue << "\n";
+            }
+            
+            outFile.close();
+
+            // Display confirmation message
+            std::cout << "\n\033[0;1mDisplay mode for " << settingKey << " set to \033[1;92m" 
+                      << newValue << "\033[0;1m.\033[0;1m\n";
+
+            // Update only the relevant toggle flag
+            if (settingKey == "mount_list") {
+                toggleFullListMount = (newValue == "long");
+            } else if (settingKey == "unmount_list") {
+                toggleFullListUmount = (newValue == "long");
+            } else if (settingKey == "cp_mv_rm_list") {
+                toggleFullListCpMvRm = (newValue == "long");
+            } else if (settingKey == "conversion_lists") {
+                toggleFullListConversions = (newValue == "long");
+            }
+        } else {
+            std::cerr << "\n\033[1;91mFailed to write configuration, unable to access: \033[1;91m'\033[1;93m" 
+                      << configPath << "\033[1;91m'.\033[0;1m\n";
+        }
+    }
+
+    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
 
@@ -221,7 +267,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
 			continue;
 		}
         
-        if (inputSearch == "long_lists" || inputSearch == "short_lists") {
+        if (inputSearch == "long_mount_list" || inputSearch == "short_mount_list" || inputSearch == "long_unmount_list" || inputSearch == "short_unmount_list" || inputSearch == "long_cp_mv_rm_list" || inputSearch == "short_cp_mv_rm_list" || inputSearch == "long_conversion_lists" || inputSearch == "short_conversion_lists") {
 			setDisplayMode(inputSearch);
 			continue;
 		}
