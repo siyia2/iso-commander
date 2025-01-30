@@ -85,6 +85,8 @@ void clearHistory(const std::string& inputSearch) {
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
+
+// Function to sel display list mode
 void setDisplayMode(const std::string& inputSearch) {
 	
 	std::map<std::string, std::string> config = readConfig(configPath);
