@@ -63,7 +63,12 @@ int main(int argc, char *argv[]) {
     bool exitProgram = false;
     
     // Automatic ISO  cache Import
-    bool search;
+    bool search = false;
+    bool longLists = false;
+    
+    longLists = readUserConfigLists(configPath);
+    
+    if (longLists) toggleFullList = true;
     
     std::string choice;
     isImportRunning.store(false);
@@ -72,7 +77,7 @@ int main(int argc, char *argv[]) {
     if (!file.is_open()) {
         search = false;
     } else {
-		search = readUserConfig(configPath);
+		search = readUserConfigUpdates(configPath);
 	}    
     
 	if (search) {
@@ -369,7 +374,7 @@ std::map<std::string, std::string> readConfig(const std::string& configPath) {
 }
 
 // Function to get AutomaticImportConfig status
-bool readUserConfig(const std::string& filePath) {
+bool readUserConfigUpdates(const std::string& filePath) {
     std::ifstream inFile(filePath);
     if (!inFile) {
         return false; // Default to false if file cannot be opened
@@ -413,6 +418,47 @@ bool readUserConfig(const std::string& filePath) {
     }
 
     return false; // Key "auto_ISO_updates" not found in the file
+}
+
+
+bool readUserConfigLists(const std::string& filePath) {
+    std::ifstream inFile(filePath);
+    if (!inFile) {
+        return false; // Default to false if file cannot be opened
+    }
+
+    std::string line;
+    while (std::getline(inFile, line)) {
+        // Remove leading and trailing whitespace from the line
+        line.erase(0, line.find_first_not_of(" \t"));
+        line.erase(line.find_last_not_of(" \t") + 1);
+
+        // Check if the line starts with "lists"
+        if (line.find("lists") == 0) {
+            // Find the position of the '=' character
+            size_t equalsPos = line.find('=');
+            if (equalsPos == std::string::npos) {
+                return false; // No '=' found, invalid format
+            }
+
+            // Extract the value part (after '=')
+            std::string valueStr = line.substr(equalsPos + 1);
+            // Remove leading and trailing whitespace from the value
+            valueStr.erase(0, valueStr.find_first_not_of(" \t"));
+            valueStr.erase(valueStr.find_last_not_of(" \t") + 1);
+
+            // Check if the value is "long" or "short"
+            if (valueStr == "long") {
+                return true;
+            } else if (valueStr == "short") {
+                return false;
+            } else {
+                return false; // Invalid value
+            }
+        }
+    }
+
+    return false; // Key "lists" not found in the file
 }
 
 

@@ -567,6 +567,11 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
             } else {
                 std::cout << "\n\033[0;1mDefault list display mode set to \033[1;92m" 
                           << inputSearch << "\033[0;1m.\033[0;1m\n";
+				if (inputSearch == "long") {
+					toggleFullList = true;
+				} else {
+					toggleFullList = false;
+				}
             }
         } else {
             std::cerr << "\n\033[1;91mFailed to write configuration, unable to access: \033[1;91m'\033[1;93m" 
