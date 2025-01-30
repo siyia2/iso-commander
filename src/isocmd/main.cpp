@@ -439,25 +439,53 @@ bool readUserConfigUpdates(const std::string& filePath) {
 }
 
 
+// Function to set list mode based on config file
 std::map<std::string, std::string> readUserConfigLists(const std::string& filePath) {
     std::map<std::string, std::string> configMap;
     std::ifstream inFile(filePath);
+
+    // Default values for required keys
+    std::map<std::string, std::string> defaultConfig = {
+        {"mount_list", "short"},
+        {"unmount_list", "long"}, // Default for umount is long
+        {"cp_mv_rm_list", "short"},
+        {"write_list", "short"},
+        {"conversion_lists", "short"}
+    };
+
+    // If the file cannot be opened, write the default configuration and return it
     if (!inFile) {
-        return configMap; // Return empty map if file cannot be opened
+        std::ofstream outFile(filePath);
+        if (!outFile) {
+            return defaultConfig; // Return default config if file creation fails
+        }
+
+        // Write default configuration to the file
+        for (const auto& pair : defaultConfig) {
+            outFile << pair.first << " = " << pair.second << "\n";
+        }
+
+        return defaultConfig;
     }
 
+    // Read the existing configuration file
     std::string line;
     while (std::getline(inFile, line)) {
         // Remove leading and trailing whitespace from the line
         line.erase(0, line.find_first_not_of(" \t"));
         line.erase(line.find_last_not_of(" \t") + 1);
-        
+
+        // Skip empty lines or comments (lines starting with '#')
+        if (line.empty() || line[0] == '#') {
+            continue;
+        }
+
         // Find the position of the '=' character
         size_t equalsPos = line.find('=');
         if (equalsPos == std::string::npos) {
             continue; // Skip lines without '='
         }
-        
+
         // Extract the key and value parts
         std::string key = line.substr(0, equalsPos);
         std::string valueStr = line.substr(equalsPos + 1);
@@ -467,54 +495,47 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
         key.erase(key.find_last_not_of(" \t") + 1);
         valueStr.erase(0, valueStr.find_first_not_of(" \t"));
         valueStr.erase(valueStr.find_last_not_of(" \t") + 1);
-        
+
         // Check if the key is one of the required keys
-        if (key == "mount_list" || key == "unmount_list" || key == "cp_mv_rm_list" || key == "write_list" || key == "conversion_lists") {
+        if (defaultConfig.find(key) != defaultConfig.end()) {
             // Check if the value is "short" or "long"
-            if (valueStr == "short" || valueStr == "full") {
+            if (valueStr == "short" || valueStr == "long") {
                 configMap[key] = valueStr;
             } else {
-                configMap.clear(); // Invalid value, return empty map
-                return configMap;
+                configMap[key] = defaultConfig[key]; // Use default value for invalid value
+            }
+        } else if (key == "auto_update") {
+            // Handle auto_update separately if needed
+            configMap[key] = valueStr;
+        }
+    }
+
+    // Add missing keys with default values
+    for (const auto& pair : defaultConfig) {
+        if (configMap.find(pair.first) == configMap.end()) {
+            configMap[pair.first] = pair.second; // Add default key-value pair
+        }
+    }
+
+    // Write the updated configuration back to the file (if any keys were missing)
+    if (configMap.size() > defaultConfig.size()) {
+        std::ofstream outFile(filePath);
+        if (outFile) {
+            for (const auto& pair : configMap) {
+                outFile << pair.first << " = " << pair.second << "\n";
             }
         }
     }
-    
-    // Check if all required keys are present
-    if (configMap.size() != 5) {
-        configMap.clear(); // Missing keys, return empty map
-    }
 
     // Set the boolean values based on the configMap
-    if (configMap["mount_list"] == "full") {
-        toggleFullListMount = true;
-    } else {
-        toggleFullListMount = false;
-    }
-    if (configMap["unmount_list"] == "full") {
-        toggleFullListUmount = true;
-    } else {
-        toggleFullListUmount = false;
-    }
-    if (configMap["cp_mv_rm_list"] == "full") {
-        toggleFullListCpMvRm = true;
-    } else {
-        toggleFullListCpMvRm = false;
-    }
-    if (configMap["write_list"] == "full") {
-        toggleFullListWrite = true;
-    } else {
-        toggleFullListWrite = false;
-    }
-    if (configMap["conversion_lists"] == "full") {
-        toggleFullListConversions = true;
-    } else {
-        toggleFullListConversions = false;
-    }
+    toggleFullListMount = (configMap["mount_list"] == "long");
+    toggleFullListUmount = (configMap["unmount_list"] == "long");
+    toggleFullListCpMvRm = (configMap["cp_mv_rm_list"] == "long");
+    toggleFullListWrite = (configMap["write_list"] == "long");
+    toggleFullListConversions = (configMap["conversion_lists"] == "long");
 
     return configMap;
 }
-
 
 
 // Function to negate original readline bindings

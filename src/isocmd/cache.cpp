@@ -531,7 +531,7 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         manualRefreshCache("", promptFlag, maxDepth, historyPattern);
-    } else if (inputSearch == "auto on" || inputSearch == "auto off") {
+    } else if (inputSearch == "*auto_on" || inputSearch == "*auto_off") {
         
         // Create directory if it doesn't exist
         std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
@@ -549,8 +549,8 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
         std::map<std::string, std::string> config = readConfig(configPath);
 
         // Update the specific setting
-        if (inputSearch == "auto on" || inputSearch == "auto off") {
-            config["auto_update"] = (inputSearch == "auto on") ? "1" : "0";
+        if (inputSearch == "*auto_on" || inputSearch == "*auto_off") {
+            config["auto_update"] = (inputSearch == "*auto_on") ? "1" : "0";
         }
 
         // Write all settings back to file
@@ -562,9 +562,9 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
             outFile.close();
 
             // Display appropriate message
-            if (inputSearch == "auto on" || inputSearch == "auto off") {
+            if (inputSearch == "*auto_on" || inputSearch == "*auto_off") {
                 std::cout << "\n\033[0;1mAutomatic background updates have been "
-                          << (inputSearch == "auto on" ? "\033[1;92menabled" : "\033[1;91mdisabled")
+                          << (inputSearch == "*auto_on" ? "\033[1;92menabled" : "\033[1;91mdisabled")
                           << "\033[0;1m.\033[0;1m\n";
             }
         } else {
@@ -628,7 +628,7 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 				manualRefreshCache("", promptFlag, maxDepth, historyPattern);
 			}        
 			
-            if (input == "stats" || input == "clr" || input == "clr_paths" || input == "clr_filter" || input == "auto off" || input == "auto on" || validInputs.find(input) != validInputs.end()) {
+            if (input == "stats" || input == "clr" || input == "clr_paths" || input == "clr_filter" || input == "*auto_off" || input == "*auto_on" || validInputs.find(input) != validInputs.end()) {
                 cacheAndMiscSwitches(input, promptFlag, maxDepth, historyPattern);
                 return;
             }
