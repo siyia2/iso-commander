@@ -685,30 +685,17 @@ void helpSearches(bool isCpMv) {
 				<< "   • Enter \033[1;35m'stats'\033[0m - View on-disk ISO cache statistics (ImportISO search prompt only)\n" << std::endl;
               
 		std::cout << "\033[1;32m4. Special Configuration Commands:\033[0m\n\n"
-
           << "\033[38;5;94mAuto-Update ISO Cache:\033[0m\n"
-          << "   • Enter \033[1;35m'*auto_on'\033[0m  - Enable auto-update of ISO cache at startup using stored readline paths (ImportISO search prompt only)\n"
-          << "   • Enter \033[1;35m'*auto_off'\033[0m - Disable ISO cache auto-update (ImportISO search prompt only)\n\n"
-
-          << "\033[38;5;94mMount List Display Modes:\033[0m\n"
-          << "   • Enter \033[1;35m'*ll_m'\033[0m - Set default display mode for mount list to long\n"
-          << "   • Enter \033[1;35m'*sl_m'\033[0m - Set default display mode for mount list to short\n\n"
-
-          << "\033[38;5;94mUnmount List Display Modes:\033[0m\n"
-          << "   • Enter \033[1;35m'*ll_u'\033[0m - Set default display mode for unmount list to long\n"
-          << "   • Enter \033[1;35m'*sl_u'\033[0m - Set default display mode for unmount list to short\n\n"
-
-          << "\033[38;5;94mFile Operations List Display Modes:\033[0m\n"
-          << "   • Enter \033[1;35m'*ll_fo'\033[0m - Set default display mode for cp/mv/rm list to long\n"
-          << "   • Enter \033[1;35m'*sl_fo'\033[0m - Set default display mode for cp/mv/rm list to short\n\n"
-
-          << "\033[38;5;94mWrite List Display Modes:\033[0m\n"
-          << "   • Enter \033[1;35m'*ll_w'\033[0m - Set default display mode for write list to long\n"
-          << "   • Enter \033[1;35m'*sl_w'\033[0m - Set default display mode for write list to short\n\n"
-
-          << "\033[38;5;94mConversion List Display Modes:\033[0m\n"
-          << "   • Enter \033[1;35m'*ll_c'\033[0m - Set default display mode for conversion lists to long\n"
-          << "   • Enter \033[1;35m'*sl_c'\033[0m - Set default display mode for conversion lists to short\n"
+          << "   • Enter \033[1;35m'*auto_on'\033[0m  - Enable auto-update of ISO cache at startup using stored readline paths\n"
+          << "   • Enter \033[1;35m'*auto_off'\033[0m - Disable ISO cache auto-update\n"
+          << "   (ImportISO search prompt only)\n\n"
+          << "\033[38;5;94mDisplay Mode Settings (sl = short list, ll = long list):\033[0m\n"
+          << "   Set default display mode for:\n"
+          << "   • Mount list:       Enter \033[1;35m'*ll_m'\033[0m or \033[1;35m'*sl_m'\033[0m\n"
+          << "   • Unmount list:     Enter \033[1;35m'*ll_u'\033[0m or \033[1;35m'*sl_u'\033[0m\n"
+          << "   • cp/mv/rm list:    Enter \033[1;35m'*ll_fo'\033[0m or \033[1;35m'*sl_fo'\033[0m\n"
+          << "   • Write list:       Enter \033[1;35m'*ll_w'\033[0m or \033[1;35m'*sl_w'\033[0m\n"
+          << "   • Conversion lists: Enter \033[1;35m'*ll_c'\033[0m or \033[1;35m'*sl_c'\033[0m\n"
           << std::endl;
 	}
                 
