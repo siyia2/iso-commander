@@ -682,7 +682,7 @@ void helpSearches(bool isCpMv) {
               
 		std::cout << "\033[1;32m3. Special Display Commands:\033[0m\n"
 				<< "   • Enter \033[1;35m'ls'\033[0m - Lists cached image file entries (Convert2ISO search prompts only)\n"
-				<< "   • Enter \033[1;35m'stats'\033[0m - View on-disk cache statistics (ImportISO search prompt only)\n" << std::endl;
+				<< "   • Enter \033[1;35m'stats'\033[0m - View on-disk ISO cache statistics (ImportISO search prompt only)\n" << std::endl;
               
 		std::cout << "\033[1;32m4. Special Configuration Commands:\033[0m\n\n"
 
