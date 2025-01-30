@@ -570,7 +570,10 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         manualRefreshCache("", promptFlag, maxDepth, historyPattern);
-    }
+    } else if (inputSearch == "*ll_m" || inputSearch == "*sl_m" || inputSearch == "*ll_u" || inputSearch == "*sl_u" || inputSearch == "*ll_fo" || inputSearch == "*sl_fo" || inputSearch == "*ll_w" || inputSearch == "*sl_w" || inputSearch == "*ll_c" || inputSearch == "*sl_c") {
+			setDisplayMode(inputSearch);
+			manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+	}
     return;
 }
 
@@ -616,7 +619,7 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 				manualRefreshCache("", promptFlag, maxDepth, historyPattern);
 			}        
 			
-            if (input == "stats" || input == "clr" || input == "clr_paths" || input == "clr_filter" || input == "auto off" || input == "auto on" || input == "long_lists" || input == "short_lists") {
+            if (input == "stats" || input == "clr" || input == "clr_paths" || input == "clr_filter" || input == "auto off" || input == "auto on" || input == "*ll_m" || input == "*sl_m" || input == "*ll_u" || input == "*sl_u" || input == "*ll_fo" || input == "*sl_fo" || input == "*ll_w" || input == "*sl_w" || input == "*ll_c" || input == "*sl_c") {
                 cacheAndMiscSwitches(input, promptFlag, maxDepth, historyPattern);
                 return;
             }
