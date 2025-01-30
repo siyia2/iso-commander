@@ -86,7 +86,7 @@ void clearHistory(const std::string& inputSearch) {
 }
 
 
-// Function to sel display list mode
+// Function to set display mode for lists
 void setDisplayMode(const std::string& inputSearch) {
 	
 	std::map<std::string, std::string> config = readConfig(configPath);
