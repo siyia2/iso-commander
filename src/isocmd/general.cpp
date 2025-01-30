@@ -33,6 +33,22 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
     bool write = (operation == "write");
     bool promptFlag = false; // PromptFlag for cache refresh, defaults to false for move and other operations
     
+    // Set default location values
+	atMount = false;
+	atConversions = false;
+	atCpMvRm = false;
+	atWrite = false;
+    
+    if (isMount) {
+		atMount = true;
+	} else if (write) {
+		atWrite = true;
+	} else if (isUnmount) {
+		
+	} else {
+		atCpMvRm = true;
+	}
+    
     while (true) {
         // Verbose output is to be disabled unless specified by progressbar function downstream
         verbose = false;
@@ -75,8 +91,27 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         }
 
         if (inputString == "~") {
-            toggleFullList = !toggleFullList;
-            needsClrScrn = true;
+		// Set default values
+		atMount = false;
+		atConversions = false;
+		atCpMvRm = false;
+		atWrite = false;
+		needsClrScrn = true;
+
+		// Update specific flags and variables based on conditions
+		if (isMount) {
+			atMount = true;
+			toggleFullListMount = !toggleFullListMount;
+		} else if (isUnmount) {
+			toggleFullListUmount = !toggleFullListUmount;
+		} else if (write) {
+			atWrite = true;
+			toggleFullListWrite = !toggleFullListWrite;
+		} else {
+			atCpMvRm = true;
+			toggleFullListCpMvRm = !toggleFullListCpMvRm;
+		}
+				
             continue;
         }
 
@@ -569,7 +604,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
                    << defaultColor << bold << "/"
                    << magenta << filename << defaultColor << "\n";
         } else if (listType == "MOUNTED_ISOS") {
-			if (toggleFullList){
+			if (toggleFullListUmount){
             output << sequenceColor << indexStrings[i] << ". "
                    << blueBold << "/mnt/iso_"
                    << magentaBold << displayPath << grayBold << displayHash << reset << "\n";
@@ -628,7 +663,7 @@ void helpSelections() {
 
 
 // Help guide for directory prompts
-void helpSearches() {
+void helpSearches(bool isCpMv) {
     clearScrollBuffer();
     
     // Title
@@ -638,15 +673,24 @@ void helpSearches() {
               << "   • Single directory: Enter a directory (e.g., '/directory/')\n"
               << "   • Multiple directories: Separate with ; (e.g., '/directory1/;/directory2/')\n"
               << "   • Overwrite files for cp/mv: Append |^O (e.g., '/directory/ |^O' or '/directory1/;/directory2/ |^O')\n" << std::endl;
-    
-    std::cout << "\033[1;32m2. Cache Management:\033[0m\n"
-              << "   • Enter \033[1;35m'clr'\033[0m - Clear cache:\n"
-              << "     - In Convert2ISO search prompts: Clears corresponding RAM cache\n"
-              << "     - In ImportISO search prompt: Clears on-disk cache\n"
-              << "   • Enter \033[1;35m'clr_paths'\033[0m - Clears folder path history (ImportISO&Convert2ISO search prompts)\n"
-              << "   • Enter \033[1;35m'clr_filter'\033[0m - Clears filter history (ImportISO&Convert2ISO search prompts)\n"
-              << "   • Enter \033[1;35m'ls'\033[0m - Lists cached image file entries (Convert2ISO search prompts only)\n"
-              << "   • Enter \033[1;35m'stats'\033[0m - View on-disk cache statistics (ImportISO search prompt only)\n" << std::endl;
+    if (!isCpMv) {
+		std::cout << "\033[1;32m2. Special Cleanup Commands:\033[0m\n"
+				<< "   • Enter \033[1;35m'clr'\033[0m - Clear cache:\n"
+				<< "     - In Convert2ISO search prompts: Clears corresponding RAM cache\n"
+				<< "     - In ImportISO search prompt: Clears on-disk cache\n"
+				<< "   • Enter \033[1;35m'clr_paths'\033[0m - Clears folder path history (ImportISO&Convert2ISO search prompts)\n"
+				<< "   • Enter \033[1;35m'clr_filter'\033[0m - Clears filter history (ImportISO&Convert2ISO search prompts)\n" << std::endl;
+              
+		std::cout << "\033[1;32m3. Special Display Commands:\033[0m\n"
+				<< "   • Enter \033[1;35m'ls'\033[0m - Lists cached image file entries (Convert2ISO search prompts only)\n"
+				<< "   • Enter \033[1;35m'stats'\033[0m - View on-disk cache statistics (ImportISO search prompt only)\n" << std::endl;
+              
+		std::cout << "\033[1;32m4. Special Configuration Commands:\033[0m\n"
+				<< "   • Enter \033[1;35m'auto on'\033[0m - Auto-update ISO cache on startup using stored readline paths (ImportISO search prompt only)\n"
+				<< "   • Enter \033[1;35m'auto off'\033[0m - Disable ISO cache auto-update (ImportISO search prompt only)\n"
+				<< "   • Enter \033[1;35m'long_lists'\033[0m - Set default display mode for selection lists to long (ImportISO&Convert2ISO search prompts)\n"
+				<< "   • Enter \033[1;35m'short_lists'\033[0m - Set default display mode for selection lists to short (ImportISO&Convert2ISO search prompts)\n" << std::endl;
+	}
                 
     // Prompt to continue
     std::cout << "\033[1;32m↵ to return...\033[0;1m";
@@ -670,11 +714,7 @@ void helpMappings() {
     std::cout << "\033[1;32m↵ to return...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
-    
 
-
-//For toggling long/short paths in lists and verbose
-bool toggleFullList = false;
 
 // For memory mapping string transformations
 std::unordered_map<std::string, std::string> transformationCache;
@@ -694,10 +734,19 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view
     }
 
     // Early return for full list mode
-    if (toggleFullList) {
+    if (toggleFullListMount && atMount) {
         return {std::string(path.substr(0, lastSlashPos)), 
                 std::string(path.substr(lastSlashPos + 1))};
-    }
+    } else if (toggleFullListCpMvRm && atCpMvRm) {
+		 return {std::string(path.substr(0, lastSlashPos)), 
+                std::string(path.substr(lastSlashPos + 1))};
+	} else if (toggleFullListConversions && atConversions) {
+		return {std::string(path.substr(0, lastSlashPos)), 
+                std::string(path.substr(lastSlashPos + 1))};
+	} else if (toggleFullListWrite && atWrite) {
+		return {std::string(path.substr(0, lastSlashPos)), 
+                std::string(path.substr(lastSlashPos + 1))};
+	}
 
     // Check cache first
     auto cacheIt = transformationCache.find(std::string(path));

@@ -10,6 +10,27 @@ const std::string configPath = std::string(getenv("HOME")) + "/.config/isocmd/co
 // Global variables for cleanup
 int lockFileDescriptor = -1;
 
+// For toggling between full and shortened paths in mount list
+bool toggleFullListMount = false;
+
+// For toggling between full and shortened paths in umount list
+bool toggleFullListUmount = true;
+
+// For toggling between full and shortened paths in cpMvRm
+bool toggleFullListCpMvRm = false;
+
+// For toggling between full and shortened paths in write
+bool toggleFullListWrite = false;
+
+// For toggling between full and shortened paths in conversions
+bool toggleFullListConversions = false;
+
+// Helper variables to determine function location
+bool atMount = false;
+bool atConversions = false;
+bool atCpMvRm = false;
+bool atWrite = false;
+
 // Global flag to track cancellation for write2usb
 std::atomic<bool> g_cancelOperation(false);
 
@@ -63,12 +84,9 @@ int main(int argc, char *argv[]) {
     bool exitProgram = false;
     
     // Automatic ISO  cache Import
-    bool search = false;
-    bool longLists = false;
+    bool search = false;      
     
-    longLists = readUserConfigLists(configPath);
-    
-    if (longLists) toggleFullList = true;
+    std::map<std::string, std::string> config = readUserConfigLists(configPath);
     
     std::string choice;
     isImportRunning.store(false);
@@ -99,7 +117,7 @@ int main(int argc, char *argv[]) {
         print_ascii();
         
         if (isImportRunning.load()) {
-			std::cout << "\033[2m[AutoImportISO operates passively in the background...]\033[0m\n";
+			std::cout << "\033[2m[Auto-update operates passively in the background...]\033[0m\n";
 		}
         
         // Display the main menu options
@@ -421,10 +439,11 @@ bool readUserConfigUpdates(const std::string& filePath) {
 }
 
 
-bool readUserConfigLists(const std::string& filePath) {
+std::map<std::string, std::string> readUserConfigLists(const std::string& filePath) {
+    std::map<std::string, std::string> configMap;
     std::ifstream inFile(filePath);
     if (!inFile) {
-        return false; // Default to false if file cannot be opened
+        return configMap; // Return empty map if file cannot be opened
     }
 
     std::string line;
@@ -432,34 +451,70 @@ bool readUserConfigLists(const std::string& filePath) {
         // Remove leading and trailing whitespace from the line
         line.erase(0, line.find_first_not_of(" \t"));
         line.erase(line.find_last_not_of(" \t") + 1);
+        
+        // Find the position of the '=' character
+        size_t equalsPos = line.find('=');
+        if (equalsPos == std::string::npos) {
+            continue; // Skip lines without '='
+        }
+        
+        // Extract the key and value parts
+        std::string key = line.substr(0, equalsPos);
+        std::string valueStr = line.substr(equalsPos + 1);
 
-        // Check if the line starts with "lists"
-        if (line.find("lists") == 0) {
-            // Find the position of the '=' character
-            size_t equalsPos = line.find('=');
-            if (equalsPos == std::string::npos) {
-                return false; // No '=' found, invalid format
-            }
-
-            // Extract the value part (after '=')
-            std::string valueStr = line.substr(equalsPos + 1);
-            // Remove leading and trailing whitespace from the value
-            valueStr.erase(0, valueStr.find_first_not_of(" \t"));
-            valueStr.erase(valueStr.find_last_not_of(" \t") + 1);
-
-            // Check if the value is "long" or "short"
-            if (valueStr == "long") {
-                return true;
-            } else if (valueStr == "short") {
-                return false;
+        // Remove leading and trailing whitespaces from both key and value
+        key.erase(0, key.find_first_not_of(" \t"));
+        key.erase(key.find_last_not_of(" \t") + 1);
+        valueStr.erase(0, valueStr.find_first_not_of(" \t"));
+        valueStr.erase(valueStr.find_last_not_of(" \t") + 1);
+        
+        // Check if the key is one of the required keys
+        if (key == "mount_list" || key == "unmount_list" || key == "cp_mv_rm_list" || key == "write_list" || key == "conversion_lists") {
+            // Check if the value is "short" or "long"
+            if (valueStr == "short" || valueStr == "long") {
+                configMap[key] = valueStr;
             } else {
-                return false; // Invalid value
+                configMap.clear(); // Invalid value, return empty map
+                return configMap;
             }
         }
     }
+    
+    // Check if all required keys are present
+    if (configMap.size() != 5) {
+        configMap.clear(); // Missing keys, return empty map
+    }
 
-    return false; // Key "lists" not found in the file
+    // Set the boolean values based on the configMap
+    if (configMap["mount_list"] == "long") {
+        toggleFullListMount = true;
+    } else {
+        toggleFullListMount = false;
+    }
+    if (configMap["unmount_list"] == "long") {
+        toggleFullListUmount = true;
+    } else {
+        toggleFullListUmount = false;
+    }
+    if (configMap["cp_mv_rm_list"] == "long") {
+        toggleFullListCpMvRm = true;
+    } else {
+        toggleFullListCpMvRm = false;
+    }
+    if (configMap["write_list"] == "long") {
+        toggleFullListWrite = true;
+    } else {
+        toggleFullListWrite = false;
+    }
+    if (configMap["conversion_lists"] == "long") {
+        toggleFullListConversions = true;
+    } else {
+        toggleFullListConversions = false;
+    }
+
+    return configMap;
 }
+
 
 
 // Function to negate original readline bindings

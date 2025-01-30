@@ -168,7 +168,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
 					std::cout << err << "\n";  // Newline ensures separate lines
 				}
 			}
-
+			bool isCpMv= true;
             // Generate the prompt with selected ISOs at the beginning
             std::string selectedIsosPrompt = generateSelectedIsosPrompt();
             std::string prompt = "\n" + selectedIsosPrompt + 
@@ -189,7 +189,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
             rl_bind_key('\t', prevent_readline_keybindings);
 			
 			if (mainInputString == "?") {
-				helpSearches();
+				helpSearches(isCpMv);
 				continue;
 			}
 			

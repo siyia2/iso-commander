@@ -527,7 +527,7 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         manualRefreshCache("", promptFlag, maxDepth, historyPattern);
     } else if (inputSearch == "auto on" || inputSearch == "auto off" || 
-               inputSearch == "long" || inputSearch == "short") {
+               inputSearch == "long_lists" || inputSearch == "short_lists") {
         
         // Create directory if it doesn't exist
         std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
@@ -567,10 +567,10 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
             } else {
                 std::cout << "\n\033[0;1mDefault list display mode set to \033[1;92m" 
                           << inputSearch << "\033[0;1m.\033[0;1m\n";
-				if (inputSearch == "long") {
-					toggleFullList = true;
+				if (inputSearch == "long_lists") {
+					toggleFullListMount = true;
 				} else {
-					toggleFullList = false;
+					toggleFullListMount = false;
 				}
             }
         } else {
@@ -608,7 +608,7 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
         // Restore readline autocomplete and screen clear bindings
         rl_bind_key('\f', rl_clear_screen);
 		rl_bind_key('\t', rl_complete);
-        
+        bool isCpMv= false;
         // Prompt the user to enter directory paths for manual cache refresh
 		std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;92m\002.iso\001\033[1;94m\002 files and import into \001\033[1;92m\002on-disk\001\033[1;94m\002 cache, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
         char* rawSearchQuery = readline(prompt.c_str());
@@ -622,12 +622,12 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
             input = searchQuery.get();
 			
 			if (input == "?") {
-				helpSearches();
+				helpSearches(isCpMv);
 				input = "";
 				manualRefreshCache("", promptFlag, maxDepth, historyPattern);
 			}        
 			
-            if (input == "stats" || input == "clr" || input == "clr_paths" || input == "clr_filter" || input == "auto off" || input == "auto on" || input == "long" || input == "short") {
+            if (input == "stats" || input == "clr" || input == "clr_paths" || input == "clr_filter" || input == "auto off" || input == "auto on" || input == "long_lists" || input == "short_lists") {
                 cacheAndMiscSwitches(input, promptFlag, maxDepth, historyPattern);
                 return;
             }

@@ -40,7 +40,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
 
 // Function toggle between long and short vebose logging in umount
 std::string modifyDirectoryPath(const std::string& dir) {
-    if (toggleFullList) {
+    if (toggleFullListUmount) {
         return dir;
     }
 

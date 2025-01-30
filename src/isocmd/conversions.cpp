@@ -116,10 +116,10 @@ void setDisplayMode(const std::string& inputSearch) {
 		// Display confirmation message
 		std::cout << "\n\033[0;1mDefault list display mode set to \033[1;92m" 
 				<< inputSearch << "\033[0;1m.\033[0;1m\n";
-		if (inputSearch == "long") {
-			toggleFullList = true;
+		if (inputSearch == "long_lists") {
+			toggleFullListConversions = true;
 		} else {
-			toggleFullList = false;
+			toggleFullListConversions = false;
 		}
 	} else {
 		std::cerr << "\n\033[1;91mFailed to write configuration, unable to access: \033[1;91m'\033[1;93m" 
@@ -199,6 +199,8 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
 		rl_bind_key('\f', rl_clear_screen);
 		rl_bind_key('\t', rl_complete);
         
+        bool isCpMv= false;
+        
         // Interactive prompt setup (similar to original code)
         std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;38;5;208m\002" + fileExtension +
                              "\001\033[1;94m\002 files and import into \001\033[1;93m\002RAM\001\033[1;94m\002 cache, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
@@ -219,13 +221,13 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
 			continue;
 		}
         
-        if (inputSearch == "long" || inputSearch == "short") {
+        if (inputSearch == "long_lists" || inputSearch == "short_lists") {
 			setDisplayMode(inputSearch);
 			continue;
 		}
         
         if (inputSearch == "?") {
-            helpSearches();
+            helpSearches(isCpMv);
             continue;
         }
 
@@ -400,6 +402,12 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
             break;
         }
     };
+    
+    // Set default location values
+	atMount = false;
+	atConversions = true;
+	atCpMvRm = false;
+	atWrite = false;
 
     // Main processing loop
     while (true) {
@@ -440,7 +448,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 
         // Handle user input for toggling the full list display
         if (mainInputString == "~") {
-            toggleFullList = !toggleFullList;
+            toggleFullListConversions = !toggleFullListConversions;
             clearScrollBuffer();
             printList(files, "IMAGE_FILES");
             continue;
