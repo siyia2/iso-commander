@@ -249,6 +249,10 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
         
         bool isCpMv= false;
         
+        const std::set<std::string> validInputs = {
+			"*ll_m", "*sl_m", "*ll_u", "*sl_u", "*ll_fo", "*sl_fo", "*ll_w", "*sl_w", "*ll_c", "*sl_c"
+		};
+        
         // Interactive prompt setup (similar to original code)
         std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;38;5;208m\002" + fileExtension +
                              "\001\033[1;94m\002 files and import into \001\033[1;93m\002RAM\001\033[1;94m\002 cache, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
@@ -269,7 +273,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
 			continue;
 		}
         
-        if (inputSearch == "*ll_m" || inputSearch == "*sl_m" || inputSearch == "*ll_u" || inputSearch == "*sl_u" || inputSearch == "*ll_fo" || inputSearch == "*sl_fo" || inputSearch == "*ll_w" || inputSearch == "*sl_w" || inputSearch == "*ll_c" || inputSearch == "*sl_c") {
+        if (validInputs.find(inputSearch) != validInputs.end()) {
 			setDisplayMode(inputSearch);
 			continue;
 		}

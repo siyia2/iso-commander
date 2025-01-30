@@ -449,6 +449,11 @@ bool isValidDirectory(const std::string& path) {
 
 // Function that can delete or show stats for ISO cache it is called from within manualRefreshCache
 void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, const int& maxDepth, const bool& historyPattern) {
+	
+	const std::set<std::string> validInputs = {
+        "*ll_m", "*sl_m", "*ll_u", "*sl_u", "*ll_fo", "*sl_fo", "*ll_w", "*sl_w", "*ll_c", "*sl_c"
+    };
+	
     if (inputSearch == "stats") {
         try {
             // Get the file size in bytes
@@ -570,7 +575,7 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         manualRefreshCache("", promptFlag, maxDepth, historyPattern);
-    } else if (inputSearch == "*ll_m" || inputSearch == "*sl_m" || inputSearch == "*ll_u" || inputSearch == "*sl_u" || inputSearch == "*ll_fo" || inputSearch == "*sl_fo" || inputSearch == "*ll_w" || inputSearch == "*sl_w" || inputSearch == "*ll_c" || inputSearch == "*sl_c") {
+    } else if (validInputs.find(inputSearch) != validInputs.end()) {
 			setDisplayMode(inputSearch);
 			manualRefreshCache("", promptFlag, maxDepth, historyPattern);
 	}
@@ -597,6 +602,10 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
         loadHistory(historyPattern);
         maxDepth = -1;
         
+        const std::set<std::string> validInputs = {
+			"*ll_m", "*sl_m", "*ll_u", "*sl_u", "*ll_fo", "*sl_fo", "*ll_w", "*sl_w", "*ll_c", "*sl_c"
+		};
+        
         // Restore readline autocomplete and screen clear bindings
         rl_bind_key('\f', rl_clear_screen);
 		rl_bind_key('\t', rl_complete);
@@ -619,7 +628,7 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 				manualRefreshCache("", promptFlag, maxDepth, historyPattern);
 			}        
 			
-            if (input == "stats" || input == "clr" || input == "clr_paths" || input == "clr_filter" || input == "auto off" || input == "auto on" || input == "*ll_m" || input == "*sl_m" || input == "*ll_u" || input == "*sl_u" || input == "*ll_fo" || input == "*sl_fo" || input == "*ll_w" || input == "*sl_w" || input == "*ll_c" || input == "*sl_c") {
+            if (input == "stats" || input == "clr" || input == "clr_paths" || input == "clr_filter" || input == "auto off" || input == "auto on" || validInputs.find(input) != validInputs.end()) {
                 cacheAndMiscSwitches(input, promptFlag, maxDepth, historyPattern);
                 return;
             }
