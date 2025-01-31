@@ -817,7 +817,7 @@ void helpSearches(bool isCpMv) {
           << "\033[38;5;94mDisplay Mode Settings (cl = compact list, cl = compact list):\033[0m\n"
           << "   Set default display mode for:\n"
           << "   • Mount list:       Enter \033[1;35m'*fl_m'\033[0m or \033[1;35m'*cl_m'\033[0m\n"
-          << "   • Unmount list:     Enter \033[1;35m'*fl_u'\033[0m or \033[1;35m'*cl_u'\033[0m\n"
+          << "   • Umount list:      Enter \033[1;35m'*fl_u'\033[0m or \033[1;35m'*cl_u'\033[0m\n"
           << "   • cp/mv/rm list:    Enter \033[1;35m'*fl_fo'\033[0m or \033[1;35m'*cl_fo'\033[0m\n"
           << "   • Write list:       Enter \033[1;35m'*fl_w'\033[0m or \033[1;35m'*cl_w'\033[0m\n"
           << "   • Conversion lists: Enter \033[1;35m'*fl_c'\033[0m or \033[1;35m'*cl_c'\033[0m\n"
