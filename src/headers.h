@@ -42,7 +42,6 @@
 #include <unistd.h>
 #include <unordered_set>
 
-std::pair<std::string, std::string> extractDirectoryAndFilenameCutAtTilde(std::string_view path);
 
 // Get max available CPU cores for global use
 extern unsigned int maxThreads;
