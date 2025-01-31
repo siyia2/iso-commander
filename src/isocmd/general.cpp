@@ -668,7 +668,7 @@ void setDisplayMode(const std::string& inputSearch) {
     if (inputSearch == "*fl_m" || inputSearch == "*cl_m") {
         settingKey = "mount_list";
     } else if (inputSearch == "*fl_u" || inputSearch == "*cl_u") {
-        settingKey = "unmount_list";
+        settingKey = "umount_list";
     } else if (inputSearch == "*fl_fo" || inputSearch == "*cl_fo") {
         settingKey = "cp_mv_rm_list";
     } else if (inputSearch == "*fl_c" || inputSearch == "*cl_c") {
@@ -708,7 +708,7 @@ void setDisplayMode(const std::string& inputSearch) {
             // Update only the relevant toggle flag
             if (settingKey == "mount_list") {
                 toggleFullListMount = (newValue == "full");
-            } else if (settingKey == "unmount_list") {
+            } else if (settingKey == "umount_list") {
                 toggleFullListUmount = (newValue == "full");
             } else if (settingKey == "cp_mv_rm_list") {
                 toggleFullListCpMvRm = (newValue == "full");

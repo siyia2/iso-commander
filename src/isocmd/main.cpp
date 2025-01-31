@@ -447,7 +447,7 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
     // Default values for required keys
     std::map<std::string, std::string> defaultConfig = {
         {"mount_list", "compact"},
-        {"unmount_list", "full"}, // Default for umount is long
+        {"umount_list", "full"}, // Default for umount is long
         {"cp_mv_rm_list", "compact"},
         {"write_list", "compact"},
         {"conversion_lists", "compact"}
@@ -529,7 +529,7 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
 
     // Set the boolean values based on the configMap
     toggleFullListMount = (configMap["mount_list"] == "full");
-    toggleFullListUmount = (configMap["unmount_list"] == "full");
+    toggleFullListUmount = (configMap["umount_list"] == "full");
     toggleFullListCpMvRm = (configMap["cp_mv_rm_list"] == "full");
     toggleFullListWrite = (configMap["write_list"] == "full");
     toggleFullListConversions = (configMap["conversion_lists"] == "full");
