@@ -449,11 +449,10 @@ bool isValidDirectory(const std::string& path) {
 
 // Function that can delete or show stats for ISO cache it is called from within manualRefreshCache
 void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, const int& maxDepth, const bool& historyPattern) {
-	
-	const std::set<std::string> validInputs = {
-			"*fl_m", "*cl_m", "*fl_u", "*cl_u", "*fl_fo", "*cl_fo", "*fl_w", "*cl_w", "*fl_c", "*cl_c"
-	};
-	
+    const std::set<std::string> validInputs = {
+        "*fl_m", "*cl_m", "*fl_u", "*cl_u", "*fl_fo", "*cl_fo", "*fl_w", "*cl_w", "*fl_c", "*cl_c"
+    };
+
     if (inputSearch == "stats") {
         try {
             // Get the file size in bytes
@@ -502,14 +501,10 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
         }
 
     } else if (inputSearch == "clr_paths" || inputSearch == "clr_filter") {
-		
-		clearHistory(inputSearch);
-        
-        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        clearHistory(inputSearch);
         manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+
     } else if (inputSearch == "*auto_on" || inputSearch == "*auto_off") {
-        
         // Create directory if it doesn't exist
         std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
         if (!std::filesystem::exists(dirPath)) {
@@ -519,7 +514,6 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
                 std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 manualRefreshCache("", promptFlag, maxDepth, historyPattern);
-                return;
             }
         }
 
@@ -552,11 +546,11 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+
     } else if (validInputs.find(inputSearch) != validInputs.end()) {
-			setDisplayMode(inputSearch);
-			manualRefreshCache("", promptFlag, maxDepth, historyPattern);
-	}
-    return;
+        setDisplayMode(inputSearch);
+        manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+    }
 }
 
 
