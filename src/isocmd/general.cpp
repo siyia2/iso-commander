@@ -774,10 +774,10 @@ void helpSelections() {
               << "   • Select all: Enter '00' (for mount/umount only)\n" << std::endl;
     
     // Special commands
-    std::cout << "\033[1;32m2. Special Selection Commands:\033[0m\n"
+    std::cout << "\033[1;32m2. Special Commands:\033[0m\n"
 			  << "   • Enter \033[1;34m'~'\033[0m - Switch between compact and full list\n"
               << "   • Enter \033[1;34m'/'\033[0m - Filter the current list based on a search terms (e.g., 'term' or 'term1;term2')\n"
-              << "   • Enter \033[1;34m'/term1;term2'\033[0m - Directly filter the list for items containing 'term1' and 'term2'\n"
+              << "   • Enter \033[1;34m'/term1;term2'\033[0m - Directly filter the list for items containing 'term1' and 'term2'\n\n"
               << "   - Note: If filtering has no matches, no message or list update is issued\n" << std::endl;
               
     // Prompt to continue
