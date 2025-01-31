@@ -10,7 +10,6 @@ static std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles h
 static std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
 static std::vector<std::string> nrgFilesCache; // Memory cached nrgImgFiles here
 
-
 // Function to clear Ram Cache and memory transformations for bin/img mdf nrg files
 void clearRamCache (bool& modeMdf, bool& modeNrg) {
 
@@ -149,7 +148,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
 			continue;
 		}
         
-        if (validInputs.find(inputSearch) != validInputs.end()) {
+        if (isValidInput(inputSearch)) {
 			setDisplayMode(inputSearch);
 			continue;
 		}

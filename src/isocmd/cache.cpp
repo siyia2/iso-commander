@@ -10,7 +10,6 @@ const std::string cacheFilePath = std::string(getenv("HOME")) + "/.local/share/i
 const std::string cacheFileName = "iso_commander_cache.txt";
 const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
-
 // Function to remove non-existent paths from cache
 void removeNonExistentPathsFromCache() {
 	
@@ -544,7 +543,7 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         manualRefreshCache("", promptFlag, maxDepth, historyPattern);
 
-    } else if (validInputs.find(inputSearch) != validInputs.end()) {
+    } else if (isValidInput(inputSearch)) {
         setDisplayMode(inputSearch);
         manualRefreshCache("", promptFlag, maxDepth, historyPattern);
     }
@@ -596,7 +595,7 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 				manualRefreshCache("", promptFlag, maxDepth, historyPattern);
 			}        
 			
-            if (input == "stats" || input == "clr" || input == "clr_paths" || input == "clr_filter" || input == "*auto_off" || input == "*auto_on" || validInputs.find(input) != validInputs.end()) {
+            if (input == "stats" || input == "clr" || input == "clr_paths" || input == "clr_filter" || input == "*auto_off" || input == "*auto_on" || isValidInput(input)) {
                 cacheAndMiscSwitches(input, promptFlag, maxDepth, historyPattern);
                 return;
             }

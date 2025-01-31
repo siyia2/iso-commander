@@ -6,6 +6,14 @@
 // For storing isoFiles in RAM
 std::vector<std::string> globalIsoFileList;
 
+const std::unordered_map<char, std::string> settingMap = {
+    {'m', "mount_list"},
+    {'u', "umount_list"},
+    {'f', "cp_mv_rm_list"},
+    {'c', "conversion_lists"},
+    {'w', "write_list"}
+};
+
 // Main function to select and operate on ISOs by number for umount mount cp mv and rm
 void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& maxDepth, bool& verbose) {
     // Calls prevent_clear_screen and tab completion
@@ -633,12 +641,39 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
 }
 
 
-// Function to set display mode for lists
+// Function to validate input dynamically
+bool isValidInput(const std::string& input) {
+    // Check if input starts with *cl or *fl
+    if (input.size() < 4 || input[0] != '*' || 
+        (input.substr(1, 2) != "cl" && input.substr(1, 2) != "fl")) {
+        return false;
+    }
+
+    // Check for underscore and at least one setting character
+    size_t underscorePos = input.find('_', 3);
+    if (underscorePos == std::string::npos || underscorePos + 1 >= input.size()) {
+        return false;
+    }
+
+    // Validate each setting character
+    std::string settingsStr = input.substr(underscorePos + 1);
+    for (char c : settingsStr) {
+        if (settingMap.find(c) == settingMap.end()) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+
 void setDisplayMode(const std::string& inputSearch) {
-    // First read all existing lines from the config file to preserve them
     std::vector<std::string> configLines;
-    bool settingFound = false;
-    
+    std::vector<std::string> settingKeys;
+    bool validInput = true;
+    std::string newValue;
+
+    // Read existing config lines
     std::ifstream inFile(configPath);
     if (inFile.is_open()) {
         std::string line;
@@ -647,8 +682,8 @@ void setDisplayMode(const std::string& inputSearch) {
         }
         inFile.close();
     }
-    
-    // Create directory if it doesn't exist
+
+    // Create directory if needed
     std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
     if (!std::filesystem::exists(dirPath)) {
         if (!std::filesystem::create_directories(dirPath)) {
@@ -659,53 +694,84 @@ void setDisplayMode(const std::string& inputSearch) {
             return;
         }
     }
-    
-    // Determine which setting to update and its new value
-    std::string settingKey;
-    std::string newValue = (inputSearch.substr(0, 3) == "*cl") ? "compact" : "full";
-    bool validInput = true;
-    
-    if (inputSearch == "*fl_m" || inputSearch == "*cl_m") {
-        settingKey = "mount_list";
-    } else if (inputSearch == "*fl_u" || inputSearch == "*cl_u") {
-        settingKey = "umount_list";
-    } else if (inputSearch == "*fl_fo" || inputSearch == "*cl_fo") {
-        settingKey = "cp_mv_rm_list";
-    } else if (inputSearch == "*fl_c" || inputSearch == "*cl_c") {
-        settingKey = "conversion_lists";
-    } else if (inputSearch == "*fl_w" || inputSearch == "*cl_w") {
-        settingKey = "write_list";
-    } else {
-        std::cerr << "\n\033[1;91mInvalid input for list display mode. Please use '*l' or '*s' prefix.\033[0;1m\n";
+
+    // Parse input command and settings
+    if (inputSearch.size() < 4 || inputSearch[0] != '*' || 
+        (inputSearch.substr(1, 2) != "cl" && inputSearch.substr(1, 2) != "fl")) {
+        std::cerr << "\n\033[1;91mInvalid input format. Use '*cl' or '*fl' prefix.\033[0;1m\n";
         validInput = false;
-    }
-    
-    if (validInput) {
-        // Update or add the specified setting
-        std::ofstream outFile(configPath);
-        if (outFile.is_open()) {
-            // First write all existing lines, updating the specific setting if found
-            for (size_t i = 0; i < configLines.size(); i++) {
-                std::string line = configLines[i];
-                if (line.find(settingKey + " =") == 0) {
-                    outFile << settingKey << " = " << newValue << "\n";
-                    settingFound = true;
+    } else {
+        std::string command = inputSearch.substr(1, 2);
+        size_t underscorePos = inputSearch.find('_', 3);
+        if (underscorePos == std::string::npos || underscorePos + 1 >= inputSearch.size()) {
+            std::cerr << "\n\033[1;91mExpected '_' followed by settings (e.g., *cl_mu).\033[0;1m\n";
+            validInput = false;
+        } else {
+            std::string settingsStr = inputSearch.substr(underscorePos + 1);
+            newValue = (command == "cl") ? "compact" : "full";
+
+            // Map characters to settings (e.g., 'm' → mount_list)
+            std::unordered_map<char, std::string> settingMap = {
+                {'m', "mount_list"},
+                {'u', "umount_list"},
+                {'f', "cp_mv_rm_list"},
+                {'c', "conversion_lists"},
+                {'w', "write_list"}
+            };
+
+            std::unordered_set<std::string> uniqueKeys;
+            for (char c : settingsStr) {
+                auto it = settingMap.find(c);
+                if (it != settingMap.end()) {
+                    const std::string& key = it->second;
+                    if (uniqueKeys.insert(key).second) {
+                        settingKeys.push_back(key);
+                    }
                 } else {
-                    outFile << line << "\n";
+                    std::cerr << "\n\033[1;91mInvalid setting character: '" << c << "'.\033[0;1m\n";
+                    validInput = false;
+                    break;
                 }
             }
-            
-            // If setting wasn't found in existing lines, add it
-            if (!settingFound) {
-                outFile << settingKey << " = " << newValue << "\n";
+        }
+    }
+
+    if (!validInput || settingKeys.empty()) {
+        if (validInput) std::cerr << "\n\033[1;91mNo valid settings specified.\033[0;1m\n";
+        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        return;
+    }
+
+    // Update config lines for each setting
+    std::unordered_set<std::string> unprocessedSettings(settingKeys.begin(), settingKeys.end());
+    for (auto& line : configLines) {
+        for (auto it = unprocessedSettings.begin(); it != unprocessedSettings.end();) {
+            const std::string& settingKey = *it;
+            if (line.find(settingKey + " =") == 0) {
+                line = settingKey + " = " + newValue;
+                it = unprocessedSettings.erase(it);
+            } else {
+                ++it;
             }
-            
-            outFile.close();
-            // Display confirmation message
-            std::cout << "\n\033[0;1mDisplay mode for " << settingKey << " set to \033[1;92m" 
-                      << newValue << "\033[0;1m.\033[0;1m\n";
-            
-            // Update only the relevant toggle flag
+        }
+    }
+
+    // Add new settings if they didn't exist
+    for (const auto& settingKey : unprocessedSettings) {
+        configLines.push_back(settingKey + " = " + newValue);
+    }
+
+    // Write updated config to file
+    std::ofstream outFile(configPath);
+    if (outFile.is_open()) {
+        for (const auto& line : configLines) {
+            outFile << line << "\n";
+        }
+        outFile.close();
+
+        // Update toggle flags for each affected setting
+        for (const auto& settingKey : settingKeys) {
             if (settingKey == "mount_list") {
                 toggleFullListMount = (newValue == "full");
             } else if (settingKey == "umount_list") {
@@ -717,11 +783,19 @@ void setDisplayMode(const std::string& inputSearch) {
             } else if (settingKey == "write_list") {
                 toggleFullListWrite = (newValue == "full");
             }
-        } else {
-            std::cerr << "\n\033[1;91mFailed to write configuration, unable to access: \033[1;91m'\033[1;93m" 
-                      << configPath << "\033[1;91m'.\033[0;1m\n";
         }
+
+        // Display confirmation
+        std::cout << "\n\033[0;1mDisplay mode set to \033[1;92m" << newValue << "\033[0;1m for:\n";
+        for (const auto& key : settingKeys) {
+            std::cout << "  - " << key << "\n";
+        }
+        std::cout << "\033[0;1m";
+    } else {
+        std::cerr << "\n\033[1;91mFailed to write to config file: \033[1;93m'" 
+                  << configPath << "'\033[1;91m.\033[0;1m\n";
     }
+
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
@@ -811,15 +885,16 @@ void helpSearches(bool isCpMv) {
 				<< "   • Enter \033[1;35m'stats'\033[0m - View on-disk ISO cache statistics (ImportISO only)\n" << std::endl;
               
 		std::cout << "\033[1;32m4. Special Configuration Commands:\033[0m\n\n"
-          << "    \033[1;38;5;94m1. Auto-Update ISO Cache:\033[0m\n"
-          << "        • Enter \033[1;35m'*auto_on'\033[0m or \033[1;35m'*auto_off'\033[0m - Enable/Disable ISO cache auto-update via stored folder paths (ImportISO only)\n\n"
-          << "    \033[1;38;5;94m2. Display Mode Settings (fl = full list, cl = compact list):\033[0m\n"
-          << "        • Mount list:       Enter \033[1;35m'*fl_m'\033[0m  or  \033[1;35m'*cl_m'\033[0m\n"
-          << "        • Umount list:      Enter \033[1;35m'*fl_u'\033[0m  or  \033[1;35m'*cl_u'\033[0m\n"
-          << "        • cp/mv/rm list:    Enter \033[1;35m'*fl_fo'\033[0m or  \033[1;35m'*cl_fo'\033[0m\n"
-          << "        • Write list:       Enter \033[1;35m'*fl_w'\033[0m  or  \033[1;35m'*cl_w'\033[0m\n"
-          << "        • Conversion lists: Enter \033[1;35m'*fl_c'\033[0m  or  \033[1;35m'*cl_c'\033[0m\n"
-          << std::endl;
+			<< "    \033[1;38;5;94m1. Auto-Update ISO Cache:\033[0m\n"
+			<< "        • Enter \033[1;35m'*auto_on'\033[0m or \033[1;35m'*auto_off'\033[0m - Enable/Disable ISO cache auto-update via stored folder paths (ImportISO only)\n\n"
+			<< "    \033[1;38;5;94m2. Display Mode Settings (fl = full list, cl = compact list):\033[0m\n"
+			<< "        • Mount list:       Enter \033[1;35m'*fl_m'\033[0m or \033[1;35m'*cl_m'\033[0m\n"
+			<< "        • Umount list:      Enter \033[1;35m'*fl_u'\033[0m or \033[1;35m'*cl_u'\033[0m\n"
+			<< "        • cp/mv/rm list:    Enter \033[1;35m'*fl_f'\033[0m or \033[1;35m'*cl_f'\033[0m\n"
+			<< "        • Write list:       Enter \033[1;35m'*fl_w'\033[0m or \033[1;35m'*cl_w'\033[0m\n"
+			<< "        • Conversion lists: Enter \033[1;35m'*fl_c'\033[0m or \033[1;35m'*cl_c'\033[0m\n"
+			<< "        • Combine settings: Use multiple letters after '*fl_' or '*cl_' (e.g., '*cl_mu' for mount and umount lists)\n"
+			<< std::endl;
 	}
                 
     // Prompt to continue
