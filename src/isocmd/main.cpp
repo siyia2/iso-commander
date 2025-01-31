@@ -446,11 +446,11 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
 
     // Default values for required keys
     std::map<std::string, std::string> defaultConfig = {
-        {"mount_list", "short"},
-        {"unmount_list", "long"}, // Default for umount is long
-        {"cp_mv_rm_list", "short"},
-        {"write_list", "short"},
-        {"conversion_lists", "short"}
+        {"mount_list", "compact"},
+        {"unmount_list", "full"}, // Default for umount is long
+        {"cp_mv_rm_list", "compact"},
+        {"write_list", "compact"},
+        {"conversion_lists", "compact"}
     };
 
     // If the file cannot be opened, write the default configuration and return it
@@ -499,7 +499,7 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
         // Check if the key is one of the required keys
         if (defaultConfig.find(key) != defaultConfig.end()) {
             // Check if the value is "short" or "long"
-            if (valueStr == "short" || valueStr == "long") {
+            if (valueStr == "compact" || valueStr == "full") {
                 configMap[key] = valueStr;
             } else {
                 configMap[key] = defaultConfig[key]; // Use default value for invalid value
@@ -528,11 +528,11 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
     }
 
     // Set the boolean values based on the configMap
-    toggleFullListMount = (configMap["mount_list"] == "long");
-    toggleFullListUmount = (configMap["unmount_list"] == "long");
-    toggleFullListCpMvRm = (configMap["cp_mv_rm_list"] == "long");
-    toggleFullListWrite = (configMap["write_list"] == "long");
-    toggleFullListConversions = (configMap["conversion_lists"] == "long");
+    toggleFullListMount = (configMap["mount_list"] == "full");
+    toggleFullListUmount = (configMap["unmount_list"] == "full");
+    toggleFullListCpMvRm = (configMap["cp_mv_rm_list"] == "full");
+    toggleFullListWrite = (configMap["write_list"] == "full");
+    toggleFullListConversions = (configMap["conversion_lists"] == "full");
 
     return configMap;
 }

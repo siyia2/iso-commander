@@ -115,18 +115,18 @@ void setDisplayMode(const std::string& inputSearch) {
     
     // Determine which setting to update and its new value
     std::string settingKey;
-    std::string newValue = (inputSearch[0] == '*' && inputSearch[1] == 's') ? "short" : "long";
+    std::string newValue = (inputSearch[0] == '*' && inputSearch[1] == 's') ? "compact" : "full";
     bool validInput = true;
     
-    if (inputSearch == "*ll_m" || inputSearch == "*sl_m") {
+    if (inputSearch == "*fl_m" || inputSearch == "*cl_m") {
         settingKey = "mount_list";
-    } else if (inputSearch == "*ll_u" || inputSearch == "*sl_u") {
+    } else if (inputSearch == "*fl_u" || inputSearch == "*cl_u") {
         settingKey = "unmount_list";
-    } else if (inputSearch == "*ll_fo" || inputSearch == "*sl_fo") {
+    } else if (inputSearch == "*fl_fo" || inputSearch == "*cl_fo") {
         settingKey = "cp_mv_rm_list";
-    } else if (inputSearch == "*ll_c" || inputSearch == "*sl_c") {
+    } else if (inputSearch == "*fl_c" || inputSearch == "*cl_c") {
         settingKey = "conversion_lists";
-    } else if (inputSearch == "*ll_w" || inputSearch == "*sl_w") {
+    } else if (inputSearch == "*fl_w" || inputSearch == "*cl_w") {
         settingKey = "write_list";
     } else {
         std::cerr << "\n\033[1;91mInvalid input for list display mode. Please use '*l' or '*s' prefix.\033[0;1m\n";
@@ -160,15 +160,15 @@ void setDisplayMode(const std::string& inputSearch) {
             
             // Update only the relevant toggle flag
             if (settingKey == "mount_list") {
-                toggleFullListMount = (newValue == "long");
+                toggleFullListMount = (newValue == "full");
             } else if (settingKey == "unmount_list") {
-                toggleFullListUmount = (newValue == "long");
+                toggleFullListUmount = (newValue == "full");
             } else if (settingKey == "cp_mv_rm_list") {
-                toggleFullListCpMvRm = (newValue == "long");
+                toggleFullListCpMvRm = (newValue == "full");
             } else if (settingKey == "conversion_lists") {
-                toggleFullListConversions = (newValue == "long");
+                toggleFullListConversions = (newValue == "full");
             } else if (settingKey == "write_list") {
-                toggleFullListWrite = (newValue == "long");
+                toggleFullListWrite = (newValue == "full");
             }
         } else {
             std::cerr << "\n\033[1;91mFailed to write configuration, unable to access: \033[1;91m'\033[1;93m" 
@@ -250,7 +250,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
         bool isCpMv= false;
         
         const std::set<std::string> validInputs = {
-			"*ll_m", "*sl_m", "*ll_u", "*sl_u", "*ll_fo", "*sl_fo", "*ll_w", "*sl_w", "*ll_c", "*sl_c"
+			"*fl_m", "*cl_m", "*fl_u", "*cl_u", "*fl_fo", "*cl_fo", "*fl_w", "*cl_w", "*fl_c", "*cl_c"
 		};
         
         // Interactive prompt setup (similar to original code)
