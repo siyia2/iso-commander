@@ -800,19 +800,19 @@ void helpSearches(bool isCpMv) {
     if (!isCpMv) {
 		std::cout << "\033[1;32m2. Special Cleanup Commands:\033[0m\n"
 				<< "   • Enter \033[1;35m'clr'\033[0m - Clear cache:\n"
-				<< "     - In Convert2ISO search prompts: Clears corresponding RAM cache\n"
-				<< "     - In ImportISO search prompt: Clears on-disk ISO cache\n"
+				<< "     - In Convert2ISO: Clears corresponding RAM cache\n"
+				<< "     - In ImportISO: Clears on-disk ISO cache\n"
 				<< "   • Enter \033[1;35m'clr_paths'\033[0m - Clear folder path history\n"
 				<< "   • Enter \033[1;35m'clr_filter'\033[0m - Clear filter history\n" << std::endl;
               
 		std::cout << "\033[1;32m3. Special Display Commands:\033[0m\n"
-				<< "   • Enter \033[1;35m'ls'\033[0m - List cached image file entries (Convert2ISO search prompts only)\n"
-				<< "   • Enter \033[1;35m'stats'\033[0m - View on-disk ISO cache statistics (ImportISO search prompt only)\n" << std::endl;
+				<< "   • Enter \033[1;35m'ls'\033[0m - List cached image file entries (Convert2ISO only)\n"
+				<< "   • Enter \033[1;35m'stats'\033[0m - View on-disk ISO cache statistics (ImportISO only)\n" << std::endl;
               
-		std::cout << "\033[1;32m4. Special Configuration Commands:\033[0m\n\n"
-          << "\033[38;5;94mAuto-Update ISO Cache:\033[0m\n"
-          << "   • Enter \033[1;35m'*auto_on'\033[0m or \033[1;35m'*auto_off'\033[0m  - Enable/Disable ISO cache auto-update via stored readline paths (ImportISO search prompt only)\n\n"
-          << "\033[38;5;94mDisplay Mode Settings (cl = compact list, cl = compact list):\033[0m\n"
+		std::cout << "\033[1;32m4. Special Configuration Commands:\033[0m\n"
+          << "\n\033[38;5;94mAuto-Update ISO Cache:\033[0m\n"
+          << "   • Enter \033[1;35m'*auto_on'\033[0m or \033[1;35m'*auto_off'\033[0m - Enable/Disable ISO cache auto-update via stored folder paths (ImportISO only)\n\n"
+          << "\033[38;5;94mDisplay Mode Settings (fl = full list, cl = compact list):\033[0m\n"
           << "   Set default display mode for:\n"
           << "   • Mount list:       Enter \033[1;35m'*fl_m'\033[0m or \033[1;35m'*cl_m'\033[0m\n"
           << "   • Umount list:      Enter \033[1;35m'*fl_u'\033[0m or \033[1;35m'*cl_u'\033[0m\n"
