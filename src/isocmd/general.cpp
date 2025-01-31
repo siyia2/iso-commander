@@ -650,7 +650,7 @@ void helpSelections() {
     
     // Special commands
     std::cout << "\033[1;32m2. Special Selection Commands:\033[0m\n"
-			  << "   • Enter \033[1;34m'~'\033[0m - Switch between short and full paths\n"
+			  << "   • Enter \033[1;34m'~'\033[0m - Switch between compact and full lists\n"
               << "   • Enter \033[1;34m'/'\033[0m - Filter the current list based on a search terms (e.g., 'term' or 'term1;term2')\n"
               << "   • Enter \033[1;34m'/term1;term2'\033[0m - Directly filter the list for items containing 'term1' and 'term2'\n"
               << "   - Note: If filtering has no matches, no message or list update is issued\n" << std::endl;
@@ -689,13 +689,13 @@ void helpSearches(bool isCpMv) {
           << "   • Enter \033[1;35m'*auto_on'\033[0m  - Enable auto-update of ISO cache at startup using stored readline paths\n"
           << "   • Enter \033[1;35m'*auto_off'\033[0m - Disable ISO cache auto-update\n"
           << "   (ImportISO search prompt only)\n\n"
-          << "\033[38;5;94mDisplay Mode Settings (sl = short list, ll = long list):\033[0m\n"
+          << "\033[38;5;94mDisplay Mode Settings (cl = compact list, fl = full list):\033[0m\n"
           << "   Set default display mode for:\n"
-          << "   • Mount list:       Enter \033[1;35m'*ll_m'\033[0m or \033[1;35m'*sl_m'\033[0m\n"
-          << "   • Unmount list:     Enter \033[1;35m'*ll_u'\033[0m or \033[1;35m'*sl_u'\033[0m\n"
-          << "   • cp/mv/rm list:    Enter \033[1;35m'*ll_fo'\033[0m or \033[1;35m'*sl_fo'\033[0m\n"
-          << "   • Write list:       Enter \033[1;35m'*ll_w'\033[0m or \033[1;35m'*sl_w'\033[0m\n"
-          << "   • Conversion lists: Enter \033[1;35m'*ll_c'\033[0m or \033[1;35m'*sl_c'\033[0m\n"
+          << "   • Mount list:       Enter \033[1;35m'*fl_m'\033[0m or \033[1;35m'*sl_m'\033[0m\n"
+          << "   • Unmount list:     Enter \033[1;35m'*fl_u'\033[0m or \033[1;35m'*sl_u'\033[0m\n"
+          << "   • cp/mv/rm list:    Enter \033[1;35m'*fl_fo'\033[0m or \033[1;35m'*sl_fo'\033[0m\n"
+          << "   • Write list:       Enter \033[1;35m'*fl_w'\033[0m or \033[1;35m'*sl_w'\033[0m\n"
+          << "   • Conversion lists: Enter \033[1;35m'*fl_c'\033[0m or \033[1;35m'*sl_c'\033[0m\n"
           << std::endl;
 	}
                 
