@@ -1,6 +1,6 @@
 
 .\" Manpage for isocmd
-.TH ISOCMD 1 "January 2025" "Iso Commander 5.5.9" "Iso-Commander Manual"
+.TH ISOCMD 1 "January 2025" "Iso Commander 5.6.0" "Iso-Commander Manual"
 .SH NAME
 Iso Commander or isocmd.
 
@@ -24,6 +24,57 @@ Display the version of the program.
 .B Ctrl + z
 
  - Suspend the isocmd process and move it to the background.
+
+.SH CONFIGURATION
+The configuration file for isocmd is located at
+.I ~/.config/isocmd/config\fR.
+.PP
+It uses a simple key-value format with '=' as the separator. Each setting should be on its own line, order is arbitrary.
+
+.SS CONFIGURATION OPTIONS
+.TP
+.B auto_update
+Controls automatic update behavior fo ISO. 
+If enabled it works in the background at every startup and it searches previously stored folder paths.
+.br
+Values: 0 (disabled), 1 (enabled)
+.br
+Default: 0
+.TP
+.B conversion_lists
+Sets the display format for conversion lists
+.br
+Values: compact, full
+.br
+Default: compact
+.TP
+.B cp_mv_rm_list
+Sets the display format for copy, move, and remove list
+.br
+Values: compact, full
+.br
+Default: compact
+.TP
+.B mount_list
+Sets the display format for mount list
+.br
+Values: compact, full
+.br
+Default: compact
+.TP
+.B unmount_list
+Sets the display format for unmount list
+.br
+Values: compact, full
+.br
+Default: full
+.TP
+.B write_list
+Sets the display format for write list
+.br
+Values: compact, full
+.br
+Default: compact
 
 .SH FEATURES
 Iso Commander provides the following key functionalities:
@@ -67,17 +118,6 @@ Creates and updates an ISO cache for fast and organized access:
 - Cache file locations:
   - User mode: \fI~/.local/share/isocmd/database/iso_commander_cache.txt\fR
   - Root mode: \fI/root/.local/share/isocmd/database/iso_commander_cache.txt\fR
-
-.TP
-.B AutoImportISO
-Automatically updates ISO cache in the background by scanning all stored folder paths from readline history at every startup:
-
-- Enter 1 to enable or 0 to disable (default is 0).
-
-- Configuration file location for AutoImportISO:
-  - User mode: \fI~/.config/isocmd/config/iso_commander_automatic.txt\fR
-  - Root mode: \fI/root/.config/isocmd/config/iso_commander_automatic.txt\fR
-
 
 .TP
 .B Automatic ISO Cache Management
