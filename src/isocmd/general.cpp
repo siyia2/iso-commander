@@ -662,7 +662,7 @@ void setDisplayMode(const std::string& inputSearch) {
     
     // Determine which setting to update and its new value
     std::string settingKey;
-    std::string newValue = (inputSearch[0] == '*' && inputSearch[1] == 's') ? "compact" : "full";
+    std::string newValue = (inputSearch.substr(0, 3) == "*cl") ? "compact" : "full";
     bool validInput = true;
     
     if (inputSearch == "*fl_m" || inputSearch == "*cl_m") {
