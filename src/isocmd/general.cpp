@@ -633,6 +633,131 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
 }
 
 
+// Function to set display mode for lists
+void setDisplayMode(const std::string& inputSearch) {
+    // First read all existing lines from the config file to preserve them
+    std::vector<std::string> configLines;
+    bool settingFound = false;
+    
+    std::ifstream inFile(configPath);
+    if (inFile.is_open()) {
+        std::string line;
+        while (std::getline(inFile, line)) {
+            configLines.push_back(line);
+        }
+        inFile.close();
+    }
+    
+    // Create directory if it doesn't exist
+    std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
+    if (!std::filesystem::exists(dirPath)) {
+        if (!std::filesystem::create_directories(dirPath)) {
+            std::cerr << "\n\033[1;91mFailed to create directory: \033[1;93m'" 
+                      << dirPath.string() << "'\033[1;91m.\033[0;1m\n";
+            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            return;
+        }
+    }
+    
+    // Determine which setting to update and its new value
+    std::string settingKey;
+    std::string newValue = (inputSearch[0] == '*' && inputSearch[1] == 's') ? "compact" : "full";
+    bool validInput = true;
+    
+    if (inputSearch == "*fl_m" || inputSearch == "*cl_m") {
+        settingKey = "mount_list";
+    } else if (inputSearch == "*fl_u" || inputSearch == "*cl_u") {
+        settingKey = "unmount_list";
+    } else if (inputSearch == "*fl_fo" || inputSearch == "*cl_fo") {
+        settingKey = "cp_mv_rm_list";
+    } else if (inputSearch == "*fl_c" || inputSearch == "*cl_c") {
+        settingKey = "conversion_lists";
+    } else if (inputSearch == "*fl_w" || inputSearch == "*cl_w") {
+        settingKey = "write_list";
+    } else {
+        std::cerr << "\n\033[1;91mInvalid input for list display mode. Please use '*l' or '*s' prefix.\033[0;1m\n";
+        validInput = false;
+    }
+    
+    if (validInput) {
+        // Update or add the specified setting
+        std::ofstream outFile(configPath);
+        if (outFile.is_open()) {
+            // First write all existing lines, updating the specific setting if found
+            for (size_t i = 0; i < configLines.size(); i++) {
+                std::string line = configLines[i];
+                if (line.find(settingKey + " =") == 0) {
+                    outFile << settingKey << " = " << newValue << "\n";
+                    settingFound = true;
+                } else {
+                    outFile << line << "\n";
+                }
+            }
+            
+            // If setting wasn't found in existing lines, add it
+            if (!settingFound) {
+                outFile << settingKey << " = " << newValue << "\n";
+            }
+            
+            outFile.close();
+            // Display confirmation message
+            std::cout << "\n\033[0;1mDisplay mode for " << settingKey << " set to \033[1;92m" 
+                      << newValue << "\033[0;1m.\033[0;1m\n";
+            
+            // Update only the relevant toggle flag
+            if (settingKey == "mount_list") {
+                toggleFullListMount = (newValue == "full");
+            } else if (settingKey == "unmount_list") {
+                toggleFullListUmount = (newValue == "full");
+            } else if (settingKey == "cp_mv_rm_list") {
+                toggleFullListCpMvRm = (newValue == "full");
+            } else if (settingKey == "conversion_lists") {
+                toggleFullListConversions = (newValue == "full");
+            } else if (settingKey == "write_list") {
+                toggleFullListWrite = (newValue == "full");
+            }
+        } else {
+            std::cerr << "\n\033[1;91mFailed to write configuration, unable to access: \033[1;91m'\033[1;93m" 
+                      << configPath << "\033[1;91m'.\033[0;1m\n";
+        }
+    }
+    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+}
+
+
+// Function to clear path and filter history
+void clearHistory(const std::string& inputSearch) {
+    const std::string basePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/";
+    std::string filePath;
+    std::string historyType;
+
+    if (inputSearch == "clr_paths") {
+        filePath = basePath + "iso_commander_history_cache.txt";
+        historyType = "Path";
+    } else if (inputSearch == "clr_filter") {
+        filePath = basePath + "iso_commander_filter_cache.txt";
+        historyType = "Filter";
+    } else {
+        std::cerr << "\n\001\033[1;91mInvalid command: \001\033[1;93m'" 
+                  << inputSearch << "'\001\033[1;91m." << std::endl;
+        return;
+    }
+
+    if (std::remove(filePath.c_str()) != 0) {
+        std::cerr << "\n\001\033[1;91mError clearing " << historyType << " history: \001\033[1;93m'" 
+                  << filePath << "'\001\033[1;91m. File missing or inaccessible." << std::endl;
+    } else {
+        std::cout << "\n\001\033[1;92m" << historyType << " history cleared successfully." << std::endl;
+        clear_history();
+    }
+
+    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+}
+
+
 // Function to display how to select items from lists
 void helpSelections() {
     clearScrollBuffer();
