@@ -52,8 +52,26 @@ extern std::vector<std::string> globalIsoFileList;
 // Holds IsoCache directory path
 extern const std::string cacheFileName;
 
-// For toggling between full and shortened paths in lists
-extern bool toggleFullList;
+// For toggling between full and shortened paths in all lists except umount
+extern bool toggleFullListMount;
+
+// For toggling between full and shortened paths in umount list
+extern bool toggleFullListUmount;
+
+// For toggling between full and shortened paths in cpMvRm
+extern bool toggleFullListCpMvRm;
+
+// For toggling between full and shortened paths in write
+extern bool toggleFullListWrite;
+
+// For toggling between full and shortened paths in conversions
+extern bool toggleFullListConversions;
+
+// Global helper variables to determine function location
+extern bool atMount;
+extern bool atConversions;
+extern bool atWrite;
+extern bool atCpMvRm;
 
 // Cache for directory and filename transformations
 extern std::unordered_map<std::string, std::string> transformationCache;
@@ -61,6 +79,7 @@ extern std::unordered_map<std::string, std::string> transformationCache;
 // For automatic ISO cache refresh from history paths
 extern const std::string historyFilePath;
 
+// Holds configuration path
 extern const std::string configPath;
 
 // For tracking cancellations
@@ -84,7 +103,6 @@ bool startsWithZero(const std::string& str);
 bool isNumeric(const std::string& str);
 bool isDirectoryEmpty(const std::string& path);
 bool readUserConfigUpdates(const std::string& filePath);
-bool readUserConfigLists(const std::string& filePath);
 
 // ints
 int prevent_readline_keybindings(int, int);
@@ -110,6 +128,7 @@ void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username,
 
 // stds
 std::map<std::string, std::string> readConfig(const std::string& configPath);
+std::map<std::string, std::string> readUserConfigLists(const std::string& filePath);
 
 
 // GENERAL
@@ -119,8 +138,10 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view
 
 // voids
 void helpSelections();
-void helpSearches();
+void helpSearches(bool isCpMv);
 void helpMappings();
+void clearHistory(const std::string& inputSearch);
+void setDisplayMode(const std::string& inputSearch);
 void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& maxDepth, bool& verbose);
 void printList(const std::vector<std::string>& items, const std::string& listType);
 void verbosePrint(const std::set<std::string>& primarySet, const std::set<std::string>& secondarySet , const std::set<std::string>& tertiarySet, const std::set<std::string>& quaternarySet,const std::set<std::string>& errorSet, int printType);
@@ -228,8 +249,6 @@ std::set<std::string> processBatchPaths(const std::vector<std::string>& batchPat
 std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, std::set<std::string>& fileNames, int& currentCacheOld, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, const std::vector<std::string>& directoryPaths, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrorsFind);
 
 // voids
-void clearHistory(const std::string& inputSearch);
-void setDisplayMode(const std::string& inputSearch);
 void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, const bool& modeMdf, const bool& modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks);
 void verboseFind(std::set<std::string>& invalidDirectoryPaths, const std::vector<std::string>& directoryPaths,std::set<std::string>& processedErrorsFind);
 void verboseSearchResults(const std::string& fileExtension, std::set<std::string>& fileNames, std::set<std::string>& invalidDirectoryPaths, bool newFilesFound, bool list, int currentCacheOld, const std::vector<std::string>& files, const std::chrono::high_resolution_clock::time_point& start_time, std::set<std::string>& processedErrorsFind,std::vector<std::string>& directoryPaths);
