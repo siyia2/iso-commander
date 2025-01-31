@@ -133,8 +133,8 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
 
 // GENERAL
 
-// stds
-std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view path);
+// bools
+bool isValidInput(const std::string& input);
 
 // voids
 void helpSelections();
@@ -150,6 +150,9 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 
 // size_ts
 size_t getTotalFileSize(const std::vector<std::string>& files);
+
+// stds
+std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view path);
 
 
 // HISTORY
