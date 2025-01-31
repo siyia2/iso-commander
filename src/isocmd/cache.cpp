@@ -451,8 +451,8 @@ bool isValidDirectory(const std::string& path) {
 void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, const int& maxDepth, const bool& historyPattern) {
 	
 	const std::set<std::string> validInputs = {
-        "*ll_m", "*sl_m", "*ll_u", "*sl_u", "*ll_fo", "*sl_fo", "*ll_w", "*sl_w", "*ll_c", "*sl_c"
-    };
+			"*fl_m", "*cl_m", "*fl_u", "*cl_u", "*fl_fo", "*cl_fo", "*fl_w", "*cl_w", "*fl_c", "*cl_c"
+	};
 	
     if (inputSearch == "stats") {
         try {
@@ -603,7 +603,7 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
         maxDepth = -1;
         
         const std::set<std::string> validInputs = {
-			"*ll_m", "*sl_m", "*ll_u", "*sl_u", "*ll_fo", "*sl_fo", "*ll_w", "*sl_w", "*ll_c", "*sl_c"
+			"*fl_m", "*cl_m", "*fl_u", "*cl_u", "*fl_fo", "*cl_fo", "*fl_w", "*cl_w", "*fl_c", "*cl_c"
 		};
         
         // Restore readline autocomplete and screen clear bindings
