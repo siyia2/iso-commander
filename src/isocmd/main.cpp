@@ -213,7 +213,7 @@ void submenu1(int& maxDepth, bool& historyPattern, bool& verbose) {
         std::cout << "\033[1;32m+-------------------------+\n";
         std::cout << "\033[1;32m|1. Mount                 |\n";
         std::cout << "\033[1;32m+-------------------------+\n";
-        std::cout << "\033[1;32m|2. Unmount               |\n";
+        std::cout << "\033[1;32m|2. Umount                |\n";
         std::cout << "\033[1;32m+-------------------------+\n";
         std::cout << "\033[1;32m|3. Delete                |\n";
         std::cout << "\033[1;32m+-------------------------+\n";
