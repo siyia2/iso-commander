@@ -349,7 +349,6 @@ void loadCache(std::vector<std::string>& isoFiles) {
     }
 
     std::vector<std::string> loadedFiles;
-    std::unordered_set<std::string> seenEntries; // Track duplicates
 
     char* start = mappedFile;
     char* end = mappedFile + fileSize;
@@ -358,8 +357,8 @@ void loadCache(std::vector<std::string>& isoFiles) {
         std::string line(start, lineEnd);
         start = lineEnd + 1;
 
-        if (!line.empty() && seenEntries.insert(line).second) {
-            loadedFiles.push_back(std::move(line)); // Preserve order, skip duplicates
+        if (!line.empty()) {
+            loadedFiles.push_back(std::move(line));
         }
     }
 
@@ -367,7 +366,7 @@ void loadCache(std::vector<std::string>& isoFiles) {
     flock(fd, LOCK_UN);
     close(fd);
 
-    isoFiles.swap(loadedFiles); // Update isoFiles with ordered, deduplicated entries
+    isoFiles.swap(loadedFiles);
 }
 
 
