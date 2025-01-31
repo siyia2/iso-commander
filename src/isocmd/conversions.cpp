@@ -130,7 +130,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
         
         // Interactive prompt setup (similar to original code)
         std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;38;5;208m\002" + fileExtension +
-                             "\001\033[1;94m\002 files and import into \001\033[1;93m\002RAM\001\033[1;94m\002 cache, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
+                             "\001\033[1;94m\002 files and import them into \001\033[1;93m\002RAM\001\033[1;94m\002 cache, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
 
         // Get user input
         char* rawinput = readline(prompt.c_str());

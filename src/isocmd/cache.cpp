@@ -578,7 +578,7 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 		rl_bind_key('\t', rl_complete);
         bool isCpMv= false;
         // Prompt the user to enter directory paths for manual cache refresh
-		std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;92m\002.iso\001\033[1;94m\002 files and import into \001\033[1;92m\002on-disk\001\033[1;94m\002 cache, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
+		std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;92m\002.iso\001\033[1;94m\002 files and import them into \001\033[1;92m\002on-disk\001\033[1;94m\002 cache, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
         char* rawSearchQuery = readline(prompt.c_str());
         
 
