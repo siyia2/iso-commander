@@ -117,7 +117,7 @@ int main(int argc, char *argv[]) {
         print_ascii();
         
         if (isImportRunning.load()) {
-			std::cout << "\033[2m[Auto-update operates in the background...]\033[0m\n";
+			std::cout << "\033[2m[Auto-update running in the background...]\033[0m\n";
 		}
         
         // Display the main menu options
