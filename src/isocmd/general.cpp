@@ -835,7 +835,7 @@ void helpMappings() {
     // Title
     std::cout << "\n\033[1;36m===== Help Guide For Mappings =====\033[0m\n" << std::endl;
     
-    std::cout << "\033[1;32m. Selecting Mappings:\033[0m\n"
+    std::cout << "\033[1;32m1. Selecting Mappings:\033[0m\n"
 			  << "   • Mapping = NewISOIndex>RemovableUSBDevice\n"
               << "   • Single mapping: Enter a mapping (e.g., '1>/dev/sdc')\n"
               << "   • Multiple mappings: Separate with ; (e.g., '1>/dev/sdc;2>/dev/sdd' or '1>/dev/sdc;1>/dev/sdd')\n" << std::endl;
