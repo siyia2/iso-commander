@@ -887,7 +887,7 @@ void helpSearches(bool isCpMv) {
 		std::cout << "\033[1;32m4. Special Configuration Commands:\033[0m\n\n"
 			<< "    \033[1;38;5;94m1. Auto-Update ISO Cache:\033[0m\n"
 			<< "        • Enter \033[1;35m'*auto_on'\033[0m or \033[1;35m'*auto_off'\033[0m - Enable/Disable ISO cache auto-update via stored folder paths (ImportISO only)\n\n"
-			<< "    \033[1;38;5;94m2. Display Mode Settings (fl = full list, cl = compact list):\033[0m\n"
+			<< "    \033[1;38;5;94m2. Set Default Display Modes (fl = full list, cl = compact list):\033[0m\n"
 			<< "        • Mount list:       Enter \033[1;35m'*fl_m'\033[0m or \033[1;35m'*cl_m'\033[0m\n"
 			<< "        • Umount list:      Enter \033[1;35m'*fl_u'\033[0m or \033[1;35m'*cl_u'\033[0m\n"
 			<< "        • cp/mv/rm list:    Enter \033[1;35m'*fl_f'\033[0m or \033[1;35m'*cl_f'\033[0m\n"
