@@ -320,20 +320,9 @@ void backgroundCacheImport(int maxDepthParam, std::atomic<bool>& isImportRunning
 void loadCache(std::vector<std::string>& isoFiles) {
     std::string cacheFilePath = getHomeDirectory() + "/.local/share/isocmd/database/iso_commander_cache.txt";
 
-    // Check if the cache file exists
-    struct stat fileStat;
-    if (stat(cacheFilePath.c_str(), &fileStat) == -1) {
-        return;
-    }
-
-    if (fileStat.st_size == 0) {
-        isoFiles.clear();
-        return;
-    }
-
     int fd = open(cacheFilePath.c_str(), O_RDONLY);
     if (fd == -1) {
-        return;
+        return; // File doesn't exist or cannot be opened
     }
 
     // Acquire a shared lock using flock
@@ -342,32 +331,43 @@ void loadCache(std::vector<std::string>& isoFiles) {
         return;
     }
 
+    struct stat fileStat;
+    if (fstat(fd, &fileStat) == -1 || fileStat.st_size == 0) {
+        flock(fd, LOCK_UN);
+        close(fd);
+        isoFiles.clear();
+        return;
+    }
+
     const auto fileSize = fileStat.st_size;
 
     char* mappedFile = static_cast<char*>(mmap(nullptr, fileSize, PROT_READ, MAP_PRIVATE, fd, 0));
     if (mappedFile == MAP_FAILED) {
-        flock(fd, LOCK_UN);  // Release the lock
+        flock(fd, LOCK_UN);
         close(fd);
         return;
     }
 
-    std::set<std::string> uniqueIsoFiles;
+    std::vector<std::string> loadedFiles;
+    std::unordered_set<std::string> seenEntries; // Track duplicates
+
     char* start = mappedFile;
     char* end = mappedFile + fileSize;
     while (start < end) {
         char* lineEnd = std::find(start, end, '\n');
         std::string line(start, lineEnd);
-        if (!line.empty()) {
-            uniqueIsoFiles.insert(std::move(line));
-        }
         start = lineEnd + 1;
+
+        if (!line.empty() && seenEntries.insert(line).second) {
+            loadedFiles.push_back(std::move(line)); // Preserve order, skip duplicates
+        }
     }
 
     munmap(mappedFile, fileSize);
-    flock(fd, LOCK_UN);  // Release the lock
+    flock(fd, LOCK_UN);
     close(fd);
 
-    isoFiles.assign(uniqueIsoFiles.begin(), uniqueIsoFiles.end());
+    isoFiles.swap(loadedFiles); // Update isoFiles with ordered, deduplicated entries
 }
 
 
@@ -376,11 +376,8 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
     std::filesystem::path cachePath = cacheDirectory;
     cachePath /= cacheFileName;
 
-    // Create the cache directory if it does not exist
-    if (!std::filesystem::exists(cacheDirectory)) {
-        if (!std::filesystem::create_directories(cacheDirectory)) {
-            return false;
-        }
+    if (!std::filesystem::exists(cacheDirectory) && !std::filesystem::create_directories(cacheDirectory)) {
+        return false;
     }
 
     if (!std::filesystem::is_directory(cacheDirectory)) {
@@ -388,15 +385,27 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
     }
 
     std::vector<std::string> existingCache;
-    loadCache(existingCache);
+    loadCache(existingCache); // Ensure loadCache preserves order
 
-    std::set<std::string> combinedCache(existingCache.begin(), existingCache.end());
-    for (const std::string& iso : isoFiles) {
-        combinedCache.insert(iso);
+    std::unordered_set<std::string> seen;
+    std::vector<std::string> combinedCache;
+
+    // Preserve existing order and add new entries to the end
+    for (const auto& entry : existingCache) {
+        if (seen.insert(entry).second) {
+            combinedCache.push_back(entry);
+        }
     }
 
-    while (combinedCache.size() > maxCacheSize) {
-        combinedCache.erase(combinedCache.begin());
+    for (const auto& iso : isoFiles) {
+        if (seen.insert(iso).second) {
+            combinedCache.push_back(iso);
+        }
+    }
+
+    // Trim from the front if over size
+    if (combinedCache.size() > maxCacheSize) {
+        combinedCache.erase(combinedCache.begin(), combinedCache.begin() + (combinedCache.size() - maxCacheSize));
     }
 
     int fd = open(cachePath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -404,34 +413,23 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
         return false;
     }
 
-    // Acquire an exclusive lock using flock
     if (flock(fd, LOCK_EX) == -1) {
         close(fd);
         return false;
     }
 
-    std::ofstream cacheFile(cachePath, std::ios::out | std::ios::trunc);
-    if (cacheFile.is_open()) {
-        for (const std::string& iso : combinedCache) {
-            cacheFile << iso << "\n";
+    bool success = true;
+    for (const auto& entry : combinedCache) {
+        std::string line = entry + "\n";
+        if (write(fd, line.data(), line.size()) == -1) {
+            success = false;
+            break;
         }
-
-        if (cacheFile.good()) {
-            cacheFile.close();
-            flock(fd, LOCK_UN);  // Release the lock
-            close(fd);
-            return true;
-        } else {
-            cacheFile.close();
-            flock(fd, LOCK_UN);  // Release the lock
-            close(fd);
-            return false;
-        }
-    } else {
-        flock(fd, LOCK_UN);  // Release the lock
-        close(fd);
-        return false;
     }
+
+    flock(fd, LOCK_UN);
+    close(fd);
+    return success;
 }
 
 
