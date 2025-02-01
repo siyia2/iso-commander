@@ -11,46 +11,56 @@ static std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles h
 static std::vector<std::string> nrgFilesCache; // Memory cached nrgImgFiles here
 
 // Function to clear Ram Cache and memory transformations for bin/img mdf nrg files
-void clearRamCache (bool& modeMdf, bool& modeNrg) {
-
+void clearRamCache(bool& modeMdf, bool& modeNrg) {
     std::vector<std::string> extensions;
     std::string cacheType;
+    bool cacheIsEmpty = false;
 
     if (!modeMdf && !modeNrg) {
         extensions = {".bin", ".img"};
-        binImgFilesCache.clear();
         cacheType = "BIN/IMG";
+        cacheIsEmpty = binImgFilesCache.empty();
+        if (!cacheIsEmpty) binImgFilesCache.clear();
     } else if (modeMdf) {
         extensions = {".mdf"};
-        mdfMdsFilesCache.clear();
         cacheType = "MDF";
+        cacheIsEmpty = mdfMdsFilesCache.empty();
+        if (!cacheIsEmpty) mdfMdsFilesCache.clear();
     } else if (modeNrg) {
         extensions = {".nrg"};
-        nrgFilesCache.clear();
         cacheType = "NRG";
+        cacheIsEmpty = nrgFilesCache.empty();
+        if (!cacheIsEmpty) nrgFilesCache.clear();
     }
 
-    // Manually remove items with matching extensions
+    // Manually remove items with matching extensions from transformationCache
+    bool transformationCacheWasCleared = false;
     for (auto it = transformationCache.begin(); it != transformationCache.end();) {
         const std::string& key = it->first;
-        bool shouldErase = std::any_of(extensions.begin(), extensions.end(), 
+        bool shouldErase = std::any_of(extensions.begin(), extensions.end(),
             [&key](const std::string& ext) {
-                return key.size() >= ext.size() && 
+                return key.size() >= ext.size() &&
                        key.compare(key.size() - ext.size(), ext.size(), ext) == 0;
             });
-        
+
         if (shouldErase) {
             it = transformationCache.erase(it);
+            transformationCacheWasCleared = true;
         } else {
             ++it;
         }
     }
 
-    std::cout << "\n\033[1;92m" << cacheType << " RAM cache cleared.\033[0;1m\n";
+    // Display appropriate messages
+    if (cacheIsEmpty && !transformationCacheWasCleared) {
+        std::cout << "\n\033[1;93m" << cacheType << " cache is empty. Nothing to clear.\033[0;1m\n";
+    } else {
+        std::cout << "\n\033[1;92m" << cacheType << " RAM cache cleared.\033[0;1m\n";
+    }
+
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     clearScrollBuffer();
-    
 }
 
 
@@ -143,7 +153,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
 
         std::string inputSearch(mainSearch.get());
         
-        if (inputSearch == "clr_paths" || inputSearch == "clr_filter") {
+        if (inputSearch == "!clr_paths" || inputSearch == "!clr_filter") {
 			clearHistory(inputSearch);
 			continue;
 		}
@@ -166,7 +176,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
 
         // Determine input type
         list = (inputSearch == "ls");
-        clr = (inputSearch == "clr");
+        clr = (inputSearch == "!clr");
 
         // Handle cache clearing (similar to original code)
         if (clr) {

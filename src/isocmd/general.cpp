@@ -808,10 +808,10 @@ void clearHistory(const std::string& inputSearch) {
     std::string filePath;
     std::string historyType;
 
-    if (inputSearch == "clr_paths") {
+    if (inputSearch == "!clr_paths") {
         filePath = basePath + "iso_commander_history_cache.txt";
         historyType = "Path";
-    } else if (inputSearch == "clr_filter") {
+    } else if (inputSearch == "!clr_filter") {
         filePath = basePath + "iso_commander_filter_cache.txt";
         historyType = "Filter";
     } else {
@@ -875,15 +875,15 @@ void helpSearches(bool isCpMv) {
     if (isCpMv) std::cout << "   - Note: Special Commands are only available within Convert2ISO&ImportISO FolderPath prompts \n" << std::endl;
     if (!isCpMv) {
 		std::cout << "\033[1;32m2. Special Cleanup Commands:\033[0m\n"
-				<< "   • Enter \033[1;35m'clr'\033[0m - Clear cache:\n"
+				<< "   • Enter \033[1;33m'!clr'\033[0m - Clear cache:\n"
 				<< "     - In Convert2ISO: Clears corresponding RAM cache\n"
 				<< "     - In ImportISO: Clears on-disk ISO cache\n"
-				<< "   • Enter \033[1;35m'clr_paths'\033[0m - Clear folder path history\n"
-				<< "   • Enter \033[1;35m'clr_filter'\033[0m - Clear filter history\n" << std::endl;
+				<< "   • Enter \033[1;33m'!clr_paths'\033[0m - Clear folder path history\n"
+				<< "   • Enter \033[1;33m'!clr_filter'\033[0m - Clear filter history\n" << std::endl;
               
 		std::cout << "\033[1;32m3. Special Display Commands:\033[0m\n"
-				<< "   • Enter \033[1;35m'ls'\033[0m - List cached image file entries (Convert2ISO only)\n"
-				<< "   • Enter \033[1;35m'stats'\033[0m - View on-disk ISO cache statistics (ImportISO only)\n" << std::endl;
+				<< "   • Enter \033[1;34m'ls'\033[0m - List cached image file entries (Convert2ISO only)\n"
+				<< "   • Enter \033[1;34m'stats'\033[0m - View on-disk ISO cache statistics (ImportISO only)\n" << std::endl;
               
 		std::cout << "\033[1;32m4. Special Configuration Commands:\033[0m\n\n"
 			<< "    \033[1;38;5;208m1. Auto-Update ISO Cache:\033[0m\n"

@@ -472,7 +472,7 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         manualRefreshCache("", promptFlag, maxDepth, historyPattern);
 
-    } else if (inputSearch == "clr") {
+    } else if (inputSearch == "!clr") {
         if (std::remove(cacheFilePath.c_str()) != 0) {
             std::cerr << "\n\001\033[1;91mError clearing IsoCache: \001\033[1;93m'" 
                       << cacheFilePath << "\001'\033[1;91m. File missing or inaccessible." << std::endl;
@@ -496,7 +496,7 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
             manualRefreshCache("", promptFlag, maxDepth, historyPattern);
         }
 
-    } else if (inputSearch == "clr_paths" || inputSearch == "clr_filter") {
+    } else if (inputSearch == "!clr_paths" || inputSearch == "!clr_filter") {
         clearHistory(inputSearch);
         manualRefreshCache("", promptFlag, maxDepth, historyPattern);
 
@@ -595,7 +595,7 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 				manualRefreshCache("", promptFlag, maxDepth, historyPattern);
 			}        
 			
-            if (input == "stats" || input == "clr" || input == "clr_paths" || input == "clr_filter" || input == "*auto_off" || input == "*auto_on" || isValidInput(input)) {
+            if (input == "stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter" || input == "*auto_off" || input == "*auto_on" || isValidInput(input)) {
                 cacheAndMiscSwitches(input, promptFlag, maxDepth, historyPattern);
                 return;
             }
