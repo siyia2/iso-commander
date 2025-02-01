@@ -12,7 +12,6 @@ const int MAX_HISTORY_LINES = 50;
 
 const int MAX_HISTORY_PATTERN_LINES = 25;
 
-
 // Function to check if folder path history is empty
 bool isHistoryFileEmpty(const std::string& filePath) {
     // Check if the file exists
