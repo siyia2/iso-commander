@@ -12,6 +12,21 @@ const int MAX_HISTORY_LINES = 50;
 
 const int MAX_HISTORY_PATTERN_LINES = 25;
 
+
+// Function to check if folder path history is empty
+bool isHistoryFileEmpty(const std::string& filePath) {
+    // Check if the file exists
+    struct stat fileInfo;
+    if (stat(filePath.c_str(), &fileInfo) != 0) {
+        // File doesn't exist, consider it as empty
+        return true;
+    }
+
+    // Check if the file size is 0
+    return (fileInfo.st_size == 0);
+}
+
+
 // Function to load history from readline
 void loadHistory(bool& historyPattern) {
     // Only load history from file if it's not already populated in memory

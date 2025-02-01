@@ -119,8 +119,15 @@ int main(int argc, char *argv[]) {
         clearScrollBuffer();
         print_ascii();
         
-        if (isImportRunning.load()) {
-			std::cout << "\033[2m[Auto-update running in the background...]\033[0m\n";
+        // Check if auto update is running or has no paths to process
+        static bool messagePrinted = false;
+        if (search && !isHistoryFileEmpty(historyFilePath)) {
+			if (isImportRunning.load()) {
+				std::cout << "\033[2m[Auto-update running in the background...]\033[0m\n";
+			}
+		} else if (!messagePrinted && isHistoryFileEmpty(historyFilePath)) {
+			std::cout << "\033[2m[Auto-update has no stored path entries to process...]\033[0m\n";
+			messagePrinted = true;
 		}
         
         // Display the main menu options
