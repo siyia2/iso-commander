@@ -18,21 +18,20 @@ bool isAlreadyMounted(const std::string& mountPoint) {
 
 // Function to mount selected ISO files called from processAndMountIsoFiles
 void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
-	
-	std::atomic<bool> g_CancelledMessageAdded{false};
+    std::atomic<bool> g_CancelledMessageAdded{false};
 
     for (const auto& isoFile : isoFiles) {
-		
-		// Check for cancellation before processing each ISO
+        // Check for cancellation before processing each ISO
         if (g_operationCancelled) {
             if (!g_CancelledMessageAdded.exchange(true)) {
-				mountedFails.clear();
+                std::lock_guard<std::mutex> lock(globalSetsMutex); // Lock the mutex
+                mountedFails.clear();
                 mountedFails.insert("\033[1;33mMount Operation interrupted by user - partial mounts cleaned up.\033[0m");
             }
             break;
         }
-		
-		namespace fs = std::filesystem;
+
+        namespace fs = std::filesystem;
         fs::path isoPath(isoFile);
 
         // Prepare path and naming information
@@ -61,6 +60,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
                          << (useFullPath ? isoDirectory : (isoDirectory + "/" + isoFilename))
                          << "'\033[0m\033[1;91m.\033[0;1m " << errorType << "\033[0m";
             
+            std::lock_guard<std::mutex> lock(globalSetsMutex); // Lock the mutex
             mountedFails.insert(errorMessage.str());
         };
 
@@ -70,6 +70,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
             errorMessage << "\033[1;91mFailed to mnt: \033[1;93m'" << isoDirectory << "/" << isoFilename
                          << "'\033[0m\033[1;91m.\033[0;1m {needsRoot}\033[0m";
             {
+                std::lock_guard<std::mutex> lock(globalSetsMutex); // Lock the mutex
                 mountedFails.insert(errorMessage.str());
             }
             continue;
@@ -82,6 +83,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
                            << "'\033[1;93m already mnt@: \033[1;94m'" << mountisoDirectory
                            << "/" << mountisoFilename << "\033[1;94m'\033[1;93m.\033[0m";
             
+            std::lock_guard<std::mutex> lock(globalSetsMutex); // Lock the mutex
             skippedMessages.insert(skippedMessage.str());
             continue;
         }
@@ -101,6 +103,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
                 errorMessage << "\033[1;91mFailed to create mount point: \033[1;93m'" << mountPoint
                              << "'\033[0m\033[1;91m. Error: " << e.what() << "\033[0m";
                 
+                std::lock_guard<std::mutex> lock(globalSetsMutex); // Lock the mutex
                 mountedFails.insert(errorMessage.str());
                 continue;
             }
@@ -112,6 +115,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
             std::stringstream errorMessage;
             errorMessage << "\033[1;91mFailed to create mount context for: \033[1;93m'" << isoFile << "'\033[0m";
             
+            std::lock_guard<std::mutex> lock(globalSetsMutex); // Lock the mutex
             mountedFails.insert(errorMessage.str());
             continue;
         }
@@ -171,6 +175,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
 
             // Thread-safe insertion of mounted file info
             {
+                std::lock_guard<std::mutex> lock(globalSetsMutex); // Lock the mutex
                 mountedFiles.insert(mountedFileInfo);
             }
         } else {

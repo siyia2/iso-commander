@@ -5,6 +5,9 @@
 // Get max available CPU cores for global use, fallback is 2 cores
 unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
+// Global mutex to protect the verbose sets
+std::mutex globalSetsMutex;
+
 const std::string configPath = std::string(getenv("HOME")) + "/.config/isocmd/config/config";
 
 // Global variables for cleanup

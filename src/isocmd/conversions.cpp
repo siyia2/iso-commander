@@ -805,8 +805,7 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
 
 // Function to convert a BIN/IMG/MDF/NRG file to ISO format
 void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, const bool& modeMdf, const bool& modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks) {
-	
-	// Setup signal handler at the start of the operation
+    // Setup signal handler at the start of the operation
     setupSignalHandlerCancellations();
         
     // Reset cancellation flag
@@ -843,27 +842,30 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
         // Check if the input file exists
         if (!std::filesystem::exists(inputPath)) {
             std::string failedMessage = "\033[1;91mThe specified input file \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m does not exist anymore.\033[0;1m";
-            failedOuts.insert(failedMessage);
+            {
+                std::lock_guard<std::mutex> lock(globalSetsMutex); // Use the global mutex
+                failedOuts.insert(failedMessage);
+            }
             // Remove the non-existent files from Cache
             if (!modeMdf && !modeNrg) {
-				auto it = std::find(binImgFilesCache.begin(), binImgFilesCache.end(), inputPath);
-				if (it != binImgFilesCache.end()) {
-					binImgFilesCache.erase(it);
-				}
-			} else if (modeMdf) {
-				auto it = std::find(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end(), inputPath);
-				if (it != mdfMdsFilesCache.end()) {
-					mdfMdsFilesCache.erase(it);
-				}
-			} else if (modeNrg) {
-				auto it = std::find(nrgFilesCache.begin(), nrgFilesCache.end(), inputPath);
-				if (it != nrgFilesCache.end()) {
-					nrgFilesCache.erase(it);
-				}
-			}
-			if (completedTasks) {
-				(*completedTasks)++; // Increment completed tasks counter for failed conversions
-			}
+                auto it = std::find(binImgFilesCache.begin(), binImgFilesCache.end(), inputPath);
+                if (it != binImgFilesCache.end()) {
+                    binImgFilesCache.erase(it);
+                }
+            } else if (modeMdf) {
+                auto it = std::find(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end(), inputPath);
+                if (it != mdfMdsFilesCache.end()) {
+                    mdfMdsFilesCache.erase(it);
+                }
+            } else if (modeNrg) {
+                auto it = std::find(nrgFilesCache.begin(), nrgFilesCache.end(), inputPath);
+                if (it != nrgFilesCache.end()) {
+                    nrgFilesCache.erase(it);
+                }
+            }
+            if (completedTasks) {
+                (*completedTasks)++; // Increment completed tasks counter for failed conversions
+            }
             continue;
         }
 
@@ -871,7 +873,10 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
         std::ifstream file(inputPath);
         if (!file.good()) {
             std::string failedMessage = "\033[1;91mThe specified file \033[1;93m'" + inputPath + "'\033[1;91m cannot be read. Check permissions.\033[0;1m";
-            failedOuts.insert(failedMessage);
+            {
+                std::lock_guard<std::mutex> lock(globalSetsMutex); // Use the global mutex
+                failedOuts.insert(failedMessage);
+            }
             if (completedTasks) {
                 (*completedTasks)++; // Increment completed tasks counter for failed conversions
             }
@@ -884,7 +889,10 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
         // Skip if ISO file already exists
         if (fileExists(outputPath)) {
             std::string skipMessage = "\033[1;93mThe corresponding .iso file already exists for: \033[1;92m'" + directory + "/" + fileNameOnly + "'\033[1;93m. Skipped conversion.\033[0;1m";
-            skippedOuts.insert(skipMessage);
+            {
+                std::lock_guard<std::mutex> lock(globalSetsMutex); // Use the global mutex
+                skippedOuts.insert(skipMessage);
+            }
             if (completedTasks) {
                 (*completedTasks)++; // Count skipped files as completed tasks
             }
@@ -908,25 +916,40 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
             // Change ownership if needed
             if (chown(outputPath.c_str(), real_uid, real_gid) != 0) {
                 std::string errorMessage = "\033[1;91mFailed to change ownership of \033[1;93m'" + outDirectory + "/" + outFileNameOnly + "'\033[1;91m: " + strerror(errno) + "\033[0;1m";
-                failedOuts.insert(errorMessage);
+                {
+                    std::lock_guard<std::mutex> lock(globalSetsMutex); // Use the global mutex
+                    failedOuts.insert(errorMessage);
+                }
             }
 
             std::string successMessage = "\033[1mImage file converted to ISO:\033[0;1m \033[1;92m'" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m.\033[0;1m";
-            successOuts.insert(successMessage);
+            {
+                std::lock_guard<std::mutex> lock(globalSetsMutex); // Use the global mutex
+                successOuts.insert(successMessage);
+            }
             
             if (completedTasks) {
                 (*completedTasks)++; // Increment completed tasks counter for successful conversions
             }
         } else {
             std::string failedMessage = "\033[1;91mConversion of \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m failed.\033[0;1m";
-            failedOuts.insert(failedMessage);
+            {
+                std::lock_guard<std::mutex> lock(globalSetsMutex); // Use the global mutex
+                failedOuts.insert(failedMessage);
+            }
 
             if (std::remove(outputPath.c_str()) == 0) {
                 std::string deletedMessage = "\033[1;92mDeleted incomplete ISO file:\033[1;91m '" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m";
-                deletedOuts.insert(deletedMessage);
+                {
+                    std::lock_guard<std::mutex> lock(globalSetsMutex); // Use the global mutex
+                    deletedOuts.insert(deletedMessage);
+                }
             } else if (!modeNrg) {
                 std::string deleteFailMessage = "\033[1;91mFailed to delete incomplete ISO file: \033[1;93m'" + outputPath + "'\033[0;1m";
-                deletedOuts.insert(deleteFailMessage);
+                {
+                    std::lock_guard<std::mutex> lock(globalSetsMutex); // Use the global mutex
+                    deletedOuts.insert(deleteFailMessage);
+                }
             }
             if (completedTasks) {
                 (*completedTasks)++; // Increment completed tasks counter for failed conversions
@@ -934,15 +957,18 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
         }
     }
     
-     // Additional check for cancellation after processing each file
+    // Additional check for cancellation after processing each file
     if (g_operationCancelled) {
-		if (!g_CancelledMessageAdded.exchange(true)) {
-			std::string cancelMsg = "\033[1;33mConversion Operation interrupted by user - partial files cleaned up.\033[0;1m";
-			failedOuts.clear();
-			deletedOuts.clear();
-			failedOuts.insert(cancelMsg);
-		}
-	}
+        if (!g_CancelledMessageAdded.exchange(true)) {
+            std::string cancelMsg = "\033[1;33mConversion Operation interrupted by user - partial files cleaned up.\033[0;1m";
+            {
+                std::lock_guard<std::mutex> lock(globalSetsMutex); // Use the global mutex
+                failedOuts.clear();
+                deletedOuts.clear();
+                failedOuts.insert(cancelMsg);
+            }
+        }
+    }
 
     // Update cache and prompt flags
     promptFlag = false;

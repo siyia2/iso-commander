@@ -71,7 +71,6 @@ std::string modifyDirectoryPath(const std::string& dir) {
 
 // Function to unmount ISO files asynchronously
 void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors) {
-    
     std::atomic<bool> g_CancelledMessageAdded{false};
     
     // Early exit if cancelled before starting
@@ -85,7 +84,10 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
             std::stringstream errorMessage;
             errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << modifiedDir
                         << "\033[1;93m'\033[1;91m.\033[0;1m {needsRoot}";
-            unmountedErrors.emplace(errorMessage.str());
+            {
+                std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
+                unmountedErrors.emplace(errorMessage.str());
+            }
         }
         return;
     }
@@ -94,8 +96,11 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
     for (const auto& isoDir : isoDirs) {
         if (g_operationCancelled) {
             if (!g_CancelledMessageAdded.exchange(true)) {
-				unmountedErrors.clear();
-                unmountedErrors.emplace("\033[1;33mUnmount Operation interrupted by user - partial cleanup performed.\033[0m");
+                {
+                    std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
+                    unmountedErrors.clear();
+                    unmountedErrors.emplace("\033[1;33mUnmount Operation interrupted by user - partial cleanup performed.\033[0m");
+                }
             }
             break;
         }
@@ -117,23 +122,32 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
         // Handle successful unmounts
         for (const auto& dir : successfulUnmounts) {
             if (isDirectoryEmpty(dir) && rmdir(dir.c_str()) == 0) {
-				std::string modifiedDir = modifyDirectoryPath(dir);
-                unmountedFiles.emplace("\033[0;1mUnmounted: \033[1;92m'" + modifiedDir + "\033[1;92m'\033[0m.");
+                std::string modifiedDir = modifyDirectoryPath(dir);
+                {
+                    std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
+                    unmountedFiles.emplace("\033[0;1mUnmounted: \033[1;92m'" + modifiedDir + "\033[1;92m'\033[0m.");
+                }
             }
         }
 
         // Additional cleanup pass
         for (const auto& dir : isoDirs) {
             if (dir.find("/mnt/iso_") == 0 && isDirectoryEmpty(dir) && rmdir(dir.c_str()) == 0) {
-				std::string modifiedDir = modifyDirectoryPath(dir);
-                unmountedFiles.emplace("\033[0;1mRemoved empty ISO directory: \033[1;92m'" + modifiedDir + "\033[1;92m'\033[0m.");
+                std::string modifiedDir = modifyDirectoryPath(dir);
+                {
+                    std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
+                    unmountedFiles.emplace("\033[0;1mRemoved empty ISO directory: \033[1;92m'" + modifiedDir + "\033[1;92m'\033[0m.");
+                }
             }
         }
 
         // Handle failures
         for (const auto& dir : failedUnmounts) {
-			std::string modifiedDir = modifyDirectoryPath(dir);
-            unmountedErrors.emplace("\033[1;91mFailed to unmount: \033[1;93m'" + modifiedDir + "'\033[1;91m.\033[0;1m {notAnISO}");
+            std::string modifiedDir = modifyDirectoryPath(dir);
+            {
+                std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
+                unmountedErrors.emplace("\033[1;91mFailed to unmount: \033[1;93m'" + modifiedDir + "'\033[1;91m.\033[0;1m {notAnISO}");
+            }
         }
     }
 }
