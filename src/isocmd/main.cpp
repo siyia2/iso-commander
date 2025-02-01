@@ -53,7 +53,7 @@ int main(int argc, char *argv[]) {
 	setupReadlineToIgnoreCtrlC();
 	
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
-        printVersionNumber("5.6.0");
+        printVersionNumber("5.6.1");
         return 0;
     }
     // Readline use semicolon as delimiter
