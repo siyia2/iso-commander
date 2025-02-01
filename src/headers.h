@@ -160,6 +160,9 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view
 
 // HISTORY
 
+// bools
+bool isHistoryFileEmpty(const std::string& filePath);
+
 // voids
 void loadHistory(bool& historyPattern);
 void saveHistory(bool& historyPattern);
