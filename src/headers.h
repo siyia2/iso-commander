@@ -49,6 +49,9 @@ extern unsigned int maxThreads;
 // For storing isoFiles in RAM cache
 extern std::vector<std::string> globalIsoFileList; 
 
+// Global mutex to protect the verbose sets
+extern std::mutex globalSetsMutex;
+
 // Holds IsoCache directory path
 extern const std::string cacheFileName;
 
