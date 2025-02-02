@@ -95,11 +95,7 @@ int main(int argc, char *argv[]) {
     isImportRunning.store(false);
     // Open the history file for automatic ISO cache imports
     std::ifstream file(historyFilePath);
-    if (!file.is_open()) {
-        search = false;
-    } else {
-		search = readUserConfigUpdates(configPath);
-	}    
+	search = readUserConfigUpdates(configPath); 
     
 	if (search) {
 		isImportRunning.store(true);
@@ -121,11 +117,12 @@ int main(int argc, char *argv[]) {
         
         // Check if auto update is running or has no paths to process
         static bool messagePrinted = false;
+        namespace fs = std::filesystem;
         if (search && !isHistoryFileEmpty(historyFilePath)) {
 			if (isImportRunning.load()) {
 				std::cout << "\033[2m[Auto-update running in the background...]\033[0m\n";
 			}
-		} else if (search && !messagePrinted && isHistoryFileEmpty(historyFilePath)) {
+		} else if ((search && !messagePrinted) && (isHistoryFileEmpty(historyFilePath) || !fs::is_regular_file(historyFilePath))) {
 			std::cout << "\033[2m[Auto-update found no stored entries to process...]\033[0m\n";
 			messagePrinted = true;
 		}
