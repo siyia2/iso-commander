@@ -125,7 +125,7 @@ int main(int argc, char *argv[]) {
 			if (isImportRunning.load()) {
 				std::cout << "\033[2m[Auto-update running in the background...]\033[0m\n";
 			}
-		} else if (!messagePrinted && isHistoryFileEmpty(historyFilePath)) {
+		} else if (search && !messagePrinted && isHistoryFileEmpty(historyFilePath)) {
 			std::cout << "\033[2m[Auto-update found no stored entries to process...]\033[0m\n";
 			messagePrinted = true;
 		}
