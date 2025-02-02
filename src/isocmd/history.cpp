@@ -22,7 +22,48 @@ bool isHistoryFileEmpty(const std::string& filePath) {
     }
 
     // Check if the file size is 0
-    return (fileInfo.st_size == 0);
+    if (fileInfo.st_size == 0) {
+        return true;
+    }
+
+    // Open the file and check its content
+    std::ifstream file(filePath);
+    if (!file.is_open()) {
+        // Unable to open the file, consider it as empty
+        return true;
+    }
+
+    bool hasNonWhitespace = false;
+    bool hasEntryStartingWithSlash = false;
+    std::string line;
+
+    while (std::getline(file, line)) {
+        // Check if the line contains non-whitespace characters
+        for (char ch : line) {
+            if (!std::isspace(static_cast<unsigned char>(ch))) {
+                hasNonWhitespace = true;
+                break;
+            }
+        }
+
+        // Check if the line starts with '/'
+        if (!line.empty() && line[0] == '/') {
+            hasEntryStartingWithSlash = true;
+        }
+    }
+
+    // If the file has no non-whitespace characters, it's empty
+    if (!hasNonWhitespace) {
+        return true;
+    }
+
+    // If the file has no entries starting with '/', it's considered empty
+    if (!hasEntryStartingWithSlash) {
+        return true;
+    }
+
+    // Otherwise, the file is not empty
+    return false;
 }
 
 
