@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GNU General Public License v3.0 or later
+// SPDX-License-Identifier: GNU General Public License v2.0
 
 #include "../headers.h"
 #include "../mdf.h"
