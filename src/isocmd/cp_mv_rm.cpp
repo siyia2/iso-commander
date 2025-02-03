@@ -313,7 +313,7 @@ bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::ato
 void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, bool overwriteExisting) {
 
     setupSignalHandlerCancellations();
-    g_operationCancelled = false;
+    g_operationCancelled.store(false);
     std::atomic<bool> g_CancelledMessageAdded{false};
 
     bool operationSuccessful = true;

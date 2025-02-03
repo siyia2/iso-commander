@@ -193,7 +193,7 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
     
     // Setup signal handler and reset cancellation flag
     setupSignalHandlerCancellations();
-    g_operationCancelled = false;
+    g_operationCancelled.store(false);
 
     // Handle input ("00" = all files, else parse input)
     if (input == "00") {

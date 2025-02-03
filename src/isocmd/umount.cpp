@@ -162,7 +162,7 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& selected
     setupSignalHandlerCancellations();
         
     // Reset cancellation flag
-    g_operationCancelled = false;
+    g_operationCancelled.store(false);
     
     if (input != "00" && selectedIsoDirs.empty()) {
         tokenizeInput(input, currentFiles, uniqueErrorMessages, selectedIndices);
