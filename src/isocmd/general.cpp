@@ -647,6 +647,7 @@ bool isValidInput(const std::string& input) {
 }
 
 
+// Function to write default display modes toconfig file
 void setDisplayMode(const std::string& inputSearch) {
     std::vector<std::string> configLines;
     std::vector<std::string> settingKeys;
