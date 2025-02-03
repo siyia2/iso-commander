@@ -379,7 +379,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 
         // Handle user input for toggling the full list display
         if (mainInputString == "~") {
-            toggleFullListConversions = !toggleFullListConversions;
+            displayConfig::toggleFullListConversions = !displayConfig::toggleFullListConversions;
             clearScrollBuffer();
             printList(files, "IMAGE_FILES", "conversions");
             continue;

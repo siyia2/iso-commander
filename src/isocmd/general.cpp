@@ -80,13 +80,13 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
 
 		// Update specific flags and variables based on conditions
 		if (isMount) {
-			toggleFullListMount = !toggleFullListMount;
+			displayConfig::toggleFullListMount = !displayConfig::toggleFullListMount;
 		} else if (isUnmount) {
-			toggleFullListUmount = !toggleFullListUmount;
+			displayConfig::toggleFullListUmount = !displayConfig::toggleFullListUmount;
 		} else if (write) {
-			toggleFullListWrite = !toggleFullListWrite;
+			displayConfig::toggleFullListWrite = !displayConfig::toggleFullListWrite;
 		} else {
-			toggleFullListCpMvRm = !toggleFullListCpMvRm;
+			displayConfig::toggleFullListCpMvRm = !displayConfig::toggleFullListCpMvRm;
 		}
 				
             continue;
@@ -582,7 +582,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
                    << defaultColor << bold << "/"
                    << magenta << filename << defaultColor << "\n";
         } else if (listType == "MOUNTED_ISOS") {
-			if (toggleFullListUmount){
+			if (displayConfig::toggleFullListUmount){
             output << sequenceColor << indexStrings[i] << ". "
                    << blueBold << "/mnt/iso_"
                    << magentaBold << displayPath << grayBold << displayHash << reset << "\n";
@@ -754,15 +754,15 @@ void setDisplayMode(const std::string& inputSearch) {
         // Update toggle flags for each affected setting
         for (const auto& settingKey : settingKeys) {
             if (settingKey == "mount_list") {
-                toggleFullListMount = (newValue == "full");
+                displayConfig::toggleFullListMount = (newValue == "full");
             } else if (settingKey == "umount_list") {
-                toggleFullListUmount = (newValue == "full");
+                displayConfig::toggleFullListUmount = (newValue == "full");
             } else if (settingKey == "cp_mv_rm_list") {
-                toggleFullListCpMvRm = (newValue == "full");
+                displayConfig::toggleFullListCpMvRm = (newValue == "full");
             } else if (settingKey == "conversion_lists") {
-                toggleFullListConversions = (newValue == "full");
+                displayConfig::toggleFullListConversions = (newValue == "full");
             } else if (settingKey == "write_list") {
-                toggleFullListWrite = (newValue == "full");
+                displayConfig::toggleFullListWrite = (newValue == "full");
             }
         }
 
@@ -920,16 +920,16 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view
     }
 
     // Early return for full list mode
-    if (toggleFullListMount && location == "mount") {
+    if (displayConfig::toggleFullListMount && location == "mount") {
         return {std::string(path.substr(0, lastSlashPos)), 
                 std::string(path.substr(lastSlashPos + 1))};
-    } else if (toggleFullListCpMvRm && location == "cp_mv_rm") {
+    } else if (displayConfig::toggleFullListCpMvRm && location == "cp_mv_rm") {
 		 return {std::string(path.substr(0, lastSlashPos)), 
                 std::string(path.substr(lastSlashPos + 1))};
-	} else if (toggleFullListConversions && location == "conversions") {
+	} else if (displayConfig::toggleFullListConversions && location == "conversions") {
 		return {std::string(path.substr(0, lastSlashPos)), 
                 std::string(path.substr(lastSlashPos + 1))};
-	} else if (toggleFullListWrite && location == "write") {
+	} else if (displayConfig::toggleFullListWrite && location == "write") {
 		return {std::string(path.substr(0, lastSlashPos)), 
                 std::string(path.substr(lastSlashPos + 1))};
 	}

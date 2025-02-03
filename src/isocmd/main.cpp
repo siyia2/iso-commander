@@ -13,21 +13,14 @@ const std::string configPath = std::string(getenv("HOME")) + "/.config/isocmd/co
 // Global variables for cleanup
 int lockFileDescriptor = -1;
 
-// For toggling between full and shortened paths in mount list
-bool toggleFullListMount = false;
-
-// For toggling between full and shortened paths in umount list
-bool toggleFullListUmount = true;
-
-// For toggling between full and shortened paths in cpMvRm
-bool toggleFullListCpMvRm = false;
-
-// For toggling between full and shortened paths in write
-bool toggleFullListWrite = false;
-
-// For toggling between full and shortened paths in conversions
-bool toggleFullListConversions = false;
-
+// Default Display config options for lists
+namespace displayConfig {
+    bool toggleFullListMount = false;
+    bool toggleFullListUmount = true;
+    bool toggleFullListCpMvRm = false;
+    bool toggleFullListWrite = false;
+    bool toggleFullListConversions = false;
+}
 
 // Global flag to track cancellation for write2usb
 std::atomic<bool> g_cancelOperation(false);
@@ -544,11 +537,11 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
     }
 
     // Set the boolean values based on the configMap
-    toggleFullListMount = (configMap["mount_list"] == "full");
-    toggleFullListUmount = (configMap["umount_list"] == "full");
-    toggleFullListCpMvRm = (configMap["cp_mv_rm_list"] == "full");
-    toggleFullListWrite = (configMap["write_list"] == "full");
-    toggleFullListConversions = (configMap["conversion_lists"] == "full");
+    displayConfig::toggleFullListMount = (configMap["mount_list"] == "full");
+    displayConfig::toggleFullListUmount = (configMap["umount_list"] == "full");
+    displayConfig::toggleFullListCpMvRm = (configMap["cp_mv_rm_list"] == "full");
+    displayConfig::toggleFullListWrite = (configMap["write_list"] == "full");
+    displayConfig::toggleFullListConversions = (configMap["conversion_lists"] == "full");
 
     return configMap;
 }
