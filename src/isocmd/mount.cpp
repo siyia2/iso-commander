@@ -22,7 +22,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
 
     for (const auto& isoFile : isoFiles) {
         // Check for cancellation before processing each ISO
-        if (g_operationCancelled) {
+        if (g_operationCancelled.load()) {
             if (!g_CancelledMessageAdded.exchange(true)) {
                 std::lock_guard<std::mutex> lock(globalSetsMutex); // Lock the mutex
                 mountedFails.clear();
@@ -234,7 +234,7 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
     // Enqueue chunk tasks
     for (const auto& chunk : isoChunks) {
         mountFutures.emplace_back(pool.enqueue([&, chunk]() {
-            if (g_operationCancelled) return;
+            if (g_operationCancelled.load()) return;
             mountIsoFiles(chunk, mountedFiles, skippedMessages, mountedFails);
             completedTasks.fetch_add(chunk.size(), std::memory_order_relaxed);
         }));
@@ -254,7 +254,7 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
     // Wait for completion or cancellation
     for (auto& future : mountFutures) {
         future.wait();
-        if (g_operationCancelled) break;
+        if (g_operationCancelled.load()) break;
     }
 
     // Cleanup

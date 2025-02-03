@@ -267,7 +267,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
 				continue;
 			}
 		}
-		if (!g_operationCancelled) {
+		if (!g_operationCancelled.load()) {
 			// File conversion workflow (using new modular function)
 			select_and_convert_to_iso(fileType, files, verbose, 
 									promptFlag, maxDepth, historyPattern);
@@ -579,7 +579,7 @@ std::set<std::string> processBatchPaths(const std::vector<std::string>& batchPat
 
             // Traverse directory
             for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
-				if (g_operationCancelled) {
+				if (g_operationCancelled.load()) {
 					if (!g_CancelledMessageAdded.exchange(true)) {
 						processedErrorsFind.clear();
 						processedErrorsFind.insert("\033[1;33mCache update interrupted by user.\033[0;1m");
@@ -638,7 +638,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
     setupSignalHandlerCancellations();
         
     // Reset cancellation flag
-    g_operationCancelled = false;
+    g_operationCancelled.store(false);
     
 	disableInput();
 	
@@ -963,7 +963,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
     }
     
     // Additional check for cancellation after processing each file
-    if (g_operationCancelled) {
+    if (g_operationCancelled.load()) {
         if (!g_CancelledMessageAdded.exchange(true)) {
 			std::string type = modeMdf ? "MDF" : (modeNrg ? "NRG" : "BIN/IMG");
             std::string cancelMsg = "\033[1;33m" + type + " conversion interrupted by user - partial files cleaned up.\033[0;1m";

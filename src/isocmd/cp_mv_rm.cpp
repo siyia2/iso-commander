@@ -280,7 +280,7 @@ bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::ato
         return false;
     }
     
-    while (!g_operationCancelled) { // Check cancellation flag at each iteration
+    while (!g_operationCancelled.load()) { // Check cancellation flag at each iteration
         input.read(buffer.data(), buffer.size());
         std::streamsize bytesRead = input.gcount();
         
@@ -298,7 +298,7 @@ bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::ato
     }
 
     // Check if the operation was cancelled
-    if (g_operationCancelled) {
+    if (g_operationCancelled.load()) {
         ec = std::make_error_code(std::errc::operation_canceled);
         output.close(); // Close the output stream before attempting to delete
         fs::remove(dst, ec); // Delete the partial file, ignore errors here
@@ -358,7 +358,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 
     auto executeOperation = [&](const std::vector<std::string>& files) {
         for (const auto& operateIso : files) {
-            if (g_operationCancelled) {
+            if (g_operationCancelled.load()) {
                 completedTasks->fetch_add(files.size() - (&operateIso - files.data()));
                 if (isDelete) {
                     {
@@ -468,7 +468,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     }
 
                     if (!success || ec) {
-                        if (g_operationCancelled) {
+                        if (g_operationCancelled.load()) {
                             if (!g_CancelledMessageAdded.exchange(true)) {
                                 {
                                     std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set

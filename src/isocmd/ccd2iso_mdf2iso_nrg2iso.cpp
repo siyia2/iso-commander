@@ -75,7 +75,7 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
     size_t sectorsProcessed = 0;
 
     while (source_length > 0) {
-        if (g_operationCancelled) {
+        if (g_operationCancelled.load()) {
             isoFile.close();
             fs::remove(isoPath);
             return false;
@@ -127,7 +127,7 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
     size_t sectorNum = 0;
     
     while (ccdFile.read(reinterpret_cast<char*>(&sector), sizeof(CcdSector))) {
-        if (g_operationCancelled) {
+        if (g_operationCancelled.load()) {
             isoFile.close();
             fs::remove(isoPath);
             return false;
@@ -214,7 +214,7 @@ bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile
 
     // Read and write sector by sector
     while (nrgFile && nrgFile.tellg() < nrgFileSize) {
-        if (g_operationCancelled) {
+        if (g_operationCancelled.load()) {
             isoFile.close();
             fs::remove(outputFile);
             return false;

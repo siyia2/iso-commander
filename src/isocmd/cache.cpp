@@ -691,7 +691,7 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
         verboseIsoCacheRefresh(allIsoFiles, totalFiles, validPaths, invalidPaths, 
                                uniqueErrorMessages, promptFlag, maxDepth, historyPattern, start_time);
     } else {
-		if (!g_operationCancelled) {
+		if (!g_operationCancelled.load()) {
 			// Save the combined cache to disk
 			saveCache(allIsoFiles, maxCacheSize);
 		}
@@ -720,7 +720,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
         auto options = std::filesystem::directory_options::none;
         for (auto it = std::filesystem::recursive_directory_iterator(path, options); 
 			it != std::filesystem::recursive_directory_iterator(); ++it) {
-			if (g_operationCancelled) {
+			if (g_operationCancelled.load()) {
 				if (!g_CancelledMessageAdded.exchange(true)) {
 					uniqueErrorMessages.clear();
 					uniqueErrorMessages.insert("\n\033[1;33mISO cache update interrupted by user.\033[0;1m");

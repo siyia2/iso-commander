@@ -726,7 +726,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
         return false;
     }
 
-    if (!g_operationCancelled) {
+    if (!g_operationCancelled.load()) {
         fsync(device_fd);
     }
     close(device_fd);

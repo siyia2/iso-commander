@@ -75,12 +75,12 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
     std::atomic<bool> g_CancelledMessageAdded{false};
     
     // Early exit if cancelled before starting
-    if (g_operationCancelled) return;
+    if (g_operationCancelled.load()) return;
 
     // Root check with cancellation awareness
     if (geteuid() != 0) {
         for (const auto& isoDir : isoDirs) {
-            if (g_operationCancelled) break;
+            if (g_operationCancelled.load()) break;
             std::string modifiedDir = modifyDirectoryPath(isoDir);
             std::stringstream errorMessage;
             errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << modifiedDir
@@ -95,7 +95,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
 
     std::vector<std::pair<std::string, int>> unmountResults;
     for (const auto& isoDir : isoDirs) {
-        if (g_operationCancelled) {
+        if (g_operationCancelled.load()) {
             if (!g_CancelledMessageAdded.exchange(true)) {
                 {
                     std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
@@ -111,7 +111,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
     }
 
     // Process results only if not cancelled
-    if (!g_operationCancelled) {
+    if (!g_operationCancelled.load()) {
         std::vector<std::string> successfulUnmounts;
         std::vector<std::string> failedUnmounts;
         
@@ -167,7 +167,7 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& selected
     if (input != "00" && selectedIsoDirs.empty()) {
         tokenizeInput(input, currentFiles, uniqueErrorMessages, selectedIndices);
         for (int index : selectedIndices) {
-            if (g_operationCancelled) break;
+            if (g_operationCancelled.load()) break;
             selectedIsoDirs.push_back(currentFiles[index - 1]);
         }
     }
@@ -213,12 +213,12 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& selected
     // Submit tasks with cancellation checks
     for (const auto& isoChunk : isoChunks) {
         unmountFutures.emplace_back(pool.enqueue([&, isoChunk]() {
-            if (g_operationCancelled) return;
+            if (g_operationCancelled.load()) return;
             
             unmountISO(isoChunk, operationFiles, operationFails);
             completedIsos.fetch_add(isoChunk.size(), std::memory_order_relaxed);
             
-            if (g_operationCancelled) {
+            if (g_operationCancelled.load()) {
                 isComplete.store(true);
             }
         }));
@@ -227,7 +227,7 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& selected
     // Wait for completion or cancellation
     for (auto& future : unmountFutures) {
         future.wait();
-        if (g_operationCancelled) break;
+        if (g_operationCancelled.load()) break;
     }
 
     isComplete.store(true);
