@@ -29,7 +29,7 @@ bool toggleFullListWrite = false;
 bool toggleFullListConversions = false;
 
 // For indicating if location is int main
-bool isAtMain = true;
+std::atomic<bool> isAtMain(true);
 
 // Helper variables to determine function location
 bool atMount = false;
@@ -130,14 +130,13 @@ int main(int argc, char *argv[]) {
             std::cout << "\033[2m[Auto-update running in the background...]\033[0m\n";
             messageActive.store(true);
 
-            // Launch a thread to clear the message after 1 second
+            // Launch a thread to clear the message after 5 seconds
             std::thread(clearMessageAfterTimeout, 1).detach();
 		} else if ((search && !messagePrinted) && (isHistoryFileEmpty(historyFilePath) || !fs::is_regular_file(historyFilePath))) {
 			std::cout << "\033[2m[Auto-update found no stored entries to process...]\033[0m\n";
 			messagePrinted = true;
 			messageActive.store(true);
-			// Launch a thread to clear the message after 4 seconds
-			std::thread(clearMessageAfterTimeout, 4).detach();
+			std::thread(clearMessageAfterTimeout, 3).detach();
 		}
         
         // Display the main menu options
@@ -564,7 +563,7 @@ void clearMessageAfterTimeout(int timeoutSeconds) {
     while (true) {
         std::this_thread::sleep_for(std::chrono::seconds(timeoutSeconds));
         
-        if (!isImportRunning.load() && isAtMain) {
+        if (!isImportRunning.load() && isAtMain.load()) {
             if (messageActive.load()) {
                 clearScrollBuffer();
                 
