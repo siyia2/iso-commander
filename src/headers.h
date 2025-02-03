@@ -88,9 +88,6 @@ extern const std::string configPath;
 // For tracking cancellations
 extern std::atomic<bool> g_operationCancelled;
 
-// For indicating if background updates run
-extern std::atomic<bool> isImportRunning;
-
 // Max cache size limit for IsoCache
 extern const uintmax_t maxCacheSize;
 
@@ -130,7 +127,7 @@ void signalHandlerCancellations(int signal);
 void clearScrollBuffer();
 void setupReadlineToIgnoreCtrlC();
 void sortFilesCaseInsensitive(std::vector<std::string>& files);
-void clearMessageAfterTimeout(int timeoutSeconds);
+void clearMessageAfterTimeout(int timeoutSeconds, std::atomic<bool>& isAtMain, std::atomic<bool>& isImportRunning, std::atomic<bool>& messageActive);
 void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname,std::set<std::string>& uniqueErrors);
 
 // stds
@@ -211,7 +208,7 @@ void cacheAndMiscSwitches (std::string& inputSearch, const bool& promptFlag, con
 void loadCache(std::vector<std::string>& isoFiles);
 void manualRefreshCache(const std::string& initialDir = "", bool promptFlag = true, int maxDepth = -1, bool historyPattern = false);
 void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, std::atomic<size_t>& totalFiles, std::mutex& traverseFilesMutex, std::mutex& traverseErrorsMutex, int& maxDepth, bool& promptFlag);
-void backgroundCacheImport(int maxDepthParam);
+void backgroundCacheImport(int maxDepthParam, std::atomic<bool>& isImportRunning);
 void removeNonExistentPathsFromCache();
 
 
