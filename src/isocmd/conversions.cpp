@@ -966,7 +966,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
     if (g_operationCancelled.load()) {
         if (!g_CancelledMessageAdded.exchange(true)) {
 			std::string type = modeMdf ? "MDF" : (modeNrg ? "NRG" : "BIN/IMG");
-            std::string cancelMsg = "\033[1;33m" + type + " conversion interrupted by user - partial files cleaned up.\033[0;1m";
+            std::string cancelMsg = "\033[1;33m" + type + " to ISO conversion interrupted by user - partial files cleaned up.\033[0;1m";
             {
                 std::lock_guard<std::mutex> lock(globalSetsMutex); // Use the global mutex
                 failedOuts.clear();
