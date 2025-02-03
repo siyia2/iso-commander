@@ -70,7 +70,6 @@ extern bool toggleFullListWrite;
 // For toggling between full and shortened paths in conversions
 extern bool toggleFullListConversions;
 
-
 // Cache for directory and filename transformations
 extern std::unordered_map<std::string, std::string> transformationCache;
 
@@ -80,7 +79,7 @@ extern const std::string historyFilePath;
 // Holds configuration path
 extern const std::string configPath;
 
-// For tracking cancellations
+// For signaling cancellations
 extern std::atomic<bool> g_operationCancelled;
 
 // Max cache size limit for IsoCache
