@@ -100,7 +100,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
                 {
                     std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
                     unmountedErrors.clear();
-                    unmountedErrors.emplace("\033[1;33mUnmount Operation interrupted by user - partial cleanup performed.\033[0m");
+                    unmountedErrors.emplace("\033[1;33mUnmount operation interrupted by user - partial cleanup performed.\033[0m");
                 }
             }
             break;

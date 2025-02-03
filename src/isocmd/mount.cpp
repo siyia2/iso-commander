@@ -26,7 +26,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
             if (!g_CancelledMessageAdded.exchange(true)) {
                 std::lock_guard<std::mutex> lock(globalSetsMutex); // Lock the mutex
                 mountedFails.clear();
-                mountedFails.insert("\033[1;33mMount Operation interrupted by user - partial mounts cleaned up.\033[0m");
+                mountedFails.insert("\033[1;33mMount operation interrupted by user - partial mounts cleaned up.\033[0m");
             }
             break;
         }
