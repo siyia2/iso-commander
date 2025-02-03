@@ -221,21 +221,21 @@ void verboseSearchResults(const std::string& fileExtension, std::set<std::string
     auto end_time = std::chrono::high_resolution_clock::now();
 
     // Case: Files were found
-    if (!fileNames.empty()) {
+    if (!fileNames.empty() && !g_operationCancelled.load()) {
         std::cout << "\n\n\033[1;92mFound " << fileNames.size() << " matching files.\033[1;93m " << currentCacheOld << " matching files cached in RAM from previous searches.\033[0;1m\n\n";
     }
 
     // Case: No new files were found, but files exist in cache
-    if (!newFilesFound && !files.empty() && !list) {
+    if (!newFilesFound && !files.empty() && !list && !g_operationCancelled.load()) {
         verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
-        std::cout << "\n\n\033[1;91mNo new " << fileExtension << " files over 5MB found. \033[1;92m";
+        std::cout << "\n\n\033[1;91mNo new " << fileExtension << " files found. \033[1;92m";
         std::cout << files.size() << " files are cached in RAM from previous searches.\033[0;1m\n\n";
     }
 
     // Case: No files were found
-    if (files.empty() && !list) {
+    if (files.empty() && !list && !g_operationCancelled.load()) {
         verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
-        std::cout << "\n\n\033[1;91mNo " << fileExtension << " files over 5MB found in the specified paths or cached in RAM.\n\033[0;1m\n";
+        std::cout << "\n\n\033[1;91mNo " << fileExtension << " files found in the specified paths or cached in RAM.\n\033[0;1m\n";
     }
     
     auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();

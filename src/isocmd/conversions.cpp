@@ -582,7 +582,8 @@ std::set<std::string> processBatchPaths(const std::vector<std::string>& batchPat
 				if (g_operationCancelled.load()) {
 					if (!g_CancelledMessageAdded.exchange(true)) {
 						processedErrorsFind.clear();
-						processedErrorsFind.insert("\033[1;33mCache update interrupted by user.\033[0;1m");
+						localFileNames.clear();
+						processedErrorsFind.insert("\033[1;33mCache update interrupted by user.\n\n\033[0;1m");
 					}
 					break;
 				}
