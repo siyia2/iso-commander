@@ -28,6 +28,9 @@ bool toggleFullListWrite = false;
 // For toggling between full and shortened paths in conversions
 bool toggleFullListConversions = false;
 
+// For indicating if location is int main
+bool isAtMain = true;
+
 // Helper variables to determine function location
 bool atMount = false;
 bool atConversions = false;
@@ -36,6 +39,11 @@ bool atWrite = false;
 
 // Global flag to track cancellation for write2usb
 std::atomic<bool> g_cancelOperation(false);
+
+// Global atomic flag for message state
+std::atomic<bool> messageActive{false};
+std::atomic<bool> isImportRunning{false};
+
 
 // Main function
 int main(int argc, char *argv[]) {
@@ -48,7 +56,7 @@ int main(int argc, char *argv[]) {
 	// Traverse depth for cache refresh
 	int maxDepth = -1;
 	// Atomic flag for AutoImportISO
-	std::atomic<bool> isImportRunning;
+	
 	
 	setupReadlineToIgnoreCtrlC();
 	
@@ -99,8 +107,8 @@ int main(int argc, char *argv[]) {
     
 	if (search) {
 		isImportRunning.store(true);
-		std::thread([maxDepth, &isImportRunning]() {
-			backgroundCacheImport(maxDepth, isImportRunning);
+		std::thread([maxDepth]() {
+			backgroundCacheImport(maxDepth);
 		}).detach();
 	}
 	
@@ -118,13 +126,18 @@ int main(int argc, char *argv[]) {
         // Check if auto update is running or has no paths to process
         static bool messagePrinted = false;
         namespace fs = std::filesystem;
-        if (search && !isHistoryFileEmpty(historyFilePath)) {
-			if (isImportRunning.load()) {
-				std::cout << "\033[2m[Auto-update running in the background...]\033[0m\n";
-			}
+        if (search && !isHistoryFileEmpty(historyFilePath) && isImportRunning.load()) {
+            std::cout << "\033[2m[Auto-update running in the background...]\033[0m\n";
+            messageActive.store(true);
+
+            // Launch a thread to clear the message after 1 second
+            std::thread(clearMessageAfterTimeout, 1).detach();
 		} else if ((search && !messagePrinted) && (isHistoryFileEmpty(historyFilePath) || !fs::is_regular_file(historyFilePath))) {
 			std::cout << "\033[2m[Auto-update found no stored entries to process...]\033[0m\n";
 			messagePrinted = true;
+			messageActive.store(true);
+			// Launch a thread to clear the message after 4 seconds
+			std::thread(clearMessageAfterTimeout, 4).detach();
 		}
         
         // Display the main menu options
@@ -155,6 +168,7 @@ int main(int argc, char *argv[]) {
                         submenu2(promptFlag, maxDepth, historyPattern, verbose);
                         break;
                     case '3':
+						isAtMain = false;
                         manualRefreshCache("", promptFlag, maxDepth, historyPattern);
                         clearScrollBuffer();
                         break;
@@ -208,7 +222,7 @@ std::cout << Color << R"((   (       )            )    *      *              ) (
 
 // Function to print submenu1
 void submenu1(int& maxDepth, bool& historyPattern, bool& verbose) {
-	
+	isAtMain = false;
     while (true) {
 		// Calls prevent_clear_screen and tab completion
 		rl_bind_key('\f', prevent_readline_keybindings);
@@ -291,7 +305,7 @@ void submenu1(int& maxDepth, bool& historyPattern, bool& verbose) {
 
 // Function to print submenu2
 void submenu2(bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
-	
+	isAtMain = false;
 	while (true) {
 		// Calls prevent_clear_screen and tab completion
 		rl_bind_key('\f', prevent_readline_keybindings);
@@ -542,6 +556,30 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
     toggleFullListConversions = (configMap["conversion_lists"] == "full");
 
     return configMap;
+}
+
+
+// Function to clear the message after a timeout
+void clearMessageAfterTimeout(int timeoutSeconds) {
+    while (true) {
+        std::this_thread::sleep_for(std::chrono::seconds(timeoutSeconds));
+        
+        if (!isImportRunning.load() && isAtMain) {
+            if (messageActive.load()) {
+                clearScrollBuffer();
+                
+                print_ascii();
+                
+                printMenu();
+                std::cout << "\n";
+                rl_on_new_line(); 
+                rl_redisplay();
+
+                messageActive.store(false);
+            }
+            break; // Exit the loop once the message is cleared
+        }
+    }
 }
 
 
