@@ -965,7 +965,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
     // Additional check for cancellation after processing each file
     if (g_operationCancelled) {
         if (!g_CancelledMessageAdded.exchange(true)) {
-            std::string cancelMsg = "\033[1;33mConversion operation interrupted by user - partial files cleaned up.\033[0;1m";
+            std::string cancelMsg = "\033[1;33mOperation interrupted by user - partial files cleaned up.\033[0;1m";
             {
                 std::lock_guard<std::mutex> lock(globalSetsMutex); // Use the global mutex
                 failedOuts.clear();
