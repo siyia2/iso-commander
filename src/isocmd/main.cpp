@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GNU General Public License v3.0 or later
 
 #include "../headers.h"
+#include "../display.h"
 
 // Get max available CPU cores for global use, fallback is 2 cores
 unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;

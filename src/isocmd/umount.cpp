@@ -2,6 +2,7 @@
 
 #include "../headers.h"
 #include "../threadpool.h"
+#include "../display.h"
 
 
 const std::string MOUNTED_ISO_PATH = "/mnt";

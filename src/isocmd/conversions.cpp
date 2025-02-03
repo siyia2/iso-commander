@@ -2,6 +2,7 @@
 
 #include "../headers.h"
 #include "../threadpool.h"
+#include "../display.h"
 #include "../mdf.h"
 #include "../ccd.h"
 

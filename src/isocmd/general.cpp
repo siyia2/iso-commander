@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GNU General Public License v3.0 or later
 
 #include "../headers.h"
+#include "../display.h"
 
 
 // For storing isoFiles in RAM
