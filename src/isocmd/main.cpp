@@ -28,8 +28,6 @@ bool toggleFullListWrite = false;
 // For toggling between full and shortened paths in conversions
 bool toggleFullListConversions = false;
 
-// For indicating if location is int main
-std::atomic<bool> isAtMain(true);
 
 // Helper variables to determine function location
 bool atMount = false;
@@ -39,10 +37,6 @@ bool atWrite = false;
 
 // Global flag to track cancellation for write2usb
 std::atomic<bool> g_cancelOperation(false);
-
-// Global atomic flag for message state
-std::atomic<bool> messageActive{false};
-std::atomic<bool> isImportRunning{false};
 
 
 // Main function
@@ -55,7 +49,12 @@ int main(int argc, char *argv[]) {
 	bool verbose = false;
 	// Traverse depth for cache refresh
 	int maxDepth = -1;
-	// Atomic flag for AutoImportISO
+	// Atomic flag for auto-update
+	std::atomic<bool> isImportRunning;
+	// Global atomic flag for auto-update message state
+	std::atomic<bool> messageActive{false};
+	// For indicating if location is int main
+	std::atomic<bool> isAtMain{true};
 	
 	
 	setupReadlineToIgnoreCtrlC();
@@ -107,8 +106,8 @@ int main(int argc, char *argv[]) {
     
 	if (search) {
 		isImportRunning.store(true);
-		std::thread([maxDepth]() {
-			backgroundCacheImport(maxDepth);
+		std::thread([maxDepth, &isImportRunning]() {
+			backgroundCacheImport(maxDepth, isImportRunning);
 		}).detach();
 	}
 	
@@ -130,13 +129,14 @@ int main(int argc, char *argv[]) {
             std::cout << "\033[2m[Auto-update running in the background...]\033[0m\n";
             messageActive.store(true);
 
-            // Launch a thread to clear the message after 5 seconds
-            std::thread(clearMessageAfterTimeout, 1).detach();
+            // Launch a thread to poll for clear message every 1 second
+            std::thread(clearMessageAfterTimeout, 1, std::ref(isAtMain), std::ref(isImportRunning), std::ref(messageActive)).detach();
 		} else if ((search && !messagePrinted) && (isHistoryFileEmpty(historyFilePath) || !fs::is_regular_file(historyFilePath))) {
 			std::cout << "\033[2m[Auto-update found no stored entries to process...]\033[0m\n";
 			messagePrinted = true;
 			messageActive.store(true);
-			std::thread(clearMessageAfterTimeout, 3).detach();
+			// clear message after 4 seconds
+			std::thread(clearMessageAfterTimeout, 4, std::ref(isAtMain), std::ref(isImportRunning), std::ref(messageActive)).detach();
 		}
         
         // Display the main menu options
@@ -158,12 +158,14 @@ int main(int argc, char *argv[]) {
         std::string choice(mainInputString);
 
         if (choice == "1") {
+			isAtMain = false;
             submenu1(maxDepth, historyPattern, verbose);
         } else {
             // Check if the input length is exactly 1
             if (choice.length() == 1) {
                 switch (choice[0]) {
                     case '2':
+						isAtMain = false;
                         submenu2(promptFlag, maxDepth, historyPattern, verbose);
                         break;
                     case '3':
@@ -221,7 +223,7 @@ std::cout << Color << R"((   (       )            )    *      *              ) (
 
 // Function to print submenu1
 void submenu1(int& maxDepth, bool& historyPattern, bool& verbose) {
-	isAtMain = false;
+	
     while (true) {
 		// Calls prevent_clear_screen and tab completion
 		rl_bind_key('\f', prevent_readline_keybindings);
@@ -304,7 +306,7 @@ void submenu1(int& maxDepth, bool& historyPattern, bool& verbose) {
 
 // Function to print submenu2
 void submenu2(bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
-	isAtMain = false;
+	
 	while (true) {
 		// Calls prevent_clear_screen and tab completion
 		rl_bind_key('\f', prevent_readline_keybindings);
@@ -559,7 +561,7 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
 
 
 // Function to clear the message after a timeout
-void clearMessageAfterTimeout(int timeoutSeconds) {
+void clearMessageAfterTimeout(int timeoutSeconds, std::atomic<bool>& isAtMain, std::atomic<bool>& isImportRunning, std::atomic<bool>& messageActive) {
     while (true) {
         std::this_thread::sleep_for(std::chrono::seconds(timeoutSeconds));
         
