@@ -70,11 +70,6 @@ extern bool toggleFullListWrite;
 // For toggling between full and shortened paths in conversions
 extern bool toggleFullListConversions;
 
-// Global helper variables to determine function location
-extern bool atMount;
-extern bool atConversions;
-extern bool atWrite;
-extern bool atCpMvRm;
 
 // Cache for directory and filename transformations
 extern std::unordered_map<std::string, std::string> transformationCache;
@@ -147,7 +142,7 @@ void helpMappings();
 void clearHistory(const std::string& inputSearch);
 void setDisplayMode(const std::string& inputSearch);
 void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& maxDepth, bool& verbose);
-void printList(const std::vector<std::string>& items, const std::string& listType);
+void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType);
 void verbosePrint(const std::set<std::string>& primarySet, const std::set<std::string>& secondarySet , const std::set<std::string>& tertiarySet, const std::set<std::string>& quaternarySet,const std::set<std::string>& errorSet, int printType);
 void tokenizeInput(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, std::set<int>& processedIndices);
 void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t totalBytes, std::atomic<size_t>* completedTasks, size_t totalTasks, std::atomic<bool>* isComplete, bool* verbose);
@@ -156,7 +151,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 size_t getTotalFileSize(const std::vector<std::string>& files);
 
 // stds
-std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view path);
+std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view path, const std::string& location);
 
 
 // HISTORY
@@ -196,7 +191,7 @@ std::string modifyDirectoryPath(const std::string& dir);
 
 // bools
 bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize);
-bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered);
+bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType);
 
 // stds
 std::string getHomeDirectory();
