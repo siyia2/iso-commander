@@ -46,19 +46,19 @@
 // Get max available CPU cores for global use
 extern unsigned int maxThreads;
 
-// For storing isoFiles in RAM cache
-extern std::vector<std::string> globalIsoFileList; 
-
 // Global mutex to protect the verbose sets
 extern std::mutex globalSetsMutex;
 
-// Holds IsoCache directory path
-extern const std::string cacheFileName;
+// For storing isoFiles in RAM cache
+extern std::vector<std::string> globalIsoFileList; 
 
 // Cache for directory and filename transformations
 extern std::unordered_map<std::string, std::string> transformationCache;
 
-// For automatic ISO cache refresh from history paths
+// Holds IsoCache directory path
+extern const std::string cacheFileName;
+
+// Holds folder history directory path
 extern const std::string historyFilePath;
 
 // Holds configuration path
