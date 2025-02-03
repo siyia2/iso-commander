@@ -41,7 +41,6 @@ int main(int argc, char *argv[]) {
 	std::atomic<bool> isImportRunning;
 	// Global atomic flag for auto-update message state
 	std::atomic<bool> messageActive{false};
-	// For indicating if location is int main
 	std::atomic<bool> isAtMain{true};
 	
 	
@@ -105,6 +104,8 @@ int main(int argc, char *argv[]) {
 		// Calls prevent_clear_screen and tab completion
 		rl_bind_key('\f', prevent_readline_keybindings);
 		rl_bind_key('\t', prevent_readline_keybindings);
+		// For indicating if location is int main
+		isAtMain.store(true);
 
 		globalIsoFileList.reserve(100);
         clearScrollBuffer();
@@ -146,18 +147,18 @@ int main(int argc, char *argv[]) {
         std::string choice(mainInputString);
 
         if (choice == "1") {
-			isAtMain = false;
+			isAtMain.store(false);
             submenu1(maxDepth, historyPattern, verbose);
         } else {
             // Check if the input length is exactly 1
             if (choice.length() == 1) {
                 switch (choice[0]) {
                     case '2':
-						isAtMain = false;
+						isAtMain.store(false);
                         submenu2(promptFlag, maxDepth, historyPattern, verbose);
                         break;
                     case '3':
-						isAtMain = false;
+						isAtMain.store(false);
                         manualRefreshCache("", promptFlag, maxDepth, historyPattern);
                         clearScrollBuffer();
                         break;
