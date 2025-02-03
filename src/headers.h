@@ -55,21 +55,6 @@ extern std::mutex globalSetsMutex;
 // Holds IsoCache directory path
 extern const std::string cacheFileName;
 
-// For toggling between full and shortened paths in all lists except umount
-extern bool toggleFullListMount;
-
-// For toggling between full and shortened paths in umount list
-extern bool toggleFullListUmount;
-
-// For toggling between full and shortened paths in cpMvRm
-extern bool toggleFullListCpMvRm;
-
-// For toggling between full and shortened paths in write
-extern bool toggleFullListWrite;
-
-// For toggling between full and shortened paths in conversions
-extern bool toggleFullListConversions;
-
 // Cache for directory and filename transformations
 extern std::unordered_map<std::string, std::string> transformationCache;
 
