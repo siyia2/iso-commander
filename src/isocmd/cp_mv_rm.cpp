@@ -138,7 +138,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
 		for (const auto& chunk : indexChunks) {
 			for (int index : chunk) {
 				// Extract the directory and filename
-				auto [shortDir, filename] = extractDirectoryAndFilename(isoFiles[index - 1]);
+				auto [shortDir, filename] = extractDirectoryAndFilename(isoFiles[index - 1], "cp_mv_rm");
 
 				// Construct the prompt with the directory in bold and filename in magenta
 				prompt += "\033[1m-> " + shortDir + "/\033[1;95m" + filename + "\033[0;1m\n";
@@ -335,7 +335,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
         if (stat(path.c_str(), &file_stat) == 0) {
             if (file_stat.st_uid != real_uid || file_stat.st_gid != real_gid) {
                 if (chown(path.c_str(), real_uid, real_gid) != 0) {
-                    auto [dir, file] = extractDirectoryAndFilename(path.string());
+                    auto [dir, file] = extractDirectoryAndFilename(path.string(), "cp_mv_rm");
                     std::string errorMessage = "\033[1;91mFailed to change ownership of '" + dir + "/" + file + "': " + strerror(errno) + "\033[0m";
                     {
                         std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
@@ -345,7 +345,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                 }
             }
         } else {
-            auto [dir, file] = extractDirectoryAndFilename(path.string());
+            auto [dir, file] = extractDirectoryAndFilename(path.string(), "cp_mv_rm");
             std::string errorMessage = "\033[1;91mFailed to get file info for '" + dir + "/" + file + "': " + strerror(errno) + "\033[0m";
             {
                 std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
@@ -371,7 +371,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
             }
 
             fs::path srcPath(operateIso);
-            auto [srcDir, srcFile] = extractDirectoryAndFilename(srcPath.string());
+            auto [srcDir, srcFile] = extractDirectoryAndFilename(srcPath.string(), "cp_mv_rm");
 
             struct stat st;
             size_t fileSize = 0;
@@ -400,7 +400,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     const auto& destDir = destDirs[i];
                     fs::path destPath = fs::path(destDir) / srcPath.filename();
 
-                    auto [destDirProcessed, destFile] = extractDirectoryAndFilename(destPath.string());
+                    auto [destDirProcessed, destFile] = extractDirectoryAndFilename(destPath.string(), "cp_mv_rm");
 
                     // Check if source and destination are the same
                     fs::path absSrcPath = fs::absolute(srcPath);
@@ -511,7 +511,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
     std::vector<std::string> isoFilesToOperate;
     for (const auto& iso : isoFiles) {
         fs::path isoPath(iso);
-        auto [isoDir, isoFile] = extractDirectoryAndFilename(isoPath.string());
+        auto [isoDir, isoFile] = extractDirectoryAndFilename(isoPath.string(), "cp_mv_rm");
 
         auto it = std::find(isoFilesCopy.begin(), isoFilesCopy.end(), iso);
         if (it != isoFilesCopy.end()) {

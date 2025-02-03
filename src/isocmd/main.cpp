@@ -29,12 +29,6 @@ bool toggleFullListWrite = false;
 bool toggleFullListConversions = false;
 
 
-// Helper variables to determine function location
-bool atMount = false;
-bool atConversions = false;
-bool atCpMvRm = false;
-bool atWrite = false;
-
 // Global flag to track cancellation for write2usb
 std::atomic<bool> g_cancelOperation(false);
 

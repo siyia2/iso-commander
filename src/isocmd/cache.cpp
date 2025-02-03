@@ -158,7 +158,7 @@ std::string getHomeDirectory() {
 
 
 // Utility function to clear screen buffer and load IsoFiles from cache to a global vector only for the first time and only for if the cache has been modified.
-bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered) {
+bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType) {
     static std::filesystem::file_time_type lastModifiedTime;
 
     clearScrollBuffer();
@@ -190,7 +190,7 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
         sortFilesCaseInsensitive(globalIsoFileList);
     }
 
-    printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES");
+    printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType);
 
     if (globalIsoFileList.empty()) {
         clearScrollBuffer();

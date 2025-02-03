@@ -41,22 +41,6 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
     bool write = (operation == "write");
     bool promptFlag = false; // PromptFlag for cache refresh, defaults to false for move and other operations
     
-    // Set default location values
-	atMount = false;
-	atConversions = false;
-	atCpMvRm = false;
-	atWrite = false;
-    
-    if (isMount) {
-		atMount = true;
-	} else if (write) {
-		atWrite = true;
-	} else if (isUnmount) {
-		
-	} else {
-		atCpMvRm = true;
-	}
-    
     while (true) {
         // Verbose output is to be disabled unless specified by progressbar function downstream
         verbose = false;
@@ -67,8 +51,10 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         uniqueErrorMessages.clear();
 
         if (needsClrScrn && !isUnmount) {
+			std::string listSubtype;
             umountMvRmBreak = false;
-            if (!clearAndLoadFiles(filteredFiles, isFiltered)) break;
+            listSubtype = isMount ? "mount" : (write ? "write" : "cp_mv_rm");
+            if (!clearAndLoadFiles(filteredFiles, isFiltered, listSubtype)) break;
             std::cout << "\n\n";
         } else if (needsClrScrn && isUnmount) {
             umountMvRmBreak = false;
@@ -99,24 +85,15 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         }
 
         if (inputString == "~") {
-		// Set default values
-		atMount = false;
-		atConversions = false;
-		atCpMvRm = false;
-		atWrite = false;
-		needsClrScrn = true;
 
 		// Update specific flags and variables based on conditions
 		if (isMount) {
-			atMount = true;
 			toggleFullListMount = !toggleFullListMount;
 		} else if (isUnmount) {
 			toggleFullListUmount = !toggleFullListUmount;
 		} else if (write) {
-			atWrite = true;
 			toggleFullListWrite = !toggleFullListWrite;
 		} else {
-			atCpMvRm = true;
 			toggleFullListCpMvRm = !toggleFullListCpMvRm;
 		}
 				
@@ -528,7 +505,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 
 
 // Function to print all required lists
-void printList(const std::vector<std::string>& items, const std::string& listType) {
+void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType) {
     static const char* defaultColor = "\033[0m";
     static const char* bold = "\033[1m";
     static const char* reset = "\033[0m";
@@ -558,7 +535,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         std::string directory, filename, displayPath, displayHash;
 
         if (listType == "ISO_FILES") {
-            auto [dir, fname] = extractDirectoryAndFilename(items[i]);
+            auto [dir, fname] = extractDirectoryAndFilename(items[i], listSubType);
             directory = dir;
             filename = fname;
         } else if (listType == "MOUNTED_ISOS") {
@@ -586,7 +563,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
 				displayHash = "";
 			}
 		} else if (listType == "IMAGE_FILES") {
-            auto [dir, fname] = extractDirectoryAndFilename(items[i]);
+            auto [dir, fname] = extractDirectoryAndFilename(items[i], "conversions");
 
             bool isSpecialExtension = false;
             std::string extension = fname;
@@ -926,7 +903,7 @@ void helpMappings() {
 std::unordered_map<std::string, std::string> transformationCache;
 
 // Function to extract directory and filename from a given path
-std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view path) {
+std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view path, const std::string& location) {
     // Use string_view for non-modifying operations
     static const std::array<std::pair<std::string_view, std::string_view>, 2> replacements = {{
         {"/home", "~"},
@@ -940,16 +917,16 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view
     }
 
     // Early return for full list mode
-    if (toggleFullListMount && atMount) {
+    if (toggleFullListMount && location == "mount") {
         return {std::string(path.substr(0, lastSlashPos)), 
                 std::string(path.substr(lastSlashPos + 1))};
-    } else if (toggleFullListCpMvRm && atCpMvRm) {
+    } else if (toggleFullListCpMvRm && location == "cp_mv_rm") {
 		 return {std::string(path.substr(0, lastSlashPos)), 
                 std::string(path.substr(lastSlashPos + 1))};
-	} else if (toggleFullListConversions && atConversions) {
+	} else if (toggleFullListConversions && location == "conversions") {
 		return {std::string(path.substr(0, lastSlashPos)), 
                 std::string(path.substr(lastSlashPos + 1))};
-	} else if (toggleFullListWrite && atWrite) {
+	} else if (toggleFullListWrite && location == "write") {
 		return {std::string(path.substr(0, lastSlashPos)), 
                 std::string(path.substr(lastSlashPos + 1))};
 	}

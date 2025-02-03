@@ -36,7 +36,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
 
         // Prepare path and naming information
         std::string isoFileName = isoPath.stem().string();
-        auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile);
+        auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile, "mount");
 
         // Generate unique hash for mount point
         std::hash<std::string> hasher;
@@ -51,7 +51,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
         // Create unique mount point and identifiers
         std::string uniqueId = isoFileName + "~" + shortHash;
         std::string mountPoint = "/mnt/iso_" + uniqueId;
-        auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint);
+        auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint, "mount");
 
         // Validation checks with centralized error handling
         auto logError = [&](const std::string& errorType, bool useFullPath = false) {

@@ -32,7 +32,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
         if (filteredFiles.size() == isoDirs.size()) {
 				isFiltered = false;
 		}
-        printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS");
+        printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS", "");
 
     return true;
 }

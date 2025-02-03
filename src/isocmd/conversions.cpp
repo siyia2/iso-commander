@@ -340,12 +340,6 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         }
     };
     
-    // Set default location values
-	atMount = false;
-	atConversions = true;
-	atCpMvRm = false;
-	atWrite = false;
-
     // Main processing loop
     while (true) {
         verbose = false; // Reset verbose mode
@@ -366,7 +360,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 			files = nrgFilesCache;
 		}
         sortFilesCaseInsensitive(files); // Sort the files case-insensitively
-        printList(files, "IMAGE_FILES"); // Print the current list of files
+        printList(files, "IMAGE_FILES", "conversions"); // Print the current list of files
 		}
 		std::cout << "\n\n";
 		std::cout << "\033[1A\033[K";
@@ -387,7 +381,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         if (mainInputString == "~") {
             toggleFullListConversions = !toggleFullListConversions;
             clearScrollBuffer();
-            printList(files, "IMAGE_FILES");
+            printList(files, "IMAGE_FILES", "conversions");
             continue;
         }
 
@@ -847,7 +841,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
 
     // Iterate over each image file
     for (const std::string& inputPath : imageFiles) {
-        auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath);
+        auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath, "conversions");
 
         // Check if the input file exists
         if (!std::filesystem::exists(inputPath)) {
@@ -920,7 +914,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
         }
 
         // Handle output results
-        auto [outDirectory, outFileNameOnly] = extractDirectoryAndFilename(outputPath);
+        auto [outDirectory, outFileNameOnly] = extractDirectoryAndFilename(outputPath, "conversions");
 
         if (conversionSuccess) {
             // Change ownership if needed

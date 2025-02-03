@@ -262,7 +262,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         // Build device prompt
         std::string devicePrompt = "\n\033[0;1m Selected \033[1;92mISO\033[0;1m:\n\n";
         for (size_t i = 0; i < selectedIsos.size(); ++i) {
-            auto [shortDir, filename] = extractDirectoryAndFilename(selectedIsos[i].path);
+            auto [shortDir, filename] = extractDirectoryAndFilename(selectedIsos[i].path, "write");
             devicePrompt += "  \033[1;93m" + std::to_string(i+1) + ">\033[0;1m " + 
                           shortDir + "/\033[1;95m" + filename + "\033[0;1m (\033[1;35m" + 
                           selectedIsos[i].sizeStr + "\033[0;1m)\n";
