@@ -6,14 +6,6 @@
 // For storing isoFiles in RAM
 std::vector<std::string> globalIsoFileList;
 
-const std::unordered_map<char, std::string> settingMap = {
-    {'m', "mount_list"},
-    {'u', "umount_list"},
-    {'f', "cp_mv_rm_list"},
-    {'c', "conversion_lists"},
-    {'w', "write_list"}
-};
-
 // Main function to select and operate on ISOs by number for umount mount cp mv and rm
 void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& maxDepth, bool& verbose) {
     // Calls prevent_clear_screen and tab completion
@@ -617,6 +609,16 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
 
     std::cout << output.str();
 }
+
+
+// Valid input for isValidInput
+const std::unordered_map<char, std::string> settingMap = {
+    {'m', "mount_list"},
+    {'u', "umount_list"},
+    {'f', "cp_mv_rm_list"},
+    {'c', "conversion_lists"},
+    {'w', "write_list"}
+};
 
 
 // Function to validate input dynamically
