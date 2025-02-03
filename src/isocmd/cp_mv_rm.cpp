@@ -364,7 +364,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     {
                         std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
                         operationErrors.clear();
-                        operationErrors.emplace("\033[1;93mOperation interrupted - partial cleanup\033[0m");
+                        operationErrors.emplace("\033[1;93mFile Operation interrupted - partial cleanup\033[0m");
                     }
                 }
                 break;
@@ -473,7 +473,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                                 {
                                     std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
                                     operationErrors.clear();
-                                    operationErrors.emplace("\033[1;33mOperation interrupted by user - partial files cleaned up.\033[0;1m");
+                                    operationErrors.emplace("\033[1;33mFile Operation interrupted by user - partial files cleaned up.\033[0;1m");
                                 }
                             }
                         } else {
