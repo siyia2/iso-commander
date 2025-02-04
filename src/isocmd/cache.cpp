@@ -206,7 +206,7 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
     printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType);
 
     if (globalIsoFileList.empty()) {
-        std::cout << "\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n";
+        std::cout << "\n\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n";
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         return false;
@@ -217,7 +217,7 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
 
 
 // Function to auto-import ISO files in cache without blocking the UI
-void backgroundCacheImport(int maxDepthParam, std::atomic<bool>& isImportRunning) {
+void backgroundCacheImport(int maxDepthParam, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
     std::vector<std::string> paths;
     int localMaxDepth = maxDepthParam;
     bool localPromptFlag = false;
@@ -321,7 +321,7 @@ void backgroundCacheImport(int maxDepthParam, std::atomic<bool>& isImportRunning
         future.wait();
     }
 
-    saveCache(allIsoFiles, maxCacheSize);
+    saveCache(allIsoFiles, maxCacheSize, newISOFound);
 
     isImportRunning.store(false);
 }
@@ -382,7 +382,7 @@ void loadCache(std::vector<std::string>& isoFiles) {
 
 
 // Function to save ISO cache to file
-bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize) {
+bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize, std::atomic<bool>& newISOFound) {
     std::filesystem::path cachePath = cacheDirectory;
     cachePath /= cacheFileName;
     if (!std::filesystem::exists(cacheDirectory) && !std::filesystem::create_directories(cacheDirectory)) {
@@ -452,7 +452,7 @@ bool isValidDirectory(const std::string& path) {
 
 
 // Function that can delete or show stats for ISO cache it is called from within manualRefreshCache
-void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, const int& maxDepth, const bool& historyPattern) {
+void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, const int& maxDepth, const bool& historyPattern, std::atomic<bool>& newISOFound) {
     const std::set<std::string> validInputs = {
         "*fl_m", "*cl_m", "*fl_u", "*cl_u", "*fl_fo", "*cl_fo", "*fl_w", "*cl_w", "*fl_c", "*cl_c"
     };
@@ -478,7 +478,7 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
 
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+        manualRefreshCache("", promptFlag, maxDepth, historyPattern, newISOFound);
 
     } else if (inputSearch == "!clr") {
         if (std::remove(cacheFilePath.c_str()) != 0) {
@@ -486,7 +486,7 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
                       << cacheFilePath << "\001'\033[1;91m. File missing or inaccessible." << std::endl;
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+            manualRefreshCache("", promptFlag, maxDepth, historyPattern, newISOFound);
         } else {
             // Clean transformation cache for .iso entries
             for (auto it = transformationCache.begin(); it != transformationCache.end();) {
@@ -501,12 +501,12 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
             std::cout << "\n\001\033[1;92mIsoCache cleared successfully\001\033[1;92m." << std::endl;
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+            manualRefreshCache("", promptFlag, maxDepth, historyPattern, newISOFound);
         }
 
     } else if (inputSearch == "!clr_paths" || inputSearch == "!clr_filter") {
         clearHistory(inputSearch);
-        manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+        manualRefreshCache("", promptFlag, maxDepth, historyPattern, newISOFound);
 
     } else if (inputSearch == "*auto_on" || inputSearch == "*auto_off") {
         // Create directory if it doesn't exist
@@ -517,7 +517,7 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
                           << dirPath.string() << "\033[1;91m'.\033[0;1m\n";
                 std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+                manualRefreshCache("", promptFlag, maxDepth, historyPattern, newISOFound);
             }
         }
 
@@ -549,17 +549,17 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
 
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+        manualRefreshCache("", promptFlag, maxDepth, historyPattern, newISOFound);
 
     } else if (isValidInput(inputSearch)) {
         setDisplayMode(inputSearch);
-        manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+        manualRefreshCache("", promptFlag, maxDepth, historyPattern, newISOFound);
     }
 }
 
 
 // Function for manual cache refresh
-void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxDepth, bool historyPattern) {
+void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxDepth, bool historyPattern, std::atomic<bool>& newISOFound) {
 	
 	// Setup signal handler at the start of the operation
     setupSignalHandlerCancellations();
@@ -600,11 +600,11 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 			if (input == "?") {
 				helpSearches(isCpMv);
 				input = "";
-				manualRefreshCache("", promptFlag, maxDepth, historyPattern);
+				manualRefreshCache("", promptFlag, maxDepth, historyPattern, newISOFound);
 			}        
 			
             if (input == "stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter" || input == "*auto_off" || input == "*auto_on" || isValidInput(input)) {
-                cacheAndMiscSwitches(input, promptFlag, maxDepth, historyPattern);
+                cacheAndMiscSwitches(input, promptFlag, maxDepth, historyPattern, newISOFound);
                 return;
             }
             
@@ -697,11 +697,11 @@ void manualRefreshCache(const std::string& initialDir, bool promptFlag, int maxD
 			clear_history();
 		}
         verboseIsoCacheRefresh(allIsoFiles, totalFiles, validPaths, invalidPaths, 
-                               uniqueErrorMessages, promptFlag, maxDepth, historyPattern, start_time);
+                               uniqueErrorMessages, promptFlag, maxDepth, historyPattern, start_time, newISOFound);
     } else {
 		if (!g_operationCancelled.load()) {
 			// Save the combined cache to disk
-			saveCache(allIsoFiles, maxCacheSize);
+			saveCache(allIsoFiles, maxCacheSize, newISOFound);
 		}
 		promptFlag = true;
 		maxDepth = -1;
