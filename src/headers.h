@@ -93,7 +93,7 @@ int prevent_readline_keybindings(int, int);
 
 void printVersionNumber(const std::string& version);
 void printMenu();
-void submenu1(int& maxDepth, bool& historyPattern, bool& verbose);
+void submenu1(int& maxDepth, bool& historyPattern, bool& verbose, std::atomic<bool>& updateRun, std::atomic<bool>& isAtISO, std::atomic<bool>& isImportRunning);
 void submenu2(bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose);
 void print_ascii();
 void flushStdin();
@@ -125,7 +125,7 @@ void helpSearches(bool isCpMv);
 void helpMappings();
 void clearHistory(const std::string& inputSearch);
 void setDisplayMode(const std::string& inputSearch);
-void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& maxDepth, bool& verbose);
+void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& maxDepth, bool& verbose, std::atomic<bool>& updateRun, std::atomic<bool>& isAtISO, std::atomic<bool>& isImportRunning);
 void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType);
 void verbosePrint(const std::set<std::string>& primarySet, const std::set<std::string>& secondarySet , const std::set<std::string>& tertiarySet, const std::set<std::string>& quaternarySet,const std::set<std::string>& errorSet, int printType);
 void tokenizeInput(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, std::set<int>& processedIndices);
