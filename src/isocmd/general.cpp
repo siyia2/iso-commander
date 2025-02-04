@@ -7,8 +7,31 @@
 // For storing isoFiles in RAM
 std::vector<std::string> globalIsoFileList;
 
+// Function to automatically update on-disk cache if auto-update is on
+void refreshListAfterTimeout(int timeoutSeconds, std::atomic<bool>& isAtISO, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateRun, std::vector<std::string>& filteredFiles, std::vector<std::string>& sourceList, bool& isFiltered, std::string& listSubtype) {
+    while (true) {
+        std::this_thread::sleep_for(std::chrono::seconds(timeoutSeconds));
+        
+        if (!isImportRunning.load() && isAtISO.load()) {
+            clearScrollBuffer();
+            
+            clearAndLoadFiles(filteredFiles, isFiltered, listSubtype);
+            sourceList = isFiltered ? filteredFiles : globalIsoFileList;  // Update sourceList
+            
+            std::cout << "\n";
+            rl_on_new_line(); 
+            rl_redisplay();
+            
+            updateRun.store(false);
+            
+            break;
+        }
+    }
+}
+
+
 // Main function to select and operate on ISOs by number for umount mount cp mv and rm
-void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& maxDepth, bool& verbose) {
+void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& maxDepth, bool& verbose, std::atomic<bool>& updateRun, std::atomic<bool>& isAtISO, std::atomic<bool>& isImportRunning) {
     // Bind readline keys
     rl_bind_key('\f', prevent_readline_keybindings);
     rl_bind_key('\t', prevent_readline_keybindings);
@@ -19,6 +42,8 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
     globalIsoFileList.reserve(100);
     sourceList.reserve(100);
     filteredFiles.reserve(100);
+    
+    isAtISO.store(true);
     
     bool isFiltered = false;
     bool needsClrScrn = true;
@@ -37,17 +62,25 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
     bool write = (operation == "write");
     bool promptFlag = false;
     
+    std::string listSubtype = isMount ? "mount" : (write ? "write" : "cp_mv_rm");
+        
     while (true) {
         verbose = false;
         operationFiles.clear();
         skippedMessages.clear();
         operationFails.clear();
         uniqueErrorMessages.clear();
-
+        
+        if (updateRun.load() && !isUnmount) {
+			std::thread(refreshListAfterTimeout, 1, std::ref(isAtISO), 
+				std::ref(isImportRunning), std::ref(updateRun), 
+                std::ref(filteredFiles), std::ref(sourceList), 
+                std::ref(isFiltered), std::ref(listSubtype)).detach();
+		}
+        
         // Determine source list and load files based on operation type
         if (!isUnmount) {
             if (needsClrScrn) {
-                std::string listSubtype = isMount ? "mount" : (write ? "write" : "cp_mv_rm");
                 if (!clearAndLoadFiles(filteredFiles, isFiltered, listSubtype)) break;
                 sourceList = isFiltered ? filteredFiles : globalIsoFileList;
                 std::cout << "\n\n";
@@ -115,7 +148,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
                 std::cout << "\033[1A\033[K";
 
                 // Generate filter prompt
-                std::string filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + 
+                std::string filterPrompt = "\001\033[1;38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + 
                                            "\001\033[1;94m\002, or ↵ to return: \001\033[0;1m\002";
                 std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
 
