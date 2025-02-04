@@ -7,21 +7,23 @@
 // For storing isoFiles in RAM
 std::vector<std::string> globalIsoFileList;
 
+// Variable to track if a new .iso file is found searching
+bool newFound = false;
+
 // Function to automatically update on-disk cache if auto-update is on
 void refreshListAfterTimeout(int timeoutSeconds, std::atomic<bool>& isAtISO, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateRun, std::vector<std::string>& filteredFiles, std::vector<std::string>& sourceList, bool& isFiltered, std::string& listSubtype) {
     while (true) {
         std::this_thread::sleep_for(std::chrono::seconds(timeoutSeconds));
         
         if (!isImportRunning.load() && isAtISO.load()) {
-            clearScrollBuffer();
-            
+			if (newFound) {
             clearAndLoadFiles(filteredFiles, isFiltered, listSubtype);
             sourceList = isFiltered ? filteredFiles : globalIsoFileList;  // Update sourceList
             
             std::cout << "\n";
             rl_on_new_line(); 
             rl_redisplay();
-            
+			}
             updateRun.store(false);
             
             break;

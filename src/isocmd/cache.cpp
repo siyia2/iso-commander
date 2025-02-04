@@ -402,6 +402,7 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
     for (const auto& iso : isoFiles) {
         if (existingSet.find(iso) == existingSet.end()) {
             newEntries.push_back(iso);
+            newISOFound = true; // Set the global variable to true when a new ISO is found
         }
     }
     
