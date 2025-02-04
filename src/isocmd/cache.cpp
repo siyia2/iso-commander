@@ -198,9 +198,7 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
 
     // Common operations
     clearScrollBuffer();
-
     if (needToReload) {
-        removeNonExistentPathsFromCache();
         loadCache(globalIsoFileList);
     }
 

@@ -73,6 +73,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         skippedMessages.clear();
         operationFails.clear();
         uniqueErrorMessages.clear();
+        removeNonExistentPathsFromCache();
         
         if (updateRun.load() && !isUnmount) {
 			std::thread(refreshListAfterAutoUpdate, 1, std::ref(isAtISO), 
@@ -248,6 +249,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
 
         // Reset filter for certain operations
         if ((operation == "mv" || operation == "rm" || operation == "umount") && isFiltered && umountMvRmBreak) {
+			removeNonExistentPathsFromCache();
             historyPattern = false;
             clear_history();
             isFiltered = false;
