@@ -7,16 +7,14 @@
 // For storing isoFiles in RAM
 std::vector<std::string> globalIsoFileList;
 
-// Variable to track if a new .iso file is found searching
-bool newISOFound = false;
 
 // Function to automatically update on-disk cache if auto-update is on
-void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISO, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateRun, std::vector<std::string>& filteredFiles, std::vector<std::string>& sourceList, bool& isFiltered, std::string& listSubtype) {
+void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISO, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateRun, std::vector<std::string>& filteredFiles, std::vector<std::string>& sourceList, bool& isFiltered, std::string& listSubtype, std::atomic<bool>& newISOFound) {
     while (true) {
         std::this_thread::sleep_for(std::chrono::seconds(timeoutSeconds));
         
         if (!isImportRunning.load() && isAtISO.load()) {
-			if (newISOFound) {
+			if (newISOFound.load()) {
             clearAndLoadFiles(filteredFiles, isFiltered, listSubtype);
             sourceList = isFiltered ? filteredFiles : globalIsoFileList;  // Update sourceList
             
@@ -25,7 +23,7 @@ void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISO, 
             rl_redisplay();
 			}
             updateRun.store(false);
-            newISOFound =false;
+            newISOFound.store(false);
             
             break;
         }
@@ -34,7 +32,7 @@ void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISO, 
 
 
 // Main function to select and operate on ISOs by number for umount mount cp mv and rm
-void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& maxDepth, bool& verbose, std::atomic<bool>& updateRun, std::atomic<bool>& isAtISO, std::atomic<bool>& isImportRunning) {
+void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& maxDepth, bool& verbose, std::atomic<bool>& updateRun, std::atomic<bool>& isAtISO, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
     // Bind readline keys
     rl_bind_key('\f', prevent_readline_keybindings);
     rl_bind_key('\t', prevent_readline_keybindings);
@@ -79,7 +77,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
 			std::thread(refreshListAfterAutoUpdate, 1, std::ref(isAtISO), 
 				std::ref(isImportRunning), std::ref(updateRun), 
                 std::ref(filteredFiles), std::ref(sourceList), 
-                std::ref(isFiltered), std::ref(listSubtype)).detach();
+                std::ref(isFiltered), std::ref(listSubtype), std::ref(newISOFound)).detach();
 		}
         
         // Determine source list and load files based on operation type
@@ -229,7 +227,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         } else if (write) {
             writeToUsb(inputString, sourceList, uniqueErrorMessages);
         } else {
-            processOperationInput(inputString, sourceList, operation, operationFiles, operationFails, uniqueErrorMessages, promptFlag, maxDepth, umountMvRmBreak, historyPattern, verbose);
+            processOperationInput(inputString, sourceList, operation, operationFiles, operationFails, uniqueErrorMessages, promptFlag, maxDepth, umountMvRmBreak, historyPattern, verbose, newISOFound);
         }
 
         // Result handling and display
