@@ -498,7 +498,7 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
                 }
             }
 
-            std::cout << "\n\001\033[1;92mIsoCache cleared successfully\001\033[1;92m'." << std::endl;
+            std::cout << "\n\001\033[1;92mIsoCache cleared successfully\001\033[1;92m." << std::endl;
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             manualRefreshCache("", promptFlag, maxDepth, historyPattern, newISOFound);
