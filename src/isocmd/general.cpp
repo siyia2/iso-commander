@@ -249,7 +249,6 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
 
         // Reset filter for certain operations
         if ((operation == "mv" || operation == "rm" || operation == "umount") && isFiltered && umountMvRmBreak) {
-			removeNonExistentPathsFromCache();
             historyPattern = false;
             clear_history();
             isFiltered = false;
