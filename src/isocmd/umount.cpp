@@ -155,7 +155,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
 
 
 // Main function to send ISOs for unmount
-void prepareUnmount(const std::string& input, std::vector<std::string>& selectedIsoDirs, std::vector<std::string>& currentFiles, std::set<std::string>& operationFiles, std::set<std::string>& operationFails, std::set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& verbose) {
+void prepareUnmount(const std::string& input, std::vector<std::string>& currentFiles, std::set<std::string>& operationFiles, std::set<std::string>& operationFails, std::set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& verbose) {
     std::set<int> selectedIndices;
     
     // Setup signal handler at the start of the operation
@@ -164,34 +164,28 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& selected
     // Reset cancellation flag
     g_operationCancelled.store(false);
     
-    if (input != "00" && selectedIsoDirs.empty()) {
+    if (input == "00") {
+        for (size_t i = 0; i < currentFiles.size(); ++i)
+            selectedIndices.insert(i + 1);
+    } else {
         tokenizeInput(input, currentFiles, uniqueErrorMessages, selectedIndices);
-        for (int index : selectedIndices) {
-            if (g_operationCancelled.load()) break;
-            selectedIsoDirs.push_back(currentFiles[index - 1]);
+        if (selectedIndices.empty()) {
+			umountMvRmBreak = false;
+            return;
         }
-    }
-
-    if (selectedIsoDirs.empty()) {
-        umountMvRmBreak = false;
-        clearScrollBuffer();
-        std::cerr << "\n\033[1;91mNo valid input provided for umount.\n";
-        std::cout << "\n\033[1;32m↵ to continue...";
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        return;
     }
 
     clearScrollBuffer();
     std::cout << "\n\033[0;1m Processing \033[1;93mumount\033[0;1m operations... (\033[1;91mCtrl + c\033[0;1m:cancel)\n";
 
     // Thread pool setup
-    unsigned int numThreads = std::min(static_cast<unsigned int>(selectedIsoDirs.size()), maxThreads);
+    unsigned int numThreads = std::min(static_cast<unsigned int>(currentFiles.size()), maxThreads);
     std::vector<std::vector<std::string>> isoChunks;
-    const size_t chunkSize = std::min(size_t(100), selectedIsoDirs.size()/numThreads + 1);
+    const size_t chunkSize = std::min(size_t(100), currentFiles.size()/numThreads + 1);
 
-    for (size_t i = 0; i < selectedIsoDirs.size(); i += chunkSize) {
-        auto end = std::min(selectedIsoDirs.begin() + i + chunkSize, selectedIsoDirs.end());
-        isoChunks.emplace_back(selectedIsoDirs.begin() + i, end);
+    for (size_t i = 0; i < currentFiles.size(); i += chunkSize) {
+        auto end = std::min(currentFiles.begin() + i + chunkSize, currentFiles.end());
+        isoChunks.emplace_back(currentFiles.begin() + i, end);
     }
 
     ThreadPool pool(numThreads);
@@ -205,7 +199,7 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& selected
         nullptr,
         static_cast<size_t>(0),
         &completedIsos,
-        selectedIsoDirs.size(),
+        currentFiles.size(),
         &isComplete,
         &verbose
     );

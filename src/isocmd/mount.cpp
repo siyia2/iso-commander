@@ -202,7 +202,6 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
     } else {
         tokenizeInput(input, isoFiles, uniqueErrorMessages, indicesToProcess);
         if (indicesToProcess.empty()) {
-            std::cout << "\033[1;91mNo valid input provided for mount.\033[0;1m";
             return;
         }
     }
