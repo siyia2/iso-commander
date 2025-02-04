@@ -92,6 +92,21 @@ void removeNonExistentPathsFromCache() {
         auto result = future.get();
         retainedPaths.insert(retainedPaths.end(), std::make_move_iterator(result.begin()), std::make_move_iterator(result.end()));
     }
+    
+    // Check if the retained paths are the same as the original cache
+	if (cache.size() == retainedPaths.size() && 
+		std::equal(cache.begin(), cache.end(), retainedPaths.begin())) {
+		// No changes needed, return without modifying the file
+		return;
+	}
+
+	// Only rewrite the file if there are changes
+	std::ofstream updatedCacheFile(cacheFilePath, std::ios::out | std::ios::trunc);
+	if (!updatedCacheFile.is_open()) {
+		flock(fd, LOCK_UN);
+		close(fd);
+		return;
+	}
 
     // Open the cache file for writing
     fd = open(cacheFilePath.c_str(), O_WRONLY);
@@ -106,7 +121,6 @@ void removeNonExistentPathsFromCache() {
     }
 
     // Write the retained paths to the updated cache file
-    std::ofstream updatedCacheFile(cacheFilePath, std::ios::out | std::ios::trunc);
     if (!updatedCacheFile.is_open()) {
         flock(fd, LOCK_UN);
         close(fd);
@@ -161,8 +175,6 @@ std::string getHomeDirectory() {
 bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType) {
     static std::filesystem::file_time_type lastModifiedTime;
 
-    clearScrollBuffer();
-
     // Check if the cache file exists and has been modified
     bool needToReload = false;
     if (std::filesystem::exists(cacheFileName)) {
@@ -185,12 +197,14 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
     }
 
     if (needToReload) {
+        clearScrollBuffer();
         removeNonExistentPathsFromCache();
         loadCache(globalIsoFileList);
         sortFilesCaseInsensitive(globalIsoFileList);
-    }
+    
 
-    printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType);
+		printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType);
+	}
 
     if (globalIsoFileList.empty()) {
         clearScrollBuffer();
@@ -373,49 +387,44 @@ void loadCache(std::vector<std::string>& isoFiles) {
 bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize) {
     std::filesystem::path cachePath = cacheDirectory;
     cachePath /= cacheFileName;
-
     if (!std::filesystem::exists(cacheDirectory) && !std::filesystem::create_directories(cacheDirectory)) {
         return false;
     }
-
     if (!std::filesystem::is_directory(cacheDirectory)) {
         return false;
     }
-
     std::vector<std::string> existingCache;
-    loadCache(existingCache); // Ensure loadCache preserves order
-
-    std::unordered_set<std::string> seen;
-    std::vector<std::string> combinedCache;
-
-    // Preserve existing order and add new entries to the end
-    for (const auto& entry : existingCache) {
-        if (seen.insert(entry).second) {
-            combinedCache.push_back(entry);
-        }
-    }
-
+    loadCache(existingCache);
+    std::unordered_set<std::string> existingSet(existingCache.begin(), existingCache.end());
+    
+    // Only write if there are new entries
+    std::vector<std::string> newEntries;
     for (const auto& iso : isoFiles) {
-        if (seen.insert(iso).second) {
-            combinedCache.push_back(iso);
+        if (existingSet.find(iso) == existingSet.end()) {
+            newEntries.push_back(iso);
         }
     }
-
-    // Trim from the front if over size
+    
+    if (newEntries.empty()) {
+        return true; // No new entries, don't modify cache
+    }
+    
+    // Combine existing cache with new entries, respecting max size
+    std::vector<std::string> combinedCache = existingCache;
+    combinedCache.insert(combinedCache.end(), newEntries.begin(), newEntries.end());
     if (combinedCache.size() > maxCacheSize) {
         combinedCache.erase(combinedCache.begin(), combinedCache.begin() + (combinedCache.size() - maxCacheSize));
     }
-
+    
     int fd = open(cachePath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd == -1) {
         return false;
     }
-
     if (flock(fd, LOCK_EX) == -1) {
         close(fd);
         return false;
     }
-
+    
     bool success = true;
     for (const auto& entry : combinedCache) {
         std::string line = entry + "\n";
@@ -424,7 +433,7 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
             break;
         }
     }
-
+    
     flock(fd, LOCK_UN);
     close(fd);
     return success;
