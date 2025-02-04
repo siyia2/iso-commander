@@ -25,6 +25,7 @@ void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISO, 
             rl_redisplay();
 			}
             updateRun.store(false);
+            newISOFound =false;
             
             break;
         }
