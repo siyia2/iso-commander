@@ -140,9 +140,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
                 std::vector<std::string>& currentFiles = !isUnmount
                 ? (isFiltered ? filteredFiles : globalIsoFileList)
                 : (isFiltered ? filteredFiles : isoDirs);
-				
-				currentFiles.reserve(100);
-                
+				                
                 // Apply the filter on the current list
                 auto newFilteredFiles = filterFiles(currentFiles, inputSearch);
                 sortFilesCaseInsensitive(newFilteredFiles);
@@ -173,9 +171,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
             std::vector<std::string>& currentFiles = !isUnmount 
             ? (isFiltered ? filteredFiles : globalIsoFileList)
             : (isFiltered ? filteredFiles : isoDirs);
-			
-			currentFiles.reserve(100);
-			
+						
             // Apply the filter on the current list
             auto newFilteredFiles = filterFiles(currentFiles, inputSearch);
             sortFilesCaseInsensitive(newFilteredFiles);
@@ -198,36 +194,19 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
             ? filteredFiles 
             : (!isUnmount ? globalIsoFileList : isoDirs);
             
-            currentFiles.reserve(100);
-
             clearScrollBuffer();
             needsClrScrn = true;
             
-            if (isMount && inputString == "00") {
-                // Special case for mounting all files
-                std::cout << "\033[0;1m";
-                std::vector<std::string> selectedIso;
-                selectedIso.reserve(100);
-                selectedIso = currentFiles;
-                processAndMountIsoFiles(inputString, selectedIso, operationFiles, skippedMessages, operationFails, uniqueErrorMessages, verbose);
-            } else if (isMount){
+            if (isMount){
                 clearScrollBuffer();
                 needsClrScrn = true;
                 std::cout << "\033[0;1m";
                 processAndMountIsoFiles(inputString, currentFiles, operationFiles, skippedMessages, operationFails, uniqueErrorMessages, verbose);
             } else if (isUnmount) {
-                // Unmount-specific logic
-                std::vector<std::string> selectedIsoDirs;
-                selectedIsoDirs.reserve(100);
                 
-                if (inputString == "00") {
-                    selectedIsoDirs = currentFiles;
-                    umountMvRmBreak = true;
-                } else {
-                    umountMvRmBreak = true;
-                }
-                
-                prepareUnmount(inputString, selectedIsoDirs, currentFiles, operationFiles, operationFails, uniqueErrorMessages, umountMvRmBreak, verbose);
+				umountMvRmBreak = true;
+                                    
+                prepareUnmount(inputString, currentFiles, currentFiles, operationFiles, operationFails, uniqueErrorMessages, umountMvRmBreak, verbose);
                 needsClrScrn = true;
             } else if (write) {
                 writeToUsb(inputString, currentFiles, uniqueErrorMessages);
