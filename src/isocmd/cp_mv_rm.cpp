@@ -5,7 +5,7 @@
 
 
 // Function to process selected indices for cpMvDel accordingly
-void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& umountMvRmBreak, bool& historyPattern, bool& verbose, std::atomic<bool>& newISOFound) {
+void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& umountMvRmBreak, bool& historyPattern, bool& verbose) {
 	bool overwriteExisting =false;
     
     std::string userDestDir;
@@ -108,7 +108,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     maxDepth = 0;
     
     if (!isDelete) {
-        manualRefreshCache(userDestDir, promptFlag, maxDepth, historyPattern, newISOFound);
+        manualRefreshCache(userDestDir, promptFlag, maxDepth, historyPattern);
     }
     
     if (!isDelete && !operationIsos.empty()) {

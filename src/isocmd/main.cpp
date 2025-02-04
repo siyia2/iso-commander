@@ -51,9 +51,6 @@ int main(int argc, char *argv[]) {
 	// For indicating if auto-update has run
 	std::atomic<bool> updateRun{false};
 	
-	// Variable to track if a new .iso file is found after search
-	std::atomic<bool> newISOFound{false};
-	
 	setupReadlineToIgnoreCtrlC();
 	
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
@@ -103,8 +100,8 @@ int main(int argc, char *argv[]) {
     
 	if (search) {
 		isImportRunning.store(true);
-		std::thread([maxDepth, &isImportRunning, &newISOFound]() {
-			backgroundCacheImport(maxDepth, isImportRunning, newISOFound);
+		std::thread([maxDepth, &isImportRunning]() {
+			backgroundCacheImport(maxDepth, isImportRunning);
 		}).detach();
 		updateRun.store(true);
 	}
@@ -160,18 +157,18 @@ int main(int argc, char *argv[]) {
 
         if (choice == "1") {
 			isAtMain.store(false);
-            submenu1(maxDepth, historyPattern, verbose, updateRun, isAtISO, isImportRunning, newISOFound);
+            submenu1(maxDepth, historyPattern, verbose, updateRun, isAtISO, isImportRunning);
         } else {
             // Check if the input length is exactly 1
             if (choice.length() == 1) {
                 switch (choice[0]) {
                     case '2':
 						isAtMain.store(false);
-                        submenu2(promptFlag, maxDepth, historyPattern, verbose, newISOFound);
+                        submenu2(promptFlag, maxDepth, historyPattern, verbose);
                         break;
                     case '3':
 						isAtMain.store(false);
-                        manualRefreshCache("", promptFlag, maxDepth, historyPattern, newISOFound);
+                        manualRefreshCache("", promptFlag, maxDepth, historyPattern);
                         clearScrollBuffer();
                         break;
                     case '4':
@@ -223,7 +220,7 @@ std::cout << Color << R"((   (       )            )    *      *              ) (
 
 
 // Function to print submenu1
-void submenu1(int& maxDepth, bool& historyPattern, bool& verbose, std::atomic<bool>& updateRun, std::atomic<bool>& isAtISO, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
+void submenu1(int& maxDepth, bool& historyPattern, bool& verbose, std::atomic<bool>& updateRun, std::atomic<bool>& isAtISO, std::atomic<bool>& isImportRunning) {
 	isAtISO.store(false);
 	
     while (true) {
@@ -271,33 +268,33 @@ void submenu1(int& maxDepth, bool& historyPattern, bool& verbose, std::atomic<bo
 		switch (submenu_choice[0]) {
         case '1':
 			clearScrollBuffer();
-            selectForIsoFiles("mount", historyPattern, maxDepth, verbose, updateRun, isAtISO, isImportRunning, newISOFound);
+            selectForIsoFiles("mount", historyPattern, maxDepth, verbose, updateRun, isAtISO, isImportRunning);
             clearScrollBuffer();
             break;
         case '2':
 			clearScrollBuffer();
-            selectForIsoFiles("umount", historyPattern, maxDepth, verbose, updateRun, isAtISO, isImportRunning, newISOFound);
+            selectForIsoFiles("umount", historyPattern, maxDepth, verbose, updateRun, isAtISO, isImportRunning);
             clearScrollBuffer();
             break;
         case '3':
 			clearScrollBuffer();
-            selectForIsoFiles("rm", historyPattern, maxDepth, verbose, updateRun, isAtISO, isImportRunning, newISOFound);
+            selectForIsoFiles("rm", historyPattern, maxDepth, verbose, updateRun, isAtISO, isImportRunning);
             clearScrollBuffer();
             break;
         case '4':
 			clearScrollBuffer();
-            selectForIsoFiles("mv", historyPattern, maxDepth, verbose, updateRun, isAtISO, isImportRunning, newISOFound);
+            selectForIsoFiles("mv", historyPattern, maxDepth, verbose, updateRun, isAtISO, isImportRunning);
 
             clearScrollBuffer();
             break;
         case '5':
 			clearScrollBuffer();
-            selectForIsoFiles("cp", historyPattern, maxDepth, verbose, updateRun, isAtISO, isImportRunning, newISOFound);
+            selectForIsoFiles("cp", historyPattern, maxDepth, verbose, updateRun, isAtISO, isImportRunning);
             clearScrollBuffer();
             break;
         case '6':
 			clearScrollBuffer();
-            selectForIsoFiles("write", historyPattern, maxDepth, verbose, updateRun, isAtISO, isImportRunning, newISOFound);
+            selectForIsoFiles("write", historyPattern, maxDepth, verbose, updateRun, isAtISO, isImportRunning);
             clearScrollBuffer();
             break;
 			}
@@ -307,7 +304,7 @@ void submenu1(int& maxDepth, bool& historyPattern, bool& verbose, std::atomic<bo
 
 
 // Function to print submenu2
-void submenu2(bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose, std::atomic<bool>& newISOFound) {
+void submenu2(bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose) {
 	
 	while (true) {
 		// Calls prevent_clear_screen and tab completion
@@ -350,17 +347,17 @@ void submenu2(bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbo
          switch (submenu_choice[0]) {
              case '1':
 				operation = "bin";
-					promptSearchBinImgMdfNrg(operation, promptFlag, maxDepth, historyPattern, verbose, newISOFound);
+					promptSearchBinImgMdfNrg(operation, promptFlag, maxDepth, historyPattern, verbose);
                 clearScrollBuffer();
                 break;
              case '2':
 				operation = "mdf";
-					promptSearchBinImgMdfNrg(operation, promptFlag, maxDepth, historyPattern, verbose, newISOFound);
+					promptSearchBinImgMdfNrg(operation, promptFlag, maxDepth, historyPattern, verbose);
                 clearScrollBuffer();
                 break;
              case '3':
 				operation = "nrg";
-					promptSearchBinImgMdfNrg(operation, promptFlag, maxDepth, historyPattern, verbose, newISOFound);
+					promptSearchBinImgMdfNrg(operation, promptFlag, maxDepth, historyPattern, verbose);
                 clearScrollBuffer();
                 break;
 			}

@@ -89,7 +89,7 @@ void verbosePrint(const std::set<std::string>& primarySet, const std::set<std::s
 // CACHE
 
 // Function that provides verbose output for manualRefreshCache
-void verboseIsoCacheRefresh(std::vector<std::string>& allIsoFiles, std::atomic<size_t>& totalFiles, std::vector<std::string>& validPaths, std::set<std::string>& invalidPaths, std::set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& historyPattern, const std::chrono::high_resolution_clock::time_point& start_time, std::atomic<bool>& newISOFound) {
+void verboseIsoCacheRefresh(std::vector<std::string>& allIsoFiles, std::atomic<size_t>& totalFiles, std::vector<std::string>& validPaths, std::set<std::string>& invalidPaths, std::set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& historyPattern, const std::chrono::high_resolution_clock::time_point& start_time) {
 	bool saveSuccess;
 	
 	// Print invalid paths
@@ -122,7 +122,7 @@ void verboseIsoCacheRefresh(std::vector<std::string>& allIsoFiles, std::atomic<s
 	if (g_operationCancelled) {
 		saveSuccess = false;
 	} else {
-		saveSuccess = saveCache(allIsoFiles, maxCacheSize, newISOFound);
+		saveSuccess = saveCache(allIsoFiles, maxCacheSize);
 	}
 
     // Stop the timer after completing the cache refresh and removal of non-existent paths
@@ -167,7 +167,7 @@ void verboseIsoCacheRefresh(std::vector<std::string>& allIsoFiles, std::atomic<s
     }
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-    manualRefreshCache("", promptFlag, maxDepth, historyPattern, newISOFound);
+    manualRefreshCache("", promptFlag, maxDepth, historyPattern);
 	}
 }
 
