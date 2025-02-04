@@ -233,7 +233,8 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
 
         // Generate the prompt with selected ISOs at the beginning for deletion confirmation
         std::string selectedIsosPrompt = generateSelectedIsosPrompt();
-        std::string prompt = "\n" + selectedIsosPrompt + "\n\001\033[1;94m\002The selected \001\033[1;92m\002ISO\001\033[1;94m\002 will be \001\033[1;91m\002*PERMANENTLY DELETED FROM DISK*\001\033[1;94m\002. Proceed? (y/n): \001\033[0;1m\002";
+        std::cout << "\n" << selectedIsosPrompt;
+        std::string prompt = "\n\001\033[1;94m\002The selected \001\033[1;92m\002ISO\001\033[1;94m\002 will be \001\033[1;91m\002*PERMANENTLY DELETED FROM DISK*\001\033[1;94m\002. Proceed? (y/n): \001\033[0;1m\002";
 
         std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         // Check for EOF (Ctrl+D) or NULL input before processing
@@ -258,6 +259,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
     }
     return userDestDir;
 }
+
 
 namespace fs = std::filesystem;
 std::atomic<bool> g_operationCancelled{false};
