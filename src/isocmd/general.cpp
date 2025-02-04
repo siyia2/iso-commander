@@ -8,15 +8,15 @@
 std::vector<std::string> globalIsoFileList;
 
 // Variable to track if a new .iso file is found searching
-bool newFound = false;
+bool newISOFound = false;
 
 // Function to automatically update on-disk cache if auto-update is on
-void refreshListAfterTimeout(int timeoutSeconds, std::atomic<bool>& isAtISO, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateRun, std::vector<std::string>& filteredFiles, std::vector<std::string>& sourceList, bool& isFiltered, std::string& listSubtype) {
+void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISO, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateRun, std::vector<std::string>& filteredFiles, std::vector<std::string>& sourceList, bool& isFiltered, std::string& listSubtype) {
     while (true) {
         std::this_thread::sleep_for(std::chrono::seconds(timeoutSeconds));
         
         if (!isImportRunning.load() && isAtISO.load()) {
-			if (newFound) {
+			if (newISOFound) {
             clearAndLoadFiles(filteredFiles, isFiltered, listSubtype);
             sourceList = isFiltered ? filteredFiles : globalIsoFileList;  // Update sourceList
             
@@ -74,7 +74,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         uniqueErrorMessages.clear();
         
         if (updateRun.load() && !isUnmount) {
-			std::thread(refreshListAfterTimeout, 1, std::ref(isAtISO), 
+			std::thread(refreshListAfterAutoUpdate, 1, std::ref(isAtISO), 
 				std::ref(isImportRunning), std::ref(updateRun), 
                 std::ref(filteredFiles), std::ref(sourceList), 
                 std::ref(isFiltered), std::ref(listSubtype)).detach();
