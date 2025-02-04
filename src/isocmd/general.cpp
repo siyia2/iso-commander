@@ -73,7 +73,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         uniqueErrorMessages.clear();
         removeNonExistentPathsFromCache();
         
-        if (updateRun.load() && !isUnmount) {
+        if (updateRun.load() && !isUnmount && !globalIsoFileList.empty()) {
 			std::thread(refreshListAfterAutoUpdate, 1, std::ref(isAtISO), 
 				std::ref(isImportRunning), std::ref(updateRun), 
                 std::ref(filteredFiles), std::ref(sourceList), 
