@@ -15,7 +15,11 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
     
     std::set<std::string> operationFiles, skippedMessages, operationFails, uniqueErrorMessages;
     std::vector<std::string> filteredFiles, isoDirs;
+    
     globalIsoFileList.reserve(100);
+    isoDirs.reserve(100);
+    filteredFiles.reserve(100);
+    
     bool isFiltered = false;
     bool needsClrScrn = true;
     bool umountMvRmBreak = false;
@@ -133,10 +137,12 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
                 std::string inputSearch(searchQuery.get());
                 
                 // Decide the current list to filter
-                std::vector<std::string>& currentFiles = !isUnmount 
+                std::vector<std::string>& currentFiles = !isUnmount
                 ? (isFiltered ? filteredFiles : globalIsoFileList)
                 : (isFiltered ? filteredFiles : isoDirs);
-
+				
+				currentFiles.reserve(100);
+                
                 // Apply the filter on the current list
                 auto newFilteredFiles = filterFiles(currentFiles, inputSearch);
                 sortFilesCaseInsensitive(newFilteredFiles);
@@ -167,7 +173,9 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
             std::vector<std::string>& currentFiles = !isUnmount 
             ? (isFiltered ? filteredFiles : globalIsoFileList)
             : (isFiltered ? filteredFiles : isoDirs);
-
+			
+			currentFiles.reserve(100);
+			
             // Apply the filter on the current list
             auto newFilteredFiles = filterFiles(currentFiles, inputSearch);
             sortFilesCaseInsensitive(newFilteredFiles);
@@ -189,6 +197,8 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
             std::vector<std::string>& currentFiles = isFiltered 
             ? filteredFiles 
             : (!isUnmount ? globalIsoFileList : isoDirs);
+            
+            currentFiles.reserve(100);
 
             clearScrollBuffer();
             needsClrScrn = true;
@@ -196,9 +206,10 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
             if (isMount && inputString == "00") {
                 // Special case for mounting all files
                 std::cout << "\033[0;1m";
-                std::vector<std::string> selectedIsoDirs;
-                selectedIsoDirs = currentFiles;
-                processAndMountIsoFiles(inputString, selectedIsoDirs, operationFiles, skippedMessages, operationFails, uniqueErrorMessages, verbose);
+                std::vector<std::string> selectedIso;
+                selectedIso.reserve(100);
+                selectedIso = currentFiles;
+                processAndMountIsoFiles(inputString, selectedIso, operationFiles, skippedMessages, operationFails, uniqueErrorMessages, verbose);
             } else if (isMount){
                 clearScrollBuffer();
                 needsClrScrn = true;
@@ -207,6 +218,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
             } else if (isUnmount) {
                 // Unmount-specific logic
                 std::vector<std::string> selectedIsoDirs;
+                selectedIsoDirs.reserve(100);
                 
                 if (inputString == "00") {
                     selectedIsoDirs = currentFiles;
