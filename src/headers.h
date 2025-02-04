@@ -73,7 +73,7 @@ extern std::atomic<bool> g_operationCancelled;
 // Max cache size limit for IsoCache
 extern const uintmax_t maxCacheSize;
 
-// Variable to track if a new .iso file is found after a search
+// Global flag to track if any new .iso file is found after a search
 extern bool newISOFound;
 
 
@@ -171,7 +171,7 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
 bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<std::string>& filteredFiles, bool& isFiltered);
 
 // voids
-void prepareUnmount(const std::string& input, std::vector<std::string>& selectedIsoDirs, std::vector<std::string>& currentFiles, std::set<std::string>& operationFiles, std::set<std::string>& operationFails, std::set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& verbose);
+void prepareUnmount(const std::string& input, std::vector<std::string>& currentFiles, std::set<std::string>& operationFiles, std::set<std::string>& operationFails, std::set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& verbose);
 void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors);
 
 // stds
