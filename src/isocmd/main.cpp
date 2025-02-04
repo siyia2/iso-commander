@@ -48,6 +48,7 @@ int main(int argc, char *argv[]) {
 	// For indicating if ISO list is visible
 	std::atomic<bool> isAtISO{false};
 	
+	// For indicating if auto-update has run
 	std::atomic<bool> updateRun{false};
 	
 	setupReadlineToIgnoreCtrlC();
