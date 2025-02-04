@@ -55,8 +55,11 @@ extern std::vector<std::string> globalIsoFileList;
 // Cache for directory and filename transformations
 extern std::unordered_map<std::string, std::string> transformationCache;
 
-// Holds IsoCache directory path
+// Holds IsoCache directory name
 extern const std::string cacheFileName;
+
+// Holds IsoCache directory path
+extern const std::string cacheFilePath;
 
 // Holds folder history directory path
 extern const std::string historyFilePath;
@@ -69,6 +72,9 @@ extern std::atomic<bool> g_operationCancelled;
 
 // Max cache size limit for IsoCache
 extern const uintmax_t maxCacheSize;
+
+// Variable to track if a new .iso file is found after a search
+extern bool newISOFound;
 
 
 //	ISO COMMANDER
