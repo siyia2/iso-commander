@@ -51,7 +51,7 @@ int main(int argc, char *argv[]) {
 	// For indicating if auto-update has run
 	std::atomic<bool> updateRun{false};
 	
-	// Variable to track if a new .iso file is found searching
+	// Variable to track if a new .iso file is found after search
 	std::atomic<bool> newISOFound{false};
 	
 	setupReadlineToIgnoreCtrlC();
