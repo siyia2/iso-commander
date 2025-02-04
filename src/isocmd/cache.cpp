@@ -177,9 +177,9 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
 
     // Check if the cache file exists and has been modified
     bool needToReload = false;
-    if (std::filesystem::exists(cacheFileName)) {
+    if (std::filesystem::exists(cacheFilePath)) {
         std::filesystem::file_time_type currentModifiedTime = 
-            std::filesystem::last_write_time(cacheFileName);
+            std::filesystem::last_write_time(cacheFilePath);
 
         if (lastModifiedTime == std::filesystem::file_time_type{}) {
             // First time checking, always load
@@ -196,18 +196,18 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
         needToReload = true;
     }
 
+    // Common operations
+    clearScrollBuffer();
+
     if (needToReload) {
-        clearScrollBuffer();
         removeNonExistentPathsFromCache();
         loadCache(globalIsoFileList);
-        sortFilesCaseInsensitive(globalIsoFileList);
-    
+    }
 
-		printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType);
-	}
+    sortFilesCaseInsensitive(globalIsoFileList);
+    printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType);
 
     if (globalIsoFileList.empty()) {
-        clearScrollBuffer();
         std::cout << "\n\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n";
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
