@@ -133,7 +133,7 @@ int main(int argc, char *argv[]) {
             // Launch a thread to poll for clear message every 1 second
             std::thread(clearMessageAfterTimeout, 1, std::ref(isAtMain), std::ref(isImportRunning), std::ref(messageActive)).detach();
 		} else if ((search && !messagePrinted) && (isHistoryFileEmpty(historyFilePath) || !fs::is_regular_file(historyFilePath))) {
-			std::cout << "\033[2m[Auto-update: no folder paths to process...]\033[0m\n";
+			std::cout << "\033[2m[Auto-update: no stored folder paths to scan...]\033[0m\n";
 			messagePrinted = true;
 			messageActive.store(true);
 			// clear message after 4 seconds
