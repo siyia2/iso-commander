@@ -144,7 +144,6 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
                 operationFails.clear();
                 uniqueErrorMessages.clear();
 
-                clear_history();
                 historyPattern = true;
                 loadHistory(historyPattern);
                 // Move the cursor up 1 line and clear them
