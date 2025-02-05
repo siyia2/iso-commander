@@ -17,9 +17,11 @@ void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISO, 
         
         if (!isImportRunning.load()) {
 			if (newISOFound.load() && isAtISO.load()) {
-				clearAndLoadFiles(filteredFiles, isFiltered, listSubtype);
-				{	
+				
+				{
 					std::lock_guard<std::mutex> lock(updateListMutex);
+					clearAndLoadFiles(filteredFiles, isFiltered, listSubtype);
+					
 					sourceList = isFiltered ? filteredFiles : globalIsoFileList;  // Update sourceList
 				}
             
@@ -82,11 +84,11 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         // Determine source list and load files based on operation type
         if (!isUnmount) {
             if (needsClrScrn) {
-                if (!clearAndLoadFiles(filteredFiles, isFiltered, listSubtype)) break;
-					{
-						std::lock_guard<std::mutex> lock(updateListMutex);
+				{
+					std::lock_guard<std::mutex> lock(updateListMutex);
+					if (!clearAndLoadFiles(filteredFiles, isFiltered, listSubtype)) break;
 						sourceList = isFiltered ? filteredFiles : globalIsoFileList;
-					}
+				}
                 std::cout << "\n\n";
             }
         } else {
