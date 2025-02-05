@@ -744,7 +744,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
 
                 const auto& entry = *it;
                 if (promptFlag && entry.is_regular_file()) {
-                    totalFiles++;  // Simple increment of atomic counter
+                    totalFiles.fetch_add(1);  // Simple increment of atomic counter
                     if (totalFiles % 100 == 0) {  // Update display periodically
                         std::cout << "\r\033[0;1mTotal files processed: " << totalFiles << std::flush;
                     }
