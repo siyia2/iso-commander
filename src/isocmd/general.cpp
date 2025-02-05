@@ -71,6 +71,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         skippedMessages.clear();
         operationFails.clear();
         uniqueErrorMessages.clear();
+        clear_history();
         removeNonExistentPathsFromCache();
         
         // Determine source list and load files based on operation type
