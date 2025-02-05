@@ -231,7 +231,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         }
 
         // Result handling and display
-        if (!uniqueErrorMessages.empty() && operationFiles.empty()) {
+        if (!uniqueErrorMessages.empty() && operationFiles.empty() && operationFails.empty() && skippedMessages.empty()) {
             clearScrollBuffer();
             needsClrScrn = true;
             std::cout << "\n\033[1;91mNo valid input provided for " << operation << ".\033[0;1m\n\n\033[1;32m↵ to continue...\033[0;1m";
