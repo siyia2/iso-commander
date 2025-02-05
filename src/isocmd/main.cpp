@@ -157,6 +157,7 @@ int main(int argc, char *argv[]) {
 
         std::string mainInputString(input.get());
         std::string choice(mainInputString);
+        std::string initialDir = "";
 
         if (choice == "1") {
 			isAtMain.store(false);
@@ -171,7 +172,7 @@ int main(int argc, char *argv[]) {
                         break;
                     case '3':
 						isAtMain.store(false);
-                        manualRefreshCache("", promptFlag, maxDepth, historyPattern, newISOFound);
+                        manualRefreshCache(initialDir, promptFlag, maxDepth, historyPattern, newISOFound);
                         clearScrollBuffer();
                         break;
                     case '4':

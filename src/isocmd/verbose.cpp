@@ -167,7 +167,8 @@ void verboseIsoCacheRefresh(std::vector<std::string>& allIsoFiles, std::atomic<s
     }
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-    manualRefreshCache("", promptFlag, maxDepth, historyPattern, newISOFound);
+    std::string initialDir = "";
+    manualRefreshCache(initialDir, promptFlag, maxDepth, historyPattern, newISOFound);
 	}
 }
 

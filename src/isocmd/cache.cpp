@@ -456,7 +456,7 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
     const std::set<std::string> validInputs = {
         "*fl_m", "*cl_m", "*fl_u", "*cl_u", "*fl_fo", "*cl_fo", "*fl_w", "*cl_w", "*fl_c", "*cl_c"
     };
-
+	std::string initialDir = "";
     if (inputSearch == "stats") {
         try {
             // Get the file size in bytes
@@ -478,7 +478,7 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
 
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        manualRefreshCache("", promptFlag, maxDepth, historyPattern, newISOFound);
+        manualRefreshCache(initialDir, promptFlag, maxDepth, historyPattern, newISOFound);
 
     } else if (inputSearch == "!clr") {
         if (std::remove(cacheFilePath.c_str()) != 0) {
@@ -486,7 +486,7 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
                       << cacheFilePath << "\001'\033[1;91m. File missing or inaccessible." << std::endl;
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            manualRefreshCache("", promptFlag, maxDepth, historyPattern, newISOFound);
+            manualRefreshCache(initialDir, promptFlag, maxDepth, historyPattern, newISOFound);
         } else {
             // Clean transformation cache for .iso entries
             for (auto it = transformationCache.begin(); it != transformationCache.end();) {
@@ -501,12 +501,12 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
             std::cout << "\n\001\033[1;92mIsoCache cleared successfully\001\033[1;92m." << std::endl;
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            manualRefreshCache("", promptFlag, maxDepth, historyPattern, newISOFound);
+            manualRefreshCache(initialDir, promptFlag, maxDepth, historyPattern, newISOFound);
         }
 
     } else if (inputSearch == "!clr_paths" || inputSearch == "!clr_filter") {
         clearHistory(inputSearch);
-        manualRefreshCache("", promptFlag, maxDepth, historyPattern, newISOFound);
+        manualRefreshCache(initialDir, promptFlag, maxDepth, historyPattern, newISOFound);
 
     } else if (inputSearch == "*auto_on" || inputSearch == "*auto_off") {
         // Create directory if it doesn't exist
@@ -517,7 +517,7 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
                           << dirPath.string() << "\033[1;91m'.\033[0;1m\n";
                 std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                manualRefreshCache("", promptFlag, maxDepth, historyPattern, newISOFound);
+                manualRefreshCache(initialDir, promptFlag, maxDepth, historyPattern, newISOFound);
             }
         }
 
@@ -549,17 +549,17 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
 
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        manualRefreshCache("", promptFlag, maxDepth, historyPattern, newISOFound);
+        manualRefreshCache(initialDir, promptFlag, maxDepth, historyPattern, newISOFound);
 
     } else if (isValidInput(inputSearch)) {
         setDisplayMode(inputSearch);
-        manualRefreshCache("", promptFlag, maxDepth, historyPattern, newISOFound);
+        manualRefreshCache(initialDir, promptFlag, maxDepth, historyPattern, newISOFound);
     }
 }
 
 
 // Function for manual cache refresh
-void manualRefreshCache(std::string initialDir, bool promptFlag, int maxDepth, bool historyPattern, std::atomic<bool>& newISOFound) {
+void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, bool historyPattern, std::atomic<bool>& newISOFound) {
 	
 	// Setup signal handler at the start of the operation
     setupSignalHandlerCancellations();
@@ -600,7 +600,8 @@ void manualRefreshCache(std::string initialDir, bool promptFlag, int maxDepth, b
 			if (input == "?") {
 				helpSearches(isCpMv);
 				input = "";
-				manualRefreshCache("", promptFlag, maxDepth, historyPattern, newISOFound);
+				std::string dummyDir = "";
+				manualRefreshCache(dummyDir, promptFlag, maxDepth, historyPattern, newISOFound);
 			}        
 			
             if (input == "stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter" || input == "*auto_off" || input == "*auto_on" || isValidInput(input)) {
