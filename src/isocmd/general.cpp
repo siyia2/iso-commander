@@ -50,8 +50,6 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
     sourceList.reserve(100);
     filteredFiles.reserve(100);
     
-    isAtISO.store(true);
-    
     bool isFiltered = false;
     bool needsClrScrn = true;
     bool umountMvRmBreak = false;
@@ -68,6 +66,8 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
     bool isUnmount = (operation == "umount");
     bool write = (operation == "write");
     bool promptFlag = false;
+    
+    if (!isUnmount) isAtISO.store(true);
     
     std::string listSubtype = isMount ? "mount" : (write ? "write" : "cp_mv_rm");
         
@@ -121,6 +121,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         
         // Help and toggle full list commands
         if (inputString == "?") {
+			isAtISO.store(false);
             helpSelections();
             needsClrScrn = true;
             continue;
