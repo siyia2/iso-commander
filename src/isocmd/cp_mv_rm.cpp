@@ -522,30 +522,34 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 
     std::vector<std::string> isoFilesToOperate;
     for (const auto& iso : isoFiles) {
-        fs::path isoPath(iso);
-        auto [isoDir, isoFile] = extractDirectoryAndFilename(isoPath.string(), "cp_mv_rm");
+		fs::path isoPath(iso);
+		auto [isoDir, isoFile] = extractDirectoryAndFilename(isoPath.string(), "cp_mv_rm");
 
-        auto it = std::find(isoFilesCopy.begin(), isoFilesCopy.end(), iso);
-        if (it != isoFilesCopy.end()) {
-            if (fs::exists(isoPath)) {
-                isoFilesToOperate.push_back(iso);
-            } else {
-                {
-                    std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
-                    operationErrors.emplace("\033[1;35mMissing: \033[1;93m'" + isoDir + "/" + isoFile + "'\033[1;35m.\033[0;1m");
-                }
-                operationSuccessful = false;
-                completedTasks->fetch_add(1);
-            }
-        } else {
-            {
-                std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
-                operationErrors.emplace("\033[1;91mNot in cache: \033[1;93m'" + isoDir + "/" + isoFile + "'\033[1;91m.\033[0;1m");
-            }
-            operationSuccessful = false;
-            completedTasks->fetch_add(1);
-        }
-    }
+		auto it = std::find(isoFilesCopy.begin(), isoFilesCopy.end(), iso);
+		if (it != isoFilesCopy.end()) {
+			if (fs::exists(isoPath)) {
+				isoFilesToOperate.push_back(iso);
+			} else {
+				std::lock_guard<std::mutex> lock(globalSetsMutex);
+				operationErrors.emplace("\033[1;35mMissing: \033[1;93m'" + isoDir + "/" + isoFile + "'\033[1;35m.\033[0;1m");
+				// Increment tasks based on operation type
+				if (isDelete) {
+					completedTasks->fetch_add(1);
+				} else {
+					completedTasks->fetch_add(destDirs.size());
+				}
+			}
+		} else {
+			std::lock_guard<std::mutex> lock(globalSetsMutex);
+			operationErrors.emplace("\033[1;91mNot in cache: \033[1;93m'" + isoDir + "/" + isoFile + "'\033[1;91m.\033[0;1m");
+			// Increment tasks based on operation type
+			if (isDelete) {
+				completedTasks->fetch_add(1);
+			} else {
+				completedTasks->fetch_add(destDirs.size());
+			}
+		}
+	}
 
     executeOperation(isoFilesToOperate);
 }
