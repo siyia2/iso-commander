@@ -260,34 +260,43 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         }
 
         // Build device prompt
-        std::string devicePrompt = "\n\033[0;1m Selected \033[1;92mISO\033[0;1m:\n\n";
-        for (size_t i = 0; i < selectedIsos.size(); ++i) {
-            auto [shortDir, filename] = extractDirectoryAndFilename(selectedIsos[i].path, "write");
-            devicePrompt += "  \033[1;93m" + std::to_string(i+1) + ">\033[0;1m " + 
-                          shortDir + "/\033[1;95m" + filename + "\033[0;1m (\033[1;35m" + 
-                          selectedIsos[i].sizeStr + "\033[0;1m)\n";
-        }
+		std::ostringstream devicePromptStream;
+		devicePromptStream << "\n\033[0;1m Selected \033[1;92mISO\033[0;1m:\n\n";
 
-        devicePrompt += "\n\033[0;1mRemovable USB Devices:\033[0;1m\n\n";
-        std::vector<std::string> usbDevices = getRemovableDevices();
+		for (size_t i = 0; i < selectedIsos.size(); ++i) {
+			auto [shortDir, filename] = extractDirectoryAndFilename(selectedIsos[i].path, "write");
+			devicePromptStream << "  \033[1;93m" << (i+1) << ">\033[0;1m " 
+							<< shortDir << "/\033[1;95m" << filename 
+							<< "\033[0;1m (\033[1;35m" << selectedIsos[i].sizeStr 
+							<< "\033[0;1m)\n";
+		}
 
-        if (usbDevices.empty()) {
-            devicePrompt += "  \033[1;91mNo removable USB devices detected!\033[0;1m\n";
-        } else {
-            for (const auto& device : usbDevices) {
-                try {
-                    std::string driveName = getDriveName(device);
-                    uint64_t deviceSize = getBlockDeviceSize(device);
-                    std::string sizeStr = formatFileSize(deviceSize);
-                    bool mounted = isDeviceMounted(device);
-                    devicePrompt += "  \033[1;93m" + device + "\033[0;1m <" + driveName + 
-                                  "> (\033[1;35m" + sizeStr + "\033[0;1m)" +
-                                  (mounted ? " \033[1;91m(mounted)\033[0;1m" : "") + "\n";
-                } catch (...) {
-                    devicePrompt += "  \033[1;91m" + device + " (error)\033[0;1m\n";
-                }
-            }
-        }
+		devicePromptStream << "\n\033[0;1mRemovable USB Devices:\033[0;1m\n\n";
+		std::vector<std::string> usbDevices = getRemovableDevices();
+
+		if (usbDevices.empty()) {
+			devicePromptStream << "  \033[1;91mNo removable USB devices detected!\033[0;1m\n";
+		} else {
+			for (const auto& device : usbDevices) {
+				try {
+					std::string driveName = getDriveName(device);
+					uint64_t deviceSize = getBlockDeviceSize(device);
+					std::string sizeStr = formatFileSize(deviceSize);
+					bool mounted = isDeviceMounted(device);
+            
+					devicePromptStream << "  \033[1;93m" << device 
+									<< "\033[0;1m <" << driveName 
+									<< "> (\033[1;35m" << sizeStr 
+									<< "\033[0;1m)"
+									<< (mounted ? " \033[1;91m(mounted)\033[0;1m" : "") 
+									<< "\n";
+				} catch (...) {
+					devicePromptStream << "  \033[1;91m" << device << " (error)\033[0;1m\n";
+				}
+			}
+		}
+
+		std::string devicePrompt = devicePromptStream.str();
         
         // Restore readline autocomplete and screen clear bindings
         rl_bind_key('\f', rl_clear_screen);

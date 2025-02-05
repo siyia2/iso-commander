@@ -127,17 +127,17 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::set<std::string>& uniqueErrorMessages, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& historyPattern, bool& isDelete, bool& isCopy, bool& abortDel, bool& overwriteExisting) {
 	
     auto generateSelectedIsosPrompt = [&]() {
-		std::string prompt;
+		std::ostringstream oss;
 		for (const auto& chunk : indexChunks) {
 			for (int index : chunk) {
 				// Extract the directory and filename
 				auto [shortDir, filename] = extractDirectoryAndFilename(isoFiles[index - 1], "cp_mv_rm");
 
-				// Construct the prompt with the directory in bold and filename in magenta
-				prompt += "\033[1m-> " + shortDir + "/\033[1;95m" + filename + "\033[0;1m\n";
+				// Stream formatted entries directly into the buffer
+				oss << "\033[1m-> " << shortDir << "/\033[1;95m" << filename << "\033[0;1m\n";
 			}
 		}
-		return prompt;
+		return oss.str();
 	};
 
 
@@ -163,7 +163,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
 			bool isCpMv= true;
             // Generate the prompt with selected ISOs at the beginning
             std::string selectedIsosPrompt = generateSelectedIsosPrompt();
-            std::string prompt = "\n" + selectedIsosPrompt + 
+			std::string prompt = "\n" + selectedIsosPrompt + 
 			"\n\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ for selected \001\033[1;92m\002ISO\001\033[1;94m\002 to be " + 
 			operationColor + operationDescription + 
 			"\001\033[1;94m\002 into, ? ↵ for help, " +
@@ -214,6 +214,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
             }
         }
     } else {
+		rl_bind_key('\f', rl_clear_screen);
         clearScrollBuffer();
 		if (!uniqueErrorMessages.empty()) {
 				std::cout << "\n";
@@ -223,10 +224,12 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
 			}
         // Generate the prompt with selected ISOs at the beginning for deletion confirmation
         std::string selectedIsosPrompt = generateSelectedIsosPrompt();
-        std::cout << "\n" << selectedIsosPrompt;
-        std::string prompt = "\n\001\033[1;94m\002The selected \001\033[1;92m\002ISO\001\033[1;94m\002 will be \001\033[1;91m\002*PERMANENTLY DELETED FROM DISK*\001\033[1;94m\002. Proceed? (y/n): \001\033[0;1m\002";
+        std::string prompt = "\n" + selectedIsosPrompt + "\n\001\033[1;94m\002The selected \001\033[1;92m\002ISO\001\033[1;94m\002 will be \001\033[1;91m\002*PERMANENTLY DELETED FROM DISK*\001\033[1;94m\002. Proceed? (y/n): \001\033[0;1m\002";
 
         std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
+        
+        rl_bind_key('\f', prevent_readline_keybindings);
+        
         // Check for EOF (Ctrl+D) or NULL input before processing
 		if (!input.get()) {
 			userDestDir = "";
