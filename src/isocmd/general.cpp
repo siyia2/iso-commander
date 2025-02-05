@@ -67,11 +67,10 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
     bool write = (operation == "write");
     bool promptFlag = false;
     
-    if (!isUnmount) isAtISO.store(true);
-    
     std::string listSubtype = isMount ? "mount" : (write ? "write" : "cp_mv_rm");
         
     while (true) {
+		if (!isUnmount) isAtISO.store(true);
         verbose = false;
         operationFiles.clear();
         skippedMessages.clear();
