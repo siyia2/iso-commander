@@ -574,12 +574,12 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     progressThread.join();
 
     auto endTime = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::seconds>(
-        endTime - startTime).count();
-    
-    std::cout << "\n\033[0;1mCompleted: \033[1;92m" << completedTasks.load()
-              << "\033[0;1m/\033[1;93m" << validPairs.size() 
-              << "\033[0;1m in \033[0;1m" << duration << " seconds.\033[0;1m\n";
+	auto duration = std::chrono::duration<double>(endTime - startTime).count();
+
+	std::cout << std::fixed << std::setprecision(1);
+	std::cout << "\n\033[0;1mCompleted: \033[1;92m" << completedTasks.load()
+			<< "\033[0;1m/\033[1;93m" << validPairs.size() 
+			<< "\033[0;1m in \033[0;1m" << duration << " seconds.\033[0;1m\n";
     
     if (g_operationCancelled.load()) {
         std::cout << "\n\033[1;33mOperation interrupted by user.\033[0;1m\n";
@@ -604,13 +604,29 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles, st
 
     std::vector<IsoInfo> selectedIsos;
     for (int idx : indicesToProcess) {
-        selectedIsos.emplace_back(IsoInfo{
-            isoFiles[idx-1],
-            std::filesystem::path(isoFiles[idx-1]).filename().string(),
-            std::filesystem::file_size(isoFiles[idx-1]),
-            formatFileSize(std::filesystem::file_size(isoFiles[idx-1])),
-            static_cast<size_t>(idx)  // Added cast here
-        });
+        try {
+            // Check if the file exists before processing
+            if (!std::filesystem::exists(isoFiles[idx - 1])) {
+                uniqueErrorMessages.insert("\033[1;35mMissing: \033[1;93m'" + isoFiles[idx - 1] + "'\033[1;35m.");
+                continue;
+            }
+
+            selectedIsos.emplace_back(IsoInfo{
+                isoFiles[idx - 1],
+                std::filesystem::path(isoFiles[idx - 1]).filename().string(),
+                std::filesystem::file_size(isoFiles[idx - 1]),
+                formatFileSize(std::filesystem::file_size(isoFiles[idx - 1])),
+                static_cast<size_t>(idx)
+            });
+        } catch (const std::filesystem::filesystem_error& e) {
+            uniqueErrorMessages.insert("\033[1;91mError accessing ISO file: " + std::string(e.what()) + ".");
+            continue;  // Skip this file and proceed with the next one
+        }
+    }
+
+    if (selectedIsos.empty()) {
+        clear_history();
+        return;
     }
 
     auto validPairs = collectDeviceMappings(selectedIsos, uniqueErrorMessages);
