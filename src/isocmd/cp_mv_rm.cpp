@@ -41,14 +41,14 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     }
 
     bool abortDel = false;
-    std::string processedUserDestDir = userDestDirRm(isoFiles, indexChunks, userDestDir, 
+    std::string processedUserDestDir = userDestDirRm(isoFiles, indexChunks, uniqueErrorMessages, userDestDir, 
         operationColor, operationDescription, umountMvRmBreak, historyPattern, isDelete, isCopy, abortDel, overwriteExisting);
     
     if ((processedUserDestDir == "" && (isCopy || isMove)) || abortDel) {
 		uniqueErrorMessages.clear();
         return;
     }
-
+	uniqueErrorMessages.clear();
     clearScrollBuffer();
     std::cout << "\n\033[0;1m Processing " + operationColor + process + "\033[0;1m operations... (\033[1;91mCtrl + c\033[0;1m:cancel)\n";
 
@@ -124,7 +124,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
 
 // Function to prompt for userDestDir and Delete confirmation
-std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& historyPattern, bool& isDelete, bool& isCopy, bool& abortDel, bool& overwriteExisting) {
+std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::set<std::string>& uniqueErrorMessages, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& historyPattern, bool& isDelete, bool& isCopy, bool& abortDel, bool& overwriteExisting) {
 	
     auto generateSelectedIsosPrompt = [&]() {
 		std::string prompt;
@@ -154,7 +154,12 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
             historyPattern = false;
             loadHistory(historyPattern);
             userDestDir.clear();
-            
+            if (!uniqueErrorMessages.empty()) {
+				std::cout << "\n";
+				for (const auto& err : uniqueErrorMessages) {
+					std::cout << err << "\n";  // Newline ensures separate lines
+				}
+			}
 			bool isCpMv= true;
             // Generate the prompt with selected ISOs at the beginning
             std::string selectedIsosPrompt = generateSelectedIsosPrompt();
@@ -210,7 +215,12 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
         }
     } else {
         clearScrollBuffer();
-
+		if (!uniqueErrorMessages.empty()) {
+				std::cout << "\n";
+				for (const auto& err : uniqueErrorMessages) {
+					std::cout << err << "\n";  // Newline ensures separate lines
+				}
+			}
         // Generate the prompt with selected ISOs at the beginning for deletion confirmation
         std::string selectedIsosPrompt = generateSelectedIsosPrompt();
         std::cout << "\n" << selectedIsosPrompt;
