@@ -440,12 +440,28 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     if (isCopy) {
                         success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec);
                     } else if (isMove) {
-                        if (i < destDirs.size() - 1) {
+                        // Try rename first (atomic move within same filesystem)
+                        fs::rename(srcPath, destPath, ec);
+                        
+                        if (ec) {
+                            // If rename fails (likely different filesystem), fall back to copy+delete
+                            ec.clear();
                             success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec);
+                            
+                            if (success && i == destDirs.size() - 1) {
+                                // Only delete source after successful copy and on last destination
+                                std::error_code deleteEc;
+                                if (!fs::remove(srcPath, deleteEc)) {
+                                    {
+                                        std::lock_guard<std::mutex> lock(globalSetsMutex);
+                                        operationErrors.emplace("\033[1;91mWarning: Move completed but failed to remove source file: \033[1;93m'" + 
+                                            srcDir + "/" + srcFile + "'\033[1;91m - " + deleteEc.message() + "\033[0m");
+                                    }
+                                }
+                            }
                         } else {
-                            fs::rename(srcPath, destPath, ec);
-                            if (!ec) completedBytes->fetch_add(fileSize);
-                            success = !ec;
+                            completedBytes->fetch_add(fileSize);
+                            success = true;
                         }
                     }
 
