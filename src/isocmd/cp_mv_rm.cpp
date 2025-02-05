@@ -45,6 +45,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         operationColor, operationDescription, umountMvRmBreak, historyPattern, isDelete, isCopy, abortDel, overwriteExisting);
     
     if ((processedUserDestDir == "" && (isCopy || isMove)) || abortDel) {
+		uniqueErrorMessages.clear();
         return;
     }
 
