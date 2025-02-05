@@ -156,65 +156,66 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
 
 // Main function to send ISOs for unmount
 void prepareUnmount(const std::string& input, std::vector<std::string>& currentFiles, std::set<std::string>& operationFiles, std::set<std::string>& operationFails, std::set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& verbose) {
-    std::set<int> selectedIndices;
+    std::set<int> indicesToProcess;
     
-    // Setup signal handler at the start of the operation
+    // Setup signal handler and reset cancellation flag
     setupSignalHandlerCancellations();
-        
-    // Reset cancellation flag
     g_operationCancelled.store(false);
-    
+
+    // Handle input ("00" = all files, else parse input)
     if (input == "00") {
         for (size_t i = 0; i < currentFiles.size(); ++i)
-            selectedIndices.insert(i + 1);
+            indicesToProcess.insert(i + 1);
     } else {
-        tokenizeInput(input, currentFiles, uniqueErrorMessages, selectedIndices);
-        if (selectedIndices.empty()) {
-			umountMvRmBreak = false;
+        tokenizeInput(input, currentFiles, uniqueErrorMessages, indicesToProcess);
+        if (indicesToProcess.empty()) {
+            umountMvRmBreak = false;
             return;
         }
     }
+
+    // Create selected files vector from indices
+    std::vector<std::string> selectedMountpoints;
+    selectedMountpoints.reserve(indicesToProcess.size());
+    for (int index : indicesToProcess)
+        selectedMountpoints.push_back(currentFiles[index - 1]);
 
     clearScrollBuffer();
     std::cout << "\n\033[0;1m Processing \033[1;93mumount\033[0;1m operations... (\033[1;91mCtrl + c\033[0;1m:cancel)\n";
 
     // Thread pool setup
-    unsigned int numThreads = std::min(static_cast<unsigned int>(currentFiles.size()), maxThreads);
-    std::vector<std::vector<std::string>> isoChunks;
-    const size_t chunkSize = std::min(size_t(100), currentFiles.size()/numThreads + 1);
+    unsigned int numThreads = std::min(static_cast<unsigned int>(selectedMountpoints.size()), maxThreads);
+    const size_t chunkSize = std::min(size_t(100), selectedMountpoints.size()/numThreads + 1);
+    std::vector<std::vector<std::string>> chunks;
 
-    for (size_t i = 0; i < currentFiles.size(); i += chunkSize) {
-        auto end = std::min(currentFiles.begin() + i + chunkSize, currentFiles.end());
-        isoChunks.emplace_back(currentFiles.begin() + i, end);
+    // Split work into chunks
+    for (size_t i = 0; i < selectedMountpoints.size(); i += chunkSize) {
+        auto end = std::min(selectedMountpoints.begin() + i + chunkSize, selectedMountpoints.end());
+        chunks.emplace_back(selectedMountpoints.begin() + i, end);
     }
 
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> unmountFutures;
-    std::atomic<size_t> completedIsos(0);
-    std::atomic<bool> isComplete(false);
+    std::atomic<size_t> completedTasks(0);
+    std::atomic<bool> isProcessingComplete(false);
 
-    // Progress thread
+    // Start progress thread
     std::thread progressThread(
         displayProgressBarWithSize, 
         nullptr,
         static_cast<size_t>(0),
-        &completedIsos,
-        currentFiles.size(),
-        &isComplete,
+        &completedTasks,
+        selectedMountpoints.size(),
+        &isProcessingComplete,
         &verbose
     );
 
-    // Submit tasks with cancellation checks
-    for (const auto& isoChunk : isoChunks) {
-        unmountFutures.emplace_back(pool.enqueue([&, isoChunk]() {
+    // Enqueue chunk tasks
+    for (const auto& chunk : chunks) {
+        unmountFutures.emplace_back(pool.enqueue([&, chunk]() {
             if (g_operationCancelled.load()) return;
-            
-            unmountISO(isoChunk, operationFiles, operationFails);
-            completedIsos.fetch_add(isoChunk.size(), std::memory_order_relaxed);
-            
-            if (g_operationCancelled.load()) {
-                isComplete.store(true);
-            }
+            unmountISO(chunk, operationFiles, operationFails);
+            completedTasks.fetch_add(chunk.size(), std::memory_order_relaxed);
         }));
     }
 
@@ -224,7 +225,8 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& currentF
         if (g_operationCancelled.load()) break;
     }
 
-    isComplete.store(true);
+    // Cleanup
+    isProcessingComplete.store(true);
     progressThread.join();
 }
 
