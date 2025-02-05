@@ -15,8 +15,8 @@ void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISO, 
     while (true) {
         std::this_thread::sleep_for(std::chrono::seconds(timeoutSeconds));
         
-        if (!isImportRunning.load() && isAtISO.load()) {
-			if (newISOFound.load()) {
+        if (!isImportRunning.load()) {
+			if (newISOFound.load() && isAtISO.load()) {
 				clearAndLoadFiles(filteredFiles, isFiltered, listSubtype);
 				{	
 					std::lock_guard<std::mutex> lock(updateListMutex);
