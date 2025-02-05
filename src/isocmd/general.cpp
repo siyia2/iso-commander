@@ -7,6 +7,8 @@
 // For storing isoFiles in RAM
 std::vector<std::string> globalIsoFileList;
 
+// Mutex to prevent race condition when live updating ISO list
+std::mutex updateListMutex;
 
 // Function to automatically update on-disk cache if auto-update is on
 void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISO, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateRun, std::vector<std::string>& filteredFiles, std::vector<std::string>& sourceList, bool& isFiltered, std::string& listSubtype, std::atomic<bool>& newISOFound) {
@@ -15,6 +17,7 @@ void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISO, 
         
         if (!isImportRunning.load() && isAtISO.load()) {
 			if (newISOFound.load()) {
+			std::lock_guard<std::mutex> lock(updateListMutex);
             clearAndLoadFiles(filteredFiles, isFiltered, listSubtype);
             sourceList = isFiltered ? filteredFiles : globalIsoFileList;  // Update sourceList
             
