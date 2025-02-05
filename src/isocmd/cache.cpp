@@ -201,8 +201,11 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
     if (needToReload) {
         loadCache(globalIsoFileList);
     }
-
-    sortFilesCaseInsensitive(globalIsoFileList);
+	{
+		std::lock_guard<std::mutex> lock(updateListMutex);
+		sortFilesCaseInsensitive(globalIsoFileList);
+	}
+    
     printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType);
 
     if (globalIsoFileList.empty()) {
