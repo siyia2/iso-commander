@@ -49,6 +49,9 @@ extern unsigned int maxThreads;
 // Global mutex to protect the verbose sets
 extern std::mutex globalSetsMutex;
 
+// Global Mutex to prevent race condition when live updating ISO list
+extern std::mutex updateListMutex;
+
 // For storing isoFiles in RAM cache
 extern std::vector<std::string> globalIsoFileList; 
 
