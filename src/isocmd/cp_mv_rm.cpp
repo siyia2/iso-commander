@@ -454,7 +454,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                                 if (!fs::remove(srcPath, deleteEc)) {
                                     {
                                         std::lock_guard<std::mutex> lock(globalSetsMutex);
-                                        operationErrors.emplace("\033[1;91mWarning: Move completed but failed to remove source file: \033[1;93m'" + 
+                                        operationErrors.emplace("\033[1;91mMove completed but failed to remove source file: \033[1;93m'" + 
                                             srcDir + "/" + srcFile + "'\033[1;91m - " + deleteEc.message() + "\033[0m");
                                     }
                                 }
