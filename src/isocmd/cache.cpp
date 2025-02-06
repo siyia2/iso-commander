@@ -10,6 +10,9 @@ const std::string cacheFilePath = std::string(getenv("HOME")) + "/.local/share/i
 const std::string cacheFileName = "iso_commander_cache.txt";
 const uintmax_t maxCacheSize = 10 * 1024 * 1024; // 10MB
 
+// Global mutex to protect counter cout
+std::mutex couNtMutex;
+
 // Function to remove non-existent paths from cache
 void removeNonExistentPathsFromCache() {
 	
@@ -747,6 +750,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
                 if (promptFlag && entry.is_regular_file()) {
                     totalFiles.fetch_add(1, std::memory_order_relaxed);  // Simple increment of atomic counter
                     if (totalFiles % 100 == 0) { // Update display periodically
+						std::lock_guard<std::mutex> lock(couNtMutex);
                         std::cout << "\r\033[0;1mTotal files processed: " << totalFiles << std::flush;
                     }
                 }

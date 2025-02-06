@@ -590,6 +590,7 @@ std::set<std::string> processBatchPaths(const std::vector<std::string>& batchPat
                 if (entry.is_regular_file()) {
                     totalFiles.fetch_add(1, std::memory_order_relaxed);
                     if (totalFiles % 100 == 0) { // Update display periodically
+						std::lock_guard<std::mutex> lock(couNtMutex);
                         std::cout << "\r\033[0;1mTotal files processed: " << totalFiles << std::flush;
                     }
                     
@@ -619,14 +620,18 @@ std::set<std::string> processBatchPaths(const std::vector<std::string>& batchPat
 
             
         } catch (const std::filesystem::filesystem_error& e) {
+			std::lock_guard<std::mutex> lock(globalSetsMutex);
             std::string errorMessage = "\033[1;91mError traversing path: " 
                 + path + " - " + e.what() + "\033[0;1m";
             processedErrorsFind.insert(errorMessage);
         }
     }
-
-    // Print the total files processed after all paths are handled
-    std::cout << "\r\033[0;1mTotal files processed: " << totalFiles << "\033[0;1m";
+	
+	{
+		std::lock_guard<std::mutex> lock(couNtMutex);
+		// Print the total files processed after all paths are handled
+		std::cout << "\r\033[0;1mTotal files processed: " << totalFiles << "\033[0;1m";
+	}
 
     return localFileNames;
 }
