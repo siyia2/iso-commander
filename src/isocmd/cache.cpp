@@ -717,7 +717,6 @@ void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, 
 void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, std::atomic<size_t>& totalFiles, std::mutex& traverseFilesMutex, std::mutex& traverseErrorsMutex, int& maxDepth, bool& promptFlag) {
     const size_t BATCH_SIZE = 100;
     std::vector<std::string> localIsoFiles;
-    std::vector<std::string> localErrors;
     std::atomic<bool> g_CancelledMessageAdded{false};
 
 
@@ -773,10 +772,6 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
         }
 
         // Merge errors
-        if (!localErrors.empty() && promptFlag) {
-            std::lock_guard<std::mutex> errorLock(traverseErrorsMutex);
-            uniqueErrorMessages.insert(localErrors.begin(), localErrors.end());
-        }
     } catch (const std::filesystem::filesystem_error& e) {
         std::string formattedError = "\n\033[1;91mError traversing directory: " + 
                                     path.string() + " - " + e.what() + "\033[0;1m";
