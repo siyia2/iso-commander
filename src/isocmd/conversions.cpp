@@ -625,10 +625,8 @@ std::set<std::string> processBatchPaths(const std::vector<std::string>& batchPat
         }
     }
 
-    // If no files were processed at all
-    if (totalFiles == 0) {
-        std::cout << "\r\033[0;1mTotal files processed: 0\033[0m" << std::flush;
-    }
+    // Print the total files processed after all paths are handled
+    std::cout << "\r\033[0;1mTotal files processed: " << totalFiles << "\033[0;1m";
 
     return localFileNames;
 }
