@@ -588,7 +588,7 @@ std::set<std::string> processBatchPaths(const std::vector<std::string>& batchPat
 					break;
 				}
                 if (entry.is_regular_file()) {
-                    totalFiles++;
+                    totalFiles.fetch_add(1, std::memory_order_relaxed);
                     std::cout << "\r\033[0;1mTotal files processed: " << totalFiles << std::flush;
                     
                     if (blacklist(entry, blacklistMdf, blacklistNrg)) {
