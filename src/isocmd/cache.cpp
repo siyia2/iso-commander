@@ -739,7 +739,6 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
 				}
 				break;
 			}
-            try {
                 if (maxDepth >= 0 && it.depth() > maxDepth) {
                     it.disable_recursion_pending();
                     continue;
@@ -765,12 +764,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
                     isoFiles.insert(isoFiles.end(), localIsoFiles.begin(), localIsoFiles.end());
                     localIsoFiles.clear();
                 }
-            } catch (const std::filesystem::filesystem_error& entryError) {
-                localErrors.push_back("\n\033[1;91mError processing path: " + 
-                                    it->path().string() + " - " + 
-                                    entryError.what() + "\033[0;1m");
-            }
-        }
+			}
 
         // Merge leftovers
         if (!localIsoFiles.empty()) {
