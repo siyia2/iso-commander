@@ -52,6 +52,9 @@ extern std::mutex globalSetsMutex;
 // Global mutex to prevent race conditions when live updating ISO list
 extern std::mutex updateListMutex;
 
+// Global mutex to protect counter cout
+extern std::mutex couNtMutex;
+
 // For storing isoFiles in RAM cache
 extern std::vector<std::string> globalIsoFileList; 
 
