@@ -573,8 +573,8 @@ void clearMessageAfterTimeout(int timeoutSeconds, std::atomic<bool>& isAtMain, s
     while (true) {
         std::this_thread::sleep_for(std::chrono::seconds(timeoutSeconds));
         
-        if (!isImportRunning.load() && isAtMain.load()) {
-            if (messageActive.load()) {
+        if (!isImportRunning.load()) {
+            if (messageActive.load() && isAtMain.load()) {
                 clearScrollBuffer();
                 
                 print_ascii();
