@@ -49,7 +49,7 @@ int main(int argc, char *argv[]) {
 	std::atomic<bool> isAtISO{false};
 	
 	// For indicating if auto-update has run
-	std::atomic<bool> updateRun{false};
+	std::atomic<bool> updateHasRun{false};
 	
 	// Variable to track if a new .iso file is found after search
 	std::atomic<bool> newISOFound{false};
@@ -57,7 +57,7 @@ int main(int argc, char *argv[]) {
 	setupReadlineToIgnoreCtrlC();
 	
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
-        printVersionNumber("5.6.5");
+        printVersionNumber("5.6.4");
         return 0;
     }
     // Readline use semicolon as delimiter
@@ -106,7 +106,7 @@ int main(int argc, char *argv[]) {
 		std::thread([maxDepth, &isImportRunning, &newISOFound]() {
 			backgroundCacheImport(maxDepth, isImportRunning, newISOFound);
 		}).detach();
-		updateRun.store(true);
+		updateHasRun.store(true);
 	}
 	
 	// End of automatic cache import
@@ -163,7 +163,7 @@ int main(int argc, char *argv[]) {
         if (choice == "1") {
 			isAtMain.store(false);
 			isAtISO.store(false);
-            submenu1(maxDepth, historyPattern, verbose, updateRun, isAtISO, isImportRunning, newISOFound);
+            submenu1(maxDepth, historyPattern, verbose, updateHasRun, isAtISO, isImportRunning, newISOFound);
         } else {
             // Check if the input length is exactly 1
             if (choice.length() == 1) {
@@ -228,7 +228,7 @@ std::cout << Color << R"((   (       )            )    *      *              ) (
 
 
 // Function to print submenu1
-void submenu1(int& maxDepth, bool& historyPattern, bool& verbose, std::atomic<bool>& updateRun, std::atomic<bool>& isAtISO, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
+void submenu1(int& maxDepth, bool& historyPattern, bool& verbose, std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISO, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
 	
     while (true) {
 		// Calls prevent_clear_screen and tab completion
@@ -277,33 +277,33 @@ void submenu1(int& maxDepth, bool& historyPattern, bool& verbose, std::atomic<bo
 		switch (submenu_choice[0]) {
         case '1':
 			clearScrollBuffer();
-            selectForIsoFiles("mount", historyPattern, maxDepth, verbose, updateRun, isAtISO, isImportRunning, newISOFound);
+            selectForIsoFiles("mount", historyPattern, maxDepth, verbose, updateHasRun, isAtISO, isImportRunning, newISOFound);
             clearScrollBuffer();
             break;
         case '2':
 			clearScrollBuffer();
-            selectForIsoFiles("umount", historyPattern, maxDepth, verbose, updateRun, isAtISO, isImportRunning, newISOFound);
+            selectForIsoFiles("umount", historyPattern, maxDepth, verbose, updateHasRun, isAtISO, isImportRunning, newISOFound);
             clearScrollBuffer();
             break;
         case '3':
 			clearScrollBuffer();
-            selectForIsoFiles("rm", historyPattern, maxDepth, verbose, updateRun, isAtISO, isImportRunning, newISOFound);
+            selectForIsoFiles("rm", historyPattern, maxDepth, verbose, updateHasRun, isAtISO, isImportRunning, newISOFound);
             clearScrollBuffer();
             break;
         case '4':
 			clearScrollBuffer();
-            selectForIsoFiles("mv", historyPattern, maxDepth, verbose, updateRun, isAtISO, isImportRunning, newISOFound);
+            selectForIsoFiles("mv", historyPattern, maxDepth, verbose, updateHasRun, isAtISO, isImportRunning, newISOFound);
 
             clearScrollBuffer();
             break;
         case '5':
 			clearScrollBuffer();
-            selectForIsoFiles("cp", historyPattern, maxDepth, verbose, updateRun, isAtISO, isImportRunning, newISOFound);
+            selectForIsoFiles("cp", historyPattern, maxDepth, verbose, updateHasRun, isAtISO, isImportRunning, newISOFound);
             clearScrollBuffer();
             break;
         case '6':
 			clearScrollBuffer();
-            selectForIsoFiles("write", historyPattern, maxDepth, verbose, updateRun, isAtISO, isImportRunning, newISOFound);
+            selectForIsoFiles("write", historyPattern, maxDepth, verbose, updateHasRun, isAtISO, isImportRunning, newISOFound);
             clearScrollBuffer();
             break;
 			}

@@ -11,7 +11,7 @@ std::vector<std::string> globalIsoFileList;
 std::mutex updateListMutex;
 
 // Function to automatically update on-disk cache if auto-update is on
-void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISO, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateRun, std::vector<std::string>& filteredFiles, std::vector<std::string>& sourceList, bool& isFiltered, std::string& listSubtype, std::atomic<bool>& newISOFound) {
+void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISO, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, std::vector<std::string>& filteredFiles, std::vector<std::string>& sourceList, bool& isFiltered, std::string& listSubtype, std::atomic<bool>& newISOFound) {
     while (true) {
         std::this_thread::sleep_for(std::chrono::seconds(timeoutSeconds));
         
@@ -28,7 +28,7 @@ void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISO, 
 				rl_on_new_line(); 
 				rl_redisplay();
 			}
-            updateRun.store(false);
+            updateHasRun.store(false);
             newISOFound.store(false);
             
             break;
@@ -38,7 +38,7 @@ void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISO, 
 
 
 // Main function to select and operate on ISOs by number for umount mount cp mv and rm
-void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& maxDepth, bool& verbose, std::atomic<bool>& updateRun, std::atomic<bool>& isAtISO, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
+void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& maxDepth, bool& verbose, std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISO, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
     // Bind readline keys
     rl_bind_key('\f', prevent_readline_keybindings);
     rl_bind_key('\t', prevent_readline_keybindings);
@@ -97,9 +97,9 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
             }
         }
         
-        if (updateRun.load() && !isUnmount && !globalIsoFileList.empty()) {
+        if (updateHasRun.load() && !isUnmount && !globalIsoFileList.empty()) {
 			std::thread(refreshListAfterAutoUpdate, 1, std::ref(isAtISO), 
-				std::ref(isImportRunning), std::ref(updateRun), 
+				std::ref(isImportRunning), std::ref(updateHasRun), 
                 std::ref(filteredFiles), std::ref(sourceList), 
                 std::ref(isFiltered), std::ref(listSubtype), std::ref(newISOFound)).detach();
 		}
