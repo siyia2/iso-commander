@@ -75,9 +75,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
     
     // Early exit if cancelled before starting
     if (g_operationCancelled.load()) {
-		unmountedErrors.clear();
-        unmountedErrors.emplace("\033[1;33mUnmount operation interrupted by user - partial cleanup performed.\033[0m");
-    
+		g_operationCancelled.store(true);
 		return;
 	}
 
@@ -85,9 +83,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
     if (geteuid() != 0) {
         for (const auto& isoDir : isoDirs) {
             if (g_operationCancelled.load()) {
-				unmountedErrors.clear();
-                unmountedErrors.emplace("\033[1;33mUnmount operation interrupted by user - partial cleanup performed.\033[0m");
-            
+				g_operationCancelled.store(true);
 				break;
 			}
             std::string modifiedDir = modifyDirectoryPath(isoDir);
@@ -104,12 +100,10 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
 
     std::vector<std::pair<std::string, int>> unmountResults;
     for (const auto& isoDir : isoDirs) {
+		    std::this_thread::sleep_for(std::chrono::seconds(2));
+
         if (g_operationCancelled.load()) {
-			{
-				std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
-                unmountedErrors.clear();
-                unmountedErrors.emplace("\033[1;33mUnmount operation interrupted by user - partial cleanup performed.\033[0m");
-            }
+			g_operationCancelled.store(true);
             break;
         }
         
@@ -167,7 +161,6 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& currentF
     
     // Setup signal handler and reset cancellation flag
     setupSignalHandlerCancellations();
-    g_operationCancelled.store(false);
 
     // Handle input ("00" = all files, else parse input)
     if (input == "00") {
@@ -261,7 +254,9 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& currentF
     for (auto& future : umountFutures) {
         future.wait();
         if (g_operationCancelled.load()) {
+			g_operationCancelled.store(true);
 			operationFails.clear();
+			operationFails.emplace("\033[1;33mUnmount operation interrupted by user - partial cleanup performed.\033[0m");
 			break;
 		}
     }

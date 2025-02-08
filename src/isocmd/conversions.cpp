@@ -343,6 +343,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
     
     // Main processing loop
     while (true) {
+		g_operationCancelled.store(false);
         verbose = false; // Reset verbose mode
         processedErrors.clear(); 
         successOuts.clear(); 
@@ -430,6 +431,19 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 			clearScrollBuffer();
 			std::cout << "\n\033[0;1m Processing \001\033[1;38;5;208m\002" + fileExtensionWithOutDots + "\033[0;1m conversions... (\033[1;91mCtrl + c\033[0;1m:cancel)\n";
 			processInput(mainInputString, files, (fileType == "mdf"), (fileType == "nrg"), processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, promptFlag, maxDepth, historyPattern, verbose, needsScrnClr, newISOFound);
+			
+			 if (!g_operationCancelled.load()) {
+           std::string type = (fileExtensionWithOutDots == "MDF") ? "MDF" 
+                   : (fileExtensionWithOutDots == "NRG") ? "NRG" 
+                   : "BIN/IMG";
+            std::string cancelMsg = "\033[1;33m" + type + " to ISO conversion interrupted by user - partial files cleaned up.\033[0;1m";
+            {
+                std::lock_guard<std::mutex> lock(globalSetsMutex);
+                failedOuts.clear();
+                deletedOuts.clear();
+                failedOuts.insert(cancelMsg);
+            }
+    }
 			if (verbose) verbosePrint(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, 3); // Print detailed logs if verbose mode is enabled
 		}
     }
@@ -438,7 +452,8 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 
 // Function to process user input and convert selected BIN/MDF/NRG files to ISO format
 void processInput(const std::string& input, std::vector<std::string>& fileList, const bool& modeMdf, const bool& modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose, bool& needsScrnClr, std::atomic<bool>& newISOFound) {
-    
+	setupSignalHandlerCancellations();
+        
     std::set<std::string> selectedFilePaths;
     std::string concatenatedFilePaths;
 
@@ -555,7 +570,7 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
     for (auto& future : futures) {
         future.wait();
         if (g_operationCancelled.load()) {
-			deletedOuts.clear();
+			g_operationCancelled.store(true);
             break;
         }
     }
@@ -820,14 +835,7 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
 
 // Function to convert a BIN/IMG/MDF/NRG file to ISO format
 void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, const bool& modeMdf, const bool& modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<bool>& newISOFound) {
-    // Setup signal handler at the start of the operation
-    setupSignalHandlerCancellations();
         
-    // Reset cancellation flag
-    g_operationCancelled.store(false);
-    
-    std::atomic<bool> g_CancelledMessageAdded{false};
-    
     // Collect unique directories from the input file paths
     std::set<std::string> uniqueDirectories;
     for (const auto& filePath : imageFiles) {
@@ -854,6 +862,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
     for (const std::string& inputPath : imageFiles) {
         // Check for cancellation before processing each file
         if (g_operationCancelled.load()) {
+			g_operationCancelled.store(true);
             break;
         }
 
@@ -931,6 +940,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
 
         // Skip completion tracking if operation was cancelled
         if (g_operationCancelled.load()) {
+			g_operationCancelled.store(true);
             break;
         }
 
@@ -978,20 +988,6 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
             }
             if (completedTasks && !g_operationCancelled.load()) {
                 (*completedTasks)++;
-            }
-        }
-    }
-    
-    // Handle cancellation message
-    if (g_operationCancelled.load()) {
-        if (!g_CancelledMessageAdded.exchange(true)) {
-            std::string type = modeMdf ? "MDF" : (modeNrg ? "NRG" : "BIN/IMG");
-            std::string cancelMsg = "\033[1;33m" + type + " to ISO conversion interrupted by user - partial files cleaned up.\033[0;1m";
-            {
-                std::lock_guard<std::mutex> lock(globalSetsMutex);
-                failedOuts.clear();
-                deletedOuts.clear();
-                failedOuts.insert(cancelMsg);
             }
         }
     }

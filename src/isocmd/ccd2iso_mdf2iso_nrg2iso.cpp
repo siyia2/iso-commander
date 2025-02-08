@@ -77,6 +77,7 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
     while (source_length > 0) {
         // Check cancellation at the start
         if (g_operationCancelled.load()) {
+			g_operationCancelled.store(true);
             isoFile.close();
             fs::remove(isoPath);
             return false;
@@ -87,6 +88,7 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
         
         // Check after seeking header
         if (g_operationCancelled.load()) {
+			g_operationCancelled.store(true);
             isoFile.close();
             fs::remove(isoPath);
             return false;
@@ -99,6 +101,7 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
         
         // Check after reading sector
         if (g_operationCancelled.load()) {
+			g_operationCancelled.store(true);
             isoFile.close();
             fs::remove(isoPath);
             return false;
@@ -109,6 +112,7 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
         
         // Check after seeking ECC
         if (g_operationCancelled.load()) {
+			g_operationCancelled.store(true);
             isoFile.close();
             fs::remove(isoPath);
             return false;
@@ -121,6 +125,7 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
         
         // Check after writing sector
         if (g_operationCancelled.load()) {
+			g_operationCancelled.store(true);
             isoFile.close();
             fs::remove(isoPath);
             return false;
@@ -158,6 +163,7 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
     while (ccdFile.read(reinterpret_cast<char*>(&sector), sizeof(CcdSector))) {
         // Check cancellation at the start of the loop
         if (g_operationCancelled.load()) {
+			g_operationCancelled.store(true);
             isoFile.close();
             fs::remove(isoPath);
             return false;
@@ -185,6 +191,7 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
 
         // Check cancellation immediately after writing sector data
         if (g_operationCancelled.load()) {
+			g_operationCancelled.store(true);
             isoFile.close();
             fs::remove(isoPath);
             return false;
@@ -202,6 +209,7 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
 
         // Check cancellation after updating progress
         if (g_operationCancelled.load()) {
+			g_operationCancelled.store(true);
             isoFile.close();
             fs::remove(isoPath);
             return false;
@@ -260,6 +268,7 @@ bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile
 
     // Check cancellation before starting the loop
     if (g_operationCancelled.load()) {
+		g_operationCancelled.store(true);
         isoFile.close();
         fs::remove(outputFile);
         return false;
@@ -269,6 +278,7 @@ bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile
     while (nrgFile && nrgFile.tellg() < nrgFileSize) {
         // Check cancellation at the start of the loop
         if (g_operationCancelled.load()) {
+			g_operationCancelled.store(true);
             isoFile.close();
             fs::remove(outputFile);
             return false;
@@ -279,6 +289,7 @@ bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile
 
         // Check cancellation after reading sector
         if (g_operationCancelled.load()) {
+			g_operationCancelled.store(true);
             isoFile.close();
             fs::remove(outputFile);
             return false;
@@ -291,6 +302,7 @@ bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile
 
             // Check cancellation after writing sector
             if (g_operationCancelled.load()) {
+				g_operationCancelled.store(true);
                 isoFile.close();
                 fs::remove(outputFile);
                 return false;
@@ -303,6 +315,7 @@ bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile
 
             // Check cancellation after updating progress
             if (g_operationCancelled.load()) {
+				g_operationCancelled.store(true);
                 isoFile.close();
                 fs::remove(outputFile);
                 return false;

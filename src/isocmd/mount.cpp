@@ -22,9 +22,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
     for (const auto& isoFile : isoFiles) {
         // Check for cancellation before processing each ISO
         if (g_operationCancelled.load()) {
-			std::lock_guard<std::mutex> lock(globalSetsMutex); // Lock the mutex
-            mountedFails.clear();
-            mountedFails.insert("\033[1;33mMount operation interrupted by user - partial mounts cleaned up.\033[0m");
+			g_operationCancelled.store(true);
             break;
         }
 
@@ -190,7 +188,6 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
     
     // Setup signal handler and reset cancellation flag
     setupSignalHandlerCancellations();
-    g_operationCancelled.store(false);
 
     // Handle input ("00" = all files, else parse input)
     if (input == "00") {
@@ -231,48 +228,50 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
     std::mutex completionMutex;
 
     // Enqueue chunk tasks with proper cancellation handling
-    for (const auto& chunk : isoChunks) {
-        mountFutures.emplace_back(pool.enqueue([&, chunk]() {
-            if (g_operationCancelled.load()) {
-                return;
-            }
+	for (const auto& chunk : isoChunks) {
+		mountFutures.emplace_back(pool.enqueue([&, chunk]() {
+			if (g_operationCancelled.load()) {
+				return;
+			}
 
-            std::vector<std::string> successfulMounts;
-            for (const auto& file : chunk) {
-                if (g_operationCancelled.load()) {
-                    break;
-                }
+			std::vector<std::string> successfulMounts;
+			for (const auto& file : chunk) {
+				if (g_operationCancelled.load()) {
+					break;
+				}
 
-                bool mountSuccess = false;
-                bool wasSkipped = false;
-                {
-                    std::lock_guard<std::mutex> lock(completionMutex);
-                    // Process single file mount
-                    std::set<std::string> tempMounted, tempSkipped, tempFailed;
-                    std::vector<std::string> singleFileChunk = {file};
-                    mountIsoFiles(singleFileChunk, tempMounted, tempSkipped, tempFailed);
+				bool mountSuccess = false;
+				bool wasSkipped = false;
+				bool mountFailed = false;
+				{
+					std::lock_guard<std::mutex> lock(completionMutex);
+					// Process single file mount
+					std::set<std::string> tempMounted, tempSkipped, tempFailed;
+					std::vector<std::string> singleFileChunk = {file};
+					mountIsoFiles(singleFileChunk, tempMounted, tempSkipped, tempFailed);
 
-                    // Update global sets and track success
-                    mountedFiles.insert(tempMounted.begin(), tempMounted.end());
-                    skippedMessages.insert(tempSkipped.begin(), tempSkipped.end());
-                    mountedFails.insert(tempFailed.begin(), tempFailed.end());
-                    mountSuccess = !tempMounted.empty();
-                    wasSkipped = !tempSkipped.empty();
-                }
+					// Update global sets and track success
+					mountedFiles.insert(tempMounted.begin(), tempMounted.end());
+					skippedMessages.insert(tempSkipped.begin(), tempSkipped.end());
+					mountedFails.insert(tempFailed.begin(), tempFailed.end());
+					mountSuccess = !tempMounted.empty();
+					wasSkipped = !tempSkipped.empty();
+					mountFailed = !tempFailed.empty();
+				}
 
-                // Only increment completed tasks if not cancelled
-                if (!g_operationCancelled.load()) {
-                    if (mountSuccess) {
-                        successfulMounts.push_back(file);
-                    }
-                    // Increment completed tasks if the file was either mounted or skipped
-                    if (mountSuccess || wasSkipped) {
-                        completedTasks.fetch_add(1, std::memory_order_relaxed);
-                    }
-                }
-            }
-        }));
-    }
+				// Only increment completed tasks if not cancelled
+				if (!g_operationCancelled.load()) {
+					if (mountSuccess) {
+						successfulMounts.push_back(file);
+					}
+					// Increment completed tasks if the file was either mounted, skipped, or failed
+					if (mountSuccess || wasSkipped || mountFailed) {
+						completedTasks.fetch_add(1, std::memory_order_relaxed);
+					}
+				}
+			}
+		}));
+	}
 
     // Start progress thread
     std::thread progressThread(
@@ -289,9 +288,11 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
     for (auto& future : mountFutures) {
         future.wait();
         if (g_operationCancelled.load()) {
-            mountedFails.clear();
-            break;
-        }
+			g_operationCancelled.store(true);
+			mountedFails.clear();
+			mountedFails.emplace("\033[1;33mUnmount operation interrupted by user - partial cleanup performed.\033[0m");
+			break;
+		}
     }
 
     // Cleanup

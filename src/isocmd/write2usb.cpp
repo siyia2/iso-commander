@@ -587,6 +587,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 			<< "\033[0;1m in \033[0;1m" << duration << " seconds.\033[0;1m\n";
     
     if (g_operationCancelled.load()) {
+		g_operationCancelled.store(true);
         std::cout << "\n\033[1;33mOperation interrupted by user.\033[0;1m\n";
     }
     flushStdin();
@@ -600,7 +601,6 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles, st
     std::set<int> indicesToProcess;
 
     setupSignalHandlerCancellations();
-    g_operationCancelled = false;
 
     tokenizeInput(input, isoFiles, uniqueErrorMessages, indicesToProcess);
     if (indicesToProcess.empty()) {
