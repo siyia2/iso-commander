@@ -555,6 +555,11 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
     }
 
     for (auto& future : futures) {
+		if (g_operationCancelled.load()) {
+			failedOuts.clear();
+			deletedOuts.clear();
+            break;
+        }
         future.wait();
     }
 

@@ -99,6 +99,10 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     }
 
     for (auto& future : futures) {
+		if (g_operationCancelled.load()) {
+			operationErrors.clear();
+            break;
+        }
         future.wait();
     }
 
