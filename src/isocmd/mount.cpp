@@ -244,6 +244,7 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
                 }
 
                 bool mountSuccess = false;
+                bool wasSkipped = false;
                 {
                     std::lock_guard<std::mutex> lock(completionMutex);
                     // Process single file mount
@@ -256,6 +257,7 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
                     skippedMessages.insert(tempSkipped.begin(), tempSkipped.end());
                     mountedFails.insert(tempFailed.begin(), tempFailed.end());
                     mountSuccess = !tempMounted.empty();
+                    wasSkipped = !tempSkipped.empty();
                 }
 
                 // Only increment completed tasks if not cancelled
@@ -263,7 +265,10 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
                     if (mountSuccess) {
                         successfulMounts.push_back(file);
                     }
-                    completedTasks.fetch_add(1, std::memory_order_relaxed);
+                    // Increment completed tasks if the file was either mounted or skipped
+                    if (mountSuccess || wasSkipped) {
+                        completedTasks.fetch_add(1, std::memory_order_relaxed);
+                    }
                 }
             }
         }));
@@ -284,7 +289,7 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
     for (auto& future : mountFutures) {
         future.wait();
         if (g_operationCancelled.load()) {
-			mountedFails.clear();
+            mountedFails.clear();
             break;
         }
     }
@@ -292,5 +297,4 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
     // Cleanup
     isProcessingComplete.store(true);
     progressThread.join();
-
 }
