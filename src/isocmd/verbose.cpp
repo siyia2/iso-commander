@@ -74,9 +74,14 @@ void verbosePrint(const std::set<std::string>& primarySet, const std::set<std::s
 
             printWithNewline(secondarySet);   // Success outputs
             printWithNewline(tertiarySet);    // Skipped outputs
-            printWithNewline(quaternarySet);  // Failed outputs
-            printWithNewline(errorSet);       // Deleted outputs
+            if (g_operationCancelled) {
+				printWithNewline(quaternarySet);  // Failed outputs
+				printWithNewline(errorSet);       // Deleted outputs
+				g_operationCancelled.store(false);
+			}
             printWithNewline(primarySet);     // Processed errors
+            
+				
             break;
     }
     // Continuation prompt
