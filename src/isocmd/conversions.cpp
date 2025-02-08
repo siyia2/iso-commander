@@ -432,18 +432,6 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 			std::cout << "\n\033[0;1m Processing \001\033[1;38;5;208m\002" + fileExtensionWithOutDots + "\033[0;1m conversions... (\033[1;91mCtrl + c\033[0;1m:cancel)\n";
 			processInput(mainInputString, files, (fileType == "mdf"), (fileType == "nrg"), processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, promptFlag, maxDepth, historyPattern, verbose, needsScrnClr, newISOFound);
 			
-			 if (!g_operationCancelled.load()) {
-           std::string type = (fileExtensionWithOutDots == "MDF") ? "MDF" 
-                   : (fileExtensionWithOutDots == "NRG") ? "NRG" 
-                   : "BIN/IMG";
-            std::string cancelMsg = "\033[1;33m" + type + " to ISO conversion interrupted by user - partial files cleaned up.\033[0;1m";
-            {
-                std::lock_guard<std::mutex> lock(globalSetsMutex);
-                failedOuts.clear();
-                deletedOuts.clear();
-                failedOuts.insert(cancelMsg);
-            }
-    }
 			if (verbose) verbosePrint(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, 3); // Print detailed logs if verbose mode is enabled
 		}
     }
@@ -990,6 +978,17 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
                 (*completedTasks)++;
             }
         }
+    }
+    
+    if (!g_operationCancelled.load()) {
+            std::string type = modeMdf ? "MDF" : (modeNrg ? "NRG" : "BIN/IMG");
+            std::string cancelMsg = "\033[1;33m" + type + " to ISO conversion interrupted by user - partial files cleaned up.\033[0;1m";
+            {
+                std::lock_guard<std::mutex> lock(globalSetsMutex);
+                failedOuts.clear();
+                deletedOuts.clear();
+                failedOuts.insert(cancelMsg);
+            }
     }
 
     // Update cache and prompt flags
