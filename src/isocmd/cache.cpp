@@ -735,7 +735,6 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
         for (auto it = std::filesystem::recursive_directory_iterator(path, options); 
 			it != std::filesystem::recursive_directory_iterator(); ++it) {
 			if (g_operationCancelled.load()) {
-				g_operationCancelled.store(true);
 				std::lock_guard<std::mutex> lock(traverseFilesMutex);
 				uniqueErrorMessages.clear();
 				uniqueErrorMessages.insert("\n\033[1;33mISO cache update interrupted by user.\033[0;1m");

@@ -6,12 +6,10 @@
 
 // Function to process selected indices for cpMvDel accordingly
 void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& umountMvRmBreak, bool& historyPattern, bool& verbose, std::atomic<bool>& newISOFound) {
-	setupSignalHandlerCancellations();
-    
-    g_operationCancelled.store(false);
-
 	bool overwriteExisting =false;
-    
+	
+	setupSignalHandlerCancellations();
+        
     std::string userDestDir;
     std::set<int> processedIndices;
 
@@ -105,7 +103,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     for (auto& future : futures) {
         future.wait();
         if (g_operationCancelled.load()) {
-			g_operationCancelled.store(true);
             break;
         }
     }
@@ -263,7 +260,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
 
 
 namespace fs = std::filesystem;
-std::atomic<bool> g_operationCancelled{false};
+
 
 // Function to buffer file copying
 bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::atomic<size_t>* completedBytes, std::error_code& ec) {
@@ -302,7 +299,6 @@ bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::ato
 
     // Check if the operation was cancelled
     if (g_operationCancelled.load()) {
-		g_operationCancelled.store(true);
         ec = std::make_error_code(std::errc::operation_canceled);
         output.close(); // Close the output stream before attempting to delete
         fs::remove(dst, ec); // Delete the partial file, ignore errors here
@@ -361,7 +357,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
             if (g_operationCancelled.load()) {
                 if (isDelete) {
                     {
-						g_operationCancelled.store(true);
                         std::lock_guard<std::mutex> lock(globalSetsMutex);
                         operationErrors.clear();
                         operationErrors.emplace("\033[1;93mDelete operation interrupted - partial cleanup.\033[0m");
@@ -485,7 +480,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     if (!success || ec) {
                         if (g_operationCancelled.load()) {
 							{
-								g_operationCancelled.store(true);
 								std::lock_guard<std::mutex> lock(globalSetsMutex);
                                 operationErrors.clear();
                                 std::string type = isCopy ? "Copy" : "Move";

@@ -559,7 +559,6 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
     for (auto& future : futures) {
         future.wait();
         if (g_operationCancelled.load()) {
-			g_operationCancelled.store(true);
             break;
         }
     }
@@ -587,7 +586,6 @@ std::set<std::string> processBatchPaths(const std::vector<std::string>& batchPat
             // Traverse directory
             for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
 				if (g_operationCancelled.load()) {
-					g_operationCancelled.store(true);
 					std::lock_guard<std::mutex> lock(globalSetsMutex);
 					processedErrorsFind.clear();
 					localFileNames.clear();
@@ -823,6 +821,12 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
 
 // Function to convert a BIN/IMG/MDF/NRG file to ISO format
 void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, const bool& modeMdf, const bool& modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<bool>& newISOFound) {
+    
+    // Clear message sets at the start of function
+    successOuts.clear();
+    skippedOuts.clear();
+    failedOuts.clear();
+    deletedOuts.clear();
         
     // Collect unique directories from the input file paths
     std::set<std::string> uniqueDirectories;
@@ -848,10 +852,15 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
 
     // Iterate over each image file
     for (const std::string& inputPath : imageFiles) {
-        // Check for cancellation before processing each file
         if (g_operationCancelled.load()) {
-			g_operationCancelled.store(true);
-            break;
+            std::string type = modeMdf ? "MDF" : (modeNrg ? "NRG" : "BIN/IMG");
+            std::string cancelMsg = "\033[1;33m" + type + " to ISO conversion interrupted by user - partial files cleaned up.\033[0;1m";
+            successOuts.clear();
+            skippedOuts.clear();
+            failedOuts.clear();
+            deletedOuts.clear();
+            failedOuts.insert(cancelMsg);
+            return;
         }
 
         auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath, "conversions");
@@ -880,7 +889,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
                     nrgFilesCache.erase(it);
                 }
             }
-            if (completedTasks && !g_operationCancelled.load()) {
+            if (completedTasks) {
                 (*completedTasks)++;
             }
             continue;
@@ -894,7 +903,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
                 std::lock_guard<std::mutex> lock(globalSetsMutex);
                 failedOuts.insert(failedMessage);
             }
-            if (completedTasks && !g_operationCancelled.load()) {
+            if (completedTasks) {
                 (*completedTasks)++;
             }
             continue;
@@ -926,13 +935,6 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
             conversionSuccess = convertNrgToIso(inputPath, outputPath, completedBytes);
         }
 
-        // Skip completion tracking if operation was cancelled
-        if (g_operationCancelled.load()) {
-			g_operationCancelled.store(true);
-            break;
-        }
-
-        // Handle output results
         auto [outDirectory, outFileNameOnly] = extractDirectoryAndFilename(outputPath, "conversions");
 
         if (conversionSuccess) {
@@ -974,28 +976,29 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
                     deletedOuts.insert(deleteFailMessage);
                 }
             }
-            if (completedTasks && !g_operationCancelled.load()) {
+            if (completedTasks) {
                 (*completedTasks)++;
             }
         }
     }
     
-    if (!g_operationCancelled.load()) {
-            std::string type = modeMdf ? "MDF" : (modeNrg ? "NRG" : "BIN/IMG");
-            std::string cancelMsg = "\033[1;33m" + type + " to ISO conversion interrupted by user - partial files cleaned up.\033[0;1m";
-            {
-                std::lock_guard<std::mutex> lock(globalSetsMutex);
-                failedOuts.clear();
-                deletedOuts.clear();
-                failedOuts.insert(cancelMsg);
-            }
+    if (g_operationCancelled.load()) {
+        std::string type = modeMdf ? "MDF" : (modeNrg ? "NRG" : "BIN/IMG");
+        std::string cancelMsg = "\033[1;33m" + type + " to ISO conversion interrupted by user - partial files cleaned up.\033[0;1m";
+        std::lock_guard<std::mutex> lock(globalSetsMutex);
+        failedOuts.clear();
+        deletedOuts.clear();
+        failedOuts.insert(cancelMsg);
+        return;
     }
 
-    // Update cache and prompt flags
-    promptFlag = false;
-    maxDepth = 0;
-    if (!successOuts.empty()) {
-        manualRefreshCache(result, promptFlag, maxDepth, historyPattern, newISOFound);
+    // Cache update only if not cancelled
+    if (!g_operationCancelled.load()) {
+        promptFlag = false;
+        maxDepth = 0;
+        if (!successOuts.empty()) {
+            manualRefreshCache(result, promptFlag, maxDepth, historyPattern, newISOFound);
+        }
     }
 
     promptFlag = true;
