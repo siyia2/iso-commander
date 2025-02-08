@@ -109,6 +109,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
     while (true) {
 		
         // Reset control flags and clear tracking sets
+        g_operationCancelled.store(false);
         bool list = false, clr = false;
         successOuts.clear(); 
         skippedOuts.clear(); 
@@ -573,7 +574,6 @@ std::set<std::string> processBatchPaths(const std::vector<std::string>& batchPat
     std::mutex fileNamesMutex;
     std::atomic<size_t> totalFiles{0};
     std::set<std::string> localFileNames;
-    std::atomic<bool> g_CancelledMessageAdded{false};
     
     disableInput();
 
@@ -587,11 +587,11 @@ std::set<std::string> processBatchPaths(const std::vector<std::string>& batchPat
             // Traverse directory
             for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
 				if (g_operationCancelled.load()) {
-					if (!g_CancelledMessageAdded.exchange(true)) {
-						processedErrorsFind.clear();
-						localFileNames.clear();
-						processedErrorsFind.insert("\033[1;33mCache update interrupted by user.\n\n\033[0;1m");
-					}
+					g_operationCancelled.store(true);
+					std::lock_guard<std::mutex> lock(globalSetsMutex);
+					processedErrorsFind.clear();
+					localFileNames.clear();
+					processedErrorsFind.insert("\033[1;33mCache update interrupted by user.\n\n\033[0;1m");
 					break;
 				}
                 if (entry.is_regular_file()) {

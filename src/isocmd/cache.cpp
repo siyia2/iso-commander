@@ -591,6 +591,7 @@ void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, 
         rl_bind_key('\f', rl_clear_screen);
 		rl_bind_key('\t', rl_complete);
         bool isCpMv= false;
+        g_operationCancelled.store(false);
         // Prompt the user to enter directory paths for manual cache refresh
 		std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;92m\002.iso\001\033[1;94m\002 files and import them into \001\033[1;92m\002on-disk\001\033[1;94m\002 cache, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
         char* rawSearchQuery = readline(prompt.c_str());
@@ -720,7 +721,6 @@ void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, 
 void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, std::atomic<size_t>& totalFiles, std::mutex& traverseFilesMutex, std::mutex& traverseErrorsMutex, int& maxDepth, bool& promptFlag) {
     const size_t BATCH_SIZE = 100;
     std::vector<std::string> localIsoFiles;
-    std::atomic<bool> g_CancelledMessageAdded{false};
 
 
     auto iequals = [](const std::string_view& a, const std::string_view& b) {
@@ -735,10 +735,10 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
         for (auto it = std::filesystem::recursive_directory_iterator(path, options); 
 			it != std::filesystem::recursive_directory_iterator(); ++it) {
 			if (g_operationCancelled.load()) {
-				if (!g_CancelledMessageAdded.exchange(true)) {
-					uniqueErrorMessages.clear();
-					uniqueErrorMessages.insert("\n\033[1;33mISO cache update interrupted by user.\033[0;1m");
-				}
+				g_operationCancelled.store(true);
+				std::lock_guard<std::mutex> lock(traverseFilesMutex);
+				uniqueErrorMessages.clear();
+				uniqueErrorMessages.insert("\n\033[1;33mISO cache update interrupted by user.\033[0;1m");
 				break;
 			}
                 if (maxDepth >= 0 && it.depth() > maxDepth) {

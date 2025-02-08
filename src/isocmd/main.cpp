@@ -23,8 +23,9 @@ namespace displayConfig {
     bool toggleFullListConversions = false;
 }
 
-// Global flag to track cancellation for write2usb
-std::atomic<bool> g_cancelOperation(false);
+
+// Global flag to track cancellation
+std::atomic<bool> g_operationCancelled{false};
 
 
 // Main function
@@ -115,6 +116,9 @@ int main(int argc, char *argv[]) {
 		// Calls prevent_clear_screen and tab completion
 		rl_bind_key('\f', prevent_readline_keybindings);
 		rl_bind_key('\t', prevent_readline_keybindings);
+		
+		// Cancellation flag set to false on default
+		g_operationCancelled.store(false);
 		
 		// For indicating if location is int main
 		isAtMain.store(true);
