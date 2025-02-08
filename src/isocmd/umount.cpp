@@ -72,15 +72,24 @@ std::string modifyDirectoryPath(const std::string& dir) {
 
 // Function to unmount ISO files asynchronously
 void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors) {
-    std::atomic<bool> g_CancelledMessageAdded{false};
     
     // Early exit if cancelled before starting
-    if (g_operationCancelled.load()) return;
+    if (g_operationCancelled.load()) {
+		unmountedErrors.clear();
+        unmountedErrors.emplace("\033[1;33mUnmount operation interrupted by user - partial cleanup performed.\033[0m");
+    
+		return;
+	}
 
     // Root check with cancellation awareness
     if (geteuid() != 0) {
         for (const auto& isoDir : isoDirs) {
-            if (g_operationCancelled.load()) break;
+            if (g_operationCancelled.load()) {
+				unmountedErrors.clear();
+                unmountedErrors.emplace("\033[1;33mUnmount operation interrupted by user - partial cleanup performed.\033[0m");
+            
+				break;
+			}
             std::string modifiedDir = modifyDirectoryPath(isoDir);
             std::stringstream errorMessage;
             errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << modifiedDir
@@ -96,12 +105,10 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
     std::vector<std::pair<std::string, int>> unmountResults;
     for (const auto& isoDir : isoDirs) {
         if (g_operationCancelled.load()) {
-            if (!g_CancelledMessageAdded.exchange(true)) {
-                {
-                    std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
-                    unmountedErrors.clear();
-                    unmountedErrors.emplace("\033[1;33mUnmount operation interrupted by user - partial cleanup performed.\033[0m");
-                }
+			{
+				std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
+                unmountedErrors.clear();
+                unmountedErrors.emplace("\033[1;33mUnmount operation interrupted by user - partial cleanup performed.\033[0m");
             }
             break;
         }

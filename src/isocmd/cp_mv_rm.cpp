@@ -310,7 +310,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
     setupSignalHandlerCancellations();
     
     g_operationCancelled.store(false);
-    std::atomic<bool> g_CancelledMessageAdded{false};
 
     bool operationSuccessful = true;
     uid_t real_uid;
@@ -479,13 +478,11 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 
                     if (!success || ec) {
                         if (g_operationCancelled.load()) {
-                            if (!g_CancelledMessageAdded.exchange(true)) {
-                                {
-                                    std::lock_guard<std::mutex> lock(globalSetsMutex);
-                                    operationErrors.clear();
-                                    std::string type = isCopy ? "Copy" : "Move";
-                                    operationErrors.emplace("\033[1;33m" + type + " operation interrupted by user - partial files cleaned up.\033[0;1m");
-                                }
+							{
+								std::lock_guard<std::mutex> lock(globalSetsMutex);
+                                operationErrors.clear();
+                                std::string type = isCopy ? "Copy" : "Move";
+                                operationErrors.emplace("\033[1;33m" + type + " operation interrupted by user - partial files cleaned up.\033[0;1m");
                             }
                         } else {
                             std::string errorMessageInfo = "\033[1;91mError " +

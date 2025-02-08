@@ -18,16 +18,13 @@ bool isAlreadyMounted(const std::string& mountPoint) {
 
 // Function to mount selected ISO files called from processAndMountIsoFiles
 void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
-    std::atomic<bool> g_CancelledMessageAdded{false};
 
     for (const auto& isoFile : isoFiles) {
         // Check for cancellation before processing each ISO
         if (g_operationCancelled.load()) {
-            if (!g_CancelledMessageAdded.exchange(true)) {
-                std::lock_guard<std::mutex> lock(globalSetsMutex); // Lock the mutex
-                mountedFails.clear();
-                mountedFails.insert("\033[1;33mMount operation interrupted by user - partial mounts cleaned up.\033[0m");
-            }
+			std::lock_guard<std::mutex> lock(globalSetsMutex); // Lock the mutex
+            mountedFails.clear();
+            mountedFails.insert("\033[1;33mMount operation interrupted by user - partial mounts cleaned up.\033[0m");
             break;
         }
 
