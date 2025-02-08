@@ -486,7 +486,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             
             // Add status indicator for cancelled operations
             if (g_operationCancelled.load()) {
-                ss << " \033[1;33m[Interrupted]\033[0m";
+                ss << " \033[1;33m[Cancelled]\033[0m";
             }
             
             ss << "\033[K";
