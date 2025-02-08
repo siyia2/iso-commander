@@ -230,12 +230,45 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
     std::atomic<size_t> completedTasks(0);
     std::atomic<bool> isProcessingComplete(false);
 
-    // Enqueue chunk tasks
+    // Mutex for thread-safe completion counting
+    std::mutex completionMutex;
+
+    // Enqueue chunk tasks with proper cancellation handling
     for (const auto& chunk : isoChunks) {
         mountFutures.emplace_back(pool.enqueue([&, chunk]() {
-            if (g_operationCancelled.load()) return;
-            mountIsoFiles(chunk, mountedFiles, skippedMessages, mountedFails);
-            completedTasks.fetch_add(chunk.size(), std::memory_order_relaxed);
+            if (g_operationCancelled.load()) {
+                return;
+            }
+
+            std::vector<std::string> successfulMounts;
+            for (const auto& file : chunk) {
+                if (g_operationCancelled.load()) {
+                    break;
+                }
+
+                bool mountSuccess = false;
+                {
+                    std::lock_guard<std::mutex> lock(completionMutex);
+                    // Process single file mount
+                    std::set<std::string> tempMounted, tempSkipped, tempFailed;
+                    std::vector<std::string> singleFileChunk = {file};
+                    mountIsoFiles(singleFileChunk, tempMounted, tempSkipped, tempFailed);
+
+                    // Update global sets and track success
+                    mountedFiles.insert(tempMounted.begin(), tempMounted.end());
+                    skippedMessages.insert(tempSkipped.begin(), tempSkipped.end());
+                    mountedFails.insert(tempFailed.begin(), tempFailed.end());
+                    mountSuccess = !tempMounted.empty();
+                }
+
+                // Only increment completed tasks if not cancelled
+                if (!g_operationCancelled.load()) {
+                    if (mountSuccess) {
+                        successfulMounts.push_back(file);
+                    }
+                    completedTasks.fetch_add(1, std::memory_order_relaxed);
+                }
+            }
         }));
     }
 
@@ -253,10 +286,14 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
     // Wait for completion or cancellation
     for (auto& future : mountFutures) {
         future.wait();
-        if (g_operationCancelled.load()) break;
+        if (g_operationCancelled.load()) {
+			mountedFails.clear();
+            break;
+        }
     }
 
     // Cleanup
     isProcessingComplete.store(true);
     progressThread.join();
+
 }

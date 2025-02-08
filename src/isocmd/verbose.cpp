@@ -79,7 +79,6 @@ void verbosePrint(const std::set<std::string>& primarySet, const std::set<std::s
             printWithNewline(primarySet);     // Processed errors
             break;
     }
-
     // Continuation prompt
     std::cout << "\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');

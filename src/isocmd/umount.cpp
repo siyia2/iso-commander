@@ -195,7 +195,7 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& currentF
     }
 
     ThreadPool pool(numThreads);
-    std::vector<std::future<void>> unmountFutures;
+    std::vector<std::future<void>> umountFutures;
     std::atomic<size_t> completedTasks(0);
     std::atomic<bool> isProcessingComplete(false);
 
@@ -210,19 +210,53 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& currentF
         &verbose
     );
 
-    // Enqueue chunk tasks
+	// Mutex for thread-safe completion counting
+    std::mutex completionMutex;
+	
     for (const auto& chunk : chunks) {
-        unmountFutures.emplace_back(pool.enqueue([&, chunk]() {
-            if (g_operationCancelled.load()) return;
-            unmountISO(chunk, operationFiles, operationFails);
-            completedTasks.fetch_add(chunk.size(), std::memory_order_relaxed);
+        umountFutures.emplace_back(pool.enqueue([&, chunk]() {
+            if (g_operationCancelled.load()) {
+                return;
+            }
+
+            std::vector<std::string> successfulUmounts;
+            for (const auto& file : chunk) {
+                if (g_operationCancelled.load()) {
+                    break;
+                }
+
+                bool umountSuccess = false;
+                {
+                    std::lock_guard<std::mutex> lock(completionMutex);
+                    // Process single file mount
+                    std::set<std::string> tempUmounted, tempFailed;
+                    std::vector<std::string> singleFileChunk = {file};
+                    unmountISO(singleFileChunk, tempUmounted, tempFailed);
+
+                    // Update global sets and track success
+                    operationFiles.insert(tempUmounted.begin(), tempUmounted.end());
+                    operationFails.insert(tempFailed.begin(), tempFailed.end());
+                    umountSuccess = !tempUmounted.empty();
+                }
+
+                // Only increment completed tasks if not cancelled
+                if (!g_operationCancelled.load()) {
+                    if (umountSuccess) {
+                        successfulUmounts.push_back(file);
+                    }
+                    completedTasks.fetch_add(1, std::memory_order_relaxed);
+                }
+            }
         }));
     }
 
     // Wait for completion or cancellation
-    for (auto& future : unmountFutures) {
+    for (auto& future : umountFutures) {
         future.wait();
-        if (g_operationCancelled.load()) break;
+        if (g_operationCancelled.load()) {
+			operationFails.clear();
+			break;
+		}
     }
 
     // Cleanup
