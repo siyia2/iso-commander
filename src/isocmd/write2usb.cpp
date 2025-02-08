@@ -301,9 +301,6 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         // Restore readline autocomplete and screen clear bindings
         rl_bind_key('\f', rl_clear_screen);
         rl_bind_key('\t', rl_complete);
-        
-        rl_bind_keyseq("\033[A", rl_get_previous_history); // Restore Up arrow
-		rl_bind_keyseq("\033[B", rl_get_next_history);     // Restore Down arrow
 
         devicePrompt += "\n\001\033[1;92m\002Mappings\001\033[1;94m\002 ↵ as \001\033[1;93m\002INDEX>DEVICE\001\033[1;94m\002, ? ↵ for help, ↵ to return:\001\033[0;1m\002 ";
 
@@ -317,8 +314,6 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             continue;
         }
         
-        if (deviceInput && *deviceInput) add_history(deviceInput.get());
-
         if (!deviceInput || deviceInput.get()[0] == '\0') {
             return {};
         }
@@ -453,9 +448,6 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         
         rl_bind_key('\f', prevent_readline_keybindings);
 		rl_bind_key('\t', prevent_readline_keybindings);
-		// Disable up/down arrow keys for history browsing
-		rl_bind_keyseq("\033[A", prevent_readline_keybindings); // Up arrow
-		rl_bind_keyseq("\033[B", prevent_readline_keybindings); // Down arrow
 
         std::unique_ptr<char, decltype(&std::free)> confirmation(
             readline("\n\001\033[1;94m\002Proceed? (y/n): \001\033[0;1m\002"), &std::free
@@ -625,13 +617,11 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles, st
     }
 
     if (selectedIsos.empty()) {
-        clear_history();
         return;
     }
 
     auto validPairs = collectDeviceMappings(selectedIsos, uniqueErrorMessages);
     if (validPairs.empty()) {
-        clear_history();
         return;
     }
 
