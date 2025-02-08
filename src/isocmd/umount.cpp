@@ -100,8 +100,6 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
 
     std::vector<std::pair<std::string, int>> unmountResults;
     for (const auto& isoDir : isoDirs) {
-		    std::this_thread::sleep_for(std::chrono::seconds(2));
-
         if (g_operationCancelled.load()) {
 			g_operationCancelled.store(true);
             break;
