@@ -229,13 +229,17 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         needsClrScrn = true;
         
         if (isMount) {
+			isAtISOList.store(false);
             processAndMountIsoFiles(inputString, sourceList, operationFiles, skippedMessages, operationFails, uniqueErrorMessages, verbose);
         } else if (isUnmount) {
             umountMvRmBreak = true;
+            isAtISOList.store(false);
             prepareUnmount(inputString, sourceList, operationFiles, operationFails, uniqueErrorMessages, umountMvRmBreak, verbose);
         } else if (write) {
+			isAtISOList.store(false);
             writeToUsb(inputString, sourceList, uniqueErrorMessages);
         } else {
+			isAtISOList.store(false);
             processOperationInput(inputString, sourceList, operation, operationFiles, operationFails, uniqueErrorMessages, promptFlag, maxDepth, umountMvRmBreak, historyPattern, verbose, newISOFound);
         }
 
