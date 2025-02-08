@@ -99,11 +99,10 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     }
 
     for (auto& future : futures) {
-		if (g_operationCancelled.load()) {
-			operationErrors.clear();
+        future.wait();
+        if (g_operationCancelled.load()) {
             break;
         }
-        future.wait();
     }
 
     isProcessingComplete.store(true);
