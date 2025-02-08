@@ -343,7 +343,6 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
     
     // Main processing loop
     while (true) {
-		g_operationCancelled.store(false);
         verbose = false; // Reset verbose mode
         processedErrors.clear(); 
         successOuts.clear(); 
@@ -556,7 +555,6 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
     for (auto& future : futures) {
         future.wait();
         if (g_operationCancelled.load()) {
-			failedOuts.clear();
 			deletedOuts.clear();
             break;
         }
@@ -915,7 +913,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
                 std::lock_guard<std::mutex> lock(globalSetsMutex);
                 skippedOuts.insert(skipMessage);
             }
-            if (completedTasks && !g_operationCancelled.load()) {
+            if (completedTasks) {
                 (*completedTasks)++;
             }
             continue;
@@ -986,15 +984,16 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
     
     // Handle cancellation message
     if (g_operationCancelled.load()) {
-		std::string type = modeMdf ? "MDF" : (modeNrg ? "NRG" : "BIN/IMG");
-        std::string cancelMsg = "\033[1;33m" + type + " to ISO conversion interrupted by user - partial files cleaned up.\n\033[0;1m";
-        {
-			std::lock_guard<std::mutex> lock(globalSetsMutex);
-            failedOuts.clear();
-            deletedOuts.clear();
-            failedOuts.insert(cancelMsg);
-		}
-		g_operationCancelled.store(true);
+        if (!g_CancelledMessageAdded.exchange(true)) {
+            std::string type = modeMdf ? "MDF" : (modeNrg ? "NRG" : "BIN/IMG");
+            std::string cancelMsg = "\033[1;33m" + type + " to ISO conversion interrupted by user - partial files cleaned up.\033[0;1m";
+            {
+                std::lock_guard<std::mutex> lock(globalSetsMutex);
+                failedOuts.clear();
+                deletedOuts.clear();
+                failedOuts.insert(cancelMsg);
+            }
+        }
     }
 
     // Update cache and prompt flags
@@ -1007,4 +1006,3 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
     promptFlag = true;
     maxDepth = -1;
 }
-
