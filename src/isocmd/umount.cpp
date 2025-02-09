@@ -230,10 +230,16 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& currentF
     for (auto& future : unmountFutures) {
         future.wait();
         if (g_operationCancelled.load()) {
-			operationFails.clear();
-			operationFails.emplace("\033[1;33mUnmount operation interrupted by user - partial cleanup performed.\033[0m");
-			break;
-		}
+            // Add individual failure messages for each task that was not completed
+            for (const auto& mountpoint : selectedMountpoints) {
+                if (operationFiles.find(mountpoint) == operationFiles.end() &&
+                    operationFails.find(mountpoint) == operationFails.end()) {
+					std::string modifiedDir = modifyDirectoryPath(mountpoint);
+                    operationFails.emplace("\033[1;33mUnmount operation interrupted by user - " + mountpoint + " not processed.\033[0m");
+                }
+            }
+            break;
+        }
     }
 
     // Cleanup

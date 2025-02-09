@@ -441,7 +441,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 
 // Function to process user input and convert selected BIN/MDF/NRG files to ISO format
 void processInput(const std::string& input, std::vector<std::string>& fileList, const bool& modeMdf, const bool& modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose, bool& needsScrnClr, std::atomic<bool>& newISOFound) {
-	setupSignalHandlerCancellations();
+    setupSignalHandlerCancellations();
         
     std::set<std::string> selectedFilePaths;
     std::string concatenatedFilePaths;
@@ -485,34 +485,34 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
     size_t totalTasks = filesToProcess.size();  // Each file is a task
 
     if (modeNrg) {
-		for (const auto& file : filesToProcess) {
-			std::ifstream nrgFile(file, std::ios::binary);
-			if (nrgFile) {
-				// Seek to the end of the file to get the total size
-				nrgFile.seekg(0, std::ios::end);
-				size_t nrgFileSize = nrgFile.tellg();
+        for (const auto& file : filesToProcess) {
+            std::ifstream nrgFile(file, std::ios::binary);
+            if (nrgFile) {
+                // Seek to the end of the file to get the total size
+                nrgFile.seekg(0, std::ios::end);
+                size_t nrgFileSize = nrgFile.tellg();
 
-				// The ISO data starts after the 307,200-byte header
-				size_t isoDataSize = nrgFileSize - 307200;
+                // The ISO data starts after the 307,200-byte header
+                size_t isoDataSize = nrgFileSize - 307200;
 
-				// Add the ISO data size to the total bytes
-				totalBytes += isoDataSize;
-			}
-		}
-	} else if (modeMdf) {
-		for (const auto& file : filesToProcess) {
-			std::ifstream mdfFile(file, std::ios::binary);
-			if (mdfFile) {
-				MdfTypeInfo mdfInfo;
-				if (!mdfInfo.determineMdfType(mdfFile)) {
-					continue;
-				}
-				mdfFile.seekg(0, std::ios::end);
-				size_t fileSize = mdfFile.tellg();
-				size_t numSectors = fileSize / mdfInfo.sector_size;
-				totalBytes += numSectors * mdfInfo.sector_data;
-			}
-		}
+                // Add the ISO data size to the total bytes
+                totalBytes += isoDataSize;
+            }
+        }
+    } else if (modeMdf) {
+        for (const auto& file : filesToProcess) {
+            std::ifstream mdfFile(file, std::ios::binary);
+            if (mdfFile) {
+                MdfTypeInfo mdfInfo;
+                if (!mdfInfo.determineMdfType(mdfFile)) {
+                    continue;
+                }
+                mdfFile.seekg(0, std::ios::end);
+                size_t fileSize = mdfFile.tellg();
+                size_t numSectors = fileSize / mdfInfo.sector_size;
+                totalBytes += numSectors * mdfInfo.sector_data;
+            }
+        }
     } else {
         for (const auto& file : filesToProcess) {
             std::ifstream ccdFile(file, std::ios::binary | std::ios::ate);
@@ -556,18 +556,28 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
         }));
     }
 
+    // Wait for completion or cancellation
     for (auto& future : futures) {
         future.wait();
         if (g_operationCancelled.load()) {
-			std::string type = modeMdf ? "MDF" : (modeNrg ? "NRG" : "BIN/IMG");
-			std::string cancelMsg = "\033[1;33m" + type + " to ISO conversion interrupted by user - partial files cleaned up.\033[0;1m";
-			failedOuts.clear();
-			deletedOuts.clear();
-			failedOuts.insert(cancelMsg);
+            // Add individual failure messages for each file that was not completed
+            for (const auto& file : filesToProcess) {
+                if (successOuts.find(file) == successOuts.end() &&
+                    skippedOuts.find(file) == skippedOuts.end() &&
+                    failedOuts.find(file) == failedOuts.end()) {
+                    // Extract output directory and filename for the interrupted file
+                    auto [outDirectory, outFileNameOnly] = extractDirectoryAndFilename(file, "conversions");
+                    std::string type = modeMdf ? "MDF" : (modeNrg ? "NRG" : "BIN/IMG");
+                    std::string cancelMsg = "\033[1;33m" + type + " to ISO conversion interrupted by user - " +
+                                           "File: " + outFileNameOnly + " in directory: " + outDirectory + " not processed.\033[0m";
+                    failedOuts.insert(cancelMsg);
+                }
+            }
             break;
         }
     }
 
+    // Cleanup
     isProcessingComplete.store(true);
     progressThread.join();
 }
@@ -826,6 +836,8 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
 
 // Function to convert a BIN/IMG/MDF/NRG file to ISO format
 void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, const bool& modeMdf, const bool& modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<bool>& newISOFound) {
+	
+	namespace fs = std::filesystem;
     
     // Clear message sets at the start of function
     successOuts.clear();
@@ -967,20 +979,21 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
                 std::lock_guard<std::mutex> lock(globalSetsMutex);
                 failedOuts.insert(failedMessage);
             }
-
-            if (std::remove(outputPath.c_str()) == 0) {
-                std::string deletedMessage = "\033[1;92mDeleted incomplete ISO file:\033[1;91m '" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m";
-                {
-                    std::lock_guard<std::mutex> lock(globalSetsMutex);
-                    deletedOuts.insert(deletedMessage);
-                }
-            } else if (!modeNrg) {
-                std::string deleteFailMessage = "\033[1;91mFailed to delete incomplete ISO file: \033[1;93m'" + outputPath + "'\033[0;1m";
-                {
-                    std::lock_guard<std::mutex> lock(globalSetsMutex);
-                    deletedOuts.insert(deleteFailMessage);
-                }
-            }
+			if (fs::exists(outputPath)) {
+				if (std::remove(outputPath.c_str()) == 0) {
+					std::string deletedMessage = "\033[1;92mDeleted incomplete ISO file:\033[1;91m '" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m";
+					{
+						std::lock_guard<std::mutex> lock(globalSetsMutex);
+						deletedOuts.insert(deletedMessage);
+					}
+				} else {
+					std::string deleteFailMessage = "\033[1;91mFailed to delete incomplete ISO file: \033[1;93m'" + outputPath + "'\033[0;1m";
+					{
+						std::lock_guard<std::mutex> lock(globalSetsMutex);
+						deletedOuts.insert(deleteFailMessage);
+					}
+				}
+			}
             if (completedTasks) {
                 (*completedTasks)++;
             }
@@ -988,12 +1001,6 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
     }
     
     if (g_operationCancelled.load()) {
-        std::string type = modeMdf ? "MDF" : (modeNrg ? "NRG" : "BIN/IMG");
-        std::string cancelMsg = "\033[1;33m" + type + " to ISO conversion interrupted by user - partial files cleaned up.\033[0;1m";
-        std::lock_guard<std::mutex> lock(globalSetsMutex);
-        failedOuts.clear();
-        deletedOuts.clear();
-        failedOuts.insert(cancelMsg);
         return;
     }
 

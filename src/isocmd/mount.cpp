@@ -22,9 +22,6 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
     for (const auto& isoFile : isoFiles) {
         // Check for cancellation before processing each ISO
         if (g_operationCancelled.load()) {
-			std::lock_guard<std::mutex> lock(globalSetsMutex);
-			mountedFails.clear();
-			mountedFails.emplace("\033[1;33mMount operation interrupted by user - partial cleanup performed.\033[0m");
             break;
         }
 
@@ -248,14 +245,23 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
 
     // Wait for completion or cancellation
     for (auto& future : mountFutures) {
-        future.wait();
-        if (g_operationCancelled.load()) {
-			mountedFails.clear();
-			mountedFails.emplace("\033[1;33mMount operation interrupted by user - partial cleanup performed.\033[0m");
+		future.wait();
+		if (g_operationCancelled.load()) {
+			// Add individual failure messages for each ISO file that was not completed
+			for (const auto& isoFile : selectedIsoFiles) {
+				if (mountedFiles.find(isoFile) == mountedFiles.end() &&
+					mountedFails.find(isoFile) == mountedFails.end() &&
+					skippedMessages.find(isoFile) == skippedMessages.end()) {
+					// Extract output directory and filename for the interrupted ISO file
+					auto [outDirectory, outFileNameOnly] = extractDirectoryAndFilename(isoFile, "mounts");
+					std::string cancelMsg = std::string("\033[1;33mMount operation interrupted by user - ") +
+											"File: " + outFileNameOnly + " in directory: " + outDirectory + " not processed.\033[0m";
+					mountedFails.insert(cancelMsg);
+				}
+			}
 			break;
 		}
 	}
-
     // Cleanup
     isProcessingComplete.store(true);
     progressThread.join();

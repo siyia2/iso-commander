@@ -6,9 +6,9 @@
 
 // Function to process selected indices for cpMvDel accordingly
 void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& umountMvRmBreak, bool& historyPattern, bool& verbose, std::atomic<bool>& newISOFound) {
-	bool overwriteExisting =false;
-	
-	setupSignalHandlerCancellations();
+    bool overwriteExisting = false;
+    
+    setupSignalHandlerCancellations();
         
     std::string userDestDir;
     std::set<int> processedIndices;
@@ -47,10 +47,10 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         operationColor, operationDescription, umountMvRmBreak, historyPattern, isDelete, isCopy, abortDel, overwriteExisting);
     
     if ((processedUserDestDir == "" && (isCopy || isMove)) || abortDel) {
-		uniqueErrorMessages.clear();
+        uniqueErrorMessages.clear();
         return;
     }
-	uniqueErrorMessages.clear();
+    uniqueErrorMessages.clear();
     clearScrollBuffer();
     std::cout << "\n\033[0;1m Processing " + operationColor + process + "\033[0;1m operations... (\033[1;91mCtrl + c\033[0;1m:cancel)\n";
 
@@ -96,25 +96,30 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
             isMove, isCopy, isDelete, &completedBytes, &completedTasks, &overwriteExisting]() {
             handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, 
                 operationErrors, userDestDir, isMove, isCopy, isDelete, 
-                &completedBytes, &completedTasks , overwriteExisting);
+                &completedBytes, &completedTasks, overwriteExisting);
         }));
     }
 
+    // Wait for completion or cancellation
     for (auto& future : futures) {
-        future.wait();
-        if (g_operationCancelled.load()) {
-			operationErrors.clear();
-			if (isDelete) {
-				operationErrors.clear();
-                operationErrors.emplace("\033[1;93mDelete operation interrupted - partial cleanup.\033[0m");
-			} else {
-				std::string type = isCopy ? "Copy" : "Move";
-                operationErrors.emplace("\033[1;33m" + type + " operation interrupted by user - partial files cleaned up.\033[0;1m");
+		future.wait();
+		if (g_operationCancelled.load()) {
+			// Add individual failure messages for each file that was not completed
+			for (const auto& file : filesToProcess) {
+				if (operationIsos.find(file) == operationIsos.end() &&
+					operationErrors.find(file) == operationErrors.end()) {
+					// Extract output directory and filename for the interrupted file
+					auto [outDirectory, outFileNameOnly] = extractDirectoryAndFilename(file, "operations");
+					std::string type = isDelete ? "Delete" : (isCopy ? "Copy" : "Move");
+					std::string cancelMsg = "\033[1;33m" + type + " operation interrupted by user - " +
+										"File: " + outFileNameOnly + " in directory: " + outDirectory + " not processed.\033[0m";
+					operationErrors.insert(cancelMsg);
+				}
 			}
-            break;
-        }
-    }
-
+			break;
+		}
+	}
+    // Cleanup
     isProcessingComplete.store(true);
     progressThread.join();
 
@@ -366,8 +371,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                 if (isDelete) {
                     {
                         std::lock_guard<std::mutex> lock(globalSetsMutex);
-                        operationErrors.clear();
-                        operationErrors.emplace("\033[1;93mDelete operation interrupted - partial cleanup.\033[0m");
                     }
                 }
                 break;
@@ -489,9 +492,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         if (g_operationCancelled.load()) {
 							{
 								std::lock_guard<std::mutex> lock(globalSetsMutex);
-                                operationErrors.clear();
                                 std::string type = isCopy ? "Copy" : "Move";
-                                operationErrors.emplace("\033[1;33m" + type + " operation interrupted by user - partial files cleaned up.\033[0;1m");
                             }
                         } else {
                             std::string errorMessageInfo = "\033[1;91mError " +
