@@ -824,6 +824,8 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
     
     std::atomic<bool> g_CancelledMessageAdded{false};
     
+    namespace fs = std::filesystem;
+    
     // Collect unique directories from the input file paths
     std::set<std::string> uniqueDirectories;
     for (const auto& filePath : imageFiles) {
@@ -948,20 +950,21 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
                 std::lock_guard<std::mutex> lock(globalSetsMutex); // Use the global mutex
                 failedOuts.insert(failedMessage);
             }
-
-            if (std::remove(outputPath.c_str()) == 0) {
-                std::string deletedMessage = "\033[1;92mDeleted incomplete ISO file:\033[1;91m '" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m";
-                {
-                    std::lock_guard<std::mutex> lock(globalSetsMutex); // Use the global mutex
-                    deletedOuts.insert(deletedMessage);
-                }
-            } else if (!modeNrg) {
-                std::string deleteFailMessage = "\033[1;91mFailed to delete incomplete ISO file: \033[1;93m'" + outputPath + "'\033[0;1m";
-                {
-                    std::lock_guard<std::mutex> lock(globalSetsMutex); // Use the global mutex
-                    deletedOuts.insert(deleteFailMessage);
-                }
-            }
+			if (fs::exists(outputPath)) {
+				if (std::remove(outputPath.c_str()) == 0) {
+					std::string deletedMessage = "\033[1;92mDeleted incomplete ISO file:\033[1;91m '" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m";
+					{
+						std::lock_guard<std::mutex> lock(globalSetsMutex); // Use the global mutex
+						deletedOuts.insert(deletedMessage);
+					}
+				} else {
+					std::string deleteFailMessage = "\033[1;91mFailed to delete incomplete ISO file: \033[1;93m'" + outputPath + "'\033[0;1m";
+					{
+						std::lock_guard<std::mutex> lock(globalSetsMutex); // Use the global mutex
+						deletedOuts.insert(deleteFailMessage);
+					}
+				}
+			}
             if (completedTasks) {
                 (*completedTasks)++; // Increment completed tasks counter for failed conversions
             }
