@@ -23,9 +23,6 @@ namespace displayConfig {
     bool toggleFullListConversions = false;
 }
 
-// Global flag to track cancellation for write2usb
-std::atomic<bool> g_cancelOperation(false);
-
 
 // Main function
 int main(int argc, char *argv[]) {
