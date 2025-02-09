@@ -107,8 +107,8 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
 
     // Main processing loop
     while (true) {
-		
         // Reset control flags and clear tracking sets
+        g_operationCancelled.store(false);
         bool list = false, clr = false;
         successOuts.clear(); 
         skippedOuts.clear(); 
@@ -343,6 +343,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
     
     // Main processing loop
     while (true) {
+		g_operationCancelled.store(false);
         verbose = false; // Reset verbose mode
         processedErrors.clear(); 
         successOuts.clear(); 
@@ -554,6 +555,7 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
 
     for (auto& future : futures) {
         future.wait();
+        if (g_operationCancelled.load()) break;
     }
 
     isProcessingComplete.store(true);
@@ -821,9 +823,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
         
     // Reset cancellation flag
     g_operationCancelled.store(false);
-    
-    std::atomic<bool> g_CancelledMessageAdded{false};
-    
+        
     namespace fs = std::filesystem;
     
     // Collect unique directories from the input file paths
@@ -967,20 +967,6 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
 			}
             if (completedTasks) {
                 (*completedTasks)++; // Increment completed tasks counter for failed conversions
-            }
-        }
-    }
-    
-    // Additional check for cancellation after processing each file
-    if (g_operationCancelled.load()) {
-        if (!g_CancelledMessageAdded.exchange(true)) {
-			std::string type = modeMdf ? "MDF" : (modeNrg ? "NRG" : "BIN/IMG");
-            std::string cancelMsg = "\033[1;33m" + type + " to ISO conversion interrupted by user - partial files cleaned up.\033[0;1m";
-            {
-                std::lock_guard<std::mutex> lock(globalSetsMutex); // Use the global mutex
-                failedOuts.clear();
-                deletedOuts.clear();
-                failedOuts.insert(cancelMsg);
             }
         }
     }

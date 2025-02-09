@@ -70,6 +70,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
     std::string listSubtype = isMount ? "mount" : (write ? "write" : "cp_mv_rm");
         
     while (true) {
+		g_operationCancelled.store(false);
 		if (!isUnmount) isAtISOList.store(true);
         verbose = false;
         operationFiles.clear();
