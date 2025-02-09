@@ -477,9 +477,10 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                                     " to '" + destDirProcessed + "/': " + ec.message() + "\033[1;91m.\033[0;1m";
                         {
 							std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
-                            operationErrors.emplace(errorMessageInfo);
+							operationErrors.emplace(errorMessageInfo);
                         }
                         operationSuccessful = false;
+                        
                         operationSuccessful = false;
                     } else {
                         if (!changeOwnership(destPath)) {
