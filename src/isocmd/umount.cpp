@@ -75,6 +75,10 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
     
     // Early exit if cancelled before starting
     if (g_operationCancelled.load()) {
+		std::lock_guard<std::mutex> lock(globalSetsMutex);
+		unmountedErrors.clear();
+		unmountedErrors.clear();
+		unmountedErrors.emplace("\033[1;33mUnmount operation interrupted by user - partial cleanup performed.\033[0m");
 		return;
 	}
 
@@ -82,6 +86,10 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
     if (geteuid() != 0) {
         for (const auto& isoDir : isoDirs) {
             if (g_operationCancelled.load()) {
+				std::lock_guard<std::mutex> lock(globalSetsMutex);
+				unmountedErrors.clear();
+				unmountedErrors.clear();
+				unmountedErrors.emplace("\033[1;33mUnmount operation interrupted by user - partial cleanup performed.\033[0m");
 				break;
 			}
             std::string modifiedDir = modifyDirectoryPath(isoDir);
@@ -99,6 +107,10 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
     std::vector<std::pair<std::string, int>> unmountResults;
     for (const auto& isoDir : isoDirs) {
         if (g_operationCancelled.load()) {
+			std::lock_guard<std::mutex> lock(globalSetsMutex);
+			unmountedErrors.clear();
+			unmountedErrors.clear();
+			unmountedErrors.emplace("\033[1;33mUnmount operation interrupted by user - partial cleanup performed.\033[0m");
             break;
         }
         
@@ -190,7 +202,7 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& currentF
     }
 
     ThreadPool pool(numThreads);
-    std::vector<std::future<void>> umountFutures;
+    std::vector<std::future<void>> unmountFutures;
     std::atomic<size_t> completedTasks(0);
     std::atomic<bool> isProcessingComplete(false);
 
@@ -205,48 +217,17 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& currentF
         &verbose
     );
 
-	// Mutex for thread-safe completion counting
-    std::mutex completionMutex;
-	
+    // Enqueue chunk tasks
     for (const auto& chunk : chunks) {
-        umountFutures.emplace_back(pool.enqueue([&, chunk]() {
-            if (g_operationCancelled.load()) {
-                return;
-            }
-
-            std::vector<std::string> successfulUmounts;
-            for (const auto& file : chunk) {
-                if (g_operationCancelled.load()) {
-                    break;
-                }
-
-                bool umountSuccess = false;
-                {
-                    std::lock_guard<std::mutex> lock(completionMutex);
-                    // Process single file mount
-                    std::set<std::string> tempUmounted, tempFailed;
-                    std::vector<std::string> singleFileChunk = {file};
-                    unmountISO(singleFileChunk, tempUmounted, tempFailed);
-
-                    // Update global sets and track success
-                    operationFiles.insert(tempUmounted.begin(), tempUmounted.end());
-                    operationFails.insert(tempFailed.begin(), tempFailed.end());
-                    umountSuccess = !tempUmounted.empty();
-                }
-
-                // Only increment completed tasks if not cancelled
-                if (!g_operationCancelled.load()) {
-                    if (umountSuccess) {
-                        successfulUmounts.push_back(file);
-                    }
-                    completedTasks.fetch_add(1, std::memory_order_relaxed);
-                }
-            }
+        unmountFutures.emplace_back(pool.enqueue([&, chunk]() {
+            if (g_operationCancelled.load()) return;
+            unmountISO(chunk, operationFiles, operationFails);
+            completedTasks.fetch_add(chunk.size(), std::memory_order_relaxed);
         }));
     }
 
     // Wait for completion or cancellation
-    for (auto& future : umountFutures) {
+    for (auto& future : unmountFutures) {
         future.wait();
         if (g_operationCancelled.load()) {
 			operationFails.clear();
