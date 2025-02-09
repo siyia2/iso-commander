@@ -103,6 +103,14 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     for (auto& future : futures) {
         future.wait();
         if (g_operationCancelled.load()) {
+			operationErrors.clear();
+			if (isDelete) {
+				operationErrors.clear();
+                operationErrors.emplace("\033[1;93mDelete operation interrupted - partial cleanup.\033[0m");
+			} else {
+				std::string type = isCopy ? "Copy" : "Move";
+                operationErrors.emplace("\033[1;33m" + type + " operation interrupted by user - partial files cleaned up.\033[0;1m");
+			}
             break;
         }
     }

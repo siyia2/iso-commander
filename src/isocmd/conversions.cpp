@@ -559,6 +559,11 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
     for (auto& future : futures) {
         future.wait();
         if (g_operationCancelled.load()) {
+			std::string type = modeMdf ? "MDF" : (modeNrg ? "NRG" : "BIN/IMG");
+			std::string cancelMsg = "\033[1;33m" + type + " to ISO conversion interrupted by user - partial files cleaned up.\033[0;1m";
+			failedOuts.clear();
+			deletedOuts.clear();
+			failedOuts.insert(cancelMsg);
             break;
         }
     }
