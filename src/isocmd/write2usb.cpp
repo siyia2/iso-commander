@@ -600,7 +600,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles, st
     std::set<int> indicesToProcess;
 
     setupSignalHandlerCancellations();
-    g_operationCancelled = false;
+    g_operationCancelled.store(false);
 
     tokenizeInput(input, isoFiles, uniqueErrorMessages, indicesToProcess);
     if (indicesToProcess.empty()) {
