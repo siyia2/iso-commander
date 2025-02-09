@@ -736,6 +736,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
 			it != std::filesystem::recursive_directory_iterator(); ++it) {
 			if (g_operationCancelled.load()) {
 				if (!g_CancelledMessageAdded.exchange(true)) {
+					std::lock_guard<std::mutex> lock(globalSetsMutex);
 					uniqueErrorMessages.clear();
 					uniqueErrorMessages.insert("\n\033[1;33mISO search interrupted by user.\033[0;1m");
 				}

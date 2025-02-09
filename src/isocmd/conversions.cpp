@@ -585,6 +585,7 @@ std::set<std::string> processBatchPaths(const std::vector<std::string>& batchPat
             for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
 				if (g_operationCancelled.load()) {
 					if (!g_CancelledMessageAdded.exchange(true)) {
+						std::lock_guard<std::mutex> lock(globalSetsMutex);
 						processedErrorsFind.clear();
 						localFileNames.clear();
 						std::string type = (blacklistMdf) ? "MDF" : (blacklistNrg) ? "NRG" : "BIN/IMG";
