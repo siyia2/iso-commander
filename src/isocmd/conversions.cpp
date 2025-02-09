@@ -713,6 +713,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
         if (batchFutures.size() >= MAX_CONCURRENT_BATCHES) {
             for (auto& future : batchFutures) {
                 future.wait();
+                if (g_operationCancelled.load()) break;
             }
             batchFutures.clear();
         }

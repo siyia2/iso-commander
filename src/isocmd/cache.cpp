@@ -671,6 +671,7 @@ void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, 
         if (++runningTasks >= maxThreads) {
             for (auto& future : futures) {
                 future.wait();
+                if (g_operationCancelled.load()) break;
             }
             futures.clear();
             runningTasks = 0;
@@ -680,6 +681,7 @@ void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, 
     // Wait for remaining tasks
     for (auto& future : futures) {
         future.wait();
+        if (g_operationCancelled.load()) break;
     }
     
     // Post-processing
