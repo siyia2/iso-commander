@@ -14,6 +14,10 @@ const std::string configPath = std::string(getenv("HOME")) + "/.config/isocmd/co
 // Global variables for cleanup
 int lockFileDescriptor = -1;
 
+// Global falg to track cancellation
+std::atomic<bool> g_operationCancelled{false};
+
+
 // Default Display config options for lists
 namespace displayConfig {
     bool toggleFullListMount = false;
@@ -112,6 +116,8 @@ int main(int argc, char *argv[]) {
 		// Calls prevent_clear_screen and tab completion
 		rl_bind_key('\f', prevent_readline_keybindings);
 		rl_bind_key('\t', prevent_readline_keybindings);
+		
+		g_operationCancelled.store(false);
 		
 		// For indicating if location is int main
 		isAtMain.store(true);
