@@ -187,6 +187,8 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
     
     // Setup signal handler
     setupSignalHandlerCancellations();
+    
+    g_operationCancelled.store(false);
 
     // Handle input ("00" = all files, else parse input)
     if (input == "00") {

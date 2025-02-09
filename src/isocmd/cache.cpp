@@ -571,7 +571,7 @@ void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, 
     setupSignalHandlerCancellations();
         
     // Reset cancellation flag
-    g_operationCancelled = false;
+    g_operationCancelled.store(false);
 	
     // Centralize input handling
     std::string input = initialDir;
@@ -720,7 +720,10 @@ void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, 
 void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, std::atomic<size_t>& totalFiles, std::mutex& traverseFilesMutex, std::mutex& traverseErrorsMutex, int& maxDepth, bool& promptFlag) {
     const size_t BATCH_SIZE = 100;
     std::vector<std::string> localIsoFiles;
+    
     std::atomic<bool> g_CancelledMessageAdded{false};
+    // Reset cancellation flag
+    g_operationCancelled.store(false);
 
 
     auto iequals = [](const std::string_view& a, const std::string_view& b) {

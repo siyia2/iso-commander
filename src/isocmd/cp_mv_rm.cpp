@@ -8,6 +8,8 @@
 void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& umountMvRmBreak, bool& historyPattern, bool& verbose, std::atomic<bool>& newISOFound) {
 	setupSignalHandlerCancellations();
 	
+	g_operationCancelled.store(false);
+	
 	bool overwriteExisting =false;
     
     std::string userDestDir;

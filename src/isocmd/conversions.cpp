@@ -77,7 +77,6 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
     
     // To keep track the number of prior cached files
     int currentCacheOld = 0;
-    g_operationCancelled = false;
     
     // Tracking sets and vectors
     std::vector<std::string> directoryPaths;
@@ -442,6 +441,8 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
 	// Setup signal handler at the start of the operation
     setupSignalHandlerCancellations();
     
+    g_operationCancelled.store(false);
+    
     std::set<std::string> selectedFilePaths;
     std::string concatenatedFilePaths;
 
@@ -570,7 +571,9 @@ std::set<std::string> processBatchPaths(const std::vector<std::string>& batchPat
     std::mutex fileNamesMutex;
     std::atomic<size_t> totalFiles{0};
     std::set<std::string> localFileNames;
+    
     std::atomic<bool> g_CancelledMessageAdded{false};
+    g_operationCancelled.store(false);
     
     disableInput();
 
