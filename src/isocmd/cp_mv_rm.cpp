@@ -6,6 +6,8 @@
 
 // Function to process selected indices for cpMvDel accordingly
 void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& umountMvRmBreak, bool& historyPattern, bool& verbose, std::atomic<bool>& newISOFound) {
+	setupSignalHandlerCancellations();
+	
 	bool overwriteExisting =false;
     
     std::string userDestDir;
@@ -307,9 +309,6 @@ bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::ato
 
 // Function to handle cpMvDel
 void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, bool overwriteExisting) {
-
-    setupSignalHandlerCancellations();
-    g_operationCancelled.store(false);
 
     bool operationSuccessful = true;
     uid_t real_uid;

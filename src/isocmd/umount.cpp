@@ -157,9 +157,8 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
 void prepareUnmount(const std::string& input, std::vector<std::string>& currentFiles, std::set<std::string>& operationFiles, std::set<std::string>& operationFails, std::set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& verbose) {
     std::set<int> indicesToProcess;
     
-    // Setup signal handler and reset cancellation flag
+    // Setup signal handler
     setupSignalHandlerCancellations();
-    g_operationCancelled.store(false);
 
     // Handle input ("00" = all files, else parse input)
     if (input == "00") {

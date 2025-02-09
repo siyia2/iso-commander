@@ -185,9 +185,8 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
 void processAndMountIsoFiles(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages, bool& verbose) {
     std::set<int> indicesToProcess;
     
-    // Setup signal handler and reset cancellation flag
+    // Setup signal handler
     setupSignalHandlerCancellations();
-    g_operationCancelled.store(false);
 
     // Handle input ("00" = all files, else parse input)
     if (input == "00") {

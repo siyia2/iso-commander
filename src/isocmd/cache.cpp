@@ -737,7 +737,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
 			if (g_operationCancelled.load()) {
 				if (!g_CancelledMessageAdded.exchange(true)) {
 					uniqueErrorMessages.clear();
-					uniqueErrorMessages.insert("\n\033[1;33mISO cache update interrupted by user.\033[0;1m");
+					uniqueErrorMessages.insert("\n\033[1;33mISO search interrupted by user.\033[0;1m");
 				}
 				break;
 			}
