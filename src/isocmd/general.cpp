@@ -69,10 +69,8 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
     
     std::string listSubtype = isMount ? "mount" : (write ? "write" : "cp_mv_rm");
         
-    while (true) {    
-		g_operationCancelled.store(false);
+    while (true) {
 		if (!isUnmount) isAtISOList.store(true);
-        
         verbose = false;
         operationFiles.clear();
         skippedMessages.clear();
@@ -436,8 +434,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
     };
 
     try {
-        bool showVerbosePrompt = true;
-        while (!enterPressed) {
+        while (!isComplete->load(std::memory_order_relaxed) || !enterPressed) {
             // Discard any input during progress update
             char ch;
             while (read(STDIN_FILENO, &ch, 1) > 0);
@@ -446,27 +443,20 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             const size_t completedTasksValue = completedTasks->load(std::memory_order_relaxed);
             const size_t completedBytesValue = bytesTrackingEnabled ? completedBytes->load(std::memory_order_relaxed) : 0;
 
-            // Calculate progress based on non-cancelled tasks
-            double tasksProgress = 0.0;
-            if (totalTasks > 0) {
-                tasksProgress = static_cast<double>(completedTasksValue) / totalTasks;
-            }
-
+            // Calculate progress
+            const double tasksProgress = static_cast<double>(completedTasksValue) / totalTasks;
             double overallProgress = tasksProgress;
-            if (bytesTrackingEnabled && totalBytes > 0) {
+            if (bytesTrackingEnabled) {
                 const double bytesProgress = static_cast<double>(completedBytesValue) / totalBytes;
                 overallProgress = std::max(bytesProgress, tasksProgress);
             }
-
-            // Ensure progress doesn't exceed 100% even if completedTasks somehow exceeds totalTasks
-            overallProgress = std::min(overallProgress, 1.0);
             const int progressPos = static_cast<int>(barWidth * overallProgress);
 
             // Calculate timing and speed
             const auto currentTime = std::chrono::high_resolution_clock::now();
             const auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime);
             const double elapsedSeconds = elapsedTime.count() / 1000.0;
-            const double speed = (bytesTrackingEnabled && elapsedSeconds > 0) ? (completedBytesValue / elapsedSeconds) : 0;
+            const double speed = bytesTrackingEnabled ? (completedBytesValue / elapsedSeconds) : 0;
 
             // Build output string efficiently
             std::stringstream ss;
@@ -482,27 +472,17 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
                    << formatSize(static_cast<size_t>(speed)) << "/s";
             }
 
-            ss << " Time Elapsed: " << std::fixed << std::setprecision(1) << elapsedSeconds << "s";
-            
-            // Add status indicator for cancelled operations
-            if (g_operationCancelled.load()) {
-                ss << " \033[1;33m[Cancelled]\033[0m";
-            }
-            
-            ss << "\033[K";
+            ss << " Time Elapsed: " << std::fixed << std::setprecision(1) << elapsedSeconds << "s\033[K";
             std::cout << ss.str() << std::flush;
 
-            // Check completion conditions
-            bool isOperationDone = (completedTasksValue >= totalTasks) || g_operationCancelled.load() || isComplete->load(std::memory_order_relaxed);
-            
-            if (isOperationDone && !enterPressed && showVerbosePrompt) {
+            // Check completion condition
+            if (completedTasksValue >= totalTasks && !enterPressed) {
                 rl_bind_key('\f', prevent_readline_keybindings);
                 rl_bind_key('\t', prevent_readline_keybindings);
                 rl_bind_keyseq("\033[A", prevent_readline_keybindings);
                 rl_bind_keyseq("\033[B", prevent_readline_keybindings);
 
                 enterPressed = true;
-                showVerbosePrompt = false;
                 std::cout << "\n\n";
                 tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
                 fcntl(STDIN_FILENO, F_SETFL, oldf);
@@ -516,7 +496,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 
                 rl_bind_keyseq("\033[A", rl_get_previous_history);
                 rl_bind_keyseq("\033[B", rl_get_next_history);
-            } else if (!isOperationDone) {
+            } else {
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }
         }

@@ -72,26 +72,15 @@ std::string modifyDirectoryPath(const std::string& dir) {
 
 // Function to unmount ISO files asynchronously
 void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors) {
+    std::atomic<bool> g_CancelledMessageAdded{false};
     
     // Early exit if cancelled before starting
-    if (g_operationCancelled.load()) {
-		std::lock_guard<std::mutex> lock(globalSetsMutex);
-		unmountedErrors.clear();
-		unmountedErrors.clear();
-		unmountedErrors.emplace("\033[1;33mUnmount operation interrupted by user - partial cleanup performed.\033[0m");
-		return;
-	}
+    if (g_operationCancelled.load()) return;
 
     // Root check with cancellation awareness
     if (geteuid() != 0) {
         for (const auto& isoDir : isoDirs) {
-            if (g_operationCancelled.load()) {
-				std::lock_guard<std::mutex> lock(globalSetsMutex);
-				unmountedErrors.clear();
-				unmountedErrors.clear();
-				unmountedErrors.emplace("\033[1;33mUnmount operation interrupted by user - partial cleanup performed.\033[0m");
-				break;
-			}
+            if (g_operationCancelled.load()) break;
             std::string modifiedDir = modifyDirectoryPath(isoDir);
             std::stringstream errorMessage;
             errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << modifiedDir
@@ -107,10 +96,13 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
     std::vector<std::pair<std::string, int>> unmountResults;
     for (const auto& isoDir : isoDirs) {
         if (g_operationCancelled.load()) {
-			std::lock_guard<std::mutex> lock(globalSetsMutex);
-			unmountedErrors.clear();
-			unmountedErrors.clear();
-			unmountedErrors.emplace("\033[1;33mUnmount operation interrupted by user - partial cleanup performed.\033[0m");
+            if (!g_CancelledMessageAdded.exchange(true)) {
+                {
+                    std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
+                    unmountedErrors.clear();
+                    unmountedErrors.emplace("\033[1;33mUnmount operation interrupted by user - partial cleanup performed.\033[0m");
+                }
+            }
             break;
         }
         
@@ -168,6 +160,7 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& currentF
     
     // Setup signal handler and reset cancellation flag
     setupSignalHandlerCancellations();
+    g_operationCancelled.store(false);
 
     // Handle input ("00" = all files, else parse input)
     if (input == "00") {
@@ -229,17 +222,7 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& currentF
     // Wait for completion or cancellation
     for (auto& future : unmountFutures) {
         future.wait();
-        if (g_operationCancelled.load()) {
-            // Add individual failure messages for each task that was not completed
-            for (const auto& mountpoint : selectedMountpoints) {
-                if (operationFiles.find(mountpoint) == operationFiles.end() &&
-                    operationFails.find(mountpoint) == operationFails.end()) {
-					std::string modifiedDir = modifyDirectoryPath(mountpoint);
-                    operationFails.emplace("\033[1;33mUnmount operation interrupted by user - " + mountpoint + " not processed.\033[0m");
-                }
-            }
-            break;
-        }
+        if (g_operationCancelled.load()) break;
     }
 
     // Cleanup

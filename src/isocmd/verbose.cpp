@@ -74,16 +74,12 @@ void verbosePrint(const std::set<std::string>& primarySet, const std::set<std::s
 
             printWithNewline(secondarySet);   // Success outputs
             printWithNewline(tertiarySet);    // Skipped outputs
-            if (g_operationCancelled) {
-				printWithNewline(quaternarySet);  // Failed outputs
-				printWithNewline(errorSet);       // Deleted outputs
-				g_operationCancelled.store(false);
-			}
+            printWithNewline(quaternarySet);  // Failed outputs
+            printWithNewline(errorSet);       // Deleted outputs
             printWithNewline(primarySet);     // Processed errors
-            
-				
             break;
     }
+
     // Continuation prompt
     std::cout << "\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');

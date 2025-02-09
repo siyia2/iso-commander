@@ -18,10 +18,16 @@ bool isAlreadyMounted(const std::string& mountPoint) {
 
 // Function to mount selected ISO files called from processAndMountIsoFiles
 void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
+    std::atomic<bool> g_CancelledMessageAdded{false};
 
     for (const auto& isoFile : isoFiles) {
         // Check for cancellation before processing each ISO
         if (g_operationCancelled.load()) {
+            if (!g_CancelledMessageAdded.exchange(true)) {
+                std::lock_guard<std::mutex> lock(globalSetsMutex); // Lock the mutex
+                mountedFails.clear();
+                mountedFails.insert("\033[1;33mMount operation interrupted by user - partial mounts cleaned up.\033[0m");
+            }
             break;
         }
 
@@ -187,6 +193,7 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
     
     // Setup signal handler and reset cancellation flag
     setupSignalHandlerCancellations();
+    g_operationCancelled.store(false);
 
     // Handle input ("00" = all files, else parse input)
     if (input == "00") {
@@ -245,23 +252,10 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
 
     // Wait for completion or cancellation
     for (auto& future : mountFutures) {
-		future.wait();
-		if (g_operationCancelled.load()) {
-			// Add individual failure messages for each ISO file that was not completed
-			for (const auto& isoFile : selectedIsoFiles) {
-				if (mountedFiles.find(isoFile) == mountedFiles.end() &&
-					mountedFails.find(isoFile) == mountedFails.end() &&
-					skippedMessages.find(isoFile) == skippedMessages.end()) {
-					// Extract output directory and filename for the interrupted ISO file
-					auto [outDirectory, outFileNameOnly] = extractDirectoryAndFilename(isoFile, "mounts");
-					std::string cancelMsg = std::string("\033[1;33mMount operation interrupted by user - ") +
-											"File: " + outFileNameOnly + " in directory: " + outDirectory + " not processed.\033[0m";
-					mountedFails.insert(cancelMsg);
-				}
-			}
-			break;
-		}
-	}
+        future.wait();
+        if (g_operationCancelled.load()) break;
+    }
+
     // Cleanup
     isProcessingComplete.store(true);
     progressThread.join();
