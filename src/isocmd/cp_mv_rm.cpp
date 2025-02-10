@@ -8,8 +8,6 @@
 void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& umountMvRmBreak, bool& historyPattern, bool& verbose, std::atomic<bool>& newISOFound) {
 	setupSignalHandlerCancellations();
 	
-	g_operationCancelled.store(false);
-	
 	bool overwriteExisting =false;
     
     std::string userDestDir;
@@ -47,6 +45,8 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     bool abortDel = false;
     std::string processedUserDestDir = userDestDirRm(isoFiles, indexChunks, uniqueErrorMessages, userDestDir, 
         operationColor, operationDescription, umountMvRmBreak, historyPattern, isDelete, isCopy, abortDel, overwriteExisting);
+        
+	g_operationCancelled.store(false);
     
     if ((processedUserDestDir == "" && (isCopy || isMove)) || abortDel) {
 		uniqueErrorMessages.clear();
