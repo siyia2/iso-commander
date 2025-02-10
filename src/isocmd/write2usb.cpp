@@ -483,6 +483,8 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     progressData.clear();
     progressData.reserve(validPairs.size());
     
+    g_operationCancelled.store(false);
+    
     // Initialize progress data
     for (const auto& [iso, device] : validPairs) {
         progressData.push_back(ProgressInfo{
