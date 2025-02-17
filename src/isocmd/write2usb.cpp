@@ -311,6 +311,12 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         std::unique_ptr<char, decltype(&std::free)> deviceInput(
             readline(devicePrompt.c_str()), &std::free
         );
+        
+        // Check for EOF (Ctrl+D) or NULL input before processing
+        if (!deviceInput || deviceInput.get()[0] == '\0') {
+            return {};
+        }
+        
         std::string mainInputString(deviceInput.get());
         if (mainInputString == "?") {
             helpMappings();
@@ -318,10 +324,6 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         }
         
         if (deviceInput && *deviceInput) add_history(deviceInput.get());
-
-        if (!deviceInput || deviceInput.get()[0] == '\0') {
-            return {};
-        }
 
         // Parse device mappings
         std::vector<std::pair<size_t, std::string>> deviceMap;
