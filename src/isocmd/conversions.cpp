@@ -371,6 +371,9 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
                      
         // Get user input
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
+        
+        if (!rawInput) break;
+        
         std::string mainInputString(rawInput.get());
         
         if (mainInputString == "?") {
