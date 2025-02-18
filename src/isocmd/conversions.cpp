@@ -450,16 +450,18 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
     std::string concatenatedFilePaths;
 
     std::set<int> processedIndices;
-    tokenizeInput(input, fileList, processedErrors, processedIndices);
+    if (!(input.empty() || std::all_of(input.begin(), input.end(), isspace))){
+		tokenizeInput(input, fileList, processedErrors, processedIndices);
+	} else {
+		return;
+	}
     
     if (processedIndices.empty()) {
-		if (!(std::all_of(processedIndices.begin(), processedIndices.end(), isspace))){
-			clearScrollBuffer();
-			std::cout << "\n\033[1;91mNo valid indices for conversion.\033[1;91m\n";
-			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-			needsScrnClr = true;
-		}
+		clearScrollBuffer();
+		std::cout << "\n\033[1;91mNo valid indices for conversion.\033[1;91m\n";
+		std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+		needsScrnClr = true;
         return;
     }
 
