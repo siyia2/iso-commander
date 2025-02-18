@@ -433,6 +433,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 			clearScrollBuffer();
 			std::cout << "\n\033[0;1m Processing \001\033[1;38;5;208m\002" + fileExtensionWithOutDots + "\033[0;1m conversions... (\033[1;91mCtrl + c\033[0;1m:cancel)\n";
 			processInput(mainInputString, files, (fileType == "mdf"), (fileType == "nrg"), processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, promptFlag, maxDepth, historyPattern, verbose, needsScrnClr, newISOFound);
+			needsScrnClr = true;
 			if (verbose) {
 				verbosePrint(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, 3); // Print detailed logs if verbose mode is enabled
 				needsScrnClr = true;
@@ -455,7 +456,6 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
     std::set<int> processedIndices;
     if (!(input.empty() || std::all_of(input.begin(), input.end(), isspace))){
 		tokenizeInput(input, fileList, processedErrors, processedIndices);
-		needsScrnClr = true;
 	} else {
 		return;
 	}
