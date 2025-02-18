@@ -390,7 +390,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         }
 
         // Handle input for returning to the unfiltered list or exiting
-        if (std::isspace(rawInput.get()[0]) || rawInput.get()[0] == '\0') {
+        if (rawInput.get()[0] == '\0') {
             clearScrollBuffer();
             if (isFiltered) {
                 // Restore the original file list
@@ -453,11 +453,13 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
     tokenizeInput(input, fileList, processedErrors, processedIndices);
     
     if (processedIndices.empty()) {
-        clearScrollBuffer();
-        std::cout << "\n\033[1;91mNo valid indices for conversion.\033[1;91m\n";
-        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        needsScrnClr = true;
+		if (!(std::all_of(processedIndices.begin(), processedIndices.end(), isspace))){
+			clearScrollBuffer();
+			std::cout << "\n\033[1;91mNo valid indices for conversion.\033[1;91m\n";
+			std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			needsScrnClr = true;
+		}
         return;
     }
 
