@@ -199,22 +199,22 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
                 return userDestDir;
             } else {
                 userDestDir = mainInputString;
-                // Check if userDestDir ends with ";^O"
-				if (userDestDir.size() >= 4 && 
-					userDestDir.substr(userDestDir.size() - 4) == " |^O") {
+                // Check if userDestDir ends with " -o"
+				if (userDestDir.size() >= 3 && 
+					userDestDir.substr(userDestDir.size() - 3) == " -o") {
 					// Set overwriteExisting to true
 					overwriteExisting = true;
 					// Remove ";^O" from userDestDir
-					userDestDir = userDestDir.substr(0, userDestDir.size() - 4);
+					userDestDir = userDestDir.substr(0, userDestDir.size() - 3);
 				} else {
 					// Ensure overwriteExisting is false if the suffix is not present
 					overwriteExisting = false;
 				}
-				// Remove ";^O" from the input before adding to history
+				// Remove "-o" from the input before adding to history
 				std::string historyInput = mainInputString;
-				if (historyInput.size() >= 4 && 
-					historyInput.substr(historyInput.size() - 4) == " |^O") {
-					historyInput = historyInput.substr(0, historyInput.size() - 4);
+				if (historyInput.size() >= 3 && 
+					historyInput.substr(historyInput.size() - 3) == " -o") {
+					historyInput = historyInput.substr(0, historyInput.size() - 3);
 				}
                 add_history(historyInput.c_str());
                 break;
