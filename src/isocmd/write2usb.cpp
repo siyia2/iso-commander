@@ -248,6 +248,7 @@ std::vector<std::string> getRemovableDevices() {
 // Function to handle device mapping collection and validation
 std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::vector<IsoInfo>& selectedIsos,std::set<std::string>& uniqueErrorMessages) {
     while (true) {
+		
 		disable_ctrl_d();
         clearScrollBuffer();
 
@@ -387,7 +388,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
 			disable_ctrl_d();
             std::cout << "\n\033[1;92m↵ to try again...\033[0;1m";
-            std::cin.ignore();
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             continue;
         }
 
@@ -444,7 +445,8 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                 std::cout << "\n\033[1;92m↵ to continue...\033[0;1m";
                 permissions = false;
             }
-            std::cin.ignore();
+            
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             continue;
         }
 
@@ -480,10 +482,10 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         
         rl_bind_keyseq("\033[A", rl_get_previous_history);
         rl_bind_keyseq("\033[B", rl_get_next_history);
-
+		
         std::cout << "\n\033[1;93mWrite operation aborted by user.\033[0;1m\n";
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.ignore();
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     }
 }
 
@@ -658,7 +660,7 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles, st
     signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
 	disable_ctrl_d();
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-    std::cin.ignore();
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
 
