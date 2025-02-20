@@ -476,18 +476,22 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     }
 
                     if (!success || ec) {
+						std::string errorDetail;
+						if (g_operationCancelled.load()) {
+							errorDetail = "Cancelled";
+						} else {
+							errorDetail = ec.message();
+						}
 						std::string errorMessageInfo = "\033[1;91mError " +
-                        std::string(isCopy ? "copying" : (i < destDirs.size() - 1 ? "moving" : "moving")) +
-									": \033[1;93m'" + srcDir + "/" + srcFile + "'\033[1;91m" +
-                                    " to '" + destDirProcessed + "/': " + ec.message() + "\033[1;91m.\033[0;1m";
-                        {
-							std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
+						std::string(isCopy ? "copying" : (i < destDirs.size() - 1 ? "moving" : "moving")) +
+						": \033[1;93m'" + srcDir + "/" + srcFile + "'\033[1;91m" +
+						" to '" + destDirProcessed + "/': " + errorDetail + "\033[1;91m.\033[0;1m";
+						{
+							std::lock_guard<std::mutex> lock(globalSetsMutex);
 							operationErrors.emplace(errorMessageInfo);
-                        }
-                        operationSuccessful = false;
-                        
-                        operationSuccessful = false;
-                    } else {
+						}
+						operationSuccessful = false;
+					} else {
                         if (!changeOwnership(destPath)) {
                             operationSuccessful = false;
                         } else {
