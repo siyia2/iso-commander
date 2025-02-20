@@ -604,6 +604,8 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
 // Function to prepare selections for write
 void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages) {
+	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+	disable_ctrl_d();
     clearScrollBuffer();
     std::set<int> indicesToProcess;
 
@@ -649,6 +651,8 @@ void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles, st
     }
 
     performWriteOperation(validPairs);
+    signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+	disable_ctrl_d();
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore();
 }
