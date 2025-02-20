@@ -107,6 +107,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
     // Main processing loop
     while (true) {
         // Reset control flags and clear tracking sets
+        enable_ctrl_d();
         setupSignalHandlerCancellations();
 		g_operationCancelled.store(false);
         bool list = false, clr = false;
@@ -343,6 +344,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
     
     // Main processing loop
     while (true) {
+		enable_ctrl_d();
 		setupSignalHandlerCancellations();
 		g_operationCancelled.store(false);
         verbose = false; // Reset verbose mode

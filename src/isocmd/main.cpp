@@ -3,6 +3,7 @@
 #include "../headers.h"
 #include "../display.h"
 
+
 // Get max available CPU cores for global use, fallback is 2 cores
 unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
@@ -605,6 +606,36 @@ int prevent_readline_keybindings(int, int) {
 // Function to clear scrollbuffer
 void clearScrollBuffer() {
         std::cout << "\033[3J\033[2J\033[H\033[0m" << std::flush;
+}
+
+
+// Function to disable (Ctrl+D)
+void disable_ctrl_d() {
+    struct termios term;
+    
+    // Get current terminal attributes
+    tcgetattr(STDIN_FILENO, &term);
+    
+    // Disable EOF (Ctrl+D) processing
+    term.c_cc[VEOF] = _POSIX_VDISABLE;
+    
+    // Apply the modified settings
+    tcsetattr(STDIN_FILENO, TCSANOW, &term);
+}
+
+
+// Function to specifically re-enable Ctrl+D
+void enable_ctrl_d() {
+    struct termios term;
+    
+    // Get current terminal attributes
+    tcgetattr(STDIN_FILENO, &term);
+    
+    // Re-enable EOF (Ctrl+D) - typically ASCII 4 (EOT)
+    term.c_cc[VEOF] = 4;  // Default value for most systems
+    
+    // Apply the modified settings
+    tcsetattr(STDIN_FILENO, TCSANOW, &term);
 }
 
 

@@ -567,6 +567,7 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
 // Function for manual cache refresh
 void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, bool historyPattern, std::atomic<bool>& newISOFound) {
 	
+	enable_ctrl_d();
 	// Setup signal handler at the start of the operation
     setupSignalHandlerCancellations();
         

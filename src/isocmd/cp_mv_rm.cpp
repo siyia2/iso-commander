@@ -148,6 +148,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
 
     if (!isDelete) {
         while (true) {
+			enable_ctrl_d();
 			setupSignalHandlerCancellations();
 			g_operationCancelled.store(false);
             // Restore readline autocomplete and screen clear bindings
