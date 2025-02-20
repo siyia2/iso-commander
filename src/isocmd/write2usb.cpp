@@ -248,7 +248,7 @@ std::vector<std::string> getRemovableDevices() {
 // Function to handle device mapping collection and validation
 std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::vector<IsoInfo>& selectedIsos,std::set<std::string>& uniqueErrorMessages) {
     while (true) {
-		
+		signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
 		disable_ctrl_d();
         clearScrollBuffer();
 
