@@ -104,6 +104,8 @@ void submenu1(int& maxDepth, bool& historyPattern, bool& verbose, std::atomic<bo
 void submenu2(bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose, std::atomic<bool>& newISOFound);
 void print_ascii();
 void flushStdin();
+void disable_ctrl_d();
+void enable_ctrl_d();
 void disableInput();
 void restoreInput();
 void configMap();
