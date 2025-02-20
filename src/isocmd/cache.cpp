@@ -459,6 +459,8 @@ bool isValidDirectory(const std::string& path) {
 
 // Function that can delete or show stats for ISO cache it is called from within manualRefreshCache
 void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, const int& maxDepth, const bool& historyPattern, std::atomic<bool>& newISOFound) {
+	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+	disable_ctrl_d();
     const std::set<std::string> validInputs = {
         "*fl_m", "*cl_m", "*fl_u", "*cl_u", "*fl_fo", "*cl_fo", "*fl_w", "*cl_w", "*fl_c", "*cl_c"
     };

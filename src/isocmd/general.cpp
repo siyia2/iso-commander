@@ -669,6 +669,8 @@ bool isValidInput(const std::string& input) {
 
 // Function to write default display modes toconfig file
 void setDisplayMode(const std::string& inputSearch) {
+	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+	disable_ctrl_d();
     std::vector<std::string> configLines;
     std::vector<std::string> settingKeys;
     bool validInput = true;
@@ -804,6 +806,8 @@ void setDisplayMode(const std::string& inputSearch) {
 
 // Function to clear path and filter history
 void clearHistory(const std::string& inputSearch) {
+	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+	disable_ctrl_d();
     const std::string basePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/";
     std::string filePath;
     std::string historyType;

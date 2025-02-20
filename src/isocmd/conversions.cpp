@@ -13,6 +13,8 @@ static std::vector<std::string> nrgFilesCache; // Memory cached nrgImgFiles here
 
 // Function to clear Ram Cache and memory transformations for bin/img mdf nrg files
 void clearRamCache(bool& modeMdf, bool& modeNrg) {
+	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+	disable_ctrl_d();
     std::vector<std::string> extensions;
     std::string cacheType;
     bool cacheIsEmpty = false;
