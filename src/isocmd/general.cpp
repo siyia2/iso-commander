@@ -877,7 +877,7 @@ void helpSearches(bool isCpMv) {
               << "   • Multiple directories: Separate with ; (e.g., '/directory1/;/directory2/')" << std::endl;
     if (isCpMv) { 
 		std::cout << "   • Overwrite files for cp/mv: Append -o (e.g., '/directory/ -o' or '/directory1/;/directory2/ -o')\n\n";
-		std::cout << "   - Note: Special Display Commands are only available within Convert2ISO&ImportISO FolderPath prompts \n" << std::endl;
+		std::cout << "   - Note: Special Display Commands are only applicable within Convert2ISO&ImportISO FolderPath prompts \n" << std::endl;
 	}
     if (!isCpMv) {
 		std::cout << "\n\033[1;32m2. Special Cleanup Commands:\033[0m\n"
