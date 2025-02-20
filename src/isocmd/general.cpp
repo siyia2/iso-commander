@@ -874,11 +874,13 @@ void helpSearches(bool isCpMv) {
     
     std::cout << "\033[1;32m1. Selecting FolderPaths:\033[0m\n"
               << "   • Single directory: Enter a directory (e.g., '/directory/')\n"
-              << "   • Multiple directories: Separate with ; (e.g., '/directory1/;/directory2/')\n"
-              << "   • Overwrite files for cp/mv: Append |^O (e.g., '/directory/ |^O' or '/directory1/;/directory2/ |^O')\n" << std::endl;
-    if (isCpMv) std::cout << "   - Note: Special Display Commands are only available within Convert2ISO&ImportISO FolderPath prompts \n" << std::endl;
+              << "   • Multiple directories: Separate with ; (e.g., '/directory1/;/directory2/')" << std::endl;
+    if (isCpMv) { 
+		std::cout << "   • Overwrite files for cp/mv: Append -o (e.g., '/directory/ -o' or '/directory1/;/directory2/ -o')\n\n";
+		std::cout << "   - Note: Special Display Commands are only available within Convert2ISO&ImportISO FolderPath prompts \n" << std::endl;
+	}
     if (!isCpMv) {
-		std::cout << "\033[1;32m2. Special Cleanup Commands:\033[0m\n"
+		std::cout << "\n\033[1;32m2. Special Cleanup Commands:\033[0m\n"
 				<< "   • Enter \033[1;33m'!clr'\033[0m - Clear cache:\n"
 				<< "     - In Convert2ISO: Clears corresponding RAM cache\n"
 				<< "     - In ImportISO: Clears on-disk ISO cache\n"
