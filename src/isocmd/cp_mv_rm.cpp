@@ -447,10 +447,22 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     std::error_code ec;
                     bool success = false;
 
-                    if (isCopy) {
+                    // MODIFIED CODE SECTION BEGINS HERE
+                    if (isMove && destDirs.size() > 1) {
+                        // For multiple destinations during move, always use copy+delete approach
                         success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec);
+                        
+                        // Only delete source after all destinations have been processed
+                        if (success && i == destDirs.size() - 1) {
+                            std::error_code deleteEc;
+                            if (!fs::remove(srcPath, deleteEc)) {
+                                std::lock_guard<std::mutex> lock(globalSetsMutex);
+                                operationErrors.emplace("\033[1;91mMove completed but failed to remove source file: \033[1;93m'" + 
+                                    srcDir + "/" + srcFile + "'\033[1;91m - " + deleteEc.message() + "\033[0m");
+                            }
+                        }
                     } else if (isMove) {
-                        // Try rename first (atomic move within same filesystem)
+                        // For single destination move, try rename first
                         fs::rename(srcPath, destPath, ec);
                         
                         if (ec) {
@@ -458,22 +470,22 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                             ec.clear();
                             success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec);
                             
-                            if (success && i == destDirs.size() - 1) {
-                                // Only delete source after successful copy and on last destination
+                            if (success) {
                                 std::error_code deleteEc;
                                 if (!fs::remove(srcPath, deleteEc)) {
-                                    {
-                                        std::lock_guard<std::mutex> lock(globalSetsMutex);
-                                        operationErrors.emplace("\033[1;91mMove completed but failed to remove source file: \033[1;93m'" + 
-                                            srcDir + "/" + srcFile + "'\033[1;91m - " + deleteEc.message() + "\033[0m");
-                                    }
+                                    std::lock_guard<std::mutex> lock(globalSetsMutex);
+                                    operationErrors.emplace("\033[1;91mMove completed but failed to remove source file: \033[1;93m'" + 
+                                        srcDir + "/" + srcFile + "'\033[1;91m - " + deleteEc.message() + "\033[0m");
                                 }
                             }
                         } else {
                             completedBytes->fetch_add(fileSize);
                             success = true;
                         }
+                    } else if (isCopy) {
+                        success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec);
                     }
+                    // MODIFIED CODE SECTION ENDS HERE
 
                     if (!success || ec) {
 						std::string errorDetail;
