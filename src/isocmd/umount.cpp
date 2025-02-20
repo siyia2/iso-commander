@@ -22,7 +22,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
     if (isoDirs.empty()) {
 		clearScrollBuffer();
         std::cerr << "\n\033[1;93mNo paths matching the '/mnt/iso_{name}' pattern found.\033[0m\033[0;1m\n";
-        std::cout << "\n\033[1;32m↵ to continue...[0;1m";
+        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         return false;
     }
