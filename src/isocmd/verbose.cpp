@@ -5,6 +5,8 @@
 
 // Main verbose print function for results
 void verbosePrint(const std::set<std::string>& primarySet, const std::set<std::string>& secondarySet = {}, const std::set<std::string>& tertiarySet = {}, const std::set<std::string>& quaternarySet = {}, const std::set<std::string>& errorSet = {}, int printType = 0) {
+	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+	disable_ctrl_d();
     clearScrollBuffer(); // Assuming this function is defined elsewhere
 
     // Helper lambda to print a set with optional color and output stream
@@ -90,6 +92,8 @@ void verbosePrint(const std::set<std::string>& primarySet, const std::set<std::s
 
 // Function that provides verbose output for manualRefreshCache
 void verboseIsoCacheRefresh(std::vector<std::string>& allIsoFiles, std::atomic<size_t>& totalFiles, std::vector<std::string>& validPaths, std::set<std::string>& invalidPaths, std::set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& historyPattern, const std::chrono::high_resolution_clock::time_point& start_time, std::atomic<bool>& newISOFound) {
+	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+	disable_ctrl_d();
 	bool saveSuccess;
 	
 	// Print invalid paths
@@ -177,6 +181,8 @@ void verboseIsoCacheRefresh(std::vector<std::string>& allIsoFiles, std::atomic<s
 
 // Function to print invalid directory paths from search
 void verboseFind(std::set<std::string>& invalidDirectoryPaths, const std::vector<std::string>& directoryPaths, std::set<std::string>& processedErrorsFind) {
+	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+	disable_ctrl_d();
 	
 	if (directoryPaths.empty() && !invalidDirectoryPaths.empty()){
 		std::cout << "\r\033[0;1mTotal files processed: 0" << std::flush;
@@ -218,6 +224,8 @@ void verboseFind(std::set<std::string>& invalidDirectoryPaths, const std::vector
 
 // Function that handles verbose results and timing from select select_and_convert_files_to_iso
 void verboseSearchResults(const std::string& fileExtension, std::set<std::string>& fileNames, std::set<std::string>& invalidDirectoryPaths, bool newFilesFound, bool list, int currentCacheOld, const std::vector<std::string>& files, const std::chrono::high_resolution_clock::time_point& start_time, std::set<std::string>& processedErrorsFind, std::vector<std::string>& directoryPaths) {
+	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+	disable_ctrl_d();
 
     auto end_time = std::chrono::high_resolution_clock::now();
 
