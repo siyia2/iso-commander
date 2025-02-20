@@ -248,6 +248,8 @@ std::vector<std::string> getRemovableDevices() {
 // Function to handle device mapping collection and validation
 std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::vector<IsoInfo>& selectedIsos,std::set<std::string>& uniqueErrorMessages) {
     while (true) {
+		setupSignalHandlerCancellations();
+		g_operationCancelled.store(false);
         clearScrollBuffer();
 
         // Display user input errors at top

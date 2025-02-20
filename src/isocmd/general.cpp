@@ -70,6 +70,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
     std::string listSubtype = isMount ? "mount" : (write ? "write" : "cp_mv_rm");
         
     while (true) {
+		setupSignalHandlerCancellations();
 		g_operationCancelled.store(false);
 		if (!isUnmount) isAtISOList.store(true);
         verbose = false;
@@ -833,6 +834,7 @@ void clearHistory(const std::string& inputSearch) {
 
 // Function to display how to select items from lists
 void helpSelections() {
+	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
     clearScrollBuffer();
     
     // Title
@@ -864,6 +866,7 @@ void helpSelections() {
 
 // Help guide for directory prompts
 void helpSearches(bool isCpMv) {
+	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
     clearScrollBuffer();
     
     // Title
@@ -873,7 +876,7 @@ void helpSearches(bool isCpMv) {
               << "   • Single directory: Enter a directory (e.g., '/directory/')\n"
               << "   • Multiple directories: Separate with ; (e.g., '/directory1/;/directory2/')\n"
               << "   • Overwrite files for cp/mv: Append |^O (e.g., '/directory/ |^O' or '/directory1/;/directory2/ |^O')\n" << std::endl;
-    if (isCpMv) std::cout << "   - Note: Special Commands are only available within Convert2ISO&ImportISO FolderPath prompts \n" << std::endl;
+    if (isCpMv) std::cout << "   - Note: Special Display Commands are only available within Convert2ISO&ImportISO FolderPath prompts \n" << std::endl;
     if (!isCpMv) {
 		std::cout << "\033[1;32m2. Special Cleanup Commands:\033[0m\n"
 				<< "   • Enter \033[1;33m'!clr'\033[0m - Clear cache:\n"
@@ -907,6 +910,7 @@ void helpSearches(bool isCpMv) {
 
 // Help guide for iso and device mapping
 void helpMappings() {
+	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
     clearScrollBuffer();
     
     // Title

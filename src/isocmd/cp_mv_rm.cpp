@@ -148,6 +148,8 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
 
     if (!isDelete) {
         while (true) {
+			setupSignalHandlerCancellations();
+			g_operationCancelled.store(false);
             // Restore readline autocomplete and screen clear bindings
             rl_bind_key('\f', rl_clear_screen);
             rl_bind_key('\t', rl_complete);
@@ -264,7 +266,7 @@ namespace fs = std::filesystem;
 
 // Function to buffer file copying
 bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::atomic<size_t>* completedBytes, std::error_code& ec) {
-	g_operationCancelled = false;
+	g_operationCancelled.store(false);
     const size_t bufferSize = 8 * 1024 * 1024; // 8MB buffer
     std::vector<char> buffer(bufferSize);
     
