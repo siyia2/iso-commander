@@ -8,6 +8,8 @@
 const std::string MOUNTED_ISO_PATH = "/mnt";
 
 bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<std::string>& filteredFiles, bool& isFiltered) {
+	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+	disable_ctrl_d();
      isoDirs.clear();
         for (const auto& entry : std::filesystem::directory_iterator(MOUNTED_ISO_PATH)) {
             if (entry.is_directory() && entry.path().filename().string().find("iso_") == 0) {
@@ -20,7 +22,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
     if (isoDirs.empty()) {
 		clearScrollBuffer();
         std::cerr << "\n\033[1;93mNo paths matching the '/mnt/iso_{name}' pattern found.\033[0m\033[0;1m\n";
-        std::cout << "\n\033[1;32m↵ to continue...";
+        std::cout << "\n\033[1;32m↵ to continue...[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         return false;
     }

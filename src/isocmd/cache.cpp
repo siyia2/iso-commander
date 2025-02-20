@@ -176,6 +176,10 @@ std::string getHomeDirectory() {
 
 // Utility function to clear screen buffer and load IsoFiles from cache to a global vector only for the first time and only for if the cache has been modified.
 bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType) {
+	
+	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+	disable_ctrl_d();
+	
     static std::filesystem::file_time_type lastModifiedTime;
 
     // Check if the cache file exists and has been modified
