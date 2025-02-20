@@ -248,10 +248,7 @@ std::vector<std::string> getRemovableDevices() {
 // Function to handle device mapping collection and validation
 std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::vector<IsoInfo>& selectedIsos,std::set<std::string>& uniqueErrorMessages) {
     while (true) {
-		signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
 		disable_ctrl_d();
-		setupSignalHandlerCancellations();
-		g_operationCancelled.store(false);
         clearScrollBuffer();
 
         // Display user input errors at top
@@ -337,8 +334,6 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         std::string pair;
 
         while (std::getline(pairStream, pair, ';')) {
-			signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
-			disable_ctrl_d();
             // Trim whitespace
             pair.erase(pair.find_last_not_of(" \t\n\r\f\v") + 1);
             pair.erase(0, pair.find_first_not_of(" \t\n\r\f\v"));
@@ -389,6 +384,8 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             for (const auto& err : errors) {
                 std::cerr << "  • " << err << "\n";
             }
+            signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+			disable_ctrl_d();
             std::cout << "\n\033[1;92m↵ to try again...\033[0;1m";
             std::cin.ignore();
             continue;
@@ -476,6 +473,8 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         if (confirmation && (confirmation.get()[0] == 'y' || confirmation.get()[0] == 'Y')) {
 			rl_bind_keyseq("\033[A", rl_get_previous_history);
             rl_bind_keyseq("\033[B", rl_get_next_history);
+            setupSignalHandlerCancellations();
+			g_operationCancelled.store(false);
             return validPairs;
         }
         
@@ -611,8 +610,6 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
 // Function to prepare selections for write
 void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages) {
-	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
-	disable_ctrl_d();
     clearScrollBuffer();
     std::set<int> indicesToProcess;
 
