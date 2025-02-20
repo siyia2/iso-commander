@@ -20,10 +20,8 @@ build() {
 
 package() {
     cd "${srcdir}/$pkgname-${pkgver}"
-    # Install the prebuilt binary instead of compiling it
-    install -Dm755 "$pkgname-${pkgver}/bin/isocmd" "$pkgdir/usr/bin/isocmd"
-    
+    install -Dm755 isocmd "$pkgdir/bin/isocmd"
     # Install the man page
-    install -Dm644 "$pkgname-${pkgver}/man/isocmd.1" "$pkgdir/usr/share/man/man1/isocmd.1"
+    install -Dm644 "${srcdir}/$pkgname-$pkgver/man/isocmd.1" "$pkgdir/usr/share/man/man1/isocmd.1"
     mandb
 }
