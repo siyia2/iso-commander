@@ -447,7 +447,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     std::error_code ec;
                     bool success = false;
 
-                    // MODIFIED CODE SECTION BEGINS HERE
                     if (isMove && destDirs.size() > 1) {
                         // For multiple destinations during move, always use copy+delete approach
                         success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec);
@@ -485,7 +484,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     } else if (isCopy) {
                         success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec);
                     }
-                    // MODIFIED CODE SECTION ENDS HERE
 
                     if (!success || ec) {
 						std::string errorDetail;
