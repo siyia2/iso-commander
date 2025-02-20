@@ -248,7 +248,8 @@ std::vector<std::string> getRemovableDevices() {
 // Function to handle device mapping collection and validation
 std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::vector<IsoInfo>& selectedIsos,std::set<std::string>& uniqueErrorMessages) {
     while (true) {
-		enable_ctrl_d();
+		signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+		disable_ctrl_d();
 		setupSignalHandlerCancellations();
 		g_operationCancelled.store(false);
         clearScrollBuffer();
@@ -336,6 +337,8 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         std::string pair;
 
         while (std::getline(pairStream, pair, ';')) {
+			signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+			disable_ctrl_d();
             // Trim whitespace
             pair.erase(pair.find_last_not_of(" \t\n\r\f\v") + 1);
             pair.erase(0, pair.find_first_not_of(" \t\n\r\f\v"));
@@ -435,8 +438,12 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                 std::cerr << "  • " << err << "\033[0;1m\n";
             }
             if (!permissions) {
+				signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+				disable_ctrl_d();
                 std::cout << "\n\033[1;92m↵ to try again...\033[0;1m";
             } else {
+				signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+				disable_ctrl_d();
                 std::cout << "\n\033[1;92m↵ to continue...\033[0;1m";
                 permissions = false;
             }
