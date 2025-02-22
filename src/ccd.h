@@ -13,7 +13,6 @@
 // Note: Their original code has been modernized and ported to C++.
 
 const size_t DATA_SIZE = 2048;
-const size_t BUFFER_SIZE = 8 * 1024 * 1024;  // 8 MB buffer
 
 struct __attribute__((packed)) CcdSectheaderSyn {
     uint8_t data[12];
