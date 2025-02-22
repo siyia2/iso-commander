@@ -965,7 +965,8 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
                 (*completedTasks)++; // Increment completed tasks counter for successful conversions
             }
         } else {
-            std::string failedMessage = "\033[1;91mConversion of \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m failed.\033[0;1m";
+            std::string failedMessage = "\033[1;91mConversion of \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m " + 
+										(g_operationCancelled.load() ? "cancelled" : "failed") + ".\033[0;1m";
             {
                 std::lock_guard<std::mutex> lock(globalSetsMutex); // Use the global mutex
                 failedOuts.insert(failedMessage);
