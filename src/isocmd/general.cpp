@@ -459,12 +459,12 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             }
 
             // Calculate progress
-            const double tasksProgress = static_cast<double>(completedTasksValue) / totalTasks;
-            double overallProgress = tasksProgress;
-            if (bytesTrackingEnabled) {
-                const double bytesProgress = static_cast<double>(completedBytesValue) / totalBytes;
-                overallProgress = std::max(bytesProgress, tasksProgress);
-            }
+			const double tasksProgress = static_cast<double>(completedTasksValue + failedTasksValue) / totalTasks;
+			double overallProgress = tasksProgress;
+			if (bytesTrackingEnabled) {
+				const double bytesProgress = static_cast<double>(completedBytesValue) / totalBytes;
+				overallProgress = std::max(bytesProgress, tasksProgress);
+			}
             const int progressPos = static_cast<int>(barWidth * overallProgress);
 
             // Calculate timing and speed
