@@ -373,23 +373,23 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
             }
 
             if (isDelete) {
-                std::error_code ec;
-                if (fs::remove(srcPath, ec)) {
-                    completedBytes->fetch_add(fileSize);
-                    {
-                        std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
-                        operationIsos.emplace("\033[0;1mDeleted: \033[1;92m'" + srcDir + "/" + srcFile + "'\033[0;1m.");
-                        completedTasks->fetch_add(1);
-                    }
-                } else {
-                    {
-                        std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
-                        operationErrors.emplace("\033[1;91mError deleting: \033[1;93m'" + srcDir + "/" + srcFile + "'\033[1;91m: " + ec.message() + ".\033[0;1m");
-                        failedTasks->fetch_add(1);
-                    }
-                    operationSuccessful = false;
-                }
-            } else {
+				std::error_code ec;
+				if (fs::remove(srcPath, ec)) {
+					completedBytes->fetch_add(fileSize);
+					{
+						std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
+						operationIsos.emplace("\033[0;1mDeleted: \033[1;92m'" + srcDir + "/" + srcFile + "'\033[0;1m.");
+					}
+					completedTasks->fetch_add(1); // Increment only on success
+				} else {
+					{
+						std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
+						operationErrors.emplace("\033[1;91mError deleting: \033[1;93m'" + srcDir + "/" + srcFile + "'\033[1;91m: " + ec.message() + ".\033[0;1m");
+						failedTasks->fetch_add(1);
+					}
+					operationSuccessful = false;
+				}
+			} else {
                 // Track if at least one copy was successful for multi-destination moves
                 bool atLeastOneCopySucceeded = false;
                 int validDestinations = 0;
