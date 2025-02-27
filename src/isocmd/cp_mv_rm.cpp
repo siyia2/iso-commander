@@ -268,7 +268,6 @@ namespace fs = std::filesystem;
 
 // Function to buffer file copying
 bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::atomic<size_t>* completedBytes, std::error_code& ec) {
-	g_operationCancelled.store(false);
     const size_t bufferSize = 8 * 1024 * 1024; // 8MB buffer
     std::vector<char> buffer(bufferSize);
     
