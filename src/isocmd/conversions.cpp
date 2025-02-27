@@ -876,14 +876,14 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
 
         if (!fs::exists(inputPath)) {
             localFailedMsgs.push_back("\033[1;91mThe specified input file \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m does not exist anymore.\033[0;1m");
-            if (completedTasks) (*completedTasks)++;
+            if (failedTasks) (*failedTasks)++;
             continue;
         }
 
         std::ifstream file(inputPath);
         if (!file.good()) {
             localFailedMsgs.push_back("\033[1;91mThe specified file \033[1;93m'" + inputPath + "'\033[1;91m cannot be read. Check permissions.\033[0;1m");
-            if (completedTasks) (*completedTasks)++;
+            if (failedTasks) (*failedTasks)++;
             continue;
         }
 
