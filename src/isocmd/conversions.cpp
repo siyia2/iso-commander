@@ -843,11 +843,13 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
 
 
 // Function to convert a BIN/IMG/MDF/NRG file to ISO format
-void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, const bool& modeMdf, const bool& modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, std::atomic<bool>& newISOFound) {
-        
+void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, 
+                  const bool& modeMdf, const bool& modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern, 
+                  std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, std::atomic<bool>& newISOFound) {
+
     namespace fs = std::filesystem;
-    
-    // Collect unique directories from the input file paths
+
+    // Collect unique directories from input file paths
     std::set<std::string> uniqueDirectories;
     for (const auto& filePath : imageFiles) {
         std::filesystem::path path(filePath);
@@ -856,12 +858,9 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
         }
     }
 
-    // Concatenate unique directory paths with ';'
-    std::string result = std::accumulate(uniqueDirectories.begin(), uniqueDirectories.end(), std::string(), [](const std::string& a, const std::string& b) {
-        return a.empty() ? b : a + ";" + b;
-    });
+    std::string result = std::accumulate(uniqueDirectories.begin(), uniqueDirectories.end(), std::string(), 
+        [](const std::string& a, const std::string& b) { return a.empty() ? b : a + ";" + b; });
 
-    // Get the real user ID and group ID (of the user who invoked sudo)
     uid_t real_uid;
     gid_t real_gid;
     std::string real_username;
@@ -869,71 +868,32 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
     
     getRealUserId(real_uid, real_gid, real_username, real_groupname, failedOuts);
 
-    // Iterate over each image file
+    // Thread-local message buffers to reduce lock contention
+    std::vector<std::string> localSuccessMsgs, localFailedMsgs, localSkippedMsgs, localDeletedMsgs;
+
     for (const std::string& inputPath : imageFiles) {
         auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath, "conversions");
 
-        // Check if the input file exists
-        if (!std::filesystem::exists(inputPath)) {
-            std::string failedMessage = "\033[1;91mThe specified input file \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m does not exist anymore.\033[0;1m";
-            {
-                std::lock_guard<std::mutex> lock(globalSetsMutex); // Use the global mutex
-                failedOuts.insert(failedMessage);
-            }
-            // Remove the non-existent files from Cache
-            if (!modeMdf && !modeNrg) {
-                auto it = std::find(binImgFilesCache.begin(), binImgFilesCache.end(), inputPath);
-                if (it != binImgFilesCache.end()) {
-                    binImgFilesCache.erase(it);
-                }
-            } else if (modeMdf) {
-                auto it = std::find(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end(), inputPath);
-                if (it != mdfMdsFilesCache.end()) {
-                    mdfMdsFilesCache.erase(it);
-                }
-            } else if (modeNrg) {
-                auto it = std::find(nrgFilesCache.begin(), nrgFilesCache.end(), inputPath);
-                if (it != nrgFilesCache.end()) {
-                    nrgFilesCache.erase(it);
-                }
-            }
-            if (completedTasks) {
-                (*completedTasks)++; // Increment completed tasks counter for failed conversions
-            }
+        if (!fs::exists(inputPath)) {
+            localFailedMsgs.push_back("\033[1;91mThe specified input file \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m does not exist anymore.\033[0;1m");
+            if (completedTasks) (*completedTasks)++;
             continue;
         }
 
-        // Attempt to open the file to check readability
         std::ifstream file(inputPath);
         if (!file.good()) {
-            std::string failedMessage = "\033[1;91mThe specified file \033[1;93m'" + inputPath + "'\033[1;91m cannot be read. Check permissions.\033[0;1m";
-            {
-                std::lock_guard<std::mutex> lock(globalSetsMutex); // Use the global mutex
-                failedOuts.insert(failedMessage);
-            }
-            if (completedTasks) {
-                (*completedTasks)++; // Increment completed tasks counter for failed conversions
-            }
+            localFailedMsgs.push_back("\033[1;91mThe specified file \033[1;93m'" + inputPath + "'\033[1;91m cannot be read. Check permissions.\033[0;1m");
+            if (completedTasks) (*completedTasks)++;
             continue;
         }
 
-        // Determine output ISO file path
         std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
-
-        // Skip if ISO file already exists
         if (fileExists(outputPath)) {
-            std::string skipMessage = "\033[1;93mThe corresponding .iso file already exists for: \033[1;92m'" + directory + "/" + fileNameOnly + "'\033[1;93m. Skipped conversion.\033[0;1m";
-            {
-                std::lock_guard<std::mutex> lock(globalSetsMutex); // Use the global mutex
-                skippedOuts.insert(skipMessage);
-            }
-            if (completedTasks) {
-                (*completedTasks)++; // Count skipped files as completed tasks
-            }
+            localSkippedMsgs.push_back("\033[1;93mThe corresponding .iso file already exists for: \033[1;92m'" + directory + "/" + fileNameOnly + "'\033[1;93m. Skipped conversion.\033[0;1m");
+            if (completedTasks) (*completedTasks)++;
             continue;
         }
 
-        // Perform the conversion based on the mode
         bool conversionSuccess = false;
         if (modeMdf) {
             conversionSuccess = convertMdfToIso(inputPath, outputPath, completedBytes);
@@ -943,54 +903,35 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
             conversionSuccess = convertNrgToIso(inputPath, outputPath, completedBytes);
         }
 
-        // Handle output results
         auto [outDirectory, outFileNameOnly] = extractDirectoryAndFilename(outputPath, "conversions");
 
         if (conversionSuccess) {
-            // Change ownership if needed
             if (chown(outputPath.c_str(), real_uid, real_gid) != 0) {
-                std::string errorMessage = "\033[1;91mFailed to change ownership of \033[1;93m'" + outDirectory + "/" + outFileNameOnly + "'\033[1;91m: " + strerror(errno) + "\033[0;1m";
-                {
-                    std::lock_guard<std::mutex> lock(globalSetsMutex); // Use the global mutex
-                    failedOuts.insert(errorMessage);
+                localFailedMsgs.push_back("\033[1;91mFailed to change ownership of \033[1;93m'" + outDirectory + "/" + outFileNameOnly + "'\033[1;91m: " + strerror(errno) + "\033[0;1m");
+            }
+            localSuccessMsgs.push_back("\033[1mImage file converted to ISO:\033[0;1m \033[1;92m'" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m.\033[0;1m");
+            if (completedTasks) (*completedTasks)++;
+        } else {
+            localFailedMsgs.push_back("\033[1;91mConversion of \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m " + 
+                                      (g_operationCancelled.load() ? "cancelled" : "failed") + ".\033[0;1m");
+            if (fs::exists(outputPath)) {
+                if (std::remove(outputPath.c_str()) == 0) {
+                    localDeletedMsgs.push_back("\033[1;92mDeleted incomplete ISO file:\033[1;91m '" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m");
+                } else {
+                    localDeletedMsgs.push_back("\033[1;91mFailed to delete incomplete ISO file: \033[1;93m'" + outputPath + "'\033[0;1m");
                 }
             }
-
-            std::string successMessage = "\033[1mImage file converted to ISO:\033[0;1m \033[1;92m'" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m.\033[0;1m";
-            {
-                std::lock_guard<std::mutex> lock(globalSetsMutex); // Use the global mutex
-                successOuts.insert(successMessage);
-            }
-            
-            if (completedTasks) {
-                (*completedTasks)++; // Increment completed tasks counter for successful conversions
-            }
-        } else {
-            std::string failedMessage = "\033[1;91mConversion of \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m " + 
-										(g_operationCancelled.load() ? "cancelled" : "failed") + ".\033[0;1m";
-            {
-                std::lock_guard<std::mutex> lock(globalSetsMutex); // Use the global mutex
-                failedOuts.insert(failedMessage);
-            }
-			if (fs::exists(outputPath)) {
-				if (std::remove(outputPath.c_str()) == 0) {
-					std::string deletedMessage = "\033[1;92mDeleted incomplete ISO file:\033[1;91m '" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m";
-					{
-						std::lock_guard<std::mutex> lock(globalSetsMutex); // Use the global mutex
-						deletedOuts.insert(deletedMessage);
-					}
-				} else {
-					std::string deleteFailMessage = "\033[1;91mFailed to delete incomplete ISO file: \033[1;93m'" + outputPath + "'\033[0;1m";
-					{
-						std::lock_guard<std::mutex> lock(globalSetsMutex); // Use the global mutex
-						deletedOuts.insert(deleteFailMessage);
-					}
-				}
-			}
-            if (failedTasks) {
-                (*failedTasks)++; // Increment completed tasks counter for failed conversions
-            }
+            if (failedTasks) (*failedTasks)++;
         }
+    }
+
+    // Batch insert messages under one lock
+    {
+        std::lock_guard<std::mutex> lock(globalSetsMutex);
+        successOuts.insert(localSuccessMsgs.begin(), localSuccessMsgs.end());
+        failedOuts.insert(localFailedMsgs.begin(), localFailedMsgs.end());
+        skippedOuts.insert(localSkippedMsgs.begin(), localSkippedMsgs.end());
+        deletedOuts.insert(localDeletedMsgs.begin(), localDeletedMsgs.end());
     }
 
     // Update cache and prompt flags

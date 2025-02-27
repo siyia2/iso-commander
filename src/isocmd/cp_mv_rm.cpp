@@ -322,6 +322,10 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
     std::string real_groupname;
     getRealUserId(real_uid, real_gid, real_username, real_groupname, operationErrors);
 
+    // Local containers to accumulate verbose messages
+    std::vector<std::string> verboseIsos;
+    std::vector<std::string> verboseErrors;
+
     std::vector<std::string> destDirs;
     std::istringstream iss(userDestDir);
     std::string destDir;
@@ -335,21 +339,17 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
             if (file_stat.st_uid != real_uid || file_stat.st_gid != real_gid) {
                 if (chown(path.c_str(), real_uid, real_gid) != 0) {
                     auto [dir, file] = extractDirectoryAndFilename(path.string(), "cp_mv_rm");
-                    std::string errorMessage = "\033[1;91mFailed to change ownership of '" + dir + "/" + file + "': " + strerror(errno) + "\033[0m";
-                    {
-                        std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
-                        operationErrors.emplace(errorMessage);
-                    }
+                    std::string errorMessage = "\033[1;91mFailed to change ownership of '" +
+                                               dir + "/" + file + "': " + strerror(errno) + "\033[0m";
+                    verboseErrors.push_back(errorMessage);
                     return false;
                 }
             }
         } else {
             auto [dir, file] = extractDirectoryAndFilename(path.string(), "cp_mv_rm");
-            std::string errorMessage = "\033[1;91mFailed to get file info for '" + dir + "/" + file + "': " + strerror(errno) + "\033[0m";
-            {
-                std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
-                operationErrors.emplace(errorMessage);
-            }
+            std::string errorMessage = "\033[1;91mFailed to get file info for '" +
+                                       dir + "/" + file + "': " + strerror(errno) + "\033[0m";
+            verboseErrors.push_back(errorMessage);
             return false;
         }
         return true;
@@ -369,24 +369,20 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
             }
 
             if (isDelete) {
-				std::error_code ec;
-				if (fs::remove(srcPath, ec)) {
-					completedBytes->fetch_add(fileSize);
-					{
-						std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
-						operationIsos.emplace("\033[0;1mDeleted: \033[1;92m'" + srcDir + "/" + srcFile + "'\033[0;1m.");
-					}
-					completedTasks->fetch_add(1); // Increment only on success
-				} else {
-					{
-						std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
-						operationErrors.emplace("\033[1;91mError deleting: \033[1;93m'" + srcDir + "/" + srcFile + "'\033[1;91m: " + ec.message() + ".\033[0;1m");
-						failedTasks->fetch_add(1);
-					}
-					operationSuccessful = false;
-				}
-			} else {
-                // Track if at least one copy was successful for multi-destination moves
+                std::error_code ec;
+                if (fs::remove(srcPath, ec)) {
+                    completedBytes->fetch_add(fileSize);
+                    verboseIsos.push_back("\033[0;1mDeleted: \033[1;92m'" +
+                                            srcDir + "/" + srcFile + "'\033[0;1m.");
+                    completedTasks->fetch_add(1);
+                } else {
+                    verboseErrors.push_back("\033[1;91mError deleting: \033[1;93m'" +
+                                              srcDir + "/" + srcFile + "'\033[1;91m: " +
+                                              ec.message() + ".\033[0;1m");
+                    failedTasks->fetch_add(1);
+                    operationSuccessful = false;
+                }
+            } else {
                 bool atLeastOneCopySucceeded = false;
                 int validDestinations = 0;
                 int successfulOperations = 0;
@@ -394,7 +390,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                 for (size_t i = 0; i < destDirs.size(); ++i) {
                     const auto& destDir = destDirs[i];
                     fs::path destPath = fs::path(destDir) / srcPath.filename();
-
                     auto [destDirProcessed, destFile] = extractDirectoryAndFilename(destPath.string(), "cp_mv_rm");
 
                     // Check if source and destination are the same
@@ -402,22 +397,19 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     fs::path absDestPath = fs::absolute(destPath);
 
                     if (absSrcPath == absDestPath) {
-                        {
-                            std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
-                            operationErrors.emplace("\033[1;91mCannot " + std::string(isMove ? "move" : "copy") +
-                                                   " file to itself: \033[1;93m'" + srcDir + "/" + srcFile + "'\033[1;91m.\033[0m");
-                            failedTasks->fetch_add(1);
-                        }
+                        verboseErrors.push_back("\033[1;91mCannot " +
+                                                  std::string(isMove ? "move" : "copy") +
+                                                  " file to itself: \033[1;93m'" +
+                                                  srcDir + "/" + srcFile + "'\033[1;91m.\033[0m");
+                        failedTasks->fetch_add(1);
                         operationSuccessful = false;
                         continue;
                     }
 
                     if (!fs::exists(destDir) || !fs::is_directory(destDir)) {
-                        {
-                            std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
-                            operationErrors.emplace("\033[1;91mInvalid destination: \033[1;93m'" + destDirProcessed + "'\033[1;91m.\033[0;1m");
-                            failedTasks->fetch_add(1);
-                        }
+                        verboseErrors.push_back("\033[1;91mInvalid destination: \033[1;93m'" +
+                                                  destDirProcessed + "'\033[1;91m.\033[0;1m");
+                        failedTasks->fetch_add(1);
                         operationSuccessful = false;
                         continue;
                     }
@@ -429,22 +421,18 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         if (overwriteExisting) {
                             std::error_code ec;
                             if (!fs::remove(destPath, ec)) {
-                                {
-                                    std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
-                                    operationErrors.emplace("\033[1;91mFailed to overwrite: \033[1;93m'" +
-                                                           destDirProcessed + "/" + destFile + "'\033[1;91m - " + ec.message() + ".\033[0;1m");
-                                    failedTasks->fetch_add(1);
-                                }
+                                verboseErrors.push_back("\033[1;91mFailed to overwrite: \033[1;93m'" +
+                                                          destDirProcessed + "/" + destFile +
+                                                          "'\033[1;91m - " + ec.message() + ".\033[0;1m");
+                                failedTasks->fetch_add(1);
                                 operationSuccessful = false;
                                 continue;
                             }
                         } else {
-                            {
-                                std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
-                                operationErrors.emplace("\033[1;91mFile exists: \033[1;93m'" +
-                                                      destDirProcessed + "/" + destFile + "'\033[1;91m (enable overwrites).\033[0;1m");
-                                failedTasks->fetch_add(1);
-                            }
+                            verboseErrors.push_back("\033[1;91mFile exists: \033[1;93m'" +
+                                                      destDirProcessed + "/" + destFile +
+                                                      "'\033[1;91m (enable overwrites).\033[0;1m");
+                            failedTasks->fetch_add(1);
                             operationSuccessful = false;
                             continue;
                         }
@@ -455,9 +443,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 
                     if (isMove && destDirs.size() > 1) {
                         // For multiple destinations during move, always use copy approach
-                        // We'll handle deletion after all copies are complete
                         success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec);
-                        
                         if (success) {
                             atLeastOneCopySucceeded = true;
                             successfulOperations++;
@@ -465,19 +451,15 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     } else if (isMove) {
                         // For single destination move, try rename first
                         fs::rename(srcPath, destPath, ec);
-                        
                         if (ec) {
-                            // If rename fails (likely different filesystem), fall back to copy+delete
                             ec.clear();
                             success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec);
-                            
                             if (success) {
                                 std::error_code deleteEc;
                                 if (!fs::remove(srcPath, deleteEc)) {
-                                    std::lock_guard<std::mutex> lock(globalSetsMutex);
-                                    operationErrors.emplace("\033[1;91mMove completed but failed to remove source file: \033[1;93m'" + 
-                                        srcDir + "/" + srcFile + "'\033[1;91m - " + deleteEc.message() + "\033[0m");
-                                    // Still count as success since the file was copied
+                                    verboseErrors.push_back("\033[1;91mMove completed but failed to remove source file: \033[1;93m'" +
+                                                              srcDir + "/" + srcFile + "'\033[1;91m - " +
+                                                              deleteEc.message() + "\033[0m");
                                     successfulOperations++;
                                 } else {
                                     successfulOperations++;
@@ -496,49 +478,36 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     }
 
                     if (!success || ec) {
-                        std::string errorDetail;
-                        if (g_operationCancelled.load()) {
-                            errorDetail = "Cancelled";
-                        } else {
-                            errorDetail = ec.message();
-                        }
+                        std::string errorDetail = g_operationCancelled.load() ? "Cancelled" : ec.message();
                         std::string errorMessageInfo = "\033[1;91mError " +
                         std::string(isCopy ? "copying" : (i < destDirs.size() - 1 ? "moving" : "moving")) +
                         ": \033[1;93m'" + srcDir + "/" + srcFile + "'\033[1;91m" +
                         " to '" + destDirProcessed + "/': " + errorDetail + "\033[1;91m.\033[0;1m";
-                        {
-                            std::lock_guard<std::mutex> lock(globalSetsMutex);
-                            operationErrors.emplace(errorMessageInfo);
-                            failedTasks->fetch_add(1);
-                        }
+                        verboseErrors.push_back(errorMessageInfo);
+                        failedTasks->fetch_add(1);
                         operationSuccessful = false;
                     } else {
                         if (!changeOwnership(destPath)) {
                             operationSuccessful = false;
-                            // Count as failure since ownership change failed
                             failedTasks->fetch_add(1);
                         } else {
-                            {
-                                std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
-                                operationIsos.emplace("\033[0;1m" +
-                                                     std::string(isCopy ? "Copied" : "Moved") + ": \033[1;92m'" +
-                                                     srcDir + "/" + srcFile + "'\033[1m to \033[1;94m'" +
-                                                     destDirProcessed + "/" + destFile + "'\033[0;1m.");
-                                completedTasks->fetch_add(1);
-                            }
+                            verboseIsos.push_back("\033[0;1m" +
+                                                    std::string(isCopy ? "Copied" : "Moved") +
+                                                    ": \033[1;92m'" + srcDir + "/" + srcFile +
+                                                    "'\033[1m to \033[1;94m'" + destDirProcessed +
+                                                    "/" + destFile + "'\033[0;1m.");
+                            completedTasks->fetch_add(1);
                         }
                     }
                 }
                 
-                // Now handle the deletion for multi-destination move after all copies are done
+                // For multi-destination move: remove source file after copies succeed
                 if (isMove && destDirs.size() > 1 && validDestinations > 0 && atLeastOneCopySucceeded) {
                     std::error_code deleteEc;
                     if (!fs::remove(srcPath, deleteEc)) {
-                        std::lock_guard<std::mutex> lock(globalSetsMutex);
-                        operationErrors.emplace("\033[1;91mMove completed but failed to remove source file: \033[1;93m'" + 
-                            srcDir + "/" + srcFile + "'\033[1;91m - " + deleteEc.message() + "\033[0m");
-                        // Note: We don't increment completedTasks here as each individual copy operation
-                        // already incremented completedTasks
+                        verboseErrors.push_back("\033[1;91mMove completed but failed to remove source file: \033[1;93m'" +
+                                                  srcDir + "/" + srcFile + "'\033[1;91m - " +
+                                                  deleteEc.message() + "\033[0m");
                     }
                 }
             }
@@ -555,16 +524,23 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
             if (fs::exists(isoPath)) {
                 isoFilesToOperate.push_back(iso);
             } else {
-                std::lock_guard<std::mutex> lock(globalSetsMutex);
-                operationErrors.emplace("\033[1;35mMissing: \033[1;93m'" + isoDir + "/" + isoFile + "'\033[1;35m.\033[0;1m");
+                verboseErrors.push_back("\033[1;35mMissing: \033[1;93m'" +
+                                          isoDir + "/" + isoFile + "'\033[1;35m.\033[0;1m");
                 failedTasks->fetch_add(1);
             }
         } else {
-            std::lock_guard<std::mutex> lock(globalSetsMutex);
-            operationErrors.emplace("\033[1;91mNot in cache: \033[1;93m'" + isoDir + "/" + isoFile + "'\033[1;91m.\033[0;1m");
+            verboseErrors.push_back("\033[1;91mNot in cache: \033[1;93m'" +
+                                      isoDir + "/" + isoFile + "'\033[1;91m.\033[0;1m");
             failedTasks->fetch_add(1);
         }
     }
 
     executeOperation(isoFilesToOperate);
+
+    // At the end, insert all collected verbose messages with a single lock
+    {
+        std::lock_guard<std::mutex> lock(globalSetsMutex);
+        operationErrors.insert(verboseErrors.begin(), verboseErrors.end());
+        operationIsos.insert(verboseIsos.begin(), verboseIsos.end());
+    }
 }
