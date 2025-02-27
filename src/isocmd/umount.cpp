@@ -73,7 +73,7 @@ std::string modifyDirectoryPath(const std::string& dir) {
 
 
 // Function to unmount ISO files asynchronously
-void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors) {
+void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks) {
     std::atomic<bool> g_CancelledMessageAdded{false};
     
     // Early exit if cancelled before starting
@@ -91,6 +91,8 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
                 std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
                 unmountedErrors.emplace(errorMessage.str());
             }
+            // Increment failed tasks
+            failedTasks->fetch_add(1, std::memory_order_relaxed);
         }
         return;
     }
@@ -118,7 +120,11 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
         
         for (const auto& [dir, result] : unmountResults) {
             bool isEmpty = isDirectoryEmpty(dir);
-            (result == 0 || isEmpty) ? successfulUnmounts.push_back(dir) : failedUnmounts.push_back(dir);
+            if (result == 0 || isEmpty) {
+                successfulUnmounts.push_back(dir);
+            } else {
+                failedUnmounts.push_back(dir);
+            }
         }
 
         // Handle successful unmounts
@@ -129,6 +135,8 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
                     std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
                     unmountedFiles.emplace("\033[0;1mUnmounted: \033[1;92m'" + modifiedDir + "\033[1;92m'\033[0m.");
                 }
+                // Increment completed tasks for each success
+                completedTasks->fetch_add(1, std::memory_order_relaxed);
             }
         }
 
@@ -140,6 +148,8 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
                     std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
                     unmountedFiles.emplace("\033[0;1mRemoved empty ISO directory: \033[1;92m'" + modifiedDir + "\033[1;92m'\033[0m.");
                 }
+                // Increment completed tasks for cleanup success
+                completedTasks->fetch_add(1, std::memory_order_relaxed);
             }
         }
 
@@ -150,6 +160,8 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
                 std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
                 unmountedErrors.emplace("\033[1;91mFailed to unmount: \033[1;93m'" + modifiedDir + "'\033[1;91m.\033[0;1m {notAnISO}");
             }
+            // Increment failed tasks for each failure
+            failedTasks->fetch_add(1, std::memory_order_relaxed);
         }
     }
 }
@@ -199,6 +211,7 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& currentF
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> unmountFutures;
     std::atomic<size_t> completedTasks(0);
+    std::atomic<size_t> failedTasks(0);
     std::atomic<bool> isProcessingComplete(false);
 
     // Start progress thread
@@ -207,6 +220,7 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& currentF
         nullptr,
         static_cast<size_t>(0),
         &completedTasks,
+        &failedTasks,
         selectedMountpoints.size(),
         &isProcessingComplete,
         &verbose
@@ -216,8 +230,7 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& currentF
     for (const auto& chunk : chunks) {
         unmountFutures.emplace_back(pool.enqueue([&, chunk]() {
             if (g_operationCancelled.load()) return;
-            unmountISO(chunk, operationFiles, operationFails);
-            completedTasks.fetch_add(chunk.size(), std::memory_order_relaxed);
+            unmountISO(chunk, operationFiles, operationFails, &completedTasks, &failedTasks);
         }));
     }
 

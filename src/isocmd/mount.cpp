@@ -17,7 +17,7 @@ bool isAlreadyMounted(const std::string& mountPoint) {
 
 
 // Function to mount selected ISO files called from processAndMountIsoFiles
-void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails) {
+void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks) {
 
     for (const auto& isoFile : isoFiles) {
         // Check for cancellation before processing each ISO
@@ -56,6 +56,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
             
             std::lock_guard<std::mutex> lock(globalSetsMutex); // Lock the mutex
             mountedFails.insert(errorMessage.str());
+            failedTasks->fetch_add(1);
         };
 
         // Root privilege check
@@ -66,6 +67,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
             {
                 std::lock_guard<std::mutex> lock(globalSetsMutex); // Lock the mutex
                 mountedFails.insert(errorMessage.str());
+                failedTasks->fetch_add(1);
             }
             continue;
         }
@@ -79,6 +81,8 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
             
             std::lock_guard<std::mutex> lock(globalSetsMutex); // Lock the mutex
             skippedMessages.insert(skippedMessage.str());
+            // Already mounted is considered a successful state
+            completedTasks->fetch_add(1);
             continue;
         }
         
@@ -99,6 +103,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
                 
                 std::lock_guard<std::mutex> lock(globalSetsMutex); // Lock the mutex
                 mountedFails.insert(errorMessage.str());
+                failedTasks->fetch_add(1);
                 continue;
             }
         }
@@ -111,6 +116,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
             
             std::lock_guard<std::mutex> lock(globalSetsMutex); // Lock the mutex
             mountedFails.insert(errorMessage.str());
+            failedTasks->fetch_add(1);
             continue;
         }
 
@@ -171,11 +177,13 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
             {
                 std::lock_guard<std::mutex> lock(globalSetsMutex); // Lock the mutex
                 mountedFiles.insert(mountedFileInfo);
+                completedTasks->fetch_add(1);  // Increment completed tasks counter
             }
         } else {
             // Mount failed
             logError("{badFS}");
             fs::remove(mountPoint);
+            // Note: failedTasks is already incremented inside logError
         }
     }
 }
@@ -223,14 +231,14 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> mountFutures;
     std::atomic<size_t> completedTasks(0);
+    std::atomic<size_t> failedTasks(0);
     std::atomic<bool> isProcessingComplete(false);
 
     // Enqueue chunk tasks
     for (const auto& chunk : isoChunks) {
         mountFutures.emplace_back(pool.enqueue([&, chunk]() {
             if (g_operationCancelled.load()) return;
-            mountIsoFiles(chunk, mountedFiles, skippedMessages, mountedFails);
-            completedTasks.fetch_add(chunk.size(), std::memory_order_relaxed);
+            mountIsoFiles(chunk, mountedFiles, skippedMessages, mountedFails, &completedTasks, &failedTasks);
         }));
     }
 
@@ -240,6 +248,7 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
         nullptr,
         static_cast<size_t>(0),
         &completedTasks,
+        &failedTasks,
         selectedIsoFiles.size(),
         &isProcessingComplete,
         &verbose

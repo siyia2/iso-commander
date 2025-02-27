@@ -385,7 +385,7 @@ size_t getTotalFileSize(const std::vector<std::string>& files) {
 
 
 // Function to display progress bar for native operations
-void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t totalBytes, std::atomic<size_t>* completedTasks, size_t totalTasks, std::atomic<bool>* isComplete, bool* verbose) {
+void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t totalBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, size_t totalTasks, std::atomic<bool>* isComplete, bool* verbose) {
     // Set up non-blocking input
     struct termios oldt, newt;
     tcgetattr(STDIN_FILENO, &oldt);
@@ -445,7 +445,18 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 
             // Load atomics once per iteration
             const size_t completedTasksValue = completedTasks->load(std::memory_order_relaxed);
+            const size_t failedTasksValue = failedTasks->load(std::memory_order_relaxed);
             const size_t completedBytesValue = bytesTrackingEnabled ? completedBytes->load(std::memory_order_relaxed) : 0;
+
+            // Check if all tasks are complete (either successfully or failed)
+            const bool allTasksProcessed = (completedTasksValue + failedTasksValue) >= totalTasks;
+            const bool allTasksCompleted = completedTasksValue >= totalTasks;
+            const bool allTasksFailed = failedTasksValue >= totalTasks;
+            
+            // Stop processing if all tasks are completed or failed
+            if (allTasksProcessed || allTasksCompleted || allTasksFailed) {
+                *isComplete = true;
+            }
 
             // Calculate progress
             const double tasksProgress = static_cast<double>(completedTasksValue) / totalTasks;
@@ -470,7 +481,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             }
             ss << "] " << std::fixed << std::setprecision(0) << (overallProgress * 100.0)
                << "% (" << completedTasksValue << "/" << totalTasks << ")";
-
+               
             if (bytesTrackingEnabled) {
                 ss << " (" << formatSize(completedBytesValue) << "/" << totalBytesFormatted << ") "
                    << formatSize(static_cast<size_t>(speed)) << "/s";
@@ -479,8 +490,8 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             ss << " Time Elapsed: " << std::fixed << std::setprecision(1) << elapsedSeconds << "s\033[K";
             std::cout << ss.str() << std::flush;
 
-            // Check completion condition
-            if (completedTasksValue >= totalTasks && !enterPressed) {
+            // Check if we should prompt the user
+            if (isComplete->load(std::memory_order_relaxed) && !enterPressed) {
                 rl_bind_key('\f', prevent_readline_keybindings);
                 rl_bind_key('\t', prevent_readline_keybindings);
                 rl_bind_keyseq("\033[A", prevent_readline_keybindings);

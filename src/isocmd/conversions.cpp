@@ -542,11 +542,12 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
 
     std::atomic<size_t> completedBytes(0);
     std::atomic<size_t> completedTasks(0);
+    std::atomic<size_t> failedTasks(0);
     std::atomic<bool> isProcessingComplete(false);
 
     // Use the enhanced progress bar with task tracking
     std::thread progressThread(displayProgressBarWithSize, &completedBytes, 
-        totalBytes, &completedTasks, totalTasks, &isProcessingComplete, &verbose);
+        totalBytes, &completedTasks, &failedTasks, totalTasks, &isProcessingComplete, &verbose);
 
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
@@ -565,11 +566,11 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
         futures.emplace_back(pool.enqueue([imageFilesInChunk = std::move(imageFilesInChunk), 
             &fileList, &successOuts, &skippedOuts, &failedOuts, &deletedOuts, 
             modeMdf, modeNrg, &maxDepth, &promptFlag, &historyPattern, 
-            &completedBytes, &completedTasks, &newISOFound]() {
+            &completedBytes, &completedTasks, &failedTasks, &newISOFound]() {
             // Process each file with task tracking
             convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts, 
                 deletedOuts, modeMdf, modeNrg, maxDepth, promptFlag, historyPattern, 
-                &completedBytes, &completedTasks, newISOFound);
+                &completedBytes, &completedTasks, &failedTasks, newISOFound);
         }));
     }
 
@@ -842,7 +843,7 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
 
 
 // Function to convert a BIN/IMG/MDF/NRG file to ISO format
-void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, const bool& modeMdf, const bool& modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<bool>& newISOFound) {
+void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, const bool& modeMdf, const bool& modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, std::atomic<bool>& newISOFound) {
         
     namespace fs = std::filesystem;
     
@@ -986,8 +987,8 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
 					}
 				}
 			}
-            if (completedTasks) {
-                (*completedTasks)++; // Increment completed tasks counter for failed conversions
+            if (failedTasks) {
+                (*failedTasks)++; // Increment completed tasks counter for failed conversions
             }
         }
     }
