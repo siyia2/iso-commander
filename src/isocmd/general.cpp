@@ -465,6 +465,12 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 				const double bytesProgress = static_cast<double>(completedBytesValue) / totalBytes;
 				overallProgress = std::max(bytesProgress, tasksProgress);
 			}
+			
+			// Force 100% progress when cancelled (or complete)
+			if (isComplete->load(std::memory_order_relaxed)) {
+				overallProgress = 1.0;
+			}
+			
             const int progressPos = static_cast<int>(barWidth * overallProgress);
 
             // Calculate timing and speed
