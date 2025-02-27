@@ -358,10 +358,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 
     auto executeOperation = [&](const std::vector<std::string>& files) {
         for (const auto& operateIso : files) {
-            if (g_operationCancelled.load()) {
-                completedTasks->fetch_add(files.size() - (&operateIso - files.data()));
-                break;
-            }
+            if (g_operationCancelled.load()) break;
 
             fs::path srcPath(operateIso);
             auto [srcDir, srcFile] = extractDirectoryAndFilename(srcPath.string(), "cp_mv_rm");
