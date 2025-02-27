@@ -19,6 +19,11 @@ bool isAlreadyMounted(const std::string& mountPoint) {
 // Function to mount selected ISO files called from processAndMountIsoFiles
 void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks) {
 
+    // Temporary containers for verbose messages
+    std::vector<std::string> tempMountedFiles;
+    std::vector<std::string> tempSkippedMessages;
+    std::vector<std::string> tempMountedFails;
+
     for (const auto& isoFile : isoFiles) {
         // Check for cancellation before processing each ISO
         if (g_operationCancelled.load()) {
@@ -53,9 +58,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
             errorMessage << "\033[1;91mFailed to mnt: \033[1;93m'" 
                          << (useFullPath ? isoDirectory : (isoDirectory + "/" + isoFilename))
                          << "'\033[0m\033[1;91m.\033[0;1m " << errorType << "\033[0m";
-            
-            std::lock_guard<std::mutex> lock(globalSetsMutex); // Lock the mutex
-            mountedFails.insert(errorMessage.str());
+            tempMountedFails.push_back(errorMessage.str());
             failedTasks->fetch_add(1);
         };
 
@@ -64,11 +67,8 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
             std::stringstream errorMessage;
             errorMessage << "\033[1;91mFailed to mnt: \033[1;93m'" << isoDirectory << "/" << isoFilename
                          << "'\033[0m\033[1;91m.\033[0;1m {needsRoot}\033[0m";
-            {
-                std::lock_guard<std::mutex> lock(globalSetsMutex); // Lock the mutex
-                mountedFails.insert(errorMessage.str());
-                failedTasks->fetch_add(1);
-            }
+            tempMountedFails.push_back(errorMessage.str());
+            failedTasks->fetch_add(1);
             continue;
         }
 
@@ -78,9 +78,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
             skippedMessage << "\033[1;93mISO: \033[1;92m'" << isoDirectory << "/" << isoFilename
                            << "'\033[1;93m already mnt@: \033[1;94m'" << mountisoDirectory
                            << "/" << mountisoFilename << "\033[1;94m'\033[1;93m.\033[0m";
-            
-            std::lock_guard<std::mutex> lock(globalSetsMutex); // Lock the mutex
-            skippedMessages.insert(skippedMessage.str());
+            tempSkippedMessages.push_back(skippedMessage.str());
             // Already mounted is considered a successful state
             completedTasks->fetch_add(1);
             continue;
@@ -100,9 +98,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
                 std::stringstream errorMessage;
                 errorMessage << "\033[1;91mFailed to create mount point: \033[1;93m'" << mountPoint
                              << "'\033[0m\033[1;91m. Error: " << e.what() << "\033[0m";
-                
-                std::lock_guard<std::mutex> lock(globalSetsMutex); // Lock the mutex
-                mountedFails.insert(errorMessage.str());
+                tempMountedFails.push_back(errorMessage.str());
                 failedTasks->fetch_add(1);
                 continue;
             }
@@ -113,9 +109,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
         if (!ctx) {
             std::stringstream errorMessage;
             errorMessage << "\033[1;91mFailed to create mount context for: \033[1;93m'" << isoFile << "'\033[0m";
-            
-            std::lock_guard<std::mutex> lock(globalSetsMutex); // Lock the mutex
-            mountedFails.insert(errorMessage.str());
+            tempMountedFails.push_back(errorMessage.str());
             failedTasks->fetch_add(1);
             continue;
         }
@@ -172,19 +166,22 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
             }
             
             mountedFileInfo += "\033[0m";
-
-            // Thread-safe insertion of mounted file info
-            {
-                std::lock_guard<std::mutex> lock(globalSetsMutex); // Lock the mutex
-                mountedFiles.insert(mountedFileInfo);
-                completedTasks->fetch_add(1);  // Increment completed tasks counter
-            }
+            tempMountedFiles.push_back(mountedFileInfo);
+            completedTasks->fetch_add(1);  // Increment completed tasks counter
         } else {
             // Mount failed
             logError("{badFS}");
             fs::remove(mountPoint);
             // Note: failedTasks is already incremented inside logError
         }
+    }
+
+    // Lock once at the end to insert all collected messages at once
+    {
+        std::lock_guard<std::mutex> lock(globalSetsMutex); // Lock the mutex
+        mountedFiles.insert(tempMountedFiles.begin(), tempMountedFiles.end());
+        skippedMessages.insert(tempSkippedMessages.begin(), tempSkippedMessages.end());
+        mountedFails.insert(tempMountedFails.begin(), tempMountedFails.end());
     }
 }
 

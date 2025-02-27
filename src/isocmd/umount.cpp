@@ -75,37 +75,44 @@ std::string modifyDirectoryPath(const std::string& dir) {
 // Function to unmount ISO files asynchronously
 void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks) {
     std::atomic<bool> g_CancelledMessageAdded{false};
-    
+
     // Early exit if cancelled before starting
     if (g_operationCancelled.load()) return;
 
-    // Root check with cancellation awareness
-    if (geteuid() != 0) {
-        for (const auto& isoDir : isoDirs) {
-            if (g_operationCancelled.load()) break;
-            std::string modifiedDir = modifyDirectoryPath(isoDir);
-            std::stringstream errorMessage;
-            errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << modifiedDir
-                        << "\033[1;93m'\033[1;91m.\033[0;1m {needsRoot}";
-            {
-                std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
-                unmountedErrors.emplace(errorMessage.str());
-            }
-            // Increment failed tasks
-            failedTasks->fetch_add(1, std::memory_order_relaxed);
-        }
-        return;
-    }
-
     std::vector<std::pair<std::string, int>> unmountResults;
+    std::vector<std::string> errorMessages;
+    std::vector<std::string> successMessages;
+    std::vector<std::string> removalMessages;
+    
+    // Root check with cancellation awareness
+    bool hasRoot = (geteuid() == 0);
+
+	if (!hasRoot) {
+		for (const auto& isoDir : isoDirs) {
+			if (g_operationCancelled.load()) break;
+			std::string modifiedDir = modifyDirectoryPath(isoDir);
+			std::stringstream errorMessage;
+			errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << modifiedDir
+						<< "\033[1;93m'\033[1;91m.\033[0;1m {needsRoot}";
+			errorMessages.push_back(errorMessage.str());
+			failedTasks->fetch_add(1, std::memory_order_relaxed);
+		}
+		// Lock and insert all Root related error messages
+		{
+			std::lock_guard<std::mutex> lock(globalSetsMutex);
+			for (const auto& msg : errorMessages) {
+				unmountedErrors.emplace(msg);
+			}
+		}
+	}
+
+
+	// If no root, skip unmount operations entirely
+	if (!hasRoot) return;
+
+    // Perform unmount operations and record results
     for (const auto& isoDir : isoDirs) {
         if (g_operationCancelled.load()) {
-            if (!g_CancelledMessageAdded.exchange(true)) {
-                {
-                    std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
-                    unmountedErrors.emplace("\033[1;33mUnmount operation interrupted by user - partial cleanup performed.\033[0m");
-                }
-            }
             break;
         }
         
@@ -118,6 +125,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
         std::vector<std::string> successfulUnmounts;
         std::vector<std::string> failedUnmounts;
         
+        // Categorize unmount results
         for (const auto& [dir, result] : unmountResults) {
             bool isEmpty = isDirectoryEmpty(dir);
             if (result == 0 || isEmpty) {
@@ -131,10 +139,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
         for (const auto& dir : successfulUnmounts) {
             if (isDirectoryEmpty(dir) && rmdir(dir.c_str()) == 0) {
                 std::string modifiedDir = modifyDirectoryPath(dir);
-                {
-                    std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
-                    unmountedFiles.emplace("\033[0;1mUnmounted: \033[1;92m'" + modifiedDir + "\033[1;92m'\033[0m.");
-                }
+                successMessages.push_back("\033[0;1mUnmounted: \033[1;92m'" + modifiedDir + "\033[1;92m'\033[0m.");
                 // Increment completed tasks for each success
                 completedTasks->fetch_add(1, std::memory_order_relaxed);
             }
@@ -144,10 +149,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
         for (const auto& dir : isoDirs) {
             if (dir.find("/mnt/iso_") == 0 && isDirectoryEmpty(dir) && rmdir(dir.c_str()) == 0) {
                 std::string modifiedDir = modifyDirectoryPath(dir);
-                {
-                    std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
-                    unmountedFiles.emplace("\033[0;1mRemoved empty ISO directory: \033[1;92m'" + modifiedDir + "\033[1;92m'\033[0m.");
-                }
+                removalMessages.push_back("\033[0;1mRemoved empty ISO directory: \033[1;92m'" + modifiedDir + "\033[1;92m'\033[0m.");
                 // Increment completed tasks for cleanup success
                 completedTasks->fetch_add(1, std::memory_order_relaxed);
             }
@@ -156,12 +158,23 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
         // Handle failures
         for (const auto& dir : failedUnmounts) {
             std::string modifiedDir = modifyDirectoryPath(dir);
-            {
-                std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
-                unmountedErrors.emplace("\033[1;91mFailed to unmount: \033[1;93m'" + modifiedDir + "'\033[1;91m.\033[0;1m {notAnISO}");
-            }
+            errorMessages.push_back("\033[1;91mFailed to unmount: \033[1;93m'" + modifiedDir + "'\033[1;91m.\033[0;1m {notAnISO}");
             // Increment failed tasks for each failure
             failedTasks->fetch_add(1, std::memory_order_relaxed);
+        }
+    }
+
+    // Lock and insert all messages at once to reduce contention
+    {
+        std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
+        for (const auto& msg : successMessages) {
+            unmountedFiles.emplace(msg);
+        }
+        for (const auto& msg : removalMessages) {
+            unmountedFiles.emplace(msg);
+        }
+        for (const auto& msg : errorMessages) {
+            unmountedErrors.emplace(msg);
         }
     }
 }
