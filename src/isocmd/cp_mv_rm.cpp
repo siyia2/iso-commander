@@ -374,12 +374,12 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     completedBytes->fetch_add(fileSize);
                     verboseIsos.push_back("\033[0;1mDeleted: \033[1;92m'" +
                                             srcDir + "/" + srcFile + "'\033[0;1m.");
-                    completedTasks->fetch_add(1);
+                    completedTasks->fetch_add(1, std::memory_order_release);
                 } else {
                     verboseErrors.push_back("\033[1;91mError deleting: \033[1;93m'" +
                                               srcDir + "/" + srcFile + "'\033[1;91m: " +
                                               ec.message() + ".\033[0;1m");
-                    failedTasks->fetch_add(1);
+                    failedTasks->fetch_add(1, std::memory_order_release);
                     operationSuccessful = false;
                 }
             } else {
@@ -401,7 +401,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                                                   std::string(isMove ? "move" : "copy") +
                                                   " file to itself: \033[1;93m'" +
                                                   srcDir + "/" + srcFile + "'\033[1;91m.\033[0m");
-                        failedTasks->fetch_add(1);
+                        failedTasks->fetch_add(1, std::memory_order_release);
                         operationSuccessful = false;
                         continue;
                     }
@@ -409,7 +409,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     if (!fs::exists(destDir) || !fs::is_directory(destDir)) {
                         verboseErrors.push_back("\033[1;91mInvalid destination: \033[1;93m'" +
                                                   destDirProcessed + "'\033[1;91m.\033[0;1m");
-                        failedTasks->fetch_add(1);
+                        failedTasks->fetch_add(1, std::memory_order_release);
                         operationSuccessful = false;
                         continue;
                     }
@@ -424,7 +424,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                                 verboseErrors.push_back("\033[1;91mFailed to overwrite: \033[1;93m'" +
                                                           destDirProcessed + "/" + destFile +
                                                           "'\033[1;91m - " + ec.message() + ".\033[0;1m");
-                                failedTasks->fetch_add(1);
+                                failedTasks->fetch_add(1, std::memory_order_release);
                                 operationSuccessful = false;
                                 continue;
                             }
@@ -432,7 +432,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                             verboseErrors.push_back("\033[1;91mFile exists: \033[1;93m'" +
                                                       destDirProcessed + "/" + destFile +
                                                       "'\033[1;91m (enable overwrites).\033[0;1m");
-                            failedTasks->fetch_add(1);
+                            failedTasks->fetch_add(1, std::memory_order_release);
                             operationSuccessful = false;
                             continue;
                         }
@@ -484,19 +484,19 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         ": \033[1;93m'" + srcDir + "/" + srcFile + "'\033[1;91m" +
                         " to '" + destDirProcessed + "/': " + errorDetail + "\033[1;91m.\033[0;1m";
                         verboseErrors.push_back(errorMessageInfo);
-                        failedTasks->fetch_add(1);
+                        failedTasks->fetch_add(1, std::memory_order_release);
                         operationSuccessful = false;
                     } else {
                         if (!changeOwnership(destPath)) {
                             operationSuccessful = false;
-                            failedTasks->fetch_add(1);
+                            failedTasks->fetch_add(1, std::memory_order_release);
                         } else {
                             verboseIsos.push_back("\033[0;1m" +
                                                     std::string(isCopy ? "Copied" : "Moved") +
                                                     ": \033[1;92m'" + srcDir + "/" + srcFile +
                                                     "'\033[1m to \033[1;94m'" + destDirProcessed +
                                                     "/" + destFile + "'\033[0;1m.");
-                            completedTasks->fetch_add(1);
+                            completedTasks->fetch_add(1, std::memory_order_release);
                         }
                     }
                 }
@@ -526,12 +526,12 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
             } else {
                 verboseErrors.push_back("\033[1;35mMissing: \033[1;93m'" +
                                           isoDir + "/" + isoFile + "'\033[1;35m.\033[0;1m");
-                failedTasks->fetch_add(1);
+                failedTasks->fetch_add(1, std::memory_order_release);
             }
         } else {
             verboseErrors.push_back("\033[1;91mNot in cache: \033[1;93m'" +
                                       isoDir + "/" + isoFile + "'\033[1;91m.\033[0;1m");
-            failedTasks->fetch_add(1);
+            failedTasks->fetch_add(1, std::memory_order_release);
         }
     }
 

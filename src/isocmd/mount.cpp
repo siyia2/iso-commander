@@ -59,7 +59,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
                          << (useFullPath ? isoDirectory : (isoDirectory + "/" + isoFilename))
                          << "'\033[0m\033[1;91m.\033[0;1m " << errorType << "\033[0m";
             tempMountedFails.push_back(errorMessage.str());
-            failedTasks->fetch_add(1);
+            failedTasks->fetch_add(1, std::memory_order_release);
         };
 
         // Root privilege check
@@ -68,7 +68,6 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
             errorMessage << "\033[1;91mFailed to mnt: \033[1;93m'" << isoDirectory << "/" << isoFilename
                          << "'\033[0m\033[1;91m.\033[0;1m {needsRoot}\033[0m";
             tempMountedFails.push_back(errorMessage.str());
-            failedTasks->fetch_add(1);
             continue;
         }
 
@@ -80,13 +79,14 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
                            << "/" << mountisoFilename << "\033[1;94m'\033[1;93m.\033[0m";
             tempSkippedMessages.push_back(skippedMessage.str());
             // Already mounted is considered a successful state
-            completedTasks->fetch_add(1);
+            completedTasks->fetch_add(1, std::memory_order_release);
             continue;
         }
         
         // Verify ISO file exists
         if (!fs::exists(isoPath)) {
             logError("{missingISO}", true);
+            failedTasks->fetch_add(1, std::memory_order_release);
             continue;
         }
 
@@ -99,7 +99,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
                 errorMessage << "\033[1;91mFailed to create mount point: \033[1;93m'" << mountPoint
                              << "'\033[0m\033[1;91m. Error: " << e.what() << "\033[0m";
                 tempMountedFails.push_back(errorMessage.str());
-                failedTasks->fetch_add(1);
+                failedTasks->fetch_add(1, std::memory_order_release);
                 continue;
             }
         }
@@ -110,7 +110,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
             std::stringstream errorMessage;
             errorMessage << "\033[1;91mFailed to create mount context for: \033[1;93m'" << isoFile << "'\033[0m";
             tempMountedFails.push_back(errorMessage.str());
-            failedTasks->fetch_add(1);
+            failedTasks->fetch_add(1, std::memory_order_release);
             continue;
         }
 
@@ -167,11 +167,12 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
             
             mountedFileInfo += "\033[0m";
             tempMountedFiles.push_back(mountedFileInfo);
-            completedTasks->fetch_add(1);  // Increment completed tasks counter
+            completedTasks->fetch_add(1, std::memory_order_release);  // Increment completed tasks counter
         } else {
             // Mount failed
             logError("{badFS}");
             fs::remove(mountPoint);
+            failedTasks->fetch_add(1, std::memory_order_release);
             // Note: failedTasks is already incremented inside logError
         }
     }

@@ -386,14 +386,12 @@ size_t getTotalFileSize(const std::vector<std::string>& files) {
 
 // Function to display progress bar for native operations
 void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t totalBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, size_t totalTasks, std::atomic<bool>* isComplete, bool* verbose) {
-    // Set up non-blocking input
     struct termios oldt, newt;
     tcgetattr(STDIN_FILENO, &oldt);
     newt = oldt;
     newt.c_lflag &= ~(ICANON | ECHO);
     tcsetattr(STDIN_FILENO, TCSANOW, &newt);
 
-    // Set stdin to non-blocking mode
     int oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
     fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
     
@@ -401,7 +399,6 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
     bool enterPressed = false;
     auto startTime = std::chrono::high_resolution_clock::now();
 
-    // Reusable components
     std::stringstream ssFormatter;
     auto formatSize = [&ssFormatter](double bytes) -> std::string {
         const char* units[] = {" B", " KB", " MB", " GB"};
@@ -417,7 +414,6 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         return ssFormatter.str();
     };
 
-    // Precompute formatted total bytes string if applicable
     const bool bytesTrackingEnabled = (completedBytes != nullptr);
     std::string totalBytesFormatted;
     if (bytesTrackingEnabled) {
@@ -425,46 +421,39 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
     }
 
     try {
-        while (!isComplete->load(std::memory_order_relaxed) || !enterPressed) {
-            // Discard any input during progress update
+        while (!isComplete->load(std::memory_order_acquire) || !enterPressed) {
             char ch;
             while (read(STDIN_FILENO, &ch, 1) > 0);
 
-            // Load atomics once per iteration
-            const size_t completedTasksValue = completedTasks->load(std::memory_order_relaxed);
-            const size_t failedTasksValue = failedTasks->load(std::memory_order_relaxed);
-            const size_t completedBytesValue = bytesTrackingEnabled ? completedBytes->load(std::memory_order_relaxed) : 0;
+            const size_t completedTasksValue = completedTasks->load(std::memory_order_acquire);
+            const size_t failedTasksValue = failedTasks->load(std::memory_order_acquire);
+            const size_t completedBytesValue = bytesTrackingEnabled ? completedBytes->load(std::memory_order_acquire) : 0;
 
-            // Check if all tasks are complete (either successfully or failed)
             const bool allTasksProcessed = (completedTasksValue + failedTasksValue) >= totalTasks;
             if (allTasksProcessed) {
-                isComplete->store(true, std::memory_order_relaxed);
+                isComplete->store(true, std::memory_order_release);
             }
 
-            // Calculate progress
-            const double tasksProgress = static_cast<double>(completedTasksValue + failedTasksValue) / totalTasks;
+            double tasksProgress = static_cast<double>(completedTasksValue + failedTasksValue) / totalTasks;
             double overallProgress = tasksProgress;
             if (bytesTrackingEnabled) {
-                const double bytesProgress = static_cast<double>(completedBytesValue) / totalBytes;
+                double bytesProgress = static_cast<double>(completedBytesValue) / totalBytes;
                 overallProgress = std::max(bytesProgress, tasksProgress);
             }
             
-            // Force 100% progress when complete
-            if (isComplete->load(std::memory_order_relaxed)) {
+            if (isComplete->load(std::memory_order_acquire)) {
                 overallProgress = 1.0;
             }
             
-            const int progressPos = static_cast<int>(barWidth * overallProgress);
+            int progressPos = static_cast<int>(barWidth * overallProgress);
 
-            // Calculate timing and speed
-            const auto currentTime = std::chrono::high_resolution_clock::now();
-            const auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime);
-            const double elapsedSeconds = elapsedTime.count() / 1000.0;
-            const double speed = bytesTrackingEnabled 
+            auto currentTime = std::chrono::high_resolution_clock::now();
+            auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime);
+            double elapsedSeconds = elapsedTime.count() / 1000.0;
+            double speed = bytesTrackingEnabled 
                 ? (elapsedSeconds > 0.0 ? (static_cast<double>(completedBytesValue) / elapsedSeconds) : 0.0)
                 : 0.0;
 
-            // Build output string efficiently
             std::stringstream ss;
             ss << "\r[";
             for (int i = 0; i < barWidth; ++i) {
@@ -481,8 +470,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             ss << " Time Elapsed: " << std::fixed << std::setprecision(1) << elapsedSeconds << "s\033[K";
             std::cout << ss.str() << std::flush;
 
-            // Check if we should prompt the user
-            if (isComplete->load(std::memory_order_relaxed) && !enterPressed) {
+            if (isComplete->load(std::memory_order_acquire) && !enterPressed) {
                 rl_bind_key('\f', prevent_readline_keybindings);
                 rl_bind_key('\t', prevent_readline_keybindings);
                 rl_bind_keyseq("\033[A", prevent_readline_keybindings);
