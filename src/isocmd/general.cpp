@@ -386,64 +386,70 @@ size_t getTotalFileSize(const std::vector<std::string>& files) {
 
 // Function to display progress bar for native operations
 void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t totalBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, size_t totalTasks, std::atomic<bool>* isComplete, bool* verbose) {
+    // Structs to handle terminal settings for non-blocking input
     struct termios oldt, newt;
-    tcgetattr(STDIN_FILENO, &oldt);
-    newt = oldt;
-    newt.c_lflag &= ~(ICANON | ECHO);
-    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    tcgetattr(STDIN_FILENO, &oldt);  // Get current terminal settings
+    newt = oldt;  // Copy old settings to new
+    newt.c_lflag &= ~(ICANON | ECHO);  // Disable canonical mode and echo
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);  // Apply new settings
 
-    int oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
-    fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
-    
-    const int barWidth = 50;
-    bool enterPressed = false;
-    auto startTime = std::chrono::high_resolution_clock::now();
+    int oldf = fcntl(STDIN_FILENO, F_GETFL, 0);  // Get current file descriptor flags
+    fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);  // Set non-blocking mode
+
+    const int barWidth = 50;  // Width of the progress bar
+    bool enterPressed = false;  // Flag to detect if enter is pressed
+    auto startTime = std::chrono::high_resolution_clock::now();  // Record start time
 
     std::stringstream ssFormatter;
     auto formatSize = [&ssFormatter](double bytes) -> std::string {
-        const char* units[] = {" B", " KB", " MB", " GB"};
+        const char* units[] = {" B", " KB", " MB", " GB"};  // Define units for sizes
         int unit = 0;
         double size = bytes;
         while (size >= 1024 && unit < 3) {
-            size /= 1024;
+            size /= 1024;  // Convert to larger units if size exceeds 1024
             unit++;
         }
         ssFormatter.str("");
         ssFormatter.clear();
-        ssFormatter << std::fixed << std::setprecision(2) << size << units[unit];
+        ssFormatter << std::fixed << std::setprecision(2) << size << units[unit];  // Format the size
         return ssFormatter.str();
     };
 
-    const bool bytesTrackingEnabled = (completedBytes != nullptr);
+    const bool bytesTrackingEnabled = (completedBytes != nullptr);  // Check if byte tracking is enabled
     std::string totalBytesFormatted;
     if (bytesTrackingEnabled) {
-        totalBytesFormatted = formatSize(static_cast<double>(totalBytes));
+        totalBytesFormatted = formatSize(static_cast<double>(totalBytes));  // Format total bytes
     }
 
     try {
+        // Main loop to update progress bar
         while (!isComplete->load(std::memory_order_acquire) || !enterPressed) {
             char ch;
-            while (read(STDIN_FILENO, &ch, 1) > 0);
+            while (read(STDIN_FILENO, &ch, 1) > 0);  // Non-blocking read to check for input
 
+            // Load current progress information
             const size_t completedTasksValue = completedTasks->load(std::memory_order_acquire);
             const size_t failedTasksValue = failedTasks->load(std::memory_order_acquire);
             const size_t completedBytesValue = bytesTrackingEnabled ? completedBytes->load(std::memory_order_acquire) : 0;
 
+            // Check if all tasks are processed
             const bool allTasksProcessed = (completedTasksValue + failedTasksValue) >= totalTasks;
             if (allTasksProcessed) {
-                isComplete->store(true, std::memory_order_acquire);
+                isComplete->store(true, std::memory_order_acquire);  // Mark as complete if all tasks are done
             }
 
+            // Calculate task and byte progress
             double tasksProgress = static_cast<double>(completedTasksValue + failedTasksValue) / totalTasks;
             double overallProgress = tasksProgress;
             if (bytesTrackingEnabled) {
                 double bytesProgress = static_cast<double>(completedBytesValue) / totalBytes;
-                overallProgress = std::max(bytesProgress, tasksProgress);
+                overallProgress = std::max(bytesProgress, tasksProgress);  // Use the maximum of task and byte progress
             }
-           
-            
+
+            // Calculate the position of the progress bar
             int progressPos = static_cast<int>(barWidth * overallProgress);
 
+            // Calculate elapsed time and speed
             auto currentTime = std::chrono::high_resolution_clock::now();
             auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime);
             double elapsedSeconds = elapsedTime.count() / 1000.0;
@@ -451,30 +457,36 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
                 ? (elapsedSeconds > 0.0 ? (static_cast<double>(completedBytesValue) / elapsedSeconds) : 0.0)
                 : 0.0;
 
+            // Construct the progress bar display
             std::stringstream ss;
-            ss << "\r[";
+            ss << "\r[";  // Start the progress bar
             for (int i = 0; i < barWidth; ++i) {
-                ss << (i < progressPos ? "=" : (i == progressPos ? ">" : " "));
+                ss << (i < progressPos ? "=" : (i == progressPos ? ">" : " "));  // Fill the bar based on progress
             }
             ss << "] " << std::fixed << std::setprecision(0) << (overallProgress * 100.0)
                << "% (" << completedTasksValue << "/" << totalTasks << ")";
-               
+
+            // Add byte and speed information if enabled
             if (bytesTrackingEnabled) {
                 ss << " (" << formatSize(static_cast<double>(completedBytesValue)) << "/" << totalBytesFormatted << ") "
                    << formatSize(speed) << "/s";
             }
 
+            // Add elapsed time
             ss << " Time Elapsed: " << std::fixed << std::setprecision(1) << elapsedSeconds << "s\033[K";
             std::cout << ss.str() << std::flush;
-            
-             if (isComplete->load(std::memory_order_acquire)) {
-				std::cout << "\r[==================================================>] 100% ("
-						  << completedTasks->load() << "/" << totalTasks << ") "
-						  << (bytesTrackingEnabled ? "(" + formatSize(static_cast<double>(completedBytes->load())) + "/" + totalBytesFormatted + ") " : "")
-						  << "Time Elapsed: " << std::fixed << std::setprecision(1) << (elapsedSeconds) << "s\033[K";
-			}
 
+            // If processing is complete, show a final message
+            if (isComplete->load(std::memory_order_acquire)) {
+                std::cout << "\r[==================================================>] 100% ("
+                          << completedTasks->load() << "/" << totalTasks << ") "
+                          << (bytesTrackingEnabled ? "(" + formatSize(static_cast<double>(completedBytes->load())) + "/" + totalBytesFormatted + ") " : "")
+                          << "Time Elapsed: " << std::fixed << std::setprecision(1) << (elapsedSeconds) << "s\033[K";
+            }
+
+            // Wait for user input (if needed)
             if (isComplete->load(std::memory_order_acquire) && !enterPressed) {
+                // Disable certain key bindings temporarily
                 rl_bind_key('\f', prevent_readline_keybindings);
                 rl_bind_key('\t', prevent_readline_keybindings);
                 rl_bind_keyseq("\033[A", prevent_readline_keybindings);
@@ -482,31 +494,33 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 
                 enterPressed = true;
                 std::cout << "\n\n";
-                tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-                fcntl(STDIN_FILENO, F_SETFL, oldf);
+                tcsetattr(STDIN_FILENO, TCSANOW, &oldt);  // Restore terminal settings
+                fcntl(STDIN_FILENO, F_SETFL, oldf);  // Restore file descriptor flags
 
                 const std::string prompt = "\033[1;94mDisplay verbose output? (y/n):\033[0;1m ";
-                std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
-                
+                std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);  // Prompt for verbose output
+
                 if (input.get()) {
                     *verbose = (std::string(input.get()) == "y" || std::string(input.get()) == "Y");
                 }
 
+                // Restore key bindings after the prompt
                 rl_bind_keyseq("\033[A", rl_get_previous_history);
                 rl_bind_keyseq("\033[B", rl_get_next_history);
             } else {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));  // Sleep for a short duration before checking progress again
             }
         }
     } catch (...) {
+        // Ensure terminal settings are restored in case of an exception
         tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
         fcntl(STDIN_FILENO, F_SETFL, oldf);
-        throw;
+        throw;  // Rethrow the exception
     }
 
     std::cout << std::endl;
-    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-    fcntl(STDIN_FILENO, F_SETFL, oldf);
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);  // Final restoration of terminal settings
+    fcntl(STDIN_FILENO, F_SETFL, oldf);  // Final restoration of file descriptor flags
 }
 
 
