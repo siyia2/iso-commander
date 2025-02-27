@@ -86,7 +86,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
         // Verify ISO file exists
         if (!fs::exists(isoPath)) {
             logError("{missingISO}", true);
-            failedTasks->fetch_add(1, std::memory_order_release);
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
             continue;
         }
 
@@ -172,7 +172,6 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
             // Mount failed
             logError("{badFS}");
             fs::remove(mountPoint);
-            failedTasks->fetch_add(1, std::memory_order_release);
             // Note: failedTasks is already incremented inside logError
         }
     }
