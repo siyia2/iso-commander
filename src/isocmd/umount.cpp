@@ -95,7 +95,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
 			errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << modifiedDir
 						<< "\033[1;93m'\033[1;91m.\033[0;1m {needsRoot}";
 			errorMessages.push_back(errorMessage.str());
-			failedTasks->fetch_add(1, std::memory_order_relaxed);
+			failedTasks->fetch_add(1, std::memory_order_acq_rel);
 		}
 		// Lock and insert all Root related error messages
 		{
@@ -141,7 +141,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
                 std::string modifiedDir = modifyDirectoryPath(dir);
                 successMessages.push_back("\033[0;1mUnmounted: \033[1;92m'" + modifiedDir + "\033[1;92m'\033[0m.");
                 // Increment completed tasks for each success
-                completedTasks->fetch_add(1, std::memory_order_relaxed);
+                completedTasks->fetch_add(1, std::memory_order_acq_rel);
             }
         }
 
@@ -151,7 +151,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
                 std::string modifiedDir = modifyDirectoryPath(dir);
                 removalMessages.push_back("\033[0;1mRemoved empty ISO directory: \033[1;92m'" + modifiedDir + "\033[1;92m'\033[0m.");
                 // Increment completed tasks for cleanup success
-                completedTasks->fetch_add(1, std::memory_order_relaxed);
+                completedTasks->fetch_add(1, std::memory_order_acq_rel);
             }
         }
 
@@ -160,7 +160,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
             std::string modifiedDir = modifyDirectoryPath(dir);
             errorMessages.push_back("\033[1;91mFailed to unmount: \033[1;93m'" + modifiedDir + "'\033[1;91m.\033[0;1m {notAnISO}");
             // Increment failed tasks for each failure
-            failedTasks->fetch_add(1, std::memory_order_relaxed);
+            failedTasks->fetch_add(1, std::memory_order_acq_rel);
         }
     }
 

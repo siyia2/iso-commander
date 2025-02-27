@@ -615,7 +615,7 @@ std::set<std::string> processBatchPaths(const std::vector<std::string>& batchPat
 					break;
 				}
                 if (entry.is_regular_file()) {
-                    totalFiles.fetch_add(1, std::memory_order_relaxed);
+                    totalFiles.fetch_add(1, std::memory_order_acq_rel);
                     if (totalFiles % 100 == 0) { // Update display periodically
 						std::lock_guard<std::mutex> lock(couNtMutex);
                         std::cout << "\r\033[0;1mTotal files processed: " << totalFiles << std::flush;
@@ -876,21 +876,21 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
 
         if (!fs::exists(inputPath)) {
             localFailedMsgs.push_back("\033[1;91mThe specified input file \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m does not exist anymore.\033[0;1m");
-            failedTasks->fetch_add(1, std::memory_order_relaxed);
+            failedTasks->fetch_add(1, std::memory_order_acq_rel);
             continue;
         }
 
         std::ifstream file(inputPath);
         if (!file.good()) {
             localFailedMsgs.push_back("\033[1;91mThe specified file \033[1;93m'" + inputPath + "'\033[1;91m cannot be read. Check permissions.\033[0;1m");
-            failedTasks->fetch_add(1, std::memory_order_relaxed);
+            failedTasks->fetch_add(1, std::memory_order_acq_rel);
             continue;
         }
 
         std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
         if (fileExists(outputPath)) {
             localSkippedMsgs.push_back("\033[1;93mThe corresponding .iso file already exists for: \033[1;92m'" + directory + "/" + fileNameOnly + "'\033[1;93m. Skipped conversion.\033[0;1m");
-            completedTasks->fetch_add(1, std::memory_order_relaxed);
+            completedTasks->fetch_add(1, std::memory_order_acq_rel);
             continue;
         }
 
@@ -910,7 +910,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
                 localFailedMsgs.push_back("\033[1;91mFailed to change ownership of \033[1;93m'" + outDirectory + "/" + outFileNameOnly + "'\033[1;91m: " + strerror(errno) + "\033[0;1m");
             }
             localSuccessMsgs.push_back("\033[1mImage file converted to ISO:\033[0;1m \033[1;92m'" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m.\033[0;1m");
-            completedTasks->fetch_add(1, std::memory_order_relaxed);
+            completedTasks->fetch_add(1, std::memory_order_acq_rel);
         } else {
             localFailedMsgs.push_back("\033[1;91mConversion of \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m " + 
                                       (g_operationCancelled.load() ? "cancelled" : "failed") + ".\033[0;1m");
@@ -921,7 +921,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
                     localDeletedMsgs.push_back("\033[1;91mFailed to delete incomplete ISO file: \033[1;93m'" + outputPath + "'\033[0;1m");
                 }
             }
-			failedTasks->fetch_add(1, std::memory_order_relaxed);
+			failedTasks->fetch_add(1, std::memory_order_acq_rel);
         }
     }
 
