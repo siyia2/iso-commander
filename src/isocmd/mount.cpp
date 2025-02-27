@@ -26,9 +26,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
 
     for (const auto& isoFile : isoFiles) {
         // Check for cancellation before processing each ISO
-        if (g_operationCancelled.load()) {
-            break;
-        }
+        if (g_operationCancelled.load()) break;
 
         namespace fs = std::filesystem;
         fs::path isoPath(isoFile);
@@ -53,10 +51,10 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
         auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint, "mount");
 
         // Validation checks with centralized error handling
-        auto logError = [&](const std::string& errorType, bool useFullPath = false) {
+        auto logError = [&](const std::string& errorType) {
             std::stringstream errorMessage;
             errorMessage << "\033[1;91mFailed to mnt: \033[1;93m'" 
-                         << (useFullPath ? isoDirectory : (isoDirectory + "/" + isoFilename))
+                         << isoDirectory + "/" + isoFilename
                          << "'\033[0m\033[1;91m.\033[0;1m " << errorType << "\033[0m";
             tempMountedFails.push_back(errorMessage.str());
             failedTasks->fetch_add(1, std::memory_order_release);
@@ -68,6 +66,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
             errorMessage << "\033[1;91mFailed to mnt: \033[1;93m'" << isoDirectory << "/" << isoFilename
                          << "'\033[0m\033[1;91m.\033[0;1m {needsRoot}\033[0m";
             tempMountedFails.push_back(errorMessage.str());
+            failedTasks->fetch_add(1, std::memory_order_release);
             continue;
         }
 
@@ -85,8 +84,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
         
         // Verify ISO file exists
         if (!fs::exists(isoPath)) {
-            logError("{missingISO}", true);
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            logError("{missingISO}");
             continue;
         }
 
