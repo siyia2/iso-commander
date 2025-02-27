@@ -431,7 +431,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 
             const bool allTasksProcessed = (completedTasksValue + failedTasksValue) >= totalTasks;
             if (allTasksProcessed) {
-                isComplete->store(true, std::memory_order_release);
+                isComplete->store(true, std::memory_order_acquire);
             }
 
             double tasksProgress = static_cast<double>(completedTasksValue + failedTasksValue) / totalTasks;
@@ -440,10 +440,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
                 double bytesProgress = static_cast<double>(completedBytesValue) / totalBytes;
                 overallProgress = std::max(bytesProgress, tasksProgress);
             }
-            
-            if (isComplete->load(std::memory_order_acquire)) {
-                overallProgress = 1.0;
-            }
+           
             
             int progressPos = static_cast<int>(barWidth * overallProgress);
 
@@ -469,6 +466,13 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 
             ss << " Time Elapsed: " << std::fixed << std::setprecision(1) << elapsedSeconds << "s\033[K";
             std::cout << ss.str() << std::flush;
+            
+             if (isComplete->load(std::memory_order_acquire)) {
+				std::cout << "\r[==================================================>] 100% ("
+						  << completedTasks->load() << "/" << totalTasks << ") "
+						  << (bytesTrackingEnabled ? "(" + formatSize(static_cast<double>(completedBytes->load())) + "/" + totalBytesFormatted + ") " : "")
+						  << "Time Elapsed: " << std::fixed << std::setprecision(1) << (elapsedSeconds) << "s\033[K";
+			}
 
             if (isComplete->load(std::memory_order_acquire) && !enterPressed) {
                 rl_bind_key('\f', prevent_readline_keybindings);
