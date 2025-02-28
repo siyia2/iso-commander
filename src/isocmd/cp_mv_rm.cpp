@@ -384,8 +384,8 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                 }
             } else {
                 bool atLeastOneCopySucceeded = false;
-                int validDestinations = 0;
-                int successfulOperations = 0;
+                std::atomic<int> validDestinations(0);
+				std::atomic<int> successfulOperations(0);
                 
                 for (size_t i = 0; i < destDirs.size(); ++i) {
                     const auto& destDir = destDirs[i];
@@ -421,7 +421,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     }
                     
                     // Count valid destinations for reporting
-                    validDestinations++;
+                    validDestinations.fetch_add(1, std::memory_order_acq_rel);
 
                     if (fs::exists(destPath)) {
                         if (overwriteExisting) {
@@ -452,7 +452,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec);
                         if (success) {
                             atLeastOneCopySucceeded = true;
-                            successfulOperations++;
+                            successfulOperations.fetch_add(1, std::memory_order_acq_rel);
                         }
                     } else if (isMove) {
                         // For single destination move, try rename first
@@ -466,20 +466,20 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                                     verboseErrors.push_back("\033[1;91mMove completed but failed to remove source file: \033[1;93m'" +
                                                               srcDir + "/" + srcFile + "'\033[1;91m - " +
                                                               deleteEc.message() + "\033[0m");
-                                    successfulOperations++;
+                                    successfulOperations.fetch_add(1, std::memory_order_acq_rel);
                                 } else {
-                                    successfulOperations++;
+                                    successfulOperations.fetch_add(1, std::memory_order_acq_rel);
                                 }
                             }
                         } else {
                             completedBytes->fetch_add(fileSize);
                             success = true;
-                            successfulOperations++;
+                            successfulOperations.fetch_add(1, std::memory_order_acq_rel);
                         }
                     } else if (isCopy) {
                         success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec);
                         if (success) {
-                            successfulOperations++;
+                            successfulOperations.fetch_add(1, std::memory_order_acq_rel);
                         }
                     }
 
