@@ -86,9 +86,6 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
     const std::string successPrefix = "\033[0;1mUnmounted: \033[1;92m'";
     const std::string successSuffix = "\033[1;92m'\033[0m.";
     
-    const std::string removalPrefix = "\033[0;1mRemoved empty ISO directory: \033[1;92m'";
-    const std::string removalSuffix = "\033[1;92m'\033[0m.";
-    
     const std::string errorPrefix = "\033[1;91mFailed to unmount: \033[1;93m'";
     const std::string errorSuffix = "'\033[1;91m.\033[0;1m {notAnISO}";
 
@@ -177,22 +174,6 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
                 
                 successMessages.push_back(outputBuffer);
                 // Increment completed tasks for each success
-                completedTasks->fetch_add(1, std::memory_order_acq_rel);
-            }
-        }
-
-        // Additional cleanup pass
-        for (const auto& dir : isoDirs) {
-            if (dir.find("/mnt/iso_") == 0 && isDirectoryEmpty(dir) && rmdir(dir.c_str()) == 0) {
-                std::string modifiedDir = modifyDirectoryPath(dir);
-                
-                outputBuffer.clear();
-                outputBuffer.append(removalPrefix)
-                           .append(modifiedDir)
-                           .append(removalSuffix);
-                
-                removalMessages.push_back(outputBuffer);
-                // Increment completed tasks for cleanup success
                 completedTasks->fetch_add(1, std::memory_order_acq_rel);
             }
         }
