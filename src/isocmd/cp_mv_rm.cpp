@@ -406,9 +406,15 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         continue;
                     }
 
-                    if (!fs::exists(destDir) || !fs::is_directory(destDir)) {
-                        verboseErrors.push_back("\033[1;91mInvalid destination: \033[1;93m'" +
-                                                  destDirProcessed + "'\033[1;91m.\033[0;1m");
+                    // Handle invalid directory as an error code
+                    std::error_code ec;
+                    if (!fs::exists(destDir, ec) || !fs::is_directory(destDir, ec)) {
+                        ec = std::make_error_code(std::errc::no_such_file_or_directory);
+                        std::string errorDetail = "Invalid destination";
+                        verboseErrors.push_back("\033[1;91mError " +
+                                                  std::string(isCopy ? "copying" : "moving") +
+                                                  ": \033[1;93m'" + srcDir + "/" + srcFile + "'\033[1;91m" +
+                                                  " to '" + destDirProcessed + "/': " + errorDetail + "\033[1;91m.\033[0;1m");
                         failedTasks->fetch_add(1, std::memory_order_acq_rel);
                         operationSuccessful = false;
                         continue;
@@ -419,7 +425,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 
                     if (fs::exists(destPath)) {
                         if (overwriteExisting) {
-                            std::error_code ec;
                             if (!fs::remove(destPath, ec)) {
                                 verboseErrors.push_back("\033[1;91mFailed to overwrite: \033[1;93m'" +
                                                           destDirProcessed + "/" + destFile +
@@ -429,16 +434,17 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                                 continue;
                             }
                         } else {
-                            verboseErrors.push_back("\033[1;91mFile exists: \033[1;93m'" +
-                                                      destDirProcessed + "/" + destFile +
-                                                      "'\033[1;91m (enable overwrites).\033[0;1m");
+                            ec = std::make_error_code(std::errc::file_exists);
+                            verboseErrors.push_back("\033[1;91mError " +
+                                                     std::string(isCopy ? "copying" : "moving") +
+                                                     ": \033[1;93m'" + srcDir + "/" + srcFile + "'\033[1;91m" +
+                                                     " to '" + destDirProcessed + "/': File exists (enable overwrites)\033[1;91m.\033[0;1m");
                             failedTasks->fetch_add(1, std::memory_order_acq_rel);
                             operationSuccessful = false;
                             continue;
                         }
                     }
 
-                    std::error_code ec;
                     bool success = false;
 
                     if (isMove && destDirs.size() > 1) {
