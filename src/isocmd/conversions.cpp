@@ -873,27 +873,20 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
         auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath, "conversions");
 
         if (!fs::exists(inputPath)) {
-            localFailedMsgs.push_back("\033[1;91mThe specified input file \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m does not exist anymore.\033[0;1m");
-             // Remove non-existent inputPath
-            if (modeNrg) {
-				nrgFilesCache.erase(
-					std::remove(nrgFilesCache.begin(), nrgFilesCache.end(), inputPath),
-					nrgFilesCache.end()
-				);
-			} else if (modeMdf) {
-				mdfMdsFilesCache.erase(
-					std::remove(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end(), inputPath),
-					mdfMdsFilesCache.end()
-				);
-			} else {
-				binImgFilesCache.erase(
-					std::remove(binImgFilesCache.begin(), binImgFilesCache.end(), inputPath),
-					binImgFilesCache.end()
-				);
-			}
-            failedTasks->fetch_add(1, std::memory_order_acq_rel);
-            continue;
-        }
+			localFailedMsgs.push_back(
+				"\033[1;91mThe specified input file \033[1;93m'" +
+				directory + "/" + fileNameOnly +
+				"'\033[1;91m does not exist anymore.\033[0;1m"
+			);
+
+			// Select the appropriate cache based on the mode.
+			auto& cache = modeNrg ? nrgFilesCache :
+							(modeMdf ? mdfMdsFilesCache : binImgFilesCache);
+			cache.erase(std::remove(cache.begin(), cache.end(), inputPath), cache.end());
+
+			failedTasks->fetch_add(1, std::memory_order_acq_rel);
+			continue;
+		}
 
         std::ifstream file(inputPath);
         if (!file.good()) {
