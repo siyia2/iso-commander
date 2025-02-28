@@ -843,9 +843,7 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
 
 
 // Function to convert a BIN/IMG/MDF/NRG file to ISO format
-void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, 
-                  const bool& modeMdf, const bool& modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern, 
-                  std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, std::atomic<bool>& newISOFound) {
+void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, const bool& modeMdf, const bool& modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, std::atomic<bool>& newISOFound) {
 
     namespace fs = std::filesystem;
 
@@ -876,6 +874,23 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
 
         if (!fs::exists(inputPath)) {
             localFailedMsgs.push_back("\033[1;91mThe specified input file \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m does not exist anymore.\033[0;1m");
+             // Remove non-existent inputPath
+            if (modeNrg) {
+				nrgFilesCache.erase(
+					std::remove(nrgFilesCache.begin(), nrgFilesCache.end(), inputPath),
+					nrgFilesCache.end()
+				);
+			} else if (modeMdf) {
+				mdfMdsFilesCache.erase(
+					std::remove(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end(), inputPath),
+					mdfMdsFilesCache.end()
+				);
+			} else {
+				binImgFilesCache.erase(
+					std::remove(binImgFilesCache.begin(), binImgFilesCache.end(), inputPath),
+					binImgFilesCache.end()
+				);
+			}
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
             continue;
         }
