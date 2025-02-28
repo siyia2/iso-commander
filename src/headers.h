@@ -16,7 +16,6 @@
 #include <fstream>
 #include <functional>
 #include <future>
-#include <libudev.h>
 #include <grp.h>
 #include <iostream>
 #include <libmount/libmount.h>
