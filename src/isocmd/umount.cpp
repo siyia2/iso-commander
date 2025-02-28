@@ -79,36 +79,63 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
     // Early exit if cancelled before starting
     if (g_operationCancelled.load()) return;
 
+    // Pre-define format strings to avoid repeated string constructions
+    const std::string rootErrorPrefix = "\033[1;91mFailed to unmount: \033[1;93m'";
+    const std::string rootErrorSuffix = "\033[1;93m'\033[1;91m.\033[0;1m {needsRoot}";
+    
+    const std::string successPrefix = "\033[0;1mUnmounted: \033[1;92m'";
+    const std::string successSuffix = "\033[1;92m'\033[0m.";
+    
+    const std::string removalPrefix = "\033[0;1mRemoved empty ISO directory: \033[1;92m'";
+    const std::string removalSuffix = "\033[1;92m'\033[0m.";
+    
+    const std::string errorPrefix = "\033[1;91mFailed to unmount: \033[1;93m'";
+    const std::string errorSuffix = "'\033[1;91m.\033[0;1m {notAnISO}";
+
+    // Pre-allocate containers with estimated capacity
+    const size_t estimatedSize = isoDirs.size();
     std::vector<std::pair<std::string, int>> unmountResults;
     std::vector<std::string> errorMessages;
     std::vector<std::string> successMessages;
     std::vector<std::string> removalMessages;
     
+    unmountResults.reserve(estimatedSize);
+    errorMessages.reserve(estimatedSize);
+    successMessages.reserve(estimatedSize);
+    removalMessages.reserve(estimatedSize);
+    
+    // Create a reusable string buffer
+    std::string outputBuffer;
+    outputBuffer.reserve(512);  // Reserve space for a typical message
+    
     // Root check with cancellation awareness
     bool hasRoot = (geteuid() == 0);
 
-	if (!hasRoot) {
-		for (const auto& isoDir : isoDirs) {
-			if (g_operationCancelled.load()) break;
-			std::string modifiedDir = modifyDirectoryPath(isoDir);
-			std::stringstream errorMessage;
-			errorMessage << "\033[1;91mFailed to unmount: \033[1;93m'" << modifiedDir
-						<< "\033[1;93m'\033[1;91m.\033[0;1m {needsRoot}";
-			errorMessages.push_back(errorMessage.str());
-			failedTasks->fetch_add(1, std::memory_order_acq_rel);
-		}
-		// Lock and insert all Root related error messages
-		{
-			std::lock_guard<std::mutex> lock(globalSetsMutex);
-			for (const auto& msg : errorMessages) {
-				unmountedErrors.emplace(msg);
-			}
-		}
-	}
-
-
-	// If no root, skip unmount operations entirely
-	if (!hasRoot) return;
+    if (!hasRoot) {
+        for (const auto& isoDir : isoDirs) {
+            if (g_operationCancelled.load()) break;
+            
+            std::string modifiedDir = modifyDirectoryPath(isoDir);
+            
+            // Use string append operations instead of stringstream
+            outputBuffer.clear();
+            outputBuffer.append(rootErrorPrefix)
+                       .append(modifiedDir)
+                       .append(rootErrorSuffix);
+            
+            errorMessages.push_back(outputBuffer);
+            failedTasks->fetch_add(1, std::memory_order_acq_rel);
+        }
+        
+        // Lock and insert all Root related error messages
+        if (!errorMessages.empty()) {
+            std::lock_guard<std::mutex> lock(globalSetsMutex);
+            unmountedErrors.insert(errorMessages.begin(), errorMessages.end());
+        }
+        
+        // If no root, skip unmount operations entirely
+        return;
+    }
 
     // Perform unmount operations and record results
     for (const auto& isoDir : isoDirs) {
@@ -125,6 +152,9 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
         std::vector<std::string> successfulUnmounts;
         std::vector<std::string> failedUnmounts;
         
+        successfulUnmounts.reserve(estimatedSize);
+        failedUnmounts.reserve(estimatedSize);
+        
         // Categorize unmount results
         for (const auto& [dir, result] : unmountResults) {
             bool isEmpty = isDirectoryEmpty(dir);
@@ -139,7 +169,13 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
         for (const auto& dir : successfulUnmounts) {
             if (isDirectoryEmpty(dir) && rmdir(dir.c_str()) == 0) {
                 std::string modifiedDir = modifyDirectoryPath(dir);
-                successMessages.push_back("\033[0;1mUnmounted: \033[1;92m'" + modifiedDir + "\033[1;92m'\033[0m.");
+                
+                outputBuffer.clear();
+                outputBuffer.append(successPrefix)
+                           .append(modifiedDir)
+                           .append(successSuffix);
+                
+                successMessages.push_back(outputBuffer);
                 // Increment completed tasks for each success
                 completedTasks->fetch_add(1, std::memory_order_acq_rel);
             }
@@ -149,7 +185,13 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
         for (const auto& dir : isoDirs) {
             if (dir.find("/mnt/iso_") == 0 && isDirectoryEmpty(dir) && rmdir(dir.c_str()) == 0) {
                 std::string modifiedDir = modifyDirectoryPath(dir);
-                removalMessages.push_back("\033[0;1mRemoved empty ISO directory: \033[1;92m'" + modifiedDir + "\033[1;92m'\033[0m.");
+                
+                outputBuffer.clear();
+                outputBuffer.append(removalPrefix)
+                           .append(modifiedDir)
+                           .append(removalSuffix);
+                
+                removalMessages.push_back(outputBuffer);
                 // Increment completed tasks for cleanup success
                 completedTasks->fetch_add(1, std::memory_order_acq_rel);
             }
@@ -158,7 +200,13 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
         // Handle failures
         for (const auto& dir : failedUnmounts) {
             std::string modifiedDir = modifyDirectoryPath(dir);
-            errorMessages.push_back("\033[1;91mFailed to unmount: \033[1;93m'" + modifiedDir + "'\033[1;91m.\033[0;1m {notAnISO}");
+            
+            outputBuffer.clear();
+            outputBuffer.append(errorPrefix)
+                       .append(modifiedDir)
+                       .append(errorSuffix);
+            
+            errorMessages.push_back(outputBuffer);
             // Increment failed tasks for each failure
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
         }
@@ -167,14 +215,18 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
     // Lock and insert all messages at once to reduce contention
     {
         std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
-        for (const auto& msg : successMessages) {
-            unmountedFiles.emplace(msg);
+        
+        // Use batch insertion for better performance
+        if (!successMessages.empty()) {
+            unmountedFiles.insert(successMessages.begin(), successMessages.end());
         }
-        for (const auto& msg : removalMessages) {
-            unmountedFiles.emplace(msg);
+        
+        if (!removalMessages.empty()) {
+            unmountedFiles.insert(removalMessages.begin(), removalMessages.end());
         }
-        for (const auto& msg : errorMessages) {
-            unmountedErrors.emplace(msg);
+        
+        if (!errorMessages.empty()) {
+            unmountedErrors.insert(errorMessages.begin(), errorMessages.end());
         }
     }
 }
