@@ -17,9 +17,7 @@ bool isAlreadyMounted(const std::string& mountPoint) {
 
 
 // Function to mount selected ISO files called from processAndMountIsoFiles
-void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, 
-                  std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, 
-                  std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks) {
+void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks) {
 
     // Pre-allocate temporary containers with estimated capacity
     const size_t estimatedSize = isoFiles.size();
