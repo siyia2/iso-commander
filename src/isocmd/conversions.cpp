@@ -874,10 +874,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
 
         if (!fs::exists(inputPath)) {
 			localFailedMsgs.push_back(
-				"\033[1;91mThe specified input file \033[1;93m'" +
-				directory + "/" + fileNameOnly +
-				"'\033[1;91m does not exist anymore.\033[0;1m"
-			);
+				"\033[1;91mThe specified input file \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m does not exist anymore.\033[0;1m");
 
 			// Select the appropriate cache based on the mode.
 			auto& cache = modeNrg ? nrgFilesCache :
