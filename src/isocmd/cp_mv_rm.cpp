@@ -534,10 +534,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                                           isoDir + "/" + isoFile + "'\033[1;35m.\033[0;1m");
                 failedTasks->fetch_add(1, std::memory_order_acq_rel);
             }
-        } else {
-            verboseErrors.push_back("\033[1;91mNot in cache: \033[1;93m'" +
-                                      isoDir + "/" + isoFile + "'\033[1;91m.\033[0;1m");
-            failedTasks->fetch_add(1, std::memory_order_acq_rel);
         }
     }
 
