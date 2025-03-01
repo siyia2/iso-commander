@@ -131,69 +131,93 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
 // Function to prompt for userDestDir and Delete confirmation
 std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::set<std::string>& uniqueErrorMessages, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& historyPattern, bool& isDelete, bool& isCopy, bool& abortDel, bool& overwriteExisting) {
-	
-    auto generateSelectedIsosPrompt = [&]() {
-		std::ostringstream oss;
-		for (const auto& chunk : indexChunks) {
-			for (int index : chunk) {
-				// Extract the directory and filename
-				auto [shortDir, filename] = extractDirectoryAndFilename(isoFiles[index - 1], "cp_mv_rm");
-
-				// Stream formatted entries directly into the buffer
-				oss << "\033[1m-> " << shortDir << "/\033[1;95m" << filename << "\033[0;1m\n";
-			}
-		}
-		return oss.str();
-	};
-
+    
+    auto generateSelectedIsosEntries = [&]() {
+        std::vector<std::string> entries;
+        for (const auto& chunk : indexChunks) {
+            for (int index : chunk) {
+                auto [shortDir, filename] = extractDirectoryAndFilename(isoFiles[index - 1], "cp_mv_rm");
+                std::ostringstream oss;
+                oss << "\033[1m-> " << shortDir << "/\033[95m" << filename << "\033[0;1m\n";
+                entries.push_back(oss.str());
+            }
+        }
+        return entries;
+    };
 
     if (!isDelete) {
+        auto entries = generateSelectedIsosEntries();
+        int totalEntries = entries.size();
+        const int entriesPerPage = 10;
+        int currentPage = 0;
+        const int totalPages = (totalEntries + entriesPerPage - 1) / entriesPerPage;
+
         while (true) {
-			enable_ctrl_d();
-			setupSignalHandlerCancellations();
-			g_operationCancelled.store(false);
-            // Restore readline autocomplete and screen clear bindings
+            enable_ctrl_d();
+            setupSignalHandlerCancellations();
+            g_operationCancelled.store(false);
             rl_bind_key('\f', rl_clear_screen);
             rl_bind_key('\t', rl_complete);
             if (!isCopy) {
                 umountMvRmBreak = true;
             }
-            clearScrollBuffer();
+            clearScrollBuffer(); // Clear the screen before displaying the new page
             clear_history();
             historyPattern = false;
             loadHistory(historyPattern);
             userDestDir.clear();
             if (!uniqueErrorMessages.empty()) {
-				std::cout << "\n";
-				for (const auto& err : uniqueErrorMessages) {
-					std::cout << err << "\n";  // Newline ensures separate lines
-				}
-			}
-			bool isCpMv= true;
-            // Generate the prompt with selected ISOs at the beginning
-            std::string selectedIsosPrompt = generateSelectedIsosPrompt();
-			std::string prompt = "\n" + selectedIsosPrompt + 
+                std::cout << "\n";
+                for (const auto& err : uniqueErrorMessages) {
+                    std::cout << err << "\n";
+                }
+            }
+            bool isCpMv = true;
+
+            int start = currentPage * entriesPerPage;
+            int end = std::min(start + entriesPerPage, totalEntries);
+            std::ostringstream oss;
+            for (int i = start; i < end; ++i) {
+                oss << entries[i];
+            }
+            std::string selectedIsosPrompt = oss.str();
+
+            if (totalPages > 1) {
+                selectedIsosPrompt += "\n\033[1mPage " + std::to_string(currentPage + 1) + " of " + std::to_string(totalPages) + "\n\033[0m";
+            }
+
+            std::string prompt = "\n" + selectedIsosPrompt + 
 			"\n\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ for selected \001\033[1;92m\002ISO\001\033[1;94m\002 to be " + 
 			operationColor + operationDescription + 
 			"\001\033[1;94m\002 into, ? ↵ for help, " +
+			(totalPages > 1 ? "j/k to navigate pages, " : "") + // Conditionally add navigation instructions
 			"↵ to return:\n\001\033[0;1m\002";
 
             std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
-            // Check for EOF (Ctrl+D) or NULL input before processing
-			if (!input.get()) {
-				break; // Exit the loop on EOF
-			}
+            if (!input.get()) {
+                break;
+            }
 
-			std::string mainInputString(input.get());
+            std::string mainInputString(input.get());
 
             rl_bind_key('\f', prevent_readline_keybindings);
             rl_bind_key('\t', prevent_readline_keybindings);
-			
-			if (mainInputString == "?") {
-				helpSearches(isCpMv);
-				continue;
-			}
-			
+
+            if (mainInputString == "n") {
+                if (currentPage < totalPages - 1) {
+                    currentPage++;
+                }
+                continue; // Restart the loop to display the new page
+            } else if (mainInputString == "p") {
+                if (currentPage > 0) {
+                    currentPage--;
+                }
+                continue; // Restart the loop to display the new page
+            } else if (mainInputString == "?") {
+                helpSearches(isCpMv);
+                continue;
+            }
+            
             if (mainInputString.empty()) {
                 umountMvRmBreak = false;
                 userDestDir = "";
@@ -201,63 +225,90 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
                 return userDestDir;
             } else {
                 userDestDir = mainInputString;
-                // Check if userDestDir ends with " -o"
-				if (userDestDir.size() >= 3 && 
-					userDestDir.substr(userDestDir.size() - 3) == " -o") {
-					// Set overwriteExisting to true
-					overwriteExisting = true;
-					// Remove ";^O" from userDestDir
-					userDestDir = userDestDir.substr(0, userDestDir.size() - 3);
-				} else {
-					// Ensure overwriteExisting is false if the suffix is not present
-					overwriteExisting = false;
-				}
-				// Remove "-o" from the input before adding to history
-				std::string historyInput = mainInputString;
-				if (historyInput.size() >= 3 && 
-					historyInput.substr(historyInput.size() - 3) == " -o") {
-					historyInput = historyInput.substr(0, historyInput.size() - 3);
-				}
+                if (userDestDir.size() >= 3 && userDestDir.substr(userDestDir.size() - 3) == " -o") {
+                    overwriteExisting = true;
+                    userDestDir = userDestDir.substr(0, userDestDir.size() - 3);
+                } else {
+                    overwriteExisting = false;
+                }
+                std::string historyInput = mainInputString;
+                if (historyInput.size() >= 3 && historyInput.substr(historyInput.size() - 3) == " -o") {
+                    historyInput = historyInput.substr(0, historyInput.size() - 3);
+                }
                 add_history(historyInput.c_str());
                 break;
             }
         }
     } else {
-		rl_bind_key('\f', rl_clear_screen);
-        clearScrollBuffer();
-		if (!uniqueErrorMessages.empty()) {
-				std::cout << "\n";
-				for (const auto& err : uniqueErrorMessages) {
-					std::cout << err << "\n";  // Newline ensures separate lines
-				}
-			}
-        // Generate the prompt with selected ISOs at the beginning for deletion confirmation
-        std::string selectedIsosPrompt = generateSelectedIsosPrompt();
-        std::string prompt = "\n" + selectedIsosPrompt + "\n\001\033[1;94m\002The selected \001\033[1;92m\002ISO\001\033[1;94m\002 will be \001\033[1;91m\002*PERMANENTLY DELETED FROM DISK*\001\033[1;94m\002. Proceed? (y/n): \001\033[0;1m\002";
+        auto entries = generateSelectedIsosEntries();
+        int totalEntries = entries.size();
+        const int entriesPerPage = 10;
+        int currentPage = 0;
+        const int totalPages = (totalEntries + entriesPerPage - 1) / entriesPerPage;
 
-        std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
-        
-        rl_bind_key('\f', prevent_readline_keybindings);
-        
-        // Check for EOF (Ctrl+D) or NULL input before processing
-		if (!input.get()) {
-			userDestDir = "";
-			abortDel = true;
-			return userDestDir; // Exit on EOF
-		}
-
-		std::string mainInputString(input.get());
-
-        if (!(mainInputString == "y" || mainInputString == "Y")) {
-            umountMvRmBreak = false;
-            abortDel = true;
-            userDestDir = "";
-            std::cout << "\n\033[1;93mDelete operation aborted by user.\033[0;1m\n";
-            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            return userDestDir;
+        rl_bind_key('\f', rl_clear_screen);
+        clearScrollBuffer(); // Clear the screen before displaying the new page
+        if (!uniqueErrorMessages.empty()) {
+            std::cout << "\n";
+            for (const auto& err : uniqueErrorMessages) {
+                std::cout << err << "\n";
+            }
         }
-        umountMvRmBreak = true;
+
+        while (true) {
+            int start = currentPage * entriesPerPage;
+            int end = std::min(start + entriesPerPage, totalEntries);
+            std::ostringstream oss;
+            for (int i = start; i < end; ++i) {
+                oss << entries[i];
+            }
+            std::string selectedIsosPrompt = oss.str();
+
+            if (totalPages > 1) {
+                selectedIsosPrompt += "\n\033[1mPage " + std::to_string(currentPage + 1) + " of " + std::to_string(totalPages) + "\n\033[0m";
+            }
+
+            std::string prompt = "\n" + selectedIsosPrompt + 
+			"\n\001\033[1;94m\002The selected \001\033[1;92m\002ISO\001\033[1;94m\002 will be \001\033[1;91m\002*PERMANENTLY DELETED FROM DISK*\001\033[1;94m\002. Proceed? (y/n)" +
+			(totalPages > 1 ? " or j/k to navigate pages" : "") + // Conditionally add navigation instructions
+			":\001\033[0;1m\002 ";
+
+            std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
+            rl_bind_key('\f', prevent_readline_keybindings);
+
+            if (!input.get()) {
+                userDestDir = "";
+                abortDel = true;
+                return userDestDir;
+            }
+
+            std::string mainInputString(input.get());
+
+            if (mainInputString == "j") {
+                if (currentPage < totalPages - 1) {
+                    currentPage++;
+                }
+                clearScrollBuffer(); // Clear the screen before displaying the new page
+                continue; // Restart the loop to display the new page
+            } else if (mainInputString == "k") {
+                if (currentPage > 0) {
+                    currentPage--;
+                }
+                clearScrollBuffer(); // Clear the screen before displaying the new page
+                continue; // Restart the loop to display the new page
+            } else if (mainInputString == "y" || mainInputString == "Y") {
+                umountMvRmBreak = true;
+                break;
+            } else {
+                umountMvRmBreak = false;
+                abortDel = true;
+                userDestDir = "";
+                std::cout << "\n\033[1;93mDelete operation aborted by user.\033[0;1m\n";
+                std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                return userDestDir;
+            }
+        }
     }
     return userDestDir;
 }
