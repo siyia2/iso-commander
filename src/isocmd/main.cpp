@@ -603,7 +603,7 @@ int prevent_readline_keybindings(int, int) {
 }
 
 
-// Function to bind ctrl+l to also clear the scroll buffer
+// Function to clear scroll buffer in addition to clearing screen with ctrl+l
 int clear_screen_and_buffer(int, int) {
     // Clear scroll buffer and screen (works in most terminals)
     clearScrollBuffer();
@@ -612,6 +612,7 @@ int clear_screen_and_buffer(int, int) {
     rl_forced_update_display();
     return 0;
 }
+
 
 // Function to clear scrollbuffer
 void clearScrollBuffer() {
