@@ -189,7 +189,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
         std::string content = oss.str();
         if (totalPages > 1) {
             content += "\n\033[1mPage " + std::to_string(currentPage + 1) + 
-                       " of " + std::to_string(totalPages) + "\n\033[0m";
+                       "/" + std::to_string(totalPages) + " \033[1;94m(+/-) ↵\n\033[0m";
         }
         return content;
     };
@@ -237,9 +237,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
             std::string prompt = "\n" + selectedIsosPrompt + 
                 "\n\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ for selected \001\033[1;92m\002ISO\001\033[1;94m\002 to be " + 
                 operationColor + operationDescription + 
-                "\001\033[1;94m\002 into, ? ↵ for help, " +
-                (totalPages > 1 ? "(+/-) ↵ for page navigation, " : "") +
-                "↵ to return:\n\001\033[0;1m\002";
+                "\001\033[1;94m\002 into, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
             
             std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
             if (!input.get()) {
@@ -303,9 +301,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
             
             std::string prompt = "\n" + selectedIsosPrompt +
                 "\n\001\033[1;94m\002The selected \001\033[1;92m\002ISO\001\033[1;94m\002 will be " +
-                "\001\033[1;91m\002*PERMANENTLY DELETED FROM DISK*\001\033[1;94m\002," +
-                (totalPages > 1 ? " (+/-) ↵ for page navigation," : "") +
-                " proceed? (y/n):\001\033[0;1m\002 ";
+                "\001\033[1;91m\002*PERMANENTLY DELETED FROM DISK*\001\033[1;94m\002. Proceed? (y/n):\001\033[0;1m\002 ";
             
             std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
             rl_bind_key('\f', prevent_readline_keybindings);
