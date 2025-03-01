@@ -200,7 +200,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
 			"\n\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ for selected \001\033[1;92m\002ISO\001\033[1;94m\002 to be " + 
 			operationColor + operationDescription + 
 			"\001\033[1;94m\002 into, ? ↵ for help, " +
-			(totalPages > 1 ? "+/- ↵ to navigate pages, " : "") + // Conditionally add navigation instructions
+			(totalPages > 1 ? "(+/-) ↵ for page navigation, " : "") + // Conditionally add navigation instructions
 			"↵ to return:\n\001\033[0;1m\002";
 
             std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
@@ -213,12 +213,12 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
             rl_bind_key('\f', prevent_readline_keybindings);
             rl_bind_key('\t', prevent_readline_keybindings);
 
-            if (mainInputString == "+") {
+            if (mainInputString == "+" && totalPages > 1) {
                 if (currentPage < totalPages - 1) {
                     currentPage++;
                 }
                 continue; // Restart the loop to display the new page
-            } else if (mainInputString == "-") {
+            } else if (mainInputString == "-" && totalPages > 1) {
                 if (currentPage > 0) {
                     currentPage--;
                 }
@@ -288,10 +288,11 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
                 selectedIsosPrompt += "\n\033[1mPage " + std::to_string(currentPage + 1) + " of " + std::to_string(totalPages) + "\n\033[0m";
             }
 
-            std::string prompt = "\n" + selectedIsosPrompt + 
-			"\n\001\033[1;94m\002The selected \001\033[1;92m\002ISO\001\033[1;94m\002 will be \001\033[1;91m\002*PERMANENTLY DELETED FROM DISK*\001\033[1;94m\002. Proceed? (y/n)" +
-			(totalPages > 1 ? ", or +/- ↵ to navigate pages" : "") + // Conditionally add navigation instructions
-			":\001\033[0;1m\002 ";
+            std::string prompt = "\n" + selectedIsosPrompt +
+            "\n\001\033[1;94m\002The selected \001\033[1;92m\002ISO\001\033[1;94m\002 will be " +
+            "\001\033[1;91m\002*PERMANENTLY DELETED FROM DISK*\001\033[1;94m\002," +
+            (totalPages > 1 ? " (+/-) ↵ for page navigation," : "") + // Conditionally add navigation instructions before Proceed?
+            " proceed? (y/n):\001\033[0;1m\002 ";
 
             std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
             rl_bind_key('\f', prevent_readline_keybindings);
@@ -304,13 +305,13 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
 
             std::string mainInputString(input.get());
 
-            if (mainInputString == "+") {
+            if (mainInputString == "+" && totalPages > 1) {
                 if (currentPage < totalPages - 1) {
                     currentPage++;
                 }
                 clearScrollBuffer(); // Clear the screen before displaying the new page
                 continue; // Restart the loop to display the new page
-            } else if (mainInputString == "-") {
+            } else if (mainInputString == "-" && totalPages > 1) {
                 if (currentPage > 0) {
                     currentPage--;
                 }
