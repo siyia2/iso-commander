@@ -153,9 +153,9 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
         if (totalEntries <= 100) {
             entriesPerPage = 10;
         } else if (totalEntries <= 1000) {
-            entriesPerPage = 20;
+            entriesPerPage = 25;
         } else {
-            entriesPerPage = 30;
+            entriesPerPage = 50;
         }
         return std::make_tuple(entriesPerPage, (totalEntries + entriesPerPage - 1) / entriesPerPage);
     };
