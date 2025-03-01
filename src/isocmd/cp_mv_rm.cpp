@@ -148,18 +148,20 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
     
     // Common pagination logic for both flows
     auto setupPagination = [](int totalEntries) {
-        // Dynamic entries per page based on totalEntries
-        int entriesPerPage;
-        if (totalEntries <= 100) {
-            entriesPerPage = 10;
-        } else if (totalEntries <= 1000) {
-            entriesPerPage = 25;
-        } else {
-            entriesPerPage = 250;
-        }
-        return std::make_tuple(entriesPerPage, (totalEntries + entriesPerPage - 1) / entriesPerPage);
-    };
+		int entriesPerPage;
     
+		if (totalEntries <= 25) {
+			entriesPerPage = totalEntries;  // Show everything on one page
+		} else {
+			// Ensure at least 25 entries per page and at most 5 pages
+			entriesPerPage = std::max(25, (totalEntries + 4) / 5);
+		}
+    
+		int totalPages = (totalEntries + entriesPerPage - 1) / entriesPerPage;  // Ensure rounding up
+    
+		return std::make_tuple(entriesPerPage, totalPages);
+	};
+
     // Display error messages if any
     auto displayErrors = [&]() {
         if (!uniqueErrorMessages.empty()) {
