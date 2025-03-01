@@ -155,9 +155,9 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
 		} else {
 			entriesPerPage = std::max(25, (totalEntries + 4) / 5);
         
-			// Cap entriesPerPage at 250 if it exceeds, allowing more pages
-			if (entriesPerPage > 250) {
-				entriesPerPage = 250;
+			// Cap entriesPerPage at 200 if it exceeds, allowing more pages
+			if (entriesPerPage > 200) {
+				entriesPerPage = 200;
 			}
 		}
 
