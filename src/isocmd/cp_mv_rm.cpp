@@ -153,9 +153,9 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
         if (totalEntries <= 100) {
             entriesPerPage = 10;
         } else if (totalEntries <= 1000) {
-            entriesPerPage = 25;
-        } else {
             entriesPerPage = 50;
+        } else {
+            entriesPerPage = 250;
         }
         return std::make_tuple(entriesPerPage, (totalEntries + entriesPerPage - 1) / entriesPerPage);
     };
@@ -208,7 +208,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
             enable_ctrl_d();
             setupSignalHandlerCancellations();
             g_operationCancelled.store(false);
-            rl_bind_key('\f', rl_clear_screen);
+            rl_bind_key('\f', clear_screen_and_buffer);
             rl_bind_key('\t', rl_complete);
             
             if (!isCopy) {
@@ -291,7 +291,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
         }
     } else {
         // Delete operation flow
-        rl_bind_key('\f', rl_clear_screen);
+        rl_bind_key('\f', clear_screen_and_buffer);
         
         while (true) {
             std::string selectedIsosPrompt = getPageContent(entries, currentPage, entriesPerPage, totalPages);

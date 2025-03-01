@@ -603,6 +603,16 @@ int prevent_readline_keybindings(int, int) {
 }
 
 
+// Function to bind ctrl+l to also clear the scroll buffer
+int clear_screen_and_buffer(int, int) {
+    // Clear scroll buffer and screen (works in most terminals)
+    clearScrollBuffer();
+    fflush(stdout);
+    // Force readline to redisplay with the current prompt
+    rl_forced_update_display();
+    return 0;
+}
+
 // Function to clear scrollbuffer
 void clearScrollBuffer() {
         std::cout << "\033[3J\033[2J\033[H\033[0m" << std::flush;

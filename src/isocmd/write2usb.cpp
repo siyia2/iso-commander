@@ -301,7 +301,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 		std::string devicePrompt = devicePromptStream.str();
         
         // Restore readline autocomplete and screen clear bindings
-        rl_bind_key('\f', rl_clear_screen);
+        rl_bind_key('\f', clear_screen_and_buffer);
         rl_bind_key('\t', rl_complete);
         
         rl_bind_keyseq("\033[A", rl_get_previous_history); // Restore Up arrow

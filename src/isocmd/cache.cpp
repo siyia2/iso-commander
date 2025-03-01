@@ -595,7 +595,7 @@ void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, 
 		};
         
         // Restore readline autocomplete and screen clear bindings
-        rl_bind_key('\f', rl_clear_screen);
+        rl_bind_key('\f', clear_screen_and_buffer);
 		rl_bind_key('\t', rl_complete);
         bool isCpMv= false;
         // Prompt the user to enter directory paths for manual cache refresh
