@@ -148,7 +148,17 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
     if (!isDelete) {
         auto entries = generateSelectedIsosEntries();
         int totalEntries = entries.size();
-        const int entriesPerPage = 10;
+        
+        // Dynamic entries per page based on totalEntries
+        int entriesPerPage;
+        if (totalEntries <= 100) {
+            entriesPerPage = 10;
+        } else if (totalEntries <= 1000) {
+            entriesPerPage = 100;
+        } else {
+            entriesPerPage = 200;
+        }
+
         int currentPage = 0;
         const int totalPages = (totalEntries + entriesPerPage - 1) / entriesPerPage;
 
@@ -190,7 +200,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
 			"\n\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ for selected \001\033[1;92m\002ISO\001\033[1;94m\002 to be " + 
 			operationColor + operationDescription + 
 			"\001\033[1;94m\002 into, ? ↵ for help, " +
-			(totalPages > 1 ? "j/k to navigate pages, " : "") + // Conditionally add navigation instructions
+			(totalPages > 1 ? "j/k ↵ to navigate pages, " : "") + // Conditionally add navigation instructions
 			"↵ to return:\n\001\033[0;1m\002";
 
             std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
@@ -203,12 +213,12 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
             rl_bind_key('\f', prevent_readline_keybindings);
             rl_bind_key('\t', prevent_readline_keybindings);
 
-            if (mainInputString == "n") {
+            if (mainInputString == "j") {
                 if (currentPage < totalPages - 1) {
                     currentPage++;
                 }
                 continue; // Restart the loop to display the new page
-            } else if (mainInputString == "p") {
+            } else if (mainInputString == "k") {
                 if (currentPage > 0) {
                     currentPage--;
                 }
@@ -242,7 +252,17 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
     } else {
         auto entries = generateSelectedIsosEntries();
         int totalEntries = entries.size();
-        const int entriesPerPage = 10;
+        
+        // Dynamic entries per page based on totalEntries
+        int entriesPerPage;
+        if (totalEntries <= 100) {
+            entriesPerPage = 10;
+        } else if (totalEntries <= 1000) {
+            entriesPerPage = 100;
+        } else {
+            entriesPerPage = 200;
+        }
+
         int currentPage = 0;
         const int totalPages = (totalEntries + entriesPerPage - 1) / entriesPerPage;
 
@@ -270,7 +290,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
 
             std::string prompt = "\n" + selectedIsosPrompt + 
 			"\n\001\033[1;94m\002The selected \001\033[1;92m\002ISO\001\033[1;94m\002 will be \001\033[1;91m\002*PERMANENTLY DELETED FROM DISK*\001\033[1;94m\002. Proceed? (y/n)" +
-			(totalPages > 1 ? " or j/k to navigate pages" : "") + // Conditionally add navigation instructions
+			(totalPages > 1 ? ", or j/k ↵ to navigate pages" : "") + // Conditionally add navigation instructions
 			":\001\033[0;1m\002 ";
 
             std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
