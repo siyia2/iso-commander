@@ -138,7 +138,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
             for (int index : chunk) {
                 auto [shortDir, filename] = extractDirectoryAndFilename(isoFiles[index - 1], "cp_mv_rm");
                 std::ostringstream oss;
-                oss << "\033[1m-> " << shortDir << "/\033[95m" << filename << "\033[0;1m\n";
+                oss << "\033[1m-> " << shortDir << "/\033[95m" << filename << "\033[0m\n";
                 entries.push_back(oss.str());
             }
         }
