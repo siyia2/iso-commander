@@ -252,14 +252,14 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
             
             // Handle navigation and help
             if (mainInputString == "+" && totalPages > 1) {
-                if (currentPage < totalPages - 1) currentPage++;
-                isPageTurn = true; // Set flag for page turn
-                continue;
-            } else if (mainInputString == "-" && totalPages > 1) {
-                if (currentPage > 0) currentPage--;
-                isPageTurn = true; // Set flag for page turn
-                continue;
-            } else if (mainInputString == "?") {
+				currentPage = (currentPage + 1) % totalPages; // Circular next page
+				isPageTurn = true;
+				continue;
+			} else if (mainInputString == "-" && totalPages > 1) {
+				currentPage = (currentPage - 1 + totalPages) % totalPages; // Circular previous page
+				isPageTurn = true;
+				continue;
+			} else if (mainInputString == "?") {
                 helpSearches(isCpMv);
                 isPageTurn = false; // Not a page turn
                 continue;
@@ -320,14 +320,14 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
             
             // Handle pagination
             if (mainInputString == "+" && totalPages > 1) {
-                if (currentPage < totalPages - 1) currentPage++;
-                clearScrollBuffer(); // Clear screen without errors after page turn
-                continue;
-            } else if (mainInputString == "-" && totalPages > 1) {
-                if (currentPage > 0) currentPage--;
-                clearScrollBuffer(); // Clear screen without errors after page turn
-                continue;
-            } 
+				currentPage = (currentPage + 1) % totalPages; // Circular next page
+				clearScrollBuffer();
+				continue;
+			} else if (mainInputString == "-" && totalPages > 1) {
+				currentPage = (currentPage - 1 + totalPages) % totalPages; // Circular previous page
+				clearScrollBuffer();
+				continue;
+			}
             
             // Process yes/no
             if (mainInputString == "y" || mainInputString == "Y") {
