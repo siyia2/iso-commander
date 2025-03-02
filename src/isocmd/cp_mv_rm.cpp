@@ -450,10 +450,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
         if (stat(path.c_str(), &file_stat) == 0) {
             if (file_stat.st_uid != real_uid || file_stat.st_gid != real_gid) {
                 if (chown(path.c_str(), real_uid, real_gid) != 0) {
-                    auto [dir, file] = extractDirectoryAndFilename(path.string(), "cp_mv_rm");
-                    std::string errorMessage = "\033[1;91mFailed to change ownership of '" +
-                                               dir + "/" + file + "': " + strerror(errno) + "\033[0m";
-                    verboseErrors.push_back(errorMessage);
                     return false;
                 }
             }

@@ -911,9 +911,9 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
         auto [outDirectory, outFileNameOnly] = extractDirectoryAndFilename(outputPath, "conversions");
 
         if (conversionSuccess) {
-            if (chown(outputPath.c_str(), real_uid, real_gid) != 0) {
-                localFailedMsgs.push_back("\033[1;91mFailed to change ownership of \033[1;93m'" + outDirectory + "/" + outFileNameOnly + "'\033[1;91m: " + strerror(errno) + "\033[0;1m");
-            }
+			// Attempt to give ownership of succesful files to real user
+            chown(outputPath.c_str(), real_uid, real_gid);
+            
             localSuccessMsgs.push_back("\033[1mImage file converted to ISO:\033[0;1m \033[1;92m'" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m.\033[0;1m");
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
         } else {
