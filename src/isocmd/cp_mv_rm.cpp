@@ -148,22 +148,22 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
     
     // Common pagination logic for both flows
     auto setupPagination = [](int totalEntries) {
-		int entriesPerPage;
+        int entriesPerPage;
 
-		if (totalEntries <= 25) {
-			entriesPerPage = totalEntries;  // Single page
-		} else {
-			entriesPerPage = std::max(25, (totalEntries + 4) / 5);
+        if (totalEntries <= 25) {
+            entriesPerPage = totalEntries;  // Single page
+        } else {
+            entriesPerPage = std::max(25, (totalEntries + 4) / 5);
         
-			// Cap entriesPerPage at 100 if it exceeds, allowing more pages
-			if (entriesPerPage > 100) {
-				entriesPerPage = 100;
-			}
-		}
+            // Cap entriesPerPage at 100 if it exceeds, allowing more pages
+            if (entriesPerPage > 100) {
+                entriesPerPage = 100;
+            }
+        }
 
-		int totalPages = (totalEntries + entriesPerPage - 1) / entriesPerPage;
-		return std::make_tuple(entriesPerPage, totalPages);
-	};
+        int totalPages = (totalEntries + entriesPerPage - 1) / entriesPerPage;
+        return std::make_tuple(entriesPerPage, totalPages);
+    };
 
     // Display error messages if any
     auto displayErrors = [&]() {
@@ -203,7 +203,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
     // Clear screen initially (common for both paths)
     clearScrollBuffer();
     displayErrors(); // Show errors on first display
-    
+
     if (!isDelete) {
         // Copy/Move operation flow
         bool isPageTurn = false; // Flag to track if we're coming from a page turn
@@ -220,7 +220,8 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
                 umountMvRmBreak = true;
             }
             
-            clearScrollBuffer(); // Clear the screen before displaying the new page
+            // Clear the screen before displaying the new page
+            clearScrollBuffer(); 
             
             // Only reset history and display errors on non-page-turn iterations
             if (!isPageTurn) {
@@ -248,25 +249,40 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
             rl_bind_key('\f', prevent_readline_keybindings);
             rl_bind_key('\t', prevent_readline_keybindings);
             
-            // Handle navigation and help
-			if (mainInputString.find('+') != std::string::npos || mainInputString.find('-') != std::string::npos) {
-				int pageShift = 0;
-				if (mainInputString.find('+') != std::string::npos) {
-					pageShift = std::count(mainInputString.begin(), mainInputString.end(), '+');
-				} else if (mainInputString.find('-') != std::string::npos) {
-					pageShift = -std::count(mainInputString.begin(), mainInputString.end(), '-');
-				}
+            // First check for page navigation inputs
+            if (mainInputString.find('+') != std::string::npos || mainInputString.find('-') != std::string::npos) {
+                // Make sure this is just a navigation command, not a path with +/- in it
+                bool isJustNavigation = true;
+                for (char c : mainInputString) {
+                    if (c != '+' && c != '-') {
+                        isJustNavigation = false;
+                        break;
+                    }
+                }
+                
+                if (isJustNavigation) {
+                    int pageShift = 0;
+                    if (mainInputString.find('+') != std::string::npos) {
+                        pageShift = std::count(mainInputString.begin(), mainInputString.end(), '+');
+                    } else if (mainInputString.find('-') != std::string::npos) {
+                        pageShift = -std::count(mainInputString.begin(), mainInputString.end(), '-');
+                    }
 
-				currentPage = (currentPage + pageShift + totalPages) % totalPages; // Circular page navigation
-				isPageTurn = true;
-				continue;
-			} else if (mainInputString == "?") {
-				helpSearches(isCpMv);
-				isPageTurn = false; // Not a page turn
-				continue;
-			} else {
-				isPageTurn = false; // Reset flag for non-page-turn actions
-			}
+                    currentPage = (currentPage + pageShift + totalPages) % totalPages; // Circular page navigation
+                    isPageTurn = true;
+                    continue;
+                }
+                // If not just navigation, treat as normal input
+            }
+            
+            // Then check for help command
+            if (mainInputString == "?") {
+                helpSearches(isCpMv);
+                isPageTurn = false; // Not a page turn
+                continue;
+            } else {
+                isPageTurn = false; // Reset flag for non-page-turn actions
+            }
             
             // Handle empty input (return)
             if (mainInputString.empty()) {
@@ -276,7 +292,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
                 return userDestDir;
             } 
             
-            // Process destination directory
+            // Process destination directory including possible -o flag
             userDestDir = mainInputString;
             
             // Check for overwrite flag
@@ -317,19 +333,27 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
             
             std::string mainInputString(input.get());
             
-            // Handle pagination
-			if (mainInputString.find('+') != std::string::npos || mainInputString.find('-') != std::string::npos) {
-				int pageShift = 0;
-				if (mainInputString.find('+') != std::string::npos) {
-					pageShift = std::count(mainInputString.begin(), mainInputString.end(), '+');
-				} else if (mainInputString.find('-') != std::string::npos) {
-					pageShift = -std::count(mainInputString.begin(), mainInputString.end(), '-');
-				}
+            // Handle pagination - only if the input consists solely of + or - characters
+            bool isJustNavigation = true;
+            for (char c : mainInputString) {
+                if (c != '+' && c != '-') {
+                    isJustNavigation = false;
+                    break;
+                }
+            }
+            
+            if (isJustNavigation && (mainInputString.find('+') != std::string::npos || mainInputString.find('-') != std::string::npos)) {
+                int pageShift = 0;
+                if (mainInputString.find('+') != std::string::npos) {
+                    pageShift = std::count(mainInputString.begin(), mainInputString.end(), '+');
+                } else if (mainInputString.find('-') != std::string::npos) {
+                    pageShift = -std::count(mainInputString.begin(), mainInputString.end(), '-');
+                }
 
-				currentPage = (currentPage + pageShift + totalPages) % totalPages; // Circular page navigation
-				clearScrollBuffer();
-				continue;
-			}
+                currentPage = (currentPage + pageShift + totalPages) % totalPages; // Circular page navigation
+                clearScrollBuffer();
+                continue;
+            }
             
             // Process yes/no
             if (mainInputString == "y" || mainInputString == "Y") {
