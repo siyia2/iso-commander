@@ -168,7 +168,8 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
 		}
         
         if (inputSearch == "?") {
-            helpSearches(isCpMv);
+			bool import2ISO = false;
+            helpSearches(isCpMv, import2ISO);
             continue;
         }
 

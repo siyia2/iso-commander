@@ -281,7 +281,8 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
             
             // Then check for help command
             if (mainInputString == "?") {
-                helpSearches(isCpMv);
+				bool import2ISO = false;
+                helpSearches(isCpMv, import2ISO);
                 isPageTurn = false; // Not a page turn
                 continue;
             } else {

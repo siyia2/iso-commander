@@ -10,6 +10,7 @@ std::vector<std::string> globalIsoFileList;
 // Mutex to prevent race conditions when live updating ISO list
 std::mutex updateListMutex;
 
+
 // Function to automatically update ISO list if auto-update is on
 void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, std::vector<std::string>& filteredFiles, std::vector<std::string>& sourceList, bool& isFiltered, std::string& listSubtype, std::atomic<bool>& newISOFound) {
     while (true) {
@@ -879,9 +880,9 @@ void helpSelections() {
 
 
 // Help guide for directory prompts
-void helpSearches(bool isCpMv) {
-	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
-	disable_ctrl_d();
+void helpSearches(bool isCpMv, bool import2ISO) {
+    std::signal(SIGINT, SIG_IGN);  // Ignore Ctrl+C
+    disable_ctrl_d();
     clearScrollBuffer();
     
     // Title
@@ -890,32 +891,43 @@ void helpSearches(bool isCpMv) {
     std::cout << "\033[1;32m1. Selecting FolderPaths:\033[0m\n"
               << "   • Single directory: Enter a directory (e.g., '/directory/')\n"
               << "   • Multiple directories: Separate with ; (e.g., '/directory1/;/directory2/')" << std::endl;
-    if (isCpMv) std::cout << "   • Overwrite files for cp/mv: Append -o (e.g., '/directory/ -o' or '/directory1/;/directory2/ -o')\n" << std::endl;
+    if (isCpMv) {
+        std::cout << "   • Overwrite files for cp/mv: Append -o (e.g., '/directory/ -o' or '/directory1/;/directory2/ -o')\n" << std::endl;
+    }
     if (!isCpMv) {
-		std::cout << "\n\033[1;32m2. Special Cleanup Commands:\033[0m\n"
-				<< "   • Enter \033[1;33m'!clr'\033[0m - Clear cache:\n"
-				<< "     - In Convert2ISO: Clears corresponding RAM cache\n"
-				<< "     - In ImportISO: Clears on-disk ISO cache\n"
-				<< "   • Enter \033[1;33m'!clr_paths'\033[0m - Clear folder path history\n"
-				<< "   • Enter \033[1;33m'!clr_filter'\033[0m - Clear filter history\n" << std::endl;
-              
-		std::cout << "\033[1;32m3. Special Display Commands:\033[0m\n"
-				<< "   • Enter \033[1;34m'ls'\033[0m - List cached image file entries (Convert2ISO only)\n"
-				<< "   • Enter \033[1;34m'stats'\033[0m - View on-disk ISO cache statistics (ImportISO only)\n" << std::endl;
-              
-		std::cout << "\033[1;32m4. Special Configuration Commands:\033[0m\n\n"
-			<< "    \033[1;38;5;208m1. Auto-Update ISO Cache:\033[0m\n"
-			<< "        • Enter \033[1;35m'*auto_on'\033[0m or \033[1;35m'*auto_off'\033[0m - Enable/Disable ISO cache auto-update via stored folder paths (ImportISO only)\n\n"
-			<< "    \033[1;38;5;208m2. Set Default Display Modes (fl = full list, cl = compact list):\033[0m\n"
-			<< "        • Mount list:       Enter \033[1;35m'*fl_m'\033[0m or \033[1;35m'*cl_m'\033[0m\n"
-			<< "        • Umount list:      Enter \033[1;35m'*fl_u'\033[0m or \033[1;35m'*cl_u'\033[0m\n"
-			<< "        • cp/mv/rm list:    Enter \033[1;35m'*fl_o'\033[0m or \033[1;35m'*cl_o'\033[0m\n"
-			<< "        • Write list:       Enter \033[1;35m'*fl_w'\033[0m or \033[1;35m'*cl_w'\033[0m\n"
-			<< "        • Conversion lists: Enter \033[1;35m'*fl_c'\033[0m or \033[1;35m'*cl_c'\033[0m\n"
-			<< "        • Combine settings: Use multiple letters after \033[1;35m'*fl_'\033[0m or \033[1;35m'*cl_'\033[0m (e.g., \033[1;35m'*cl_mu'\033[0m for mount and umount lists)\n"
-			<< std::endl;
-	}
-                
+        std::cout << "\n\033[1;32m2. Special Cleanup Commands:\033[0m\n";
+        if (!import2ISO) {
+            std::cout << "   • Enter \033[1;33m'!clr'\033[0m - Clear corresponding RAM cache\n";
+        }
+        if (import2ISO) {
+            std::cout << "   • Enter \033[1;33m'!clr'\033[0m - Clear on-disk ISO cache\n";
+        }
+	std::cout << "   • Enter \033[1;33m'!clr_paths'\033[0m - Clear folder path history\n"
+			  << "   • Enter \033[1;33m'!clr_filter'\033[0m - Clear filter history\n" << std::endl;
+        std::cout << "\033[1;32m3. Special Display Commands:\033[0m\n";
+        if (!import2ISO) {
+            std::cout << "   • Enter \033[1;34m'ls'\033[0m - List cached image file entries\n\n";
+        }
+        if (import2ISO) {
+            std::cout << "   • Enter \033[1;34m'stats'\033[0m - View on-disk ISO cache statistics\n" << std::endl;
+        }
+					
+       std::cout << "\033[1;32m" << "4. Special Configuration Commands:\033[0m\n\n";
+       
+		if (import2ISO) { 
+			std::cout << "   \033[1;38;5;208m1. Auto-Update ISO Cache:\033[0m\n"
+                     << "      • Enter \033[1;35m'*auto_on'\033[0m or \033[1;35m'*auto_off'\033[0m - Enable/Disable ISO cache auto-update via stored folder paths (default: disabled)\n\n";
+		}
+				std::cout << "   \033[1;38;5;208m" << (import2ISO ? "2." : "1.") << " Set Default Display Modes (fl = full list, cl = compact list):\033[0m\n"
+						<< "      • Mount list:       Enter \033[1;35m'*fl_m'\033[0m or \033[1;35m'*cl_m'\033[0m\n"
+						<< "      • Umount list:      Enter \033[1;35m'*fl_u'\033[0m or \033[1;35m'*cl_u'\033[0m\n"
+						<< "      • cp/mv/rm list:    Enter \033[1;35m'*fl_o'\033[0m or \033[1;35m'*cl_o'\033[0m\n"
+						<< "      • Write list:       Enter \033[1;35m'*fl_w'\033[0m or \033[1;35m'*cl_w'\033[0m\n"
+						<< "      • Conversion lists: Enter \033[1;35m'*fl_c'\033[0m or \033[1;35m'*cl_c'\033[0m\n"
+						<< "      • Combine settings: Use multiple letters after \033[1;35m'*fl_'\033[0m or \033[1;35m'*cl_'\033[0m (e.g., \033[1;35m'*cl_mu'\033[0m for mount and umount lists)\n"
+                  << std::endl;
+    }
+    
     // Prompt to continue
     std::cout << "\033[1;32m↵ to return...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');

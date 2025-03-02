@@ -573,6 +573,7 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
 // Function for manual cache refresh
 void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, bool historyPattern, std::atomic<bool>& newISOFound) {
 	
+	
 	enable_ctrl_d();
 	// Setup signal handler at the start of the operation
     setupSignalHandlerCancellations();
@@ -611,7 +612,8 @@ void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, 
             input = searchQuery.get();
 			
 			if (input == "?") {
-				helpSearches(isCpMv);
+				bool import2ISO = true;
+				helpSearches(isCpMv, import2ISO);
 				input = "";
 				std::string dummyDir = "";
 				manualRefreshCache(dummyDir, promptFlag, maxDepth, historyPattern, newISOFound);
