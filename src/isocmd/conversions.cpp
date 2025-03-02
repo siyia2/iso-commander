@@ -865,7 +865,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
     std::string real_username;
     std::string real_groupname;
     
-    getRealUserId(real_uid, real_gid, real_username, real_groupname, failedOuts);
+    getRealUserId(real_uid, real_gid, real_username, real_groupname);
 
     // Thread-local message buffers to reduce lock contention
     std::vector<std::string> localSuccessMsgs, localFailedMsgs, localSkippedMsgs, localDeletedMsgs;

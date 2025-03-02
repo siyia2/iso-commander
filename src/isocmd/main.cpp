@@ -781,7 +781,7 @@ void sortFilesCaseInsensitive(std::vector<std::string>& files) {
 
 
 // Function to get the sudo invoker ID
-void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname,std::set<std::string>& uniqueErrors) {
+void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname) {
 
     // Get the real user ID and group ID (of the user who invoked sudo)
     const char* sudo_uid = std::getenv("SUDO_UID");
@@ -792,7 +792,7 @@ void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username,
             real_uid = static_cast<uid_t>(std::stoul(sudo_uid));
             real_gid = static_cast<gid_t>(std::stoul(sudo_gid));
         } catch (const std::exception& e) {
-            uniqueErrors.insert("\033[1;91mError parsing SUDO_UID or SUDO_GID environment variables.\033[0;1m");
+        //    uniqueErrors.insert("\033[1;91mError parsing SUDO_UID or SUDO_GID environment variables.\033[0;1m");
             return;
         }
     } else {
@@ -804,7 +804,7 @@ void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username,
     // Get real user's name
     struct passwd *pw = getpwuid(real_uid);
     if (pw == nullptr) {
-        uniqueErrors.insert("\033[1;91mError getting user information: " + std::string(strerror(errno)) + "\033[0;1m");
+     //   uniqueErrors.insert("\033[1;91mError getting user information: " + std::string(strerror(errno)) + "\033[0;1m");
         return;
     }
     real_username = pw->pw_name;
@@ -812,7 +812,7 @@ void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username,
     // Get real group name
     struct group *gr = getgrgid(real_gid);
     if (gr == nullptr) {
-        uniqueErrors.insert("\033[1;91mError getting group information: " + std::string(strerror(errno)) + "\033[0;1m");
+     //   uniqueErrors.insert("\033[1;91mError getting group information: " + std::string(strerror(errno)) + "\033[0;1m");
         return;
     }
     real_groupname = gr->gr_name;

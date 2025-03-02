@@ -421,7 +421,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
     gid_t real_gid;
     std::string real_username;
     std::string real_groupname;
-    getRealUserId(real_uid, real_gid, real_username, real_groupname, operationErrors);
+    getRealUserId(real_uid, real_gid, real_username, real_groupname);
 
     // Local containers to accumulate verbose messages
     std::vector<std::string> verboseIsos;
