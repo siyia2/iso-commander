@@ -890,11 +890,11 @@ void helpSearches(bool isCpMv, bool import2ISO) {
           << (isCpMv ? "Cp/Mv" : (import2ISO ? "Import2ISO" : "Convert2ISO")) 
           << " Prompt =====\033[0m\n" << std::endl;
     
-    std::cout << "\033[1;32m1. Selecting FolderPaths:\033[0m\n"
-              << "   • Single directory: Enter a directory (e.g., '/directory/')\n"
-              << "   • Multiple directories: Separate with ; (e.g., '/directory1/;/directory2/')" << std::endl;
+    std::cout << "\033[1;32m" << (isCpMv ? " " : "1. ") << "Selecting FolderPaths:\033[0m\n"
+              << (isCpMv ? " " : "   ") <<"• Single directory: Enter a directory (e.g., '/directory/')\n"
+              << (isCpMv ? " " : "   ") <<"• Multiple directories: Separate with ; (e.g., '/directory1/;/directory2/')" << std::endl;
     if (isCpMv) {
-        std::cout << "   • Overwrite files for cp/mv: Append -o (e.g., '/directory/ -o' or '/directory1/;/directory2/ -o')\n" << std::endl;
+        std::cout << " • Overwrite files for cp/mv: Append -o (e.g., '/directory/ -o' or '/directory1/;/directory2/ -o')\n" << std::endl;
     }
     if (!isCpMv) {
         std::cout << "\n\033[1;32m2. Special Cleanup Commands:\033[0m\n";
@@ -917,16 +917,16 @@ void helpSearches(bool isCpMv, bool import2ISO) {
        std::cout << "\033[1;32m" << "4. Special Configuration Commands:\033[0m\n\n";
        
 		if (import2ISO) { 
-			std::cout << "   \033[1;38;5;208m1. Auto-Update ISO Cache:\033[0m\n"
+			std::cout << "   \033[1;38;5;208mA. Auto-Update ISO Cache:\033[0m\n"
                       << "      • Enter \033[1;35m'*auto_on'\033[0m or \033[1;35m'*auto_off'\033[0m - Enable/Disable ISO cache auto-update via stored folder paths (default: disabled)\n\n";
 		}
-				std::cout << "   \033[1;38;5;208m" << (import2ISO ? "2." : "1.") << " Set Default Display Modes (fl = full list, cl = compact list):\033[0m\n"
-						<< "      • Mount list:       Enter \033[1;35m'*fl_m'\033[0m or \033[1;35m'*cl_m'\033[0m\n"
-						<< "      • Umount list:      Enter \033[1;35m'*fl_u'\033[0m or \033[1;35m'*cl_u'\033[0m\n"
-						<< "      • cp/mv/rm list:    Enter \033[1;35m'*fl_o'\033[0m or \033[1;35m'*cl_o'\033[0m\n"
-						<< "      • Write list:       Enter \033[1;35m'*fl_w'\033[0m or \033[1;35m'*cl_w'\033[0m\n"
-						<< "      • Conversion lists: Enter \033[1;35m'*fl_c'\033[0m or \033[1;35m'*cl_c'\033[0m\n"
-						<< "      • Combine settings: Use multiple letters after \033[1;35m'*fl_'\033[0m or \033[1;35m'*cl_'\033[0m (e.g., \033[1;35m'*cl_mu'\033[0m for mount and umount lists)\n"
+				std::cout << "\033[1;38;5;208m   B. Set Default Display Modes (fl = full list, cl = compact list):\033[0m\n"
+						<<  "      • Mount list:       Enter \033[1;35m'*fl_m'\033[0m or \033[1;35m'*cl_m'\033[0m\n"
+						<<  "      • Umount list:      Enter \033[1;35m'*fl_u'\033[0m or \033[1;35m'*cl_u'\033[0m\n"
+						<<  "      • cp/mv/rm list:    Enter \033[1;35m'*fl_o'\033[0m or \033[1;35m'*cl_o'\033[0m\n"
+						<<  "      • Write list:       Enter \033[1;35m'*fl_w'\033[0m or \033[1;35m'*cl_w'\033[0m\n"
+						<<  "      • Conversion lists: Enter \033[1;35m'*fl_c'\033[0m or \033[1;35m'*cl_c'\033[0m\n"
+						<<  "      • Combine settings: Use multiple letters after \033[1;35m'*fl_'\033[0m or \033[1;35m'*cl_'\033[0m (e.g., \033[1;35m'*cl_mu'\033[0m for mount and umount lists)\n"
                   << std::endl;
     }
     
@@ -945,10 +945,10 @@ void helpMappings() {
     // Title
     std::cout << "\n\033[1;36m===== Help Guide For Mappings =====\033[0m\n" << std::endl;
     
-    std::cout << "\033[1;32m1. Selecting Mappings:\033[0m\n"
-			  << "   • Mapping = NewISOIndex>RemovableUSBDevice\n"
-              << "   • Single mapping: Enter a mapping (e.g., '1>/dev/sdc')\n"
-              << "   • Multiple mappings: Separate with ; (e.g., '1>/dev/sdc;2>/dev/sdd' or '1>/dev/sdc;1>/dev/sdd')\n" << std::endl;
+    std::cout << "\033[1;32m Selecting Mappings:\033[0m\n"
+			  << " • Mapping = NewISOIndex>RemovableUSBDevice\n"
+              << " • Single mapping: Enter a mapping (e.g., '1>/dev/sdc')\n"
+              << " • Multiple mappings: Separate with ; (e.g., '1>/dev/sdc;2>/dev/sdd' or '1>/dev/sdc;1>/dev/sdd')\n" << std::endl;
                   
     // Prompt to continue
     std::cout << "\033[1;32m↵ to return...\033[0;1m";
