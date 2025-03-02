@@ -435,22 +435,8 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
     }
 
     auto changeOwnership = [&](const fs::path& path) -> bool {
-        struct stat file_stat;
-        if (stat(path.c_str(), &file_stat) == 0) {
-            if (file_stat.st_uid != real_uid || file_stat.st_gid != real_gid) {
-                if (chown(path.c_str(), real_uid, real_gid) != 0) {
-                    return false;
-                }
-            }
-        } else {
-            auto [dir, file] = extractDirectoryAndFilename(path.string(), "cp_mv_rm");
-            std::string errorMessage = "\033[1;91mFailed to get file info for '" +
-                                       dir + "/" + file + "': " + strerror(errno) + "\033[0m";
-            verboseErrors.push_back(errorMessage);
-            return false;
-        }
-        return true;
-    };
+		return chown(path.c_str(), real_uid, real_gid) == 0;
+	};
 
     auto executeOperation = [&](const std::vector<std::string>& files) {
         for (const auto& operateIso : files) {
