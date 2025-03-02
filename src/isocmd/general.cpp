@@ -886,7 +886,9 @@ void helpSearches(bool isCpMv, bool import2ISO) {
     clearScrollBuffer();
     
     // Title
-    std::cout << "\n\033[1;36m===== Help Guide For FolderPath Prompts =====\033[0m\n" << std::endl;
+    std::cout << "\n\033[1;36m===== Help Guide For " 
+          << (isCpMv ? "Cp/Mv" : (import2ISO ? "Import2ISO" : "Convert2ISO")) 
+          << " Prompt =====\033[0m\n" << std::endl;
     
     std::cout << "\033[1;32m1. Selecting FolderPaths:\033[0m\n"
               << "   • Single directory: Enter a directory (e.g., '/directory/')\n"
