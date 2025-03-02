@@ -130,7 +130,7 @@ bool isValidInput(const std::string& input);
 
 // voids
 void helpSelections();
-void helpSearches(bool isCpMv);
+void helpSearches(bool isCpMv, bool import2ISO);
 void helpMappings();
 void clearHistory(const std::string& inputSearch);
 void setDisplayMode(const std::string& inputSearch);
