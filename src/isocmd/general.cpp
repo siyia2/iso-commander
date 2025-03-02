@@ -916,7 +916,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
        
 		if (import2ISO) { 
 			std::cout << "   \033[1;38;5;208m1. Auto-Update ISO Cache:\033[0m\n"
-                     << "      • Enter \033[1;35m'*auto_on'\033[0m or \033[1;35m'*auto_off'\033[0m - Enable/Disable ISO cache auto-update via stored folder paths (default: disabled)\n\n";
+                      << "      • Enter \033[1;35m'*auto_on'\033[0m or \033[1;35m'*auto_off'\033[0m - Enable/Disable ISO cache auto-update via stored folder paths (default: disabled)\n\n";
 		}
 				std::cout << "   \033[1;38;5;208m" << (import2ISO ? "2." : "1.") << " Set Default Display Modes (fl = full list, cl = compact list):\033[0m\n"
 						<< "      • Mount list:       Enter \033[1;35m'*fl_m'\033[0m or \033[1;35m'*cl_m'\033[0m\n"
