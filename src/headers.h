@@ -116,7 +116,7 @@ void clearScrollBuffer();
 void setupReadlineToIgnoreCtrlC();
 void sortFilesCaseInsensitive(std::vector<std::string>& files);
 void clearMessageAfterTimeout(int timeoutSeconds, std::atomic<bool>& isAtMain, std::atomic<bool>& isImportRunning, std::atomic<bool>& messageActive);
-void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname,std::set<std::string>& uniqueErrors);
+void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname);
 
 // stds
 std::map<std::string, std::string> readConfig(const std::string& configPath);
