@@ -945,7 +945,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
 				  << "   • Enter \033[1;33m'!clr_filter'\033[0m - Clear filter history\n" << std::endl;
 		std::cout << "\033[1;32m3. Special Display Command:\033[0m\n";
         if (!import2ISO) {
-            std::cout << "   • Enter \033[1;34m'ls'\033[0m - List cached image file entries\n\n";
+            std::cout << "   • Enter \033[1;34m'ls'\033[0m - List corresponding cached entries\n\n";
         }
         if (import2ISO) {
             std::cout << "   • Enter \033[1;34m'stats'\033[0m - View on-disk ISO cache statistics\n" << std::endl;
@@ -957,7 +957,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
 			std::cout << "   \033[1;38;5;208mA. Auto-Update ISO Cache:\033[0m\n"
                       << "      • Enter \033[1;35m'*auto_on'\033[0m or \033[1;35m'*auto_off'\033[0m - Enable/Disable ISO cache auto-update via stored folder paths (default: disabled)\n\n";
 		}
-				std::cout << "\033[1;38;5;208m   B. Set Default Display Modes (fl = full list, cl = compact list):\033[0m\n"
+				std::cout << "\033[1;38;5;208m   B. Set Default Display Modes (fl = full list, cl = compact list | default: cl, unmount → fl):\033[0m\n"
 						<<  "      • Mount list:       Enter \033[1;35m'*fl_m'\033[0m or \033[1;35m'*cl_m'\033[0m\n"
 						<<  "      • Umount list:      Enter \033[1;35m'*fl_u'\033[0m or \033[1;35m'*cl_u'\033[0m\n"
 						<<  "      • cp/mv/rm list:    Enter \033[1;35m'*fl_o'\033[0m or \033[1;35m'*cl_o'\033[0m\n"
