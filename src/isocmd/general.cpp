@@ -887,7 +887,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
     
     // Title
     std::cout << "\n\033[1;36m===== Help Guide For " 
-          << (isCpMv ? "Cp/Mv" : (import2ISO ? "Import2ISO" : "Convert2ISO")) 
+          << (isCpMv ? "Cp/Mv FolderPath" : (import2ISO ? "Import2ISO FolderPath" : "Convert2ISO FolderPath")) 
           << " Prompt =====\033[0m\n" << std::endl;
     
     std::cout << "\033[1;32m" << (isCpMv ? " " : "1. ") << "Selecting FolderPaths:\033[0m\n"
@@ -906,7 +906,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
         }
 		std::cout << "   • Enter \033[1;33m'!clr_paths'\033[0m - Clear folder path history\n"
 				  << "   • Enter \033[1;33m'!clr_filter'\033[0m - Clear filter history\n" << std::endl;
-		std::cout << "\033[1;32m3. Special Display Commands:\033[0m\n";
+		std::cout << "\033[1;32m3. Special Display Command:\033[0m\n";
         if (!import2ISO) {
             std::cout << "   • Enter \033[1;34m'ls'\033[0m - List cached image file entries\n\n";
         }
