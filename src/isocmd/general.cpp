@@ -846,6 +846,43 @@ void clearHistory(const std::string& inputSearch) {
 }
 
 
+// Trim function to remove leading and trailing whitespaces and spaces between semicolons
+std::string trimWhitespace(const std::string& str) {
+    // Step 1: Trim leading and trailing spaces
+    size_t first = str.find_first_not_of(" \t\n\r\f\v");
+    size_t last = str.find_last_not_of(" \t\n\r\f\v");
+    
+    if (first == std::string::npos || last == std::string::npos)
+        return "";
+    
+    std::string trimmed = str.substr(first, (last - first + 1));
+    
+    // Step 2: Remove spaces around semicolons
+    // Iterate through the string and remove spaces around semicolons
+    std::string result;
+    bool insideSemicolon = false;
+
+    for (size_t i = 0; i < trimmed.length(); ++i) {
+        if (trimmed[i] == ';') {
+            // If we hit a semicolon, add it directly and skip spaces that follow
+            result += ';';
+            insideSemicolon = true;
+        }
+        else if (insideSemicolon && trimmed[i] == ' ') {
+            // Skip spaces after a semicolon
+            continue;
+        }
+        else {
+            // Otherwise, just append the character
+            result += trimmed[i];
+            insideSemicolon = false;
+        }
+    }
+    
+    return result;
+}
+
+
 // Function to display how to select items from lists
 void helpSelections() {
 	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C

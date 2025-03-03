@@ -269,7 +269,9 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
                 break;
             }
             
-            std::string mainInputString(input.get());
+            // Trim leading and trailing whitespaces but keep spaces inside
+			std::string mainInputString = trimWhitespace(input.get());
+		
             rl_bind_key('\f', prevent_readline_keybindings);
             rl_bind_key('\t', prevent_readline_keybindings);
             
@@ -434,9 +436,22 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
         destDirs.push_back(fs::path(destDir).string());
     }
 
+    // Create a map to track file locks for destination paths
+    std::mutex fileLocksMutex;
+    std::map<std::string, std::unique_ptr<std::mutex>> fileLocks;
+
+    // Function to get or create a lock for a specific destination path
+    auto getLock = [&](const std::string& path) -> std::mutex& {
+        std::lock_guard<std::mutex> guard(fileLocksMutex);
+        if (fileLocks.find(path) == fileLocks.end()) {
+            fileLocks[path] = std::make_unique<std::mutex>();
+        }
+        return *fileLocks[path];
+    };
+
     auto changeOwnership = [&](const fs::path& path) -> bool {
-		return chown(path.c_str(), real_uid, real_gid) == 0;
-	};
+        return chown(path.c_str(), real_uid, real_gid) == 0;
+    };
 
     auto executeOperation = [&](const std::vector<std::string>& files) {
         for (const auto& operateIso : files) {
@@ -452,6 +467,9 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
             }
 
             if (isDelete) {
+                // For delete operations, lock the source file
+                std::lock_guard<std::mutex> srcLock(getLock(srcPath.string()));
+                
                 std::error_code ec;
                 if (fs::remove(srcPath, ec)) {
                     completedBytes->fetch_add(fileSize);
@@ -468,7 +486,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
             } else {
                 bool atLeastOneCopySucceeded = false;
                 std::atomic<int> validDestinations(0);
-				std::atomic<int> successfulOperations(0);
+                std::atomic<int> successfulOperations(0);
                 
                 for (size_t i = 0; i < destDirs.size(); ++i) {
                     const auto& destDir = destDirs[i];
@@ -506,6 +524,36 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     // Count valid destinations for reporting
                     validDestinations.fetch_add(1, std::memory_order_acq_rel);
 
+                    // Lock both source and destination files for atomic operations
+                    // Use hierarchical locking to prevent deadlocks
+                    std::string srcLockKey = srcPath.string();
+                    std::string destLockKey = destPath.string();
+                    
+                    // Lock in consistent order to prevent deadlocks
+                    std::mutex *firstLock, *secondLock;
+                    bool srcFirst = srcLockKey < destLockKey;
+                    
+                    if (srcFirst) {
+                        firstLock = &getLock(srcLockKey);
+                        secondLock = &getLock(destLockKey);
+                    } else {
+                        firstLock = &getLock(destLockKey);
+                        secondLock = &getLock(srcLockKey);
+                    }
+                    
+                    std::lock_guard<std::mutex> lock1(*firstLock);
+                    std::lock_guard<std::mutex> lock2(*secondLock);
+                    
+                    // Inside the lock, check again if source exists (might have been moved by another operation)
+                    if (!fs::exists(srcPath)) {
+                        verboseErrors.push_back("\033[1;91mSource file no longer exists: \033[1;93m'" +
+                                                 srcDir + "/" + srcFile + "'\033[1;91m.\033[0;1m");
+                        failedTasks->fetch_add(1, std::memory_order_acq_rel);
+                        operationSuccessful = false;
+                        continue;
+                    }
+
+                    // Check if destination exists inside the lock to ensure atomicity
                     if (fs::exists(destPath)) {
                         if (overwriteExisting) {
                             if (!fs::remove(destPath, ec)) {
@@ -592,6 +640,9 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                 
                 // For multi-destination move: remove source file after copies succeed
                 if (isMove && destDirs.size() > 1 && validDestinations > 0 && atLeastOneCopySucceeded) {
+                    // Lock the source file for deletion
+                    std::lock_guard<std::mutex> srcLock(getLock(srcPath.string()));
+                    
                     std::error_code deleteEc;
                     if (!fs::remove(srcPath, deleteEc)) {
                         verboseErrors.push_back("\033[1;91mMove completed but failed to remove source file: \033[1;93m'" +

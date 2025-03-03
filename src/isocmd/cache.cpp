@@ -609,7 +609,7 @@ void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, 
             input.clear();  // Explicitly clear input to trigger early exit
         } else {
             std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
-            input = searchQuery.get();
+            input = trimWhitespace(searchQuery.get());  // Trim only leading and trailing spaces
 			
 			if (input == "?") {
 				bool import2ISO = true;
@@ -625,7 +625,7 @@ void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, 
             }
             
             if (!input.empty() && promptFlag) {
-                add_history(searchQuery.get());
+                add_history(input.c_str());
                 std::cout << "\n";
             }
         }

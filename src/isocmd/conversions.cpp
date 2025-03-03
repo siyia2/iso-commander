@@ -147,15 +147,15 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
                              "\001\033[1;94m\002 files and import them into \001\033[1;93m\002RAM\001\033[1;94m\002 cache, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
 
         // Get user input
-        char* rawinput = readline(prompt.c_str());
-        std::unique_ptr<char, decltype(&std::free)> mainSearch(rawinput, &std::free);
+        std::unique_ptr<char, decltype(&std::free)> mainSearch(readline(prompt.c_str()), &std::free);
         
         // Check for EOF (Ctrl+D) or NULL input before processing
-        if (!mainSearch.get()) {
-            return; // Exit the loop on EOF
+        if (!mainSearch.get() || mainSearch.get()[0] == '\0') {
+            break; // Exit the loop on EOF
         }
 
-        std::string inputSearch(mainSearch.get());
+        // Trim leading and trailing whitespaces but keep spaces inside
+		std::string inputSearch = trimWhitespace(mainSearch.get());
         
         if (inputSearch == "!clr_paths" || inputSearch == "!clr_filter") {
 			clearHistory(inputSearch);
@@ -171,12 +171,6 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
 			bool import2ISO = false;
             helpSearches(isCpMv, import2ISO);
             continue;
-        }
-
-        // Exit condition
-        if (std::isspace(mainSearch.get()[0]) || mainSearch.get()[0] == '\0') {
-			clear_history();
-            break;
         }
 
         // Determine input type
@@ -260,7 +254,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
 		}
 		
 		if (!directoryPaths.empty()) {
-			add_history(mainSearch.get());
+			add_history(inputSearch.c_str());
             saveHistory(historyPattern);       
 		}
 		
