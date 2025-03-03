@@ -145,6 +145,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 size_t getTotalFileSize(const std::vector<std::string>& files);
 
 // stds
+std::string trimWhitespace(const std::string& str);
 std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view path, const std::string& location);
 
 
