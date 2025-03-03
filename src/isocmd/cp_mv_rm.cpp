@@ -428,6 +428,20 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
     // Local containers to accumulate verbose messages
     std::vector<std::string> verboseIsos;
     std::vector<std::string> verboseErrors;
+    
+    // Batch size for inserting entries into sets
+    const size_t BATCH_SIZE = 1000;
+
+    // Function to batch insert messages into sets
+    auto batchInsertMessages = [&]() {
+        if (verboseIsos.size() >= BATCH_SIZE || verboseErrors.size() >= BATCH_SIZE) {
+            std::lock_guard<std::mutex> lock(globalSetsMutex);
+            operationErrors.insert(verboseErrors.begin(), verboseErrors.end());
+            operationIsos.insert(verboseIsos.begin(), verboseIsos.end());
+            verboseIsos.clear();
+            verboseErrors.clear();
+        }
+    };
 
     std::vector<std::string> destDirs;
     std::istringstream iss(userDestDir);
@@ -483,6 +497,9 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     failedTasks->fetch_add(1, std::memory_order_acq_rel);
                     operationSuccessful = false;
                 }
+                
+                // Check if we need to batch insert
+                batchInsertMessages();
             } else {
                 bool atLeastOneCopySucceeded = false;
                 std::atomic<int> validDestinations(0);
@@ -504,6 +521,9 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                                                   srcDir + "/" + srcFile + "'\033[1;91m.\033[0m");
                         failedTasks->fetch_add(1, std::memory_order_acq_rel);
                         operationSuccessful = false;
+                        
+                        // Check if we need to batch insert
+                        batchInsertMessages();
                         continue;
                     }
 
@@ -518,6 +538,9 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                                                   " to '" + destDirProcessed + "/': " + errorDetail + "\033[1;91m.\033[0;1m");
                         failedTasks->fetch_add(1, std::memory_order_acq_rel);
                         operationSuccessful = false;
+                        
+                        // Check if we need to batch insert
+                        batchInsertMessages();
                         continue;
                     }
                     
@@ -550,6 +573,9 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                                                  srcDir + "/" + srcFile + "'\033[1;91m.\033[0;1m");
                         failedTasks->fetch_add(1, std::memory_order_acq_rel);
                         operationSuccessful = false;
+                        
+                        // Check if we need to batch insert
+                        batchInsertMessages();
                         continue;
                     }
 
@@ -562,6 +588,9 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                                                           "'\033[1;91m - " + ec.message() + ".\033[0;1m");
                                 failedTasks->fetch_add(1, std::memory_order_acq_rel);
                                 operationSuccessful = false;
+                                
+                                // Check if we need to batch insert
+                                batchInsertMessages();
                                 continue;
                             }
                         } else {
@@ -572,6 +601,9 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                                                      " to '" + destDirProcessed + "/': File exists (enable overwrites)\033[1;91m.\033[0;1m");
                             failedTasks->fetch_add(1, std::memory_order_acq_rel);
                             operationSuccessful = false;
+                            
+                            // Check if we need to batch insert
+                            batchInsertMessages();
                             continue;
                         }
                     }
@@ -636,6 +668,9 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                             completedTasks->fetch_add(1, std::memory_order_acq_rel);
                         }
                     }
+                    
+                    // Check if we need to batch insert
+                    batchInsertMessages();
                 }
                 
                 // For multi-destination move: remove source file after copies succeed
@@ -648,6 +683,9 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         verboseErrors.push_back("\033[1;91mMove completed but failed to remove source file: \033[1;93m'" +
                                                   srcDir + "/" + srcFile + "'\033[1;91m - " +
                                                   deleteEc.message() + "\033[0m");
+                        
+                        // Check if we need to batch insert
+                        batchInsertMessages();
                     }
                 }
             }
@@ -667,13 +705,16 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                 verboseErrors.push_back("\033[1;35mMissing: \033[1;93m'" +
                                           isoDir + "/" + isoFile + "'\033[1;35m.\033[0;1m");
                 failedTasks->fetch_add(1, std::memory_order_acq_rel);
+                
+                // Check if we need to batch insert
+                batchInsertMessages();
             }
         }
     }
 
     executeOperation(isoFilesToOperate);
 
-    // At the end, insert all collected verbose messages with a single lock
+    // At the end, insert any remaining collected verbose messages
     {
         std::lock_guard<std::mutex> lock(globalSetsMutex);
         operationErrors.insert(verboseErrors.begin(), verboseErrors.end());
