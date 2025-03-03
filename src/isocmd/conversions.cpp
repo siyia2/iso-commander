@@ -150,7 +150,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
         std::unique_ptr<char, decltype(&std::free)> mainSearch(readline(prompt.c_str()), &std::free);
         
         // Check for EOF (Ctrl+D) or NULL input before processing
-        if (!mainSearch.get() || mainSearch.get()[0] == '\0') {
+        if (!mainSearch.get() || mainSearch.get()[0] == '\0' || std::all_of(mainSearch.get(), mainSearch.get() + strlen(mainSearch.get()), [](char c) { return c == ' '; })) {
             break; // Exit the loop on EOF
         }
 
