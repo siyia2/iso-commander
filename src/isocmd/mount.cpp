@@ -19,14 +19,17 @@ bool isAlreadyMounted(const std::string& mountPoint) {
 // Function to mount selected ISO files called from processAndMountIsoFiles
 void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks) {
 
-    // Pre-allocate temporary containers with estimated capacity
-    const size_t estimatedSize = isoFiles.size();
+    // Pre-allocate temporary containers with batch capacity
+    const size_t BATCH_SIZE = 1000;
     std::vector<std::string> tempMountedFiles;
     std::vector<std::string> tempSkippedMessages;
     std::vector<std::string> tempMountedFails;
-    tempMountedFiles.reserve(estimatedSize);
-    tempSkippedMessages.reserve(estimatedSize);
-    tempMountedFails.reserve(estimatedSize);
+    tempMountedFiles.reserve(BATCH_SIZE);
+    tempSkippedMessages.reserve(BATCH_SIZE);
+    tempMountedFails.reserve(BATCH_SIZE);
+
+    // Track total processed entries for batch insertions
+    size_t totalProcessedEntries = 0;
 
     // Pre-calculate mount info format strings to avoid repeated concatenations
     const std::string mountedFormatPrefix = "\033[1mISO: \033[1;92m'";
@@ -56,6 +59,22 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
     // Create a single string buffer to reuse for formatting
     std::string outputBuffer;
     outputBuffer.reserve(512);  // Reserve space for a typical message
+
+    // Function to flush temporary vectors to sets
+    auto flushTemporaryBuffers = [&]() {
+        std::lock_guard<std::mutex> lock(globalSetsMutex);
+        mountedFiles.insert(tempMountedFiles.begin(), tempMountedFiles.end());
+        skippedMessages.insert(tempSkippedMessages.begin(), tempSkippedMessages.end());
+        mountedFails.insert(tempMountedFails.begin(), tempMountedFails.end());
+        
+        // Clear temporary vectors but maintain capacity
+        tempMountedFiles.clear();
+        tempSkippedMessages.clear();
+        tempMountedFails.clear();
+        
+        // Reset counter after flush
+        totalProcessedEntries = 0;
+    };
 
     namespace fs = std::filesystem;
     for (const auto& isoFile : isoFiles) {
@@ -92,6 +111,12 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
                        .append(errorFormatEnd);
             tempMountedFails.push_back(outputBuffer);
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
+            totalProcessedEntries++;
+            
+            // Check if we need to flush
+            if (totalProcessedEntries >= BATCH_SIZE) {
+                flushTemporaryBuffers();
+            }
             continue;
         }
 
@@ -106,6 +131,12 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
             tempSkippedMessages.push_back(outputBuffer);
             // Already mounted is considered a successful state
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
+            totalProcessedEntries++;
+            
+            // Check if we need to flush
+            if (totalProcessedEntries >= BATCH_SIZE) {
+                flushTemporaryBuffers();
+            }
             continue;
         }
         
@@ -118,6 +149,12 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
                        .append(errorFormatEnd);
             tempMountedFails.push_back(outputBuffer);
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
+            totalProcessedEntries++;
+            
+            // Check if we need to flush
+            if (totalProcessedEntries >= BATCH_SIZE) {
+                flushTemporaryBuffers();
+            }
             continue;
         }
 
@@ -133,6 +170,12 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
                            .append(e.what()).append(errorFormatEnd);
                 tempMountedFails.push_back(outputBuffer);
                 failedTasks->fetch_add(1, std::memory_order_acq_rel);
+                totalProcessedEntries++;
+                
+                // Check if we need to flush
+                if (totalProcessedEntries >= BATCH_SIZE) {
+                    flushTemporaryBuffers();
+                }
                 continue;
             }
         }
@@ -159,27 +202,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
                 const char* fstype = mnt_context_get_fstype(ctx);
                 if (fstype) {
                     detectedFsType = fstype;
-                } else {
-                    // Fallback to parsing /proc/mounts only if needed
-                    FILE* mountFile = fopen("/proc/mounts", "r");
-                    if (mountFile) {
-                        char line[1024];
-                        while (fgets(line, sizeof(line), mountFile)) {
-                            char sourcePath[PATH_MAX];
-                            char mountPath[PATH_MAX];
-                            char fsType[256];
-                            
-                            // Parse /proc/mounts line
-                            if (sscanf(line, "%s %s %s", sourcePath, mountPath, fsType) == 3) {
-                                if (strcmp(mountPath, mountPoint.c_str()) == 0) {
-                                    detectedFsType = fsType;
-                                    break;
-                                }
-                            }
-                        }
-                        fclose(mountFile);
-                    }
-                }
+                } 
             }
 
             // Prepare mounted file information with minimal allocations
@@ -202,6 +225,12 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
             
             tempMountedFiles.push_back(outputBuffer);
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
+            totalProcessedEntries++;
+            
+            // Check if we need to flush
+            if (totalProcessedEntries >= BATCH_SIZE) {
+                flushTemporaryBuffers();
+            }
         } else {
             // Mount failed
             outputBuffer.clear();
@@ -212,18 +241,21 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
             tempMountedFails.push_back(outputBuffer);
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
             fs::remove(mountPoint);
+            totalProcessedEntries++;
+            
+            // Check if we need to flush
+            if (totalProcessedEntries >= BATCH_SIZE) {
+                flushTemporaryBuffers();
+            }
         }
     }
 
     // Free the mount context
     mnt_free_context(ctx);
 
-    // Lock once at the end to insert all collected messages at once
-    {
-        std::lock_guard<std::mutex> lock(globalSetsMutex);
-        mountedFiles.insert(tempMountedFiles.begin(), tempMountedFiles.end());
-        skippedMessages.insert(tempSkippedMessages.begin(), tempSkippedMessages.end());
-        mountedFails.insert(tempMountedFails.begin(), tempMountedFails.end());
+    // Final flush for any remaining entries
+    if (totalProcessedEntries > 0) {
+        flushTemporaryBuffers();
     }
 }
 

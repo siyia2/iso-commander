@@ -842,6 +842,9 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
 
     namespace fs = std::filesystem;
 
+    // Batch size constant for inserting entries into sets
+    const size_t BATCH_SIZE = 1000;
+
     // Collect unique directories from input file paths
     std::set<std::string> uniqueDirectories;
     for (const auto& filePath : imageFiles) {
@@ -864,26 +867,54 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
     // Thread-local message buffers to reduce lock contention
     std::vector<std::string> localSuccessMsgs, localFailedMsgs, localSkippedMsgs, localDeletedMsgs;
 
+    // Function to check if any buffer has reached the batch size and flush if needed
+    auto batchInsertMessages = [&]() {
+        bool shouldFlush = 
+            localSuccessMsgs.size() >= BATCH_SIZE ||
+            localFailedMsgs.size() >= BATCH_SIZE ||
+            localSkippedMsgs.size() >= BATCH_SIZE ||
+            localDeletedMsgs.size() >= BATCH_SIZE;
+            
+        if (shouldFlush) {
+            std::lock_guard<std::mutex> lock(globalSetsMutex);
+            successOuts.insert(localSuccessMsgs.begin(), localSuccessMsgs.end());
+            failedOuts.insert(localFailedMsgs.begin(), localFailedMsgs.end());
+            skippedOuts.insert(localSkippedMsgs.begin(), localSkippedMsgs.end());
+            deletedOuts.insert(localDeletedMsgs.begin(), localDeletedMsgs.end());
+            
+            localSuccessMsgs.clear();
+            localFailedMsgs.clear();
+            localSkippedMsgs.clear();
+            localDeletedMsgs.clear();
+        }
+    };
+
     for (const std::string& inputPath : imageFiles) {
         auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath, "conversions");
 
         if (!fs::exists(inputPath)) {
-			localFailedMsgs.push_back(
-				"\033[1;35mMissing: \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;35m.\033[0;1m");
+            localFailedMsgs.push_back(
+                "\033[1;35mMissing: \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;35m.\033[0;1m");
 
-			// Select the appropriate cache based on the mode.
-			auto& cache = modeNrg ? nrgFilesCache :
-							(modeMdf ? mdfMdsFilesCache : binImgFilesCache);
-			cache.erase(std::remove(cache.begin(), cache.end(), inputPath), cache.end());
+            // Select the appropriate cache based on the mode.
+            auto& cache = modeNrg ? nrgFilesCache :
+                            (modeMdf ? mdfMdsFilesCache : binImgFilesCache);
+            cache.erase(std::remove(cache.begin(), cache.end(), inputPath), cache.end());
 
-			failedTasks->fetch_add(1, std::memory_order_acq_rel);
-			continue;
-		}
+            failedTasks->fetch_add(1, std::memory_order_acq_rel);
+            
+            // Check if we need to batch insert
+            batchInsertMessages();
+            continue;
+        }
 
         std::ifstream file(inputPath);
         if (!file.good()) {
             localFailedMsgs.push_back("\033[1;91mThe specified file \033[1;93m'" + inputPath + "'\033[1;91m cannot be read. Check permissions.\033[0;1m");
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
+            
+            // Check if we need to batch insert
+            batchInsertMessages();
             continue;
         }
 
@@ -891,6 +922,9 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
         if (fileExists(outputPath)) {
             localSkippedMsgs.push_back("\033[1;93mThe corresponding .iso file already exists for: \033[1;92m'" + directory + "/" + fileNameOnly + "'\033[1;93m. Skipped conversion.\033[0;1m");
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
+            
+            // Check if we need to batch insert
+            batchInsertMessages();
             continue;
         }
 
@@ -906,7 +940,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
         auto [outDirectory, outFileNameOnly] = extractDirectoryAndFilename(outputPath, "conversions");
 
         if (conversionSuccess) {
-			// Attempt to give ownership of succesful files to real user
+            // Attempt to give ownership of successful files to real user
             chown(outputPath.c_str(), real_uid, real_gid);
             
             localSuccessMsgs.push_back("\033[1mImage file converted to ISO:\033[0;1m \033[1;92m'" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m.\033[0;1m");
@@ -921,11 +955,14 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
                     localDeletedMsgs.push_back("\033[1;91mFailed to delete incomplete ISO file: \033[1;93m'" + outputPath + "'\033[0;1m");
                 }
             }
-			failedTasks->fetch_add(1, std::memory_order_acq_rel);
+            failedTasks->fetch_add(1, std::memory_order_acq_rel);
         }
+        
+        // Check if we need to batch insert
+        batchInsertMessages();
     }
 
-    // Batch insert messages under one lock
+    // Insert any remaining messages under one lock
     {
         std::lock_guard<std::mutex> lock(globalSetsMutex);
         successOuts.insert(localSuccessMsgs.begin(), localSuccessMsgs.end());

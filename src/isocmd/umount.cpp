@@ -79,6 +79,10 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
     // Early exit if cancelled before starting
     if (g_operationCancelled.load()) return;
 
+    // Define batch size for insertions
+    const size_t BATCH_SIZE = 1000;
+    size_t totalProcessedEntries = 0;
+
     // Pre-define format strings to avoid repeated string constructions
     const std::string rootErrorPrefix = "\033[1;91mFailed to unmount: \033[1;93m'";
     const std::string rootErrorSuffix = "\033[1;93m'\033[1;91m.\033[0;1m {needsRoot}";
@@ -89,21 +93,41 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
     const std::string errorPrefix = "\033[1;91mFailed to unmount: \033[1;93m'";
     const std::string errorSuffix = "'\033[1;91m.\033[0;1m {notAnISO}";
 
-    // Pre-allocate containers with estimated capacity
-    const size_t estimatedSize = isoDirs.size();
-    std::vector<std::pair<std::string, int>> unmountResults;
+    // Pre-allocate containers with batch capacity
     std::vector<std::string> errorMessages;
     std::vector<std::string> successMessages;
     std::vector<std::string> removalMessages;
     
-    unmountResults.reserve(estimatedSize);
-    errorMessages.reserve(estimatedSize);
-    successMessages.reserve(estimatedSize);
-    removalMessages.reserve(estimatedSize);
+    errorMessages.reserve(BATCH_SIZE);
+    successMessages.reserve(BATCH_SIZE);
+    removalMessages.reserve(BATCH_SIZE);
     
     // Create a reusable string buffer
     std::string outputBuffer;
     outputBuffer.reserve(512);  // Reserve space for a typical message
+    
+    // Function to flush temporary buffers to sets
+    auto flushTemporaryBuffers = [&]() {
+        std::lock_guard<std::mutex> lock(globalSetsMutex);
+        
+        if (!successMessages.empty()) {
+            unmountedFiles.insert(successMessages.begin(), successMessages.end());
+            successMessages.clear();
+        }
+        
+        if (!removalMessages.empty()) {
+            unmountedFiles.insert(removalMessages.begin(), removalMessages.end());
+            removalMessages.clear();
+        }
+        
+        if (!errorMessages.empty()) {
+            unmountedErrors.insert(errorMessages.begin(), errorMessages.end());
+            errorMessages.clear();
+        }
+        
+        // Reset counter after flush
+        totalProcessedEntries = 0;
+    };
     
     // Root check with cancellation awareness
     bool hasRoot = (geteuid() == 0);
@@ -122,17 +146,27 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
             
             errorMessages.push_back(outputBuffer);
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
+            
+            totalProcessedEntries++;
+            
+            // Check if we need to flush
+            if (totalProcessedEntries >= BATCH_SIZE) {
+                flushTemporaryBuffers();
+            }
         }
         
-        // Lock and insert all Root related error messages
-        if (!errorMessages.empty()) {
-            std::lock_guard<std::mutex> lock(globalSetsMutex);
-            unmountedErrors.insert(errorMessages.begin(), errorMessages.end());
+        // Final flush for any remaining entries
+        if (totalProcessedEntries > 0) {
+            flushTemporaryBuffers();
         }
         
         // If no root, skip unmount operations entirely
         return;
     }
+
+    // For unmount operations, we'll collect results first, then process them in batches
+    std::vector<std::pair<std::string, int>> unmountResults;
+    unmountResults.reserve(isoDirs.size());
 
     // Perform unmount operations and record results
     for (const auto& isoDir : isoDirs) {
@@ -146,69 +180,50 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
 
     // Process results only if not cancelled
     if (!g_operationCancelled.load()) {
-        std::vector<std::string> successfulUnmounts;
-        std::vector<std::string> failedUnmounts;
-        
-        successfulUnmounts.reserve(estimatedSize);
-        failedUnmounts.reserve(estimatedSize);
-        
-        // Categorize unmount results
+        // Process unmount results in batches
         for (const auto& [dir, result] : unmountResults) {
             bool isEmpty = isDirectoryEmpty(dir);
+            
             if (result == 0 || isEmpty) {
-                successfulUnmounts.push_back(dir);
+                // Successful unmount
+                if (isEmpty && rmdir(dir.c_str()) == 0) {
+                    std::string modifiedDir = modifyDirectoryPath(dir);
+                    
+                    outputBuffer.clear();
+                    outputBuffer.append(successPrefix)
+                               .append(modifiedDir)
+                               .append(successSuffix);
+                    
+                    successMessages.push_back(outputBuffer);
+                    completedTasks->fetch_add(1, std::memory_order_acq_rel);
+                    
+                    totalProcessedEntries++;
+                }
             } else {
-                failedUnmounts.push_back(dir);
-            }
-        }
-
-        // Handle successful unmounts
-        for (const auto& dir : successfulUnmounts) {
-            if (isDirectoryEmpty(dir) && rmdir(dir.c_str()) == 0) {
+                // Failed unmount
                 std::string modifiedDir = modifyDirectoryPath(dir);
                 
                 outputBuffer.clear();
-                outputBuffer.append(successPrefix)
+                outputBuffer.append(errorPrefix)
                            .append(modifiedDir)
-                           .append(successSuffix);
+                           .append(errorSuffix);
                 
-                successMessages.push_back(outputBuffer);
-                // Increment completed tasks for each success
-                completedTasks->fetch_add(1, std::memory_order_acq_rel);
+                errorMessages.push_back(outputBuffer);
+                failedTasks->fetch_add(1, std::memory_order_acq_rel);
+                
+                totalProcessedEntries++;
             }
-        }
-
-        // Handle failures
-        for (const auto& dir : failedUnmounts) {
-            std::string modifiedDir = modifyDirectoryPath(dir);
             
-            outputBuffer.clear();
-            outputBuffer.append(errorPrefix)
-                       .append(modifiedDir)
-                       .append(errorSuffix);
-            
-            errorMessages.push_back(outputBuffer);
-            // Increment failed tasks for each failure
-            failedTasks->fetch_add(1, std::memory_order_acq_rel);
+            // Check if we need to flush
+            if (totalProcessedEntries >= BATCH_SIZE) {
+                flushTemporaryBuffers();
+            }
         }
     }
 
-    // Lock and insert all messages at once to reduce contention
-    {
-        std::lock_guard<std::mutex> lock(globalSetsMutex); // Protect the set
-        
-        // Use batch insertion for better performance
-        if (!successMessages.empty()) {
-            unmountedFiles.insert(successMessages.begin(), successMessages.end());
-        }
-        
-        if (!removalMessages.empty()) {
-            unmountedFiles.insert(removalMessages.begin(), removalMessages.end());
-        }
-        
-        if (!errorMessages.empty()) {
-            unmountedErrors.insert(errorMessages.begin(), errorMessages.end());
-        }
+    // Final flush for any remaining entries
+    if (totalProcessedEntries > 0) {
+        flushTemporaryBuffers();
     }
 }
 
