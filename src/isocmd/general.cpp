@@ -858,24 +858,22 @@ std::string trimWhitespace(const std::string& str) {
     std::string trimmed = str.substr(first, (last - first + 1));
     
     // Step 2: Remove spaces around semicolons
-    // Iterate through the string and remove spaces around semicolons
     std::string result;
-    bool insideSemicolon = false;
-
     for (size_t i = 0; i < trimmed.length(); ++i) {
-        if (trimmed[i] == ';') {
-            // If we hit a semicolon, add it directly and skip spaces that follow
+        if (trimmed[i] == ' ') {
+            // Skip spaces if they are before or after a semicolon
+            bool isSpaceBeforeSemicolon = (i + 1 < trimmed.length() && trimmed[i + 1] == ';');
+            bool isSpaceAfterSemicolon = (i > 0 && trimmed[i - 1] == ';');
+            
+            if (!isSpaceBeforeSemicolon && !isSpaceAfterSemicolon) {
+                result += ' ';
+            }
+        } else if (trimmed[i] == ';') {
+            // Add the semicolon and skip any spaces immediately before or after
             result += ';';
-            insideSemicolon = true;
-        }
-        else if (insideSemicolon && trimmed[i] == ' ') {
-            // Skip spaces after a semicolon
-            continue;
-        }
-        else {
-            // Otherwise, just append the character
+        } else {
+            // Add non-space, non-semicolon characters
             result += trimmed[i];
-            insideSemicolon = false;
         }
     }
     
