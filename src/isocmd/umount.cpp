@@ -74,10 +74,6 @@ std::string modifyDirectoryPath(const std::string& dir) {
 
 // Function to unmount ISO files asynchronously
 void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks) {
-    std::atomic<bool> g_CancelledMessageAdded{false};
-
-    // Early exit if cancelled before starting
-    if (g_operationCancelled.load()) return;
 
     // Define batch size for insertions
     const size_t BATCH_SIZE = 1000;
