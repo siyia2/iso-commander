@@ -495,7 +495,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
             }
 
             if (isDelete) {
-                
+                if (g_operationCancelled.load()) break;
                 std::error_code ec;
                 if (fs::remove(srcPath, ec)) {
                     completedBytes->fetch_add(fileSize);
