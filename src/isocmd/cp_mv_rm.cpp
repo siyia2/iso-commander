@@ -6,55 +6,75 @@
 
 // Function to process selected indices for cpMvDel accordingly
 void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& umountMvRmBreak, bool& historyPattern, bool& verbose, std::atomic<bool>& newISOFound) {
-	setupSignalHandlerCancellations();
-	
-	bool overwriteExisting =false;
+    setupSignalHandlerCancellations();
     
+    bool overwriteExisting = false;
     std::string userDestDir;
     std::set<int> processedIndices;
 
     bool isDelete = (process == "rm");
-    bool isMove = (process == "mv");
-    bool isCopy = (process == "cp");
+    bool isMove   = (process == "mv");
+    bool isCopy   = (process == "cp");
     std::string operationDescription = isDelete ? "*PERMANENTLY DELETED*" : (isMove ? "*MOVED*" : "*COPIED*");
-    std::string operationColor = isDelete ? "\033[1;91m" : (isCopy ? "\033[1;92m" : "\033[1;93m");
+    std::string operationColor       = isDelete ? "\033[1;91m" : (isCopy ? "\033[1;92m" : "\033[1;93m");
 
+    // Parse the input to fill processedIndices.
     tokenizeInput(input, isoFiles, uniqueErrorMessages, processedIndices);
 
     if (processedIndices.empty()) {
         umountMvRmBreak = false;
         return;
     }
+    
+    // --- Grouping logic: ensure that files with the same base name go into the same chunk ---
+    // Group indices by their base filename (ignoring directory paths)
+    std::unordered_map<std::string, std::vector<int>> groups;
+    for (int idx : processedIndices) {
+        std::string baseName = std::filesystem::path(isoFiles[idx - 1]).filename().string();
+        groups[baseName].push_back(idx);
+    }
+    
+    // Convert the map into a vector of groups; sort groups by the first index to preserve order.
+    std::vector<std::vector<int>> groupList;
+    for (auto& kv : groups) {
+        groupList.push_back(kv.second);
+    }
+    std::sort(groupList.begin(), groupList.end(), [](const std::vector<int>& a, const std::vector<int>& b) {
+        return a.front() < b.front();
+    });
 
-    unsigned int numThreads = std::min(static_cast<unsigned int>(processedIndices.size()), maxThreads);
+    // Merge groups into chunks so that each chunk has at most maxFilesPerChunk files (if possible)
     std::vector<std::vector<int>> indexChunks;
     const size_t maxFilesPerChunk = 10;
-
-    size_t totalFiles = processedIndices.size();
-    size_t filesPerThread = (totalFiles + numThreads - 1) / numThreads;
-    size_t chunkSize = std::min(maxFilesPerChunk, filesPerThread);
-
-    auto it = processedIndices.begin();
-    for (size_t i = 0; i < totalFiles; i += chunkSize) {
-        auto chunkEnd = std::next(it, std::min(chunkSize, 
-            static_cast<size_t>(std::distance(it, processedIndices.end()))));
-        indexChunks.emplace_back(it, chunkEnd);
-        it = chunkEnd;
+    std::vector<int> currentChunk;
+    for (const auto& group : groupList) {
+        if (!currentChunk.empty() && (currentChunk.size() + group.size() > maxFilesPerChunk)) {
+            indexChunks.push_back(currentChunk);
+            currentChunk.clear();
+        }
+        currentChunk.insert(currentChunk.end(), group.begin(), group.end());
     }
+    if (!currentChunk.empty()) {
+        indexChunks.push_back(currentChunk);
+    }
+
+    unsigned int numThreads = std::min(static_cast<unsigned int>(processedIndices.size()), maxThreads);
 
     bool abortDel = false;
     std::string processedUserDestDir = userDestDirRm(isoFiles, indexChunks, uniqueErrorMessages, userDestDir, 
-        operationColor, operationDescription, umountMvRmBreak, historyPattern, isDelete, isCopy, abortDel, overwriteExisting);
+                                                     operationColor, operationDescription, umountMvRmBreak, 
+                                                     historyPattern, isDelete, isCopy, abortDel, overwriteExisting);
         
-	g_operationCancelled.store(false);
+    g_operationCancelled.store(false);
     
     if ((processedUserDestDir == "" && (isCopy || isMove)) || abortDel) {
-		uniqueErrorMessages.clear();
+        uniqueErrorMessages.clear();
         return;
     }
-	uniqueErrorMessages.clear();
+    uniqueErrorMessages.clear();
     clearScrollBuffer();
-    std::cout << "\n\033[0;1m Processing " + operationColor + process + "\033[0;1m operations... (\033[1;91mCtrl + c\033[0;1m:cancel)\n";
+    std::cout << "\n\033[0;1m Processing " + operationColor + process +
+                 "\033[0;1m operations... (\033[1;91mCtrl + c\033[0;1m:cancel)\n";
 
     std::vector<std::string> filesToProcess;
     for (const auto& index : processedIndices) {
@@ -67,45 +87,45 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     size_t totalBytes = getTotalFileSize(filesToProcess);
     size_t totalTasks = filesToProcess.size();
     
-    // Adjust total bytes for copy operations with multiple destinations
+    // Adjust totals for copy/move operations with multiple destinations
     if (isCopy || isMove) {
         size_t destCount = std::count(processedUserDestDir.begin(), processedUserDestDir.end(), ';') + 1;
         totalBytes *= destCount;
-        totalTasks *= destCount;  // Also adjust total tasks for multiple destinations
+        totalTasks *= destCount;
     }
     
     std::atomic<bool> isProcessingComplete(false);
 
-    // Create progress thread with both byte and task tracking
+    // Start progress tracking in a separate thread.
     std::thread progressThread(displayProgressBarWithSize, &completedBytes, 
-        totalBytes, &completedTasks, &failedTasks, totalTasks, &isProcessingComplete, &verbose);
+                                 totalBytes, &completedTasks, &failedTasks, 
+                                 totalTasks, &isProcessingComplete, &verbose);
 
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
     futures.reserve(indexChunks.size());
 
+    // For each chunk, create a vector of file names and enqueue the operation.
     for (const auto& chunk : indexChunks) {
         std::vector<std::string> isoFilesInChunk;
         isoFilesInChunk.reserve(chunk.size());
-        std::transform(
-            chunk.begin(),
-            chunk.end(),
-            std::back_inserter(isoFilesInChunk),
-            [&isoFiles](size_t index) { return isoFiles[index - 1]; }
-        );
+        std::transform(chunk.begin(), chunk.end(), std::back_inserter(isoFilesInChunk),
+            [&isoFiles](size_t index) { return isoFiles[index - 1]; });
 
         futures.emplace_back(pool.enqueue([isoFilesInChunk = std::move(isoFilesInChunk), 
-            &isoFiles, &operationIsos, &operationErrors, &userDestDir, 
-            isMove, isCopy, isDelete, &completedBytes, &completedTasks, &failedTasks, &overwriteExisting]() {
-            handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, 
-                operationErrors, userDestDir, isMove, isCopy, isDelete, 
-                &completedBytes, &completedTasks, &failedTasks, overwriteExisting);
+                                             &isoFiles, &operationIsos, &operationErrors, &userDestDir, 
+                                             isMove, isCopy, isDelete, &completedBytes, &completedTasks, 
+                                             &failedTasks, &overwriteExisting]() {
+            handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors, 
+                                   userDestDir, isMove, isCopy, isDelete, 
+                                   &completedBytes, &completedTasks, &failedTasks, overwriteExisting);
         }));
     }
 
     for (auto& future : futures) {
         future.wait();
-        if (g_operationCancelled.load()) break;
+        if (g_operationCancelled.load())
+            break;
     }
 
     isProcessingComplete.store(true);
