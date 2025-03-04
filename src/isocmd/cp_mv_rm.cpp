@@ -521,7 +521,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         verboseErrors.push_back("\033[1;91mError " +
                                                   std::string(isCopy ? "copying" : "moving") +
                                                   ": \033[1;93m'" + srcDir + "/" + srcFile + "'\033[1;91m" +
-                                                  " to '" + destDir + "/': " + errorDetail + "\033[1;91m.\033[0;1m");
+                                                  " to '" + destDir + "': " + errorDetail + "\033[1;91m.\033[0;1m");
                         failedTasks->fetch_add(1, std::memory_order_acq_rel);
                         operationSuccessful = false;
                         
