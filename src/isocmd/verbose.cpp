@@ -231,20 +231,20 @@ void verboseSearchResults(const std::string& fileExtension, std::set<std::string
 
     // Case: Files were found
     if (!fileNames.empty() && !g_operationCancelled.load()) {
-        std::cout << "\n\n\033[1;92m" << fileNames.size() << " new \033[1;38;5;208m{" << fileExtension << "} \033[1;92mfiles found.\033[1;93m\n" << currentCacheOld << " \033[1;38;5;208m{" << fileExtension << "} \033[1;93mentries cached.\033[0;1m\n\n";
+        std::cout << "\n\n\033[1;92m" << fileNames.size() << " \033[1;38;5;208m{" << fileExtension << "} \033[1;92mfiles found\033[1;93m\n" << currentCacheOld << " \033[1;38;5;208m{" << fileExtension << "} \033[1;93mcached entries\033[0;1m\n\n";
     }
 
     // Case: No new files were found, but files exist in cache
     if (!newFilesFound && !files.empty() && !list && !g_operationCancelled.load()) {
         verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
-        std::cout << "\n\n\033[1;91m0 new \033[1;38;5;208m{" << fileExtension << "} \033[1;91mfiles found. \033[1;93m\n";
-        std::cout << files.size() << " \033[1;38;5;208m{" << fileExtension << "} \033[1;93mentries cached | \033[1;94mls \033[1;93m↵ to list.\033[0;1m\n\n";
+        std::cout << "\n\n\033[1;91m0 \033[1;38;5;208m{" << fileExtension << "} \033[1;91mfiles found \033[1;93m\n";
+        std::cout << files.size() << " \033[1;38;5;208m{" << fileExtension << "} \033[1;93mcached entries | \033[1;94mls \033[1;93m↵ to list\033[0;1m\n\n";
     }
 
     // Case: No files were found
     if (files.empty() && !list && !g_operationCancelled.load()) {
         verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
-        std::cout << "\n\n\033[1;91m0\033[1;38;5;208m {" << fileExtension << "} \033[1;91mfiles found.\n\033[1;93m0\033[1;38;5;208m {" << fileExtension << "} \033[1;93mentries cached.\n\033[0;1m\n";
+        std::cout << "\n\n\033[1;91m0\033[1;38;5;208m {" << fileExtension << "} \033[1;91mfiles found\n\033[1;93m0\033[1;38;5;208m {" << fileExtension << "} \033[1;93mcached entries\n\033[0;1m\n";
     }
     
     auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
