@@ -32,6 +32,11 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         // Grouping logic for "cp" and "mv": group indices by their base filename.
         std::unordered_map<std::string, std::vector<int>> groups;
         for (int idx : processedIndices) {
+            // Ensure idx is within expected range (assuming 1-indexed)
+            if (idx <= 0 || static_cast<size_t>(idx) > isoFiles.size()) {
+                uniqueErrorMessages.insert("Index out of range: " + std::to_string(idx));
+                continue;
+            }
             std::string baseName = std::filesystem::path(isoFiles[idx - 1]).filename().string();
             groups[baseName].push_back(idx);
         }
@@ -61,6 +66,11 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     } else {
         // For "rm", process each file individually (no grouping)
         for (int idx : processedIndices) {
+            // Validate index range
+            if (idx <= 0 || static_cast<size_t>(idx) > isoFiles.size()) {
+                uniqueErrorMessages.insert("Index out of range: " + std::to_string(idx));
+                continue;
+            }
             indexChunks.push_back({ idx });
         }
     }
@@ -84,8 +94,11 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
                  "\033[0;1m operations... (\033[1;91mCtrl + c\033[0;1m:cancel)\n";
 
     std::vector<std::string> filesToProcess;
-    for (const auto& index : processedIndices) {
-        filesToProcess.push_back(isoFiles[index - 1]);
+    for (int idx : processedIndices) {
+        if (idx <= 0 || static_cast<size_t>(idx) > isoFiles.size()) {
+            continue;
+        }
+        filesToProcess.push_back(isoFiles[idx - 1]);
     }
 
     std::atomic<size_t> completedBytes(0);
@@ -117,8 +130,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         std::vector<std::string> isoFilesInChunk;
         isoFilesInChunk.reserve(chunk.size());
         std::transform(chunk.begin(), chunk.end(), std::back_inserter(isoFilesInChunk),
-            [&isoFiles](size_t index) { return isoFiles[index - 1]; });
-
+            [&isoFiles](int index) { return isoFiles[index - 1]; });
         futures.emplace_back(pool.enqueue([isoFilesInChunk = std::move(isoFilesInChunk), 
                                              &isoFiles, &operationIsos, &operationErrors, &userDestDir, 
                                              isMove, isCopy, isDelete, &completedBytes, &completedTasks, 
