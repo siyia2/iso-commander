@@ -6,9 +6,9 @@
 
 // Function to process selected indices for cpMvDel accordingly
 void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, std::set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& umountMvRmBreak, bool& historyPattern, bool& verbose, std::atomic<bool>& newISOFound) {
-	setupSignalHandlerCancellations();
-	
-	bool overwriteExisting =false;
+    setupSignalHandlerCancellations();
+    
+    bool overwriteExisting = false;
     
     std::string userDestDir;
     std::set<int> processedIndices;
@@ -26,33 +26,65 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         return;
     }
 
-    unsigned int numThreads = std::min(static_cast<unsigned int>(processedIndices.size()), maxThreads);
+    // Create a map to group files with the same filename
+    std::unordered_map<std::string, std::vector<int>> filenameGroups;
+    for (int index : processedIndices) {
+        std::string filename = std::filesystem::path(isoFiles[index - 1]).filename().string();
+        filenameGroups[filename].push_back(index);
+    }
+
+    // Determine thread allocation based on filename groups with max chunk size
+    unsigned int numThreads = std::min(static_cast<unsigned int>(filenameGroups.size()), maxThreads);
     std::vector<std::vector<int>> indexChunks;
-    const size_t maxFilesPerChunk = 5;
+    const size_t maxFilesPerChunk = 5; // Explicitly set max files per chunk
 
-    size_t totalFiles = processedIndices.size();
-    size_t filesPerThread = (totalFiles + numThreads - 1) / numThreads;
-    size_t chunkSize = std::min(maxFilesPerChunk, filesPerThread);
-
-    auto it = processedIndices.begin();
-    for (size_t i = 0; i < totalFiles; i += chunkSize) {
-        auto chunkEnd = std::next(it, std::min(chunkSize, 
-            static_cast<size_t>(std::distance(it, processedIndices.end()))));
-        indexChunks.emplace_back(it, chunkEnd);
-        it = chunkEnd;
+    // Distribute filename groups across threads with max chunk size
+    for (const auto& [filename, group] : filenameGroups) {
+        // If current group exceeds max files per chunk, split it
+        if (group.size() > maxFilesPerChunk) {
+            for (size_t i = 0; i < group.size(); i += maxFilesPerChunk) {
+                std::vector<int> chunk(
+                    group.begin() + i, 
+                    group.begin() + std::min(i + maxFilesPerChunk, group.size())
+                );
+                
+                if (indexChunks.size() < numThreads) {
+                    indexChunks.push_back(chunk);
+                } else {
+                    // Find the smallest chunk and add to it
+                    auto smallestChunkIt = std::min_element(indexChunks.begin(), indexChunks.end(), 
+                        [](const std::vector<int>& a, const std::vector<int>& b) {
+                            return a.size() < b.size();
+                        });
+                    smallestChunkIt->insert(smallestChunkIt->end(), chunk.begin(), chunk.end());
+                }
+            }
+        } else {
+            // For groups smaller than or equal to max files per chunk
+            if (indexChunks.size() < numThreads) {
+                indexChunks.push_back(group);
+            } else {
+                // Find the smallest chunk and add to it
+                auto smallestChunkIt = std::min_element(indexChunks.begin(), indexChunks.end(), 
+                    [](const std::vector<int>& a, const std::vector<int>& b) {
+                        return a.size() < b.size();
+                    });
+                smallestChunkIt->insert(smallestChunkIt->end(), group.begin(), group.end());
+            }
+        }
     }
 
     bool abortDel = false;
     std::string processedUserDestDir = userDestDirRm(isoFiles, indexChunks, uniqueErrorMessages, userDestDir, 
         operationColor, operationDescription, umountMvRmBreak, historyPattern, isDelete, isCopy, abortDel, overwriteExisting);
         
-	g_operationCancelled.store(false);
+    g_operationCancelled.store(false);
     
     if ((processedUserDestDir == "" && (isCopy || isMove)) || abortDel) {
-		uniqueErrorMessages.clear();
+        uniqueErrorMessages.clear();
         return;
     }
-	uniqueErrorMessages.clear();
+    uniqueErrorMessages.clear();
     clearScrollBuffer();
     std::cout << "\n\033[0;1m Processing " + operationColor + process + "\033[0;1m operations... (\033[1;91mCtrl + c\033[0;1m:cancel)\n";
 
