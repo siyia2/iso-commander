@@ -36,7 +36,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     // Determine thread allocation based on filename groups with max chunk size
     unsigned int numThreads = std::min(static_cast<unsigned int>(filenameGroups.size()), maxThreads);
     std::vector<std::vector<int>> indexChunks;
-    const size_t maxFilesPerChunk = 5; // Explicitly set max files per chunk
+    const size_t maxFilesPerChunk = 10; // Explicitly set max files per chunk
 
     // Distribute filename groups across threads with max chunk size
     for (const auto& [filename, group] : filenameGroups) {
