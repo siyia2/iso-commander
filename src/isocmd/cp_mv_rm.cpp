@@ -45,7 +45,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
     // Merge groups into chunks so that each chunk has at most maxFilesPerChunk files (if possible)
     std::vector<std::vector<int>> indexChunks;
-    const size_t maxFilesPerChunk = 10;
+    const size_t maxFilesPerChunk = 5;
     std::vector<int> currentChunk;
     for (const auto& group : groupList) {
         if (!currentChunk.empty() && (currentChunk.size() + group.size() > maxFilesPerChunk)) {

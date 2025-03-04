@@ -473,7 +473,7 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
     unsigned int numThreads = std::min(static_cast<unsigned int>(processedIndices.size()), 
         std::thread::hardware_concurrency());
     std::vector<std::vector<size_t>> indexChunks;
-    const size_t maxFilesPerChunk = 10;
+    const size_t maxFilesPerChunk = 5;
 
     size_t totalFiles = processedIndices.size();
     size_t filesPerThread = (totalFiles + numThreads - 1) / numThreads;
