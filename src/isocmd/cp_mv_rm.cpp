@@ -545,7 +545,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         continue;
                     }
 
-                    // Check if destination exists inside the lock to ensure atomicity
+                    // Check if destination exists
                     if (fs::exists(destPath)) {
                         if (overwriteExisting) {
                             if (!fs::remove(destPath, ec)) {
