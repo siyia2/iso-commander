@@ -450,21 +450,9 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
         destDirs.push_back(fs::path(destDir).string());
     }
 
-    // Create a map to track file locks for destination paths
-    std::mutex fileLocksMutex;
-    std::map<std::string, std::unique_ptr<std::mutex>> fileLocks;
-
-    // Function to get or create a lock for a specific destination path
-    auto getLock = [&](const std::string& path) -> std::mutex& {
-        std::lock_guard<std::mutex> guard(fileLocksMutex);
-        if (fileLocks.find(path) == fileLocks.end()) {
-            fileLocks[path] = std::make_unique<std::mutex>();
-        }
-        return *fileLocks[path];
-    };
-
-    auto changeOwnership = [&](const fs::path& path) -> bool {
-        return chown(path.c_str(), real_uid, real_gid) == 0;
+    // Change ownership function (no return value)
+    auto changeOwnership = [&](const fs::path& path) {
+        chown(path.c_str(), real_uid, real_gid); // Attempt to change ownership, ignore result
     };
 
     auto executeOperation = [&](const std::vector<std::string>& files) {
@@ -481,8 +469,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
             }
 
             if (isDelete) {
-                // For delete operations, lock the source file
-                std::lock_guard<std::mutex> srcLock(getLock(srcPath.string()));
                 
                 std::error_code ec;
                 if (fs::remove(srcPath, ec)) {
@@ -546,26 +532,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     
                     // Count valid destinations for reporting
                     validDestinations.fetch_add(1, std::memory_order_acq_rel);
-
-                    // Lock both source and destination files for atomic operations
-                    // Use hierarchical locking to prevent deadlocks
-                    std::string srcLockKey = srcPath.string();
-                    std::string destLockKey = destPath.string();
-                    
-                    // Lock in consistent order to prevent deadlocks
-                    std::mutex *firstLock, *secondLock;
-                    bool srcFirst = srcLockKey < destLockKey;
-                    
-                    if (srcFirst) {
-                        firstLock = &getLock(srcLockKey);
-                        secondLock = &getLock(destLockKey);
-                    } else {
-                        firstLock = &getLock(destLockKey);
-                        secondLock = &getLock(srcLockKey);
-                    }
-                    
-                    std::lock_guard<std::mutex> lock1(*firstLock);
-                    std::lock_guard<std::mutex> lock2(*secondLock);
                     
                     // Inside the lock, check again if source exists (might have been moved by another operation)
                     if (!fs::exists(srcPath)) {
@@ -656,17 +622,15 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         failedTasks->fetch_add(1, std::memory_order_acq_rel);
                         operationSuccessful = false;
                     } else {
-                        if (!changeOwnership(destPath)) {
-                            operationSuccessful = false;
-                            failedTasks->fetch_add(1, std::memory_order_acq_rel);
-                        } else {
-                            verboseIsos.push_back("\033[0;1m" +
-                                                    std::string(isCopy ? "Copied" : "Moved") +
-                                                    ": \033[1;92m'" + srcDir + "/" + srcFile +
-                                                    "'\033[1m to \033[1;94m'" + destDirProcessed +
-                                                    "/" + destFile + "'\033[0;1m.");
-                            completedTasks->fetch_add(1, std::memory_order_acq_rel);
-                        }
+                        // Attempt to change ownership, but ignore success/failure
+                        changeOwnership(destPath);
+
+                        verboseIsos.push_back("\033[0;1m" +
+                                                std::string(isCopy ? "Copied" : "Moved") +
+                                                ": \033[1;92m'" + srcDir + "/" + srcFile +
+                                                "'\033[1m to \033[1;94m'" + destDirProcessed +
+                                                "/" + destFile + "'\033[0;1m.");
+                        completedTasks->fetch_add(1, std::memory_order_acq_rel);
                     }
                     
                     // Check if we need to batch insert
@@ -675,8 +639,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                 
                 // For multi-destination move: remove source file after copies succeed
                 if (isMove && destDirs.size() > 1 && validDestinations > 0 && atLeastOneCopySucceeded) {
-                    // Lock the source file for deletion
-                    std::lock_guard<std::mutex> srcLock(getLock(srcPath.string()));
                     
                     std::error_code deleteEc;
                     if (!fs::remove(srcPath, deleteEc)) {
