@@ -614,51 +614,66 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages) {
     clearScrollBuffer();
     std::set<int> indicesToProcess;
-
     setupSignalHandlerCancellations();
     g_operationCancelled.store(false);
-
+    
     tokenizeInput(input, isoFiles, uniqueErrorMessages, indicesToProcess);
+    
     if (indicesToProcess.empty()) {
         return;
     }
-
+    
     std::vector<IsoInfo> selectedIsos;
+    
     for (int idx : indicesToProcess) {
+        // Bounds check to prevent potential out-of-range access
+        if (idx <= 0 || idx > static_cast<int>(isoFiles.size())) {
+            uniqueErrorMessages.insert("\033[1;91mInvalid file index: " + std::to_string(idx) + ".");
+            continue;
+        }
+        
         try {
-            // Check if the file exists before processing
-            if (!std::filesystem::exists(isoFiles[idx - 1])) {
-                uniqueErrorMessages.insert("\033[1;35mMissing: \033[1;93m'" + isoFiles[idx - 1] + "'\033[1;35m.");
+            // Safely convert index to size_t for vector access
+            size_t vecIndex = static_cast<size_t>(idx - 1);
+            const std::string& isoPath = isoFiles[vecIndex];
+            
+            if (!std::filesystem::exists(isoPath)) {
+                uniqueErrorMessages.insert("\033[1;35mMissing: \033[1;93m'" + isoPath + "'\033[1;35m.");
                 continue;
             }
-
+            
+            std::uintmax_t fileSize = std::filesystem::file_size(isoPath);
+            
             selectedIsos.emplace_back(IsoInfo{
-                isoFiles[idx - 1],
-                std::filesystem::path(isoFiles[idx - 1]).filename().string(),
-                std::filesystem::file_size(isoFiles[idx - 1]),
-                formatFileSize(std::filesystem::file_size(isoFiles[idx - 1])),
-                static_cast<size_t>(idx)
+                isoPath,
+                std::filesystem::path(isoPath).filename().string(),
+                fileSize,
+                formatFileSize(fileSize),
+                static_cast<size_t>(idx)  // Explicit conversion to size_t
             });
         } catch (const std::filesystem::filesystem_error& e) {
             uniqueErrorMessages.insert("\033[1;91mError accessing ISO file: " + std::string(e.what()) + ".");
-            continue;  // Skip this file and proceed with the next one
+            continue;
         }
     }
-
+    
     if (selectedIsos.empty()) {
         clear_history();
         return;
     }
-
+    
     auto validPairs = collectDeviceMappings(selectedIsos, uniqueErrorMessages);
+    
     if (validPairs.empty()) {
         clear_history();
         return;
     }
-
+    
     performWriteOperation(validPairs);
+    
     signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
-	disable_ctrl_d();
+    disable_ctrl_d();
+    
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
@@ -682,15 +697,27 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
 
     // Get device sector size
     int sectorSize = 0;
-    if (ioctl(device_fd, BLKSSZGET, &sectorSize) < 0 || sectorSize == 0) {
+    if (ioctl(device_fd, BLKSSZGET, &sectorSize) < 0 || sectorSize <= 0) {
         progressData[progressIndex].failed.store(true);
         close(device_fd);
         return false;
     }
 
+    // Safely convert sector size to size_t
+    size_t safeSectorSize = static_cast<size_t>(sectorSize);
+
     // Get ISO file size and check alignment
-    const uint64_t fileSize = std::filesystem::file_size(isoPath);
-    if (fileSize % sectorSize != 0) {
+    std::uintmax_t fileSize = 0;
+    try {
+        fileSize = std::filesystem::file_size(isoPath);
+    } catch (const std::filesystem::filesystem_error&) {
+        progressData[progressIndex].failed.store(true);
+        close(device_fd);
+        return false;
+    }
+
+    // Check file size alignment with safe type conversion
+    if (fileSize % safeSectorSize != 0) {
         progressData[progressIndex].failed.store(true);
         close(device_fd);
         return false;
@@ -698,66 +725,84 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
 
     // Set buffer size as multiple of sector size (8MB default)
     size_t bufferSize = 8 * 1024 * 1024;
-    bufferSize = (bufferSize / sectorSize) * sectorSize;
-    if (bufferSize == 0) bufferSize = sectorSize;
+    bufferSize = (bufferSize / safeSectorSize) * safeSectorSize;
+    if (bufferSize == 0) bufferSize = safeSectorSize;
 
     // Allocate aligned buffer
-    char* alignedBuffer = nullptr;
-    if (posix_memalign((void**)&alignedBuffer, sectorSize, bufferSize) != 0) {
+    void* rawAlignedBuffer = nullptr;
+    if (posix_memalign(&rawAlignedBuffer, safeSectorSize, bufferSize) != 0) {
         progressData[progressIndex].failed.store(true);
         close(device_fd);
         return false;
     }
-    std::unique_ptr<char, decltype(&free)> bufferGuard(alignedBuffer, &free);
+    std::unique_ptr<char, decltype(&free)> bufferGuard(static_cast<char*>(rawAlignedBuffer), &free);
 
     // Initialize timing and speed calculation variables
     auto startTime = std::chrono::high_resolution_clock::now();
     auto lastUpdate = startTime;
-    uint64_t bytesInWindow = 0;
+    std::uintmax_t bytesInWindow = 0;
     const int UPDATE_INTERVAL_MS = 500;
 
     try {
-        while (progressData[progressIndex].bytesWritten.load() < fileSize && !g_operationCancelled) {
-            const uint64_t totalWritten = progressData[progressIndex].bytesWritten.load();
-            const uint64_t remaining = fileSize - totalWritten;
-            const size_t bytesToRead = std::min(bufferSize, static_cast<size_t>(remaining));
-
-            iso.read(alignedBuffer, bytesToRead);
-            const std::streamsize bytesRead = iso.gcount();
+        while (progressData[progressIndex].bytesWritten.load() < fileSize && !g_operationCancelled.load()) {
+            // Safe calculation of remaining bytes
+            std::uintmax_t totalWritten = progressData[progressIndex].bytesWritten.load();
+            std::uintmax_t remaining = fileSize - totalWritten;
             
-            if (bytesRead <= 0 || static_cast<size_t>(bytesRead) != bytesToRead) {
+            // Safely convert to buffer size
+            size_t bytesToRead = static_cast<size_t>(std::min(remaining, static_cast<std::uintmax_t>(bufferSize)));
+
+            // Read into buffer with explicit size conversion
+            iso.read(static_cast<char*>(rawAlignedBuffer), static_cast<std::streamsize>(bytesToRead));
+            std::streamsize bytesRead = iso.gcount();
+            
+            // Validate read operation
+            if (bytesRead <= 0 || 
+                static_cast<std::uintmax_t>(bytesRead) != static_cast<std::uintmax_t>(bytesToRead)) {
                 throw std::runtime_error("Read error");
             }
 
             // Handle partial writes
-            ssize_t bytesWritten = 0;
-            while (bytesWritten < static_cast<ssize_t>(bytesToRead)) {
-                size_t chunk = std::min(static_cast<size_t>(bytesToRead - bytesWritten), bufferSize);
-                chunk = (chunk / sectorSize) * sectorSize;
+            std::streamsize totalBytesWritten = 0;
+            while (totalBytesWritten < bytesRead) {
+                // Safe chunk calculation with explicit conversions
+                size_t remainingToWrite = static_cast<size_t>(bytesRead - totalBytesWritten);
+                size_t chunk = std::min(remainingToWrite, bufferSize);
+                
+                // Ensure chunk is sector-aligned
+                chunk = (chunk / safeSectorSize) * safeSectorSize;
                 if (chunk == 0) break;
-                ssize_t result = write(device_fd, alignedBuffer + bytesWritten, chunk);
+
+                // Write chunk
+                ssize_t result = write(device_fd, 
+                    static_cast<char*>(rawAlignedBuffer) + totalBytesWritten, 
+                    chunk);
+                
                 if (result == -1) {
                     throw std::runtime_error("Write error");
                 }
-                bytesWritten += result;
+                
+                totalBytesWritten += static_cast<std::streamsize>(result);
             }
 
             // Atomically update progress
-            progressData[progressIndex].bytesWritten.fetch_add(bytesWritten);
-            bytesInWindow += bytesWritten;
+            progressData[progressIndex].bytesWritten.fetch_add(static_cast<std::uintmax_t>(totalBytesWritten));
+            bytesInWindow += static_cast<std::uintmax_t>(totalBytesWritten);
 
-            // Update progress and speed
+            // Update progress and speed periodically
             auto now = std::chrono::high_resolution_clock::now();
             auto timeSinceLastUpdate = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate);
 
             if (timeSinceLastUpdate.count() >= UPDATE_INTERVAL_MS) {
-                // Calculate and update progress atomically
-                const int progress = static_cast<int>((static_cast<double>(progressData[progressIndex].bytesWritten.load()) / fileSize) * 100);
+                // Safe progress calculation
+                double progressPercentage = (static_cast<double>(progressData[progressIndex].bytesWritten.load()) / 
+                                            static_cast<double>(fileSize)) * 100.0;
+                int progress = std::min(100, std::max(0, static_cast<int>(progressPercentage)));
                 progressData[progressIndex].progress.store(progress);
 
-                // Calculate and update speed atomically
-                double seconds = timeSinceLastUpdate.count() / 1000.0;
-                double mbPerSec = (static_cast<double>(bytesInWindow) / (1024 * 1024)) / seconds;
+                // Speed calculation with safe conversions
+                double seconds = static_cast<double>(timeSinceLastUpdate.count()) / 1000.0;
+                double mbPerSec = (static_cast<double>(bytesInWindow) / (1024.0 * 1024.0)) / seconds;
                 progressData[progressIndex].speed.store(mbPerSec);
 
                 // Reset window counters
@@ -771,12 +816,15 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
         return false;
     }
 
+    // Ensure all data is written to disk
     if (!g_operationCancelled.load()) {
         fsync(device_fd);
     }
     close(device_fd);
 
-    if (!g_operationCancelled && progressData[progressIndex].bytesWritten.load() == fileSize) {
+    // Final completion check with safe type conversion
+    if (!g_operationCancelled.load() && 
+        progressData[progressIndex].bytesWritten.load() == fileSize) {
         progressData[progressIndex].completed.store(true);
         return true;
     }

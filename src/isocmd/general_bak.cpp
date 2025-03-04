@@ -392,7 +392,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
     struct termios oldt, newt;
     tcgetattr(STDIN_FILENO, &oldt);  // Get current terminal settings
     newt = oldt;  // Copy old settings to new
-    newt.c_lflag &= ~(ICANON | ECHO);  // Disable canonical mode and echo
+    newt.c_lflag &= static_cast<tcflag_t>(~(ICANON | ECHO));  // Disable canonical mode and echo
     tcsetattr(STDIN_FILENO, TCSANOW, &newt);  // Apply new settings
 
     int oldf = fcntl(STDIN_FILENO, F_GETFL, 0);  // Get current file descriptor flags
@@ -437,14 +437,14 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             // Check if all tasks are processed
             const bool allTasksProcessed = (completedTasksValue + failedTasksValue) >= totalTasks;
             if (allTasksProcessed) {
-                isComplete->store(true, std::memory_order_acquire);  // Mark as complete if all tasks are done
+                completedBytes->store(0, std::memory_order_release);  // Mark as complete if all tasks are done
             }
 
             // Calculate task and byte progress
-            double tasksProgress = static_cast<double>(completedTasksValue + failedTasksValue) / totalTasks;
+            double tasksProgress = static_cast<double>(completedTasksValue + failedTasksValue) / static_cast<double>(totalTasks);
             double overallProgress = tasksProgress;
             if (bytesTrackingEnabled) {
-                double bytesProgress = static_cast<double>(completedBytesValue) / totalBytes;
+                double bytesProgress = static_cast<double>(completedBytesValue) / static_cast<double>(totalBytes);
                 overallProgress = std::max(bytesProgress, tasksProgress);  // Use the maximum of task and byte progress
             }
 
@@ -454,7 +454,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             // Calculate elapsed time and speed
             auto currentTime = std::chrono::high_resolution_clock::now();
             auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime);
-            double elapsedSeconds = elapsedTime.count() / 1000.0;
+            double elapsedSeconds = static_cast<double>(elapsedTime.count()) / 1000.0;
             double speed = bytesTrackingEnabled 
                 ? (elapsedSeconds > 0.0 ? (static_cast<double>(completedBytesValue) / elapsedSeconds) : 0.0)
                 : 0.0;
@@ -525,7 +525,6 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
     fcntl(STDIN_FILENO, F_SETFL, oldf);  // Final restoration of file descriptor flags
 }
 
-
 // Function to print all required lists
 void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType) {
     static const char* defaultColor = "\033[0m";
@@ -553,7 +552,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     output << "\n"; // Initial newline for visual spacing
 
     for (size_t i = 0; i < items.size(); ++i) {
-        const char* sequenceColor = (i % 2 == 0) ? red : green;
+        const char* listSequenceColor = (i % 2 == 0) ? red : green;
         std::string directory, filename, displayPath, displayHash;
 
         if (listType == "ISO_FILES") {
@@ -561,30 +560,30 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
             directory = dir;
             filename = fname;
         } else if (listType == "MOUNTED_ISOS") {
-			std::string dirName = items[i];
+            std::string dirName = items[i];
     
-			// Find the position of the first underscore
-			size_t firstUnderscorePos = dirName.find('_');
+            // Find the position of the first underscore
+            size_t firstUnderscorePos = dirName.find('_');
     
-			// Find the position of the last tilde
-			size_t lastTildePos = dirName.find_last_of('~');
+            // Find the position of the last tilde
+            size_t lastTildePos = dirName.find_last_of('~');
     
-			// Extract displayPath (after first underscore and before last tilde)
-			if (firstUnderscorePos != std::string::npos && lastTildePos != std::string::npos && lastTildePos > firstUnderscorePos) {
-				displayPath = dirName.substr(firstUnderscorePos + 1, lastTildePos - (firstUnderscorePos + 1));
-			} else {
-				// If the conditions are not met, use the entire dirName (or handle it as needed)
-				displayPath = dirName;
-			}
+            // Extract displayPath (after first underscore and before last tilde)
+            if (firstUnderscorePos != std::string::npos && lastTildePos != std::string::npos && lastTildePos > firstUnderscorePos) {
+                displayPath = dirName.substr(firstUnderscorePos + 1, lastTildePos - (firstUnderscorePos + 1));
+            } else {
+                // If the conditions are not met, use the entire dirName (or handle it as needed)
+                displayPath = dirName;
+            }
     
-			// Extract displayHash (from last tilde to the end, including the last tilde)
-			if (lastTildePos != std::string::npos) {
-				displayHash = dirName.substr(lastTildePos); // Start at lastTildePos instead of lastTildePos + 1
-			} else {
-				// If no tilde is found, set displayHash to an empty string (or handle it as needed)
-				displayHash = "";
-			}
-		} else if (listType == "IMAGE_FILES") {
+            // Extract displayHash (from last tilde to the end, including the last tilde)
+            if (lastTildePos != std::string::npos) {
+                displayHash = dirName.substr(lastTildePos); // Start at lastTildePos instead of lastTildePos + 1
+            } else {
+                // If no tilde is found, set displayHash to an empty string (or handle it as needed)
+                displayHash = "";
+            }
+        } else if (listType == "IMAGE_FILES") {
             auto [dir, fname] = extractDirectoryAndFilename(items[i], "conversions");
 
             bool isSpecialExtension = false;
@@ -601,39 +600,36 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
             if (isSpecialExtension) {
                 directory = dir;
                 filename = fname;
-                sequenceColor = orangeBold;
+                listSequenceColor = orangeBold;
             }
         }
 
         // Build output based on listType
         if (listType == "ISO_FILES") {
-            output << sequenceColor << indexStrings[i] << ". "
+            output << listSequenceColor << indexStrings[i] << ". "
                    << defaultColor << bold << directory
                    << defaultColor << bold << "/"
                    << magenta << filename << defaultColor << "\n";
         } else if (listType == "MOUNTED_ISOS") {
-			if (displayConfig::toggleFullListUmount){
-            output << sequenceColor << indexStrings[i] << ". "
-                   << blueBold << "/mnt/iso_"
-                   << magentaBold << displayPath << grayBold << displayHash << reset << "\n";
-			} else {
-				output << sequenceColor << indexStrings[i] << ". "
-                   << magentaBold << displayPath << "\n";
-			}
+            if (displayConfig::toggleFullListUmount) {
+                output << listSequenceColor << indexStrings[i] << ". "
+                       << blueBold << "/mnt/iso_"
+                       << magentaBold << displayPath << grayBold << displayHash << reset << "\n";
+            } else {
+                output << listSequenceColor << indexStrings[i] << ". "
+                       << magentaBold << displayPath << "\n";
+            }
         } else if (listType == "IMAGE_FILES") {
-		// Alternate sequence color like in "ISO_FILES"
-		const char* sequenceColor = (i % 2 == 0) ? red : green;
-    
-			if (directory.empty() && filename.empty()) {
-				// Standard case
-				output << sequenceColor << indexStrings[i] << ". "
-				<< reset << bold << items[i] << defaultColor << "\n";
-			} else {
-				// Special extension case (keep the filename sequence as orange bold)
-				output << sequenceColor << indexStrings[i] << ". "
-					<< reset << bold << directory << "/"
-					<< orangeBold << filename << defaultColor << "\n";
-			}
+            if (directory.empty() && filename.empty()) {
+                // Standard case
+                output << listSequenceColor << indexStrings[i] << ". "
+                       << reset << bold << items[i] << defaultColor << "\n";
+            } else {
+                // Special extension case (keep the filename sequence as orange bold)
+                output << listSequenceColor << indexStrings[i] << ". "
+                       << reset << bold << directory << "/"
+                       << orangeBold << filename << defaultColor << "\n";
+            }
         }
     }
 
@@ -722,15 +718,6 @@ void setDisplayMode(const std::string& inputSearch) {
         } else {
             std::string settingsStr = inputSearch.substr(underscorePos + 1);
             newValue = (command == "cl") ? "compact" : "full";
-
-            // Map characters to settings (e.g., 'm' → mount_list)
-            std::unordered_map<char, std::string> settingMap = {
-                {'m', "mount_list"},
-                {'u', "umount_list"},
-                {'o', "cp_mv_rm_list"},
-                {'c', "conversion_lists"},
-                {'w', "write_list"}
-            };
 
             std::unordered_set<std::string> uniqueKeys;
             for (char c : settingsStr) {

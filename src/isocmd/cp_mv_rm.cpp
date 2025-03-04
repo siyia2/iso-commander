@@ -32,13 +32,11 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         // Grouping logic for "cp" and "mv": group indices by their base filename.
         std::unordered_map<std::string, std::vector<int>> groups;
         for (int idx : processedIndices) {
-            // Ensure idx is within expected range (assuming 1-indexed)
-            if (idx <= 0 || static_cast<size_t>(idx) > isoFiles.size()) {
-                uniqueErrorMessages.insert("Index out of range: " + std::to_string(idx));
-                continue;
+            // Safe index access with bounds checking and explicit type conversion
+            if (idx > 0 && static_cast<std::vector<std::string>::size_type>(idx - 1) < isoFiles.size()) {
+                std::string baseName = std::filesystem::path(isoFiles[static_cast<std::vector<std::string>::size_type>(idx - 1)]).filename().string();
+                groups[baseName].push_back(idx);
             }
-            std::string baseName = std::filesystem::path(isoFiles[idx - 1]).filename().string();
-            groups[baseName].push_back(idx);
         }
         
         // Convert the map into a vector of groups and sort groups by the first index to preserve order.
@@ -66,11 +64,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     } else {
         // For "rm", process each file individually (no grouping)
         for (int idx : processedIndices) {
-            // Validate index range
-            if (idx <= 0 || static_cast<size_t>(idx) > isoFiles.size()) {
-                uniqueErrorMessages.insert("Index out of range: " + std::to_string(idx));
-                continue;
-            }
             indexChunks.push_back({ idx });
         }
     }
@@ -84,7 +77,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         
     g_operationCancelled.store(false);
     
-    if ((processedUserDestDir == "" && (isCopy || isMove)) || abortDel) {
+    if ((processedUserDestDir.empty() && (isCopy || isMove)) || abortDel) {
         uniqueErrorMessages.clear();
         return;
     }
@@ -94,11 +87,11 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
                  "\033[0;1m operations... (\033[1;91mCtrl + c\033[0;1m:cancel)\n";
 
     std::vector<std::string> filesToProcess;
-    for (int idx : processedIndices) {
-        if (idx <= 0 || static_cast<size_t>(idx) > isoFiles.size()) {
-            continue;
+    for (const auto& index : processedIndices) {
+        // Safe index access with bounds checking and explicit type conversion
+        if (index > 0 && static_cast<std::vector<std::string>::size_type>(index - 1) < isoFiles.size()) {
+            filesToProcess.push_back(isoFiles[static_cast<std::vector<std::string>::size_type>(index - 1)]);
         }
-        filesToProcess.push_back(isoFiles[idx - 1]);
     }
 
     std::atomic<size_t> completedBytes(0);
@@ -109,7 +102,11 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     
     // Adjust totals for copy/move operations with multiple destinations
     if (isCopy || isMove) {
-        size_t destCount = std::count(processedUserDestDir.begin(), processedUserDestDir.end(), ';') + 1;
+        // Use safe counting method to avoid potential signed/unsigned conversion
+        size_t destCount = 1;
+        if (!processedUserDestDir.empty()) {
+            destCount = static_cast<size_t>(std::count(processedUserDestDir.begin(), processedUserDestDir.end(), ';') + 1);
+        }
         totalBytes *= destCount;
         totalTasks *= destCount;
     }
@@ -130,15 +127,30 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         std::vector<std::string> isoFilesInChunk;
         isoFilesInChunk.reserve(chunk.size());
         std::transform(chunk.begin(), chunk.end(), std::back_inserter(isoFilesInChunk),
-            [&isoFiles](int index) { return isoFiles[index - 1]; });
-        futures.emplace_back(pool.enqueue([isoFilesInChunk = std::move(isoFilesInChunk), 
-                                             &isoFiles, &operationIsos, &operationErrors, &userDestDir, 
-                                             isMove, isCopy, isDelete, &completedBytes, &completedTasks, 
-                                             &failedTasks, &overwriteExisting]() {
-            handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors, 
-                                   userDestDir, isMove, isCopy, isDelete, 
-                                   &completedBytes, &completedTasks, &failedTasks, overwriteExisting);
-        }));
+            [&isoFiles](int index) { 
+                // Safe index access with bounds checking and explicit type conversion
+                return (index > 0 && static_cast<std::vector<std::string>::size_type>(index - 1) < isoFiles.size()) 
+                    ? isoFiles[static_cast<std::vector<std::string>::size_type>(index - 1)] 
+                    : ""; 
+            });
+
+        // Remove any empty strings that might have been added due to invalid indices
+        isoFilesInChunk.erase(
+            std::remove_if(isoFilesInChunk.begin(), isoFilesInChunk.end(), 
+                           [](const std::string& s) { return s.empty(); }),
+            isoFilesInChunk.end()
+        );
+
+        if (!isoFilesInChunk.empty()) {
+            futures.emplace_back(pool.enqueue([isoFilesInChunk = std::move(isoFilesInChunk), 
+                                                 &isoFiles, &operationIsos, &operationErrors, &userDestDir, 
+                                                 isMove, isCopy, isDelete, &completedBytes, &completedTasks, 
+                                                 &failedTasks, &overwriteExisting]() {
+                handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors, 
+                                       userDestDir, isMove, isCopy, isDelete, 
+                                       &completedBytes, &completedTasks, &failedTasks, overwriteExisting);
+            }));
+        }
     }
 
     for (auto& future : futures) {
@@ -176,7 +188,9 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
         std::vector<std::string> entries;
         for (const auto& chunk : indexChunks) {
             for (int index : chunk) {
-                auto [shortDir, filename] = extractDirectoryAndFilename(isoFiles[index - 1], "cp_mv_rm");
+                // Safely convert index to size_t
+                auto safeIndex = static_cast<size_t>(std::max(1, index)) - 1;
+                auto [shortDir, filename] = extractDirectoryAndFilename(isoFiles[safeIndex], "cp_mv_rm");
                 std::ostringstream oss;
                 oss << "\033[1m-> " << shortDir << "/\033[95m" << filename << "\033[0m\n";
                 entries.push_back(oss.str());
@@ -186,20 +200,20 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
     };
     
     // Common pagination logic for both flows
-    auto setupPagination = [](int totalEntries) {
-        int entriesPerPage;
+    auto setupPagination = [](size_t totalEntries) {
+        size_t entriesPerPage;
 
         if (totalEntries <= 25) {
             entriesPerPage = totalEntries;  // Single page
         } else {
-            entriesPerPage = std::max(25, (totalEntries + 4) / 5);
+            entriesPerPage = std::max(static_cast<size_t>(25), (totalEntries + 4) / 5);
             // Cap entriesPerPage at 100 if it exceeds, allowing more pages
             if (entriesPerPage > 100) {
                 entriesPerPage = 100;
             }
         }
 
-        int totalPages = (totalEntries + entriesPerPage - 1) / entriesPerPage;
+        size_t totalPages = (totalEntries + entriesPerPage - 1) / entriesPerPage;
         return std::make_tuple(entriesPerPage, totalPages);
     };
 
@@ -214,13 +228,13 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
     };
     
     // Create page content for current pagination state
-    auto getPageContent = [](const std::vector<std::string>& entries, int currentPage, int entriesPerPage, int totalPages) {
-        int totalEntries = entries.size();
-        int start = currentPage * entriesPerPage;
-        int end = std::min(start + entriesPerPage, totalEntries);
+    auto getPageContent = [](const std::vector<std::string>& entries, size_t currentPage, size_t entriesPerPage, size_t totalPages) {
+        size_t totalEntries = entries.size();
+        size_t start = currentPage * entriesPerPage;
+        size_t end = std::min(start + entriesPerPage, totalEntries);
         
         std::ostringstream oss;
-        for (int i = start; i < end; ++i) {
+        for (size_t i = start; i < end; ++i) {
             oss << entries[i];
         }
         
@@ -233,7 +247,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
     };
     
     // Handle pagination navigation
-    auto handlePageNavigation = [&](const std::string& input, int& currentPage, int totalPages) -> bool {
+    auto handlePageNavigation = [&](const std::string& input, size_t& currentPage, size_t totalPages) -> bool {
         // Make sure this is just a navigation command, not a path with +/- in it
         bool isJustNavigation = true;
         for (char c : input) {
@@ -246,12 +260,13 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
         if (isJustNavigation && (input.find('+') != std::string::npos || input.find('-') != std::string::npos)) {
             int pageShift = 0;
             if (input.find('+') != std::string::npos) {
-                pageShift = std::count(input.begin(), input.end(), '+');
+                pageShift = static_cast<int>(std::count(input.begin(), input.end(), '+'));
             } else if (input.find('-') != std::string::npos) {
-                pageShift = -std::count(input.begin(), input.end(), '-');
+                pageShift = -static_cast<int>(std::count(input.begin(), input.end(), '-'));
             }
 
-            currentPage = (currentPage + pageShift + totalPages) % totalPages; // Circular page navigation
+            // Safely handle page navigation with signed arithmetic but unsigned storage
+            currentPage = (currentPage + static_cast<size_t>(pageShift) + totalPages) % totalPages; 
             return true;
         }
         return false;
@@ -259,9 +274,9 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
     
     // Generate entries once for efficiency
     auto entries = generateSelectedIsosEntries();
-    int totalEntries = entries.size();
+    size_t totalEntries = entries.size();
     auto [entriesPerPage, totalPages] = setupPagination(totalEntries);
-    int currentPage = 0;
+    size_t currentPage = 0;
     
     // Clear screen initially (common for both paths)
     clearScrollBuffer();
@@ -309,8 +324,8 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
             }
             
             // Trim leading and trailing whitespaces but keep spaces inside
-			std::string mainInputString = trimWhitespace(input.get());
-		
+            std::string mainInputString = trimWhitespace(input.get());
+        
             rl_bind_key('\f', prevent_readline_keybindings);
             rl_bind_key('\t', prevent_readline_keybindings);
             
@@ -322,7 +337,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
             
             // Then check for help command
             if (mainInputString == "?") {
-				bool import2ISO = false;
+                bool import2ISO = false;
                 helpSearches(isCpMv, import2ISO);
                 isPageTurn = false; // Not a page turn
                 continue;
@@ -426,7 +441,7 @@ bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::ato
     }
     
     while (!g_operationCancelled.load()) { // Check cancellation flag at each iteration
-        input.read(buffer.data(), buffer.size());
+        input.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
         std::streamsize bytesRead = input.gcount();
         
         if (bytesRead == 0) {
@@ -439,7 +454,7 @@ bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::ato
             return false;
         }
         
-        completedBytes->fetch_add(bytesRead, std::memory_order_relaxed);
+        completedBytes->fetch_add(static_cast<size_t>(bytesRead), std::memory_order_relaxed);
     }
 
     // Check if the operation was cancelled
@@ -453,8 +468,6 @@ bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::ato
     return true;
 }
 
-
-// Function to handle cpMvDel
 void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::set<std::string>& operationIsos, std::set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, bool overwriteExisting) {
 
     bool operationSuccessful = true;
@@ -484,9 +497,9 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 
     std::vector<std::string> destDirs;
     std::istringstream iss(userDestDir);
-    std::string destDir;
-    while (std::getline(iss, destDir, ';')) {
-        destDirs.push_back(fs::path(destDir).string());
+    std::string parsedDestDir;
+    while (std::getline(iss, parsedDestDir, ';')) {
+        destDirs.push_back(fs::path(parsedDestDir).string());
     }
 
     // Change ownership function (no return value)
@@ -503,7 +516,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
             struct stat st;
             size_t fileSize = 0;
             if (stat(srcPath.c_str(), &st) == 0) {
-                fileSize = st.st_size;
+                fileSize = static_cast<size_t>(st.st_size);
             }
 
             if (isDelete) {
@@ -530,8 +543,8 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                 std::atomic<int> successfulOperations(0);
                 
                 for (size_t i = 0; i < destDirs.size(); ++i) {
-                    const auto& destDir = destDirs[i];
-                    fs::path destPath = fs::path(destDir) / srcPath.filename();
+                    const auto& currentDestDir = destDirs[i];
+                    fs::path destPath = fs::path(currentDestDir) / srcPath.filename();
                     auto [destDirProcessed, destFile] = extractDirectoryAndFilename(destPath.string(), "cp_mv_rm");
 
                     // Check if source and destination are the same
@@ -540,7 +553,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 
                     if (absSrcPath == absDestPath) {
                         verboseErrors.push_back("\033[1;91mCannot " +
-                                                  std::string(isMove ? "move" : "copy") +
+                                                  std::string(isCopy ? "copy" : "move") +
                                                   " file to itself: \033[1;93m'" +
                                                   srcDir + "/" + srcFile + "'\033[1;91m.\033[0m");
                         failedTasks->fetch_add(1, std::memory_order_acq_rel);
@@ -553,13 +566,13 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 
                     // Handle invalid directory as an error code
                     std::error_code ec;
-                    if (!fs::exists(destDir, ec) || !fs::is_directory(destDir, ec)) {
+                    if (!fs::exists(currentDestDir, ec) || !fs::is_directory(currentDestDir, ec)) {
                         ec = std::make_error_code(std::errc::no_such_file_or_directory);
                         std::string errorDetail = "Invalid destination";
                         verboseErrors.push_back("\033[1;91mError " +
                                                   std::string(isCopy ? "copying" : "moving") +
                                                   ": \033[1;93m'" + srcDir + "/" + srcFile + "'\033[1;91m" +
-                                                  " to '" + destDir + "': " + errorDetail + "\033[1;91m.\033[0;1m");
+                                                  " to '" + currentDestDir + "': " + errorDetail + "\033[1;91m.\033[0;1m");
                         failedTasks->fetch_add(1, std::memory_order_acq_rel);
                         operationSuccessful = false;
                         
@@ -653,7 +666,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                     if (!success || ec) {
                         std::string errorDetail = g_operationCancelled.load() ? "Cancelled" : ec.message();
                         std::string errorMessageInfo = "\033[1;91mError " +
-                        std::string(isCopy ? "copying" : (i < destDirs.size() - 1 ? "moving" : "moving")) +
+                        std::string(isCopy ? "copying" : "moving") +
                         ": \033[1;93m'" + srcDir + "/" + srcFile + "'\033[1;91m" +
                         " to '" + destDirProcessed + "/': " + errorDetail + "\033[1;91m.\033[0;1m";
                         verboseErrors.push_back(errorMessageInfo);
@@ -691,8 +704,8 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
             }
         }
     };
-
-    std::vector<std::string> isoFilesToOperate;
+    
+     std::vector<std::string> isoFilesToOperate;
     for (const auto& iso : isoFiles) {
         fs::path isoPath(iso);
         auto [isoDir, isoFile] = extractDirectoryAndFilename(isoPath.string(), "cp_mv_rm");

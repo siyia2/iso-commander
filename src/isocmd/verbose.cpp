@@ -126,7 +126,7 @@ void verboseIsoCacheRefresh(std::vector<std::string>& allIsoFiles, std::atomic<s
 	if (g_operationCancelled) {
 		saveSuccess = false;
 	} else {
-		saveSuccess = saveCache(allIsoFiles, maxCacheSize, newISOFound);
+		saveSuccess = saveCache(allIsoFiles, newISOFound);
 	}
 
     // Stop the timer after completing the cache refresh and removal of non-existent paths

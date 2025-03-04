@@ -232,11 +232,10 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& currentF
     g_operationCancelled.store(false);
     
     std::set<int> indicesToProcess;
-
     // Handle input ("00" = all files, else parse input)
     if (input == "00") {
         for (size_t i = 0; i < currentFiles.size(); ++i)
-            indicesToProcess.insert(i + 1);
+            indicesToProcess.insert(static_cast<int>(i + 1));
     } else {
         tokenizeInput(input, currentFiles, uniqueErrorMessages, indicesToProcess);
         if (indicesToProcess.empty()) {
@@ -244,33 +243,49 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& currentF
             return;
         }
     }
-
+    
     // Create selected files vector from indices
     std::vector<std::string> selectedMountpoints;
     selectedMountpoints.reserve(indicesToProcess.size());
-    for (int index : indicesToProcess)
-        selectedMountpoints.push_back(currentFiles[index - 1]);
-
+    for (int index : indicesToProcess) {
+        if (index > 0 && index <= static_cast<int>(currentFiles.size())) {
+            selectedMountpoints.push_back(currentFiles[static_cast<size_t>(index - 1)]);
+        }
+    }
+    
+    if (selectedMountpoints.empty()) {
+        umountMvRmBreak = false;
+        return;
+    }
+    
     clearScrollBuffer();
     std::cout << "\n\033[0;1m Processing \033[1;93mumount\033[0;1m operations... (\033[1;91mCtrl + c\033[0;1m:cancel)\n";
-
+    
     // Thread pool setup
-    unsigned int numThreads = std::min(static_cast<unsigned int>(selectedMountpoints.size()), maxThreads);
-    const size_t chunkSize = std::min(size_t(100), selectedMountpoints.size()/numThreads + 1);
+    const unsigned int numThreads = std::min(static_cast<unsigned int>(selectedMountpoints.size()), maxThreads);
+    const size_t chunkSize = std::min(static_cast<size_t>(100), selectedMountpoints.size() / numThreads + 1);
     std::vector<std::vector<std::string>> chunks;
-
+    
     // Split work into chunks
     for (size_t i = 0; i < selectedMountpoints.size(); i += chunkSize) {
-        auto end = std::min(selectedMountpoints.begin() + i + chunkSize, selectedMountpoints.end());
-        chunks.emplace_back(selectedMountpoints.begin() + i, end);
+        auto endIterator = std::next(
+            selectedMountpoints.begin(), 
+            std::min(static_cast<std::vector<std::string>::difference_type>(i + chunkSize), 
+                     static_cast<std::vector<std::string>::difference_type>(selectedMountpoints.size()))
+        );
+        
+        chunks.emplace_back(
+            std::next(selectedMountpoints.begin(), static_cast<std::vector<std::string>::difference_type>(i)),
+            endIterator
+        );
     }
-
+    
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> unmountFutures;
     std::atomic<size_t> completedTasks(0);
     std::atomic<size_t> failedTasks(0);
     std::atomic<bool> isProcessingComplete(false);
-
+    
     // Start progress thread
     std::thread progressThread(
         displayProgressBarWithSize, 
@@ -282,7 +297,7 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& currentF
         &isProcessingComplete,
         &verbose
     );
-
+    
     // Enqueue chunk tasks
     for (const auto& chunk : chunks) {
         unmountFutures.emplace_back(pool.enqueue([&, chunk]() {
@@ -290,13 +305,13 @@ void prepareUnmount(const std::string& input, std::vector<std::string>& currentF
             unmountISO(chunk, operationFiles, operationFails, &completedTasks, &failedTasks);
         }));
     }
-
+    
     // Wait for completion or cancellation
     for (auto& future : unmountFutures) {
         future.wait();
         if (g_operationCancelled.load()) break;
     }
-
+    
     // Cleanup
     isProcessingComplete.store(true);
     progressThread.join();

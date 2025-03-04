@@ -152,7 +152,7 @@ void saveHistory(bool& historyPattern) {
         // Remove existing duplicate if present, then add to end
         auto it = lineIndices.find(line);
         if (it != lineIndices.end()) {
-            uniqueLines.erase(uniqueLines.begin() + it->second);
+            uniqueLines.erase(uniqueLines.begin() + static_cast<std::vector<std::string>::difference_type>(it->second));
             lineIndices.erase(it);
         }
 
@@ -169,7 +169,7 @@ void saveHistory(bool& historyPattern) {
     if (uniqueLines.size() > maxLines) {
         uniqueLines.erase(
             uniqueLines.begin(), 
-            uniqueLines.begin() + (uniqueLines.size() - maxLines)
+                uniqueLines.begin() + static_cast<std::vector<std::string>::difference_type>(uniqueLines.size() - maxLines)
         );
     }
 

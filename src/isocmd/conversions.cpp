@@ -216,7 +216,6 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
 			// Parse input search paths
 			std::istringstream ss(inputSearch);
 			std::string path;
-			std::set<std::string> uniquePaths;
     
 			while (std::getline(ss, path, ';')) {
 				// Trim leading and trailing whitespace
@@ -294,7 +293,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
     
     for (char c : fileExtension) {
 		if (c != '.') {
-			fileExtensionWithOutDots += toupper(c);  // Capitalize the character and add it to the result
+			fileExtensionWithOutDots += static_cast<char>(std::toupper(c));  // Capitalize the character and add it to the result
 		}
 	}
     
@@ -446,7 +445,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 
 // Function to process user input and convert selected BIN/MDF/NRG files to ISO format
 void processInput(const std::string& input, std::vector<std::string>& fileList, const bool& modeMdf, const bool& modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose, bool& needsScrnClr, std::atomic<bool>& newISOFound) {
-	// Setup signal handler at the start of the operation
+    // Setup signal handler at the start of the operation
     setupSignalHandlerCancellations();
     
     g_operationCancelled.store(false);
@@ -456,22 +455,26 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
 
     std::set<int> processedIndices;
     if (!(input.empty() || std::all_of(input.begin(), input.end(), isspace))){
-		tokenizeInput(input, fileList, processedErrors, processedIndices);
-	} else {
-		return;
-	}
+        tokenizeInput(input, fileList, processedErrors, processedIndices);
+    } else {
+        return;
+    }
     
     if (processedIndices.empty()) {
-		clearScrollBuffer();
-		std::cout << "\n\033[1;91mNo valid indices for conversion.\033[1;91m\n";
-		std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-		needsScrnClr = true;
+        clearScrollBuffer();
+        std::cout << "\n\033[1;91mNo valid indices for conversion.\033[1;91m\n";
+        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        needsScrnClr = true;
         return;
     }
 
-    unsigned int numThreads = std::min(static_cast<unsigned int>(processedIndices.size()), 
-        std::thread::hardware_concurrency());
+    // Ensure safe unsigned conversion of number of threads
+    unsigned int numThreads = std::min(
+        static_cast<unsigned int>(processedIndices.size()), 
+        std::thread::hardware_concurrency()
+    );
+
     std::vector<std::vector<size_t>> indexChunks;
     const size_t maxFilesPerChunk = 5;
 
@@ -481,56 +484,67 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
 
     auto it = processedIndices.begin();
     for (size_t i = 0; i < totalFiles; i += chunkSize) {
-        auto chunkEnd = std::next(it, std::min(chunkSize, 
-            static_cast<size_t>(std::distance(it, processedIndices.end()))));
+        // Safe iterator advancement with explicit type casting
+        auto chunkEnd = std::next(it, static_cast<std::set<int>::difference_type>(
+            std::min(chunkSize, 
+                     static_cast<size_t>(std::distance(it, processedIndices.end())))
+        ));
+        
         indexChunks.emplace_back(it, chunkEnd);
         it = chunkEnd;
     }
     
     std::vector<std::string> filesToProcess;
-    for (const auto& index : processedIndices) {
-        filesToProcess.push_back(fileList[index - 1]);
-    }
+	for (const auto& index : processedIndices) {
+		// Convert index to size_t to prevent sign conversion warning
+		if (index > 0 && static_cast<size_t>(index) <= fileList.size()) {
+			filesToProcess.push_back(fileList[static_cast<size_t>(index) - 1]);
+		}
+	}
 
     // Calculate total bytes and tasks
     size_t totalBytes = 0;
     size_t totalTasks = filesToProcess.size();  // Each file is a task
 
     if (modeNrg) {
-		for (const auto& file : filesToProcess) {
-			std::ifstream nrgFile(file, std::ios::binary);
-			if (nrgFile) {
-				// Seek to the end of the file to get the total size
-				nrgFile.seekg(0, std::ios::end);
-				size_t nrgFileSize = nrgFile.tellg();
+        for (const auto& file : filesToProcess) {
+            std::ifstream nrgFile(file, std::ios::binary);
+            if (nrgFile) {
+                // Seek to the end and safely convert file size
+                nrgFile.seekg(0, std::ios::end);
+                auto nrgFileSize = nrgFile.tellg();
+                size_t safeNrgFileSize = nrgFileSize > 0 ? static_cast<size_t>(nrgFileSize) : 0;
 
-				// The ISO data starts after the 307,200-byte header
-				size_t isoDataSize = nrgFileSize - 307200;
+                // The ISO data starts after the 307,200-byte header
+                size_t isoDataSize = safeNrgFileSize > 307200 ? safeNrgFileSize - 307200 : 0;
 
-				// Add the ISO data size to the total bytes
-				totalBytes += isoDataSize;
-			}
-		}
-	} else if (modeMdf) {
-		for (const auto& file : filesToProcess) {
-			std::ifstream mdfFile(file, std::ios::binary);
-			if (mdfFile) {
-				MdfTypeInfo mdfInfo;
-				if (!mdfInfo.determineMdfType(mdfFile)) {
-					continue;
-				}
-				mdfFile.seekg(0, std::ios::end);
-				size_t fileSize = mdfFile.tellg();
-				size_t numSectors = fileSize / mdfInfo.sector_size;
-				totalBytes += numSectors * mdfInfo.sector_data;
-			}
-		}
+                // Add the ISO data size to the total bytes
+                totalBytes += isoDataSize;
+            }
+        }
+    } else if (modeMdf) {
+        for (const auto& file : filesToProcess) {
+            std::ifstream mdfFile(file, std::ios::binary);
+            if (mdfFile) {
+                MdfTypeInfo mdfInfo;
+                if (!mdfInfo.determineMdfType(mdfFile)) {
+                    continue;
+                }
+                mdfFile.seekg(0, std::ios::end);
+                auto fileSize = mdfFile.tellg();
+                size_t safeFileSize = fileSize > 0 ? static_cast<size_t>(fileSize) : 0;
+                
+                size_t numSectors = safeFileSize / mdfInfo.sector_size;
+                totalBytes += numSectors * mdfInfo.sector_data;
+            }
+        }
     } else {
         for (const auto& file : filesToProcess) {
             std::ifstream ccdFile(file, std::ios::binary | std::ios::ate);
             if (ccdFile) {
-                size_t fileSize = ccdFile.tellg();
-                totalBytes += (fileSize / sizeof(CcdSector)) * DATA_SIZE;
+                auto fileSize = ccdFile.tellg();
+                size_t safeCcdFileSize = fileSize > 0 ? static_cast<size_t>(fileSize) : 0;
+                totalBytes += (safeCcdFileSize / sizeof(CcdSector)) * DATA_SIZE;
             }
         }
     }
@@ -748,15 +762,15 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
     std::vector<std::string>* currentCache = nullptr;
 
     if (mode == "bin") {
-        currentCacheOld = binImgFilesCache.size();
+        currentCacheOld = static_cast<int>(std::min(binImgFilesCache.size(), static_cast<size_t>(std::numeric_limits<int>::max())));
         currentCache = &binImgFilesCache;
         currentCacheSet.insert(binImgFilesCache.begin(), binImgFilesCache.end());
     } else if (mode == "mdf") {
-        currentCacheOld = mdfMdsFilesCache.size();
+		currentCacheOld = static_cast<int>(std::min(mdfMdsFilesCache.size(), static_cast<size_t>(std::numeric_limits<int>::max())));
         currentCache = &mdfMdsFilesCache;
         currentCacheSet.insert(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end());
     } else if (mode == "nrg") {
-        currentCacheOld = nrgFilesCache.size();
+		currentCacheOld = static_cast<int>(std::min(nrgFilesCache.size(), static_cast<size_t>(std::numeric_limits<int>::max())));
         currentCache = &nrgFilesCache;
         currentCacheSet.insert(nrgFilesCache.begin(), nrgFilesCache.end());
     } else {

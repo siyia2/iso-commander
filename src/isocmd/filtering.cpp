@@ -7,7 +7,7 @@
 // Conver strings to lowercase efficiently
 void toLowerInPlace(std::string& str) {
     for (char& c : str) {
-        c = std::tolower(static_cast<unsigned char>(c));
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     }
 }
 
@@ -42,11 +42,15 @@ std::vector<size_t> boyerMooreSearch(const std::string& pattern, const std::stri
     suffixLengths[patternLen - 1] = patternLen;
     size_t lastPrefixPosition = patternLen;
     
-    for (int i = patternLen - 2; i >= 0; --i) {
+    // Change loop to use size_t to avoid sign conversion warnings
+    for (size_t i = patternLen - 2; i < patternLen; --i) {
         if (memcmp(pattern.c_str() + i + 1, pattern.c_str() + patternLen - lastPrefixPosition, lastPrefixPosition - (i + 1)) == 0) {
             suffixLengths[i] = lastPrefixPosition - (i + 1);
             lastPrefixPosition = i + 1;
         }
+        
+        // Break condition to handle unsigned underflow
+        if (i == 0) break;
     }
     
     // Update good suffix shifts

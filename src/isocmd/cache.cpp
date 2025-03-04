@@ -15,42 +15,64 @@ std::mutex couNtMutex;
 
 // Function to remove non-existent paths from cache
 void removeNonExistentPathsFromCache() {
-	
-	if (!std::filesystem::exists(cacheFilePath)) {
-        // If the file is missing, clear the ISO cache and return
+    // Early return if cache file path doesn't exist
+    if (!std::filesystem::exists(cacheFilePath)) {
         globalIsoFileList.clear();
         return;
     }
 
     // Open the cache file for reading
-    int fd = open(cacheFilePath.c_str(), O_RDONLY);
-    if (fd == -1) {
+    int readFd = open(cacheFilePath.c_str(), O_RDONLY);
+    if (readFd == -1) {
         return;
     }
 
+    // Use a RAII-style approach for file descriptor
+    struct FileDescriptorGuard {
+        int& fd;
+        FileDescriptorGuard(int& fileDesc) : fd(fileDesc) {}
+        ~FileDescriptorGuard() {
+            if (fd != -1) {
+                close(fd);
+                fd = -1;
+            }
+        }
+    };
+    FileDescriptorGuard readFdGuard(readFd);
+
     // Lock the file to prevent concurrent access
-    if (flock(fd, LOCK_EX) == -1) {
-        close(fd);
+    if (flock(readFd, LOCK_EX) == -1) {
         return;
     }
 
     // Get the file size
     struct stat sb;
-    if (fstat(fd, &sb) == -1) {
-        flock(fd, LOCK_UN);
-        close(fd);
+    if (fstat(readFd, &sb) == -1) {
+        flock(readFd, LOCK_UN);
         return;
     }
-
-    size_t fileSize = sb.st_size;
+    // Use static_cast to resolve sign conversion warning
+    size_t fileSize = static_cast<size_t>(sb.st_size);
 
     // Memory map the file
-    char* mappedFile = static_cast<char*>(mmap(nullptr, fileSize, PROT_READ, MAP_PRIVATE, fd, 0));
+    char* mappedFile = static_cast<char*>(mmap(nullptr, fileSize, PROT_READ, MAP_PRIVATE, readFd, 0));
     if (mappedFile == MAP_FAILED) {
-        flock(fd, LOCK_UN);
-        close(fd);
+        flock(readFd, LOCK_UN);
         return;
     }
+
+    // Use RAII for memory unmapping
+    struct MappedFileGuard {
+        char* file;
+        size_t size;
+        MappedFileGuard(char* mappedFile, size_t fileSize) : file(mappedFile), size(fileSize) {}
+        ~MappedFileGuard() {
+            if (file != MAP_FAILED) {
+                munmap(file, size);
+            }
+        }
+    };
+    MappedFileGuard mappedFileGuard(mappedFile, fileSize);
 
     // Read the file into a vector of strings
     std::vector<std::string> cache;
@@ -58,17 +80,13 @@ void removeNonExistentPathsFromCache() {
     char* end = mappedFile + fileSize;
     while (start < end) {
         char* lineEnd = std::find(start, end, '\n');
-        cache.emplace_back(start, lineEnd);
+        if (start != lineEnd) {  // Ignore empty lines
+            cache.emplace_back(start, lineEnd);
+        }
         start = lineEnd + 1;
     }
 
-    // Unmap and close the file
-    munmap(mappedFile, fileSize);
-    flock(fd, LOCK_UN);
-    close(fd);
-
     // Determine batch size
-    const size_t maxThreads = std::thread::hardware_concurrency();
     const size_t batchSize = std::max(cache.size() / maxThreads + 1, static_cast<size_t>(2));
 
     // Create a vector to hold futures
@@ -76,11 +94,16 @@ void removeNonExistentPathsFromCache() {
 
     // Process paths in batches
     for (size_t i = 0; i < cache.size(); i += batchSize) {
-        auto begin = cache.begin() + i;
-        auto end = std::min(begin + batchSize, cache.end());
-            futures.push_back(std::async(std::launch::async, [begin, end]() {
+        // Use static_cast to resolve sign conversion warning
+        auto begin = cache.begin() + static_cast<std::vector<std::string>::difference_type>(i);
+        auto batchEnd = std::min(
+            begin + static_cast<std::vector<std::string>::difference_type>(batchSize), 
+            cache.end()
+        );
+        
+        futures.push_back(std::async(std::launch::async, [begin, batchEnd]() {
             std::vector<std::string> result;
-            for (auto it = begin; it != end; ++it) {
+            for (auto it = begin; it != batchEnd; ++it) {
                 if (std::filesystem::exists(*it)) {
                     result.push_back(*it);
                 }
@@ -93,52 +116,50 @@ void removeNonExistentPathsFromCache() {
     std::vector<std::string> retainedPaths;
     for (auto& future : futures) {
         auto result = future.get();
-        retainedPaths.insert(retainedPaths.end(), std::make_move_iterator(result.begin()), std::make_move_iterator(result.end()));
+        retainedPaths.insert(
+            retainedPaths.end(), 
+            std::make_move_iterator(result.begin()), 
+            std::make_move_iterator(result.end())
+        );
     }
     
     // Check if the retained paths are the same as the original cache
-	if (cache.size() == retainedPaths.size() && 
-		std::equal(cache.begin(), cache.end(), retainedPaths.begin())) {
-		// No changes needed, return without modifying the file
-		return;
-	}
-
-	// Only rewrite the file if there are changes
-	std::ofstream updatedCacheFile(cacheFilePath, std::ios::out | std::ios::trunc);
-	if (!updatedCacheFile.is_open()) {
-		flock(fd, LOCK_UN);
-		close(fd);
-		return;
-	}
-
-    // Open the cache file for writing
-    fd = open(cacheFilePath.c_str(), O_WRONLY);
-    if (fd == -1) {
+    if (cache.size() == retainedPaths.size() && 
+        std::equal(cache.begin(), cache.end(), retainedPaths.begin())) {
+        // No changes needed, return without modifying the file
         return;
     }
 
+    // Attempt to open the file for writing
+    int writeFd = open(cacheFilePath.c_str(), O_WRONLY | O_TRUNC);
+    if (writeFd == -1) {
+        return;
+    }
+
+    // Use RAII for write file descriptor
+    FileDescriptorGuard writeFdGuard(writeFd);
+
     // Lock the file to prevent concurrent access
-    if (flock(fd, LOCK_EX) == -1) {
-        close(fd);
+    if (flock(writeFd, LOCK_EX) == -1) {
+        return;
+    }
+
+    // Open file stream for writing
+    std::ofstream updatedCacheFile(cacheFilePath, std::ios::out | std::ios::trunc);
+    if (!updatedCacheFile.is_open()) {
+        flock(writeFd, LOCK_UN);
         return;
     }
 
     // Write the retained paths to the updated cache file
-    if (!updatedCacheFile.is_open()) {
-        flock(fd, LOCK_UN);
-        close(fd);
-        return;
+    for (const std::string& path : retainedPaths) {
+        if (std::filesystem::exists(path)) {
+            updatedCacheFile << path << '\n';
+        }
     }
 
-    for (const std::string& path : retainedPaths) {
-		if (std::filesystem::exists(path)) {
-			updatedCacheFile << path << '\n';
-		}
-	}
-
-    // RAII: Close the file and release the lock
-    flock(fd, LOCK_UN);
-    close(fd);
+    // Close file and release lock
+    flock(writeFd, LOCK_UN);
 }
 
 
@@ -301,26 +322,20 @@ void backgroundCacheImport(int maxDepthParam, std::atomic<bool>& isImportRunning
     std::vector<std::future<void>> futures;
     for (const auto& path : finalPaths) {
         if (isValidDirectory(path)) {
-            // Wait until the number of active threads is less than maxThreads * 2
-            std::unique_lock<std::mutex> lock(threadMutex);
-            cv.wait(lock, [&]() { return activeThreads < maxThreadsX2; });
-
-            // Increment the active thread count
+            // Rename the lock to avoid shadowing
+            std::unique_lock<std::mutex> threadLock(threadMutex);
+            cv.wait(threadLock, [&]() { return activeThreads < maxThreadsX2; });
+            
+            // Convert fileSize to size_t to resolve sign conversion warnings
             activeThreads++;
-
-            // Launch the task asynchronously
             futures.push_back(std::async(std::launch::async, [&, path]() {
                 traverse(path, allIsoFiles, uniqueErrorMessages,
                          totalFiles, processMutex, traverseErrorMutex,
                          localMaxDepth, localPromptFlag);
-
-                // Decrement the active thread count when done
-                {
-                    std::unique_lock<std::mutex> lock(threadMutex);
-                    activeThreads--;
-                }
-
-                // Notify the waiting thread that a thread has finished
+                
+                // Rename the inner lock to avoid shadowing
+                std::unique_lock<std::mutex> innerThreadLock(threadMutex);
+                activeThreads--;
                 cv.notify_one();
             }));
         }
@@ -331,7 +346,7 @@ void backgroundCacheImport(int maxDepthParam, std::atomic<bool>& isImportRunning
         future.wait();
     }
 
-    saveCache(allIsoFiles, maxCacheSize, newISOFound);
+    saveCache(allIsoFiles, newISOFound);
 
     isImportRunning.store(false);
 }
@@ -339,7 +354,6 @@ void backgroundCacheImport(int maxDepthParam, std::atomic<bool>& isImportRunning
 
 // Function to load ISO cache from file
 void loadCache(std::vector<std::string>& isoFiles) {
-    std::string cacheFilePath = getHomeDirectory() + "/.local/share/isocmd/database/iso_commander_cache.txt";
 
     int fd = open(cacheFilePath.c_str(), O_RDONLY);
     if (fd == -1) {
@@ -362,7 +376,8 @@ void loadCache(std::vector<std::string>& isoFiles) {
 
     const auto fileSize = fileStat.st_size;
 
-    char* mappedFile = static_cast<char*>(mmap(nullptr, fileSize, PROT_READ, MAP_PRIVATE, fd, 0));
+    size_t fileSizeUnsigned = static_cast<size_t>(fileSize);
+    char* mappedFile = static_cast<char*>(mmap(nullptr, fileSizeUnsigned, PROT_READ, MAP_PRIVATE, fd, 0));
     if (mappedFile == MAP_FAILED) {
         flock(fd, LOCK_UN);
         close(fd);
@@ -383,7 +398,8 @@ void loadCache(std::vector<std::string>& isoFiles) {
         }
     }
 
-    munmap(mappedFile, fileSize);
+    // Use the same unsigned size for munmap
+    munmap(mappedFile, fileSizeUnsigned);
     flock(fd, LOCK_UN);
     close(fd);
 
@@ -392,7 +408,7 @@ void loadCache(std::vector<std::string>& isoFiles) {
 
 
 // Function to save ISO cache to file
-bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize, std::atomic<bool>& newISOFound) {
+bool saveCache(const std::vector<std::string>& isoFiles, std::atomic<bool>& newISOFound) {
     std::filesystem::path cachePath = cacheDirectory;
     cachePath /= cacheFileName;
     if (!std::filesystem::exists(cacheDirectory) && !std::filesystem::create_directories(cacheDirectory)) {
@@ -422,7 +438,9 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSiz
     std::vector<std::string> combinedCache = existingCache;
     combinedCache.insert(combinedCache.end(), newEntries.begin(), newEntries.end());
     if (combinedCache.size() > maxCacheSize) {
-        combinedCache.erase(combinedCache.begin(), combinedCache.begin() + (combinedCache.size() - maxCacheSize));
+        combinedCache.erase(combinedCache.begin(), 
+			combinedCache.begin() + static_cast<std::vector<std::string>::difference_type>(combinedCache.size() - maxCacheSize)
+		);
     }
     
     int fd = open(cachePath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -477,8 +495,8 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
             std::uintmax_t cachesizeInBytes = maxCacheSize;
 
             // Convert to MB
-            double fileSizeInMB = fileSizeInBytes / (1024.0 * 1024.0);
-            double cachesizeInMb = cachesizeInBytes / (1024.0 * 1024.0);
+            double fileSizeInMB = static_cast<double>(fileSizeInBytes) / (1024.0 * 1024.0);
+			double cachesizeInMb = static_cast<double>(cachesizeInBytes) / (1024.0 * 1024.0);
 
             std::cout << "\nCapacity: " << std::fixed << std::setprecision(1) << fileSizeInMB << "MB" 
                       << "/" << std::setprecision(0) << cachesizeInMb << "MB" 
@@ -533,7 +551,7 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
             }
         }
 
-        std::map<std::string, std::string> config = readConfig(configPath);
+        std::map<std::string, std::string> config = readConfig();
 
         // Update the specific setting
         if (inputSearch == "*auto_on" || inputSearch == "*auto_off") {
@@ -719,7 +737,7 @@ void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, 
     } else {
 		if (!g_operationCancelled.load()) {
 			// Save the combined cache to disk
-			saveCache(allIsoFiles, maxCacheSize, newISOFound);
+			saveCache(allIsoFiles, newISOFound);
 		}
 		promptFlag = true;
 		maxDepth = -1;
@@ -735,62 +753,60 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
     std::atomic<bool> g_CancelledMessageAdded{false};
     // Reset cancellation flag
     g_operationCancelled.store(false);
-
-
-    auto iequals = [](const std::string_view& a, const std::string_view& b) {
-        return std::equal(a.begin(), a.end(), b.begin(), b.end(),
-                         [](unsigned char a, unsigned char b) {
-                             return std::tolower(a) == std::tolower(b);
+    
+    // Renamed lambda parameters to avoid shadowing
+    auto iequals = [](const std::string_view& str1, const std::string_view& str2) {
+        return std::equal(str1.begin(), str1.end(), str2.begin(), str2.end(),
+                         [](unsigned char ch1, unsigned char ch2) {
+                             return std::tolower(ch1) == std::tolower(ch2);
                          });
     };
-
+    
     try {
         auto options = std::filesystem::directory_options::none;
         for (auto it = std::filesystem::recursive_directory_iterator(path, options); 
-			it != std::filesystem::recursive_directory_iterator(); ++it) {
-			if (g_operationCancelled.load()) {
-				if (!g_CancelledMessageAdded.exchange(true)) {
-					std::lock_guard<std::mutex> lock(globalSetsMutex);
-					uniqueErrorMessages.clear();
-					uniqueErrorMessages.insert("\n\033[1;33mISO search interrupted by user.\033[0;1m");
-				}
-				break;
-			}
-                if (maxDepth >= 0 && it.depth() > maxDepth) {
-                    it.disable_recursion_pending();
-                    continue;
+             it != std::filesystem::recursive_directory_iterator(); ++it) {
+            if (g_operationCancelled.load()) {
+                if (!g_CancelledMessageAdded.exchange(true)) {
+                    std::lock_guard<std::mutex> lock(globalSetsMutex);
+                    uniqueErrorMessages.clear();
+                    uniqueErrorMessages.insert("\n\033[1;33mISO search interrupted by user.\033[0;1m");
                 }
-
-                const auto& entry = *it;
-                if (promptFlag && entry.is_regular_file()) {
-                    totalFiles.fetch_add(1, std::memory_order_acq_rel);
-                    if (totalFiles % 100 == 0) { // Update display periodically
-						std::lock_guard<std::mutex> lock(couNtMutex);
-                        std::cout << "\r\033[0;1mTotal files processed: " << totalFiles << std::flush;
-                    }
+                break;
+            }
+            
+            if (maxDepth >= 0 && it.depth() > maxDepth) {
+                it.disable_recursion_pending();
+                continue;
+            }
+            
+            const auto& entry = *it;
+            if (promptFlag && entry.is_regular_file()) {
+                totalFiles.fetch_add(1, std::memory_order_acq_rel);
+                if (totalFiles % 100 == 0) { // Update display periodically
+                    std::lock_guard<std::mutex> lock(couNtMutex);
+                    std::cout << "\r\033[0;1mTotal files processed: " << totalFiles << std::flush;
                 }
-
-                if (!entry.is_regular_file()) continue;
-
-                const auto& filePath = entry.path();
-                if (!iequals(filePath.extension().string(), ".iso")) continue;
-
-                localIsoFiles.push_back(filePath.string());
-
-                if (localIsoFiles.size() >= BATCH_SIZE) {
-                    std::lock_guard<std::mutex> lock(traverseFilesMutex);
-                    isoFiles.insert(isoFiles.end(), localIsoFiles.begin(), localIsoFiles.end());
-                    localIsoFiles.clear();
-                }
-			}
-
+            }
+            
+            if (!entry.is_regular_file()) continue;
+            
+            const auto& filePath = entry.path();
+            if (!iequals(filePath.extension().string(), ".iso")) continue;
+            
+            localIsoFiles.push_back(filePath.string());
+            if (localIsoFiles.size() >= BATCH_SIZE) {
+                std::lock_guard<std::mutex> lock(traverseFilesMutex);
+                isoFiles.insert(isoFiles.end(), localIsoFiles.begin(), localIsoFiles.end());
+                localIsoFiles.clear();
+            }
+        }
+        
         // Merge leftovers
         if (!localIsoFiles.empty()) {
             std::lock_guard<std::mutex> lock(traverseFilesMutex);
             isoFiles.insert(isoFiles.end(), localIsoFiles.begin(), localIsoFiles.end());
         }
-
-        // Merge errors
     } catch (const std::filesystem::filesystem_error& e) {
         std::string formattedError = "\n\033[1;91mError traversing directory: " + 
                                     path.string() + " - " + e.what() + "\033[0;1m";

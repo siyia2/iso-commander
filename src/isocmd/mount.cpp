@@ -261,18 +261,17 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
 
 
 // Function to process input and mount ISO files asynchronously
-void processAndMountIsoFiles(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages, bool& verbose) {
+void processAndMountIsoFiles(const std::string& input, std::vector<std::string>& isoFiles,std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages, bool& verbose) {
     std::set<int> indicesToProcess;
-    
+
     // Setup signal handler
     setupSignalHandlerCancellations();
-    
     g_operationCancelled.store(false);
 
     // Handle input ("00" = all files, else parse input)
     if (input == "00") {
         for (size_t i = 0; i < isoFiles.size(); ++i)
-            indicesToProcess.insert(i + 1);
+            indicesToProcess.insert(static_cast<int>(i + 1));
     } else {
         tokenizeInput(input, isoFiles, uniqueErrorMessages, indicesToProcess);
         if (indicesToProcess.empty()) {
@@ -284,19 +283,20 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
     std::vector<std::string> selectedIsoFiles;
     selectedIsoFiles.reserve(indicesToProcess.size());
     for (int index : indicesToProcess)
-        selectedIsoFiles.push_back(isoFiles[index - 1]);
+        selectedIsoFiles.push_back(isoFiles[static_cast<size_t>(index - 1)]);
 
     std::cout << "\n\033[0;1m Processing \033[1;92mmount\033[0;1m operations... (\033[1;91mCtrl + c\033[0;1m:cancel)\n";
 
     // Thread pool and task setup
     unsigned int numThreads = std::min(static_cast<unsigned int>(selectedIsoFiles.size()), maxThreads);
-    const size_t chunkSize = std::min(size_t(100), selectedIsoFiles.size()/numThreads + 1);
+    const size_t chunkSize = std::min(size_t(100), selectedIsoFiles.size() / numThreads + 1);
     std::vector<std::vector<std::string>> isoChunks;
 
     // Split work into chunks
     for (size_t i = 0; i < selectedIsoFiles.size(); i += chunkSize) {
-        auto end = std::min(selectedIsoFiles.begin() + i + chunkSize, selectedIsoFiles.end());
-        isoChunks.emplace_back(selectedIsoFiles.begin() + i, end);
+        auto end = std::min(selectedIsoFiles.begin() + static_cast<std::vector<std::string>::difference_type>(i + chunkSize),
+                            selectedIsoFiles.end());
+        isoChunks.emplace_back(selectedIsoFiles.begin() + static_cast<std::vector<std::string>::difference_type>(i), end);
     }
 
     ThreadPool pool(numThreads);
@@ -335,3 +335,4 @@ void processAndMountIsoFiles(const std::string& input, std::vector<std::string>&
     isProcessingComplete.store(true);
     progressThread.join();
 }
+
