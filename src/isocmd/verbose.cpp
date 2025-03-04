@@ -231,20 +231,20 @@ void verboseSearchResults(const std::string& fileExtension, std::set<std::string
 
     // Case: Files were found
     if (!fileNames.empty() && !g_operationCancelled.load()) {
-        std::cout << "\n\n\033[1;92mFound " << fileNames.size() << " matching files.\033[1;93m " << currentCacheOld << " matching entries cached in RAM from previous searches.\033[0;1m\n\n";
+        std::cout << "\n\n\033[1;92m" << fileNames.size() << " new \033[1;38;5;208m{" << fileExtension << "} \033[1;92mfiles found.\033[1;93m\n" << currentCacheOld << " \033[1;38;5;208m{" << fileExtension << "} \033[1;93mentries cached.\033[0;1m\n\n";
     }
 
     // Case: No new files were found, but files exist in cache
     if (!newFilesFound && !files.empty() && !list && !g_operationCancelled.load()) {
         verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
-        std::cout << "\n\n\033[1;91mNo new " << fileExtension << " files found. \033[1;92m";
-        std::cout << files.size() << " matching entries are cached in RAM from previous searches, \033[1;94mls\033[1;92m ↵ in FolderPath prompt to display .\033[0;1m\n\n";
+        std::cout << "\n\n\033[1;91m0 new \033[1;38;5;208m{" << fileExtension << "} \033[1;91mfiles found. \033[1;93m\n";
+        std::cout << files.size() << " \033[1;38;5;208m{" << fileExtension << "} \033[1;93mentries cached | \033[1;94mls \033[1;93m↵ to list.\033[0;1m\n\n";
     }
 
     // Case: No files were found
     if (files.empty() && !list && !g_operationCancelled.load()) {
         verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
-        std::cout << "\n\n\033[1;91mNo " << fileExtension << " files found in the specified paths or matching entries cached in RAM.\n\033[0;1m\n";
+        std::cout << "\n\n\033[1;91m0\033[1;38;5;208m {" << fileExtension << "} \033[1;91mfiles found.\n\033[1;93m0\033[1;38;5;208m {" << fileExtension << "} \033[1;93mentries cached.\n\033[0;1m\n";
     }
     
     auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
