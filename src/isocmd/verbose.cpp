@@ -4,16 +4,17 @@
 
 
 // Main verbose print function for results
-void verbosePrint(const std::unordered_set<std::string>& primarySet, const std::unordered_set<std::string>& secondarySet = {}, const std::unordered_set<std::string>& tertiarySet = {}, const std::unordered_set<std::string>& quaternarySet = {}, const std::unordered_set<std::string>& errorSet = {}, int printType = 0) {
+void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_set<std::string>& secondarySet, std::unordered_set<std::string>& tertiarySet, std::unordered_set<std::string>& quaternarySet, std::unordered_set<std::string>& errorSet, 
+int printType) {
 
     signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
     disable_ctrl_d();
     clearScrollBuffer(); // Assuming this function is defined elsewhere
 
-    // Lambda to convert an unordered_set to a vector, sort it, and print it
-    auto printSortedSet = [&](const std::unordered_set<std::string>& set, bool isError = false, bool addNewLineBefore = false) {
+    // Lambda to move an unordered_set to a vector, sort it, and print it
+    auto printSortedSet = [&](std::unordered_set<std::string>&& set, bool isError = false, bool addNewLineBefore = false) {
         if (!set.empty()) {
-            std::vector<std::string> vec(set.begin(), set.end());
+            std::vector<std::string> vec(std::make_move_iterator(set.begin()), std::make_move_iterator(set.end()));
             sortFilesCaseInsensitive(vec); // Sort the vector case-insensitively
             if (addNewLineBefore) {
                 std::cout << "\n";
@@ -30,45 +31,35 @@ void verbosePrint(const std::unordered_set<std::string>& primarySet, const std::
 
     switch (printType) {
         case 0: // Unmounted
-            // primarySet = unmounted files, secondarySet = unmounted errors, errorSet = error messages
-            printSortedSet(primarySet);
-            printSortedSet(secondarySet, false, !primarySet.empty());
-            printSortedSet(errorSet, true, !primarySet.empty() || !secondarySet.empty());
+            printSortedSet(std::move(primarySet));
+            printSortedSet(std::move(secondarySet), false, !primarySet.empty());
+            printSortedSet(std::move(errorSet), true, !primarySet.empty() || !secondarySet.empty());
             std::cout << "\n\n";
             break;
 
         case 1: // Operation
-            // primarySet = operation ISOs, secondarySet = operation errors, errorSet = unique error messages
-            printSortedSet(primarySet, false);
-            printSortedSet(secondarySet, false, !primarySet.empty());
-            printSortedSet(errorSet, false, !primarySet.empty() || !secondarySet.empty());
+            printSortedSet(std::move(primarySet));
+            printSortedSet(std::move(secondarySet), false, !primarySet.empty());
+            printSortedSet(std::move(errorSet), false, !primarySet.empty() || !secondarySet.empty());
             std::cout << "\n\n";
             break;
 
         case 2: // Mounted
-            // primarySet = mounted files, secondarySet = skipped messages, 
-            // tertiarySet = mounted fails, errorSet = unique error messages
-            printSortedSet(primarySet);
-            printSortedSet(tertiarySet, true, !primarySet.empty());
+            printSortedSet(std::move(primarySet));
+            printSortedSet(std::move(tertiarySet), true, !primarySet.empty());
             if (primarySet.empty() && !tertiarySet.empty() && !secondarySet.empty()) {
                 std::cout << "\n";
             }
-            printSortedSet(secondarySet, true, !primarySet.empty());
-            printSortedSet(errorSet, true, !primarySet.empty() || !secondarySet.empty() || !tertiarySet.empty());
+            printSortedSet(std::move(secondarySet), true, !primarySet.empty());
+            printSortedSet(std::move(errorSet), true, !primarySet.empty() || !secondarySet.empty() || !tertiarySet.empty());
             std::cout << "\n\n";
             break;
 
         case 3: // Conversion
-            // primarySet = processed errors
-            // secondarySet = success outputs
-            // tertiarySet = skipped outputs
-            // quaternarySet = failed outputs
-            // errorSet = deleted outputs
             std::cout << "\n";
-            // Lambda to convert, sort, and print with a newline after each element
-            auto printSortedWithNewline = [&](const std::unordered_set<std::string>& outs) {
+            auto printSortedWithNewline = [&](std::unordered_set<std::string>&& outs) {
                 if (!outs.empty()) {
-                    std::vector<std::string> vec(outs.begin(), outs.end());
+                    std::vector<std::string> vec(std::make_move_iterator(outs.begin()), std::make_move_iterator(outs.end()));
                     sortFilesCaseInsensitive(vec);
                     for (const auto& out : vec) {
                         std::cout << out << "\033[0;1m\n";
@@ -77,11 +68,11 @@ void verbosePrint(const std::unordered_set<std::string>& primarySet, const std::
                 }
             };
 
-            printSortedWithNewline(secondarySet);   // Success outputs
-            printSortedWithNewline(tertiarySet);      // Skipped outputs
-            printSortedWithNewline(quaternarySet);    // Failed outputs
-            printSortedWithNewline(errorSet);         // Deleted outputs
-            printSortedWithNewline(primarySet);       // Processed errors
+            printSortedWithNewline(std::move(secondarySet));   // Success outputs
+            printSortedWithNewline(std::move(tertiarySet));    // Skipped outputs
+            printSortedWithNewline(std::move(quaternarySet));  // Failed outputs
+            printSortedWithNewline(std::move(errorSet));       // Deleted outputs
+            printSortedWithNewline(std::move(primarySet));     // Processed errors
             break;
     }
 
