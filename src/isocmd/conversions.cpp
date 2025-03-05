@@ -470,10 +470,7 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
     }
 
     // Ensure safe unsigned conversion of number of threads
-    unsigned int numThreads = std::min(
-        static_cast<unsigned int>(processedIndices.size()), 
-        std::thread::hardware_concurrency()
-    );
+    unsigned int numThreads = std::min(static_cast<unsigned int>(processedIndices.size()), maxThreads);
 
     std::vector<std::vector<size_t>> indexChunks;
     const size_t maxFilesPerChunk = 5;
@@ -995,4 +992,3 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
     promptFlag = true;
     maxDepth = -1;
 }
-
