@@ -26,46 +26,37 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         return;
     }
     
-    // --- Create chunks based on the operation type ---
     std::vector<std::vector<int>> indexChunks;
-    if (!isDelete) {
-        // Grouping logic for "cp" and "mv": group indices by their base filename
-        std::unordered_map<std::string, std::vector<int>> groups;
-        for (int idx : processedIndices) {
-            std::string baseName = std::filesystem::path(isoFiles[idx - 1]).filename().string();
-            groups[baseName].push_back(idx);
-        }
-        
-        // Find the largest group
-        auto largestGroup = std::max_element(groups.begin(), groups.end(), 
-            [](const auto& a, const auto& b) { return a.second.size() < b.second.size(); });
-        
-        // If the largest group is larger than maxFilesPerChunk, create a single chunk for that group
-        const size_t maxFilesPerChunk = 5;
-        if (largestGroup != groups.end() && largestGroup->second.size() > maxFilesPerChunk) {
-            indexChunks.push_back(largestGroup->second);
-            groups.erase(largestGroup->first);
-        }
+	if (!isDelete) {
+		// Group indices by their base filename
+		std::unordered_map<std::string, std::vector<int>> groups;
+		for (int idx : processedIndices) {
+			std::string baseName = std::filesystem::path(isoFiles[idx - 1]).filename().string();
+			groups[baseName].push_back(idx);
+		}
 
-        // Continue with the previous chunking logic for remaining groups
-        std::vector<int> currentChunk;
-        for (auto& kv : groups) {
-            auto& group = kv.second;
-            if (!currentChunk.empty() && (currentChunk.size() + group.size() > maxFilesPerChunk)) {
-                indexChunks.push_back(currentChunk);
-                currentChunk.clear();
-            }
-            currentChunk.insert(currentChunk.end(), group.begin(), group.end());
-        }
-        if (!currentChunk.empty()) {
-            indexChunks.push_back(currentChunk);
-        }
-    } else {
-        // For "rm", process each file individually (no grouping)
-        for (int idx : processedIndices) {
-            indexChunks.push_back({ idx });
-        }
-    }
+		std::vector<int> uniqueNameFiles;
+		// Separate multi-file groups and collect unique files
+		for (auto& kv : groups) {
+			if (kv.second.size() > 1) {
+				indexChunks.push_back(kv.second);
+			} else {
+				uniqueNameFiles.push_back(kv.second[0]);
+			}
+		}
+
+		// Split unique files into chunks of up to 5
+		const size_t maxFilesPerChunk = 5;
+		for (size_t i = 0; i < uniqueNameFiles.size(); i += maxFilesPerChunk) {
+			auto end = i + maxFilesPerChunk <= uniqueNameFiles.size() ? uniqueNameFiles.begin() + i + maxFilesPerChunk : uniqueNameFiles.end();
+			indexChunks.emplace_back(uniqueNameFiles.begin() + i, end);
+		}
+	} else {
+		// For "rm", process each file individually
+		for (int idx : processedIndices) {
+			indexChunks.push_back({idx});
+		}
+	}
 
     unsigned int numThreads = std::min(static_cast<unsigned int>(processedIndices.size()), maxThreads);
 
