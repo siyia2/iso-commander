@@ -18,23 +18,41 @@
 
 bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std::atomic<size_t>* completedBytes) {
     namespace fs = std::filesystem;
-    std::ifstream mdfFile(mdfPath, std::ios::binary);
-    std::ofstream isoFile(isoPath, std::ios::binary);
-    if (!mdfFile.is_open() || !isoFile.is_open()) {
+    
+    // Initial cancellation check
+    if (g_operationCancelled.load()) {
+		g_operationCancelled.store(true);
         return false;
     }
-
-    // Disable internal buffering for more direct writes
-    isoFile.rdbuf()->pubsetbuf(nullptr, 0);
-
-    size_t seek_ecc = 0, sector_size = 0, seek_head = 0, sector_data = 0;
-    char buf[12];
+    
+    std::ifstream mdfFile(mdfPath, std::ios::binary);
+    if (!mdfFile.is_open()) {
+        return false;
+    }
     
     // Check if file is valid MDF
     mdfFile.seekg(32768);
+    char buf[12];
     if (!mdfFile.read(buf, 8) || std::memcmp("CD001", buf + 1, 5) == 0) {
         return false; // Not an MDF file or unsupported format
     }
+    
+    // Check cancellation before opening output file
+    if (g_operationCancelled.load()) {
+		g_operationCancelled.store(true);
+        return false;
+    }
+    
+    std::ofstream isoFile(isoPath, std::ios::binary);
+    if (!isoFile.is_open()) {
+        return false;
+    }
+    
+    // Disable internal buffering for more direct writes
+    isoFile.rdbuf()->pubsetbuf(nullptr, 0);
+    
+    // Determine MDF format
+    size_t seek_ecc = 0, sector_size = 0, seek_head = 0, sector_data = 0;
     
     mdfFile.seekg(0);
     if (!mdfFile.read(buf, 12)) {
@@ -70,71 +88,56 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
     size_t source_length = static_cast<size_t>(mdfFile.tellg()) / sector_size;
     mdfFile.seekg(0, std::ios::beg);
     
+    // Initialize progress tracking
+    if (completedBytes) {
+        *completedBytes = 0;
+    }
+    
     // Buffer for a single sector
     std::vector<char> sectorBuffer(sector_data);
-    size_t sectorsProcessed = 0;
-
+    
+    // Main conversion loop with strategic cancellation checks
     while (source_length > 0) {
-        // Check cancellation at the start
+        // Check cancellation at the start of each sector processing
         if (g_operationCancelled.load()) {
             isoFile.close();
             fs::remove(isoPath);
+            g_operationCancelled.store(true);
             return false;
         }
-
+        
         // Skip header
         mdfFile.seekg(static_cast<std::streamoff>(seek_head), std::ios::cur);
-        
-        // Check after seeking header
-        if (g_operationCancelled.load()) {
-            isoFile.close();
-            fs::remove(isoPath);
-            return false;
-        }
         
         // Read sector data
         if (!mdfFile.read(sectorBuffer.data(), sector_data)) {
             return false;
         }
         
-        // Check after reading sector
-        if (g_operationCancelled.load()) {
-            isoFile.close();
-            fs::remove(isoPath);
-            return false;
-        }
-        
         // Skip ECC data
         mdfFile.seekg(static_cast<std::streamoff>(seek_ecc), std::ios::cur);
         
-        // Check after seeking ECC
+        // Check cancellation before writing
         if (g_operationCancelled.load()) {
             isoFile.close();
             fs::remove(isoPath);
+            g_operationCancelled.store(true);
             return false;
         }
         
-        // Write sector immediately
+        // Write sector
         if (!isoFile.write(sectorBuffer.data(), sector_data)) {
             return false;
         }
         
-        // Check after writing sector
-        if (g_operationCancelled.load()) {
-            isoFile.close();
-            fs::remove(isoPath);
-            return false;
-        }
-
         // Update progress
         if (completedBytes) {
             completedBytes->fetch_add(sector_data, std::memory_order_relaxed);
         }
         
-        sectorsProcessed++;
         --source_length;
     }
-
+    
     return true;
 }
 
@@ -143,26 +146,44 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
 
 bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std::atomic<size_t>* completedBytes) {
     namespace fs = std::filesystem;
+    
+    // Initial cancellation check
+    if (g_operationCancelled.load()) {
+		g_operationCancelled.store(true);
+        return false;
+    }
+    
     std::ifstream ccdFile(ccdPath, std::ios::binary);
     if (!ccdFile) return false;
     
+    // Check cancellation before opening output file
+    if (g_operationCancelled.load()) {
+		g_operationCancelled.store(true);
+        return false;
+    }
+    
     std::ofstream isoFile(isoPath, std::ios::binary);
     if (!isoFile) return false;
-
+    
     // Disable internal buffering for more direct writes
     isoFile.rdbuf()->pubsetbuf(nullptr, 0);
     
+    // Initialize progress counter
+    if (completedBytes) {
+        *completedBytes = 0;
+    }
+    
     CcdSector sector;
-    size_t sectorNum = 0;
     
     while (ccdFile.read(reinterpret_cast<char*>(&sector), sizeof(CcdSector))) {
-        // Check cancellation at the start of the loop
+        // Check cancellation before processing sector
         if (g_operationCancelled.load()) {
             isoFile.close();
             fs::remove(isoPath);
+            g_operationCancelled.store(true);
             return false;
         }
-
+        
         size_t bytesWritten = 0;
         
         switch (sector.sectheader.header.mode) {
@@ -182,34 +203,26 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
             default:
                 return false;
         }
-
-        // Check cancellation immediately after writing sector data
+        
+        // Check cancellation after writing
         if (g_operationCancelled.load()) {
             isoFile.close();
             fs::remove(isoPath);
+            g_operationCancelled.store(true);
             return false;
         }
-
+        
         // Validate write operation
         if (!isoFile || bytesWritten != DATA_SIZE) {
             return false;
         }
-
+        
         // Update progress
         if (completedBytes) {
             completedBytes->fetch_add(bytesWritten, std::memory_order_relaxed);
         }
-
-        // Check cancellation after updating progress
-        if (g_operationCancelled.load()) {
-            isoFile.close();
-            fs::remove(isoPath);
-            return false;
-        }
-        
-        sectorNum++;
     }
-
+    
     return true;
 }
 
@@ -217,6 +230,13 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
 
 bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile, std::atomic<size_t>* completedBytes) {
     namespace fs = std::filesystem;
+    
+    // Early cancellation check
+    if (g_operationCancelled.load()) {
+		g_operationCancelled.store(true);
+        return false;
+    }
+
     std::ifstream nrgFile(inputFile, std::ios::binary);
     if (!nrgFile) {
         return false;
@@ -240,6 +260,12 @@ bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile
     nrgFile.clear();
     nrgFile.seekg(307200, std::ios::beg);  // Skip the header section
 
+    // Check cancellation before opening output file
+    if (g_operationCancelled.load()) {
+		g_operationCancelled.store(true);
+        return false;
+    }
+
     std::ofstream isoFile(outputFile, std::ios::binary);
     if (!isoFile) {
         return false;
@@ -248,51 +274,45 @@ bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile
     // Disable internal buffering for more direct writes
     isoFile.rdbuf()->pubsetbuf(nullptr, 0);
 
-    // Use sector-sized buffer (typical CD sector size is 2048 bytes)
-    constexpr size_t SECTOR_SIZE = 2048;
-    std::vector<char> sectorBuffer(SECTOR_SIZE);
-    size_t sectorsProcessed = 0;
-
     // Initialize completedBytes to 0 if provided
     if (completedBytes) {
         *completedBytes = 0;
     }
 
-    // Check cancellation before starting the loop
-    if (g_operationCancelled.load()) {
-        isoFile.close();
-        fs::remove(outputFile);
-        return false;
-    }
+    constexpr size_t SECTOR_SIZE = 2048;
+    std::vector<char> sectorBuffer(SECTOR_SIZE);
 
-    // Read and write sector by sector
+    // Conversion loop with comprehensive cancellation checks
     while (nrgFile && nrgFile.tellg() < nrgFileSize) {
-        // Check cancellation at the start of the loop
+        // Check cancellation before reading
         if (g_operationCancelled.load()) {
             isoFile.close();
             fs::remove(outputFile);
+            g_operationCancelled.store(true);
             return false;
         }
 
         nrgFile.read(sectorBuffer.data(), SECTOR_SIZE);
         std::streamsize bytesRead = nrgFile.gcount();
-
-        // Check cancellation after reading sector
-        if (g_operationCancelled.load()) {
-            isoFile.close();
-            fs::remove(outputFile);
-            return false;
-        }
         
         if (bytesRead > 0) {
+            // Check cancellation before writing
+            if (g_operationCancelled.load()) {
+                isoFile.close();
+                fs::remove(outputFile);
+                g_operationCancelled.store(true);
+                return false;
+            }
+
             if (!isoFile.write(sectorBuffer.data(), bytesRead)) {
                 return false;
             }
 
-            // Check cancellation after writing sector
+            // Check cancellation after writing
             if (g_operationCancelled.load()) {
                 isoFile.close();
                 fs::remove(outputFile);
+                g_operationCancelled.store(true);
                 return false;
             }
 
@@ -300,15 +320,6 @@ bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile
             if (completedBytes) {
                 completedBytes->fetch_add(bytesRead, std::memory_order_relaxed);
             }
-
-            // Check cancellation after updating progress
-            if (g_operationCancelled.load()) {
-                isoFile.close();
-                fs::remove(outputFile);
-                return false;
-            }
-            
-            sectorsProcessed++;
         }
     }
 
