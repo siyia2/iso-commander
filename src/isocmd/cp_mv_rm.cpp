@@ -34,7 +34,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 			std::string baseName = std::filesystem::path(isoFiles[idx - 1]).filename().string();
 			groups[baseName].push_back(idx);
 		}
-
+    
 		std::vector<int> uniqueNameFiles;
 		// Separate multi-file groups and collect unique files
 		for (auto& kv : groups) {
@@ -42,19 +42,32 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 				indexChunks.push_back(kv.second);
 			} else {
 				uniqueNameFiles.push_back(kv.second[0]);
+				}
 			}
-		}
-
-		// Split unique files into chunks of up to 5
-		const size_t maxFilesPerChunk = 5;
+    
+		// Calculate max files per chunk based on maxThreads
+		size_t maxFilesPerChunk = std::max(1UL, maxThreads > 0 ? (uniqueNameFiles.size() + maxThreads - 1) / maxThreads : 5);
+    
+		// Split unique files into chunks
 		for (size_t i = 0; i < uniqueNameFiles.size(); i += maxFilesPerChunk) {
-			auto end = i + maxFilesPerChunk <= uniqueNameFiles.size() ? uniqueNameFiles.begin() + i + maxFilesPerChunk : uniqueNameFiles.end();
-			indexChunks.emplace_back(uniqueNameFiles.begin() + i, end);
+			auto end = std::min(i + maxFilesPerChunk, uniqueNameFiles.size());
+				std::vector<int> chunk(
+				uniqueNameFiles.begin() + i, 
+					uniqueNameFiles.begin() + end
+				);
+				indexChunks.emplace_back(chunk);
 		}
 	} else {
-		// For "rm", process each file individually
-		for (int idx : processedIndices) {
-			indexChunks.push_back({idx});
+		// For "rm", group indices into chunks based on maxThreads
+		size_t maxFilesPerChunk = std::max(1UL, maxThreads > 0 ? (processedIndices.size() + maxThreads - 1) / maxThreads : 10);
+    
+		for (size_t i = 0; i < processedIndices.size(); i += maxFilesPerChunk) {
+			std::vector<int> chunk;
+			auto end = std::min(i + maxFilesPerChunk, processedIndices.size());
+			for (size_t j = i; j < end; ++j) {
+				chunk.push_back(*(std::next(processedIndices.begin(), j)));
+			}
+			indexChunks.push_back(chunk);
 		}
 	}
 
