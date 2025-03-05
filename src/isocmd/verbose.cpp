@@ -4,12 +4,7 @@
 
 
 // Main verbose print function for results
-void verbosePrint(const std::unordered_set<std::string>& primarySet, 
-                  const std::unordered_set<std::string>& secondarySet = {}, 
-                  const std::unordered_set<std::string>& tertiarySet = {}, 
-                  const std::unordered_set<std::string>& quaternarySet = {}, 
-                  const std::unordered_set<std::string>& errorSet = {}, 
-                  int printType = 0) {
+void verbosePrint(const std::unordered_set<std::string>& primarySet, const std::unordered_set<std::string>& secondarySet = {}, const std::unordered_set<std::string>& tertiarySet = {}, const std::unordered_set<std::string>& quaternarySet = {}, const std::unordered_set<std::string>& errorSet = {}, int printType = 0) {
 
     signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
     disable_ctrl_d();
