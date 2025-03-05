@@ -27,6 +27,8 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     }
     
     std::vector<std::vector<int>> indexChunks;
+	unsigned int numThreads = std::min(static_cast<unsigned int>(processedIndices.size()), maxThreads);
+
 	if (!isDelete) {
 		// Group indices by their base filename
 		std::unordered_map<std::string, std::vector<int>> groups;
@@ -42,24 +44,24 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 				indexChunks.push_back(kv.second);
 			} else {
 				uniqueNameFiles.push_back(kv.second[0]);
-				}
 			}
+		}
     
-		// Calculate max files per chunk based on maxThreads
-		size_t maxFilesPerChunk = std::max(1UL, maxThreads > 0 ? (uniqueNameFiles.size() + maxThreads - 1) / maxThreads : 5);
+		// Calculate max files per chunk based on numThreads
+		size_t maxFilesPerChunk = std::max(1UL, numThreads > 0 ? (uniqueNameFiles.size() + numThreads - 1) / numThreads : 5);
     
 		// Split unique files into chunks
 		for (size_t i = 0; i < uniqueNameFiles.size(); i += maxFilesPerChunk) {
 			auto end = std::min(i + maxFilesPerChunk, uniqueNameFiles.size());
-				std::vector<int> chunk(
+			std::vector<int> chunk(
 				uniqueNameFiles.begin() + i, 
-					uniqueNameFiles.begin() + end
-				);
-				indexChunks.emplace_back(chunk);
+				uniqueNameFiles.begin() + end
+			);
+			indexChunks.emplace_back(chunk);
 		}
 	} else {
-		// For "rm", group indices into chunks based on maxThreads
-		size_t maxFilesPerChunk = std::max(1UL, maxThreads > 0 ? (processedIndices.size() + maxThreads - 1) / maxThreads : 10);
+		// For "rm", group indices into chunks based on numThreads
+		size_t maxFilesPerChunk = std::max(1UL, numThreads > 0 ? (processedIndices.size() + numThreads - 1) / numThreads : 10);
     
 		for (size_t i = 0; i < processedIndices.size(); i += maxFilesPerChunk) {
 			std::vector<int> chunk;
@@ -71,7 +73,6 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 		}
 	}
 
-    unsigned int numThreads = std::min(static_cast<unsigned int>(processedIndices.size()), maxThreads);
 
     bool abortDel = false;
     std::string processedUserDestDir = userDestDirRm(isoFiles, indexChunks, uniqueErrorMessages, userDestDir, 
