@@ -216,7 +216,6 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
 			// Parse input search paths
 			std::istringstream ss(inputSearch);
 			std::string path;
-			std::set<std::string> uniquePaths;
     
 			while (std::getline(ss, path, ';')) {
 				// Trim leading and trailing whitespace
