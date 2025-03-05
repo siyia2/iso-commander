@@ -107,7 +107,7 @@ std::string removeAnsiCodes(const std::string& input) {
 // Function to filter cached ISO files or mountpoints based on search query (case-insensitive)
 std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query) {
     std::vector<std::string> filteredFiles;
-    std::set<std::string> queryTokens;
+    std::unordered_set<std::string> queryTokens;
 
     // Tokenize the query and convert each token to lowercase
     std::stringstream ss(query);

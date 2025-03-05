@@ -4,20 +4,27 @@
 
 
 // Main verbose print function for results
-void verbosePrint(const std::set<std::string>& primarySet, const std::set<std::string>& secondarySet = {}, const std::set<std::string>& tertiarySet = {}, const std::set<std::string>& quaternarySet = {}, const std::set<std::string>& errorSet = {}, int printType = 0) {
-	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
-	disable_ctrl_d();
+void verbosePrint(const std::unordered_set<std::string>& primarySet, 
+                  const std::unordered_set<std::string>& secondarySet = {}, 
+                  const std::unordered_set<std::string>& tertiarySet = {}, 
+                  const std::unordered_set<std::string>& quaternarySet = {}, 
+                  const std::unordered_set<std::string>& errorSet = {}, 
+                  int printType = 0) {
+
+    signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+    disable_ctrl_d();
     clearScrollBuffer(); // Assuming this function is defined elsewhere
 
-    // Helper lambda to print a set with optional color and output stream
-    auto printSet = [](const std::set<std::string>& set, bool isError = false, bool addNewLineBefore = false) {
+    // Lambda to convert an unordered_set to a vector, sort it, and print it
+    auto printSortedSet = [&](const std::unordered_set<std::string>& set, bool isError = false, bool addNewLineBefore = false) {
         if (!set.empty()) {
+            std::vector<std::string> vec(set.begin(), set.end());
+            sortFilesCaseInsensitive(vec); // Sort the vector case-insensitively
             if (addNewLineBefore) {
                 std::cout << "\n";
             }
-            for (const auto& item : set) {
+            for (const auto& item : vec) {
                 if (isError) {
-                    // Red color for errors
                     std::cerr << "\n\033[1;91m" << item << "\033[0m\033[1m";
                 } else {
                     std::cout << "\n" << item;
@@ -26,59 +33,60 @@ void verbosePrint(const std::set<std::string>& primarySet, const std::set<std::s
         }
     };
 
-    // Determine print behavior based on type
     switch (printType) {
         case 0: // Unmounted
-            // Unmounted: primarySet = unmounted files, secondarySet = unmounted errors, errorSet = error messages
-            printSet(primarySet);
-            printSet(secondarySet, false, !primarySet.empty());
-            printSet(errorSet, true, !primarySet.empty() || !secondarySet.empty());
+            // primarySet = unmounted files, secondarySet = unmounted errors, errorSet = error messages
+            printSortedSet(primarySet);
+            printSortedSet(secondarySet, false, !primarySet.empty());
+            printSortedSet(errorSet, true, !primarySet.empty() || !secondarySet.empty());
             std::cout << "\n\n";
             break;
 
         case 1: // Operation
-            // Operation: primarySet = operation ISOs, secondarySet = operation errors, errorSet = unique error messages
-            printSet(primarySet, false);
-            printSet(secondarySet, false, !primarySet.empty());
-            printSet(errorSet, false, !primarySet.empty() || !secondarySet.empty());
+            // primarySet = operation ISOs, secondarySet = operation errors, errorSet = unique error messages
+            printSortedSet(primarySet, false);
+            printSortedSet(secondarySet, false, !primarySet.empty());
+            printSortedSet(errorSet, false, !primarySet.empty() || !secondarySet.empty());
             std::cout << "\n\n";
             break;
 
         case 2: // Mounted
-			// Mounted: primarySet = mounted files, secondarySet = skipped messages, 
-			// tertiarySet = mounted fails, errorSet = unique error messages
-			printSet(primarySet);
-			printSet(tertiarySet, true, !primarySet.empty());
-			if (primarySet.empty() && !tertiarySet.empty() && !secondarySet.empty()) {
-				std::cout << "\n";
-			}
-			printSet(secondarySet, true, !primarySet.empty());
-			printSet(errorSet, true, !primarySet.empty() || !secondarySet.empty() || !tertiarySet.empty());
-			std::cout << "\n\n";
-			break;
+            // primarySet = mounted files, secondarySet = skipped messages, 
+            // tertiarySet = mounted fails, errorSet = unique error messages
+            printSortedSet(primarySet);
+            printSortedSet(tertiarySet, true, !primarySet.empty());
+            if (primarySet.empty() && !tertiarySet.empty() && !secondarySet.empty()) {
+                std::cout << "\n";
+            }
+            printSortedSet(secondarySet, true, !primarySet.empty());
+            printSortedSet(errorSet, true, !primarySet.empty() || !secondarySet.empty() || !tertiarySet.empty());
+            std::cout << "\n\n";
+            break;
 
         case 3: // Conversion
-            // Conversion: 
             // primarySet = processed errors
             // secondarySet = success outputs
             // tertiarySet = skipped outputs
             // quaternarySet = failed outputs
             // errorSet = deleted outputs
             std::cout << "\n";
-            auto printWithNewline = [](const std::set<std::string>& outs) {
-                for (const auto& out : outs) {
-                    std::cout << out << "\033[0;1m\n";
-                }
+            // Lambda to convert, sort, and print with a newline after each element
+            auto printSortedWithNewline = [&](const std::unordered_set<std::string>& outs) {
                 if (!outs.empty()) {
+                    std::vector<std::string> vec(outs.begin(), outs.end());
+                    sortFilesCaseInsensitive(vec);
+                    for (const auto& out : vec) {
+                        std::cout << out << "\033[0;1m\n";
+                    }
                     std::cout << "\n";
                 }
             };
 
-            printWithNewline(secondarySet);   // Success outputs
-            printWithNewline(tertiarySet);    // Skipped outputs
-            printWithNewline(quaternarySet);  // Failed outputs
-            printWithNewline(errorSet);       // Deleted outputs
-            printWithNewline(primarySet);     // Processed errors
+            printSortedWithNewline(secondarySet);   // Success outputs
+            printSortedWithNewline(tertiarySet);      // Skipped outputs
+            printSortedWithNewline(quaternarySet);    // Failed outputs
+            printSortedWithNewline(errorSet);         // Deleted outputs
+            printSortedWithNewline(primarySet);       // Processed errors
             break;
     }
 
@@ -91,7 +99,7 @@ void verbosePrint(const std::set<std::string>& primarySet, const std::set<std::s
 // CACHE
 
 // Function that provides verbose output for manualRefreshCache
-void verboseIsoCacheRefresh(std::vector<std::string>& allIsoFiles, std::atomic<size_t>& totalFiles, std::vector<std::string>& validPaths, std::set<std::string>& invalidPaths, std::set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& historyPattern, const std::chrono::high_resolution_clock::time_point& start_time, std::atomic<bool>& newISOFound) {
+void verboseIsoCacheRefresh(std::vector<std::string>& allIsoFiles, std::atomic<size_t>& totalFiles, std::vector<std::string>& validPaths, std::unordered_set<std::string>& invalidPaths, std::unordered_set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& historyPattern, const std::chrono::high_resolution_clock::time_point& start_time, std::atomic<bool>& newISOFound) {
 	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
 	disable_ctrl_d();
 	bool saveSuccess;
@@ -180,7 +188,7 @@ void verboseIsoCacheRefresh(std::vector<std::string>& allIsoFiles, std::atomic<s
 // CONVERSIONS
 
 // Function to print invalid directory paths from search
-void verboseFind(std::set<std::string>& invalidDirectoryPaths, const std::vector<std::string>& directoryPaths, std::set<std::string>& processedErrorsFind) {
+void verboseFind(std::unordered_set<std::string>& invalidDirectoryPaths, const std::vector<std::string>& directoryPaths, std::unordered_set<std::string>& processedErrorsFind) {
 	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
 	disable_ctrl_d();
 	
@@ -223,7 +231,7 @@ void verboseFind(std::set<std::string>& invalidDirectoryPaths, const std::vector
 
 
 // Function that handles verbose results and timing from select select_and_convert_files_to_iso
-void verboseSearchResults(const std::string& fileExtension, std::set<std::string>& fileNames, std::set<std::string>& invalidDirectoryPaths, bool newFilesFound, bool list, int currentCacheOld, const std::vector<std::string>& files, const std::chrono::high_resolution_clock::time_point& start_time, std::set<std::string>& processedErrorsFind, std::vector<std::string>& directoryPaths) {
+void verboseSearchResults(const std::string& fileExtension, std::unordered_set<std::string>& fileNames, std::unordered_set<std::string>& invalidDirectoryPaths, bool newFilesFound, bool list, int currentCacheOld, const std::vector<std::string>& files, const std::chrono::high_resolution_clock::time_point& start_time, std::unordered_set<std::string>& processedErrorsFind, std::vector<std::string>& directoryPaths) {
 	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
 	disable_ctrl_d();
 

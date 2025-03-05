@@ -82,7 +82,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
     
     // Tracking sets and vectors
     std::vector<std::string> directoryPaths;
-    std::set<std::string> uniquePaths, processedErrors, processedErrorsFind, successOuts, 
+    std::unordered_set<std::string> uniquePaths, processedErrors, processedErrorsFind, successOuts, 
                            skippedOuts, failedOuts, deletedOuts, 
                            invalidDirectoryPaths, fileNames;
                            
@@ -138,7 +138,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
         
         bool isCpMv= false;
         
-        const std::set<std::string> validInputs = {
+        const std::unordered_set<std::string> validInputs = {
 			"*fl_m", "*cl_m", "*fl_u", "*cl_u", "*fl_fo", "*cl_fo", "*fl_w", "*cl_w", "*fl_c", "*cl_c"
 		};
         
@@ -280,7 +280,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
     rl_bind_key('\t', prevent_readline_keybindings);
     
     // Containers to track file processing results
-    std::set<std::string> processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts;
+    std::unordered_set<std::string> processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts;
     
     bool isFiltered = false; // Indicates if the file list is currently filtered
     bool needsScrnClr = true;
@@ -444,16 +444,16 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 
 
 // Function to process user input and convert selected BIN/MDF/NRG files to ISO format
-void processInput(const std::string& input, std::vector<std::string>& fileList, const bool& modeMdf, const bool& modeNrg, std::set<std::string>& processedErrors, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose, bool& needsScrnClr, std::atomic<bool>& newISOFound) {
+void processInput(const std::string& input, std::vector<std::string>& fileList, const bool& modeMdf, const bool& modeNrg, std::unordered_set<std::string>& processedErrors, std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, std::unordered_set<std::string>& deletedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose, bool& needsScrnClr, std::atomic<bool>& newISOFound) {
 	// Setup signal handler at the start of the operation
     setupSignalHandlerCancellations();
     
     g_operationCancelled.store(false);
     
-    std::set<std::string> selectedFilePaths;
+    std::unordered_set<std::string> selectedFilePaths;
     std::string concatenatedFilePaths;
 
-    std::set<int> processedIndices;
+    std::unordered_set<int> processedIndices;
     if (!(input.empty() || std::all_of(input.begin(), input.end(), isspace))){
 		tokenizeInput(input, fileList, processedErrors, processedIndices);
 	} else {
@@ -579,10 +579,10 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
 
 
 // Function to process a single batch of paths and find files for findFiles
-std::set<std::string> processBatchPaths(const std::vector<std::string>& batchPaths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback,std::set<std::string>& processedErrorsFind) {
+std::unordered_set<std::string> processBatchPaths(const std::vector<std::string>& batchPaths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback,std::unordered_set<std::string>& processedErrorsFind) {
     std::mutex fileNamesMutex;
     std::atomic<size_t> totalFiles{0};
-    std::set<std::string> localFileNames;
+    std::unordered_set<std::string> localFileNames;
     
     std::atomic<bool> g_CancelledMessageAdded{false};
     g_operationCancelled.store(false);
@@ -659,7 +659,7 @@ std::set<std::string> processBatchPaths(const std::vector<std::string>& batchPat
 
 
 // Function to search for .bin .img .nrg and mdf files
-std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, std::set<std::string>& fileNames, int& currentCacheOld, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, const std::vector<std::string>& directoryPaths, std::set<std::string>& invalidDirectoryPaths, std::set<std::string>& processedErrorsFind) {
+std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, std::unordered_set<std::string>& fileNames, int& currentCacheOld, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, const std::vector<std::string>& directoryPaths, std::unordered_set<std::string>& invalidDirectoryPaths, std::unordered_set<std::string>& processedErrorsFind) {
 	
 	// Setup signal handler at the start of the operation
     setupSignalHandlerCancellations();
@@ -673,13 +673,13 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
     std::mutex pathsMutex;
     
     // Tracking sets and variables
-    std::set<std::string> processedValidPaths;
+    std::unordered_set<std::string> processedValidPaths;
     
     // Disable input before processing
     disableInput();
 
     // Consolidated set for all invalid paths
-    std::set<std::string> invalidPaths;
+    std::unordered_set<std::string> invalidPaths;
     
     // Batch processing configuration
     const size_t BATCH_SIZE = 100;  // Number of paths per batch
@@ -715,7 +715,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
     }
 
     // Batch processing with thread pool
-    std::vector<std::future<std::set<std::string>>> batchFutures;
+    std::vector<std::future<std::unordered_set<std::string>>> batchFutures;
     
     // Process batches with thread pool
     for (const auto& batch : pathBatches) {
@@ -733,7 +733,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
 
     // Collect results from all batches
     for (auto& future : batchFutures) {
-        std::set<std::string> batchResults = future.get();
+        std::unordered_set<std::string> batchResults = future.get();
         fileNames.insert(batchResults.begin(), batchResults.end());
     }
 
@@ -743,7 +743,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
     verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
 
     // Choose the appropriate cache
-    std::set<std::string> currentCacheSet;
+    std::unordered_set<std::string> currentCacheSet;
     std::vector<std::string>* currentCache = nullptr;
 
     if (mode == "bin") {
@@ -819,7 +819,7 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
 
 
     // Blacklisted keywords (previously commented out)
-    std::set<std::string> blacklistKeywords = {};
+    std::unordered_set<std::string> blacklistKeywords = {};
     
     // Convert filename to lowercase without extension
     std::string filenameLowerNoExt = filenameLower;
@@ -837,7 +837,7 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
 
 
 // Function to convert a BIN/IMG/MDF/NRG file to ISO format
-void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::string>& successOuts, std::set<std::string>& skippedOuts, std::set<std::string>& failedOuts, std::set<std::string>& deletedOuts, const bool& modeMdf, const bool& modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, std::atomic<bool>& newISOFound) {
+void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, std::unordered_set<std::string>& deletedOuts, const bool& modeMdf, const bool& modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, std::atomic<bool>& newISOFound) {
 
     namespace fs = std::filesystem;
 
@@ -845,7 +845,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::set<std::stri
     const size_t BATCH_SIZE = 1000;
 
     // Collect unique directories from input file paths
-    std::set<std::string> uniqueDirectories;
+    std::unordered_set<std::string> uniqueDirectories;
     for (const auto& filePath : imageFiles) {
         std::filesystem::path path(filePath);
         if (path.has_parent_path()) {

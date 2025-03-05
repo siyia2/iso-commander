@@ -246,7 +246,7 @@ std::vector<std::string> getRemovableDevices() {
 
 
 // Function to handle device mapping collection and validation
-std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::vector<IsoInfo>& selectedIsos,std::set<std::string>& uniqueErrorMessages) {
+std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::vector<IsoInfo>& selectedIsos,std::unordered_set<std::string>& uniqueErrorMessages) {
     while (true) {
 		signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
 		disable_ctrl_d();
@@ -329,7 +329,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 
         // Parse device mappings
         std::vector<std::pair<size_t, std::string>> deviceMap;
-        std::set<std::string> usedDevices;
+        std::unordered_set<std::string> usedDevices;
         std::vector<std::string> errors;
         std::istringstream pairStream(deviceInput.get());
         std::string pair;
@@ -370,7 +370,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         }
 
         // Validate all selected ISOs have at least one mapping
-        std::set<size_t> mappedIndices;
+        std::unordered_set<size_t> mappedIndices;
         for (const auto& [index, device] : deviceMap) {
             mappedIndices.insert(index);
         }
@@ -611,9 +611,9 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
 
 // Function to prepare selections for write
-void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages) {
+void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages) {
     clearScrollBuffer();
-    std::set<int> indicesToProcess;
+    std::unordered_set<int> indicesToProcess;
 
     setupSignalHandlerCancellations();
     g_operationCancelled.store(false);

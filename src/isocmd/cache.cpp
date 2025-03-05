@@ -294,7 +294,7 @@ void backgroundCacheImport(int maxDepthParam, std::atomic<bool>& isImportRunning
     // Process paths with thread limit
     std::vector<std::string> allIsoFiles;
     std::atomic<size_t> totalFiles{0};
-    std::set<std::string> uniqueErrorMessages;
+    std::unordered_set<std::string> uniqueErrorMessages;
     std::mutex processMutex;
     std::mutex traverseErrorMutex;
 
@@ -464,7 +464,7 @@ bool isValidDirectory(const std::string& path) {
 void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, const int& maxDepth, const bool& historyPattern, std::atomic<bool>& newISOFound) {
 	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
 	disable_ctrl_d();
-    const std::set<std::string> validInputs = {
+    const std::unordered_set<std::string> validInputs = {
         "*fl_m", "*cl_m", "*fl_u", "*cl_u", "*fl_fo", "*cl_fo", "*fl_w", "*cl_w", "*fl_c", "*cl_c"
     };
 	std::string initialDir = "";
@@ -590,7 +590,7 @@ void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, 
         loadHistory(historyPattern);
         maxDepth = -1;
         
-        const std::set<std::string> validInputs = {
+        const std::unordered_set<std::string> validInputs = {
 			"*fl_m", "*cl_m", "*fl_u", "*cl_u", "*fl_fo", "*cl_fo", "*fl_w", "*cl_w", "*fl_c", "*cl_c"
 		};
         
@@ -636,61 +636,63 @@ void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, 
     }
 
     // Combine path validation and processing
-    std::vector<std::string> validPaths;
-    std::set<std::string> invalidPaths;
-    std::set<std::string> uniqueErrorMessages;
-    std::vector<std::string> allIsoFiles;
-    std::atomic<size_t> totalFiles{0};
-	
+    std::unordered_set<std::string> uniquePaths;  // Set to track unique paths
+	std::vector<std::string> validPaths;
+	std::unordered_set<std::string> invalidPaths;
+	std::unordered_set<std::string> uniqueErrorMessages;
+	std::vector<std::string> allIsoFiles;
+	std::atomic<size_t> totalFiles{0};
+
 	if (promptFlag) {
 		disableInput();
 	}
-    
-    auto start_time = std::chrono::high_resolution_clock::now();
 
-    // Single-pass path processing with concurrent file traversal
-    std::vector<std::future<void>> futures;
-    std::mutex processMutex;
-    std::mutex traverseErrorMutex;
+	auto start_time = std::chrono::high_resolution_clock::now();
 
-    std::istringstream iss(input);
-    std::string path;
-    std::size_t runningTasks = 0;
-	
-	
-    
-    while (std::getline(iss, path, ';')) {
-        if (!isValidDirectory(path)) {
-            if (promptFlag) {
-                std::lock_guard<std::mutex> lock(processMutex);
-                invalidPaths.insert(path);
-            }
-            continue;
-        }
+	// Single-pass path processing with concurrent file traversal
+	std::vector<std::future<void>> futures;
+	std::mutex processMutex;
+	std::mutex traverseErrorMutex;
 
-        validPaths.push_back(path);
-        futures.emplace_back(std::async(std::launch::async, 
-            [path, &allIsoFiles, &uniqueErrorMessages, &totalFiles, &processMutex, &traverseErrorMutex, &maxDepth, &promptFlag]() {
-                traverse(path, allIsoFiles, uniqueErrorMessages, 
-                         totalFiles, processMutex, traverseErrorMutex, maxDepth, promptFlag);
-            }
-        ));
+	std::istringstream iss(input);
+	std::string path;
+	std::size_t runningTasks = 0;
 
-        if (++runningTasks >= maxThreads) {
-            for (auto& future : futures) {
-                future.wait();
-                if (g_operationCancelled.load()) break;
-            }
-            futures.clear();
-            runningTasks = 0;
-        }
-    }
+	while (std::getline(iss, path, ';')) {
+		if (!isValidDirectory(path)) {
+			if (promptFlag) {
+				std::lock_guard<std::mutex> lock(processMutex);
+				invalidPaths.insert(path);
+			}
+			continue;
+		}
 
-    // Wait for remaining tasks
-    for (auto& future : futures) {
-        future.wait();
-        if (g_operationCancelled.load()) break;
-    }
+		// Insert into set first to check for duplicates
+		if (uniquePaths.insert(path).second) { // insert() returns {iterator, bool}, second is true if inserted
+			validPaths.push_back(path);
+			futures.emplace_back(std::async(std::launch::async, 
+				[path, &allIsoFiles, &uniqueErrorMessages, &totalFiles, &processMutex, &traverseErrorMutex, &maxDepth, &promptFlag]() {
+					traverse(path, allIsoFiles, uniqueErrorMessages, 
+							totalFiles, processMutex, traverseErrorMutex, maxDepth, promptFlag);
+				}
+			));
+
+			if (++runningTasks >= maxThreads) {
+				for (auto& future : futures) {
+					future.wait();
+					if (g_operationCancelled.load()) break;
+				}
+				futures.clear();
+				runningTasks = 0;
+			}
+		}
+	}
+
+	// Wait for remaining tasks
+	for (auto& future : futures) {
+		future.wait();
+		if (g_operationCancelled.load()) break;
+	}
     
     // Post-processing
     if (promptFlag) {
@@ -727,7 +729,7 @@ void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, 
 
 
 // Function to traverse a directory and find ISO files
-void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, std::atomic<size_t>& totalFiles, std::mutex& traverseFilesMutex, std::mutex& traverseErrorsMutex, int& maxDepth, bool& promptFlag) {
+void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages, std::atomic<size_t>& totalFiles, std::mutex& traverseFilesMutex, std::mutex& traverseErrorsMutex, int& maxDepth, bool& promptFlag) {
     const size_t BATCH_SIZE = 100;
     std::vector<std::string> localIsoFiles;
     

@@ -44,7 +44,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
     rl_bind_key('\f', prevent_readline_keybindings);
     rl_bind_key('\t', prevent_readline_keybindings);
     
-    std::set<std::string> operationFiles, skippedMessages, operationFails, uniqueErrorMessages;
+    std::unordered_set<std::string> operationFiles, skippedMessages, operationFails, uniqueErrorMessages;
     std::vector<std::string> filteredFiles, sourceList;
     
     globalIsoFileList.reserve(100);
@@ -258,7 +258,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
             clearScrollBuffer();
             needsClrScrn = true;
             verbosePrint(operationFiles, operationFails, 
-                         (isMount ? skippedMessages : std::set<std::string>{}), 
+                         (isMount ? skippedMessages : std::unordered_set<std::string>{}), 
                          {}, uniqueErrorMessages, 
                          isMount ? 2 : 1);
         }
@@ -285,13 +285,13 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
 
 
 // General function to tokenize input strings
-void tokenizeInput(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& uniqueErrorMessages, std::set<int>& processedIndices) {
+void tokenizeInput(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<int>& processedIndices) {
     std::istringstream iss(input);
     std::string token;
 
-    std::set<std::string> invalidInputs;
-    std::set<std::string> invalidIndices;
-    std::set<std::string> invalidRanges;
+    std::unordered_set<std::string> invalidInputs;
+    std::unordered_set<std::string> invalidIndices;
+    std::unordered_set<std::string> invalidRanges;
 
     while (iss >> token) {
         if (startsWithZero(token)) {
@@ -347,7 +347,7 @@ void tokenizeInput(const std::string& input, std::vector<std::string>& isoFiles,
 
     // Helper to format error messages with pluralization
     auto formatCategory = [](const std::string& singular, const std::string& plural,
-                            const std::set<std::string>& items) {
+                            const std::unordered_set<std::string>& items) {
         if (items.empty()) return std::string();
         std::ostringstream oss;
         oss << "\033[1;91m" << (items.size() > 1 ? plural : singular) << ": '";

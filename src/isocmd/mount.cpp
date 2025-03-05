@@ -17,7 +17,7 @@ bool isAlreadyMounted(const std::string& mountPoint) {
 
 
 // Function to mount selected ISO files called from processAndMountIsoFiles
-void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks) {
+void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedFiles, std::unordered_set<std::string>& skippedMessages, std::unordered_set<std::string>& mountedFails, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks) {
 
     // Pre-allocate temporary containers with batch capacity
     const size_t BATCH_SIZE = 1000;
@@ -261,8 +261,8 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::set<std::strin
 
 
 // Function to process input and mount ISO files asynchronously
-void processAndMountIsoFiles(const std::string& input, std::vector<std::string>& isoFiles, std::set<std::string>& mountedFiles, std::set<std::string>& skippedMessages, std::set<std::string>& mountedFails, std::set<std::string>& uniqueErrorMessages, bool& verbose) {
-    std::set<int> indicesToProcess;
+void processAndMountIsoFiles(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedFiles, std::unordered_set<std::string>& skippedMessages, std::unordered_set<std::string>& mountedFails, std::unordered_set<std::string>& uniqueErrorMessages, bool& verbose) {
+    std::unordered_set<int> indicesToProcess;
     
     // Setup signal handler
     setupSignalHandlerCancellations();

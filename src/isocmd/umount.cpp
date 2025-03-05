@@ -73,7 +73,7 @@ std::string modifyDirectoryPath(const std::string& dir) {
 
 
 // Function to unmount ISO files asynchronously
-void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& unmountedFiles, std::set<std::string>& unmountedErrors, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks) {
+void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std::string>& unmountedFiles, std::unordered_set<std::string>& unmountedErrors, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks) {
 
     // Define batch size for insertions
     const size_t BATCH_SIZE = 1000;
@@ -225,13 +225,13 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::set<std::string>& 
 
 
 // Main function to send ISOs for unmount
-void prepareUnmount(const std::string& input, std::vector<std::string>& currentFiles, std::set<std::string>& operationFiles, std::set<std::string>& operationFails, std::set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& verbose) {
+void prepareUnmount(const std::string& input, std::vector<std::string>& currentFiles, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& verbose) {
     // Setup signal handler
     setupSignalHandlerCancellations();
     
     g_operationCancelled.store(false);
     
-    std::set<int> indicesToProcess;
+    std::unordered_set<int> indicesToProcess;
 
     // Handle input ("00" = all files, else parse input)
     if (input == "00") {
