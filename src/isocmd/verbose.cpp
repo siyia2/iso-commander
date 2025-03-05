@@ -4,26 +4,36 @@
 
 
 // Main verbose print function for results
-void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_set<std::string>& secondarySet, std::unordered_set<std::string>& tertiarySet, std::unordered_set<std::string>& quaternarySet, std::unordered_set<std::string>& errorSet, 
-int printType) {
-
+void verbosePrint(std::unordered_set<std::string>& primarySet, 
+                  std::unordered_set<std::string>& secondarySet, 
+                  std::unordered_set<std::string>& tertiarySet, 
+                  std::unordered_set<std::string>& quaternarySet, 
+                  std::unordered_set<std::string>& errorSet, 
+                  int printType) {
     signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
     disable_ctrl_d();
     clearScrollBuffer(); // Assuming this function is defined elsewhere
 
-    // Lambda to move an unordered_set to a vector, sort it, and print it
-    auto printSortedSet = [&](std::unordered_set<std::string>&& set, bool isError = false, bool addNewLineBefore = false) {
+    // Lambda to move a set to a sorted vector and print
+    auto printSortedSet = [](std::unordered_set<std::string>& set, bool isError = false) {
         if (!set.empty()) {
-            std::vector<std::string> vec(std::make_move_iterator(set.begin()), std::make_move_iterator(set.end()));
-            sortFilesCaseInsensitive(vec); // Sort the vector case-insensitively
-            if (addNewLineBefore) {
-                std::cout << "\n";
-            }
+            std::vector<std::string> vec(
+                std::make_move_iterator(set.begin()), 
+                std::make_move_iterator(set.end())
+            );
+            std::sort(vec.begin(), vec.end(), 
+                [](const std::string& a, const std::string& b) {
+                    return strcasecmp(a.c_str(), b.c_str()) < 0;
+                }
+            );
+            
+            std::cout << "\n";
+
             for (const auto& item : vec) {
                 if (isError) {
-                    std::cerr << "\n\033[1;91m" << item << "\033[0m\033[1m";
+                    std::cerr << "\033[1;91m" << item << "\033[0m\033[1m\n";
                 } else {
-                    std::cout << "\n" << item;
+                    std::cout << item << "\n";
                 }
             }
         }
@@ -31,51 +41,42 @@ int printType) {
 
     switch (printType) {
         case 0: // Unmounted
-            printSortedSet(std::move(primarySet));
-            printSortedSet(std::move(secondarySet), false, !primarySet.empty());
-            printSortedSet(std::move(errorSet), true, !primarySet.empty() || !secondarySet.empty());
-            std::cout << "\n\n";
-            break;
-
-        case 1: // Operation
-            printSortedSet(std::move(primarySet));
-            printSortedSet(std::move(secondarySet), false, !primarySet.empty());
-            printSortedSet(std::move(errorSet), false, !primarySet.empty() || !secondarySet.empty());
-            std::cout << "\n\n";
-            break;
-
-        case 2: // Mounted
-            printSortedSet(std::move(primarySet));
-            printSortedSet(std::move(tertiarySet), true, !primarySet.empty());
-            if (primarySet.empty() && !tertiarySet.empty() && !secondarySet.empty()) {
-                std::cout << "\n";
-            }
-            printSortedSet(std::move(secondarySet), true, !primarySet.empty());
-            printSortedSet(std::move(errorSet), true, !primarySet.empty() || !secondarySet.empty() || !tertiarySet.empty());
-            std::cout << "\n\n";
-            break;
-
-        case 3: // Conversion
+        {
+            printSortedSet(primarySet, false);
+            printSortedSet(secondarySet, false);
+            printSortedSet(errorSet, true);
             std::cout << "\n";
-            auto printSortedWithNewline = [&](std::unordered_set<std::string>&& outs) {
-                if (!outs.empty()) {
-                    std::vector<std::string> vec(std::make_move_iterator(outs.begin()), std::make_move_iterator(outs.end()));
-                    sortFilesCaseInsensitive(vec);
-                    for (const auto& out : vec) {
-                        std::cout << out << "\033[0;1m\n";
-                    }
-                    std::cout << "\n";
-                }
-            };
-
-            printSortedWithNewline(std::move(secondarySet));   // Success outputs
-            printSortedWithNewline(std::move(tertiarySet));    // Skipped outputs
-            printSortedWithNewline(std::move(quaternarySet));  // Failed outputs
-            printSortedWithNewline(std::move(errorSet));       // Deleted outputs
-            printSortedWithNewline(std::move(primarySet));     // Processed errors
             break;
+        }
+        case 1: // Operation
+        {
+            printSortedSet(primarySet, false);
+            printSortedSet(secondarySet, false);
+            printSortedSet(errorSet, false);
+            std::cout << "\n";
+            break;
+        }
+        case 2: // Mounted
+        {
+            printSortedSet(primarySet, false);
+            printSortedSet(tertiarySet, true);
+            printSortedSet(secondarySet, true);
+            printSortedSet(errorSet, true);
+            std::cout << "\n";
+            break;
+        }
+        case 3: // Conversion
+        {
+            printSortedSet(secondarySet, false);   // Success outputs
+            printSortedSet(tertiarySet, false);    // Skipped outputs
+            printSortedSet(quaternarySet, false);  // Failed outputs
+            printSortedSet(errorSet, false);       // Deleted outputs
+            printSortedSet(primarySet, false);     // Processed errors
+            std::cout << "\n";
+            break;
+        }
     }
-
+    
     // Continuation prompt
     std::cout << "\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
