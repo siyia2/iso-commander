@@ -63,7 +63,7 @@ int main(int argc, char *argv[]) {
         return 0;
     }
     // Readline use semicolon as delimiter
-    rl_completer_word_break_characters = (char *)";";
+    rl_completer_word_break_characters =";";
 
     const char* lockFile = "/tmp/isocmd.lock";
 
