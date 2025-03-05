@@ -138,8 +138,7 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 
     for (auto& future : futures) {
         future.wait();
-        if (g_operationCancelled.load())
-            break;
+       if (g_operationCancelled.load()) break;
     }
 
     isProcessingComplete.store(true);
