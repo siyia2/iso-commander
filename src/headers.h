@@ -185,7 +185,7 @@ std::string modifyDirectoryPath(const std::string& dir);
 // CACHE
 
 // bools
-bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize, std::atomic<bool>& newISOFound);
+bool saveCache(const std::vector<std::string>& isoFiles, std::atomic<bool>& newISOFound);
 bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType);
 
 // stds
