@@ -155,35 +155,25 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
     
     std::ifstream ccdFile(ccdPath, std::ios::binary);
     if (!ccdFile) return false;
-    
-    // Check cancellation before opening output file
-    if (g_operationCancelled.load()) {
-		g_operationCancelled.store(true);
-        return false;
-    }
-    
+
     std::ofstream isoFile(isoPath, std::ios::binary);
     if (!isoFile) return false;
-    
+
     // Disable internal buffering for more direct writes
     isoFile.rdbuf()->pubsetbuf(nullptr, 0);
     
-    // Initialize progress counter
-    if (completedBytes) {
-        *completedBytes = 0;
-    }
-    
     CcdSector sector;
+    size_t sectorNum = 0;
     
     while (ccdFile.read(reinterpret_cast<char*>(&sector), sizeof(CcdSector))) {
-        // Check cancellation before processing sector
+        // Check cancellation at the start of the loop
         if (g_operationCancelled.load()) {
             isoFile.close();
             fs::remove(isoPath);
             g_operationCancelled.store(true);
             return false;
         }
-        
+
         size_t bytesWritten = 0;
         
         switch (sector.sectheader.header.mode) {
@@ -203,8 +193,26 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
             default:
                 return false;
         }
-        
-        // Check cancellation after writing
+
+        // Check cancellation immediately after writing sector data
+        if (g_operationCancelled.load()) {
+            isoFile.close();
+            fs::remove(isoPath);
+            g_operationCancelled.store(true);
+            return false;
+        }
+
+        // Validate write operation
+        if (!isoFile || bytesWritten != DATA_SIZE) {
+            return false;
+        }
+
+        // Update progress
+        if (completedBytes) {
+            completedBytes->fetch_add(bytesWritten, std::memory_order_relaxed);
+        }
+
+        // Check cancellation after updating progress
         if (g_operationCancelled.load()) {
             isoFile.close();
             fs::remove(isoPath);
@@ -212,17 +220,9 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
             return false;
         }
         
-        // Validate write operation
-        if (!isoFile || bytesWritten != DATA_SIZE) {
-            return false;
-        }
-        
-        // Update progress
-        if (completedBytes) {
-            completedBytes->fetch_add(bytesWritten, std::memory_order_relaxed);
-        }
+        sectorNum++;
     }
-    
+
     return true;
 }
 
