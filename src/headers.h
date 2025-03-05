@@ -96,6 +96,7 @@ bool readUserConfigUpdates(const std::string& filePath);
 // ints
 int prevent_readline_keybindings(int, int);
 int clear_screen_and_buffer(int, int);
+int naturalCompare(const std::string &a, const std::string &b);
 
 // voids
 void printVersionNumber(const std::string& version);
