@@ -392,7 +392,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
     struct termios oldt, newt;
     tcgetattr(STDIN_FILENO, &oldt);  // Get current terminal settings
     newt = oldt;  // Copy old settings to new
-    newt.c_lflag &= ~(ICANON | ECHO);  // Disable canonical mode and echo
+    newt.c_lflag &= ~(static_cast<tcflag_t>(ICANON) | static_cast<tcflag_t>(ECHO));  // Disable canonical mode and echo
     tcsetattr(STDIN_FILENO, TCSANOW, &newt);  // Apply new settings
 
     int oldf = fcntl(STDIN_FILENO, F_GETFL, 0);  // Get current file descriptor flags
@@ -430,23 +430,22 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             while (read(STDIN_FILENO, &ch, 1) > 0);  // Non-blocking read to check for input
 
             // Load current progress information
-            const size_t completedTasksValue = completedTasks->load(std::memory_order_acquire);
-            const size_t failedTasksValue = failedTasks->load(std::memory_order_acquire);
-            const size_t completedBytesValue = bytesTrackingEnabled ? completedBytes->load(std::memory_order_acquire) : 0;
+            const size_t completedTasksValue = completedTasks->load(std::memory_order_relaxed);
+            const size_t failedTasksValue = failedTasks->load(std::memory_order_relaxed);
+            const size_t completedBytesValue = bytesTrackingEnabled ? completedBytes->load(std::memory_order_relaxed) : 0;
 
             // Check if all tasks are processed
             const bool allTasksProcessed = (completedTasksValue + failedTasksValue) >= totalTasks;
             if (allTasksProcessed) {
-                isComplete->store(true, std::memory_order_acquire);  // Mark as complete if all tasks are done
+                isComplete->store(true, std::memory_order_relaxed);  // Mark as complete if all tasks are done
             }
 
             // Calculate task and byte progress
-            double tasksProgress = static_cast<double>(completedTasksValue + failedTasksValue) / totalTasks;
-            double overallProgress = tasksProgress;
-            if (bytesTrackingEnabled) {
-                double bytesProgress = static_cast<double>(completedBytesValue) / totalBytes;
-                overallProgress = std::max(bytesProgress, tasksProgress);  // Use the maximum of task and byte progress
-            }
+            double tasksProgress = static_cast<double>(completedTasksValue + failedTasksValue) / static_cast<double>(totalTasks);
+            double bytesProgress = bytesTrackingEnabled ? static_cast<double>(completedBytesValue) / static_cast<double>(totalBytes) : 0.0;
+
+            // Calculate the overall progress (using the maximum of byte and task progress)
+            double overallProgress = std::max(bytesProgress, tasksProgress);
 
             // Calculate the position of the progress bar
             int progressPos = static_cast<int>(barWidth * overallProgress);
@@ -454,7 +453,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             // Calculate elapsed time and speed
             auto currentTime = std::chrono::high_resolution_clock::now();
             auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime);
-            double elapsedSeconds = elapsedTime.count() / 1000.0;
+            double elapsedSeconds = static_cast<double>(elapsedTime.count()) / 1000.0;
             double speed = bytesTrackingEnabled 
                 ? (elapsedSeconds > 0.0 ? (static_cast<double>(completedBytesValue) / elapsedSeconds) : 0.0)
                 : 0.0;
@@ -481,8 +480,8 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             // If processing is complete, show a final message
             if (isComplete->load(std::memory_order_acquire)) {
                 std::cout << "\r[==================================================>] 100% ("
-                          << completedTasks->load() << "/" << totalTasks << ") "
-                          << (bytesTrackingEnabled ? "(" + formatSize(static_cast<double>(completedBytes->load())) + "/" + totalBytesFormatted + ") " : "")
+                          << completedTasks->load(std::memory_order_relaxed) << "/" << totalTasks << ") "
+                          << (bytesTrackingEnabled ? "(" + formatSize(static_cast<double>(completedBytes->load(std::memory_order_relaxed))) + "/" + totalBytesFormatted + ") " : "")
                           << "Time Elapsed: " << std::fixed << std::setprecision(1) << (elapsedSeconds) << "s\033[K";
             }
 
@@ -722,15 +721,6 @@ void setDisplayMode(const std::string& inputSearch) {
         } else {
             std::string settingsStr = inputSearch.substr(underscorePos + 1);
             newValue = (command == "cl") ? "compact" : "full";
-
-            // Map characters to settings (e.g., 'm' → mount_list)
-            std::unordered_map<char, std::string> settingMap = {
-                {'m', "mount_list"},
-                {'u', "umount_list"},
-                {'o', "cp_mv_rm_list"},
-                {'c', "conversion_lists"},
-                {'w', "write_list"}
-            };
 
             std::unordered_set<std::string> uniqueKeys;
             for (char c : settingsStr) {
