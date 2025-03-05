@@ -9,30 +9,25 @@ void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_se
     disable_ctrl_d();
     clearScrollBuffer(); // Assuming this function is defined elsewhere
 
-    // Lambda to move a set to a sorted vector and print
-    auto printSortedSet = [](std::unordered_set<std::string>& set, bool isError = false) {
-        if (!set.empty()) {
-            std::vector<std::string> vec(
-                std::make_move_iterator(set.begin()), 
-                std::make_move_iterator(set.end())
-            );
-            std::sort(vec.begin(), vec.end(), 
-                [](const std::string& a, const std::string& b) {
-                    return strcasecmp(a.c_str(), b.c_str()) < 0;
-                }
-            );
-            
-            std::cout << "\n";
-
-            for (const auto& item : vec) {
-                if (isError) {
-                    std::cerr << "\033[1;91m" << item << "\033[0m\033[1m\n";
-                } else {
-                    std::cout << item << "\n";
-                }
-            }
-        }
-    };
+	// Lambda to move a set to a sorted vector and print
+	auto printSortedSet = [](std::unordered_set<std::string>& set, bool isError = false) {
+		if (!set.empty()) {
+			std::vector<std::string> vec(
+				std::make_move_iterator(set.begin()), 
+				std::make_move_iterator(set.end())
+			);
+			sortFilesCaseInsensitive(vec);  // Changed this line to use the function directly
+        
+			std::cout << "\n";
+			for (const auto& item : vec) {
+				if (isError) {
+					std::cerr << "\033[1;91m" << item << "\033[0m\033[1m\n";
+				} else {
+					std::cout << item << "\n";
+				}
+			}
+		}
+	};
 
     switch (printType) {
         case 0: // Unmounted
