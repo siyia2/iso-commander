@@ -436,7 +436,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             // Check if all tasks are processed
             const bool allTasksProcessed = (completedTasksValue + failedTasksValue) >= totalTasks;
             if (allTasksProcessed) {
-                isComplete->store(true, std::memory_order_acquire);  // Mark as complete if all tasks are done
+                isComplete->store(true, std::memory_order_release);  // Mark as complete if all tasks are done
             }
 
             // Calculate task and byte progress
