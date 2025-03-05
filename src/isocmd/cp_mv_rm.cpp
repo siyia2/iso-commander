@@ -29,26 +29,28 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
     // --- Create chunks based on the operation type ---
     std::vector<std::vector<int>> indexChunks;
     if (!isDelete) {
-        // Grouping logic for "cp" and "mv": group indices by their base filename.
+        // Grouping logic for "cp" and "mv": group indices by their base filename
         std::unordered_map<std::string, std::vector<int>> groups;
         for (int idx : processedIndices) {
             std::string baseName = std::filesystem::path(isoFiles[idx - 1]).filename().string();
             groups[baseName].push_back(idx);
         }
         
-        // Convert the map into a vector of groups and sort groups by the first index to preserve order.
-        std::vector<std::vector<int>> groupList;
-        for (auto& kv : groups) {
-            groupList.push_back(kv.second);
-        }
-        std::sort(groupList.begin(), groupList.end(), [](const std::vector<int>& a, const std::vector<int>& b) {
-            return a.front() < b.front();
-        });
-
-        // Merge groups into chunks so that each chunk has at most maxFilesPerChunk files (if possible)
+        // Find the largest group
+        auto largestGroup = std::max_element(groups.begin(), groups.end(), 
+            [](const auto& a, const auto& b) { return a.second.size() < b.second.size(); });
+        
+        // If the largest group is larger than maxFilesPerChunk, create a single chunk for that group
         const size_t maxFilesPerChunk = 5;
+        if (largestGroup != groups.end() && largestGroup->second.size() > maxFilesPerChunk) {
+            indexChunks.push_back(largestGroup->second);
+            groups.erase(largestGroup->first);
+        }
+
+        // Continue with the previous chunking logic for remaining groups
         std::vector<int> currentChunk;
-        for (const auto& group : groupList) {
+        for (auto& kv : groups) {
+            auto& group = kv.second;
             if (!currentChunk.empty() && (currentChunk.size() + group.size() > maxFilesPerChunk)) {
                 indexChunks.push_back(currentChunk);
                 currentChunk.clear();
