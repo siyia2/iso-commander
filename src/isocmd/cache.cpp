@@ -331,7 +331,7 @@ void backgroundCacheImport(int maxDepthParam, std::atomic<bool>& isImportRunning
         future.wait();
     }
 
-    saveCache(allIsoFiles, maxCacheSize, newISOFound);
+    saveCache(allIsoFiles, newISOFound);
 
     isImportRunning.store(false);
 }
@@ -339,7 +339,6 @@ void backgroundCacheImport(int maxDepthParam, std::atomic<bool>& isImportRunning
 
 // Function to load ISO cache from file
 void loadCache(std::vector<std::string>& isoFiles) {
-    std::string cacheFilePath = getHomeDirectory() + "/.local/share/isocmd/database/iso_commander_cache.txt";
 
     int fd = open(cacheFilePath.c_str(), O_RDONLY);
     if (fd == -1) {
@@ -392,7 +391,7 @@ void loadCache(std::vector<std::string>& isoFiles) {
 
 
 // Function to save ISO cache to file
-bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize, std::atomic<bool>& newISOFound) {
+bool saveCache(const std::vector<std::string>& isoFiles, std::atomic<bool>& newISOFound) {
     std::filesystem::path cachePath = cacheDirectory;
     cachePath /= cacheFileName;
     if (!std::filesystem::exists(cacheDirectory) && !std::filesystem::create_directories(cacheDirectory)) {
@@ -719,7 +718,7 @@ void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, 
     } else {
 		if (!g_operationCancelled.load()) {
 			// Save the combined cache to disk
-			saveCache(allIsoFiles, maxCacheSize, newISOFound);
+			saveCache(allIsoFiles, newISOFound);
 		}
 		promptFlag = true;
 		maxDepth = -1;

@@ -640,7 +640,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
 }
 
 
-// Valid input for isValidInput
+// Valid input for general use
 const std::unordered_map<char, std::string> settingMap = {
     {'m', "mount_list"},
     {'u', "umount_list"},
