@@ -19,19 +19,20 @@ struct ProgressInfo {
     std::string filename;
     std::string device;
     std::string totalSize;
+
     // Atomic members for tracking progress
     std::atomic<bool> completed{false};
     std::atomic<bool> failed{false};
     std::atomic<uint64_t> bytesWritten{0};
     std::atomic<int> progress{0};
     std::atomic<double> speed{0.0};
-    
-    // Constructor with disambiguated parameter names
-    ProgressInfo(std::string fn, std::string dev, std::string total)
-        : filename(std::move(fn)),
-          device(std::move(dev)),
-          totalSize(std::move(total)) {}
-    
+
+    // Constructor to initialize members
+    ProgressInfo(std::string filename, std::string device, std::string totalSize)
+        : filename(std::move(filename)),
+          device(std::move(device)),
+          totalSize(std::move(totalSize)) {}
+
     // Explicitly define the move constructor
     ProgressInfo(ProgressInfo&& other) noexcept
         : filename(std::move(other.filename)),
@@ -42,7 +43,7 @@ struct ProgressInfo {
           bytesWritten(other.bytesWritten.load()),
           progress(other.progress.load()),
           speed(other.speed.load()) {}
-    
+
     // Explicitly define the move assignment operator
     ProgressInfo& operator=(ProgressInfo&& other) noexcept {
         if (this != &other) {
@@ -57,7 +58,7 @@ struct ProgressInfo {
         }
         return *this;
     }
-    
+
     // Delete the copy constructor and copy assignment operator
     ProgressInfo(const ProgressInfo&) = delete;
     ProgressInfo& operator=(const ProgressInfo&) = delete;

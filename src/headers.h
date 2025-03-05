@@ -119,7 +119,7 @@ void clearMessageAfterTimeout(int timeoutSeconds, std::atomic<bool>& isAtMain, s
 void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname);
 
 // stds
-std::map<std::string, std::string> readConfig();
+std::map<std::string, std::string> readConfig(const std::string& configPath);
 std::map<std::string, std::string> readUserConfigLists(const std::string& filePath);
 
 
@@ -185,7 +185,7 @@ std::string modifyDirectoryPath(const std::string& dir);
 // CACHE
 
 // bools
-bool saveCache(const std::vector<std::string>& isoFiles, std::atomic<bool>& newISOFound);
+bool saveCache(const std::vector<std::string>& isoFiles, std::size_t maxCacheSize, std::atomic<bool>& newISOFound);
 bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType);
 
 // stds
