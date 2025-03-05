@@ -168,17 +168,21 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
     
     // Generate entries for selected ISO files - used by both branches
     auto generateSelectedIsosEntries = [&]() {
-        std::vector<std::string> entries;
-        for (const auto& chunk : indexChunks) {
-            for (int index : chunk) {
-                auto [shortDir, filename] = extractDirectoryAndFilename(isoFiles[index - 1], "cp_mv_rm");
-                std::ostringstream oss;
-                oss << "\033[1m-> " << shortDir << "/\033[95m" << filename << "\033[0m\n";
-                entries.push_back(oss.str());
-            }
-        }
-        return entries;
-    };
+		std::vector<std::string> entries;
+		for (const auto& chunk : indexChunks) {
+			for (int index : chunk) {
+				auto [shortDir, filename] = extractDirectoryAndFilename(isoFiles[index - 1], "cp_mv_rm");
+				std::ostringstream oss;
+				oss << "\033[1m-> " << shortDir << "/\033[95m" << filename << "\033[0m\n";
+				entries.push_back(oss.str());
+			}
+		}
+    
+		// Sort the entries using the natural comparison
+		sortFilesCaseInsensitive(entries);
+    
+		return entries;
+	};
     
     // Common pagination logic for both flows
     auto setupPagination = [](int totalEntries) {

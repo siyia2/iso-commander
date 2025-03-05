@@ -770,13 +770,60 @@ bool isDirectoryEmpty(const std::string& path) {
 }
 
 
-// Sorts items in a case-insensitive manner
-void sortFilesCaseInsensitive(std::vector<std::string>& files) {
-    std::sort(files.begin(), files.end(), 
-        [](const std::string& a, const std::string& b) {
-            return strcasecmp(a.c_str(), b.c_str()) < 0;
+// Compare two strings in natural order, case-insensitively.
+int naturalCompare(const std::string &a, const std::string &b) {
+    size_t i = 0, j = 0;
+    while (i < a.size() && j < b.size()) {
+        if (std::isdigit(a[i]) && std::isdigit(b[j])) {
+            // Skip leading zeros and compute lengths
+            size_t start_a = i, start_b = j;
+            while (start_a < a.size() && a[start_a] == '0') start_a++;
+            while (start_b < b.size() && b[start_b] == '0') start_b++;
+            
+            // Compute total digit lengths
+            size_t len_a = 0, len_b = 0;
+            while (i + len_a < a.size() && std::isdigit(a[i + len_a])) len_a++;
+            while (j + len_b < b.size() && std::isdigit(b[j + len_b])) len_b++;
+            
+            // Non-zero lengths via subtraction (optimization)
+            size_t nz_len_a = len_a - (start_a - i);
+            size_t nz_len_b = len_b - (start_b - j);
+            
+            // Compare non-zero lengths
+            if (nz_len_a != nz_len_b)
+                return (nz_len_a < nz_len_b) ? -1 : 1;
+            
+            // Compare digit by digit if lengths match
+            for (size_t k = 0; k < nz_len_a; ++k) {
+                char ca = (start_a + k < a.size()) ? a[start_a + k] : '0';
+                char cb = (start_b + k < b.size()) ? b[start_b + k] : '0';
+                if (ca != cb) return (ca < cb) ? -1 : 1;
+            }
+            
+            // Compare leading zeros if digits are equal
+            size_t zeros_a = start_a - i;
+            size_t zeros_b = start_b - j;
+            if (zeros_a != zeros_b)
+                return (zeros_a < zeros_b) ? -1 : 1;
+            
+            i += len_a;
+            j += len_b;
+        } else {
+            // Case-insensitive compare for non-digits
+            char ca = std::tolower(a[i]), cb = std::tolower(b[j]);
+            if (ca != cb) return (ca < cb) ? -1 : 1;
+            ++i; ++j;
         }
-    );
+    }
+    return (i < a.size()) ? 1 : (j < b.size()) ? -1 : 0;
+}
+
+
+// Sort files using a natural order, case-insensitive comparator.
+void sortFilesCaseInsensitive(std::vector<std::string>& files) {
+    std::sort(files.begin(), files.end(), [](const std::string& a, const std::string& b) {
+        return naturalCompare(a, b) < 0;
+    });
 }
 
 
