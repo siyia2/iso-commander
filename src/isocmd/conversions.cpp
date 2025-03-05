@@ -927,7 +927,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
             continue;
         }
 
-        bool conversionSuccess = false;
+        std::atomic<bool> conversionSuccess(false); // Atomic boolean for thread safety
         if (modeMdf) {
             conversionSuccess = convertMdfToIso(inputPath, outputPath, completedBytes);
         } else if (!modeMdf && !modeNrg) {
@@ -943,16 +943,9 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
             
             localSuccessMsgs.push_back("\033[1mImage file converted to ISO:\033[0;1m \033[1;92m'" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m.\033[0;1m");
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
-        } else {
+        } else if (conversionSuccess.load() || g_operationCancelled.load()){
             localFailedMsgs.push_back("\033[1;91mConversion of \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m " + 
                                       (g_operationCancelled.load() ? "cancelled" : "failed") + ".\033[0;1m");
-            if (fs::exists(outputPath)) {
-                if (std::remove(outputPath.c_str()) == 0) {
-                    localDeletedMsgs.push_back("\033[1;92mDeleted incomplete ISO file:\033[1;91m '" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m");
-                } else {
-                    localDeletedMsgs.push_back("\033[1;91mFailed to delete incomplete ISO file: \033[1;93m'" + outputPath + "'\033[0;1m");
-                }
-            }
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
         }
         

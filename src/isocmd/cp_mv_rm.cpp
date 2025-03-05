@@ -456,7 +456,7 @@ bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::ato
 // Function to handle cpMvDel
 void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::unordered_set<std::string>& operationIsos, std::unordered_set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, bool overwriteExisting) {
 
-    bool operationSuccessful = true;
+    std::atomic<bool> operationSuccessful(true);
     uid_t real_uid;
     gid_t real_gid;
     std::string real_username;
@@ -495,7 +495,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 
     auto executeOperation = [&](const std::vector<std::string>& files) {
         for (const auto& operateIso : files) {
-
             fs::path srcPath(operateIso);
             auto [srcDir, srcFile] = extractDirectoryAndFilename(srcPath.string(), "cp_mv_rm");
 
@@ -518,13 +517,13 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                                               srcDir + "/" + srcFile + "'\033[1;91m: " +
                                               ec.message() + ".\033[0;1m");
                     failedTasks->fetch_add(1, std::memory_order_acq_rel);
-                    operationSuccessful = false;
+                    operationSuccessful.store(false);
                 }
                 
                 // Check if we need to batch insert
                 batchInsertMessages();
             } else {
-                bool atLeastOneCopySucceeded = false;
+                std::atomic<bool> atLeastOneCopySucceeded(false);
                 std::atomic<int> validDestinations(0);
                 std::atomic<int> successfulOperations(0);
                 
@@ -543,7 +542,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                                                   " file to itself: \033[1;93m'" +
                                                   srcDir + "/" + srcFile + "'\033[1;91m.\033[0m");
                         failedTasks->fetch_add(1, std::memory_order_acq_rel);
-                        operationSuccessful = false;
+                        operationSuccessful.store(false);
                         
                         // Check if we need to batch insert
                         batchInsertMessages();
@@ -560,7 +559,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                                                   ": \033[1;93m'" + srcDir + "/" + srcFile + "'\033[1;91m" +
                                                   " to '" + destDir + "': " + errorDetail + "\033[1;91m.\033[0;1m");
                         failedTasks->fetch_add(1, std::memory_order_acq_rel);
-                        operationSuccessful = false;
+                        operationSuccessful.store(false);
                         
                         // Check if we need to batch insert
                         batchInsertMessages();
@@ -575,7 +574,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         verboseErrors.push_back("\033[1;91mSource file no longer exists: \033[1;93m'" +
                                                  srcDir + "/" + srcFile + "'\033[1;91m.\033[0;1m");
                         failedTasks->fetch_add(1, std::memory_order_acq_rel);
-                        operationSuccessful = false;
+                        operationSuccessful.store(false);
                         
                         // Check if we need to batch insert
                         batchInsertMessages();
@@ -590,7 +589,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                                                           destDirProcessed + "/" + destFile +
                                                           "'\033[1;91m - " + ec.message() + ".\033[0;1m");
                                 failedTasks->fetch_add(1, std::memory_order_acq_rel);
-                                operationSuccessful = false;
+                                operationSuccessful.store(false);
                                 
                                 // Check if we need to batch insert
                                 batchInsertMessages();
@@ -603,7 +602,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                                                      ": \033[1;93m'" + srcDir + "/" + srcFile + "'\033[1;91m" +
                                                      " to '" + destDirProcessed + "/': File exists (enable overwrites)\033[1;91m.\033[0;1m");
                             failedTasks->fetch_add(1, std::memory_order_acq_rel);
-                            operationSuccessful = false;
+                            operationSuccessful.store(false);
                             
                             // Check if we need to batch insert
                             batchInsertMessages();
@@ -611,13 +610,13 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         }
                     }
 
-                    bool success = false;
+                    std::atomic<bool> success(false);
 
                     if (isMove && destDirs.size() > 1) {
                         // For multiple destinations during move, always use copy approach
-                        success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec);
-                        if (success) {
-                            atLeastOneCopySucceeded = true;
+                        success.store(bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec));
+                        if (success.load()) {
+                            atLeastOneCopySucceeded.store(true);
                             successfulOperations.fetch_add(1, std::memory_order_acq_rel);
                         }
                     } else if (isMove) {
@@ -625,8 +624,8 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         fs::rename(srcPath, destPath, ec);
                         if (ec) {
                             ec.clear();
-                            success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec);
-                            if (success) {
+                            success.store(bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec));
+                            if (success.load()) {
                                 std::error_code deleteEc;
                                 if (!fs::remove(srcPath, deleteEc)) {
                                     verboseErrors.push_back("\033[1;91mMove completed but failed to remove source file: \033[1;93m'" +
@@ -639,17 +638,17 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                             }
                         } else {
                             completedBytes->fetch_add(fileSize);
-                            success = true;
+                            success.store(true);
                             successfulOperations.fetch_add(1, std::memory_order_acq_rel);
                         }
                     } else if (isCopy) {
-                        success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec);
-                        if (success) {
+                        success.store(bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec));
+                        if (success.load()) {
                             successfulOperations.fetch_add(1, std::memory_order_acq_rel);
                         }
                     }
 
-                    if (!success || ec) {
+                    if (!success.load() || ec) {
                         std::string errorDetail = g_operationCancelled.load() ? "Cancelled" : ec.message();
                         std::string errorMessageInfo = "\033[1;91mError " +
                         std::string(isCopy ? "copying" : (i < destDirs.size() - 1 ? "moving" : "moving")) +
@@ -657,7 +656,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         " to '" + destDirProcessed + "/': " + errorDetail + "\033[1;91m.\033[0;1m";
                         verboseErrors.push_back(errorMessageInfo);
                         failedTasks->fetch_add(1, std::memory_order_acq_rel);
-                        operationSuccessful = false;
+                        operationSuccessful.store(false);
                     } else {
                         // Attempt to change ownership, but ignore success/failure
                         changeOwnership(destPath);
@@ -675,7 +674,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                 }
                 
                 // For multi-destination move: remove source file after copies succeed
-                if (isMove && destDirs.size() > 1 && validDestinations > 0 && atLeastOneCopySucceeded) {
+                if (isMove && destDirs.size() > 1 && validDestinations > 0 && atLeastOneCopySucceeded.load()) {
                     
                     std::error_code deleteEc;
                     if (!fs::remove(srcPath, deleteEc)) {
