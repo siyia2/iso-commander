@@ -257,10 +257,13 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         } else if (verbose) {
             clearScrollBuffer();
             needsClrScrn = true;
-            verbosePrint(operationFiles, operationFails, 
-                         (isMount ? skippedMessages : std::unordered_set<std::string>{}), 
-                         {}, uniqueErrorMessages, 
-                         isMount ? 2 : 1);
+            std::unordered_set<std::string> conditionalSet = isMount ? skippedMessages : std::unordered_set<std::string>{};
+			std::unordered_set<std::string> emptySet{};
+			verbosePrint(operationFiles, operationFails,
+             conditionalSet, 
+             emptySet, 
+             uniqueErrorMessages,
+             isMount ? 2 : 1);
         }
 
         // Reset filter for certain operations
