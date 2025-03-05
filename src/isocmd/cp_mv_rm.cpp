@@ -410,6 +410,7 @@ namespace fs = std::filesystem;
 bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::atomic<size_t>* completedBytes, std::error_code& ec) {
     const size_t bufferSize = 8 * 1024 * 1024; // 8MB buffer
     std::vector<char> buffer(bufferSize);
+    if (g_operationCancelled.load()) return false;
     
     std::ifstream input(src, std::ios::binary);
     if (!input) {
