@@ -17,13 +17,13 @@
 // MDF2ISO
 
 bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std::atomic<size_t>* completedBytes) {
-    namespace fs = std::filesystem;
-    
-    // Initial cancellation check
+    // Early cancellation check
     if (g_operationCancelled.load()) {
 		g_operationCancelled.store(true);
         return false;
     }
+    
+    namespace fs = std::filesystem;
     
     std::ifstream mdfFile(mdfPath, std::ios::binary);
     if (!mdfFile.is_open()) {
@@ -145,13 +145,13 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
 // CCD2ISO
 
 bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std::atomic<size_t>* completedBytes) {
-    namespace fs = std::filesystem;
-    
-    // Initial cancellation check
+   // Early cancellation check
     if (g_operationCancelled.load()) {
 		g_operationCancelled.store(true);
         return false;
     }
+    
+    namespace fs = std::filesystem;
     
     std::ifstream ccdFile(ccdPath, std::ios::binary);
     if (!ccdFile) return false;
@@ -229,13 +229,13 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
 // NRG2ISO
 
 bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile, std::atomic<size_t>* completedBytes) {
-    namespace fs = std::filesystem;
-    
     // Early cancellation check
     if (g_operationCancelled.load()) {
 		g_operationCancelled.store(true);
         return false;
     }
+    
+    namespace fs = std::filesystem;
 
     std::ifstream nrgFile(inputFile, std::ios::binary);
     if (!nrgFile) {
