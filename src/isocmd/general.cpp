@@ -722,15 +722,6 @@ void setDisplayMode(const std::string& inputSearch) {
             std::string settingsStr = inputSearch.substr(underscorePos + 1);
             newValue = (command == "cl") ? "compact" : "full";
 
-            // Map characters to settings (e.g., 'm' → mount_list)
-            std::unordered_map<char, std::string> settingMap = {
-                {'m', "mount_list"},
-                {'u', "umount_list"},
-                {'o', "cp_mv_rm_list"},
-                {'c', "conversion_lists"},
-                {'w', "write_list"}
-            };
-
             std::unordered_set<std::string> uniqueKeys;
             for (char c : settingsStr) {
                 auto it = settingMap.find(c);
