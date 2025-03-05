@@ -63,7 +63,7 @@ int main(int argc, char *argv[]) {
         return 0;
     }
     // Readline use semicolon as delimiter
-    rl_completer_word_break_characters = ";";
+    rl_completer_word_break_characters = (char *)";";
 
     const char* lockFile = "/tmp/isocmd.lock";
 
@@ -97,6 +97,7 @@ int main(int argc, char *argv[]) {
     
     std::map<std::string, std::string> config = readUserConfigLists(configPath);
     
+    std::string choice;
     isImportRunning.store(false);
     // Open the history file for automatic ISO cache imports
     std::ifstream file(historyFilePath);
@@ -398,7 +399,7 @@ void printMenu() {
 // GENERAL STUFF
 
 // function to read and map config file
-std::map<std::string, std::string> readConfig() {
+std::map<std::string, std::string> readConfig(const std::string& configPath) {
     std::map<std::string, std::string> config;
     std::ifstream inFile(configPath);
     
@@ -659,7 +660,7 @@ void flushStdin() {
 void disableInput() {
     struct termios term;
     tcgetattr(STDIN_FILENO, &term);
-    term.c_lflag &= ~(static_cast<tcflag_t>(ICANON) | static_cast<tcflag_t>(ECHO));
+    term.c_lflag &= ~(ICANON | ECHO);
     tcsetattr(STDIN_FILENO, TCSANOW, &term);
 }
 

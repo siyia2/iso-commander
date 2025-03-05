@@ -92,8 +92,8 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
             return false;
         }
         
-        // Read sector data - use static_cast to match read() method signature
-        if (!mdfFile.read(sectorBuffer.data(), static_cast<std::streamsize>(sector_data))) {
+        // Read sector data
+        if (!mdfFile.read(sectorBuffer.data(), sector_data)) {
             return false;
         }
         
@@ -114,8 +114,8 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
             return false;
         }
         
-        // Write sector immediately - use static_cast to match write() method signature
-        if (!isoFile.write(sectorBuffer.data(), static_cast<std::streamsize>(sector_data))) {
+        // Write sector immediately
+        if (!isoFile.write(sectorBuffer.data(), sector_data)) {
             return false;
         }
         
@@ -274,7 +274,7 @@ bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile
             return false;
         }
 
-        nrgFile.read(sectorBuffer.data(), static_cast<std::streamsize>(SECTOR_SIZE));
+        nrgFile.read(sectorBuffer.data(), SECTOR_SIZE);
         std::streamsize bytesRead = nrgFile.gcount();
 
         // Check cancellation after reading sector
@@ -296,9 +296,9 @@ bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile
                 return false;
             }
 
-            // Update progress - use static_cast to match method signature
+            // Update progress
             if (completedBytes) {
-                completedBytes->fetch_add(static_cast<size_t>(bytesRead), std::memory_order_relaxed);
+                completedBytes->fetch_add(bytesRead, std::memory_order_relaxed);
             }
 
             // Check cancellation after updating progress
