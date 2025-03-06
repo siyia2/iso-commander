@@ -142,7 +142,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         // Handle empty input or return
         if (inputString.empty()) {
             if (isFiltered) {
-				filteredFiles.clear();
+		isFiltered = {};
                 isFiltered = false;
                 continue;
             } else {
