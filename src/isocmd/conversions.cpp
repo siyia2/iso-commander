@@ -360,7 +360,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 		} else if ((fileType == "nrg") && (nrgFilesCache.size() != files.size()) && !nrgFilesCache.empty()  && !isFiltered) {
 			files = nrgFilesCache;
 		}
-        if (!list && !isFiltered) {
+        if ((!list && !isFiltered) || isFiltered) {
 			sortFilesCaseInsensitive(files); // Sort the files case-insensitively
 			fileExtension == ".bin/.img" 
 			? sortFilesCaseInsensitive(binImgFilesCache) 
