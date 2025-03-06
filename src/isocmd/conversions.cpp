@@ -267,14 +267,14 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
 		if (!g_operationCancelled.load()) {
 			// File conversion workflow (using new modular function)
 			select_and_convert_to_iso(fileType, files, verbose, 
-									promptFlag, maxDepth, historyPattern, newISOFound);
+									promptFlag, maxDepth, historyPattern, newISOFound, list);
 		}
     }
 }
 
 
 // Function to handle conversions for select_and_convert_to_iso
-void select_and_convert_to_iso(const std::string& fileType, std::vector<std::string>& files, bool& verbose, bool& promptFlag, int& maxDepth, bool& historyPattern, std::atomic<bool>& newISOFound) {
+void select_and_convert_to_iso(const std::string& fileType, std::vector<std::string>& files, bool& verbose, bool& promptFlag, int& maxDepth, bool& historyPattern, std::atomic<bool>& newISOFound, bool& list) {
     // Bind keys for preventing clear screen and enabling tab completion
     rl_bind_key('\f', prevent_readline_keybindings);
     rl_bind_key('\t', prevent_readline_keybindings);
@@ -360,7 +360,14 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 		} else if ((fileType == "nrg") && (nrgFilesCache.size() != files.size()) && !nrgFilesCache.empty()  && !isFiltered) {
 			files = nrgFilesCache;
 		}
-        sortFilesCaseInsensitive(files); // Sort the files case-insensitively
+        if (!list && !isFiltered) {
+			sortFilesCaseInsensitive(files); // Sort the files case-insensitively
+			fileExtension == ".bin/.img" 
+			? sortFilesCaseInsensitive(binImgFilesCache) 
+			: fileExtension == ".mdf" 
+				? sortFilesCaseInsensitive(mdfMdsFilesCache) 
+				: sortFilesCaseInsensitive(nrgFilesCache);
+		}
         printList(files, "IMAGE_FILES", "conversions"); // Print the current list of files
 		}
 		std::cout << "\n\n";
