@@ -403,10 +403,6 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
                 // Restore the original file list
                 files = (fileType == "bin" || fileType == "img") ? binImgFilesCache :
                         (fileType == "mdf" ? mdfMdsFilesCache : nrgFilesCache);
-                        // Clear any filtered results that might be stored
-						auto filteredFiles = std::vector<std::string>();  // Create an empty vector
-						std::swap(filteredFiles, files);  // Swap to clear any previous filtered list
-						
                 needsScrnClr = true;
                 isFiltered = false; // Reset filter status
                 continue;
