@@ -162,45 +162,8 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 }
 
 
-// Function to display input errors for Cp/Mv/Rm
-void displayErrors(const std::unordered_set<std::string>& uniqueErrorMessages) {
-    if (!uniqueErrorMessages.empty()) {
-        std::cout << "\n";
-        for (const auto& err : uniqueErrorMessages) {
-            std::cout << err << "\n";
-        }
-    }
-}
-
-
-// Function to generate formatted entries for selected ISO files
-std::vector<std::string> generateSelectedIsosEntries(const std::vector<std::string>& isoFiles, const std::vector<std::vector<int>>& indexChunks
-) {
-    std::vector<std::string> entries;
-    
-    // Process each index in each chunk
-    for (const auto& chunk : indexChunks) {
-        for (int index : chunk) {
-            // Extract directory and filename components
-            auto [shortDir, filename] = extractDirectoryAndFilename(isoFiles[index - 1], "cp_mv_rm");
-            
-            // Format the entry with appropriate colors
-            std::ostringstream oss;
-            oss << "\033[1m-> " << shortDir << "/\033[95m" << filename << "\033[0m\n";
-            entries.push_back(oss.str());
-        }
-    }
-    
-    // Sort the entries using natural case-insensitive comparison
-    sortFilesCaseInsensitive(entries);
-    
-    return entries;
-}
-
-
 // Function that handles all pagination logic for a list of entries
-std::string handlePaginatedDisplay(const std::vector<std::string>& entries, const std::string& promptPrefix, const std::string& promptSuffix, const std::function<void()>& displayErrorsFn, const std::function<void()>& setupEnvironmentFn, bool& isPageTurn
-) {
+std::string handlePaginatedDisplay(const std::vector<std::string>& entries, const std::string& promptPrefix, const std::string& promptSuffix, const std::function<void()>& displayErrorsFn, const std::function<void()>& setupEnvironmentFn, bool& isPageTurn) {
     int totalEntries = entries.size();
     
     // Setup pagination parameters
@@ -292,18 +255,39 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, cons
     }
 }
 
-
 // Function to handle rm including pagination
 bool handleDeleteOperation(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::unordered_set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& abortDel) {
     
-    // Generate entries for deletion
-    auto entries = generateSelectedIsosEntries(isoFiles, indexChunks);
     bool isPageTurn = false;
     
     // Setup environment function
     auto setupEnv = [&]() {
         rl_bind_key('\f', clear_screen_and_buffer);
     };
+    
+    // Display error messages if any
+    auto displayErrors = [&]() {
+        if (!uniqueErrorMessages.empty()) {
+            std::cout << "\n";
+            for (const auto& err : uniqueErrorMessages) {
+                std::cout << err << "\n";
+            }
+        }
+    };
+    
+    // Generate entries for selected ISO files
+    std::vector<std::string> entries;
+    for (const auto& chunk : indexChunks) {
+        for (int index : chunk) {
+            auto [shortDir, filename] = extractDirectoryAndFilename(isoFiles[index - 1], "cp_mv_rm");
+            std::ostringstream oss;
+            oss << "\033[1m-> " << shortDir << "/\033[95m" << filename << "\033[0m\n";
+            entries.push_back(oss.str());
+        }
+    }
+
+    // Sort the entries using the natural comparison
+    sortFilesCaseInsensitive(entries);
     
     // Prefix and suffix for the prompt
     std::string promptPrefix = "\n";
@@ -312,17 +296,13 @@ bool handleDeleteOperation(std::vector<std::string>& isoFiles, std::vector<std::
     
     // Use the consolidated pagination function with custom input handling
     while (true) {
-        // Clear screen initially
-        clearScrollBuffer();
-        displayErrors(uniqueErrorMessages); // Show errors on first display
-        
         // Use the consolidated pagination function
         std::string userInput = handlePaginatedDisplay(
-            entries, 
-            promptPrefix, 
-            promptSuffix, 
-            [&uniqueErrorMessages]() { displayErrors(uniqueErrorMessages); }, 
-            setupEnv, 
+            entries,
+            promptPrefix,
+            promptSuffix,
+            displayErrors,
+            setupEnv,
             isPageTurn
         );
         
@@ -351,18 +331,39 @@ bool handleDeleteOperation(std::vector<std::string>& isoFiles, std::vector<std::
     }
 }
 
-
 // Function to prompt for userDestDir or Delete confirmation including pagination
 std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::unordered_set<std::string>& uniqueErrorMessages, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& historyPattern, bool& isDelete, bool& isCopy, bool& abortDel, bool& overwriteExisting) {
 
+    // Display error messages if any
+    auto displayErrors = [&]() {
+        if (!uniqueErrorMessages.empty()) {
+            std::cout << "\n";
+            for (const auto& err : uniqueErrorMessages) {
+                std::cout << err << "\n";
+            }
+        }
+    };
+    
+    // Generate entries for selected ISO files - used by both branches
+    std::vector<std::string> entries;
+    for (const auto& chunk : indexChunks) {
+        for (int index : chunk) {
+            auto [shortDir, filename] = extractDirectoryAndFilename(isoFiles[index - 1], "cp_mv_rm");
+            std::ostringstream oss;
+            oss << "\033[1m-> " << shortDir << "/\033[95m" << filename << "\033[0m\n";
+            entries.push_back(oss.str());
+        }
+    }
+    
+    // Sort the entries using the natural comparison
+    sortFilesCaseInsensitive(entries);
     
     // Clear screen initially
     clearScrollBuffer();
-    displayErrors(uniqueErrorMessages); // Show errors on first display
+    displayErrors(); // Show errors on first display
     
     if (!isDelete) {
         // Copy/Move operation flow
-        auto entries = generateSelectedIsosEntries(isoFiles, indexChunks);
         bool isPageTurn = false;
         
         // Setup environment function
@@ -395,7 +396,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
             entries, 
             promptPrefix, 
             promptSuffix, 
-            [&uniqueErrorMessages]() { displayErrors(uniqueErrorMessages); },
+            displayErrors,
             setupEnv, 
             isPageTurn
         );
