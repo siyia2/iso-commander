@@ -76,9 +76,9 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         enable_ctrl_d();
         setupSignalHandlerCancellations();
         g_operationCancelled.store(false);
-		// For non-umount operations, we show the global list.
-		if (!isUnmount)
-			isAtISOList.store(true);
+        // For non-umount operations, we show the global list.
+        if (!isUnmount)
+            isAtISOList.store(true);
         verbose = false;
         resetVerboseSets(operationFiles, skippedMessages, operationFails, uniqueErrorMessages);
         clear_history();
@@ -98,7 +98,6 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
                 if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered))
                     break;
                 // If filtered, update isoDirs accordingly.
-                isoDirs = isFiltered ? filteredFiles : isoDirs;
                 std::cout << "\n\n";
             }
         }
@@ -229,17 +228,31 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         
         if (isMount) {
             isAtISOList.store(false);
-            processAndMountIsoFiles(inputString, globalIsoFileList, operationFiles, skippedMessages, operationFails, uniqueErrorMessages, verbose);
+            // Create a temporary copy of the active list
+            std::vector<std::string> activeList = isFiltered ? filteredFiles : globalIsoFileList;
+            processAndMountIsoFiles(inputString, activeList, operationFiles, skippedMessages, operationFails, uniqueErrorMessages, verbose);
         } else if (isUnmount) {
             umountMvRmBreak = true;
             isAtISOList.store(false);
-            prepareUnmount(inputString, isoDirs, operationFiles, operationFails, uniqueErrorMessages, umountMvRmBreak, verbose);
+            // For unmount operations
+            if (isFiltered) {
+                // When filtered, we work with a copy of filteredFiles
+                std::vector<std::string> tempList = filteredFiles;
+                prepareUnmount(inputString, tempList, operationFiles, operationFails, uniqueErrorMessages, umountMvRmBreak, verbose);
+            } else {
+                // For unfiltered, we directly use isoDirs as it's meant to be modified
+                prepareUnmount(inputString, isoDirs, operationFiles, operationFails, uniqueErrorMessages, umountMvRmBreak, verbose);
+            }
         } else if (write) {
             isAtISOList.store(false);
-            writeToUsb(inputString, globalIsoFileList, uniqueErrorMessages);
+            // For write, use filtered or global list
+            std::vector<std::string> activeList = isFiltered ? filteredFiles : globalIsoFileList;
+            writeToUsb(inputString, activeList, uniqueErrorMessages);
         } else {
             isAtISOList.store(false);
-            processOperationInput(inputString, globalIsoFileList, operation, operationFiles, operationFails, uniqueErrorMessages, promptFlag, maxDepth, umountMvRmBreak, historyPattern, verbose, newISOFound);
+            // For other operations (cp, mv, rm)
+            std::vector<std::string> activeList = isFiltered ? filteredFiles : globalIsoFileList;
+            processOperationInput(inputString, activeList, operation, operationFiles, operationFails, uniqueErrorMessages, promptFlag, maxDepth, umountMvRmBreak, historyPattern, verbose, newISOFound);
         }
 
         // Result handling and display
