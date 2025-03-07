@@ -23,17 +23,17 @@ void clearRamCache(bool& modeMdf, bool& modeNrg) {
         extensions = {".bin", ".img"};
         cacheType = "BIN/IMG";
         cacheIsEmpty = binImgFilesCache.empty();
-        if (!cacheIsEmpty) binImgFilesCache.clear();
+        if (!cacheIsEmpty) std::vector<std::string>().swap(binImgFilesCache);
     } else if (modeMdf) {
         extensions = {".mdf"};
         cacheType = "MDF";
         cacheIsEmpty = mdfMdsFilesCache.empty();
-        if (!cacheIsEmpty) mdfMdsFilesCache.clear();
+        if (!cacheIsEmpty) std::vector<std::string>().swap(mdfMdsFilesCache);
     } else if (modeNrg) {
         extensions = {".nrg"};
         cacheType = "NRG";
         cacheIsEmpty = nrgFilesCache.empty();
-        if (!cacheIsEmpty) nrgFilesCache.clear();
+        if (!cacheIsEmpty) std::vector<std::string>().swap(nrgFilesCache);
     }
 
     // Manually remove items with matching extensions from transformationCache
