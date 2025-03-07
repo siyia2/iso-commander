@@ -14,39 +14,42 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
     static size_t previousHash = 0;  // Store only a hash, not the entire vector
     std::vector<std::string> newIsoDirs;
 
+    // Collect directories
     for (const auto& entry : std::filesystem::directory_iterator(MOUNTED_ISO_PATH)) {
         if (entry.is_directory() && entry.path().filename().string().find("iso_") == 0) {
             newIsoDirs.push_back(entry.path().string());
         }
     }
 
-    // Compute a hash of the new vector
-    size_t currentHash = 0;
+    // Hash comparison
+    size_t currentHash = newIsoDirs.size(); // Include size in hash
     for (const auto& path : newIsoDirs) {
-        currentHash ^= std::hash<std::string>{}(path);  // Combine hashes
+        // Hash combination - rotate and add
+        currentHash = (currentHash << 1) | (currentHash >> 63); // 64-bit rotation
+        currentHash += std::hash<std::string>{}(path);
     }
 
     // Sort only if the hash is different
     if (currentHash != previousHash) {
-        sortFilesCaseInsensitive(newIsoDirs);  // Use your custom sort function
-        previousHash = currentHash;  // Update the stored hash
+        sortFilesCaseInsensitive(newIsoDirs);
+        previousHash = currentHash;
     }
 
-    isoDirs = std::move(newIsoDirs);  // Efficiently move the new vector
+    isoDirs = std::move(newIsoDirs);
 
     if (isoDirs.empty()) {
         clearScrollBuffer();
         std::cerr << "\n\033[1;93mNo paths matching the '/mnt/iso_{name}' pattern found.\033[0m\033[0;1m\n";
-        std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
+        std::cout << "\n\033[1;32m↵ to return...\033[0m\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        isoDirs = {}; // De-allocate from memory
+        isoDirs = {}; // De-allocate memory for static vector
         return false;
     }
 
     clearScrollBuffer();
-    if (filteredFiles.size() == isoDirs.size()) {
-        isFiltered = false;
-    }
+
+    // More robust filtering detection
+    isFiltered = !filteredFiles.empty() && filteredFiles.size() <= isoDirs.size();
     printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS", "");
 
     return true;
