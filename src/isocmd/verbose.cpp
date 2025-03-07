@@ -72,6 +72,69 @@ void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_se
 }
 
 
+// Function to clear and de-allocate verbos sets
+void resetVerboseSets(std::unordered_set<std::string>& processedErrors,std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts) {
+    
+    std::unordered_set<std::string>().swap(processedErrors);
+    std::unordered_set<std::string>().swap(successOuts);
+    std::unordered_set<std::string>().swap(skippedOuts);
+    std::unordered_set<std::string>().swap(failedOuts);
+
+}
+
+
+
+// Function to handle error reporting for Cp/Mv/Rm
+void reportErrorCpMvRm(const std::string& errorType, const std::string& srcDir, const std::string& srcFile,const std::string& destDir, const std::string& errorDetail, const std::string& operation, std::vector<std::string>& verboseErrors, std::atomic<size_t>* failedTasks, std::atomic<bool>& operationSuccessful, const std::function<void()>& batchInsertFunc) {
+    
+    std::string errorMsg;
+    
+    if (errorType == "same_file") {
+        errorMsg = "\033[1;91mCannot " + operation + " file to itself: \033[1;93m'" +
+                   srcDir + "/" + srcFile + "'\033[1;91m.\033[0m";
+    }
+    else if (errorType == "invalid_dest") {
+        errorMsg = "\033[1;91mError " + operation + ": \033[1;93m'" + 
+                   srcDir + "/" + srcFile + "'\033[1;91m to '" + 
+                   destDir + "': " + errorDetail + "\033[1;91m.\033[0;1m";
+    }
+    else if (errorType == "source_missing") {
+        errorMsg = "\033[1;91mSource file no longer exists: \033[1;93m'" +
+                   srcDir + "/" + srcFile + "'\033[1;91m.\033[0;1m";
+    }
+    else if (errorType == "overwrite_failed") {
+        errorMsg = "\033[1;91mFailed to overwrite: \033[1;93m'" +
+                   destDir + "/" + srcFile + "'\033[1;91m - " + 
+                   errorDetail + ".\033[0;1m";
+    }
+    else if (errorType == "file_exists") {
+        errorMsg = "\033[1;91mError " + operation + ": \033[1;93m'" + 
+                   srcDir + "/" + srcFile + "'\033[1;91m to '" + 
+                   destDir + "/': File exists (enable overwrites)\033[1;91m.\033[0;1m";
+    }
+    else if (errorType == "remove_after_move") {
+        errorMsg = "\033[1;91mMove completed but failed to remove source file: \033[1;93m'" +
+                   srcDir + "/" + srcFile + "'\033[1;91m - " +
+                   errorDetail + "\033[0m";
+    }
+    else if (errorType == "missing_file") {
+        errorMsg = "\033[1;35mMissing: \033[1;93m'" +
+                   srcDir + "/" + srcFile + "'\033[1;35m.\033[0;1m";
+    }
+    else {
+        // Generic error case
+        errorMsg = "\033[1;91mError: " + errorDetail + "\033[0;1m";
+    }
+    
+    verboseErrors.push_back(errorMsg);
+    failedTasks->fetch_add(1, std::memory_order_acq_rel);
+    operationSuccessful.store(false);
+    
+    // Call the batch insert function to handle message batching
+    batchInsertFunc();
+}
+
+
 // CACHE
 
 // Function that provides verbose output for manualRefreshCache

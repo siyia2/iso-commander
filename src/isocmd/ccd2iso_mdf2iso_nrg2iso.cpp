@@ -22,9 +22,7 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
 		g_operationCancelled.store(true);
         return false;
     }
-    
-    namespace fs = std::filesystem;
-    
+        
     std::ifstream mdfFile(mdfPath, std::ios::binary);
     if (!mdfFile.is_open()) {
         return false;
@@ -150,9 +148,7 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
 		g_operationCancelled.store(true);
         return false;
     }
-    
-    namespace fs = std::filesystem;
-    
+        
     std::ifstream ccdFile(ccdPath, std::ios::binary);
     if (!ccdFile) return false;
 
@@ -235,8 +231,6 @@ bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile
         return false;
     }
     
-    namespace fs = std::filesystem;
-
     std::ifstream nrgFile(inputFile, std::ios::binary);
     if (!nrgFile) {
         return false;
