@@ -90,7 +90,25 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
             outputBuffer.clear();
             outputBuffer.append(errorFormatPrefix)
                        .append(isoDirectory).append("/").append(isoFilename)
-                       .append(errorFormatSuffix).append("{cancelled}")
+                       .append(errorFormatSuffix).append("{CXL}")
+                       .append(errorFormatEnd);
+            tempMountedFails.push_back(outputBuffer);
+            failedTasks->fetch_add(1, std::memory_order_acq_rel);
+            totalProcessedEntries++;
+            
+            // Check if we need to flush
+            if (totalProcessedEntries >= BATCH_SIZE) {
+                flushTemporaryBuffers();
+            }
+            continue;
+        }
+        
+         // Root privilege check
+        if (geteuid() != 0) {
+            outputBuffer.clear();
+            outputBuffer.append(errorFormatPrefix)
+                       .append(isoDirectory).append("/").append(isoFilename)
+                       .append(errorFormatSuffix).append("{needsRoot}")
                        .append(errorFormatEnd);
             tempMountedFails.push_back(outputBuffer);
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
@@ -117,24 +135,6 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
         std::string uniqueId = isoFileName + "~" + shortHash;
         std::string mountPoint = "/mnt/iso_" + uniqueId;
         auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint, "mount");
-
-        // Root privilege check
-        if (geteuid() != 0) {
-            outputBuffer.clear();
-            outputBuffer.append(errorFormatPrefix)
-                       .append(isoDirectory).append("/").append(isoFilename)
-                       .append(errorFormatSuffix).append("{needsRoot}")
-                       .append(errorFormatEnd);
-            tempMountedFails.push_back(outputBuffer);
-            failedTasks->fetch_add(1, std::memory_order_acq_rel);
-            totalProcessedEntries++;
-            
-            // Check if we need to flush
-            if (totalProcessedEntries >= BATCH_SIZE) {
-                flushTemporaryBuffers();
-            }
-            continue;
-        }
 
         // Check if already mounted
         if (isAlreadyMounted(mountPoint)) {

@@ -110,7 +110,7 @@ void unmountISO(const std::vector<std::string>& isoDirs,
 
     // Cancellation strings (make sure to use these names consistently)
     const std::string cancelPrefix     = "\033[1;91mFailed to unmount: \033[1;93m'";
-    const std::string cancelSuffix     = "'\033[1;91m.\033[0;1m {cancelled}";
+    const std::string cancelSuffix     = "'\033[1;91m.\033[0;1m {CXL}";
 
     // Pre-allocate containers with batch capacity
     std::vector<std::string> errorMessages;
