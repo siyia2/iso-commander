@@ -255,6 +255,28 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, cons
     }
 }
 
+
+// Function to generate entries for selected ISO files
+std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>& indexChunks, const std::vector<std::string>& isoFiles) {
+    std::vector<std::string> entries;
+
+    // Generate entries for selected ISO files
+    for (const auto& chunk : indexChunks) {
+        for (int index : chunk) {
+            auto [shortDir, filename] = extractDirectoryAndFilename(isoFiles[index - 1], "cp_mv_rm");
+            std::ostringstream oss;
+            oss << "\033[1m-> " << shortDir << "/\033[95m" << filename << "\033[0m\n";
+            entries.push_back(oss.str());
+        }
+    }
+
+    // Sort the entries using the natural comparison
+    sortFilesCaseInsensitive(entries);
+
+    return entries;
+}
+
+
 // Function to handle rm including pagination
 bool handleDeleteOperation(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::unordered_set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& abortDel) {
     
@@ -276,15 +298,7 @@ bool handleDeleteOperation(std::vector<std::string>& isoFiles, std::vector<std::
     };
     
     // Generate entries for selected ISO files
-    std::vector<std::string> entries;
-    for (const auto& chunk : indexChunks) {
-        for (int index : chunk) {
-            auto [shortDir, filename] = extractDirectoryAndFilename(isoFiles[index - 1], "cp_mv_rm");
-            std::ostringstream oss;
-            oss << "\033[1m-> " << shortDir << "/\033[95m" << filename << "\033[0m\n";
-            entries.push_back(oss.str());
-        }
-    }
+    std::vector<std::string> entries = generateIsoEntries(indexChunks, isoFiles);
 
     // Sort the entries using the natural comparison
     sortFilesCaseInsensitive(entries);
@@ -311,6 +325,9 @@ bool handleDeleteOperation(std::vector<std::string>& isoFiles, std::vector<std::
         // Handle EOF
         if (userInput.empty() && !isPageTurn) {
             abortDel = true;
+            std::cout << "\n\033[1;93mDelete operation aborted by user.\033[0;1m\n";
+            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             return false;
         }
         
@@ -346,18 +363,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
     };
     
     // Generate entries for selected ISO files - used by both branches
-    std::vector<std::string> entries;
-    for (const auto& chunk : indexChunks) {
-        for (int index : chunk) {
-            auto [shortDir, filename] = extractDirectoryAndFilename(isoFiles[index - 1], "cp_mv_rm");
-            std::ostringstream oss;
-            oss << "\033[1m-> " << shortDir << "/\033[95m" << filename << "\033[0m\n";
-            entries.push_back(oss.str());
-        }
-    }
-    
-    // Sort the entries using the natural comparison
-    sortFilesCaseInsensitive(entries);
+	std::vector<std::string> entries = generateIsoEntries(indexChunks, isoFiles);
     
     // Clear screen initially
     clearScrollBuffer();
