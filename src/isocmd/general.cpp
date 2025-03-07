@@ -80,10 +80,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
 		if (!isUnmount)
 			isAtISOList.store(true);
         verbose = false;
-        std::unordered_set<std::string>().swap(operationFiles);
-        std::unordered_set<std::string>().swap(skippedMessages);
-        std::unordered_set<std::string>().swap(operationFails);
-        std::unordered_set<std::string>().swap(uniqueErrorMessages);
+        resetVerboseSets(operationFiles, skippedMessages, operationFails, uniqueErrorMessages);
         clear_history();
         removeNonExistentPathsFromCache();
         
@@ -159,10 +156,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         if (inputString == "/") {
             while (true) {
                 verbose = false;
-                std::unordered_set<std::string>().swap(operationFiles);
-				std::unordered_set<std::string>().swap(skippedMessages);
-				std::unordered_set<std::string>().swap(operationFails);
-				std::unordered_set<std::string>().swap(uniqueErrorMessages);
+                resetVerboseSets(operationFiles, skippedMessages, operationFails, uniqueErrorMessages);
 
                 historyPattern = true;
                 loadHistory(historyPattern);

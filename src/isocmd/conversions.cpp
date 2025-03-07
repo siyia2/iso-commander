@@ -113,10 +113,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
         setupSignalHandlerCancellations();
 		g_operationCancelled.store(false);
         bool list = false, clr = false;
-        std::unordered_set<std::string>().swap(processedErrors);
-        std::unordered_set<std::string>().swap(successOuts);
-        std::unordered_set<std::string>().swap(skippedOuts);
-        std::unordered_set<std::string>().swap(failedOuts);
+        resetVerboseSets(processedErrors, successOuts, skippedOuts, failedOuts);
         directoryPaths.clear();
         invalidDirectoryPaths.clear();
         uniquePaths.clear();
@@ -343,10 +340,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 		setupSignalHandlerCancellations();
 		g_operationCancelled.store(false);
         verbose = false; // Reset verbose mode
-        std::unordered_set<std::string>().swap(processedErrors);
-        std::unordered_set<std::string>().swap(successOuts);
-        std::unordered_set<std::string>().swap(skippedOuts);
-        std::unordered_set<std::string>().swap(failedOuts);
+        resetVerboseSets(processedErrors, successOuts, skippedOuts, failedOuts);
         
         clear_history();	
 		if (needsScrnClr) {
