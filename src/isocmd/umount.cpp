@@ -112,11 +112,9 @@ void unmountISO(const std::vector<std::string>& isoDirs,std::unordered_set<std::
     // Pre-allocate containers with batch capacity
     std::vector<std::string> errorMessages;
     std::vector<std::string> successMessages;
-    std::vector<std::string> removalMessages;
 
     errorMessages.reserve(BATCH_SIZE);
     successMessages.reserve(BATCH_SIZE);
-    removalMessages.reserve(BATCH_SIZE);
 
     // Function to flush temporary buffers to sets
     auto flushTemporaryBuffers = [&]() {
@@ -127,11 +125,6 @@ void unmountISO(const std::vector<std::string>& isoDirs,std::unordered_set<std::
             successMessages.clear();
         }
 
-        if (!removalMessages.empty()) {
-            unmountedFiles.insert(removalMessages.begin(), removalMessages.end());
-            removalMessages.clear();
-        }
-
         if (!errorMessages.empty()) {
             unmountedErrors.insert(errorMessages.begin(), errorMessages.end());
             errorMessages.clear();
@@ -140,9 +133,7 @@ void unmountISO(const std::vector<std::string>& isoDirs,std::unordered_set<std::
 
     // Helper to check if any buffer needs flushing
     auto checkAndFlush = [&]() {
-        if (errorMessages.size() >= BATCH_SIZE || 
-            successMessages.size() >= BATCH_SIZE || 
-            removalMessages.size() >= BATCH_SIZE) {
+        if (errorMessages.size() >= BATCH_SIZE || successMessages.size() >= BATCH_SIZE) {
             flushTemporaryBuffers();
         }
     };

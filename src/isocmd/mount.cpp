@@ -65,7 +65,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
     // Create formatter for verbose output
     VerbosityFormatter formatter;
     
-    // Reuse mount context if possible
+    // Create mount context once
     struct libmnt_context *ctx = mnt_new_context();
     if (!ctx) {
         // Handle context creation failure globally
@@ -75,63 +75,34 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
         return;
     }
 
-    // Function to flush temporary vectors to sets
-    auto flushTemporaryBuffers = [&]() {
+    // Track total processed entries for batch flushing
+    size_t totalProcessedEntries = 0;
+
+    // Function to flush temporary buffers to permanent sets
+    auto flushBuffers = [&]() {
         std::lock_guard<std::mutex> lock(globalSetsMutex);
         mountedFiles.insert(tempMountedFiles.begin(), tempMountedFiles.end());
         skippedMessages.insert(tempSkippedMessages.begin(), tempSkippedMessages.end());
         mountedFails.insert(tempMountedFails.begin(), tempMountedFails.end());
         
-        // Clear temporary vectors but maintain capacity
         tempMountedFiles.clear();
         tempSkippedMessages.clear();
         tempMountedFails.clear();
+        totalProcessedEntries = 0;
     };
 
-    // Helper to check if any buffer needs flushing
-    auto checkAndFlush = [&]() {
-        if (tempMountedFiles.size() >= BATCH_SIZE || 
-            tempSkippedMessages.size() >= BATCH_SIZE || 
-            tempMountedFails.size() >= BATCH_SIZE) {
-            flushTemporaryBuffers();
-        }
-    };
-
-    // Modify the handleMountFailure function to check buffer sizes directly
-    auto handleMountFailure = [&](const std::string& isoDirectory, const std::string& isoFilename, 
-                                 const std::string& errorType, VerbosityFormatter& formatter,
-                                 std::vector<std::string>& tempMountedFails, 
-                                 std::vector<std::string>& tempSkippedMessages,
-                                 std::atomic<size_t>* failedTasks, std::atomic<size_t>* completedTasks,
-                                 const size_t BATCH_SIZE, bool skip = false,
-                                 const std::string& mountTarget = "") {
-        
-        tempMountedFails.push_back(formatter.formatMountFailure(isoDirectory, isoFilename, errorType, mountTarget));
-        if (skip) {
-            tempSkippedMessages.push_back(formatter.formatMountSkipped(isoDirectory, isoFilename));
-            completedTasks->fetch_add(1, std::memory_order_acq_rel);
-        } else {
-            failedTasks->fetch_add(1, std::memory_order_acq_rel);
-        }
-        
-        // Check if we need to flush based on buffer sizes
-        checkAndFlush();
-        
-        return true; // Continue to next iteration
-    };
-
-    namespace fs = std::filesystem;
     for (const auto& isoFile : isoFiles) {
         fs::path isoPath(isoFile);
 
-        // Prepare path and naming information - minimize string operations
+        // Prepare path information
         std::string isoFileName = isoPath.stem().string();
         auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile, "mount");
         
-        // Check for cancellation before processing each ISO        
+        // Check for cancellation
         if (g_operationCancelled.load()) {
             if (handleMountFailure(isoDirectory, isoFilename, "CXL", formatter, tempMountedFails, 
-                                   tempSkippedMessages, failedTasks, completedTasks, BATCH_SIZE)) {
+                                  tempSkippedMessages, failedTasks, completedTasks, 
+                                  totalProcessedEntries, flushBuffers, BATCH_SIZE)) {
                 continue;
             }
         }
@@ -139,7 +110,8 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
         // Root privilege check
         if (geteuid() != 0) {
             if (handleMountFailure(isoDirectory, isoFilename, "needsRoot", formatter, tempMountedFails, 
-                                   tempSkippedMessages, failedTasks, completedTasks, BATCH_SIZE)) {
+                                  tempSkippedMessages, failedTasks, completedTasks, 
+                                  totalProcessedEntries, flushBuffers, BATCH_SIZE)) {
                 continue;
             }
         }
@@ -148,13 +120,13 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
         std::hash<std::string> hasher;
         size_t hashValue = hasher(isoFile);
         const std::string base36Chars = "0123456789abcdefghijklmnopqrstuvwxyz";
-        char shortHash[6] = {0};  // Use char array instead of string concatenation
+        char shortHash[6] = {0};
         for (int i = 0; i < 5; ++i) {
             shortHash[i] = base36Chars[hashValue % 36];
             hashValue /= 36;
         }
 
-        // Create unique mount point and identifiers - minimize allocations
+        // Create unique mount point
         std::string uniqueId = isoFileName + "~" + shortHash;
         std::string mountPoint = "/mnt/iso_" + uniqueId;
         auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint, "mount");
@@ -162,8 +134,8 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
         // Check if already mounted
         if (isAlreadyMounted(mountPoint)) {
             if (handleMountFailure(isoDirectory, isoFilename, mountisoDirectory, formatter, tempMountedFails, 
-                                   tempSkippedMessages, failedTasks, completedTasks, BATCH_SIZE, true, 
-                                   mountisoFilename)) {
+                                  tempSkippedMessages, failedTasks, completedTasks, 
+                                  totalProcessedEntries, flushBuffers, BATCH_SIZE, true, mountisoFilename)) {
                 continue;
             }
         }
@@ -171,61 +143,63 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
         // Verify ISO file exists
         if (!fs::exists(isoPath)) {
             if (handleMountFailure(isoDirectory, isoFilename, "missingISO", formatter, tempMountedFails, 
-                                   tempSkippedMessages, failedTasks, completedTasks, BATCH_SIZE)) {
+                                  tempSkippedMessages, failedTasks, completedTasks, 
+                                  totalProcessedEntries, flushBuffers, BATCH_SIZE)) {
                 continue;
             }
         }
 
-        // Create mount point directory if it doesn't exist
+        // Create mount point directory
         if (!fs::exists(mountPoint)) {
             try {
                 fs::create_directory(mountPoint);
             } catch (const fs::filesystem_error& e) {
-                std::string errorMessage = "Failed to create mount point: " + std::string(e.what());
+                std::string errorMessage = "detailedError";
                 if (handleMountFailure(isoDirectory, isoFilename, errorMessage, formatter, tempMountedFails, 
-                                       tempSkippedMessages, failedTasks, completedTasks, BATCH_SIZE)) {
+                                      tempSkippedMessages, failedTasks, completedTasks, 
+                                      totalProcessedEntries, flushBuffers, BATCH_SIZE)) {
                     continue;
                 }
             }
         }
 
-        // Reuse the mount context instead of creating a new one each time
+        // Reuse the mount context
         mnt_reset_context(ctx);
         mnt_context_set_source(ctx, isoFile.c_str());
         mnt_context_set_target(ctx, mountPoint.c_str());
         mnt_context_set_options(ctx, "loop,ro");
-
-        // Set filesystem types to try
         mnt_context_set_fstype(ctx, "iso9660,udf,hfsplus,rockridge,joliet,isofs");
 
         // Attempt to mount
         int ret = mnt_context_mount(ctx);
         bool mountSuccess = (ret == 0);
 
-        // Filesystem type detection
-        std::string detectedFsType;
         if (mountSuccess) {
-            struct stat st;
-            if (stat(mountPoint.c_str(), &st) == 0) {
-                // Reuse the context's filesystem type if available instead of parsing /proc/mounts
-                const char* fstype = mnt_context_get_fstype(ctx);
-                if (fstype) {
-                    detectedFsType = fstype;
-                } 
+            // Get filesystem type if available
+            std::string detectedFsType;
+            const char* fstype = mnt_context_get_fstype(ctx);
+            if (fstype) {
+                detectedFsType = fstype;
             }
 
-            // Add formatted successful mount message
-            tempMountedFiles.push_back(formatter.formatMountSuccess(isoDirectory, isoFilename, 
-                                                                  mountisoDirectory, mountisoFilename, 
-                                                                  detectedFsType));
+            // Add successful mount message
+            tempMountedFiles.push_back(formatter.formatMountSuccess(
+                isoDirectory, isoFilename, 
+                mountisoDirectory, mountisoFilename, 
+                detectedFsType
+            ));
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
             
-            // Check if we need to flush based on buffer sizes
-            checkAndFlush();
+            // Increment counter and check if we need to flush
+            totalProcessedEntries++;
+            if (totalProcessedEntries >= BATCH_SIZE) {
+                flushBuffers();
+            }
         } else {
             // Mount failed
             if (handleMountFailure(isoDirectory, isoFilename, "badFS", formatter, tempMountedFails, 
-                                   tempSkippedMessages, failedTasks, completedTasks, BATCH_SIZE)) {
+                                  tempSkippedMessages, failedTasks, completedTasks, 
+                                  totalProcessedEntries, flushBuffers, BATCH_SIZE)) {
                 fs::remove(mountPoint);
                 continue;
             }
@@ -236,7 +210,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
     mnt_free_context(ctx);
 
     // Final flush for any remaining entries
-    flushTemporaryBuffers();
+    flushBuffers();
 }
 
 
