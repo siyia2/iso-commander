@@ -47,7 +47,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
     std::unordered_set<std::string> operationFiles, skippedMessages, operationFails, uniqueErrorMessages;
     std::vector<std::string> filteredFiles;
     
-    static std::vector<std::string> sourceList;
+    static std::vector<std::string> sourceList; // Static vector to hold mountpoints for umount
     
     globalIsoFileList.reserve(100);
     sourceList.reserve(100);
