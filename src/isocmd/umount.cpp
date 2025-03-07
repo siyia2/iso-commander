@@ -7,32 +7,43 @@
 
 const std::string MOUNTED_ISO_PATH = "/mnt";
 
+
+// Function to load and display mount-points
 bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<std::string>& filteredFiles, bool& isFiltered) {
     signal(SIGINT, SIG_IGN);  // Ignore Ctrl+C
     disable_ctrl_d();
 
-    static size_t previousHash = 0;  // Store only a hash, not the entire vector
+    // Static cache: previous hash and sorted directories.
+    static size_t previousHash = 0;
+    static std::vector<std::string> lastSortedDirs;
     std::vector<std::string> newIsoDirs;
 
-    // Collect directories
-    for (const auto& entry : std::filesystem::directory_iterator(MOUNTED_ISO_PATH)) {
-        if (entry.is_directory() && entry.path().filename().string().find("iso_") == 0) {
-            newIsoDirs.push_back(entry.path().string());
-        }
-    }
+	// Collect directories
+	for (const auto& entry : std::filesystem::directory_iterator(MOUNTED_ISO_PATH)) {
+		if (entry.is_directory()) {
+			auto filename = entry.path().filename().string();
+			if (filename.find("iso_") == 0) { // or filename.starts_with("iso_") in C++20
+				newIsoDirs.push_back(entry.path().string());
+			}
+		}
+	}
 
-    // Hash comparison
-    size_t currentHash = newIsoDirs.size(); // Include size in hash
+    // Compute an order-independent hash:
+    size_t currentHash = 0;
     for (const auto& path : newIsoDirs) {
-        // Hash combination - rotate and add
-        currentHash = (currentHash << 1) | (currentHash >> 63); // 64-bit rotation
         currentHash += std::hash<std::string>{}(path);
     }
+    currentHash += newIsoDirs.size();
 
-    // Sort only if the hash is different
+    // Only sort if the set of directories has changed
     if (currentHash != previousHash) {
         sortFilesCaseInsensitive(newIsoDirs);
+        // Cache the sorted vector and update the hash
+        lastSortedDirs = newIsoDirs;
         previousHash = currentHash;
+    } else {
+        // Reuse the cached sorted vector if nothing has changed
+        newIsoDirs = lastSortedDirs;
     }
 
     isoDirs = std::move(newIsoDirs);
