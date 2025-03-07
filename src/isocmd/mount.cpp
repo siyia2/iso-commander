@@ -75,9 +75,6 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
         return;
     }
 
-    // Track total processed entries for batch flushing
-    size_t totalProcessedEntries = 0;
-
     // Function to flush temporary buffers to permanent sets
     auto flushBuffers = [&]() {
         std::lock_guard<std::mutex> lock(globalSetsMutex);
@@ -88,7 +85,6 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
         tempMountedFiles.clear();
         tempSkippedMessages.clear();
         tempMountedFails.clear();
-        totalProcessedEntries = 0;
     };
 
     for (const auto& isoFile : isoFiles) {
@@ -102,7 +98,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
         if (g_operationCancelled.load()) {
             if (handleMountFailure(isoDirectory, isoFilename, "CXL", formatter, tempMountedFails, 
                                   tempSkippedMessages, failedTasks, completedTasks, 
-                                  totalProcessedEntries, flushBuffers, BATCH_SIZE)) {
+                                  tempMountedFiles, flushBuffers, BATCH_SIZE)) {
                 continue;
             }
         }
@@ -111,7 +107,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
         if (geteuid() != 0) {
             if (handleMountFailure(isoDirectory, isoFilename, "needsRoot", formatter, tempMountedFails, 
                                   tempSkippedMessages, failedTasks, completedTasks, 
-                                  totalProcessedEntries, flushBuffers, BATCH_SIZE)) {
+                                  tempMountedFiles, flushBuffers, BATCH_SIZE)) {
                 continue;
             }
         }
@@ -135,7 +131,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
         if (isAlreadyMounted(mountPoint)) {
             if (handleMountFailure(isoDirectory, isoFilename, mountisoDirectory, formatter, tempMountedFails, 
                                   tempSkippedMessages, failedTasks, completedTasks, 
-                                  totalProcessedEntries, flushBuffers, BATCH_SIZE, true, mountisoFilename)) {
+                                  tempMountedFiles, flushBuffers, BATCH_SIZE, true, mountisoFilename)) {
                 continue;
             }
         }
@@ -144,7 +140,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
         if (!fs::exists(isoPath)) {
             if (handleMountFailure(isoDirectory, isoFilename, "missingISO", formatter, tempMountedFails, 
                                   tempSkippedMessages, failedTasks, completedTasks, 
-                                  totalProcessedEntries, flushBuffers, BATCH_SIZE)) {
+                                  tempMountedFiles, flushBuffers, BATCH_SIZE)) {
                 continue;
             }
         }
@@ -157,7 +153,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
                 std::string errorMessage = "detailedError";
                 if (handleMountFailure(isoDirectory, isoFilename, errorMessage, formatter, tempMountedFails, 
                                       tempSkippedMessages, failedTasks, completedTasks, 
-                                      totalProcessedEntries, flushBuffers, BATCH_SIZE)) {
+                                      tempMountedFiles, flushBuffers, BATCH_SIZE)) {
                     continue;
                 }
             }
@@ -190,16 +186,15 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
             ));
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
             
-            // Increment counter and check if we need to flush
-            totalProcessedEntries++;
-            if (totalProcessedEntries >= BATCH_SIZE) {
+            // Check if we need to flush temporary buffers based on size
+            if (tempMountedFiles.size() >= BATCH_SIZE) {
                 flushBuffers();
             }
         } else {
             // Mount failed
             if (handleMountFailure(isoDirectory, isoFilename, "badFS", formatter, tempMountedFails, 
                                   tempSkippedMessages, failedTasks, completedTasks, 
-                                  totalProcessedEntries, flushBuffers, BATCH_SIZE)) {
+                                  tempMountedFiles, flushBuffers, BATCH_SIZE)) {
                 fs::remove(mountPoint);
                 continue;
             }

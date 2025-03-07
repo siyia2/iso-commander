@@ -101,7 +101,7 @@ std::string modifyDirectoryPath(const std::string& dir) {
 
 
 // Function to unmount ISO files
-void unmountISO(const std::vector<std::string>& isoDirs,std::unordered_set<std::string>& unmountedFiles, std::unordered_set<std::string>& unmountedErrors, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks) {
+void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std::string>& unmountedFiles, std::unordered_set<std::string>& unmountedErrors, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks) {
 
     // Create the message formatter
     VerboseMessageFormatter messageFormatter;
@@ -174,7 +174,6 @@ void unmountISO(const std::vector<std::string>& isoDirs,std::unordered_set<std::
     }
 
     // Process results only if not cancelled
-    size_t processed = 0;
     for (const auto& [dir, result] : unmountResults) {
         if (g_operationCancelled.load()) break;
         bool isEmpty = isDirectoryEmpty(dir);
@@ -191,7 +190,6 @@ void unmountISO(const std::vector<std::string>& isoDirs,std::unordered_set<std::
             errorMessages.push_back(messageFormatter.format("error", modifiedDir));
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
         }
-        processed++;
 
         // Check if we need to flush based on buffer sizes
         checkAndFlush();
@@ -199,7 +197,7 @@ void unmountISO(const std::vector<std::string>& isoDirs,std::unordered_set<std::
 
     // If cancellation occurred, process the remaining isoDirs as cancelled
     if (g_operationCancelled.load()) {
-        for (size_t i = processed; i < isoDirs.size(); ++i) {
+        for (size_t i = unmountResults.size(); i < isoDirs.size(); ++i) {
             std::string modifiedDir = modifyDirectoryPath(isoDirs[i]);
             errorMessages.push_back(messageFormatter.format("cancel", modifiedDir));
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
