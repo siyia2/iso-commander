@@ -59,8 +59,9 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
 
     clearScrollBuffer();
 
-    // More robust filtering detection
-    isFiltered = !filteredFiles.empty() && filteredFiles.size() <= isoDirs.size();
+    if (filteredFiles.size() == isoDirs.size()) {
+        isFiltered = false;
+    }
     printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS", "");
 
     return true;
