@@ -331,6 +331,7 @@ bool handleDeleteOperation(std::vector<std::string>& isoFiles, std::vector<std::
     }
 }
 
+
 // Function to prompt for userDestDir or Delete confirmation including pagination
 std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::unordered_set<std::string>& uniqueErrorMessages, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& historyPattern, bool& isDelete, bool& isCopy, bool& abortDel, bool& overwriteExisting) {
 
