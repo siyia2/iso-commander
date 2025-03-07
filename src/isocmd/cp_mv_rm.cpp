@@ -620,33 +620,39 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                             successfulOperations.fetch_add(1, std::memory_order_acq_rel);
                         }
                     } else if (isMove) {
-                        // For single destination move, try rename first
-                        fs::rename(srcPath, destPath, ec);
-                        if (ec) {
-                            ec.clear();
-                            success.store(bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec));
-                            if (success.load()) {
-                                std::error_code deleteEc;
-                                if (!fs::remove(srcPath, deleteEc)) {
-                                    verboseErrors.push_back("\033[1;91mMove completed but failed to remove source file: \033[1;93m'" +
-                                                              srcDir + "/" + srcFile + "'\033[1;91m - " +
-                                                              deleteEc.message() + "\033[0m");
-                                    successfulOperations.fetch_add(1, std::memory_order_acq_rel);
-                                } else {
-                                    successfulOperations.fetch_add(1, std::memory_order_acq_rel);
-                                }
-                            }
-                        } else {
-                            completedBytes->fetch_add(fileSize);
-                            success.store(true);
-                            successfulOperations.fetch_add(1, std::memory_order_acq_rel);
-                        }
-                    } else if (isCopy) {
-                        success.store(bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec));
-                        if (success.load()) {
-                            successfulOperations.fetch_add(1, std::memory_order_acq_rel);
-                        }
-                    }
+						if (!g_operationCancelled.load()) {
+						// For single destination move, try rename first
+						fs::rename(srcPath, destPath, ec);
+        
+							if (ec) {
+								ec.clear();
+								success.store(bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec));
+								if (success.load()) {
+									std::error_code deleteEc;
+									if (!fs::remove(srcPath, deleteEc)) {
+										verboseErrors.push_back("\033[1;91mMove completed but failed to remove source file: \033[1;93m'" +
+																srcDir + "/" + srcFile + "'\033[1;91m - " +
+																deleteEc.message() + "\033[0m");
+										successfulOperations.fetch_add(1, std::memory_order_acq_rel);
+									} else {
+										successfulOperations.fetch_add(1, std::memory_order_acq_rel);
+									}
+								}
+							} else {
+								completedBytes->fetch_add(fileSize);
+								success.store(true);
+								successfulOperations.fetch_add(1, std::memory_order_acq_rel);
+							}
+						} else {
+							// Operation was cancelled before rename, so mark as failure
+							success.store(false);
+						}
+				} else if (isCopy) {
+					success.store(bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec));
+					if (success.load()) {
+						successfulOperations.fetch_add(1, std::memory_order_acq_rel);
+					}
+				}
 
                     if (!success.load() || ec) {
                         std::string errorDetail = g_operationCancelled.load() ? "Cancelled" : ec.message();
