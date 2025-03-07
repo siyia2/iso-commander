@@ -78,14 +78,30 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
 
     namespace fs = std::filesystem;
     for (const auto& isoFile : isoFiles) {
-        // Check for cancellation before processing each ISO
-        if (g_operationCancelled.load()) break;
-
-        fs::path isoPath(isoFile);
+		
+		 fs::path isoPath(isoFile);
 
         // Prepare path and naming information - minimize string operations
         std::string isoFileName = isoPath.stem().string();
         auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile, "mount");
+		
+		 // Check for cancellation before processing each ISO        
+        if (g_operationCancelled.load()) {
+            outputBuffer.clear();
+            outputBuffer.append(errorFormatPrefix)
+                       .append(isoDirectory).append("/").append(isoFilename)
+                       .append(errorFormatSuffix).append("{cancelled}")
+                       .append(errorFormatEnd);
+            tempMountedFails.push_back(outputBuffer);
+            failedTasks->fetch_add(1, std::memory_order_acq_rel);
+            totalProcessedEntries++;
+            
+            // Check if we need to flush
+            if (totalProcessedEntries >= BATCH_SIZE) {
+                flushTemporaryBuffers();
+            }
+            continue;
+        }
 
         // Generate unique hash for mount point
         std::hash<std::string> hasher;

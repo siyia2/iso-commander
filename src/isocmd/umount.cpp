@@ -88,7 +88,11 @@ std::string modifyDirectoryPath(const std::string& dir) {
 
 
 // Function to unmount ISO files asynchronously
-void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std::string>& unmountedFiles, std::unordered_set<std::string>& unmountedErrors, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks) {
+void unmountISO(const std::vector<std::string>& isoDirs,
+                std::unordered_set<std::string>& unmountedFiles,
+                std::unordered_set<std::string>& unmountedErrors,
+                std::atomic<size_t>* completedTasks,
+                std::atomic<size_t>* failedTasks) {
 
     // Define batch size for insertions
     const size_t BATCH_SIZE = 1000;
@@ -96,81 +100,82 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std:
 
     // Pre-define format strings to avoid repeated string constructions
     const std::string rootErrorPrefix = "\033[1;91mFailed to unmount: \033[1;93m'";
-    const std::string rootErrorSuffix = "\033[1;93m'\033[1;91m.\033[0;1m {needsRoot}";
-    
-    const std::string successPrefix = "\033[0;1mUnmounted: \033[1;92m'";
-    const std::string successSuffix = "\033[1;92m'\033[0m.";
-    
-    const std::string errorPrefix = "\033[1;91mFailed to unmount: \033[1;93m'";
-    const std::string errorSuffix = "'\033[1;91m.\033[0;1m {notAnISO}";
+    const std::string rootErrorSuffix  = "\033[1;93m'\033[1;91m.\033[0;1m {needsRoot}";
+
+    const std::string successPrefix    = "\033[0;1mUnmounted: \033[1;92m'";
+    const std::string successSuffix    = "\033[1;92m'\033[0m.";
+
+    const std::string errorPrefix      = "\033[1;91mFailed to unmount: \033[1;93m'";
+    const std::string errorSuffix      = "'\033[1;91m.\033[0;1m {notAnISO}";
+
+    // Cancellation strings (make sure to use these names consistently)
+    const std::string cancelPrefix     = "\033[1;91mFailed to unmount: \033[1;93m'";
+    const std::string cancelSuffix     = "'\033[1;91m.\033[0;1m {cancelled}";
 
     // Pre-allocate containers with batch capacity
     std::vector<std::string> errorMessages;
     std::vector<std::string> successMessages;
     std::vector<std::string> removalMessages;
-    
+
     errorMessages.reserve(BATCH_SIZE);
     successMessages.reserve(BATCH_SIZE);
     removalMessages.reserve(BATCH_SIZE);
-    
+
     // Create a reusable string buffer
     std::string outputBuffer;
     outputBuffer.reserve(512);  // Reserve space for a typical message
-    
+
     // Function to flush temporary buffers to sets
     auto flushTemporaryBuffers = [&]() {
         std::lock_guard<std::mutex> lock(globalSetsMutex);
-        
+
         if (!successMessages.empty()) {
             unmountedFiles.insert(successMessages.begin(), successMessages.end());
             successMessages.clear();
         }
-        
+
         if (!removalMessages.empty()) {
             unmountedFiles.insert(removalMessages.begin(), removalMessages.end());
             removalMessages.clear();
         }
-        
+
         if (!errorMessages.empty()) {
             unmountedErrors.insert(errorMessages.begin(), errorMessages.end());
             errorMessages.clear();
         }
-        
-        // Reset counter after flush
         totalProcessedEntries = 0;
     };
-    
+
     // Root check with cancellation awareness
     bool hasRoot = (geteuid() == 0);
 
     if (!hasRoot) {
         for (const auto& isoDir : isoDirs) {
-            if (g_operationCancelled.load()) break;
-            
             std::string modifiedDir = modifyDirectoryPath(isoDir);
-            
-            // Use string append operations instead of stringstream
             outputBuffer.clear();
-            outputBuffer.append(rootErrorPrefix)
-                       .append(modifiedDir)
-                       .append(rootErrorSuffix);
-            
+            if (!g_operationCancelled.load()) {
+                outputBuffer.append(rootErrorPrefix)
+                            .append(modifiedDir)
+                            .append(rootErrorSuffix);
+                failedTasks->fetch_add(1, std::memory_order_acq_rel);
+            } else {
+                // Append cancelled message when operation is cancelled
+                outputBuffer.append(cancelPrefix)
+                            .append(modifiedDir)
+                            .append(cancelSuffix);
+                // Optionally, you could update a cancellation counter here
+            }
             errorMessages.push_back(outputBuffer);
-            failedTasks->fetch_add(1, std::memory_order_acq_rel);
-            
             totalProcessedEntries++;
-            
+
             // Check if we need to flush
             if (totalProcessedEntries >= BATCH_SIZE) {
                 flushTemporaryBuffers();
             }
         }
-        
-        // Final flush for any remaining entries
         if (totalProcessedEntries > 0) {
             flushTemporaryBuffers();
         }
-        
         // If no root, skip unmount operations entirely
         return;
     }
@@ -184,48 +189,55 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std:
         if (g_operationCancelled.load()) {
             break;
         }
-        
         int result = umount2(isoDir.c_str(), MNT_DETACH);
         unmountResults.emplace_back(isoDir, result);
     }
 
     // Process results only if not cancelled
-    if (!g_operationCancelled.load()) {
-        // Process unmount results in batches
-        for (const auto& [dir, result] : unmountResults) {
-            bool isEmpty = isDirectoryEmpty(dir);
-            
-            if (result == 0 || isEmpty) {
-                // Successful unmount
-                if (isEmpty && rmdir(dir.c_str()) == 0) {
-                    std::string modifiedDir = modifyDirectoryPath(dir);
-                    
-                    outputBuffer.clear();
-                    outputBuffer.append(successPrefix)
-                               .append(modifiedDir)
-                               .append(successSuffix);
-                    
-                    successMessages.push_back(outputBuffer);
-                    completedTasks->fetch_add(1, std::memory_order_acq_rel);
-                    
-                    totalProcessedEntries++;
-                }
-            } else {
-                // Failed unmount
-                std::string modifiedDir = modifyDirectoryPath(dir);
-                
-                outputBuffer.clear();
-                outputBuffer.append(errorPrefix)
-                           .append(modifiedDir)
-                           .append(errorSuffix);
-                
-                errorMessages.push_back(outputBuffer);
-                failedTasks->fetch_add(1, std::memory_order_acq_rel);
-                
-                totalProcessedEntries++;
+    size_t processed = 0;
+    for (const auto& [dir, result] : unmountResults) {
+        if (g_operationCancelled.load()) break;
+        bool isEmpty = isDirectoryEmpty(dir);
+        std::string modifiedDir = modifyDirectoryPath(dir);
+        outputBuffer.clear();
+
+        if (result == 0 || isEmpty) {
+            // Successful unmount
+            if (isEmpty && rmdir(dir.c_str()) == 0) {
+                outputBuffer.append(successPrefix)
+                            .append(modifiedDir)
+                            .append(successSuffix);
+                successMessages.push_back(outputBuffer);
+                completedTasks->fetch_add(1, std::memory_order_acq_rel);
             }
-            
-            // Check if we need to flush
+        } else {
+            // Failed unmount
+            outputBuffer.append(errorPrefix)
+                        .append(modifiedDir)
+                        .append(errorSuffix);
+            errorMessages.push_back(outputBuffer);
+            failedTasks->fetch_add(1, std::memory_order_acq_rel);
+        }
+        totalProcessedEntries++;
+        processed++;
+
+        // Check if we need to flush
+        if (totalProcessedEntries >= BATCH_SIZE) {
+            flushTemporaryBuffers();
+        }
+    }
+
+    // If cancellation occurred, process the remaining isoDirs as cancelled
+    if (g_operationCancelled.load()) {
+        for (size_t i = processed; i < isoDirs.size(); ++i) {
+            std::string modifiedDir = modifyDirectoryPath(isoDirs[i]);
+            outputBuffer.clear();
+            outputBuffer.append(cancelPrefix)
+                        .append(modifiedDir)
+                        .append(cancelSuffix);
+            errorMessages.push_back(outputBuffer);
+            failedTasks->fetch_add(1, std::memory_order_acq_rel);
+            totalProcessedEntries++;
             if (totalProcessedEntries >= BATCH_SIZE) {
                 flushTemporaryBuffers();
             }
