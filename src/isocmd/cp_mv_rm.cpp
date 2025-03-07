@@ -636,7 +636,7 @@ bool performCopyOperation(const fs::path& srcPath, const fs::path& destPath, con
 }
 
 
-// Function to handle CpMv
+// Function to handle CpMvRm
 void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::unordered_set<std::string>& operationIsos, std::unordered_set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete, std::atomic<size_t>* completedBytes,std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, bool overwriteExisting) {
 
     std::atomic<bool> operationSuccessful(true);
