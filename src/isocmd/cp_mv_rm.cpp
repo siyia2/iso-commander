@@ -162,115 +162,211 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
 }
 
 
-// Function to prompt for userDestDir and Delete confirmation
-std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::unordered_set<std::string>& uniqueErrorMessages, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& historyPattern, bool& isDelete, bool& isCopy, bool& abortDel, bool& overwriteExisting) {
-    
-    // Generate entries for selected ISO files - used by both branches
-    auto generateSelectedIsosEntries = [&]() {
-		std::vector<std::string> entries;
-		for (const auto& chunk : indexChunks) {
-			for (int index : chunk) {
-				auto [shortDir, filename] = extractDirectoryAndFilename(isoFiles[index - 1], "cp_mv_rm");
-				std::ostringstream oss;
-				oss << "\033[1m-> " << shortDir << "/\033[95m" << filename << "\033[0m\n";
-				entries.push_back(oss.str());
-			}
-		}
-    
-		// Sort the entries using the natural comparison
-		sortFilesCaseInsensitive(entries);
-    
-		return entries;
-	};
-    
-    // Common pagination logic for both flows
-    auto setupPagination = [](int totalEntries) {
-        int entriesPerPage;
-
-        if (totalEntries <= 25) {
-            entriesPerPage = totalEntries;  // Single page
-        } else {
-            entriesPerPage = std::max(25, (totalEntries + 4) / 5);
-            // Cap entriesPerPage at 100 if it exceeds, allowing more pages
-            if (entriesPerPage > 100) {
-                entriesPerPage = 100;
-            }
+// Function to display input errors for Cp/Mv/Rm
+void displayErrors(const std::unordered_set<std::string>& uniqueErrorMessages) {
+    if (!uniqueErrorMessages.empty()) {
+        std::cout << "\n";
+        for (const auto& err : uniqueErrorMessages) {
+            std::cout << err << "\n";
         }
+    }
+}
 
-        int totalPages = (totalEntries + entriesPerPage - 1) / entriesPerPage;
-        return std::make_tuple(entriesPerPage, totalPages);
-    };
 
-    // Display error messages if any
-    auto displayErrors = [&]() {
-        if (!uniqueErrorMessages.empty()) {
-            std::cout << "\n";
-            for (const auto& err : uniqueErrorMessages) {
-                std::cout << err << "\n";
-            }
-        }
-    };
+// Function to generate formatted entries for selected ISO files
+std::vector<std::string> generateSelectedIsosEntries(const std::vector<std::string>& isoFiles, const std::vector<std::vector<int>>& indexChunks
+) {
+    std::vector<std::string> entries;
     
-    // Create page content for current pagination state
-    auto getPageContent = [](const std::vector<std::string>& entries, int currentPage, int entriesPerPage, int totalPages) {
-        int totalEntries = entries.size();
+    // Process each index in each chunk
+    for (const auto& chunk : indexChunks) {
+        for (int index : chunk) {
+            // Extract directory and filename components
+            auto [shortDir, filename] = extractDirectoryAndFilename(isoFiles[index - 1], "cp_mv_rm");
+            
+            // Format the entry with appropriate colors
+            std::ostringstream oss;
+            oss << "\033[1m-> " << shortDir << "/\033[95m" << filename << "\033[0m\n";
+            entries.push_back(oss.str());
+        }
+    }
+    
+    // Sort the entries using natural case-insensitive comparison
+    sortFilesCaseInsensitive(entries);
+    
+    return entries;
+}
+
+
+// Function that handles all pagination logic for a list of entries
+std::string handlePaginatedDisplay(const std::vector<std::string>& entries, const std::string& promptPrefix, const std::string& promptSuffix, const std::function<void()>& displayErrorsFn, const std::function<void()>& setupEnvironmentFn, bool& isPageTurn
+) {
+    int totalEntries = entries.size();
+    
+    // Setup pagination parameters
+    int entriesPerPage;
+    if (totalEntries <= 25) {
+        entriesPerPage = totalEntries;  // Single page
+    } else {
+        entriesPerPage = std::max(25, (totalEntries + 4) / 5);
+        // Cap entriesPerPage at 100 if it exceeds, allowing more pages
+        if (entriesPerPage > 100) {
+            entriesPerPage = 100;
+        }
+    }
+    
+    int totalPages = (totalEntries + entriesPerPage - 1) / entriesPerPage;
+    int currentPage = 0;
+    
+    while (true) {
+        // Setup environment if function is provided
+        if (setupEnvironmentFn) {
+            setupEnvironmentFn();
+        }
+        
+        // Clear the screen before displaying the new page
+        clearScrollBuffer(); 
+        
+        // Only display errors on non-page-turn iterations
+        if (!isPageTurn && displayErrorsFn) {
+            displayErrorsFn();
+        }
+        
+        // Create content for current page
         int start = currentPage * entriesPerPage;
         int end = std::min(start + entriesPerPage, totalEntries);
         
-        std::ostringstream oss;
+        std::ostringstream pageContent;
         for (int i = start; i < end; ++i) {
-            oss << entries[i];
+            pageContent << entries[i];
         }
         
-        std::string content = oss.str();
         if (totalPages > 1) {
-            content += "\n\033[1mPage " + std::to_string(currentPage + 1) + 
-                       "/" + std::to_string(totalPages) + " \033[1;94m(+/-) ↵\n\033[0m";
+            pageContent << "\n\033[1mPage " << (currentPage + 1) 
+                      << "/" << totalPages << " \033[1;94m(+/-) ↵\n\033[0m";
         }
-        return content;
-    };
-    
-    // Handle pagination navigation
-    auto handlePageNavigation = [&](const std::string& input, int& currentPage, int totalPages) -> bool {
-        // Make sure this is just a navigation command, not a path with +/- in it
-        bool isJustNavigation = true;
-        for (char c : input) {
-            if (c != '+' && c != '-') {
-                isJustNavigation = false;
-                break;
+        
+        // Build the full prompt
+        std::string prompt = promptPrefix + pageContent.str() + promptSuffix;
+        
+        // Get user input
+        std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
+        if (!input.get()) {
+            return "";  // Handle EOF or error
+        }
+        
+        // Process input
+        std::string userInput = trimWhitespace(input.get());
+        
+        // Handle page navigation
+        bool isNavigation = false;
+        if (!userInput.empty()) {
+            // Check if this is just a navigation command
+            bool isJustNavigation = true;
+            for (char c : userInput) {
+                if (c != '+' && c != '-') {
+                    isJustNavigation = false;
+                    break;
+                }
+            }
+            
+            if (isJustNavigation && (userInput.find('+') != std::string::npos || userInput.find('-') != std::string::npos)) {
+                int pageShift = 0;
+                if (userInput.find('+') != std::string::npos) {
+                    pageShift = std::count(userInput.begin(), userInput.end(), '+');
+                } else if (userInput.find('-') != std::string::npos) {
+                    pageShift = -std::count(userInput.begin(), userInput.end(), '-');
+                }
+
+                currentPage = (currentPage + pageShift + totalPages) % totalPages; // Circular navigation
+                isPageTurn = true;
+                isNavigation = true;
+                continue;
             }
         }
         
-        if (isJustNavigation && (input.find('+') != std::string::npos || input.find('-') != std::string::npos)) {
-            int pageShift = 0;
-            if (input.find('+') != std::string::npos) {
-                pageShift = std::count(input.begin(), input.end(), '+');
-            } else if (input.find('-') != std::string::npos) {
-                pageShift = -std::count(input.begin(), input.end(), '-');
-            }
-
-            currentPage = (currentPage + pageShift + totalPages) % totalPages; // Circular page navigation
-            return true;
+        if (!isNavigation) {
+            isPageTurn = false;  // Reset flag for non-page-turn actions
+            return userInput;     // Return the final non-navigation input
         }
-        return false;
+    }
+}
+
+
+// Function to handle rm including pagination
+bool handleDeleteOperation(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::unordered_set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& abortDel) {
+    
+    // Generate entries for deletion
+    auto entries = generateSelectedIsosEntries(isoFiles, indexChunks);
+    bool isPageTurn = false;
+    
+    // Setup environment function
+    auto setupEnv = [&]() {
+        rl_bind_key('\f', clear_screen_and_buffer);
     };
     
-    // Generate entries once for efficiency
-    auto entries = generateSelectedIsosEntries();
-    int totalEntries = entries.size();
-    auto [entriesPerPage, totalPages] = setupPagination(totalEntries);
-    int currentPage = 0;
+    // Prefix and suffix for the prompt
+    std::string promptPrefix = "\n";
+    std::string promptSuffix = "\n\001\033[1;94m\002The selected \001\033[1;92m\002ISO\001\033[1;94m\002 will be " +
+        std::string("\001\033[1;91m\002*PERMANENTLY DELETED FROM DISK*\001\033[1;94m\002. Proceed? (y/n):\001\033[0;1m\002 ");
     
-    // Clear screen initially (common for both paths)
-    clearScrollBuffer();
-    displayErrors(); // Show errors on first display
+    // Use the consolidated pagination function with custom input handling
+    while (true) {
+        // Clear screen initially
+        clearScrollBuffer();
+        displayErrors(uniqueErrorMessages); // Show errors on first display
+        
+        // Use the consolidated pagination function
+        std::string userInput = handlePaginatedDisplay(
+            entries, 
+            promptPrefix, 
+            promptSuffix, 
+            [&uniqueErrorMessages]() { displayErrors(uniqueErrorMessages); }, 
+            setupEnv, 
+            isPageTurn
+        );
+        
+        rl_bind_key('\f', prevent_readline_keybindings);
+        
+        // Handle EOF
+        if (userInput.empty() && !isPageTurn) {
+            abortDel = true;
+            return false;
+        }
+        
+        // Process yes/no (only if not page turning)
+        if (!isPageTurn) {
+            if (userInput == "y" || userInput == "Y") {
+                umountMvRmBreak = true;
+                return true;
+            } else {
+                umountMvRmBreak = false;
+                abortDel = true;
+                std::cout << "\n\033[1;93mDelete operation aborted by user.\033[0;1m\n";
+                std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                return false;
+            }
+        }
+    }
+}
 
+
+// Function to prompt for userDestDir or Delete confirmation including pagination
+std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::unordered_set<std::string>& uniqueErrorMessages, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& historyPattern, bool& isDelete, bool& isCopy, bool& abortDel, bool& overwriteExisting) {
+
+    
+    // Clear screen initially
+    clearScrollBuffer();
+    displayErrors(uniqueErrorMessages); // Show errors on first display
+    
     if (!isDelete) {
         // Copy/Move operation flow
-        bool isPageTurn = false; // Flag to track if we're coming from a page turn
+        auto entries = generateSelectedIsosEntries(isoFiles, indexChunks);
+        bool isPageTurn = false;
         
-        while (true) {
-            // Setup environment
+        // Setup environment function
+        auto setupEnv = [&]() {
             enable_ctrl_d();
             setupSignalHandlerCancellations();
             g_operationCancelled.store(false);
@@ -281,121 +377,74 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
                 umountMvRmBreak = true;
             }
             
-            // Clear the screen before displaying the new page
-            clearScrollBuffer(); 
-            
-            // Only reset history and display errors on non-page-turn iterations
             if (!isPageTurn) {
                 clear_history();
                 historyPattern = false;
                 loadHistory(historyPattern);
-                displayErrors();
             }
-            
-            userDestDir.clear();
-            bool isCpMv = true;
-            std::string selectedIsosPrompt = getPageContent(entries, currentPage, entriesPerPage, totalPages);
-            
-            std::string prompt = "\n" + selectedIsosPrompt + 
-                "\n\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ for selected \001\033[1;92m\002ISO\001\033[1;94m\002 to be " + 
-                operationColor + operationDescription + 
-                "\001\033[1;94m\002 into, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
-            
-            std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
-            if (!input.get()) {
-                break;
-            }
-            
-            // Trim leading and trailing whitespaces but keep spaces inside
-			std::string mainInputString = trimWhitespace(input.get());
-		
-            rl_bind_key('\f', prevent_readline_keybindings);
-            rl_bind_key('\t', prevent_readline_keybindings);
-            
-            // Check for page navigation inputs
-            if (handlePageNavigation(mainInputString, currentPage, totalPages)) {
-                isPageTurn = true;
-                continue;
-            }
-            
-            // Then check for help command
-            if (mainInputString == "?") {
-				bool import2ISO = false;
-                helpSearches(isCpMv, import2ISO);
-                isPageTurn = false; // Not a page turn
-                continue;
-            } else {
-                isPageTurn = false; // Reset flag for non-page-turn actions
-            }
-            
-            // Handle empty input (return)
-            if (mainInputString.empty()) {
-                umountMvRmBreak = false;
-                userDestDir = "";
-                clear_history();
-                return userDestDir;
-            } 
-            
-            // Process destination directory including possible -o flag
-            userDestDir = mainInputString;
-            
-            // Check for overwrite flag
-            if (userDestDir.size() >= 3 && userDestDir.substr(userDestDir.size() - 3) == " -o") {
-                overwriteExisting = true;
-                userDestDir = userDestDir.substr(0, userDestDir.size() - 3);
-            } else {
-                overwriteExisting = false;
-            }
-            
-            // Add to history without the overwrite flag
-            std::string historyInput = mainInputString;
-            if (historyInput.size() >= 3 && historyInput.substr(historyInput.size() - 3) == " -o") {
-                historyInput = historyInput.substr(0, historyInput.size() - 3);
-            }
-            add_history(historyInput.c_str());
-            break;
-        }
-    } else {
-        // Delete operation flow
-        rl_bind_key('\f', clear_screen_and_buffer);
+        };
         
-        while (true) {
-            std::string selectedIsosPrompt = getPageContent(entries, currentPage, entriesPerPage, totalPages);
-            
-            std::string prompt = "\n" + selectedIsosPrompt +
-                "\n\001\033[1;94m\002The selected \001\033[1;92m\002ISO\001\033[1;94m\002 will be " +
-                "\001\033[1;91m\002*PERMANENTLY DELETED FROM DISK*\001\033[1;94m\002. Proceed? (y/n):\001\033[0;1m\002 ";
-            
-            std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
-            rl_bind_key('\f', prevent_readline_keybindings);
-            
-            if (!input.get()) {
-                userDestDir = "";
-                abortDel = true;
-                return userDestDir;
-            }
-            
-            std::string mainInputString(input.get());
-            
-            // Handle pagination
-            if (handlePageNavigation(mainInputString, currentPage, totalPages)) {
-                clearScrollBuffer();
-                continue;
-            }
-            
-            // Process yes/no
-            if (mainInputString == "y" || mainInputString == "Y") {
-                umountMvRmBreak = true;
-                break;
-            } else {
-                umountMvRmBreak = false;
-                abortDel = true;
-                userDestDir = "";
-                std::cout << "\n\033[1;93mDelete operation aborted by user.\033[0;1m\n";
-                std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                return userDestDir;
-            }
+        // Prefix and suffix for the prompt
+        std::string promptPrefix = "\n";
+        std::string promptSuffix = "\n\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ for selected \001\033[1;92m\002ISO\001\033[1;94m\002 to be " + 
+            operationColor + operationDescription + 
+            "\001\033[1;94m\002 into, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
+        
+        // Use the consolidated pagination function
+        std::string userInput = handlePaginatedDisplay(
+            entries, 
+            promptPrefix, 
+            promptSuffix, 
+            [&uniqueErrorMessages]() { displayErrors(uniqueErrorMessages); },
+            setupEnv, 
+            isPageTurn
+        );
+        
+        // After pagination, handle the input
+        rl_bind_key('\f', prevent_readline_keybindings);
+        rl_bind_key('\t', prevent_readline_keybindings);
+        
+        // Handle help command
+        if (userInput == "?") {
+            bool import2ISO = false;
+            bool isCpMv = true;
+            helpSearches(isCpMv, import2ISO);
+            userDestDir = "";
+            return userDestDir;
+        }
+        
+        // Handle empty input (return)
+        if (userInput.empty()) {
+            umountMvRmBreak = false;
+            userDestDir = "";
+            clear_history();
+            return userDestDir;
+        }
+        
+        // Process destination directory including possible -o flag
+        userDestDir = userInput;
+        
+        // Check for overwrite flag
+        if (userDestDir.size() >= 3 && userDestDir.substr(userDestDir.size() - 3) == " -o") {
+            overwriteExisting = true;
+            userDestDir = userDestDir.substr(0, userDestDir.size() - 3);
+        } else {
+            overwriteExisting = false;
+        }
+        
+        // Add to history without the overwrite flag
+        std::string historyInput = userInput;
+        if (historyInput.size() >= 3 && historyInput.substr(historyInput.size() - 3) == " -o") {
+            historyInput = historyInput.substr(0, historyInput.size() - 3);
+        }
+        add_history(historyInput.c_str());
+    } else {
+        // Delete operation flow - call the extracted function
+        bool proceedWithDelete = handleDeleteOperation(isoFiles, indexChunks, uniqueErrorMessages, umountMvRmBreak, abortDel);
+        
+        if (!proceedWithDelete) {
+            userDestDir = "";
+            return userDestDir;
         }
     }
     
@@ -453,8 +502,33 @@ bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::ato
 }
 
 
-// Function to handle cpMvDel
-void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::unordered_set<std::string>& operationIsos, std::unordered_set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, bool overwriteExisting) {
+// Helper function to perform delete operations
+void performDeleteOperation(const fs::path& srcPath,const std::string& srcDir, const std::string& srcFile, size_t fileSize,std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors ,std::atomic<bool>& operationSuccessful, const std::function<void()>& batchInsertMessages) {
+    std::error_code ec;
+    // Set errorDetail based on whether the operation was cancelled
+    std::string errorDetail = g_operationCancelled.load() ? "Cancelled" : ec.message();
+
+    if (!g_operationCancelled.load()) {
+        if (fs::remove(srcPath, ec)) {
+            completedBytes->fetch_add(fileSize);
+            verboseIsos.push_back("\033[0;1mDeleted: \033[1;92m'" +
+                                    srcDir + "/" + srcFile + "'\033[0;1m.");
+            completedTasks->fetch_add(1, std::memory_order_acq_rel);
+        }
+    } else {
+        verboseErrors.push_back("\033[1;91mError deleting: \033[1;93m'" +
+                                  srcDir + "/" + srcFile + "'\033[1;91m: " +
+                                  errorDetail + ".\033[0;1m");
+        failedTasks->fetch_add(1, std::memory_order_acq_rel);
+        operationSuccessful.store(false);
+    }
+    // Insert messages if batch size limit is reached
+    batchInsertMessages();
+}
+
+
+// Function to handle CpMv
+void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::unordered_set<std::string>& operationIsos, std::unordered_set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete, std::atomic<size_t>* completedBytes,std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, bool overwriteExisting) {
 
     std::atomic<bool> operationSuccessful(true);
     uid_t real_uid;
@@ -470,7 +544,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
     // Batch size for inserting entries into sets
     const size_t BATCH_SIZE = 1000;
 
-    // Function to batch insert messages into sets
+    // Function to batch insert messages into global sets
     auto batchInsertMessages = [&]() {
         if (verboseIsos.size() >= BATCH_SIZE || verboseErrors.size() >= BATCH_SIZE) {
             std::lock_guard<std::mutex> lock(globalSetsMutex);
@@ -505,28 +579,11 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
             }
 
             if (isDelete) {
-				std::error_code ec;
-				// Create a custom error detail: "Cancelled" if operation cancelled, otherwise use ec.message()
-				std::string errorDetail = g_operationCancelled.load() ? "Cancelled" : ec.message();
-    
-				if (!g_operationCancelled.load()) {
-					if (fs::remove(srcPath, ec)) {
-						completedBytes->fetch_add(fileSize);
-						verboseIsos.push_back("\033[0;1mDeleted: \033[1;92m'" +
-											srcDir + "/" + srcFile + "'\033[0;1m.");
-						completedTasks->fetch_add(1, std::memory_order_acq_rel);
-					}
-				} else {
-					// Use errorDetail here so that on cancellation it displays "Cancelled"
-					verboseErrors.push_back("\033[1;91mError deleting: \033[1;93m'" +
-											srcDir + "/" + srcFile + "'\033[1;91m: " +
-											errorDetail + ".\033[0;1m");
-					failedTasks->fetch_add(1, std::memory_order_acq_rel);
-					operationSuccessful.store(false);
-				}
-		
-                // Check if we need to batch insert
-                batchInsertMessages();
+                // Use the modularized delete function
+                performDeleteOperation(srcPath, srcDir, srcFile, fileSize,
+                                       completedBytes, completedTasks, failedTasks,
+                                       verboseIsos, verboseErrors, operationSuccessful,
+                                       batchInsertMessages);
             } else {
                 std::atomic<bool> atLeastOneCopySucceeded(false);
                 std::atomic<int> validDestinations(0);
@@ -549,7 +606,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         failedTasks->fetch_add(1, std::memory_order_acq_rel);
                         operationSuccessful.store(false);
                         
-                        // Check if we need to batch insert
                         batchInsertMessages();
                         continue;
                     }
@@ -566,27 +622,22 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         failedTasks->fetch_add(1, std::memory_order_acq_rel);
                         operationSuccessful.store(false);
                         
-                        // Check if we need to batch insert
                         batchInsertMessages();
                         continue;
                     }
                     
-                    // Count valid destinations for reporting
                     validDestinations.fetch_add(1, std::memory_order_acq_rel);
                     
-                    // Inside the lock, check again if source exists (might have been moved by another operation)
                     if (!fs::exists(srcPath)) {
                         verboseErrors.push_back("\033[1;91mSource file no longer exists: \033[1;93m'" +
                                                  srcDir + "/" + srcFile + "'\033[1;91m.\033[0;1m");
                         failedTasks->fetch_add(1, std::memory_order_acq_rel);
                         operationSuccessful.store(false);
                         
-                        // Check if we need to batch insert
                         batchInsertMessages();
                         continue;
                     }
 
-                    // Check if destination exists
                     if (fs::exists(destPath)) {
                         if (overwriteExisting) {
                             if (!fs::remove(destPath, ec)) {
@@ -596,7 +647,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                                 failedTasks->fetch_add(1, std::memory_order_acq_rel);
                                 operationSuccessful.store(false);
                                 
-                                // Check if we need to batch insert
                                 batchInsertMessages();
                                 continue;
                             }
@@ -609,7 +659,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                             failedTasks->fetch_add(1, std::memory_order_acq_rel);
                             operationSuccessful.store(false);
                             
-                            // Check if we need to batch insert
                             batchInsertMessages();
                             continue;
                         }
@@ -625,39 +674,37 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                             successfulOperations.fetch_add(1, std::memory_order_acq_rel);
                         }
                     } else if (isMove) {
-						if (!g_operationCancelled.load()) {
-						// For single destination move, try rename first
-						fs::rename(srcPath, destPath, ec);
+                        if (!g_operationCancelled.load()) {
+                            fs::rename(srcPath, destPath, ec);
         
-							if (ec) {
-								ec.clear();
-								success.store(bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec));
-								if (success.load()) {
-									std::error_code deleteEc;
-									if (!fs::remove(srcPath, deleteEc)) {
-										verboseErrors.push_back("\033[1;91mMove completed but failed to remove source file: \033[1;93m'" +
-																srcDir + "/" + srcFile + "'\033[1;91m - " +
-																deleteEc.message() + "\033[0m");
-										successfulOperations.fetch_add(1, std::memory_order_acq_rel);
-									} else {
-										successfulOperations.fetch_add(1, std::memory_order_acq_rel);
-									}
-								}
-							} else {
-								completedBytes->fetch_add(fileSize);
-								success.store(true);
-								successfulOperations.fetch_add(1, std::memory_order_acq_rel);
-							}
-						} else {
-							// Operation was cancelled before rename, so mark as failure
-							success.store(false);
-						}
-					} else if (isCopy) {
-						success.store(bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec));
-						if (success.load()) {
-							successfulOperations.fetch_add(1, std::memory_order_acq_rel);
-						}
-					}
+                            if (ec) {
+                                ec.clear();
+                                success.store(bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec));
+                                if (success.load()) {
+                                    std::error_code deleteEc;
+                                    if (!fs::remove(srcPath, deleteEc)) {
+                                        verboseErrors.push_back("\033[1;91mMove completed but failed to remove source file: \033[1;93m'" +
+                                                                srcDir + "/" + srcFile + "'\033[1;91m - " +
+                                                                deleteEc.message() + "\033[0m");
+                                        successfulOperations.fetch_add(1, std::memory_order_acq_rel);
+                                    } else {
+                                        successfulOperations.fetch_add(1, std::memory_order_acq_rel);
+                                    }
+                                }
+                            } else {
+                                completedBytes->fetch_add(fileSize);
+                                success.store(true);
+                                successfulOperations.fetch_add(1, std::memory_order_acq_rel);
+                            }
+                        } else {
+                            success.store(false);
+                        }
+                    } else if (isCopy) {
+                        success.store(bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec));
+                        if (success.load()) {
+                            successfulOperations.fetch_add(1, std::memory_order_acq_rel);
+                        }
+                    }
 
                     if (!success.load() || ec) {
                         std::string errorDetail = g_operationCancelled.load() ? "Cancelled" : ec.message();
@@ -669,9 +716,8 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         failedTasks->fetch_add(1, std::memory_order_acq_rel);
                         operationSuccessful.store(false);
                     } else {
-                        // Attempt to change ownership, but ignore success/failure
+                        // Attempt to change ownership, ignoring any errors
                         changeOwnership(destPath);
-
                         verboseIsos.push_back("\033[0;1m" +
                                                 std::string(isCopy ? "Copied" : "Moved") +
                                                 ": \033[1;92m'" + srcDir + "/" + srcFile +
@@ -680,20 +726,17 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                         completedTasks->fetch_add(1, std::memory_order_acq_rel);
                     }
                     
-                    // Check if we need to batch insert
                     batchInsertMessages();
                 }
                 
                 // For multi-destination move: remove source file after copies succeed
                 if (isMove && destDirs.size() > 1 && validDestinations > 0 && atLeastOneCopySucceeded.load()) {
-                    
                     std::error_code deleteEc;
                     if (!fs::remove(srcPath, deleteEc)) {
                         verboseErrors.push_back("\033[1;91mMove completed but failed to remove source file: \033[1;93m'" +
                                                   srcDir + "/" + srcFile + "'\033[1;91m - " +
                                                   deleteEc.message() + "\033[0m");
                         
-                        // Check if we need to batch insert
                         batchInsertMessages();
                     }
                 }
@@ -715,7 +758,6 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
                                           isoDir + "/" + isoFile + "'\033[1;35m.\033[0;1m");
                 failedTasks->fetch_add(1, std::memory_order_acq_rel);
                 
-                // Check if we need to batch insert
                 batchInsertMessages();
             }
         }
@@ -723,7 +765,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 
     executeOperation(isoFilesToOperate);
 
-    // At the end, insert any remaining collected verbose messages
+    // Insert any remaining verbose messages at the end
     {
         std::lock_guard<std::mutex> lock(globalSetsMutex);
         operationErrors.insert(verboseErrors.begin(), verboseErrors.end());
