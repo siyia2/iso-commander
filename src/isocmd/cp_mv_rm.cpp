@@ -647,12 +647,12 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
 							// Operation was cancelled before rename, so mark as failure
 							success.store(false);
 						}
-				} else if (isCopy) {
-					success.store(bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec));
-					if (success.load()) {
-						successfulOperations.fetch_add(1, std::memory_order_acq_rel);
+					} else if (isCopy) {
+						success.store(bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec));
+						if (success.load()) {
+							successfulOperations.fetch_add(1, std::memory_order_acq_rel);
+						}
 					}
-				}
 
                     if (!success.load() || ec) {
                         std::string errorDetail = g_operationCancelled.load() ? "Cancelled" : ec.message();
