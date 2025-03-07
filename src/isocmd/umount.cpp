@@ -3,6 +3,7 @@
 #include "../headers.h"
 #include "../threadpool.h"
 #include "../display.h"
+#include "../umount.h"
 
 
 const std::string MOUNTED_ISO_PATH = "/mnt";
@@ -99,53 +100,12 @@ std::string modifyDirectoryPath(const std::string& dir) {
 }
 
 
-// Function to format verbose messages based on message type for umount operation
-std::string formatVerboseMessage(const std::string& messageType, const std::string& path) {
-    // Pre-define format strings to avoid repeated string constructions
-    static const std::string rootErrorPrefix = "\033[1;91mFailed to unmount: \033[1;93m'";
-    static const std::string rootErrorSuffix = "\033[1;93m'\033[1;91m.\033[0;1m {needsRoot}";
-
-    static const std::string successPrefix = "\033[0;1mUnmounted: \033[1;92m'";
-    static const std::string successSuffix = "\033[1;92m'\033[0m.";
-
-    static const std::string errorPrefix = "\033[1;91mFailed to unmount: \033[1;93m'";
-    static const std::string errorSuffix = "'\033[1;91m.\033[0;1m {notAnISO}";
-
-    static const std::string cancelPrefix = "\033[1;91mFailed to unmount: \033[1;93m'";
-    static const std::string cancelSuffix = "'\033[1;91m.\033[0;1m {CXL}";
-
-    // Create a reusable string buffer
-    std::string outputBuffer;
-    outputBuffer.reserve(256);  // Reserve space for a typical message
-
-    if (messageType == "root_error") {
-        outputBuffer.append(rootErrorPrefix)
-                  .append(path)
-                  .append(rootErrorSuffix);
-    }
-    else if (messageType == "success") {
-        outputBuffer.append(successPrefix)
-                  .append(path)
-                  .append(successSuffix);
-    }
-    else if (messageType == "error") {
-        outputBuffer.append(errorPrefix)
-                  .append(path)
-                  .append(errorSuffix);
-    }
-    else if (messageType == "cancel") {
-        outputBuffer.append(cancelPrefix)
-                  .append(path)
-                  .append(cancelSuffix);
-    }
-
-    return outputBuffer;
-}
-
-
 // Function to unmount ISO files
 void unmountISO(const std::vector<std::string>& isoDirs,std::unordered_set<std::string>& unmountedFiles, std::unordered_set<std::string>& unmountedErrors, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks) {
 
+    // Create the message formatter
+    VerboseMessageFormatter messageFormatter;
+    
     // Define batch size for insertions
     const size_t BATCH_SIZE = 1000;
     size_t totalProcessedEntries = 0;
@@ -188,11 +148,11 @@ void unmountISO(const std::vector<std::string>& isoDirs,std::unordered_set<std::
             std::string modifiedDir = modifyDirectoryPath(isoDir);
             
             if (!g_operationCancelled.load()) {
-                errorMessages.push_back(formatVerboseMessage("root_error", modifiedDir));
+                errorMessages.push_back(messageFormatter.format("root_error", modifiedDir));
                 failedTasks->fetch_add(1, std::memory_order_acq_rel);
             } else {
                 // Append cancelled message when operation is cancelled
-                errorMessages.push_back(formatVerboseMessage("cancel", modifiedDir));
+                errorMessages.push_back(messageFormatter.format("cancel", modifiedDir));
                 // Optionally, you could update a cancellation counter here
             }
             totalProcessedEntries++;
@@ -232,12 +192,12 @@ void unmountISO(const std::vector<std::string>& isoDirs,std::unordered_set<std::
         if (result == 0 || isEmpty) {
             // Successful unmount
             if (isEmpty && rmdir(dir.c_str()) == 0) {
-                successMessages.push_back(formatVerboseMessage("success", modifiedDir));
+                successMessages.push_back(messageFormatter.format("success", modifiedDir));
                 completedTasks->fetch_add(1, std::memory_order_acq_rel);
             }
         } else {
             // Failed unmount
-            errorMessages.push_back(formatVerboseMessage("error", modifiedDir));
+            errorMessages.push_back(messageFormatter.format("error", modifiedDir));
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
         }
         totalProcessedEntries++;
@@ -253,7 +213,7 @@ void unmountISO(const std::vector<std::string>& isoDirs,std::unordered_set<std::
     if (g_operationCancelled.load()) {
         for (size_t i = processed; i < isoDirs.size(); ++i) {
             std::string modifiedDir = modifyDirectoryPath(isoDirs[i]);
-            errorMessages.push_back(formatVerboseMessage("cancel", modifiedDir));
+            errorMessages.push_back(messageFormatter.format("cancel", modifiedDir));
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
             totalProcessedEntries++;
             if (totalProcessedEntries >= BATCH_SIZE) {
