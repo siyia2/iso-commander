@@ -83,7 +83,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
     // Tracking sets and vectors
     std::vector<std::string> directoryPaths;
     std::unordered_set<std::string> uniquePaths, processedErrors, processedErrorsFind, successOuts, 
-                           skippedOuts, failedOuts, deletedOuts, 
+                           skippedOuts, failedOuts, 
                            invalidDirectoryPaths, fileNames;
                            
     // Control flags
@@ -113,11 +113,10 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
         setupSignalHandlerCancellations();
 		g_operationCancelled.store(false);
         bool list = false, clr = false;
-        successOuts.clear(); 
-        skippedOuts.clear(); 
-        failedOuts.clear(); 
-        deletedOuts.clear(); 
-        processedErrors.clear();
+        std::unordered_set<std::string>().swap(processedErrors);
+        std::unordered_set<std::string>().swap(successOuts);
+        std::unordered_set<std::string>().swap(skippedOuts);
+        std::unordered_set<std::string>().swap(failedOuts);
         directoryPaths.clear();
         invalidDirectoryPaths.clear();
         uniquePaths.clear();
@@ -280,7 +279,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
     rl_bind_key('\t', prevent_readline_keybindings);
     
     // Containers to track file processing results
-    std::unordered_set<std::string> processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts;
+    std::unordered_set<std::string> processedErrors, successOuts, skippedOuts, failedOuts;
     
     bool isFiltered = false; // Indicates if the file list is currently filtered
     bool needsScrnClr = true;
@@ -344,11 +343,11 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 		setupSignalHandlerCancellations();
 		g_operationCancelled.store(false);
         verbose = false; // Reset verbose mode
-        processedErrors.clear(); 
-        successOuts.clear(); 
-        skippedOuts.clear(); 
-        failedOuts.clear(); 
-        deletedOuts.clear();
+        std::unordered_set<std::string>().swap(processedErrors);
+        std::unordered_set<std::string>().swap(successOuts);
+        std::unordered_set<std::string>().swap(skippedOuts);
+        std::unordered_set<std::string>().swap(failedOuts);
+        
         clear_history();	
 		if (needsScrnClr) {
         clearScrollBuffer(); // Clear the screen for new content
@@ -439,10 +438,10 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 			// Process other input commands for file processing
 			clearScrollBuffer();
 			std::cout << "\n\033[0;1m Processing \001\033[1;38;5;208m\002" + fileExtensionWithOutDots + "\033[0;1m conversions... (\033[1;91mCtrl + c\033[0;1m:cancel)\n";
-			processInput(mainInputString, files, (fileType == "mdf"), (fileType == "nrg"), processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, promptFlag, maxDepth, historyPattern, verbose, needsScrnClr, newISOFound);
+			processInput(mainInputString, files, (fileType == "mdf"), (fileType == "nrg"), processedErrors, successOuts, skippedOuts, failedOuts, promptFlag, maxDepth, historyPattern, verbose, needsScrnClr, newISOFound);
 			needsScrnClr = true;
 			if (verbose) {
-				verbosePrint(processedErrors, successOuts, skippedOuts, failedOuts, deletedOuts, 3); // Print detailed logs if verbose mode is enabled
+				verbosePrint(processedErrors, successOuts, skippedOuts, failedOuts, 3); // Print detailed logs if verbose mode is enabled
 				needsScrnClr = true;
 			}
 		}
@@ -451,7 +450,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 
 
 // Function to process user input and convert selected BIN/MDF/NRG files to ISO format
-void processInput(const std::string& input, std::vector<std::string>& fileList, const bool& modeMdf, const bool& modeNrg, std::unordered_set<std::string>& processedErrors, std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, std::unordered_set<std::string>& deletedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose, bool& needsScrnClr, std::atomic<bool>& newISOFound) {
+void processInput(const std::string& input, std::vector<std::string>& fileList, const bool& modeMdf, const bool& modeNrg, std::unordered_set<std::string>& processedErrors, std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose, bool& needsScrnClr, std::atomic<bool>& newISOFound) {
 	// Setup signal handler at the start of the operation
     setupSignalHandlerCancellations();
     
@@ -565,12 +564,12 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
         );
 
         futures.emplace_back(pool.enqueue([imageFilesInChunk = std::move(imageFilesInChunk), 
-            &fileList, &successOuts, &skippedOuts, &failedOuts, &deletedOuts, 
+            &fileList, &successOuts, &skippedOuts, &failedOuts, 
             modeMdf, modeNrg, &maxDepth, &promptFlag, &historyPattern, 
             &completedBytes, &completedTasks, &failedTasks, &newISOFound]() {
             // Process each file with task tracking
             convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts, 
-                deletedOuts, modeMdf, modeNrg, maxDepth, promptFlag, historyPattern, 
+                modeMdf, modeNrg, maxDepth, promptFlag, historyPattern, 
                 &completedBytes, &completedTasks, &failedTasks, newISOFound);
         }));
     }
@@ -844,7 +843,7 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
 
 
 // Function to convert a BIN/IMG/MDF/NRG file to ISO format
-void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, std::unordered_set<std::string>& deletedOuts, const bool& modeMdf, const bool& modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, std::atomic<bool>& newISOFound) {
+void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, const bool& modeMdf, const bool& modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, std::atomic<bool>& newISOFound) {
 
     namespace fs = std::filesystem;
 
@@ -878,20 +877,17 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
         bool shouldFlush = 
             localSuccessMsgs.size() >= BATCH_SIZE ||
             localFailedMsgs.size() >= BATCH_SIZE ||
-            localSkippedMsgs.size() >= BATCH_SIZE ||
-            localDeletedMsgs.size() >= BATCH_SIZE;
+            localSkippedMsgs.size() >= BATCH_SIZE;
             
         if (shouldFlush) {
             std::lock_guard<std::mutex> lock(globalSetsMutex);
             successOuts.insert(localSuccessMsgs.begin(), localSuccessMsgs.end());
             failedOuts.insert(localFailedMsgs.begin(), localFailedMsgs.end());
             skippedOuts.insert(localSkippedMsgs.begin(), localSkippedMsgs.end());
-            deletedOuts.insert(localDeletedMsgs.begin(), localDeletedMsgs.end());
             
             localSuccessMsgs.clear();
             localFailedMsgs.clear();
             localSkippedMsgs.clear();
-            localDeletedMsgs.clear();
         }
     };
 
@@ -966,7 +962,6 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
         successOuts.insert(localSuccessMsgs.begin(), localSuccessMsgs.end());
         failedOuts.insert(localFailedMsgs.begin(), localFailedMsgs.end());
         skippedOuts.insert(localSkippedMsgs.begin(), localSkippedMsgs.end());
-        deletedOuts.insert(localDeletedMsgs.begin(), localDeletedMsgs.end());
     }
 
     // Update cache and prompt flags

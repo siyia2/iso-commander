@@ -80,10 +80,10 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
 		if (!isUnmount)
 			isAtISOList.store(true);
         verbose = false;
-        operationFiles.clear();
-        skippedMessages.clear();
-        operationFails.clear();
-        uniqueErrorMessages.clear();
+        std::unordered_set<std::string>().swap(operationFiles);
+        std::unordered_set<std::string>().swap(skippedMessages);
+        std::unordered_set<std::string>().swap(operationFails);
+        std::unordered_set<std::string>().swap(uniqueErrorMessages);
         clear_history();
         removeNonExistentPathsFromCache();
         
@@ -159,10 +159,10 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         if (inputString == "/") {
             while (true) {
                 verbose = false;
-                operationFiles.clear();
-                skippedMessages.clear();
-                operationFails.clear();
-                uniqueErrorMessages.clear();
+                std::unordered_set<std::string>().swap(operationFiles);
+				std::unordered_set<std::string>().swap(skippedMessages);
+				std::unordered_set<std::string>().swap(operationFails);
+				std::unordered_set<std::string>().swap(uniqueErrorMessages);
 
                 historyPattern = true;
                 loadHistory(historyPattern);
@@ -259,7 +259,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
             needsClrScrn = true;
             std::unordered_set<std::string> conditionalSet = isMount ? skippedMessages : std::unordered_set<std::string>{};
             std::unordered_set<std::string> emptySet{};
-            verbosePrint(operationFiles, operationFails, conditionalSet, emptySet, uniqueErrorMessages, isMount ? 2 : 1);
+            verbosePrint(operationFiles, operationFails, conditionalSet, uniqueErrorMessages, isMount ? 2 : 1);
         }
 
         // Reset filter for certain operations

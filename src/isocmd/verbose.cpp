@@ -4,7 +4,7 @@
 
 
 // Main verbose print function for results
-void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_set<std::string>& secondarySet, std::unordered_set<std::string>& tertiarySet, std::unordered_set<std::string>& quaternarySet, std::unordered_set<std::string>& errorSet, int printType) {
+void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_set<std::string>& secondarySet, std::unordered_set<std::string>& tertiarySet, std::unordered_set<std::string>& errorSet, int printType) {
     signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
     disable_ctrl_d();
     clearScrollBuffer(); // Assuming this function is defined elsewhere
@@ -59,8 +59,7 @@ void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_se
         {
             printSortedSet(secondarySet, false);   // Success outputs
             printSortedSet(tertiarySet, false);    // Skipped outputs
-            printSortedSet(quaternarySet, false);  // Failed outputs
-            printSortedSet(errorSet, false);       // Deleted outputs
+            printSortedSet(errorSet, false);       // Failed outputs
             printSortedSet(primarySet, false);     // Processed errors
             std::cout << "\n";
             break;
