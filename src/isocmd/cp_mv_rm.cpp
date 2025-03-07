@@ -505,21 +505,26 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vecto
             }
 
             if (isDelete) {
-                if (g_operationCancelled.load()) break;
-                std::error_code ec;
-                if (fs::remove(srcPath, ec)) {
-                    completedBytes->fetch_add(fileSize);
-                    verboseIsos.push_back("\033[0;1mDeleted: \033[1;92m'" +
-                                            srcDir + "/" + srcFile + "'\033[0;1m.");
-                    completedTasks->fetch_add(1, std::memory_order_acq_rel);
-                } else {
-                    verboseErrors.push_back("\033[1;91mError deleting: \033[1;93m'" +
-                                              srcDir + "/" + srcFile + "'\033[1;91m: " +
-                                              ec.message() + ".\033[0;1m");
-                    failedTasks->fetch_add(1, std::memory_order_acq_rel);
-                    operationSuccessful.store(false);
-                }
-                
+				std::error_code ec;
+				// Create a custom error detail: "Cancelled" if operation cancelled, otherwise use ec.message()
+				std::string errorDetail = g_operationCancelled.load() ? "Cancelled" : ec.message();
+    
+				if (!g_operationCancelled.load()) {
+					if (fs::remove(srcPath, ec)) {
+						completedBytes->fetch_add(fileSize);
+						verboseIsos.push_back("\033[0;1mDeleted: \033[1;92m'" +
+											srcDir + "/" + srcFile + "'\033[0;1m.");
+						completedTasks->fetch_add(1, std::memory_order_acq_rel);
+					}
+				} else {
+					// Use errorDetail here so that on cancellation it displays "Cancelled"
+					verboseErrors.push_back("\033[1;91mError deleting: \033[1;93m'" +
+											srcDir + "/" + srcFile + "'\033[1;91m: " +
+											errorDetail + ".\033[0;1m");
+					failedTasks->fetch_add(1, std::memory_order_acq_rel);
+					operationSuccessful.store(false);
+				}
+		
                 // Check if we need to batch insert
                 batchInsertMessages();
             } else {
