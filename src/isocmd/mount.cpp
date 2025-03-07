@@ -16,7 +16,7 @@ bool isAlreadyMounted(const std::string& mountPoint) {
 }
 
 
-// New helper function to handle formatting verbose output messages
+// Function to handle formatting verbose output messages
 struct VerbosityFormatter {
     // Format strings for different message types
     const std::string mountedFormatPrefix = "\033[1mISO: \033[1;92m'";
