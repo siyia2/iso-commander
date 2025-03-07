@@ -108,7 +108,6 @@ void unmountISO(const std::vector<std::string>& isoDirs,std::unordered_set<std::
     
     // Define batch size for insertions
     const size_t BATCH_SIZE = 1000;
-    size_t totalProcessedEntries = 0;
 
     // Pre-allocate containers with batch capacity
     std::vector<std::string> errorMessages;
@@ -137,7 +136,15 @@ void unmountISO(const std::vector<std::string>& isoDirs,std::unordered_set<std::
             unmountedErrors.insert(errorMessages.begin(), errorMessages.end());
             errorMessages.clear();
         }
-        totalProcessedEntries = 0;
+    };
+
+    // Helper to check if any buffer needs flushing
+    auto checkAndFlush = [&]() {
+        if (errorMessages.size() >= BATCH_SIZE || 
+            successMessages.size() >= BATCH_SIZE || 
+            removalMessages.size() >= BATCH_SIZE) {
+            flushTemporaryBuffers();
+        }
     };
 
     // Root check with cancellation awareness
@@ -151,21 +158,14 @@ void unmountISO(const std::vector<std::string>& isoDirs,std::unordered_set<std::
                 errorMessages.push_back(messageFormatter.format("root_error", modifiedDir));
                 failedTasks->fetch_add(1, std::memory_order_acq_rel);
             } else {
-                // Append cancelled message when operation is cancelled
                 errorMessages.push_back(messageFormatter.format("cancel", modifiedDir));
-                // Optionally, you could update a cancellation counter here
             }
-            totalProcessedEntries++;
 
-            // Check if we need to flush
-            if (totalProcessedEntries >= BATCH_SIZE) {
-                flushTemporaryBuffers();
-            }
+            // Check if we need to flush based on buffer sizes
+            checkAndFlush();
         }
-        if (totalProcessedEntries > 0) {
-            flushTemporaryBuffers();
-        }
-        // If no root, skip unmount operations entirely
+        // Final flush for remaining entries
+        flushTemporaryBuffers();
         return;
     }
 
@@ -200,13 +200,10 @@ void unmountISO(const std::vector<std::string>& isoDirs,std::unordered_set<std::
             errorMessages.push_back(messageFormatter.format("error", modifiedDir));
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
         }
-        totalProcessedEntries++;
         processed++;
 
-        // Check if we need to flush
-        if (totalProcessedEntries >= BATCH_SIZE) {
-            flushTemporaryBuffers();
-        }
+        // Check if we need to flush based on buffer sizes
+        checkAndFlush();
     }
 
     // If cancellation occurred, process the remaining isoDirs as cancelled
@@ -215,17 +212,14 @@ void unmountISO(const std::vector<std::string>& isoDirs,std::unordered_set<std::
             std::string modifiedDir = modifyDirectoryPath(isoDirs[i]);
             errorMessages.push_back(messageFormatter.format("cancel", modifiedDir));
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
-            totalProcessedEntries++;
-            if (totalProcessedEntries >= BATCH_SIZE) {
-                flushTemporaryBuffers();
-            }
+            
+            // Check if we need to flush based on buffer sizes
+            checkAndFlush();
         }
     }
 
     // Final flush for any remaining entries
-    if (totalProcessedEntries > 0) {
-        flushTemporaryBuffers();
-    }
+    flushTemporaryBuffers();
 }
 
 
