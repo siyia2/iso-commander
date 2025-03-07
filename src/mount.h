@@ -12,11 +12,9 @@ struct VerbosityFormatter {
     const std::string mountedFormatSuffix = "\033[1;94m'\033[0;1m.";
     const std::string mountedFormatSuffixWithFS = "\033[1;94m'\033[0;1m. {";
     const std::string mountedFormatEnd = "\033[0m";
-
     const std::string errorFormatPrefix = "\033[1;91mFailed to mnt: \033[1;93m'";
     const std::string errorFormatSuffix = "'\033[0m\033[1;91m.\033[0;1m ";
     const std::string errorFormatEnd = "\033[0m";
-
     const std::string skippedFormatPrefix = "\033[1;93mISO: \033[1;92m'";
     const std::string skippedFormatMiddle = "'\033[1;93m alr mnt@: \033[1;94m'";
     const std::string skippedFormatSuffix = "\033[1;94m'\033[1;93m.\033[0m";
@@ -82,6 +80,45 @@ struct VerbosityFormatter {
                    .append(skippedFormatMiddle)
                    .append(mountisoDirectory).append("/").append(mountisoFilename)
                    .append(skippedFormatSuffix);
+        return outputBuffer;
+    }
+    
+    // Add the missing methods that were causing compilation errors
+    
+    // Format a mount failure message
+    std::string formatMountFailure(const std::string& isoDirectory, const std::string& isoFilename, 
+                                 const std::string& errorType, const std::string& mountTarget = "") {
+        outputBuffer.clear();
+        outputBuffer.append(errorFormatPrefix)
+                   .append(isoDirectory).append("/").append(isoFilename)
+                   .append(errorFormatSuffix);
+                   
+        if (errorType == "CXL") {
+            outputBuffer.append("Operation was cancelled");
+        } else if (errorType == "needsRoot") {
+            outputBuffer.append("Root privileges required for mounting");
+        } else if (errorType == "missingISO") {
+            outputBuffer.append("ISO file not found");
+        } else if (errorType == "badFS") {
+            outputBuffer.append("Failed to mount (unsupported filesystem or corrupted ISO)");
+        } else if (!mountTarget.empty()) {
+            // This is for the case when it's already mounted
+            outputBuffer.append("Already mounted at ").append(mountTarget);
+        } else {
+            // For other custom error messages
+            outputBuffer.append(errorType);
+        }
+        
+        outputBuffer.append(errorFormatEnd);
+        return outputBuffer;
+    }
+    
+    // Format a mount skipped message
+    std::string formatMountSkipped(const std::string& isoDirectory, const std::string& isoFilename) {
+        outputBuffer.clear();
+        outputBuffer.append(skippedFormatPrefix)
+                   .append(isoDirectory).append("/").append(isoFilename)
+                   .append("'\033[1;93m skipped.\033[0m");
         return outputBuffer;
     }
 };
