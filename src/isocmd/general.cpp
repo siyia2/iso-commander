@@ -47,10 +47,10 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
     std::unordered_set<std::string> operationFiles, skippedMessages, operationFails, uniqueErrorMessages;
     std::vector<std::string> filteredFiles;
     
-    static std::vector<std::string> sourceList; // Static vector to hold mountpoints for umount
+    // Static vector renamed to isoDirs: used exclusively for umount
+    static std::vector<std::string> isoDirs; 
     
     globalIsoFileList.reserve(100);
-    sourceList.reserve(100);
     filteredFiles.reserve(100);
     
     bool isFiltered = false;
@@ -73,10 +73,12 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
     std::string listSubtype = isMount ? "mount" : (write ? "write" : "cp_mv_rm");
         
     while (true) {
-		enable_ctrl_d();
-		setupSignalHandlerCancellations();
-		g_operationCancelled.store(false);
-		if (!isUnmount) isAtISOList.store(true);
+        enable_ctrl_d();
+        setupSignalHandlerCancellations();
+        g_operationCancelled.store(false);
+		// For non-umount operations, we show the global list.
+		if (!isUnmount)
+			isAtISOList.store(true);
         verbose = false;
         operationFiles.clear();
         skippedMessages.clear();
@@ -85,30 +87,31 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         clear_history();
         removeNonExistentPathsFromCache();
         
-        // Determine source list and load files based on operation type
+        // Load files based on operation type:
+        // For non-umount, work with globalIsoFileList exclusively.
         if (!isUnmount) {
             if (needsClrScrn) {
-				if (!clearAndLoadFiles(filteredFiles, isFiltered, listSubtype)) break;
-				{
-					std::lock_guard<std::mutex> lock(updateListMutex);
-					sourceList = isFiltered ? filteredFiles : globalIsoFileList;
-				}
+                if (!clearAndLoadFiles(filteredFiles, isFiltered, listSubtype))
+                    break;
                 std::cout << "\n\n";
             }
         } else {
+            // For umount, load and display into isoDirs.
             if (needsClrScrn) {
-                if (!loadAndDisplayMountedISOs(sourceList, filteredFiles, isFiltered)) break;
-                sourceList = isFiltered ? filteredFiles : sourceList;
+                if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered))
+                    break;
+                // If filtered, update isoDirs accordingly.
+                isoDirs = isFiltered ? filteredFiles : isoDirs;
                 std::cout << "\n\n";
             }
         }
         
         if (updateHasRun.load() && !isUnmount && !globalIsoFileList.empty()) {
-			std::thread(refreshListAfterAutoUpdate, 1, std::ref(isAtISOList), 
-				std::ref(isImportRunning), std::ref(updateHasRun), 
-                std::ref(filteredFiles), std::ref(sourceList), 
-                std::ref(isFiltered), std::ref(listSubtype), std::ref(newISOFound)).detach();
-		}
+            std::thread(refreshListAfterAutoUpdate, 1, std::ref(isAtISOList), 
+                        std::ref(isImportRunning), std::ref(updateHasRun), 
+                        std::ref(filteredFiles), std::ref(globalIsoFileList), 
+                        std::ref(isFiltered), std::ref(listSubtype), std::ref(newISOFound)).detach();
+        }
         
         std::cout << "\033[1A\033[K";
         
@@ -120,14 +123,14 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         
         // Handle input processing
-        if (!input.get()) break;
+        if (!input.get())
+            break;
 
         std::string inputString(input.get());
         
-        
         // Help and toggle full list commands
         if (inputString == "?") {
-			isAtISOList.store(false);
+            isAtISOList.store(false);
             helpSelections();
             needsClrScrn = true;
             continue;
@@ -144,7 +147,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         // Handle empty input or return
         if (inputString.empty()) {
             if (isFiltered) {
-				std::vector<std::string>().swap(filteredFiles);
+                std::vector<std::string>().swap(filteredFiles);
                 isFiltered = false;
                 continue;
             } else {
@@ -163,7 +166,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
 
                 historyPattern = true;
                 loadHistory(historyPattern);
-                // Move the cursor up 1 line and clear them
+                // Move the cursor up 1 line and clear it.
                 std::cout << "\033[1A\033[K";
 
                 // Generate filter prompt
@@ -174,23 +177,19 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
                 if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
                     historyPattern = false;
                     clear_history();
-                    if (isFiltered) {
-                        needsClrScrn = true;
-                    } else {
-                        needsClrScrn = false;
-                    }
+                    needsClrScrn = isFiltered ? true : false;
                     break;
                 }
 
                 std::string inputSearch(searchQuery.get());
                 
-                // Filter files
-                auto newFilteredFiles = filterFiles(isFiltered ? filteredFiles : sourceList, inputSearch);
+                // Use the appropriate list: for umount use isoDirs, otherwise use globalIsoFileList.
+                auto newFilteredFiles = filterFiles(isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList), inputSearch);
                 sortFilesCaseInsensitive(newFilteredFiles);
 
-                // Check if filter is meaningful
+                // Check if the filter is meaningful.
                 bool filterUnchanged = (isMount && newFilteredFiles.size() == globalIsoFileList.size()) ||
-                                       (isUnmount && newFilteredFiles.size() == sourceList.size());
+                                       (isUnmount && newFilteredFiles.size() == isoDirs.size());
                 
                 if (!filterUnchanged && !newFilteredFiles.empty()) {
                     add_history(searchQuery.get());
@@ -212,13 +211,11 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         if (inputString[0] == '/' && inputString.length() > 1) {
             std::string searchTerm = inputString.substr(1);
             
-            // Filter files
-            auto newFilteredFiles = filterFiles(isFiltered ? filteredFiles : sourceList, searchTerm);
+            auto newFilteredFiles = filterFiles(isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList), searchTerm);
             sortFilesCaseInsensitive(newFilteredFiles);
 
-            // Check if filter is meaningful
             bool filterUnchanged = (isMount && newFilteredFiles.size() == globalIsoFileList.size()) ||
-                                   (isUnmount && newFilteredFiles.size() == sourceList.size());
+                                   (isUnmount && newFilteredFiles.size() == isoDirs.size());
             
             if (!filterUnchanged && !newFilteredFiles.empty()) {
                 historyPattern = true;
@@ -232,23 +229,23 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
             continue;
         }
 
-        // Operation processing
+        // Operation processing: pass the proper list based on operation type.
         clearScrollBuffer();
         needsClrScrn = true;
         
         if (isMount) {
-			isAtISOList.store(false);
-            processAndMountIsoFiles(inputString, sourceList, operationFiles, skippedMessages, operationFails, uniqueErrorMessages, verbose);
+            isAtISOList.store(false);
+            processAndMountIsoFiles(inputString, globalIsoFileList, operationFiles, skippedMessages, operationFails, uniqueErrorMessages, verbose);
         } else if (isUnmount) {
             umountMvRmBreak = true;
             isAtISOList.store(false);
-            prepareUnmount(inputString, sourceList, operationFiles, operationFails, uniqueErrorMessages, umountMvRmBreak, verbose);
+            prepareUnmount(inputString, isoDirs, operationFiles, operationFails, uniqueErrorMessages, umountMvRmBreak, verbose);
         } else if (write) {
-			isAtISOList.store(false);
-            writeToUsb(inputString, sourceList, uniqueErrorMessages);
+            isAtISOList.store(false);
+            writeToUsb(inputString, globalIsoFileList, uniqueErrorMessages);
         } else {
-			isAtISOList.store(false);
-            processOperationInput(inputString, sourceList, operation, operationFiles, operationFails, uniqueErrorMessages, promptFlag, maxDepth, umountMvRmBreak, historyPattern, verbose, newISOFound);
+            isAtISOList.store(false);
+            processOperationInput(inputString, globalIsoFileList, operation, operationFiles, operationFails, uniqueErrorMessages, promptFlag, maxDepth, umountMvRmBreak, historyPattern, verbose, newISOFound);
         }
 
         // Result handling and display
@@ -261,12 +258,8 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
             clearScrollBuffer();
             needsClrScrn = true;
             std::unordered_set<std::string> conditionalSet = isMount ? skippedMessages : std::unordered_set<std::string>{};
-			std::unordered_set<std::string> emptySet{};
-			verbosePrint(operationFiles, operationFails,
-             conditionalSet, 
-             emptySet, 
-             uniqueErrorMessages,
-             isMount ? 2 : 1);
+            std::unordered_set<std::string> emptySet{};
+            verbosePrint(operationFiles, operationFails, conditionalSet, emptySet, uniqueErrorMessages, isMount ? 2 : 1);
         }
 
         // Reset filter for certain operations
@@ -277,8 +270,8 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
             needsClrScrn = true;
         }
 
-        // Handle empty source list
-        if (sourceList.empty()) {
+        // For non-umount operations, if there are no ISOs in the global list, inform the user.
+        if (!isUnmount && globalIsoFileList.empty()) {
             clearScrollBuffer();
             needsClrScrn = true;
             std::cout << "\n\033[1;93mNo ISO available for " << operation << ".\033[0m\n\n";
