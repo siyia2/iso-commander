@@ -36,10 +36,10 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
 
     if (isoDirs.empty()) {
         clearScrollBuffer();
-        isoDirs = {}; // De-allocate mount-points from memory
         std::cerr << "\n\033[1;93mNo paths matching the '/mnt/iso_{name}' pattern found.\033[0m\033[0;1m\n";
         std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        isoDirs = {}; // De-allocate from memory
         return false;
     }
 
