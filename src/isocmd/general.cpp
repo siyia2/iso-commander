@@ -45,7 +45,9 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
     rl_bind_key('\t', prevent_readline_keybindings);
     
     std::unordered_set<std::string> operationFiles, skippedMessages, operationFails, uniqueErrorMessages;
-    std::vector<std::string> filteredFiles, sourceList;
+    std::vector<std::string> filteredFiles;
+    
+    static std::vector<std::string> sourceList;
     
     globalIsoFileList.reserve(100);
     sourceList.reserve(100);

@@ -8,34 +8,46 @@
 const std::string MOUNTED_ISO_PATH = "/mnt";
 
 bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<std::string>& filteredFiles, bool& isFiltered) {
-	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
-	disable_ctrl_d();
-     isoDirs.clear();
-        for (const auto& entry : std::filesystem::directory_iterator(MOUNTED_ISO_PATH)) {
-            if (entry.is_directory() && entry.path().filename().string().find("iso_") == 0) {
-                isoDirs.push_back(entry.path().string());
-            }
-        }
-        sortFilesCaseInsensitive(isoDirs);
+    signal(SIGINT, SIG_IGN);  // Ignore Ctrl+C
+    disable_ctrl_d();
 
-    // Check if ISOs exist
+    static size_t previousHash = 0;  // Store only a hash, not the entire vector
+    std::vector<std::string> newIsoDirs;
+
+    for (const auto& entry : std::filesystem::directory_iterator(MOUNTED_ISO_PATH)) {
+        if (entry.is_directory() && entry.path().filename().string().find("iso_") == 0) {
+            newIsoDirs.push_back(entry.path().string());
+        }
+    }
+
+    // Compute a hash of the new vector
+    size_t currentHash = 0;
+    for (const auto& path : newIsoDirs) {
+        currentHash ^= std::hash<std::string>{}(path);  // Combine hashes
+    }
+
+    // Sort only if the hash is different
+    if (currentHash != previousHash) {
+        sortFilesCaseInsensitive(newIsoDirs);  // Use your custom sort function
+        previousHash = currentHash;  // Update the stored hash
+    }
+
+    isoDirs = std::move(newIsoDirs);  // Efficiently move the new vector
+
     if (isoDirs.empty()) {
-		clearScrollBuffer();
+        clearScrollBuffer();
+        isoDirs = {}; // De-allocate mount-points from memory
         std::cerr << "\n\033[1;93mNo paths matching the '/mnt/iso_{name}' pattern found.\033[0m\033[0;1m\n";
         std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         return false;
     }
 
-    // Sort ISOs case-insensitively
-    sortFilesCaseInsensitive(isoDirs);
-
-    // Display ISOs
     clearScrollBuffer();
-        if (filteredFiles.size() == isoDirs.size()) {
-				isFiltered = false;
-		}
-        printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS", "");
+    if (filteredFiles.size() == isoDirs.size()) {
+        isFiltered = false;
+    }
+    printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS", "");
 
     return true;
 }
