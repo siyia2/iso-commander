@@ -278,9 +278,6 @@ std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>&
         }
     }
 
-    // Sort the entries using the natural comparison
-    sortFilesCaseInsensitive(entries);
-
     return entries;
 }
 
@@ -298,6 +295,9 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::vector
     // Generate entries for selected ISO files
     std::vector<std::string> entries = generateIsoEntries(indexChunks, isoFiles);
 
+    // Sort the entries using the natural comparison
+    sortFilesCaseInsensitive(entries);
+    
     // Prefix and suffix for the prompt
     std::string promptPrefix = "\n";
     std::string promptSuffix = "\n\001\033[1;94m\002The selected \001\033[1;92m\002ISO\001\033[1;94m\002 will be " +
@@ -319,8 +319,8 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::vector
         
         // Handle EOF
         if (userInput.empty() && !isPageTurn) {
+			umountMvRmBreak = false;
             abortDel = true;
-            umountMvRmBreak = false;
             std::cout << "\n\033[1;93mDelete operation aborted by user.\033[0;1m\n";
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -360,6 +360,9 @@ std::string userDestDirRm(const std::vector<std::string>& isoFiles, std::vector<
     
     // Generate entries for selected ISO files - used by both branches
 	std::vector<std::string> entries = generateIsoEntries(indexChunks, isoFiles);
+	
+	 // Sort the entries using the natural comparison
+    sortFilesCaseInsensitive(entries);
     
     // Clear screen initially
     clearScrollBuffer();
