@@ -226,13 +226,13 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                  filteredFiles, isoDirs, operationFiles, 
                  operationFails, uniqueErrorMessages, skippedMessages, verbose,
                  needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
-                 promptFlag, maxDepth, newISOFound);
+                 promptFlag, maxDepth, filterHistory, newISOFound);
     }
 }
 
 
 // Function to process operations from selectIsoFiles
-void processOperationForSelectedIsoFiles(const std::string& inputString,bool isMount, bool isUnmount, bool write, bool isFiltered, const std::vector<std::string>& filteredFiles, std::vector<std::string>& isoDirs, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<std::string>& skippedMessages, bool verbose, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool promptFlag, int& maxDepth, std::atomic<bool>& newISOFound) {
+void processOperationForSelectedIsoFiles(const std::string& inputString,bool isMount, bool isUnmount, bool write, bool isFiltered, const std::vector<std::string>& filteredFiles, std::vector<std::string>& isoDirs, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<std::string>& skippedMessages, bool verbose, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool promptFlag, int& maxDepth, bool& filterHistory, std::atomic<bool>& newISOFound) {
     
     clearScrollBuffer();
     // Default flags
@@ -259,8 +259,6 @@ void processOperationForSelectedIsoFiles(const std::string& inputString,bool isM
         writeToUsb(inputString, activeList, uniqueErrorMessages);
     } else {
         isAtISOList.store(false);
-        // Disable filter history
-        bool filterHistory = false;
         // Use const reference instead of copying
         const std::vector<std::string>& activeList = isFiltered ? filteredFiles : globalIsoFileList;
          processOperationInput(inputString, activeList, operation, operationFiles, operationFails, uniqueErrorMessages, promptFlag, maxDepth, umountMvRmBreak, filterHistory, verbose, newISOFound);
