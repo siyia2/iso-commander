@@ -184,3 +184,36 @@ void saveHistory(bool& historyPattern) {
     flock(fd, LOCK_UN);
     close(fd);
 }
+
+
+// Function to clear path and filter history
+void clearHistory(const std::string& inputSearch) {
+	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+	disable_ctrl_d();
+    const std::string basePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/";
+    std::string filePath;
+    std::string historyType;
+
+    if (inputSearch == "!clr_paths") {
+        filePath = basePath + "iso_commander_history_cache.txt";
+        historyType = "Path";
+    } else if (inputSearch == "!clr_filter") {
+        filePath = basePath + "iso_commander_filter_cache.txt";
+        historyType = "Filter";
+    } else {
+        std::cerr << "\n\001\033[1;91mInvalid command: \001\033[1;93m'" 
+                  << inputSearch << "'\001\033[1;91m." << std::endl;
+        return;
+    }
+
+    if (std::remove(filePath.c_str()) != 0) {
+        std::cerr << "\n\001\033[1;91mError clearing " << historyType << " history: \001\033[1;93m'" 
+                  << filePath << "'\001\033[1;91m. File missing or inaccessible." << std::endl;
+    } else {
+        std::cout << "\n\001\033[1;92m" << historyType << " history cleared successfully." << std::endl;
+        clear_history();
+    }
+
+    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+}

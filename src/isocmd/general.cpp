@@ -82,8 +82,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
             removeNonExistentPathsFromCache();
         }
         
-        // Load files based on operation type:
-        // For non-umount, work with globalIsoFileList exclusively.
+        // Load files based on operation type
         if (!isUnmount) {
             if (needsClrScrn) {
                 if (!clearAndLoadFiles(filteredFiles, isFiltered, listSubtype, umountMvRmBreak))
@@ -91,18 +90,17 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
                 std::cout << "\n\n";
             }
         } else {
-            // For umount, load and display into isoDirs.
+            // For umount, load and display into isoDirs
             if (needsClrScrn) {
                 if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak))
                     break;
-                // If filtered, update isoDirs accordingly.
                 std::cout << "\n\n";
             }
         }
         
         if (updateHasRun.load() && !isUnmount && !globalIsoFileList.empty()) {
             std::thread(refreshListAfterAutoUpdate, 1, std::ref(isAtISOList), 
-                        std::ref(isImportRunning), std::ref(updateHasRun),  std::ref(umountMvRmBreak),
+                        std::ref(isImportRunning), std::ref(updateHasRun), std::ref(umountMvRmBreak),
                         std::ref(filteredFiles), std::ref(isFiltered), std::ref(listSubtype), std::ref(newISOFound)).detach();
         }
         
@@ -121,156 +119,185 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
 
         std::string inputString(input.get());
         
-        // Help and toggle full list commands
-        if (inputString == "?") {
-            isAtISOList.store(false);
-            helpSelections();
-            needsClrScrn = true;
-            continue;
+        // Process user input using the second function
+        if (!processUserInputForIsoSelection(inputString, isMount, isUnmount, write, isFiltered, 
+                 filteredFiles, isoDirs, operationFiles, operationFails, uniqueErrorMessages, 
+                 skippedMessages, verbose, needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
+                 promptFlag, maxDepth, historyPattern, newISOFound)) {
+            return; // Exit if the processing function indicates we should return
         }
+    }
+}
 
-        if (inputString == "~") {
-            if (isMount) displayConfig::toggleFullListMount = !displayConfig::toggleFullListMount;
-            else if (isUnmount) displayConfig::toggleFullListUmount = !displayConfig::toggleFullListUmount;
-            else if (write) displayConfig::toggleFullListWrite = !displayConfig::toggleFullListWrite;
-            else displayConfig::toggleFullListCpMvRm = !displayConfig::toggleFullListCpMvRm;
-            continue;
+// Function to process user input for ISO file selection
+bool processUserInputForIsoSelection(const std::string& inputString, bool isMount, bool isUnmount, bool write, bool& isFiltered, std::vector<std::string>& filteredFiles, std::vector<std::string>& isoDirs, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages,std::unordered_set<std::string>& skippedMessages, bool& verbose, bool& needsClrScrn,const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool& promptFlag, int& maxDepth, bool& historyPattern, std::atomic<bool>& newISOFound) {
+    // Help and toggle full list commands
+    if (inputString == "?") {
+        isAtISOList.store(false);
+        helpSelections();
+        needsClrScrn = true;
+        return true;
+    }
+
+    if (inputString == "~") {
+        if (isMount) displayConfig::toggleFullListMount = !displayConfig::toggleFullListMount;
+        else if (isUnmount) displayConfig::toggleFullListUmount = !displayConfig::toggleFullListUmount;
+        else if (write) displayConfig::toggleFullListWrite = !displayConfig::toggleFullListWrite;
+        else displayConfig::toggleFullListCpMvRm = !displayConfig::toggleFullListCpMvRm;
+        return true;
+    }
+
+    // Handle empty input or return
+    if (inputString.empty()) {
+        if (isFiltered) {
+            // Use swap-and-clear idiom for more efficient vector clearing
+            std::vector<std::string>().swap(filteredFiles);
+            isFiltered = false;
+            return true;
+        } else {
+            return false; // Signal to the main function to return
         }
+    }
 
-        // Handle empty input or return
-        if (inputString.empty()) {
-            if (isFiltered) {
-                // Use swap-and-clear idiom for more efficient vector clearing
-                std::vector<std::string>().swap(filteredFiles);
-                isFiltered = false;
-                continue;
-            } else {
-                return;
-            }
-        }
+    // Filtering logic with FilterTerms prompt
+    if (inputString == "/") {
+        handleFilterPrompt(isFiltered, filteredFiles, isoDirs, isUnmount, historyPattern, 
+                          operationFiles, skippedMessages, operationFails, uniqueErrorMessages, 
+                          verbose, needsClrScrn, operation);
+        return true;
+    }
 
-        // Filtering logic with FilterTerms prompt
-        if (inputString == "/") {
-            while (true) {
-                verbose = false;
-                resetVerboseSets(operationFiles, skippedMessages, operationFails, uniqueErrorMessages);
-
-                historyPattern = true;
-                loadHistory(historyPattern);
-                // Move the cursor up 1 line and clear it.
-                std::cout << "\033[1A\033[K";
-
-                // Generate filter prompt
-                std::string filterPrompt = "\001\033[1;38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + 
-                                           "\001\033[1;94m\002, or ↵ to return: \001\033[0;1m\002";
-                std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
-
-                if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
-                    historyPattern = false;
-                    clear_history();
-                    needsClrScrn = isFiltered ? true : false;
-                    break;
-                }
-
-                std::string inputSearch(searchQuery.get());
-                
-                // Use references to avoid unnecessary copies
-                const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
-                
-                // Allocate the result vector with a reasonable initial capacity to avoid reallocations
-                std::vector<std::string> newFilteredFiles;
-                newFilteredFiles.reserve(std::min(sourceList.size(), sourceList.size() / 2 + 1));
-                
-                // Perform filtering
-				for (const auto& file : sourceList) {
-					if (file.find(inputSearch) != std::string::npos) {
-						newFilteredFiles.push_back(file);  // Only copy matching files
-					}
-				}
-
-                
-                if (!newFilteredFiles.empty()) {
-                    sortFilesCaseInsensitive(newFilteredFiles);
-                    
-                    // Check if the filter is meaningful
-                    bool filterUnchanged = newFilteredFiles.size() == sourceList.size();
-                    
-                    if (!filterUnchanged) {
-                        add_history(searchQuery.get());
-                        saveHistory(historyPattern);
-                        needsClrScrn = true;
-                        // Move instead of copy filtered results
-                        filteredFiles = std::move(newFilteredFiles);
-                        isFiltered = true;
-                        historyPattern = false;
-                        clear_history();
-                        break;
-                    }
-                }
-                // Explicitly clear vector if not used
-                std::vector<std::string>().swap(newFilteredFiles);
-                historyPattern = false;
-                clear_history();
-            }
-            continue;
-        }
-
-        // Quick filter when starting with '/'
-        if (inputString[0] == '/' && inputString.length() > 1) {
-            std::string searchTerm = inputString.substr(1);
-            
-            // Use references to avoid unnecessary copies
-            const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
-            
-            // Allocate result vector with a reasonable capacity
-            std::vector<std::string> newFilteredFiles;
-            newFilteredFiles.reserve(std::min(sourceList.size(), sourceList.size() / 2 + 1));
-            
-            // Convert search term to lowercase once
-            std::string lowerSearchTerm = searchTerm;
-            std::transform(lowerSearchTerm.begin(), lowerSearchTerm.end(), lowerSearchTerm.begin(), 
+    // Quick filter when starting with '/'
+    if (inputString[0] == '/' && inputString.length() > 1) {
+        std::string searchTerm = inputString.substr(1);
+        
+        // Use references to avoid unnecessary copies
+        const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
+        
+        // Allocate result vector with a reasonable capacity
+        std::vector<std::string> newFilteredFiles;
+        newFilteredFiles.reserve(std::min(sourceList.size(), sourceList.size() / 2 + 1));
+        
+        // Convert search term to lowercase once
+        std::string lowerSearchTerm = searchTerm;
+        std::transform(lowerSearchTerm.begin(), lowerSearchTerm.end(), lowerSearchTerm.begin(), 
+                       [](unsigned char c) { return std::tolower(c); });
+        
+        // Perform filtering directly
+        for (const auto& file : sourceList) {
+            std::string lowerFile = file;
+            std::transform(lowerFile.begin(), lowerFile.end(), lowerFile.begin(), 
                            [](unsigned char c) { return std::tolower(c); });
             
-            // Perform filtering directly
-            for (const auto& file : sourceList) {
-                std::string lowerFile = file;
-                std::transform(lowerFile.begin(), lowerFile.end(), lowerFile.begin(), 
-                               [](unsigned char c) { return std::tolower(c); });
-                
-                if (lowerFile.find(lowerSearchTerm) != std::string::npos) {
-                    newFilteredFiles.push_back(file);
-                }
+            if (lowerFile.find(lowerSearchTerm) != std::string::npos) {
+                newFilteredFiles.push_back(file);
             }
+        }
+        
+        if (!newFilteredFiles.empty()) {
+            sortFilesCaseInsensitive(newFilteredFiles);
             
-            if (!newFilteredFiles.empty()) {
-                sortFilesCaseInsensitive(newFilteredFiles);
-                
-                // Check if the filter is meaningful
-                bool filterUnchanged = newFilteredFiles.size() == sourceList.size();
-                
-                if (!filterUnchanged) {
-                    historyPattern = true;
-                    loadHistory(historyPattern);
-                    add_history(searchTerm.c_str());
-                    saveHistory(historyPattern);
-                    // Move instead of copy
-                    filteredFiles = std::move(newFilteredFiles);
-                    isFiltered = true;
-                    needsClrScrn = true;
-                    continue;
-                }
+            // Check if the filter is meaningful
+            bool filterUnchanged = newFilteredFiles.size() == sourceList.size();
+            
+            if (!filterUnchanged) {
+                historyPattern = true;
+                loadHistory(historyPattern);
+                add_history(searchTerm.c_str());
+                saveHistory(historyPattern);
+                // Move instead of copy
+                filteredFiles = std::move(newFilteredFiles);
+                isFiltered = true;
+                needsClrScrn = true;
+                return true;
             }
-            // Explicitly clear if not used
-            std::vector<std::string>().swap(newFilteredFiles);
-            continue;
+        }
+        // Explicitly clear if not used
+        std::vector<std::string>().swap(newFilteredFiles);
+        return true;
+    }
+
+    // Operation processing
+    processOperationForSelectedIsoFiles(inputString, isMount, isUnmount, write, isFiltered, 
+             filteredFiles, isoDirs, operationFiles, 
+             operationFails, uniqueErrorMessages, skippedMessages, verbose,
+             needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
+             promptFlag, maxDepth, historyPattern, newISOFound);
+    
+    return true;
+}
+
+// Helper function to handle the filter prompt functionality for ISO file selection
+void handleFilterPrompt(bool& isFiltered, std::vector<std::string>& filteredFiles, const std::vector<std::string>& isoDirs, bool isUnmount, bool& historyPattern,std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& skippedMessages,std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, bool& verbose, bool& needsClrScrn, const std::string& operation) {
+    
+    while (true) {
+        verbose = false;
+        resetVerboseSets(operationFiles, skippedMessages, operationFails, uniqueErrorMessages);
+
+        historyPattern = true;
+        loadHistory(historyPattern);
+        // Move the cursor up 1 line and clear it.
+        std::cout << "\033[1A\033[K";
+
+        // Determine operation color
+        std::string operationColor = operation == "rm" ? "\033[1;91m" :
+                                    operation == "cp" ? "\033[1;92m" : 
+                                    operation == "mv" ? "\033[1;93m" :
+                                    operation == "mount" ? "\033[1;92m" : 
+                                    operation == "write" ? "\033[1;93m" :
+                                    operation == "umount" ? "\033[1;93m" : "\033[1;95m";
+
+        // Generate filter prompt
+        std::string filterPrompt = "\001\033[1;38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + 
+                                  "\001\033[1;94m\002, or ↵ to return: \001\033[0;1m\002";
+        std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
+
+        if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
+            historyPattern = false;
+            clear_history();
+            needsClrScrn = isFiltered ? true : false;
+            break;
         }
 
-        // Operation processing
-        processOperationForSelectedIsoFiles(inputString, isMount, isUnmount, write, isFiltered, 
-                 filteredFiles, isoDirs, operationFiles, 
-                 operationFails, uniqueErrorMessages, skippedMessages, verbose,
-                 needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
-                 promptFlag, maxDepth, historyPattern, newISOFound);
+        std::string inputSearch(searchQuery.get());
+        
+        // Use references to avoid unnecessary copies
+        const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
+        
+        // Allocate the result vector with a reasonable initial capacity to avoid reallocations
+        std::vector<std::string> newFilteredFiles;
+        newFilteredFiles.reserve(std::min(sourceList.size(), sourceList.size() / 2 + 1));
+        
+        // Perform filtering
+        for (const auto& file : sourceList) {
+            if (file.find(inputSearch) != std::string::npos) {
+                newFilteredFiles.push_back(file);  // Only copy matching files
+            }
+        }
+
+        
+        if (!newFilteredFiles.empty()) {
+            sortFilesCaseInsensitive(newFilteredFiles);
+            
+            // Check if the filter is meaningful
+            bool filterUnchanged = newFilteredFiles.size() == sourceList.size();
+            
+            if (!filterUnchanged) {
+                add_history(searchQuery.get());
+                saveHistory(historyPattern);
+                needsClrScrn = true;
+                // Move instead of copy filtered results
+                filteredFiles = std::move(newFilteredFiles);
+                isFiltered = true;
+                historyPattern = false;
+                clear_history();
+                break;
+            }
+        }
+        // Explicitly clear vector if not used
+        std::vector<std::string>().swap(newFilteredFiles);
+        historyPattern = false;
+        clear_history();
     }
 }
 
@@ -486,101 +513,94 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         totalBytesFormatted = formatSize(static_cast<double>(totalBytes));  // Format total bytes
     }
 
-    try {
-        // Main loop to update progress bar
-        while (!isComplete->load(std::memory_order_acquire) || !enterPressed) {
-            char ch;
-            while (read(STDIN_FILENO, &ch, 1) > 0);  // Non-blocking read to check for input
+    // Main loop to update progress bar
+    while (!isComplete->load(std::memory_order_acquire) || !enterPressed) {
+        char ch;
+        while (read(STDIN_FILENO, &ch, 1) > 0);  // Non-blocking read to check for input
 
-            // Load current progress information
-            const size_t completedTasksValue = completedTasks->load(std::memory_order_acquire);
-            const size_t failedTasksValue = failedTasks->load(std::memory_order_acquire);
-            const size_t completedBytesValue = bytesTrackingEnabled ? completedBytes->load(std::memory_order_acquire) : 0;
+        // Load current progress information
+        const size_t completedTasksValue = completedTasks->load(std::memory_order_acquire);
+        const size_t failedTasksValue = failedTasks->load(std::memory_order_acquire);
+        const size_t completedBytesValue = bytesTrackingEnabled ? completedBytes->load(std::memory_order_acquire) : 0;
 
-            // Check if all tasks are processed
-            const bool allTasksProcessed = (completedTasksValue + failedTasksValue) >= totalTasks;
-            if (allTasksProcessed) {
-                isComplete->store(true, std::memory_order_release);  // Mark as complete if all tasks are done
-            }
-
-            // Calculate task and byte progress
-            double tasksProgress = static_cast<double>(completedTasksValue + failedTasksValue) / totalTasks;
-            double overallProgress = tasksProgress;
-            if (bytesTrackingEnabled) {
-                double bytesProgress = static_cast<double>(completedBytesValue) / totalBytes;
-                overallProgress = std::max(bytesProgress, tasksProgress);  // Use the maximum of task and byte progress
-            }
-
-            // Calculate the position of the progress bar
-            int progressPos = static_cast<int>(barWidth * overallProgress);
-
-            // Calculate elapsed time and speed
-            auto currentTime = std::chrono::high_resolution_clock::now();
-            auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime);
-            double elapsedSeconds = elapsedTime.count() / 1000.0;
-            double speed = bytesTrackingEnabled 
-                ? (elapsedSeconds > 0.0 ? (static_cast<double>(completedBytesValue) / elapsedSeconds) : 0.0)
-                : 0.0;
-
-            // Construct the progress bar display
-            std::stringstream ss;
-            ss << "\r[";  // Start the progress bar
-            for (int i = 0; i < barWidth; ++i) {
-                ss << (i < progressPos ? "=" : (i == progressPos ? ">" : " "));  // Fill the bar based on progress
-            }
-            ss << "] " << std::fixed << std::setprecision(0) << (overallProgress * 100.0)
-               << "% (" << completedTasksValue << "/" << totalTasks << ")";
-
-            // Add byte and speed information if enabled
-            if (bytesTrackingEnabled) {
-                ss << " (" << formatSize(static_cast<double>(completedBytesValue)) << "/" << totalBytesFormatted << ") "
-                   << formatSize(speed) << "/s";
-            }
-
-            // Add elapsed time
-            ss << " Time Elapsed: " << std::fixed << std::setprecision(1) << elapsedSeconds << "s\033[K";
-            std::cout << ss.str() << std::flush;
-
-            // If processing is complete, show a final message
-            if (isComplete->load(std::memory_order_acquire)) {
-                std::cout << "\r[==================================================>] 100% ("
-                          << completedTasks->load() << "/" << totalTasks << ") "
-                          << (bytesTrackingEnabled ? "(" + formatSize(static_cast<double>(completedBytes->load())) + "/" + totalBytesFormatted + ") " : "")
-                          << "Time Elapsed: " << std::fixed << std::setprecision(1) << (elapsedSeconds) << "s\033[K";
-            }
-
-            // Wait for user input (if needed)
-            if (isComplete->load(std::memory_order_acquire) && !enterPressed) {
-                // Disable certain key bindings temporarily
-                rl_bind_key('\f', prevent_readline_keybindings);
-                rl_bind_key('\t', prevent_readline_keybindings);
-                rl_bind_keyseq("\033[A", prevent_readline_keybindings);
-                rl_bind_keyseq("\033[B", prevent_readline_keybindings);
-
-                enterPressed = true;
-                std::cout << "\n\n";
-                tcsetattr(STDIN_FILENO, TCSANOW, &oldt);  // Restore terminal settings
-                fcntl(STDIN_FILENO, F_SETFL, oldf);  // Restore file descriptor flags
-
-                const std::string prompt = "\033[1;94mDisplay verbose output? (y/n):\033[0;1m ";
-                std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);  // Prompt for verbose output
-
-                if (input.get()) {
-                    *verbose = (std::string(input.get()) == "y" || std::string(input.get()) == "Y");
-                }
-
-                // Restore key bindings after the prompt
-                rl_bind_keyseq("\033[A", rl_get_previous_history);
-                rl_bind_keyseq("\033[B", rl_get_next_history);
-            } else {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));  // Sleep for a short duration before checking progress again
-            }
+        // Check if all tasks are processed
+        const bool allTasksProcessed = (completedTasksValue + failedTasksValue) >= totalTasks;
+        if (allTasksProcessed) {
+            isComplete->store(true, std::memory_order_release);  // Mark as complete if all tasks are done
         }
-    } catch (...) {
-        // Ensure terminal settings are restored in case of an exception
-        tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-        fcntl(STDIN_FILENO, F_SETFL, oldf);
-        throw;  // Rethrow the exception
+
+        // Calculate task and byte progress
+        double tasksProgress = static_cast<double>(completedTasksValue + failedTasksValue) / totalTasks;
+        double overallProgress = tasksProgress;
+        if (bytesTrackingEnabled) {
+            double bytesProgress = static_cast<double>(completedBytesValue) / totalBytes;
+            overallProgress = std::max(bytesProgress, tasksProgress);  // Use the maximum of task and byte progress
+        }
+
+        // Calculate the position of the progress bar
+        int progressPos = static_cast<int>(barWidth * overallProgress);
+
+        // Calculate elapsed time and speed
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime);
+        double elapsedSeconds = elapsedTime.count() / 1000.0;
+        double speed = bytesTrackingEnabled 
+            ? (elapsedSeconds > 0.0 ? (static_cast<double>(completedBytesValue) / elapsedSeconds) : 0.0)
+            : 0.0;
+
+        // Construct the progress bar display
+        std::stringstream ss;
+        ss << "\r[";  // Start the progress bar
+        for (int i = 0; i < barWidth; ++i) {
+            ss << (i < progressPos ? "=" : (i == progressPos ? ">" : " "));  // Fill the bar based on progress
+        }
+        ss << "] " << std::fixed << std::setprecision(0) << (overallProgress * 100.0)
+            << "% (" << completedTasksValue << "/" << totalTasks << ")";
+
+        // Add byte and speed information if enabled
+        if (bytesTrackingEnabled) {
+            ss << " (" << formatSize(static_cast<double>(completedBytesValue)) << "/" << totalBytesFormatted << ") "
+                << formatSize(speed) << "/s";
+        }
+
+        // Add elapsed time
+        ss << " Time Elapsed: " << std::fixed << std::setprecision(1) << elapsedSeconds << "s\033[K";
+        std::cout << ss.str() << std::flush;
+
+        // If processing is complete, show a final message
+        if (isComplete->load(std::memory_order_acquire)) {
+            std::cout << "\r[==================================================>] 100% ("
+                      << completedTasks->load() << "/" << totalTasks << ") "
+                      << (bytesTrackingEnabled ? "(" + formatSize(static_cast<double>(completedBytes->load())) + "/" + totalBytesFormatted + ") " : "")
+                      << "Time Elapsed: " << std::fixed << std::setprecision(1) << (elapsedSeconds) << "s\033[K";
+        }
+
+        // Wait for user input (if needed)
+        if (isComplete->load(std::memory_order_acquire) && !enterPressed) {
+            // Disable certain key bindings temporarily
+            rl_bind_key('\f', prevent_readline_keybindings);
+            rl_bind_key('\t', prevent_readline_keybindings);
+            rl_bind_keyseq("\033[A", prevent_readline_keybindings);
+            rl_bind_keyseq("\033[B", prevent_readline_keybindings);
+
+            enterPressed = true;
+            std::cout << "\n\n";
+            tcsetattr(STDIN_FILENO, TCSANOW, &oldt);  // Restore terminal settings
+            fcntl(STDIN_FILENO, F_SETFL, oldf);  // Restore file descriptor flags
+
+            const std::string prompt = "\033[1;94mDisplay verbose output? (y/n):\033[0;1m ";
+            std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);  // Prompt for verbose output
+
+            if (input.get()) {
+                *verbose = (std::string(input.get()) == "y" || std::string(input.get()) == "Y");
+            }
+
+            // Restore key bindings after the prompt
+            rl_bind_keyseq("\033[A", rl_get_previous_history);
+            rl_bind_keyseq("\033[B", rl_get_next_history);
+        } else {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));  // Sleep for a short duration before checking progress again
+        }
     }
 
     std::cout << std::endl;
@@ -740,7 +760,7 @@ bool isValidInput(const std::string& input) {
 }
 
 
-// Function to write default display modes toconfig file
+// Function to write default display modes to config file
 void setDisplayMode(const std::string& inputSearch) {
 	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
 	disable_ctrl_d();
@@ -861,39 +881,6 @@ void setDisplayMode(const std::string& inputSearch) {
     } else {
         std::cerr << "\n\033[1;91mFailed to write to config file: \033[1;93m'" 
                   << configPath << "'\033[1;91m.\033[0;1m\n";
-    }
-
-    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-}
-
-
-// Function to clear path and filter history
-void clearHistory(const std::string& inputSearch) {
-	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
-	disable_ctrl_d();
-    const std::string basePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/";
-    std::string filePath;
-    std::string historyType;
-
-    if (inputSearch == "!clr_paths") {
-        filePath = basePath + "iso_commander_history_cache.txt";
-        historyType = "Path";
-    } else if (inputSearch == "!clr_filter") {
-        filePath = basePath + "iso_commander_filter_cache.txt";
-        historyType = "Filter";
-    } else {
-        std::cerr << "\n\001\033[1;91mInvalid command: \001\033[1;93m'" 
-                  << inputSearch << "'\001\033[1;91m." << std::endl;
-        return;
-    }
-
-    if (std::remove(filePath.c_str()) != 0) {
-        std::cerr << "\n\001\033[1;91mError clearing " << historyType << " history: \001\033[1;93m'" 
-                  << filePath << "'\001\033[1;91m. File missing or inaccessible." << std::endl;
-    } else {
-        std::cout << "\n\001\033[1;92m" << historyType << " history cleared successfully." << std::endl;
-        clear_history();
     }
 
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
