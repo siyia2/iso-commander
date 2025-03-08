@@ -277,10 +277,6 @@ std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>&
             entries.push_back(oss.str());
         }
     }
-
-    // Sort the entries using the natural comparison
-    sortFilesCaseInsensitive(entries);
-
     return entries;
 }
 
