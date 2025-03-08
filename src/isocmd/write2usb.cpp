@@ -299,16 +299,10 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<s
             std::cerr << "  • " << err << "\033[0;1m\n";
         }
         
-        if (!permissions) {
-            signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
-            disable_ctrl_d();
-            std::cout << "\n\033[1;92m↵ to try again...\033[0;1m";
-        } else {
-            signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
-            disable_ctrl_d();
-            std::cout << "\n\033[1;92m↵ to continue...\033[0;1m";
-            permissions = false;
-        }
+        signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+		disable_ctrl_d();
+		std::cout << "\n\033[1;92m↵ to " << (!permissions ? "try again..." : "continue...") << "\033[0;1m";
+		if (permissions) permissions = false;
         
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         
@@ -381,10 +375,10 @@ std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::strin
 
 
 // Function to handle device mapping collection and validation
-std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::vector<IsoInfo>& selectedIsos,std::unordered_set<std::string>& uniqueErrorMessages) {
+std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::vector<IsoInfo>& selectedIsos, std::unordered_set<std::string>& uniqueErrorMessages) {
     while (true) {
-		signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
-		disable_ctrl_d();
+        signal(SIGINT, SIG_IGN);  // Ignore Ctrl+C
+        disable_ctrl_d();
         clearScrollBuffer();
 
         // Display user input errors at top
@@ -395,66 +389,67 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             }
             uniqueErrorMessages.clear();
         }
-        // Build device prompt
-		std::ostringstream devicePromptStream;
-		devicePromptStream << "\n\033[0;1m Selected \033[1;92mISO\033[0;1m:\n\n";
 
-		for (size_t i = 0; i < selectedIsos.size(); ++i) {
-			auto [shortDir, filename] = extractDirectoryAndFilename(selectedIsos[i].path, "write");
-			devicePromptStream << "  \033[1;93m" << (i+1) << ">\033[0;1m " 
-							<< shortDir << "/\033[1;95m" << filename 
-							<< "\033[0;1m (\033[1;35m" << selectedIsos[i].sizeStr 
-							<< "\033[0;1m)\n";
-		}
+        // Build device prompt with selected ISOs
+        std::ostringstream devicePromptStream;
+        devicePromptStream << "\n\033[0;1m Selected \033[1;92mISO\033[0;1m:\n\n";
 
-		devicePromptStream << "\n\033[0;1mRemovable USB Devices:\033[0;1m\n\n";
-		std::vector<std::string> usbDevices = getRemovableDevices();
-		
-		sortFilesCaseInsensitive(usbDevices);
+        for (size_t i = 0; i < selectedIsos.size(); ++i) {
+            auto [shortDir, filename] = extractDirectoryAndFilename(selectedIsos[i].path, "write");
+            devicePromptStream << "  \033[1;93m" << (i+1) << ">\033[0;1m " 
+                            << shortDir << "/\033[1;95m" << filename 
+                            << "\033[0;1m (\033[1;35m" << selectedIsos[i].sizeStr 
+                            << "\033[0;1m)\n";
+        }
 
-		if (usbDevices.empty()) {
-			devicePromptStream << "  \033[1;91mNo removable USB devices detected!\033[0;1m\n";
-		} else {
-			for (const auto& device : usbDevices) {
-				try {
-					std::string driveName = getDriveName(device);
-					uint64_t deviceSize = getBlockDeviceSize(device);
-					std::string sizeStr = formatFileSize(deviceSize);
-					bool mounted = isDeviceMounted(device);
-            
-					devicePromptStream << "  \033[1;93m" << device 
-									<< "\033[0;1m <" << driveName 
-									<< "> (\033[1;35m" << sizeStr 
-									<< "\033[0;1m)"
-									<< (mounted ? " \033[1;91m(mounted)\033[0;1m" : "") 
-									<< "\n";
-				} catch (...) {
-					devicePromptStream << "  \033[1;91m" << device << " (error)\033[0;1m\n";
-				}
-			}
-		}
+        // Add USB devices to prompt
+        devicePromptStream << "\n\033[0;1mRemovable USB Devices:\033[0;1m\n\n";
+        std::vector<std::string> usbDevices = getRemovableDevices();
+        sortFilesCaseInsensitive(usbDevices);
 
-		std::string devicePrompt = devicePromptStream.str();
+        if (usbDevices.empty()) {
+            devicePromptStream << "  \033[1;91mNo removable USB devices detected!\033[0;1m\n";
+        } else {
+            for (const auto& device : usbDevices) {
+                try {
+                    std::string driveName = getDriveName(device);
+                    uint64_t deviceSize = getBlockDeviceSize(device);
+                    std::string sizeStr = formatFileSize(deviceSize);
+                    bool mounted = isDeviceMounted(device);
+                
+                    devicePromptStream << "  \033[1;93m" << device 
+                                    << "\033[0;1m <" << driveName 
+                                    << "> (\033[1;35m" << sizeStr 
+                                    << "\033[0;1m)"
+                                    << (mounted ? " \033[1;91m(mounted)\033[0;1m" : "") 
+                                    << "\n";
+                } catch (...) {
+                    devicePromptStream << "  \033[1;91m" << device << " (error)\033[0;1m\n";
+                }
+            }
+        }
+
+        // Finalize prompt with usage instructions
+        devicePromptStream << "\n\001\033[1;92m\002Mappings\001\033[1;94m\002 ↵ as \001\033[1;93m\002INDEX>DEVICE\001\033[1;94m\002, ? ↵ for help, ↵ to return:\001\033[0;1m\002 ";
+        std::string devicePrompt = devicePromptStream.str();
         
-        // Restore readline autocomplete and screen clear bindings
+        // Restore readline functionality
         rl_bind_key('\f', clear_screen_and_buffer);
         rl_bind_key('\t', rl_complete);
-        
-        rl_bind_keyseq("\033[A", rl_get_previous_history); // Restore Up arrow
-		rl_bind_keyseq("\033[B", rl_get_next_history);     // Restore Down arrow
-
-        devicePrompt += "\n\001\033[1;92m\002Mappings\001\033[1;94m\002 ↵ as \001\033[1;93m\002INDEX>DEVICE\001\033[1;94m\002, ? ↵ for help, ↵ to return:\001\033[0;1m\002 ";
+        rl_bind_keyseq("\033[A", rl_get_previous_history);
+        rl_bind_keyseq("\033[B", rl_get_next_history);
 
         // Get user input
         std::unique_ptr<char, decltype(&std::free)> deviceInput(
             readline(devicePrompt.c_str()), &std::free
         );
         
-        // Check for EOF (Ctrl+D) or NULL input before processing
+        // Handle empty input
         if (!deviceInput || deviceInput.get()[0] == '\0') {
             return {};
         }
         
+        // Process input
         std::string mainInputString(deviceInput.get());
         if (mainInputString == "?") {
             helpMappings();
@@ -463,78 +458,70 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         
         if (deviceInput && *deviceInput) add_history(deviceInput.get());
 
-        // Parse device mappings
-        std::vector<std::pair<size_t, std::string>> deviceMap;
-        std::unordered_set<std::string> usedDevices;
+        // Parse mappings
         std::vector<std::string> errors;
-        std::istringstream pairStream(deviceInput.get());
-        std::string pair;
+        std::vector<std::string> isoFilenames;
+        for (const auto& iso : selectedIsos) {
+            isoFilenames.push_back(iso.path);
+        }
+        
+        auto deviceMap = parseDeviceMappings(deviceInput.get(), isoFilenames, errors);
 
-        // Create a vector of strings from your IsoInfo objects
-		std::vector<std::string> isoFilenames;
-		for (const auto& iso : selectedIsos) {
-			isoFilenames.push_back(iso.path);  // Or whatever member contains the filename
-		}
-
-		// Then call the function with the string vector
-		deviceMap = parseDeviceMappings(deviceInput.get(), isoFilenames, errors);
-
+        // Handle parsing errors
         if (!errors.empty()) {
             std::cerr << "\n\033[1;91mErrors:\033[0;1m\n";
             for (const auto& err : errors) {
                 std::cerr << "  • " << err << "\n";
             }
-            signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
-			disable_ctrl_d();
+            
             std::cout << "\n\033[1;92m↵ to try again...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             continue;
         }
 
-        // Validate devices
-        std::vector<std::pair<IsoInfo, std::string>> validPairs;
-        std::vector<std::string> validationErrors;
+        // Validate device mappings
         bool permissions = false;
-		
-		
-		validPairs = validateDevices(deviceMap, selectedIsos, permissions);
-		if (validPairs.empty()) {
-			continue;
-		} 
+        auto validPairs = validateDevices(deviceMap, selectedIsos, permissions);
+        if (validPairs.empty()) {
+            continue;
+        }
 
-        // Final confirmation
+        // Final confirmation dialog
         std::cout << "\n\033[1;93mWARNING: This will \033[1;91m*ERASE ALL DATA*\033[1;93m on:\033[0;1m\n\n";
         for (const auto& [iso, device] : validPairs) {
-			// Get device size before other checks
             uint64_t deviceSize = getBlockDeviceSize(device);
             std::string deviceSizeStr = formatFileSize(deviceSize);
             std::string driveName = getDriveName(device);
             
-            std::cout << "  {\033[1;93m" << device << " \033[0;1m<" << driveName << "> (\033[1;35m" << deviceSizeStr << "\033[0;1m)} ← \033[1;92m" 
+            std::cout << "  {\033[1;93m" << device << " \033[0;1m<" << driveName << "> (\033[1;35m" 
+                      << deviceSizeStr << "\033[0;1m)} ← \033[1;92m" 
                       << iso.filename << "\033[0;1m\n";
         }
         
+        // Disable readline bindings for confirmation
         rl_bind_key('\f', prevent_readline_keybindings);
-		rl_bind_key('\t', prevent_readline_keybindings);
-		// Disable up/down arrow keys for history browsing
-		rl_bind_keyseq("\033[A", prevent_readline_keybindings); // Up arrow
-		rl_bind_keyseq("\033[B", prevent_readline_keybindings); // Down arrow
+        rl_bind_key('\t', prevent_readline_keybindings);
+        rl_bind_keyseq("\033[A", prevent_readline_keybindings);
+        rl_bind_keyseq("\033[B", prevent_readline_keybindings);
 
+        // Get confirmation
         std::unique_ptr<char, decltype(&std::free)> confirmation(
             readline("\n\001\033[1;94m\002Proceed? (y/n): \001\033[0;1m\002"), &std::free
         );
 
+        // Process confirmation
         if (confirmation && (confirmation.get()[0] == 'y' || confirmation.get()[0] == 'Y')) {
-			rl_bind_keyseq("\033[A", rl_get_previous_history);
+            rl_bind_keyseq("\033[A", rl_get_previous_history);
             rl_bind_keyseq("\033[B", rl_get_next_history);
             setupSignalHandlerCancellations();
-			g_operationCancelled.store(false);
+            g_operationCancelled.store(false);
             return validPairs;
         }
         
+        // Restore bindings if not proceeding
         rl_bind_keyseq("\033[A", rl_get_previous_history);
         rl_bind_keyseq("\033[B", rl_get_next_history);
-		
+        
         std::cout << "\n\033[1;93mWrite operation aborted by user.\033[0;1m\n";
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
