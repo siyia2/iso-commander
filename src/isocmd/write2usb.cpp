@@ -378,14 +378,14 @@ std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::strin
 }
 
 
-// Struct to hold completion data
+// Struct to hold completion data for custom readline
 static struct CompleterData {
     const std::vector<IsoInfo>* sortedIsos = nullptr;
     const std::vector<std::string>* usbDevices = nullptr;
 } completerData;
 
 
-// Custopm readline completion for write2usb generator function
+// Custom readline completion for write2usb function
 char** completion_cb(const char* text, int start, int end) {
     rl_attempted_completion_over = 1; // Tell Readline we'll handle completion
 
