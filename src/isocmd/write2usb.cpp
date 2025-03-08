@@ -394,41 +394,69 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             uniqueErrorMessages.clear();
         }
 
-        // Build device prompt with selected ISOs
+        // Sort ISOs by size (descending)
+        std::vector<IsoInfo> sortedIsos = selectedIsos;
+        std::sort(sortedIsos.begin(), sortedIsos.end(), [](const IsoInfo& a, const IsoInfo& b) {
+            return a.size > b.size; // Compare numeric sizes directly
+        });
+
+        // Build device prompt with sorted ISOs
         std::ostringstream devicePromptStream;
         devicePromptStream << "\n\033[0;1m Selected \033[1;92mISO\033[0;1m:\n\n";
-
-        for (size_t i = 0; i < selectedIsos.size(); ++i) {
-            auto [shortDir, filename] = extractDirectoryAndFilename(selectedIsos[i].path, "write");
+        for (size_t i = 0; i < sortedIsos.size(); ++i) {
+            auto [shortDir, filename] = extractDirectoryAndFilename(sortedIsos[i].path, "write");
             devicePromptStream << "  \033[1;93m" << (i+1) << ">\033[0;1m " 
                             << shortDir << "/\033[1;95m" << filename 
-                            << "\033[0;1m (\033[1;35m" << selectedIsos[i].sizeStr 
+                            << "\033[0;1m (\033[1;35m" << sortedIsos[i].sizeStr 
                             << "\033[0;1m)\n";
         }
 
-        // Add USB devices to prompt
+        // Process and sort USB devices by capacity
         devicePromptStream << "\n\033[0;1mRemovable USB Devices:\033[0;1m\n\n";
         std::vector<std::string> usbDevices = getRemovableDevices();
-        sortFilesCaseInsensitive(usbDevices);
+        
+        // Struct to hold device information
+        struct DeviceInfo {
+            std::string path;
+            uint64_t size;
+            std::string driveName;
+            std::string sizeStr;
+            bool mounted;
+            bool error;
+        };
 
-        if (usbDevices.empty()) {
+        std::vector<DeviceInfo> deviceInfos;
+        for (const auto& device : usbDevices) {
+            try {
+                std::string driveName = getDriveName(device);
+                uint64_t deviceSize = getBlockDeviceSize(device);
+                std::string sizeStr = formatFileSize(deviceSize);
+                bool mounted = isDeviceMounted(device);
+                deviceInfos.push_back({device, deviceSize, driveName, sizeStr, mounted, false});
+            } catch (...) {
+                deviceInfos.push_back({device, 0, "", "", false, true});
+            }
+        }
+
+        // Sort devices by capacity (descending), errors last
+        std::sort(deviceInfos.begin(), deviceInfos.end(), [](const DeviceInfo& a, const DeviceInfo& b) {
+            if (a.error != b.error) return !a.error; // Non-errors first
+            return a.size > b.size; // Descending order by size
+        });
+
+        if (deviceInfos.empty()) {
             devicePromptStream << "  \033[1;91mNo removable USB devices detected!\033[0;1m\n";
         } else {
-            for (const auto& device : usbDevices) {
-                try {
-                    std::string driveName = getDriveName(device);
-                    uint64_t deviceSize = getBlockDeviceSize(device);
-                    std::string sizeStr = formatFileSize(deviceSize);
-                    bool mounted = isDeviceMounted(device);
-                
-                    devicePromptStream << "  \033[1;93m" << device 
-                                    << "\033[0;1m <" << driveName 
-                                    << "> (\033[1;35m" << sizeStr 
+            for (const auto& dev : deviceInfos) {
+                if (dev.error) {
+                    devicePromptStream << "  \033[1;91m" << dev.path << " (error)\033[0;1m\n";
+                } else {
+                    devicePromptStream << "  \033[1;93m" << dev.path 
+                                    << "\033[0;1m <" << dev.driveName 
+                                    << "> (\033[1;35m" << dev.sizeStr 
                                     << "\033[0;1m)"
-                                    << (mounted ? " \033[1;91m(mounted)\033[0;1m" : "") 
+                                    << (dev.mounted ? " \033[1;91m(mounted)\033[0;1m" : "") 
                                     << "\n";
-                } catch (...) {
-                    devicePromptStream << "  \033[1;91m" << device << " (error)\033[0;1m\n";
                 }
             }
         }
