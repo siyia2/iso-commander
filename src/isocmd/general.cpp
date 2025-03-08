@@ -181,21 +181,13 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
                 std::vector<std::string> newFilteredFiles;
                 newFilteredFiles.reserve(std::min(sourceList.size(), sourceList.size() / 2 + 1));
                 
-                // Convert search term to lowercase once
-                std::string lowerInputSearch = inputSearch;
-                std::transform(lowerInputSearch.begin(), lowerInputSearch.end(), lowerInputSearch.begin(), 
-                               [](unsigned char c) { return std::tolower(c); });
-                
-                // Perform filtering directly
-                for (const auto& file : sourceList) {
-                    std::string lowerFile = file;
-                    std::transform(lowerFile.begin(), lowerFile.end(), lowerFile.begin(), 
-                                   [](unsigned char c) { return std::tolower(c); });
-                    
-                    if (lowerFile.find(lowerInputSearch) != std::string::npos) {
-                        newFilteredFiles.push_back(file);  // Only copy matching files
-                    }
-                }
+                // Perform filtering
+				for (const auto& file : sourceList) {
+					if (file.find(inputSearch) != std::string::npos) {
+						newFilteredFiles.push_back(file);  // Only copy matching files
+					}
+				}
+
                 
                 if (!newFilteredFiles.empty()) {
                     sortFilesCaseInsensitive(newFilteredFiles);
