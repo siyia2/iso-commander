@@ -287,7 +287,6 @@ void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMes
     if ((operation == "mv" || operation == "rm" || operation == "umount") && isFiltered && umountMvRmBreak) {
         historyPattern = false;
         clear_history();
-        isFiltered = false;
         needsClrScrn = true;
     }
 
