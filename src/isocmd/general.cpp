@@ -68,7 +68,51 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
     bool promptFlag = false;
     
     std::string listSubtype = isMount ? "mount" : (write ? "write" : "cp_mv_rm");
+    
+    // Function to perform search and filter operations
+    auto performFilter = [&](const std::vector<std::string>& searchTerms, const std::vector<std::string>& sourceList) -> std::vector<std::string> {
+        std::vector<std::string> newFilteredFiles;
+        newFilteredFiles.reserve(std::min(sourceList.size(), sourceList.size() / 2 + 1));
         
+        for (const auto& file : sourceList) {
+            std::string lowerFile = file;
+            toLowerInPlace(lowerFile);
+            
+            bool matchFound = std::any_of(searchTerms.begin(), searchTerms.end(), 
+                [&lowerFile](const auto& term) { return lowerFile.find(term) != std::string::npos; });
+            
+            if (matchFound) {
+                newFilteredFiles.push_back(file);
+            }
+        }
+        
+        if (!newFilteredFiles.empty()) {
+            sortFilesCaseInsensitive(newFilteredFiles);
+        }
+        
+        return newFilteredFiles;
+    };
+    
+    // Function to parse search terms
+    auto parseSearchTerms = [](const std::string& inputSearch) -> std::vector<std::string> {
+        std::vector<std::string> searchTerms;
+        std::stringstream ss(inputSearch);
+        std::string term;
+        
+        while (std::getline(ss, term, ';')) {
+            term.erase(0, term.find_first_not_of(" \t"));
+            term.erase(term.find_last_not_of(" \t") + 1);
+            
+            if (!term.empty()) {
+                std::transform(term.begin(), term.end(), term.begin(), 
+                             [](unsigned char c) { return std::tolower(c); });
+                searchTerms.push_back(term);
+            }
+        }
+        
+        return searchTerms;
+    };
+    
     while (true) {
         enable_ctrl_d();
         setupSignalHandlerCancellations();
@@ -82,27 +126,21 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
             removeNonExistentPathsFromCache();
         }
         
-        // Load files based on operation type:
-        // For non-umount, work with globalIsoFileList exclusively.
-        if (!isUnmount) {
-            if (needsClrScrn) {
+        // Load files based on operation type
+        if (needsClrScrn) {
+            if (!isUnmount) {
                 if (!clearAndLoadFiles(filteredFiles, isFiltered, listSubtype, umountMvRmBreak))
                     break;
-                std::cout << "\n\n";
-            }
-        } else {
-            // For umount, load and display into isoDirs.
-            if (needsClrScrn) {
+            } else {
                 if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak))
                     break;
-                // If filtered, update isoDirs accordingly.
-                std::cout << "\n\n";
             }
+            std::cout << "\n\n";
         }
         
         if (updateHasRun.load() && !isUnmount && !globalIsoFileList.empty()) {
             std::thread(refreshListAfterAutoUpdate, 1, std::ref(isAtISOList), 
-                        std::ref(isImportRunning), std::ref(updateHasRun),  std::ref(umountMvRmBreak),
+                        std::ref(isImportRunning), std::ref(updateHasRun), std::ref(umountMvRmBreak),
                         std::ref(filteredFiles), std::ref(isFiltered), std::ref(listSubtype), std::ref(newISOFound)).detach();
         }
         
@@ -115,13 +153,12 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
 
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         
-        // Handle input processing
         if (!input.get())
             break;
 
         std::string inputString(input.get());
         
-        // Help and toggle full list commands
+        // Handle special commands
         if (inputString == "?") {
             isAtISOList.store(false);
             helpSelections();
@@ -130,6 +167,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         }
 
         if (inputString == "~") {
+            // Toggle full list display based on operation type
             if (isMount) displayConfig::toggleFullListMount = !displayConfig::toggleFullListMount;
             else if (isUnmount) displayConfig::toggleFullListUmount = !displayConfig::toggleFullListUmount;
             else if (write) displayConfig::toggleFullListWrite = !displayConfig::toggleFullListWrite;
@@ -141,7 +179,6 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         // Handle empty input or return
         if (inputString.empty()) {
             if (isFiltered) {
-                // Use swap-and-clear idiom for more efficient vector clearing
                 std::vector<std::string>().swap(filteredFiles);
                 isFiltered = false;
                 continue;
@@ -150,178 +187,84 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
             }
         }
 
-        // Filtering logic with FilterTerms prompt
-        if (inputString == "/") {
-            while (true) {
-                verbose = false;
-                resetVerboseSets(operationFiles, skippedMessages, operationFails, uniqueErrorMessages);
+        // Handle filtering operations
+        if (inputString == "/" || (inputString[0] == '/' && inputString.length() > 1)) {
+            bool isFilterPrompt = (inputString == "/");
+            std::string searchString;
+            
+            if (isFilterPrompt) {
+                // Interactive filter prompt
+                while (true) {
+                    verbose = false;
+                    resetVerboseSets(operationFiles, skippedMessages, operationFails, uniqueErrorMessages);
 
-                historyPattern = true;
-                loadHistory(historyPattern);
-                // Move the cursor up 1 line and clear it.
-                std::cout << "\033[1A\033[K";
+                    historyPattern = true;
+                    loadHistory(historyPattern);
+                    std::cout << "\033[1A\033[K";
 
-                // Generate filter prompt
-                std::string filterPrompt = "\001\033[1;38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001" + operationColor + "\002" + operation + 
-                                           "\001\033[1;94m\002, or ↵ to return: \001\033[0;1m\002";
-                std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
+                    std::string filterPrompt = "\001\033[1;38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001" + 
+                                              operationColor + "\002" + operation + 
+                                              "\001\033[1;94m\002, or ↵ to return: \001\033[0;1m\002";
+                    std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
 
-                if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
-                    historyPattern = false;
-                    clear_history();
-                    needsClrScrn = isFiltered ? true : false;
-                    break;
-                }
-
-                std::string inputSearch(searchQuery.get());
-                
-                // Split the search string by semicolons
-                std::vector<std::string> searchTerms;
-                std::stringstream ss(inputSearch);
-                std::string term;
-                
-                // Parse the search terms
-                while (std::getline(ss, term, ';')) {
-                    // Trim leading/trailing whitespace if needed
-                    term.erase(0, term.find_first_not_of(" \t"));
-                    term.erase(term.find_last_not_of(" \t") + 1);
-                    
-                    if (!term.empty()) {
-                        // Convert to lowercase for case-insensitive search
-                        std::transform(term.begin(), term.end(), term.begin(), 
-                                     [](unsigned char c) { return std::tolower(c); });
-                        searchTerms.push_back(term);
-                    }
-                }
-                
-                // Use references to avoid unnecessary copies
-                const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
-                
-                // Allocate the result vector with a reasonable initial capacity to avoid reallocations
-                std::vector<std::string> newFilteredFiles;
-                newFilteredFiles.reserve(std::min(sourceList.size(), sourceList.size() / 2 + 1));
-                
-                // Perform filtering - include file if it matches ANY of the search terms
-				for (const auto& file : sourceList) {
-					std::string lowerFile = file;
-					toLowerInPlace(lowerFile);  // Use the toLowerInPlace function to convert the string to lowercase
-    
-					// Check if the file contains any of the search terms
-					bool matchFound = false;
-					for (const auto& term : searchTerms) {
-						if (lowerFile.find(term) != std::string::npos) {
-							matchFound = true;
-							break;  // No need to check other terms once a match is found
-						}
-					}
-				           
-                    if (matchFound) {
-                        newFilteredFiles.push_back(file);
-                    }
-                }
-                
-                if (!newFilteredFiles.empty()) {
-                    sortFilesCaseInsensitive(newFilteredFiles);
-                    
-                    // Check if the filter is meaningful
-                    bool filterUnchanged = newFilteredFiles.size() == sourceList.size();
-                    
-                    if (!filterUnchanged) {
-                        add_history(searchQuery.get());
-                        saveHistory(historyPattern);
-                        needsClrScrn = true;
-                        // Move instead of copy filtered results
-                        filteredFiles = std::move(newFilteredFiles);
-                        isFiltered = true;
+                    if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
                         historyPattern = false;
                         clear_history();
+                        needsClrScrn = isFiltered ? true : false;
                         break;
                     }
-                }
-                // Explicitly clear vector if not used
-                std::vector<std::string>().swap(newFilteredFiles);
-                historyPattern = false;
-                clear_history();
-            }
-            continue;
-        }
 
-        // Quick filter when starting with '/'
-        if (inputString[0] == '/' && inputString.length() > 1) {
-            std::string searchString = inputString.substr(1);
-            
-            // Split the search string by semicolons
-            std::vector<std::string> searchTerms;
-            std::stringstream ss(searchString);
-            std::string term;
-            
-            // Parse the search terms
-            while (std::getline(ss, term, ';')) {
-                // Trim leading/trailing whitespace if needed
-                term.erase(0, term.find_first_not_of(" \t"));
-                term.erase(term.find_last_not_of(" \t") + 1);
-                
-                if (!term.empty()) {
-                    // Convert to lowercase for case-insensitive search
-                    std::transform(term.begin(), term.end(), term.begin(), 
-                                 [](unsigned char c) { return std::tolower(c); });
-                    searchTerms.push_back(term);
-                }
-            }
-            
-            if (!searchTerms.empty()) {
-                // Use references to avoid unnecessary copies
-                const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
-                
-                // Allocate result vector with a reasonable capacity
-                std::vector<std::string> newFilteredFiles;
-                newFilteredFiles.reserve(std::min(sourceList.size(), sourceList.size() / 2 + 1));
-                
-                // Perform filtering - include file if it matches ANY of the search terms
-                for (const auto& file : sourceList) {
-                    std::string lowerFile = file;
-                    std::transform(lowerFile.begin(), lowerFile.end(), lowerFile.begin(), 
-                                 [](unsigned char c) { return std::tolower(c); });
+                    searchString = searchQuery.get();
                     
-                    // Check if the file contains any of the search terms
-                    bool matchFound = false;
-                    for (const auto& term : searchTerms) {
-                        if (lowerFile.find(term) != std::string::npos) {
-                            matchFound = true;
-                            break;  // No need to check other terms once a match is found
+                    // Perform filtering
+                    const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
+                    std::vector<std::string> searchTerms = parseSearchTerms(searchString);
+                    
+                    if (!searchTerms.empty()) {
+                        auto newFilteredFiles = performFilter(searchTerms, sourceList);
+                        
+                        bool filterUnchanged = newFilteredFiles.size() == sourceList.size();
+                        
+                        if (!filterUnchanged && !newFilteredFiles.empty()) {
+                            add_history(searchQuery.get());
+                            saveHistory(historyPattern);
+                            needsClrScrn = true;
+                            filteredFiles = std::move(newFilteredFiles);
+                            isFiltered = true;
+                            historyPattern = false;
+                            clear_history();
+                            break;
                         }
                     }
-                    
-                    if (matchFound) {
-                        newFilteredFiles.push_back(file);
-                    }
+                    historyPattern = false;
+                    clear_history();
                 }
+            } else {
+                // Quick filter with /pattern
+                searchString = inputString.substr(1);
+                std::vector<std::string> searchTerms = parseSearchTerms(searchString);
                 
-                if (!newFilteredFiles.empty()) {
-                    sortFilesCaseInsensitive(newFilteredFiles);
+                if (!searchTerms.empty()) {
+                    const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
+                    auto newFilteredFiles = performFilter(searchTerms, sourceList);
                     
-                    // Check if the filter is meaningful
                     bool filterUnchanged = newFilteredFiles.size() == sourceList.size();
                     
-                    if (!filterUnchanged) {
+                    if (!filterUnchanged && !newFilteredFiles.empty()) {
                         historyPattern = true;
                         loadHistory(historyPattern);
                         add_history(searchString.c_str());
                         saveHistory(historyPattern);
-                        // Move instead of copy
                         filteredFiles = std::move(newFilteredFiles);
                         isFiltered = true;
                         needsClrScrn = true;
-                        continue;
                     }
                 }
-                // Explicitly clear if not used
-                std::vector<std::string>().swap(newFilteredFiles);
-                continue;
             }
+            continue;
         }
 
-        // Operation processing
+        // Process operation for selected files
         processOperationForSelectedIsoFiles(inputString, isMount, isUnmount, write, isFiltered, 
                  filteredFiles, isoDirs, operationFiles, 
                  operationFails, uniqueErrorMessages, skippedMessages, verbose,
