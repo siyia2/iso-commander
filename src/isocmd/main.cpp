@@ -425,6 +425,7 @@ std::map<std::string, std::string> readConfig(const std::string& configPath) {
     return config;
 }
 
+
 // Function to get AutomaticImportConfig status
 bool readUserConfigUpdates(const std::string& filePath) {
     std::ifstream inFile(filePath);
