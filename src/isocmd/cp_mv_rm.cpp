@@ -4,7 +4,7 @@
 #include "../threadpool.h"
 
 
-// Function to group files for CpMvRm, same filenames are grouped in teh same chunk
+// Function to group files for CpMvRm, same filenames are grouped in the same chunk and processed by the same thread
 std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::unordered_set<int>& processedIndices, const std::vector<std::string>& isoFiles, unsigned int numThreads, bool isDelete) {
     // Convert unordered_set to vector
     std::vector<int> processedIndicesVector(processedIndices.begin(), processedIndices.end());
