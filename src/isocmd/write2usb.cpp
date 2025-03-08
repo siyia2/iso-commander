@@ -252,6 +252,134 @@ std::vector<std::string> getRemovableDevices() {
 }
 
 
+// Function used for pair (ISO>DEVICE) validation
+std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<std::pair<size_t, std::string>>& deviceMap, const std::vector<IsoInfo>& selectedIsos, bool& permissions) {
+    
+    std::vector<std::string> validationErrors;
+    std::vector<std::pair<IsoInfo, std::string>> validPairs;
+    
+    for (const auto& devicePair : deviceMap) {
+        size_t index = devicePair.first;
+        const std::string& device = devicePair.second;
+        const auto& iso = selectedIsos[index - 1];
+        
+        // Get device size before other checks
+        uint64_t deviceSize = getBlockDeviceSize(device);
+        std::string deviceSizeStr = formatFileSize(deviceSize);
+        std::string driveName = getDriveName(device);
+        
+        if (!isUsbDevice(device)) {
+            validationErrors.push_back("\033[1;93m'" + device + "'\033[0;1m is not a removable USB device");
+            continue;
+        }
+        
+        if (isDeviceMounted(device)) {
+            validationErrors.push_back("\033[1;93m'" + device + "'\033[0;1m or its partitions are mounted");
+            continue;
+        }
+        
+        if (deviceSize == 0) {
+            validationErrors.push_back("\033[0;1mFailed to get size for \033[1;93m'" + device + "'\033[0;1m check permissions ");
+            permissions = true;
+            continue;
+        }
+        
+        if (iso.size > deviceSize) {
+            validationErrors.push_back("\033[1;92m'" + iso.filename + "'\033[0;1m (\033[1;95m" + iso.sizeStr + "\033[0;1m) is too large for \033[1;93m'" + 
+                device + " <" + driveName  +">' \033[0;1m(\033[1;95m" + deviceSizeStr + "\033[0;1m)");
+            continue;
+        }
+        
+        validPairs.emplace_back(iso, device);
+    }
+    
+    if (!validationErrors.empty()) {
+        std::cerr << "\n\033[1;91mValidation errors:\033[0;1m\n";
+        for (const auto& err : validationErrors) {
+            std::cerr << "  • " << err << "\033[0;1m\n";
+        }
+        
+        if (!permissions) {
+            signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+            disable_ctrl_d();
+            std::cout << "\n\033[1;92m↵ to try again...\033[0;1m";
+        } else {
+            signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+            disable_ctrl_d();
+            std::cout << "\n\033[1;92m↵ to continue...\033[0;1m";
+            permissions = false;
+        }
+        
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        
+        // Return an empty vector if any validation errors were found
+        return {};
+    }
+    
+    return validPairs;
+}
+
+
+// Function to parse device mappings for errors
+std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::string& pairString, const std::vector<std::string>& selectedIsos, std::vector<std::string>& errors) {
+    
+    std::vector<std::pair<size_t, std::string>> deviceMap;
+    std::unordered_set<std::string> usedDevices;
+    std::istringstream pairStream(pairString);
+    std::string pair;
+    
+    errors.clear();
+    
+    while (std::getline(pairStream, pair, ';')) {
+        // Trim whitespace
+        pair.erase(pair.find_last_not_of(" \t\n\r\f\v") + 1);
+        pair.erase(0, pair.find_first_not_of(" \t\n\r\f\v"));
+        if (pair.empty()) continue;
+        
+        size_t sepPos = pair.find('>');
+        if (sepPos == std::string::npos) {
+            errors.push_back("Invalid pair format: '" + pair + "'");
+            continue;
+        }
+        
+        std::string indexStr = pair.substr(0, sepPos);
+        std::string device = pair.substr(sepPos + 1);
+        
+        try {
+            size_t index = std::stoul(indexStr);
+            if (index < 1 || index > selectedIsos.size()) {
+                errors.push_back("Invalid index " + indexStr);
+                continue;
+            }
+            
+            if (usedDevices.count(device)) {
+                errors.push_back("Device " + device + " used multiple times");
+                continue;
+            }
+            
+            deviceMap.emplace_back(index, device);
+            usedDevices.insert(device);
+        } catch (...) {
+            errors.push_back("Invalid index: '" + indexStr + "'");
+        }
+    }
+    
+    // Validate all selected ISOs have at least one mapping
+    std::unordered_set<size_t> mappedIndices;
+    for (const auto& [index, device] : deviceMap) {
+        mappedIndices.insert(index);
+    }
+    
+    for (size_t i = 1; i <= selectedIsos.size(); ++i) {
+        if (mappedIndices.find(i) == mappedIndices.end()) {
+            errors.push_back("Missing mapping for ISO " + std::to_string(i));
+        }
+    }
+    
+    return deviceMap;
+}
+
+
 // Function to handle device mapping collection and validation
 std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::vector<IsoInfo>& selectedIsos,std::unordered_set<std::string>& uniqueErrorMessages) {
     while (true) {
@@ -342,51 +470,14 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         std::istringstream pairStream(deviceInput.get());
         std::string pair;
 
-        while (std::getline(pairStream, pair, ';')) {
-            // Trim whitespace
-            pair.erase(pair.find_last_not_of(" \t\n\r\f\v") + 1);
-            pair.erase(0, pair.find_first_not_of(" \t\n\r\f\v"));
+        // Create a vector of strings from your IsoInfo objects
+		std::vector<std::string> isoFilenames;
+		for (const auto& iso : selectedIsos) {
+			isoFilenames.push_back(iso.path);  // Or whatever member contains the filename
+		}
 
-            if (pair.empty()) continue;
-
-            size_t sepPos = pair.find('>');
-            if (sepPos == std::string::npos) {
-                errors.push_back("Invalid pair format: '" + pair + "'");
-                continue;
-            }
-
-            std::string indexStr = pair.substr(0, sepPos);
-            std::string device = pair.substr(sepPos + 1);
-
-            try {
-                size_t index = std::stoul(indexStr);
-                if (index < 1 || index > selectedIsos.size()) {
-                    errors.push_back("Invalid index " + indexStr);
-                    continue;
-                }
-
-                if (usedDevices.count(device)) {
-                    errors.push_back("Device " + device + " used multiple times");
-                    continue;
-                }
-
-                deviceMap.emplace_back(index, device);
-                usedDevices.insert(device);
-            } catch (...) {
-                errors.push_back("Invalid index: '" + indexStr + "'");
-            }
-        }
-
-        // Validate all selected ISOs have at least one mapping
-        std::unordered_set<size_t> mappedIndices;
-        for (const auto& [index, device] : deviceMap) {
-            mappedIndices.insert(index);
-        }
-        for (size_t i = 1; i <= selectedIsos.size(); ++i) {
-            if (mappedIndices.find(i) == mappedIndices.end()) {
-                errors.push_back("Missing mapping for ISO " + std::to_string(i));
-            }
-        }
+		// Then call the function with the string vector
+		deviceMap = parseDeviceMappings(deviceInput.get(), isoFilenames, errors);
 
         if (!errors.empty()) {
             std::cerr << "\n\033[1;91mErrors:\033[0;1m\n";
@@ -404,59 +495,12 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         std::vector<std::pair<IsoInfo, std::string>> validPairs;
         std::vector<std::string> validationErrors;
         bool permissions = false;
-
-        for (const auto& [index, device] : deviceMap) {
-            const auto& iso = selectedIsos[index - 1];
-
-            // Get device size before other checks
-            uint64_t deviceSize = getBlockDeviceSize(device);
-            std::string deviceSizeStr = formatFileSize(deviceSize);
-            std::string driveName = getDriveName(device);
-
-            if (!isUsbDevice(device)) {
-                validationErrors.push_back("\033[1;93m'" + device + "'\033[0;1m is not a removable USB device");
-                continue;
-            }
-            
-            if (isDeviceMounted(device)) {
-                validationErrors.push_back("\033[1;93m'" + device + "'\033[0;1m or its partitions are mounted");
-                continue;
-            }
-
-            if (deviceSize == 0) {
-                validationErrors.push_back("\033[0;1mFailed to get size for \033[1;93m'" + device + "'\033[0;1m check permissions ");
-                permissions = true;
-                continue;
-            }
-
-            if (iso.size > deviceSize) {
-                validationErrors.push_back("\033[1;92m'" + iso.filename + "'\033[0;1m (\033[1;95m" + iso.sizeStr + "\033[0;1m) is too large for \033[1;93m'" + 
-                    device + " <" + driveName  +">' \033[0;1m(\033[1;95m" + deviceSizeStr + "\033[0;1m)");
-                continue;
-            }
-
-            validPairs.emplace_back(iso, device);
-        }
-
-        if (!validationErrors.empty()) {
-            std::cerr << "\n\033[1;91mValidation errors:\033[0;1m\n";
-            for (const auto& err : validationErrors) {
-                std::cerr << "  • " << err << "\033[0;1m\n";
-            }
-            if (!permissions) {
-				signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
-				disable_ctrl_d();
-                std::cout << "\n\033[1;92m↵ to try again...\033[0;1m";
-            } else {
-				signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
-				disable_ctrl_d();
-                std::cout << "\n\033[1;92m↵ to continue...\033[0;1m";
-                permissions = false;
-            }
-            
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            continue;
-        }
+		
+		
+		validPairs = validateDevices(deviceMap, selectedIsos, permissions);
+		if (validPairs.empty()) {
+			continue;
+		} 
 
         // Final confirmation
         std::cout << "\n\033[1;93mWARNING: This will \033[1;91m*ERASE ALL DATA*\033[1;93m on:\033[0;1m\n\n";
