@@ -60,7 +60,7 @@ std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::unordered
 
 
 // Function to process selected indices for cpMvDel accordingly
-void processOperationInput(const std::string& input, const std::vector<std::string>& isoFiles, const std::string& process, std::unordered_set<std::string>& operationIsos, std::unordered_set<std::string>& operationErrors, std::unordered_set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& umountMvRmBreak, bool& historyPattern, bool& verbose, std::atomic<bool>& newISOFound) {
+void processOperationInput(const std::string& input, const std::vector<std::string>& isoFiles, const std::string& process, std::unordered_set<std::string>& operationIsos, std::unordered_set<std::string>& operationErrors, std::unordered_set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& historyPattern, bool& verbose, std::atomic<bool>& newISOFound) {
     setupSignalHandlerCancellations();
     
     bool overwriteExisting = false;
@@ -155,10 +155,10 @@ void processOperationInput(const std::string& input, const std::vector<std::stri
 
     isProcessingComplete.store(true);
     progressThread.join();
-
-    promptFlag = false;
-    maxDepth = 0;
     
+    bool promptFlag = false;
+	int maxDepth = 0;
+
     if (!isDelete) {
         manualRefreshCache(userDestDir, promptFlag, maxDepth, historyPattern, newISOFound);
     }
@@ -169,8 +169,6 @@ void processOperationInput(const std::string& input, const std::vector<std::stri
     }
 
     clear_history();
-    promptFlag = true;
-    maxDepth = -1;
 }
 
 

@@ -93,7 +93,7 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
 
 
 // Function to select and convert files based on user's choice of file type
-void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose, std::atomic<bool>& newISOFound) {
+void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<bool>& newISOFound) {
     // Setup file type configuration
     std::string fileExtension, fileTypeName, fileType = fileTypeChoice;
     bool modeMdf = (fileType == "mdf");
@@ -141,7 +141,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
         resetVerboseSets(processedErrors, successOuts, skippedOuts, failedOuts);
         clearScrollBuffer();
         clear_history();
-        historyPattern = false;
+        bool historyPattern = false;
         loadHistory(historyPattern);
         rl_bind_key('\f', clear_screen_and_buffer);
         rl_bind_key('\t', rl_complete);
@@ -243,8 +243,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
         
         // Process files if operation wasn't cancelled
         if (!g_operationCancelled.load()) {
-            select_and_convert_to_iso(fileType, files, verbose, promptFlag, 
-                                     maxDepth, historyPattern, newISOFound, list);
+            select_and_convert_to_iso(fileType, files, newISOFound, list);
         }
     }
 }
@@ -293,7 +292,7 @@ void filterQuery(std::vector<std::string>& files, bool& historyPattern, const st
 
 
 // Function to handle conversions for select_and_convert_to_iso
-void select_and_convert_to_iso(const std::string& fileType, std::vector<std::string>& files, bool& verbose, bool& promptFlag, int& maxDepth, bool& historyPattern, std::atomic<bool>& newISOFound, bool& list) {
+void select_and_convert_to_iso(const std::string& fileType, std::vector<std::string>& files, std::atomic<bool>& newISOFound, bool& list) {
     // Bind keys for preventing clear screen and enabling tab completion
     rl_bind_key('\f', prevent_readline_keybindings);
     rl_bind_key('\t', prevent_readline_keybindings);
@@ -321,7 +320,8 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 		enable_ctrl_d();
 		setupSignalHandlerCancellations();
 		g_operationCancelled.store(false);
-        verbose = false; // Reset verbose mode
+		bool historyPattern =false;
+        bool verbose = false; // Reset verbose mode
         resetVerboseSets(processedErrors, successOuts, skippedOuts, failedOuts);
         
         clear_history();	
@@ -409,7 +409,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 			// Process other input commands for file processing
 			clearScrollBuffer();
 			std::cout << "\n\033[0;1m Processing \001\033[1;38;5;208m\002" + fileExtensionWithOutDots + "\033[0;1m conversions... (\033[1;91mCtrl + c\033[0;1m:cancel)\n";
-			processInput(mainInputString, files, (fileType == "mdf"), (fileType == "nrg"), processedErrors, successOuts, skippedOuts, failedOuts, promptFlag, maxDepth, historyPattern, verbose, needsScrnClr, newISOFound);
+			processInput(mainInputString, files, (fileType == "mdf"), (fileType == "nrg"), processedErrors, successOuts, skippedOuts, failedOuts, verbose, needsScrnClr, newISOFound);
 			needsScrnClr = true;
 			if (verbose) {
 				verbosePrint(processedErrors, successOuts, skippedOuts, failedOuts, 3); // Print detailed logs if verbose mode is enabled
@@ -468,7 +468,7 @@ size_t calculateSizeForConverted(const std::vector<std::string>& filesToProcess,
 
 
 // Function to process user input and convert selected BIN/MDF/NRG files to ISO format
-void processInput(const std::string& input, std::vector<std::string>& fileList, const bool& modeMdf, const bool& modeNrg, std::unordered_set<std::string>& processedErrors, std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose, bool& needsScrnClr, std::atomic<bool>& newISOFound) {
+void processInput(const std::string& input, std::vector<std::string>& fileList, const bool& modeMdf, const bool& modeNrg, std::unordered_set<std::string>& processedErrors, std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, bool& verbose, bool& needsScrnClr, std::atomic<bool>& newISOFound) {
 	// Setup signal handler at the start of the operation
     setupSignalHandlerCancellations();
     
@@ -545,12 +545,10 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
 
         futures.emplace_back(pool.enqueue([imageFilesInChunk = std::move(imageFilesInChunk), 
             &fileList, &successOuts, &skippedOuts, &failedOuts, 
-            modeMdf, modeNrg, &maxDepth, &promptFlag, &historyPattern, 
-            &completedBytes, &completedTasks, &failedTasks, &newISOFound]() {
+            modeMdf, modeNrg, &completedBytes, &completedTasks, &failedTasks, &newISOFound]() {
             // Process each file with task tracking
             convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts, 
-                modeMdf, modeNrg, maxDepth, promptFlag, historyPattern, 
-                &completedBytes, &completedTasks, &failedTasks, newISOFound);
+                modeMdf, modeNrg, &completedBytes, &completedTasks, &failedTasks, newISOFound);
         }));
     }
 
@@ -796,7 +794,7 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
 
 
 // Function to convert a BIN/IMG/MDF/NRG file to ISO format
-void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, const bool& modeMdf, const bool& modeNrg, int& maxDepth, bool& promptFlag, bool& historyPattern, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, std::atomic<bool>& newISOFound) {
+void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, const bool& modeMdf, const bool& modeNrg, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, std::atomic<bool>& newISOFound) {
 
     namespace fs = std::filesystem;
 
@@ -918,12 +916,11 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
     }
 
     // Update cache and prompt flags
-    promptFlag = false;
-    maxDepth = 0;
+    bool promptFlag = false;
+    bool historyPattern = false;
+    int maxDepth = 0;
     if (!successOuts.empty()) {
         manualRefreshCache(result, promptFlag, maxDepth, historyPattern, newISOFound);
     }
 
-    promptFlag = true;
-    maxDepth = -1;
 }

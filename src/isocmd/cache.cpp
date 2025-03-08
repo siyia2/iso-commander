@@ -235,9 +235,9 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
 
 
 // Function to auto-import ISO files in cache without blocking the UI
-void backgroundCacheImport(int maxDepthParam, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
+void backgroundCacheImport(std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
     std::vector<std::string> paths;
-    int localMaxDepth = maxDepthParam;
+    int localMaxDepth = -1;
     bool localPromptFlag = false;
     const size_t maxThreadsX2 = (std::thread::hardware_concurrency() == 0 ? 4 : std::thread::hardware_concurrency()) * 2;
 
@@ -581,7 +581,6 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
 // Function for manual cache refresh
 void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, bool historyPattern, std::atomic<bool>& newISOFound) {
 	
-	
 	enable_ctrl_d();
 	// Setup signal handler at the start of the operation
     setupSignalHandlerCancellations();
@@ -597,7 +596,6 @@ void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, 
         }
         
         loadHistory(historyPattern);
-        maxDepth = -1;
         
         const std::unordered_set<std::string> validInputs = {
 			"*fl_m", "*cl_m", "*fl_u", "*cl_u", "*fl_fo", "*cl_fo", "*fl_w", "*cl_w", "*fl_c", "*cl_c"
@@ -730,8 +728,6 @@ void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, 
 			// Save the combined cache to disk
 			saveCache(allIsoFiles, newISOFound);
 		}
-		promptFlag = true;
-		maxDepth = -1;
 	}
 }
 
