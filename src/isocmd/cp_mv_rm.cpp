@@ -278,23 +278,13 @@ std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>&
 
 
 // Function to handle rm including pagination
-bool handleDeleteOperation(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::unordered_set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& abortDel) {
+bool handleDeleteOperation(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, const std::function<void()>& displayErrorsFn, bool& umountMvRmBreak, bool& abortDel) {
     
     bool isPageTurn = false;
     
     // Setup environment function
     auto setupEnv = [&]() {
         rl_bind_key('\f', clear_screen_and_buffer);
-    };
-    
-    // Display error messages if any
-    auto displayErrors = [&]() {
-        if (!uniqueErrorMessages.empty()) {
-            std::cout << "\n";
-            for (const auto& err : uniqueErrorMessages) {
-                std::cout << err << "\n";
-            }
-        }
     };
     
     // Generate entries for selected ISO files
@@ -315,7 +305,7 @@ bool handleDeleteOperation(std::vector<std::string>& isoFiles, std::vector<std::
             entries,
             promptPrefix,
             promptSuffix,
-            displayErrors,
+            displayErrorsFn,
             setupEnv,
             isPageTurn
         );
@@ -448,7 +438,7 @@ std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::v
         add_history(historyInput.c_str());
     } else {
         // Delete operation flow - call the extracted function
-        bool proceedWithDelete = handleDeleteOperation(isoFiles, indexChunks, uniqueErrorMessages, umountMvRmBreak, abortDel);
+        bool proceedWithDelete = handleDeleteOperation(isoFiles, indexChunks, displayErrors, umountMvRmBreak, abortDel);
         
         if (!proceedWithDelete) {
             userDestDir = "";
