@@ -90,12 +90,19 @@ std::vector<size_t> boyerMooreSearch(const std::string& pattern, const std::stri
 // Remove AnsiCodes from filenames
 std::string removeAnsiCodes(const std::string& input) {
     std::string result;
-    for (size_t i = 0; i < input.length(); ++i) {
-        if (input[i] == '\033' && i + 1 < input.length() && input[i+1] == '[') {
-            // Skip the entire ANSI escape sequence
-            while (i < input.length() && !isalpha(input[i])) {
-                ++i;
+    result.reserve(input.size()); // Preallocate memory
+
+    for (size_t i = 0; i < input.size(); ++i) {
+        if (input[i] == '\033' && i + 1 < input.size() && input[i+1] == '[') {
+            // Skip CSI sequence: \033[ ... [a-zA-Z]
+            size_t j = i + 2; // Skip \033 and [
+            while (j < input.size() && (input[j] < 'A' || input[j] > 'Z') && (input[j] < 'a' || input[j] > 'z')) {
+                ++j;
             }
+            if (j < input.size()) {
+                ++j; // Skip the terminating letter
+            }
+            i = j - 1; // Adjust i (loop will increment to j)
         } else {
             result += input[i];
         }
