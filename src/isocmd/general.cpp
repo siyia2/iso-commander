@@ -257,11 +257,10 @@ void processOperationForSelectedIsoFiles(const std::string& inputString, bool is
         writeToUsb(inputString, activeList, uniqueErrorMessages);
     } else {
         isAtISOList.store(false);
-        bool promptFlag = false;
-        int maxDepth = 0;
+        
         // Use const reference instead of copying
         const std::vector<std::string>& activeList = isFiltered ? filteredFiles : globalIsoFileList;
-         processOperationInput(inputString, activeList, operation, operationFiles, operationFails, uniqueErrorMessages, promptFlag, maxDepth, umountMvRmBreak, filterHistory, verbose, newISOFound);
+         processOperationInput(inputString, activeList, operation, operationFiles, operationFails, uniqueErrorMessages, umountMvRmBreak, filterHistory, verbose, newISOFound);
     }
 
     handleSelectIsoFilesResults(uniqueErrorMessages, operationFiles, operationFails, skippedMessages, operation, 
@@ -951,11 +950,16 @@ void helpMappings() {
     // Title
     std::cout << "\n\033[1;36m===== Help Guide For Mappings =====\033[0m\n" << std::endl;
     
-    std::cout << "\033[1;32m Selecting Mappings:\033[0m\n"
-			  << " • Mapping = NewISOIndex>RemovableUSBDevice\n"
-              << " • Single mapping: Enter a mapping (e.g., '1>/dev/sdc')\n"
-              << " • Multiple mappings: Separate with ; (e.g., '1>/dev/sdc;2>/dev/sdd' or '1>/dev/sdc;1>/dev/sdd')\n" << std::endl;
-                  
+    std::cout << "\033[1;32m1. Selecting Mappings:\033[0m\n"
+			  << "   • Mapping = NewISOIndex>RemovableUSBDevice\n"
+              << "   • Single mapping: Enter a mapping (e.g., '1>/dev/sdc')\n"
+              << "   • Multiple mappings: Separate with ; (e.g., '1>/dev/sdc;2>/dev/sdd' or '1>/dev/sdc;1>/dev/sdd')\n" << std::endl;
+              
+    std::cout << "\033[1;32m2. Tips:\033[0m\n"
+              << "   • AutoComplete INDEX>DEVICE mappings with Tab\033[0m\n"
+              << "   • Partitions are not eligible for write, only raw devices (e.g., '/dev/sdc')\n"
+              << "   • USB detection relies on '/sys/class/block/sd*/removable' kernel value\n" << std::endl;
+               
     // Prompt to continue
     std::cout << "\033[1;32m↵ to return...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
