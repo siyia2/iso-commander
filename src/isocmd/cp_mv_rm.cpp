@@ -60,7 +60,7 @@ std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::unordered
 
 
 // Function to process selected indices for cpMvDel accordingly
-void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::unordered_set<std::string>& operationIsos, std::unordered_set<std::string>& operationErrors, std::unordered_set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& umountMvRmBreak, bool& historyPattern, bool& verbose, std::atomic<bool>& newISOFound) {
+void processOperationInput(const std::string& input, const std::vector<std::string>& isoFiles, const std::string& process, std::unordered_set<std::string>& operationIsos, std::unordered_set<std::string>& operationErrors, std::unordered_set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& umountMvRmBreak, bool& historyPattern, bool& verbose, std::atomic<bool>& newISOFound) {
     setupSignalHandlerCancellations();
     
     bool overwriteExisting = false;
@@ -290,7 +290,7 @@ std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>&
 
 
 // Function to handle rm including pagination
-bool handleDeleteOperation(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, const std::function<void()>& displayErrorsFn, bool& umountMvRmBreak, bool& abortDel) {
+bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, const std::function<void()>& displayErrorsFn, bool& umountMvRmBreak, bool& abortDel) {
     
     bool isPageTurn = false;
     
@@ -352,7 +352,7 @@ bool handleDeleteOperation(std::vector<std::string>& isoFiles, std::vector<std::
 
 
 // Function to prompt for userDestDir or Delete confirmation including pagination
-std::string userDestDirRm(std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::unordered_set<std::string>& uniqueErrorMessages, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& historyPattern, bool& isDelete, bool& isCopy, bool& abortDel, bool& overwriteExisting) {
+std::string userDestDirRm(const std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::unordered_set<std::string>& uniqueErrorMessages, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& historyPattern, bool& isDelete, bool& isCopy, bool& abortDel, bool& overwriteExisting) {
 
     // Display error messages if any
     auto displayErrors = [&]() {
@@ -645,7 +645,7 @@ bool performCopyOperation(const fs::path& srcPath, const fs::path& destPath, con
 
 
 // Function to handle CpMvRm
-void handleIsoFileOperation(const std::vector<std::string>& isoFiles, std::vector<std::string>& isoFilesCopy, std::unordered_set<std::string>& operationIsos, std::unordered_set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete, std::atomic<size_t>* completedBytes,std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, bool overwriteExisting) {
+void handleIsoFileOperation(const std::vector<std::string>& isoFiles, const std::vector<std::string>& isoFilesCopy, std::unordered_set<std::string>& operationIsos, std::unordered_set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete, std::atomic<size_t>* completedBytes,std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, bool overwriteExisting) {
 
     std::atomic<bool> operationSuccessful(true);
     uid_t real_uid;

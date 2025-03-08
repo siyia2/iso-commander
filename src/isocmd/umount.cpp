@@ -23,7 +23,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
 	for (const auto& entry : std::filesystem::directory_iterator(MOUNTED_ISO_PATH)) {
 		if (entry.is_directory()) {
 			auto filename = entry.path().filename().string();
-			if (filename.find("iso_") == 0) { // or filename.starts_with("iso_") in C++20
+			if (filename.find("iso_") == 0) { // filename.starts_with("iso_")
 				newIsoDirs.push_back(entry.path().string());
 			}
 		}

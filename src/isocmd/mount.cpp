@@ -18,7 +18,7 @@ bool isAlreadyMounted(const std::string& mountPoint) {
 
 
 // Function to handle error cases that lead to continue for mount
-bool handleMountFailure(const std::string& isoDirectory, const std::string& isoFilename, const std::string& errorTypeOrMountDir, VerbosityFormatter& formatter, std::vector<std::string>& tempMountedFails, std::vector<std::string>& tempSkippedMessages, std::atomic<size_t>* failedTasks, std::atomic<size_t>* completedTasks, const std::function<void()>& flushFunction, bool isSkipped = false, const std::string& mountisoFilename = "") {
+bool handleMountFailureAndSkipped(const std::string& isoDirectory, const std::string& isoFilename, const std::string& errorTypeOrMountDir, VerbosityFormatter& formatter, std::vector<std::string>& tempMountedFails, std::vector<std::string>& tempSkippedMessages, std::atomic<size_t>* failedTasks, std::atomic<size_t>* completedTasks, const std::function<void()>& flushFunction, bool isSkipped = false, const std::string& mountisoFilename = "") {
     if (isSkipped) {
         // Handle skipped cases (already mounted)
         // In this case, errorTypeOrMountDir contains the mount directory
@@ -90,13 +90,13 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
         
         // Check for cancellation
         if (g_operationCancelled.load()) {
-            handleMountFailure(isoDirectory, isoFilename, "CXL", formatter, tempMountedFails, tempSkippedMessages, failedTasks, completedTasks, flushBuffers);
+            handleMountFailureAndSkipped(isoDirectory, isoFilename, "CXL", formatter, tempMountedFails, tempSkippedMessages, failedTasks, completedTasks, flushBuffers);
             continue;
         }
         
         // Root privilege check
         if (geteuid() != 0) {
-            handleMountFailure(isoDirectory, isoFilename, "needsRoot", formatter, tempMountedFails, tempSkippedMessages, failedTasks, completedTasks, flushBuffers);
+            handleMountFailureAndSkipped(isoDirectory, isoFilename, "needsRoot", formatter, tempMountedFails, tempSkippedMessages, failedTasks, completedTasks, flushBuffers);
             continue;
         }
 
@@ -117,13 +117,13 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
 
         // Check if already mounted
         if (isAlreadyMounted(mountPoint)) {
-            handleMountFailure(isoDirectory, isoFilename, mountisoDirectory, formatter, tempMountedFails, tempSkippedMessages, failedTasks, completedTasks, flushBuffers, true, mountisoFilename);
+            handleMountFailureAndSkipped(isoDirectory, isoFilename, mountisoDirectory, formatter, tempMountedFails, tempSkippedMessages, failedTasks, completedTasks, flushBuffers, true, mountisoFilename);
             continue;
         }
         
         // Verify ISO file exists
         if (!fs::exists(isoPath)) {
-            handleMountFailure(isoDirectory, isoFilename, "missingISO", formatter, tempMountedFails, tempSkippedMessages, failedTasks, completedTasks, flushBuffers);
+            handleMountFailureAndSkipped(isoDirectory, isoFilename, "missingISO", formatter, tempMountedFails, tempSkippedMessages, failedTasks, completedTasks, flushBuffers);
             continue;
         }
 
@@ -132,7 +132,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
             try {
                 fs::create_directory(mountPoint);
             } catch (const fs::filesystem_error& e) {
-                handleMountFailure(isoDirectory, isoFilename, "detailedError", formatter, tempMountedFails, tempSkippedMessages, failedTasks, completedTasks, flushBuffers);
+                handleMountFailureAndSkipped(isoDirectory, isoFilename, "detailedError", formatter, tempMountedFails, tempSkippedMessages, failedTasks, completedTasks, flushBuffers);
                 continue;
             }
         }
@@ -165,7 +165,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
         } else {
             // Mount failed
-            handleMountFailure(isoDirectory, isoFilename, "badFS", formatter, tempMountedFails, tempSkippedMessages, failedTasks, completedTasks, flushBuffers);
+            handleMountFailureAndSkipped(isoDirectory, isoFilename, "badFS", formatter, tempMountedFails, tempSkippedMessages, failedTasks, completedTasks, flushBuffers);
             fs::remove(mountPoint);
         }
 
@@ -184,7 +184,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
 
 
 // Function to process input and mount ISO files asynchronously
-void processAndMountIsoFiles(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedFiles, std::unordered_set<std::string>& skippedMessages, std::unordered_set<std::string>& mountedFails, std::unordered_set<std::string>& uniqueErrorMessages, bool& verbose) {
+void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedFiles, std::unordered_set<std::string>& skippedMessages, std::unordered_set<std::string>& mountedFails, std::unordered_set<std::string>& uniqueErrorMessages, bool& verbose) {
     std::unordered_set<int> indicesToProcess;
     
     // Setup signal handler

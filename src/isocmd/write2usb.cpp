@@ -611,7 +611,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
 
 // Function to prepare selections for write
-void writeToUsb(const std::string& input, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages) {
+void writeToUsb(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages) {
     clearScrollBuffer();
     std::unordered_set<int> indicesToProcess;
 
