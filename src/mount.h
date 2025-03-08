@@ -93,7 +93,7 @@ struct VerbosityFormatter {
                    .append(isoDirectory).append("/").append(isoFilename)
                    .append(errorFormatSuffix);
                    
-        if (errorType == "CXL") {
+        if (errorType == "clx") {
             outputBuffer.append("Operation was cancelled");
         } else if (errorType == "needsRoot") {
             outputBuffer.append("Root privileges required for mounting");

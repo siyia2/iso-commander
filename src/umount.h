@@ -14,7 +14,7 @@ struct VerboseMessageFormatter {
     const std::string errorPrefix = "\033[1;91mFailed to unmount: \033[1;93m'";
     const std::string errorSuffix = "'\033[1;91m.\033[0;1m {notAnISO}";
     const std::string cancelPrefix = "\033[1;91mFailed to unmount: \033[1;93m'";
-    const std::string cancelSuffix = "'\033[1;91m.\033[0;1m {CXL}";
+    const std::string cancelSuffix = "'\033[1;91m.\033[0;1m {cxl}";
     
     // Format message based on message type
     std::string format(const std::string& messageType, const std::string& path) {
