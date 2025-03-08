@@ -105,7 +105,8 @@ std::string removeAnsiCodes(const std::string& input) {
 
 
 // Function to filter cached ISO files or mountpoints based on search query (case-insensitive)
-std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query) {
+std::vector<std::string> filterFiles(const std::vector<std::string>::const_iterator begin, const std::vector<std::string>::const_iterator end, const std::string& query) {
+    
     std::vector<std::string> filteredFiles;
     std::vector<std::pair<std::string, bool>> queryTokens; // token and its case sensitivity flag
     
@@ -128,14 +129,20 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
         }
     }
     
+    // Calculate the number of elements in the range
+    size_t numFiles = std::distance(begin, end);
+    
     // This mutex will only be used for the final merge
     std::mutex filterMutex;
     
-    auto filterTask = [&](size_t start, size_t end) {
+    auto filterTask = [&](
+        std::vector<std::string>::const_iterator rangeBegin,
+        std::vector<std::string>::const_iterator rangeEnd) {
+        
         std::vector<std::string> localFilteredFiles;
         
-        for (size_t i = start; i < end; ++i) {
-            const std::string& file = files[i];
+        for (auto it = rangeBegin; it != rangeEnd; ++it) {
+            const std::string& file = *it;
             std::string cleanFileName = removeAnsiCodes(file);  // Remove ANSI codes first
             std::string fileNameLower = cleanFileName;
             toLowerInPlace(fileNameLower);  // Convert once to lowercase for case-insensitive searches
@@ -171,7 +178,6 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
         filteredFiles.insert(filteredFiles.end(), localFilteredFiles.begin(), localFilteredFiles.end());
     };
     
-    size_t numFiles = files.size();
     size_t numThreads = std::min(static_cast<size_t>(maxThreads), numFiles);
     
     // Calculate the batch size based on the number of threads
@@ -180,12 +186,16 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
     std::vector<std::future<void>> futures;
     
     // Launch threads to process files in batches
+    auto it = begin;
     for (size_t i = 0; i < numFiles; i += batchSize) {
-        size_t start = i;
-        size_t end = std::min(i + batchSize, numFiles);
+        auto batchStart = it;
+        
+        // Advance iterator by batchSize or to the end, whichever comes first
+        size_t advanceBy = std::min(batchSize, numFiles - i);
+        std::advance(it, advanceBy);
         
         // Launch each batch processing task asynchronously
-        futures.push_back(std::async(std::launch::async, filterTask, start, end));
+        futures.push_back(std::async(std::launch::async, filterTask, batchStart, it));
     }
     
     // Wait for all threads to finish
@@ -196,3 +206,7 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
     return filteredFiles;
 }
 
+// Wrapper function that accepts a vector directly for backward compatibility
+std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query) {
+    return filterFiles(files.begin(), files.end(), query);
+}
