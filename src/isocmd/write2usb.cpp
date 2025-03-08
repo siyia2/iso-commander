@@ -203,9 +203,7 @@ std::string getDriveName(const std::string& device) {
 
 // Get removable drives to display in selection
 std::vector<std::string> getRemovableDevices() {
-    std::vector<std::string> devices;
-    namespace fs = std::filesystem;
-    
+    std::vector<std::string> devices;    
     try {
         for (const auto& entry : fs::directory_iterator("/sys/block")) {
             std::string deviceName = entry.path().filename();
@@ -260,7 +258,6 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             }
             uniqueErrorMessages.clear();
         }
-
         // Build device prompt
 		std::ostringstream devicePromptStream;
 		devicePromptStream << "\n\033[0;1m Selected \033[1;92mISO\033[0;1m:\n\n";
@@ -275,6 +272,8 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 
 		devicePromptStream << "\n\033[0;1mRemovable USB Devices:\033[0;1m\n\n";
 		std::vector<std::string> usbDevices = getRemovableDevices();
+		
+		sortFilesCaseInsensitive(usbDevices);
 
 		if (usbDevices.empty()) {
 			devicePromptStream << "  \033[1;91mNo removable USB devices detected!\033[0;1m\n";
