@@ -587,6 +587,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         
         // Handle empty input
         if (!deviceInput || deviceInput.get()[0] == '\0') {
+			rl_completion_display_matches_hook = rl_display_match_list;
             return {};
         }
         
