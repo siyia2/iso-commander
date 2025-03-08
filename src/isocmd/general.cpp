@@ -250,38 +250,44 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
             std::vector<std::string> activeList = isFiltered ? filteredFiles : globalIsoFileList;
             processOperationInput(inputString, activeList, operation, operationFiles, operationFails, uniqueErrorMessages, promptFlag, maxDepth, umountMvRmBreak, historyPattern, verbose, newISOFound);
         }
+        
+		handleSelectIsoFilesResults(uniqueErrorMessages, operationFiles, operationFails, skippedMessages, operation, 
+		verbose, isMount, isFiltered, umountMvRmBreak, isUnmount, needsClrScrn, historyPattern);
+    }
+}
 
-        // Result handling and display
-        if (!uniqueErrorMessages.empty() && operationFiles.empty() && operationFails.empty() && skippedMessages.empty()) {
-            clearScrollBuffer();
-            needsClrScrn = true;
-            std::cout << "\n\033[1;91mNo valid input provided for " << operation << ".\033[0;1m\n\n\033[1;32m↵ to continue...\033[0;1m";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        } else if (verbose) {
-            clearScrollBuffer();
-            needsClrScrn = true;
-            std::unordered_set<std::string> conditionalSet = isMount ? skippedMessages : std::unordered_set<std::string>{};
-            std::unordered_set<std::string> emptySet{};
-            verbosePrint(operationFiles, operationFails, conditionalSet, uniqueErrorMessages, isMount ? 2 : 1);
-        }
 
-        // Reset filter for certain operations
-        if ((operation == "mv" || operation == "rm" || operation == "umount") && isFiltered && umountMvRmBreak) {
-            historyPattern = false;
-            clear_history();
-            isFiltered = false;
-            needsClrScrn = true;
-        }
+void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& skippedMessages, const std::string& operation, bool verbose, bool isMount, bool isFiltered, bool umountMvRmBreak, bool isUnmount, bool& needsClrScrn, bool& historyPattern) {
+    // Result handling and display
+    if (!uniqueErrorMessages.empty() && operationFiles.empty() && operationFails.empty() && skippedMessages.empty()) {
+        clearScrollBuffer();
+        needsClrScrn = true;
+        std::cout << "\n\033[1;91mNo valid input provided.\033[0;1m\n\n\033[1;32m↵ to continue...\033[0;1m";
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    } else if (verbose) {
+        clearScrollBuffer();
+        needsClrScrn = true;
+        std::unordered_set<std::string> conditionalSet = isMount ? skippedMessages : std::unordered_set<std::string>{};
+        std::unordered_set<std::string> emptySet{};
+        verbosePrint(operationFiles, operationFails, conditionalSet, uniqueErrorMessages, isMount ? 2 : 1);
+    }
 
-        // For non-umount operations, if there are no ISOs in the global list, inform the user.
-        if (!isUnmount && globalIsoFileList.empty()) {
-            clearScrollBuffer();
-            needsClrScrn = true;
-            std::cout << "\n\033[1;93mNo ISO available for " << operation << ".\033[0m\n\n";
-            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            return;
-        }
+    // Reset filter for certain operations
+    if ((operation == "mv" || operation == "rm" || operation == "umount") && isFiltered && umountMvRmBreak) {
+        historyPattern = false;
+        clear_history();
+        isFiltered = false;
+        needsClrScrn = true;
+    }
+
+    // For non-umount operations, if there are no ISOs in the global list, inform the user.
+    if (!isUnmount && globalIsoFileList.empty()) {
+        clearScrollBuffer();
+        needsClrScrn = true;
+        std::cout << "\n\033[1;93mNo ISO available for " << operation << ".\033[0m\n\n";
+        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        return;
     }
 }
 
