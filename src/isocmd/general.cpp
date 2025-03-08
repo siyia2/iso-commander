@@ -202,19 +202,20 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
                 newFilteredFiles.reserve(std::min(sourceList.size(), sourceList.size() / 2 + 1));
                 
                 // Perform filtering - include file if it matches ANY of the search terms
-                for (const auto& file : sourceList) {
-                    std::string lowerFile = file;
-                    std::transform(lowerFile.begin(), lowerFile.end(), lowerFile.begin(), 
-                                 [](unsigned char c) { return std::tolower(c); });
-                    
-                    // Check if the file contains any of the search terms
-                    bool matchFound = false;
-                    for (const auto& term : searchTerms) {
-                        if (lowerFile.find(term) != std::string::npos) {
-                            matchFound = true;
-                            break;  // No need to check other terms once a match is found
-                        }
-                    }
+				for (const auto& file : sourceList) {
+					std::string lowerFile = file;
+					toLowerInPlace(lowerFile);  // Use the toLowerInPlace function to convert the string to lowercase
+    
+					// Check if the file contains any of the search terms
+					bool matchFound = false;
+					for (const auto& term : searchTerms) {
+						if (lowerFile.find(term) != std::string::npos) {
+							matchFound = true;
+							break;  // No need to check other terms once a match is found
+						}
+					}
+				
+
                     
                     if (matchFound) {
                         newFilteredFiles.push_back(file);
