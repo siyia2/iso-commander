@@ -144,8 +144,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
 void resetVerboseSets(std::unordered_set<std::string>& processedErrors,std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts);
 void tokenizeInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<int>& processedIndices);
 void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t totalBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, size_t totalTasks, std::atomic<bool>* isComplete, bool* verbose);
-void handleFilterPrompt(bool& isFiltered, std::vector<std::string>& filteredFiles, const std::vector<std::string>& isoDirs, bool isUnmount, bool& historyPattern,std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& skippedMessages,std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, bool& verbose, bool& needsClrScrn, const std::string& operation, const std::string& operationColor);
-bool processUserInputForIsoSelection(const std::string& inputString, bool isMount, bool isUnmount, bool write, bool& isFiltered, std::vector<std::string>& filteredFiles, std::vector<std::string>& isoDirs, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<std::string>& skippedMessages, bool& verbose, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool& promptFlag, int& maxDepth, bool& historyPattern, std::atomic<bool>& newISOFound, const std::string& operationColor);
+
 
 // size_ts
 size_t getTotalFileSize(const std::vector<std::string>& files);
