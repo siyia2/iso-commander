@@ -69,49 +69,75 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
     
     std::string listSubtype = isMount ? "mount" : (write ? "write" : "cp_mv_rm");
     
-    // Function to perform search and filter operations
-    auto performFilter = [&](const std::vector<std::string>& searchTerms, const std::vector<std::string>& sourceList) -> std::vector<std::string> {
-        std::vector<std::string> newFilteredFiles;
-        newFilteredFiles.reserve(std::min(sourceList.size(), sourceList.size() / 2 + 1));
-        
-        for (const auto& file : sourceList) {
-            std::string lowerFile = file;
-            toLowerInPlace(lowerFile);
-            
-            bool matchFound = std::any_of(searchTerms.begin(), searchTerms.end(), 
-                [&lowerFile](const auto& term) { return lowerFile.find(term) != std::string::npos; });
-            
-            if (matchFound) {
-                newFilteredFiles.push_back(file);
-            }
-        }
-        
-        if (!newFilteredFiles.empty()) {
-            sortFilesCaseInsensitive(newFilteredFiles);
-        }
-        
-        return newFilteredFiles;
-    };
+    // Modified performFilter lambda function with smart case sensitivity
+	auto performFilter = [&](const std::vector<std::string>& searchTerms, const std::vector<std::string>& sourceList) -> std::vector<std::string> {
+		std::vector<std::string> newFilteredFiles;
+		newFilteredFiles.reserve(std::min(sourceList.size(), sourceList.size() / 2 + 1));
     
-    // Function to parse search terms
-    auto parseSearchTerms = [](const std::string& inputSearch) -> std::vector<std::string> {
-        std::vector<std::string> searchTerms;
-        std::stringstream ss(inputSearch);
-        std::string term;
+		// Determine if any search term contains uppercase characters
+		bool hasUpperCase = std::any_of(searchTerms.begin(), searchTerms.end(), 
+			[](const std::string& term) {
+				return std::any_of(term.begin(), term.end(), 
+					[](unsigned char c) { return std::isupper(c); });
+			});
+    
+		for (const auto& file : sourceList) {
+			bool matchFound = false;
         
-        while (std::getline(ss, term, ';')) {
-            term.erase(0, term.find_first_not_of(" \t"));
-            term.erase(term.find_last_not_of(" \t") + 1);
+			if (hasUpperCase) {
+				// Case-sensitive search when uppercase is detected
+				matchFound = std::any_of(searchTerms.begin(), searchTerms.end(), 
+					[&file](const auto& term) { return file.find(term) != std::string::npos; });
+			} else {
+				// Case-insensitive search when all lowercase
+				std::string lowerFile = file;
+				toLowerInPlace(lowerFile);
             
-            if (!term.empty()) {
-                std::transform(term.begin(), term.end(), term.begin(), 
-                             [](unsigned char c) { return std::tolower(c); });
-                searchTerms.push_back(term);
-            }
-        }
+				matchFound = std::any_of(searchTerms.begin(), searchTerms.end(), 
+					[&lowerFile](const auto& term) { 
+						// term is already lowercase from parseSearchTerms
+						return lowerFile.find(term) != std::string::npos; 
+					});
+			}
         
-        return searchTerms;
-    };
+			if (matchFound) {
+				newFilteredFiles.push_back(file);
+			}
+		}
+    
+		if (!newFilteredFiles.empty()) {
+			sortFilesCaseInsensitive(newFilteredFiles);
+		}
+    
+		return newFilteredFiles;
+	};
+
+	// Modified parseSearchTerms lambda to preserve case when needed
+	auto parseSearchTerms = [](const std::string& inputSearch) -> std::vector<std::string> {
+		std::vector<std::string> searchTerms;
+		std::stringstream ss(inputSearch);
+		std::string term;
+    
+		// Check if the entire input has any uppercase
+		bool hasUpperCase = std::any_of(inputSearch.begin(), inputSearch.end(), 
+			[](unsigned char c) { return std::isupper(c); });
+    
+		while (std::getline(ss, term, ';')) {
+			term.erase(0, term.find_first_not_of(" \t"));
+			term.erase(term.find_last_not_of(" \t") + 1);
+        
+			if (!term.empty()) {
+				if (!hasUpperCase) {
+					// Convert to lowercase only if no uppercase in entire input
+					std::transform(term.begin(), term.end(), term.begin(), 
+                             [](unsigned char c) { return std::tolower(c); });
+				}
+				searchTerms.push_back(term);
+			}
+		}
+    
+		return searchTerms;
+	};
     
     while (true) {
         enable_ctrl_d();
