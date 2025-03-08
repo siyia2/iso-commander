@@ -11,21 +11,30 @@ std::vector<ProgressInfo> progressData;
 
 // Function to get the size of a block device
 uint64_t getBlockDeviceSize(const std::string& device) {
-    struct stat st;
-    if (stat(device.c_str(), &st) == 0) {
-        if (S_ISBLK(st.st_mode)) {
-            int fd = open(device.c_str(), O_RDONLY);
-            if (fd != -1) {
-                uint64_t size;
-                if (ioctl(fd, BLKGETSIZE64, &size) == 0) {
-                    close(fd);
-                    return size;
-                }
-                close(fd);
-            }
-        }
+    // Open the device
+    int fd = open(device.c_str(), O_RDONLY);
+    if (fd == -1) {
+        return 0;
     }
-    return 0; // Return 0 if unable to determine size
+
+    // Try multiple approaches to get the size
+    uint64_t size = 0;
+    
+    // First try BLKGETSIZE64 - the modern way to get size in bytes
+    if (ioctl(fd, BLKGETSIZE64, &size) == 0) {
+        close(fd);
+        return size;
+    }
+    
+    // If BLKGETSIZE64 fails, try BLKGETSIZE (returns number of 512-byte sectors)
+    unsigned long sectors = 0;
+    if (ioctl(fd, BLKGETSIZE, &sectors) == 0) {
+        close(fd);
+        return sectors * 512ULL;
+    }
+    
+    close(fd);
+    return 0;
 }
 
 
