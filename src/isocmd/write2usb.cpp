@@ -387,6 +387,7 @@ static struct CompleterData {
 
 // Custom readline completion for write2usb function
 char** completion_cb(const char* text, int start, int end) {
+	
     rl_attempted_completion_over = 1; // Tell Readline we'll handle completion
 
     char** matches = nullptr;
@@ -471,6 +472,16 @@ char** completion_cb(const char* text, int start, int end) {
 // Function to display selectedIsos and devices for write
 std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::vector<IsoInfo>& selectedIsos, std::unordered_set<std::string>& uniqueErrorMessages) {
     while (true) {
+	
+	// Disable readline completion list display for more than one items
+	rl_completion_display_matches_hook = [](char **matches, int num_matches, int max_length) {
+		// Mark parameters as unused to suppress warnings
+		(void)matches;
+		(void)num_matches;
+		(void)max_length;
+
+		// Do nothing so no list is printed
+	};
         signal(SIGINT, SIG_IGN);  // Ignore Ctrl+C
         disable_ctrl_d();
         clearScrollBuffer();
@@ -651,6 +662,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         // Restore bindings if not proceeding
         rl_bind_keyseq("\033[A", rl_get_previous_history);
         rl_bind_keyseq("\033[B", rl_get_next_history);
+        rl_completion_display_matches_hook = rl_display_match_list;
         
         std::cout << "\n\033[1;93mWrite operation aborted by user.\033[0;1m\n";
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
@@ -776,6 +788,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     }
     flushStdin();
     restoreInput();
+    rl_completion_display_matches_hook = rl_display_match_list;
 }
 
 
