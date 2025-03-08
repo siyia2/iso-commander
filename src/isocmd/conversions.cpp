@@ -777,7 +777,6 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
         }
     }
 
-
     // Blacklisted keywords (previously commented out)
     std::unordered_set<std::string> blacklistKeywords = {};
     
