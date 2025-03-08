@@ -75,6 +75,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         g_operationCancelled.store(false);
         resetVerboseSets(operationFiles, skippedMessages, operationFails, uniqueErrorMessages);
         verbose = false;
+        historyPattern = false;
         clear_history();
         
         if (!isUnmount) {
@@ -92,6 +93,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
                     break;
             }
             std::cout << "\n\n";
+            // Flag for initiating screen clearing on destructive list actions e.g. Umount/Mv/Rm
             umountMvRmBreak = false;
         }
         
@@ -166,7 +168,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
                     std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
 
                     if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
-                        historyPattern = false;
+                        
                         clear_history();
                         needsClrScrn = isFiltered ? true : false;
                         break;
@@ -188,12 +190,10 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
                             needsClrScrn = true;
                             filteredFiles = std::move(newFilteredFiles);
                             isFiltered = true;
-                            historyPattern = false;
                             clear_history();
                             break;
                         }
                     }
-                    historyPattern = false;
                     clear_history();
                 }
             } else {
@@ -225,13 +225,13 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
                  filteredFiles, isoDirs, operationFiles, 
                  operationFails, uniqueErrorMessages, skippedMessages, verbose,
                  needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
-                 promptFlag, maxDepth, historyPattern, newISOFound);
+                 promptFlag, maxDepth, newISOFound);
     }
 }
 
 
 // Function to process operations from selectIsoFiles
-void processOperationForSelectedIsoFiles(const std::string& inputString,bool isMount, bool isUnmount, bool write, bool isFiltered, const std::vector<std::string>& filteredFiles, std::vector<std::string>& isoDirs, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<std::string>& skippedMessages, bool verbose, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool promptFlag, int& maxDepth, bool& historyPattern, std::atomic<bool>& newISOFound) {
+void processOperationForSelectedIsoFiles(const std::string& inputString,bool isMount, bool isUnmount, bool write, bool isFiltered, const std::vector<std::string>& filteredFiles, std::vector<std::string>& isoDirs, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<std::string>& skippedMessages, bool& verbose, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool& promptFlag, int& maxDepth, std::atomic<bool>& newISOFound) {
     
     clearScrollBuffer();
     needsClrScrn = true;
@@ -257,18 +257,19 @@ void processOperationForSelectedIsoFiles(const std::string& inputString,bool isM
         writeToUsb(inputString, activeList, uniqueErrorMessages);
     } else {
         isAtISOList.store(false);
+        bool historyPattern = false;
         // Use const reference instead of copying
         const std::vector<std::string>& activeList = isFiltered ? filteredFiles : globalIsoFileList;
-        processOperationInput(inputString, activeList, operation, operationFiles, operationFails, uniqueErrorMessages, promptFlag, maxDepth, umountMvRmBreak, historyPattern, verbose, newISOFound);
+        processOperationInput(inputString, activeList, operation, operationFiles, operationFails, uniqueErrorMessages, promptFlag, maxDepth, umountMvRmBreak, verbose, historyPattern, newISOFound);
     }
 
     handleSelectIsoFilesResults(uniqueErrorMessages, operationFiles, operationFails, skippedMessages, operation, 
-                                 verbose, isMount, isFiltered, umountMvRmBreak, isUnmount, needsClrScrn, historyPattern);
+                                 verbose, isMount, isFiltered, umountMvRmBreak, isUnmount, needsClrScrn);
 }
 
 
 // Function to process results from selectIsoFiles
-void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& skippedMessages, const std::string& operation, bool verbose, bool isMount, bool isFiltered, bool umountMvRmBreak, bool isUnmount, bool& needsClrScrn, bool& historyPattern) {
+void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& skippedMessages, const std::string& operation, bool& verbose, bool isMount, bool& isFiltered, bool& umountMvRmBreak, bool isUnmount, bool& needsClrScrn) {
     // Result handling and display
     if (!uniqueErrorMessages.empty() && operationFiles.empty() && operationFails.empty() && skippedMessages.empty()) {
         clearScrollBuffer();
@@ -285,7 +286,6 @@ void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMes
 
     // Reset filter for certain operations
     if ((operation == "mv" || operation == "rm" || operation == "umount") && isFiltered && umountMvRmBreak) {
-        historyPattern = false;
         clear_history();
         needsClrScrn = true;
     }
