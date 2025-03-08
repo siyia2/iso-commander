@@ -320,6 +320,7 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::vector
         // Handle EOF
         if (userInput.empty() && !isPageTurn) {
             abortDel = true;
+            umountMvRmBreak = false;
             std::cout << "\n\033[1;93mDelete operation aborted by user.\033[0;1m\n";
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
