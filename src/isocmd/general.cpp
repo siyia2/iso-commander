@@ -134,6 +134,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
             else if (isUnmount) displayConfig::toggleFullListUmount = !displayConfig::toggleFullListUmount;
             else if (write) displayConfig::toggleFullListWrite = !displayConfig::toggleFullListWrite;
             else displayConfig::toggleFullListCpMvRm = !displayConfig::toggleFullListCpMvRm;
+            needsClrScrn = true;
             continue;
         }
 
@@ -174,6 +175,25 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
 
                 std::string inputSearch(searchQuery.get());
                 
+                // Split the search string by semicolons
+                std::vector<std::string> searchTerms;
+                std::stringstream ss(inputSearch);
+                std::string term;
+                
+                // Parse the search terms
+                while (std::getline(ss, term, ';')) {
+                    // Trim leading/trailing whitespace if needed
+                    term.erase(0, term.find_first_not_of(" \t"));
+                    term.erase(term.find_last_not_of(" \t") + 1);
+                    
+                    if (!term.empty()) {
+                        // Convert to lowercase for case-insensitive search
+                        std::transform(term.begin(), term.end(), term.begin(), 
+                                     [](unsigned char c) { return std::tolower(c); });
+                        searchTerms.push_back(term);
+                    }
+                }
+                
                 // Use references to avoid unnecessary copies
                 const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
                 
@@ -181,13 +201,25 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
                 std::vector<std::string> newFilteredFiles;
                 newFilteredFiles.reserve(std::min(sourceList.size(), sourceList.size() / 2 + 1));
                 
-                // Perform filtering
-				for (const auto& file : sourceList) {
-					if (file.find(inputSearch) != std::string::npos) {
-						newFilteredFiles.push_back(file);  // Only copy matching files
-					}
-				}
-
+                // Perform filtering - include file if it matches ANY of the search terms
+                for (const auto& file : sourceList) {
+                    std::string lowerFile = file;
+                    std::transform(lowerFile.begin(), lowerFile.end(), lowerFile.begin(), 
+                                 [](unsigned char c) { return std::tolower(c); });
+                    
+                    // Check if the file contains any of the search terms
+                    bool matchFound = false;
+                    for (const auto& term : searchTerms) {
+                        if (lowerFile.find(term) != std::string::npos) {
+                            matchFound = true;
+                            break;  // No need to check other terms once a match is found
+                        }
+                    }
+                    
+                    if (matchFound) {
+                        newFilteredFiles.push_back(file);
+                    }
+                }
                 
                 if (!newFilteredFiles.empty()) {
                     sortFilesCaseInsensitive(newFilteredFiles);
@@ -217,52 +249,77 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
 
         // Quick filter when starting with '/'
         if (inputString[0] == '/' && inputString.length() > 1) {
-            std::string searchTerm = inputString.substr(1);
+            std::string searchString = inputString.substr(1);
             
-            // Use references to avoid unnecessary copies
-            const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
+            // Split the search string by semicolons
+            std::vector<std::string> searchTerms;
+            std::stringstream ss(searchString);
+            std::string term;
             
-            // Allocate result vector with a reasonable capacity
-            std::vector<std::string> newFilteredFiles;
-            newFilteredFiles.reserve(std::min(sourceList.size(), sourceList.size() / 2 + 1));
-            
-            // Convert search term to lowercase once
-            std::string lowerSearchTerm = searchTerm;
-            std::transform(lowerSearchTerm.begin(), lowerSearchTerm.end(), lowerSearchTerm.begin(), 
-                           [](unsigned char c) { return std::tolower(c); });
-            
-            // Perform filtering directly
-            for (const auto& file : sourceList) {
-                std::string lowerFile = file;
-                std::transform(lowerFile.begin(), lowerFile.end(), lowerFile.begin(), 
-                               [](unsigned char c) { return std::tolower(c); });
+            // Parse the search terms
+            while (std::getline(ss, term, ';')) {
+                // Trim leading/trailing whitespace if needed
+                term.erase(0, term.find_first_not_of(" \t"));
+                term.erase(term.find_last_not_of(" \t") + 1);
                 
-                if (lowerFile.find(lowerSearchTerm) != std::string::npos) {
-                    newFilteredFiles.push_back(file);
+                if (!term.empty()) {
+                    // Convert to lowercase for case-insensitive search
+                    std::transform(term.begin(), term.end(), term.begin(), 
+                                 [](unsigned char c) { return std::tolower(c); });
+                    searchTerms.push_back(term);
                 }
             }
             
-            if (!newFilteredFiles.empty()) {
-                sortFilesCaseInsensitive(newFilteredFiles);
+            if (!searchTerms.empty()) {
+                // Use references to avoid unnecessary copies
+                const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
                 
-                // Check if the filter is meaningful
-                bool filterUnchanged = newFilteredFiles.size() == sourceList.size();
+                // Allocate result vector with a reasonable capacity
+                std::vector<std::string> newFilteredFiles;
+                newFilteredFiles.reserve(std::min(sourceList.size(), sourceList.size() / 2 + 1));
                 
-                if (!filterUnchanged) {
-                    historyPattern = true;
-                    loadHistory(historyPattern);
-                    add_history(searchTerm.c_str());
-                    saveHistory(historyPattern);
-                    // Move instead of copy
-                    filteredFiles = std::move(newFilteredFiles);
-                    isFiltered = true;
-                    needsClrScrn = true;
-                    continue;
+                // Perform filtering - include file if it matches ANY of the search terms
+                for (const auto& file : sourceList) {
+                    std::string lowerFile = file;
+                    std::transform(lowerFile.begin(), lowerFile.end(), lowerFile.begin(), 
+                                 [](unsigned char c) { return std::tolower(c); });
+                    
+                    // Check if the file contains any of the search terms
+                    bool matchFound = false;
+                    for (const auto& term : searchTerms) {
+                        if (lowerFile.find(term) != std::string::npos) {
+                            matchFound = true;
+                            break;  // No need to check other terms once a match is found
+                        }
+                    }
+                    
+                    if (matchFound) {
+                        newFilteredFiles.push_back(file);
+                    }
                 }
+                
+                if (!newFilteredFiles.empty()) {
+                    sortFilesCaseInsensitive(newFilteredFiles);
+                    
+                    // Check if the filter is meaningful
+                    bool filterUnchanged = newFilteredFiles.size() == sourceList.size();
+                    
+                    if (!filterUnchanged) {
+                        historyPattern = true;
+                        loadHistory(historyPattern);
+                        add_history(searchString.c_str());
+                        saveHistory(historyPattern);
+                        // Move instead of copy
+                        filteredFiles = std::move(newFilteredFiles);
+                        isFiltered = true;
+                        needsClrScrn = true;
+                        continue;
+                    }
+                }
+                // Explicitly clear if not used
+                std::vector<std::string>().swap(newFilteredFiles);
+                continue;
             }
-            // Explicitly clear if not used
-            std::vector<std::string>().swap(newFilteredFiles);
-            continue;
         }
 
         // Operation processing
