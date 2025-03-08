@@ -41,6 +41,10 @@ uint64_t getBlockDeviceSize(const std::string& device) {
 // Function to check if block device is usb
 bool isUsbDevice(const std::string& devicePath) {
     try {
+		// Early return if path doesn't start with "/dev/"
+        if (devicePath.substr(0, 5) != "/dev/") {
+            return false;
+        }
         // Extract device name (e.g., "sdb" from "/dev/sdb")
         size_t lastSlash = devicePath.find_last_of('/');
         std::string deviceName = (lastSlash == std::string::npos) ? 
