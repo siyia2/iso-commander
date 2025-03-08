@@ -250,6 +250,237 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
 }
 
 
+// Function to process a single batch of paths and find files for findFiles
+std::unordered_set<std::string> processBatchPaths(const std::vector<std::string>& batchPaths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback,std::unordered_set<std::string>& processedErrorsFind) {
+    std::atomic<size_t> totalFiles{0};
+    std::unordered_set<std::string> localFileNames;
+    
+    std::atomic<bool> g_CancelledMessageAdded{false};
+    g_operationCancelled.store(false);
+    
+    disableInput();
+
+    for (const auto& path : batchPaths) {
+		
+        try {
+            // Flags for blacklisting
+            bool blacklistMdf = (mode == "mdf");
+            bool blacklistNrg = (mode == "nrg");
+
+            // Traverse directory
+            for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
+				if (g_operationCancelled.load()) {
+					if (!g_CancelledMessageAdded.exchange(true)) {
+						std::lock_guard<std::mutex> lock(globalSetsMutex);
+						processedErrorsFind.clear();
+						localFileNames.clear();
+						std::string type = (blacklistMdf) ? "MDF" : (blacklistNrg) ? "NRG" : "BIN/IMG";
+						processedErrorsFind.insert("\033[1;33m" + type + " search interrupted by user.\n\n\033[0;1m");
+					}
+					break;
+				}
+                if (entry.is_regular_file()) {
+                    totalFiles.fetch_add(1, std::memory_order_acq_rel);
+                    if (totalFiles % 100 == 0) { // Update display periodically
+						std::lock_guard<std::mutex> lock(couNtMutex);
+                        std::cout << "\r\033[0;1mTotal files processed: " << totalFiles << std::flush;
+                    }
+                    
+                    if (blacklist(entry, blacklistMdf, blacklistNrg)) {
+                        std::string fileName = entry.path().string();
+                        // Thread-safe insertion
+                        {
+                            std::lock_guard<std::mutex> lock(globalSetsMutex);
+                            bool isInCache = false;
+                            if (mode == "nrg") {
+                                isInCache = (std::find(nrgFilesCache.begin(), nrgFilesCache.end(), fileName) != nrgFilesCache.end());
+                            } else if (mode == "mdf") {
+                                isInCache = (std::find(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end(), fileName) != mdfMdsFilesCache.end());
+                            } else if (mode == "bin") {
+                                isInCache = (std::find(binImgFilesCache.begin(), binImgFilesCache.end(), fileName) != binImgFilesCache.end());
+                            }
+                            
+                            if (!isInCache) {
+                                if (localFileNames.insert(fileName).second) {
+                                    callback(fileName, entry.path().parent_path().string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            
+        } catch (const std::filesystem::filesystem_error& e) {
+			std::lock_guard<std::mutex> lock(globalSetsMutex);
+            std::string errorMessage = "\033[1;91mError traversing path: " 
+                + path + " - " + e.what() + "\033[0;1m";
+            processedErrorsFind.insert(errorMessage);
+        }
+    }
+	
+	{
+		std::lock_guard<std::mutex> lock(couNtMutex);
+		// Print the total files processed after all paths are handled
+		std::cout << "\r\033[0;1mTotal files processed: " << totalFiles << "\033[0;1m";
+	}
+
+    return localFileNames;
+}
+
+
+// Function to search for .bin .img .nrg and mdf files
+std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, std::unordered_set<std::string>& fileNames, int& currentCacheOld, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, const std::vector<std::string>& directoryPaths, std::unordered_set<std::string>& invalidDirectoryPaths, std::unordered_set<std::string>& processedErrorsFind) {
+    // Setup signal handler and reset cancellation flag
+    setupSignalHandlerCancellations();
+    g_operationCancelled.store(false);
+    
+    // Disable input before processing
+    disableInput();
+    
+    // Choose the appropriate cache upfront
+    std::vector<std::string>* currentCache = nullptr;
+    if (mode == "bin") {
+        currentCacheOld = binImgFilesCache.size();
+        currentCache = &binImgFilesCache;
+    } else if (mode == "mdf") {
+        currentCacheOld = mdfMdsFilesCache.size();
+        currentCache = &mdfMdsFilesCache;
+    } else if (mode == "nrg") {
+        currentCacheOld = nrgFilesCache.size();
+        currentCache = &nrgFilesCache;
+    } else {
+        restoreInput();
+        return {};
+    }
+    
+    // Constants for batch processing
+    const size_t BATCH_SIZE = 100;
+    const size_t MAX_CONCURRENT_BATCHES = maxThreads;
+    
+    // Create batches of unique input paths
+    std::vector<std::vector<std::string>> pathBatches;
+    std::vector<std::string> currentBatch;
+    std::unordered_set<std::string> processedValidPaths;
+    
+    for (const auto& originalPath : inputPaths) {
+        std::string path = std::filesystem::path(originalPath).string();
+        
+        // Skip empty or already processed paths
+        if (path.empty() || !processedValidPaths.insert(path).second) {
+            continue;
+        }
+        
+        currentBatch.push_back(path);
+        
+        // Create a new batch when current one is full
+        if (currentBatch.size() >= BATCH_SIZE) {
+            pathBatches.push_back(std::move(currentBatch));
+            currentBatch = std::vector<std::string>();
+        }
+    }
+    
+    // Add any remaining paths
+    if (!currentBatch.empty()) {
+        pathBatches.push_back(std::move(currentBatch));
+    }
+    
+    // Process batches with thread pool
+    std::vector<std::future<std::unordered_set<std::string>>> batchFutures;
+    
+    for (const auto& batch : pathBatches) {
+        batchFutures.push_back(std::async(std::launch::async, processBatchPaths, 
+                                         batch, mode, callback, std::ref(processedErrorsFind)));
+        
+        // Limit concurrent batches and check for cancellation
+        if (batchFutures.size() >= MAX_CONCURRENT_BATCHES) {
+            for (auto& future : batchFutures) {
+                future.wait();
+                if (g_operationCancelled.load()) {
+                    // Clean up and exit early if operation was cancelled
+                    restoreInput();
+                    return *currentCache;
+                }
+            }
+            batchFutures.clear();
+        }
+    }
+    
+    // Collect results from all batches
+    for (auto& future : batchFutures) {
+        std::unordered_set<std::string> batchResults = future.get();
+        fileNames.insert(batchResults.begin(), batchResults.end());
+    }
+    
+    verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
+    
+    // Efficiently update cache with new files
+    std::unordered_set<std::string> currentCacheSet(currentCache->begin(), currentCache->end());
+    std::vector<std::string> newFiles;
+    
+    for (const auto& fileName : fileNames) {
+        if (currentCacheSet.insert(fileName).second) {
+            newFiles.push_back(fileName);
+        }
+    }
+    
+    // Append all new files at once
+    if (!newFiles.empty()) {
+        currentCache->insert(currentCache->end(), newFiles.begin(), newFiles.end());
+    }
+    
+    // Restore input
+    flushStdin();
+    restoreInput();
+    
+    return *currentCache;
+}
+
+
+// Blacklist function for MDF BIN IMG NRG
+bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, const bool& blacklistNrg) {
+    const std::string filenameLower = entry.filename().string();
+    const std::string ext = entry.extension().string();
+    std::string extLower = ext;
+    toLowerInPlace(extLower);
+
+    // Default mode: .bin and .img files
+    if (!blacklistMdf && !blacklistNrg) {
+        if (!((extLower == ".bin" || extLower == ".img"))) {
+            return false;
+        }
+    } 
+    // MDF mode
+    else if (blacklistMdf) {
+        if (extLower != ".mdf") {
+            return false;
+        }
+    } 
+    // NRG mode
+    else if (blacklistNrg) {
+        if (extLower != ".nrg") {
+            return false;
+        }
+    }
+
+    // Blacklisted keywords (previously commented out)
+    std::unordered_set<std::string> blacklistKeywords = {};
+    
+    // Convert filename to lowercase without extension
+    std::string filenameLowerNoExt = filenameLower;
+    filenameLowerNoExt.erase(filenameLowerNoExt.size() - ext.size());
+
+    // Check blacklisted keywords
+    for (const auto& keyword : blacklistKeywords) {
+        if (filenameLowerNoExt.find(keyword) != std::string::npos) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+
 // Combined function for filtering and converting files to ISO
 void select_and_convert_to_iso(const std::string& fileType, std::vector<std::string>& files, std::atomic<bool>& newISOFound, bool& list) {
 
@@ -562,237 +793,6 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
 
     isProcessingComplete.store(true);
     progressThread.join();
-}
-
-
-// Function to process a single batch of paths and find files for findFiles
-std::unordered_set<std::string> processBatchPaths(const std::vector<std::string>& batchPaths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback,std::unordered_set<std::string>& processedErrorsFind) {
-    std::atomic<size_t> totalFiles{0};
-    std::unordered_set<std::string> localFileNames;
-    
-    std::atomic<bool> g_CancelledMessageAdded{false};
-    g_operationCancelled.store(false);
-    
-    disableInput();
-
-    for (const auto& path : batchPaths) {
-		
-        try {
-            // Flags for blacklisting
-            bool blacklistMdf = (mode == "mdf");
-            bool blacklistNrg = (mode == "nrg");
-
-            // Traverse directory
-            for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
-				if (g_operationCancelled.load()) {
-					if (!g_CancelledMessageAdded.exchange(true)) {
-						std::lock_guard<std::mutex> lock(globalSetsMutex);
-						processedErrorsFind.clear();
-						localFileNames.clear();
-						std::string type = (blacklistMdf) ? "MDF" : (blacklistNrg) ? "NRG" : "BIN/IMG";
-						processedErrorsFind.insert("\033[1;33m" + type + " search interrupted by user.\n\n\033[0;1m");
-					}
-					break;
-				}
-                if (entry.is_regular_file()) {
-                    totalFiles.fetch_add(1, std::memory_order_acq_rel);
-                    if (totalFiles % 100 == 0) { // Update display periodically
-						std::lock_guard<std::mutex> lock(couNtMutex);
-                        std::cout << "\r\033[0;1mTotal files processed: " << totalFiles << std::flush;
-                    }
-                    
-                    if (blacklist(entry, blacklistMdf, blacklistNrg)) {
-                        std::string fileName = entry.path().string();
-                        // Thread-safe insertion
-                        {
-                            std::lock_guard<std::mutex> lock(globalSetsMutex);
-                            bool isInCache = false;
-                            if (mode == "nrg") {
-                                isInCache = (std::find(nrgFilesCache.begin(), nrgFilesCache.end(), fileName) != nrgFilesCache.end());
-                            } else if (mode == "mdf") {
-                                isInCache = (std::find(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end(), fileName) != mdfMdsFilesCache.end());
-                            } else if (mode == "bin") {
-                                isInCache = (std::find(binImgFilesCache.begin(), binImgFilesCache.end(), fileName) != binImgFilesCache.end());
-                            }
-                            
-                            if (!isInCache) {
-                                if (localFileNames.insert(fileName).second) {
-                                    callback(fileName, entry.path().parent_path().string());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            
-        } catch (const std::filesystem::filesystem_error& e) {
-			std::lock_guard<std::mutex> lock(globalSetsMutex);
-            std::string errorMessage = "\033[1;91mError traversing path: " 
-                + path + " - " + e.what() + "\033[0;1m";
-            processedErrorsFind.insert(errorMessage);
-        }
-    }
-	
-	{
-		std::lock_guard<std::mutex> lock(couNtMutex);
-		// Print the total files processed after all paths are handled
-		std::cout << "\r\033[0;1mTotal files processed: " << totalFiles << "\033[0;1m";
-	}
-
-    return localFileNames;
-}
-
-
-// Function to search for .bin .img .nrg and mdf files
-std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, std::unordered_set<std::string>& fileNames, int& currentCacheOld, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, const std::vector<std::string>& directoryPaths, std::unordered_set<std::string>& invalidDirectoryPaths, std::unordered_set<std::string>& processedErrorsFind) {
-    // Setup signal handler and reset cancellation flag
-    setupSignalHandlerCancellations();
-    g_operationCancelled.store(false);
-    
-    // Disable input before processing
-    disableInput();
-    
-    // Choose the appropriate cache upfront
-    std::vector<std::string>* currentCache = nullptr;
-    if (mode == "bin") {
-        currentCacheOld = binImgFilesCache.size();
-        currentCache = &binImgFilesCache;
-    } else if (mode == "mdf") {
-        currentCacheOld = mdfMdsFilesCache.size();
-        currentCache = &mdfMdsFilesCache;
-    } else if (mode == "nrg") {
-        currentCacheOld = nrgFilesCache.size();
-        currentCache = &nrgFilesCache;
-    } else {
-        restoreInput();
-        return {};
-    }
-    
-    // Constants for batch processing
-    const size_t BATCH_SIZE = 100;
-    const size_t MAX_CONCURRENT_BATCHES = maxThreads;
-    
-    // Create batches of unique input paths
-    std::vector<std::vector<std::string>> pathBatches;
-    std::vector<std::string> currentBatch;
-    std::unordered_set<std::string> processedValidPaths;
-    
-    for (const auto& originalPath : inputPaths) {
-        std::string path = std::filesystem::path(originalPath).string();
-        
-        // Skip empty or already processed paths
-        if (path.empty() || !processedValidPaths.insert(path).second) {
-            continue;
-        }
-        
-        currentBatch.push_back(path);
-        
-        // Create a new batch when current one is full
-        if (currentBatch.size() >= BATCH_SIZE) {
-            pathBatches.push_back(std::move(currentBatch));
-            currentBatch = std::vector<std::string>();
-        }
-    }
-    
-    // Add any remaining paths
-    if (!currentBatch.empty()) {
-        pathBatches.push_back(std::move(currentBatch));
-    }
-    
-    // Process batches with thread pool
-    std::vector<std::future<std::unordered_set<std::string>>> batchFutures;
-    
-    for (const auto& batch : pathBatches) {
-        batchFutures.push_back(std::async(std::launch::async, processBatchPaths, 
-                                         batch, mode, callback, std::ref(processedErrorsFind)));
-        
-        // Limit concurrent batches and check for cancellation
-        if (batchFutures.size() >= MAX_CONCURRENT_BATCHES) {
-            for (auto& future : batchFutures) {
-                future.wait();
-                if (g_operationCancelled.load()) {
-                    // Clean up and exit early if operation was cancelled
-                    restoreInput();
-                    return *currentCache;
-                }
-            }
-            batchFutures.clear();
-        }
-    }
-    
-    // Collect results from all batches
-    for (auto& future : batchFutures) {
-        std::unordered_set<std::string> batchResults = future.get();
-        fileNames.insert(batchResults.begin(), batchResults.end());
-    }
-    
-    verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
-    
-    // Efficiently update cache with new files
-    std::unordered_set<std::string> currentCacheSet(currentCache->begin(), currentCache->end());
-    std::vector<std::string> newFiles;
-    
-    for (const auto& fileName : fileNames) {
-        if (currentCacheSet.insert(fileName).second) {
-            newFiles.push_back(fileName);
-        }
-    }
-    
-    // Append all new files at once
-    if (!newFiles.empty()) {
-        currentCache->insert(currentCache->end(), newFiles.begin(), newFiles.end());
-    }
-    
-    // Restore input
-    flushStdin();
-    restoreInput();
-    
-    return *currentCache;
-}
-
-
-// Blacklist function for MDF BIN IMG NRG
-bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, const bool& blacklistNrg) {
-    const std::string filenameLower = entry.filename().string();
-    const std::string ext = entry.extension().string();
-    std::string extLower = ext;
-    toLowerInPlace(extLower);
-
-    // Default mode: .bin and .img files
-    if (!blacklistMdf && !blacklistNrg) {
-        if (!((extLower == ".bin" || extLower == ".img"))) {
-            return false;
-        }
-    } 
-    // MDF mode
-    else if (blacklistMdf) {
-        if (extLower != ".mdf") {
-            return false;
-        }
-    } 
-    // NRG mode
-    else if (blacklistNrg) {
-        if (extLower != ".nrg") {
-            return false;
-        }
-    }
-
-    // Blacklisted keywords (previously commented out)
-    std::unordered_set<std::string> blacklistKeywords = {};
-    
-    // Convert filename to lowercase without extension
-    std::string filenameLowerNoExt = filenameLower;
-    filenameLowerNoExt.erase(filenameLowerNoExt.size() - ext.size());
-
-    // Check blacklisted keywords
-    for (const auto& keyword : blacklistKeywords) {
-        if (filenameLowerNoExt.find(keyword) != std::string::npos) {
-            return false;
-        }
-    }
-
-    return true;
 }
 
 
