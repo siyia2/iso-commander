@@ -175,7 +175,7 @@ std::string getHomeDirectory() {
 
 
 // Utility function to clear screen buffer and load IsoFiles from cache to a global vector only for the first time and only for if the cache has been modified.
-bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType) {
+bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType, bool& umountMvRmBreak) {
 	
 	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
 	disable_ctrl_d();
@@ -216,6 +216,7 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
     // Lock to prevent simultaneous access to std::cout
     {
         std::lock_guard<std::mutex> printLock(couNtMutex);
+        if (umountMvRmBreak) isFiltered = false;
         printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType);
 
 		if (globalIsoFileList.empty()) {
@@ -666,7 +667,6 @@ void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, 
 	while (std::getline(iss, path, ';')) {
 		if (!isValidDirectory(path)) {
 			if (promptFlag) {
-				std::lock_guard<std::mutex> lock(processMutex);
 				invalidPaths.insert(path);
 			}
 			continue;

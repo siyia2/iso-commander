@@ -10,7 +10,7 @@ const std::string MOUNTED_ISO_PATH = "/mnt";
 
 
 // Function to load and display mount-points
-bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<std::string>& filteredFiles, bool& isFiltered) {
+bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& umountMvRmBreak) {
     signal(SIGINT, SIG_IGN);  // Ignore Ctrl+C
     disable_ctrl_d();
 
@@ -60,7 +60,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
 
     clearScrollBuffer();
 
-    if (filteredFiles.size() == isoDirs.size()) {
+    if (filteredFiles.size() == isoDirs.size() || umountMvRmBreak) {
         isFiltered = false;
     }
     printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS", "");
@@ -213,7 +213,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std:
 
 
 // Main function to send ISOs for unmount
-void prepareUnmount(const std::string& input, std::vector<std::string>& currentFiles, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& verbose) {
+void prepareUnmount(const std::string& input, const std::vector<std::string>& currentFiles, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& verbose) {
     // Setup signal handler
     setupSignalHandlerCancellations();
     
