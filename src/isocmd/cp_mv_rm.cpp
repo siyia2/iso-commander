@@ -277,6 +277,10 @@ std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>&
             entries.push_back(oss.str());
         }
     }
+
+    // Sort the entries using the natural comparison
+    sortFilesCaseInsensitive(entries);
+
     return entries;
 }
 
@@ -294,9 +298,6 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::vector
     // Generate entries for selected ISO files
     std::vector<std::string> entries = generateIsoEntries(indexChunks, isoFiles);
 
-    // Sort the entries using the natural comparison
-    sortFilesCaseInsensitive(entries);
-    
     // Prefix and suffix for the prompt
     std::string promptPrefix = "\n";
     std::string promptSuffix = "\n\001\033[1;94m\002The selected \001\033[1;92m\002ISO\001\033[1;94m\002 will be " +
