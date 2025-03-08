@@ -69,6 +69,8 @@ void clearRamCache(bool& modeMdf, bool& modeNrg) {
 
 // Function to check and list stored ram cache
 void ramCacheList(std::vector<std::string>& files, bool& list, const std::string& fileExtension, const std::vector<std::string>& binImgFilesCache, const std::vector<std::string>& mdfMdsFilesCache, const std::vector<std::string>& nrgFilesCache, bool modeMdf, bool modeNrg) {
+	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+	disable_ctrl_d();
     if (((binImgFilesCache.empty() && !modeMdf && !modeNrg) || 
          (mdfMdsFilesCache.empty() && modeMdf) || 
          (nrgFilesCache.empty() && modeNrg)) && list) {
@@ -77,6 +79,7 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         clearScrollBuffer();
         list = false;
+        return;
     } else if (list) {
         if (!modeMdf && !modeNrg) {
             files = binImgFilesCache;
@@ -87,39 +90,6 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
         }
     }
 }
-
-
-void parseInputSearchPaths(const std::string& inputSearch, 
-                          std::unordered_set<std::string>& uniquePaths,
-                          std::vector<std::string>& directoryPaths,
-                          std::unordered_set<std::string>& invalidDirectoryPaths) {
-    std::istringstream ss(inputSearch);
-    std::string path;
-    
-    while (std::getline(ss, path, ';')) {
-        // Trim leading and trailing whitespace
-        size_t start = path.find_first_not_of(" \t");
-        size_t end = path.find_last_not_of(" \t");
-
-        // Check if the path is not just whitespace
-        if (start != std::string::npos && end != std::string::npos) {
-            std::string cleanedPath = path.substr(start, end - start + 1);
-
-            // Check if the path is unique
-            if (uniquePaths.find(cleanedPath) == uniquePaths.end()) {
-                // Check if the directory exists
-                if (directoryExists(cleanedPath)) {
-                    directoryPaths.push_back(cleanedPath);
-                    uniquePaths.insert(cleanedPath);
-                } else {
-                    // Mark invalid directories with red color
-                    invalidDirectoryPaths.insert("\033[1;91m" + cleanedPath);
-                }
-            }
-        }
-    }
-}
-
 
 
 // Function to select and convert files based on user's choice of file type
@@ -217,7 +187,14 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
         }
         
         // Show cache contents if requested
-        ramCacheList(files, list, fileExtension, binImgFilesCache, mdfMdsFilesCache, nrgFilesCache, modeMdf, modeNrg);
+		if (list) {
+			ramCacheList(files, list, fileExtension, binImgFilesCache, mdfMdsFilesCache, nrgFilesCache, modeMdf, modeNrg);
+			if (!files.empty()) {
+				// continue to image file list
+			} else {
+				continue;
+			}
+	   }
         
         // Add spacing for non-list, non-clear operations
         if (!inputSearch.empty() && !list && !clr) {
