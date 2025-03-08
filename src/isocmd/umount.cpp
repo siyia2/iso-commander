@@ -61,6 +61,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
     clearScrollBuffer();
 
     if (filteredFiles.size() == isoDirs.size() || umountMvRmBreak) {
+		filteredFiles = isoDirs;
         isFiltered = false;
     }
     printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS", "");

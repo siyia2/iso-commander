@@ -78,9 +78,9 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         clear_history();
         
         if (!isUnmount) {
-            isAtISOList.store(true);
-            removeNonExistentPathsFromCache();
-        }
+			removeNonExistentPathsFromCache();
+			isAtISOList.store(true);
+		}
         
         // Load files based on operation type
         if (needsClrScrn) {
@@ -92,6 +92,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
                     break;
             }
             std::cout << "\n\n";
+            umountMvRmBreak = false;
         }
         
         if (updateHasRun.load() && !isUnmount && !globalIsoFileList.empty()) {
@@ -99,6 +100,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
                         std::ref(isImportRunning), std::ref(updateHasRun), std::ref(umountMvRmBreak),
                         std::ref(filteredFiles), std::ref(isFiltered), std::ref(listSubtype), std::ref(newISOFound)).detach();
         }
+        
         
         std::cout << "\033[1A\033[K";
         

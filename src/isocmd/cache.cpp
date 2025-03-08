@@ -216,7 +216,10 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
     // Lock to prevent simultaneous access to std::cout
     {
         std::lock_guard<std::mutex> printLock(couNtMutex);
-        if (umountMvRmBreak) isFiltered = false;
+        if (umountMvRmBreak) {
+			filteredFiles = globalIsoFileList;
+			isFiltered = false;
+		}
         printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType);
 
 		if (globalIsoFileList.empty()) {
