@@ -53,9 +53,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
     bool isFiltered = false;
     bool needsClrScrn = true;
     bool umountMvRmBreak = false;
-    
-    bool promptFlag = false;
-    int maxDepth = 0;
+
 
     // Determine operation color and specific flags
     std::string operationColor = operation == "rm" ? "\033[1;91m" :
@@ -77,7 +75,6 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         g_operationCancelled.store(false);
         resetVerboseSets(operationFiles, skippedMessages, operationFails, uniqueErrorMessages);
         bool filterHistory = false;
-        bool verbose = false;
         clear_history();
         
         if (!isUnmount) {
@@ -224,19 +221,20 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         // Process operation for selected files
         processOperationForSelectedIsoFiles(inputString, isMount, isUnmount, write, isFiltered, 
                  filteredFiles, isoDirs, operationFiles, 
-                 operationFails, uniqueErrorMessages, skippedMessages, verbose,
+                 operationFails, uniqueErrorMessages, skippedMessages,
                  needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
-                 promptFlag, maxDepth, filterHistory, newISOFound);
+                 filterHistory, newISOFound);
     }
 }
 
 
 // Function to process operations from selectIsoFiles
-void processOperationForSelectedIsoFiles(const std::string& inputString,bool isMount, bool isUnmount, bool write, bool& isFiltered, const std::vector<std::string>& filteredFiles, std::vector<std::string>& isoDirs, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<std::string>& skippedMessages, bool& verbose, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool promptFlag, int& maxDepth, bool& filterHistory, std::atomic<bool>& newISOFound) {
+void processOperationForSelectedIsoFiles(const std::string& inputString, bool isMount, bool isUnmount, bool write, bool& isFiltered, const std::vector<std::string>& filteredFiles, std::vector<std::string>& isoDirs, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<std::string>& skippedMessages, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool& filterHistory, std::atomic<bool>& newISOFound) {
     
     clearScrollBuffer();
     // Default flags
     needsClrScrn = true;
+    bool verbose = false;
 
     if (isMount) {
         isAtISOList.store(false);
@@ -259,6 +257,8 @@ void processOperationForSelectedIsoFiles(const std::string& inputString,bool isM
         writeToUsb(inputString, activeList, uniqueErrorMessages);
     } else {
         isAtISOList.store(false);
+        bool promptFlag = false;
+        int maxDepth = 0;
         // Use const reference instead of copying
         const std::vector<std::string>& activeList = isFiltered ? filteredFiles : globalIsoFileList;
          processOperationInput(inputString, activeList, operation, operationFiles, operationFails, uniqueErrorMessages, promptFlag, maxDepth, umountMvRmBreak, filterHistory, verbose, newISOFound);
@@ -270,7 +270,7 @@ void processOperationForSelectedIsoFiles(const std::string& inputString,bool isM
 
 
 // Function to process results from selectIsoFiles
-void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& skippedMessages, const std::string& operation, bool verbose, bool isMount, bool& isFiltered, bool& umountMvRmBreak, bool isUnmount, bool& needsClrScrn) {
+void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& skippedMessages, const std::string& operation, bool& verbose, bool isMount, bool& isFiltered, bool& umountMvRmBreak, bool isUnmount, bool& needsClrScrn) {
     // Result handling and display
     if (!uniqueErrorMessages.empty() && operationFiles.empty() && operationFails.empty() && skippedMessages.empty()) {
         clearScrollBuffer();
