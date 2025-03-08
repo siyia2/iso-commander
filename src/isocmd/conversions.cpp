@@ -515,6 +515,12 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         clear_history();
         if (needsScrnClr) {
             clearScrollBuffer(); // Clear the screen for new content
+             // Assist in automatic removal of non-existent entries from cache
+			files = 
+				(!isFiltered && !binImgFilesCache.empty() && (fileType == "bin" || fileType == "img") && binImgFilesCache.size() != files.size()) ? binImgFilesCache :
+				(!isFiltered && !mdfMdsFilesCache.empty() && fileType == "mdf" && mdfMdsFilesCache.size() != files.size()) ? mdfMdsFilesCache :
+				(!isFiltered && !nrgFilesCache.empty() && fileType == "nrg" && nrgFilesCache.size() != files.size()) ? nrgFilesCache :
+				files;
             
             if ((!list && !isFiltered) || isFiltered) {
                 sortFilesCaseInsensitive(files); // Sort the files case-insensitively
