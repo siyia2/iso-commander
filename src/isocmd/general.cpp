@@ -214,9 +214,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
 							break;  // No need to check other terms once a match is found
 						}
 					}
-				
-
-                    
+				           
                     if (matchFound) {
                         newFilteredFiles.push_back(file);
                     }
