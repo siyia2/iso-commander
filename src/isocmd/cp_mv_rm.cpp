@@ -4,6 +4,61 @@
 #include "../threadpool.h"
 
 
+// Function to group files for CpMvRm same filenames are grouped in teh same chunk
+std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::unordered_set<int>& processedIndices, const std::vector<std::string>& isoFiles, unsigned int numThreads, bool isDelete) {
+    // Convert unordered_set to vector
+    std::vector<int> processedIndicesVector(processedIndices.begin(), processedIndices.end());
+
+    std::vector<std::vector<int>> indexChunks;
+
+    if (!isDelete) {
+        // Group indices by their base filename
+        std::unordered_map<std::string, std::vector<int>> groups;
+        for (int idx : processedIndicesVector) {
+            std::string baseName = std::filesystem::path(isoFiles[idx - 1]).filename().string();
+            groups[baseName].push_back(idx);
+        }
+
+        std::vector<int> uniqueNameFiles;
+        // Separate multi-file groups and collect unique files
+        for (auto& kv : groups) {
+            if (kv.second.size() > 1) {
+                indexChunks.push_back(kv.second);
+            } else {
+                uniqueNameFiles.push_back(kv.second[0]);
+            }
+        }
+
+        // Calculate max files per chunk based on numThreads
+        size_t maxFilesPerChunk = std::max(1UL, numThreads > 0 ? (uniqueNameFiles.size() + numThreads - 1) / numThreads : 5);
+
+        // Split unique files into chunks
+        for (size_t i = 0; i < uniqueNameFiles.size(); i += maxFilesPerChunk) {
+            auto end = std::min(i + maxFilesPerChunk, uniqueNameFiles.size());
+            std::vector<int> chunk(
+                uniqueNameFiles.begin() + i,
+                uniqueNameFiles.begin() + end
+            );
+            indexChunks.emplace_back(chunk);
+        }
+    } else {
+        // For "rm", group indices into chunks based on numThreads
+        size_t maxFilesPerChunk = std::max(1UL, numThreads > 0 ? (processedIndicesVector.size() + numThreads - 1) / numThreads : 10);
+
+        for (size_t i = 0; i < processedIndicesVector.size(); i += maxFilesPerChunk) {
+            std::vector<int> chunk;
+            auto end = std::min(i + maxFilesPerChunk, processedIndicesVector.size());
+            for (size_t j = i; j < end; ++j) {
+                chunk.push_back(processedIndicesVector[j]);
+            }
+            indexChunks.push_back(chunk);
+        }
+    }
+
+    return indexChunks;
+}
+
+
 // Function to process selected indices for cpMvDel accordingly
 void processOperationInput(const std::string& input, std::vector<std::string>& isoFiles, const std::string& process, std::unordered_set<std::string>& operationIsos, std::unordered_set<std::string>& operationErrors, std::unordered_set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& umountMvRmBreak, bool& historyPattern, bool& verbose, std::atomic<bool>& newISOFound) {
     setupSignalHandlerCancellations();
@@ -26,55 +81,12 @@ void processOperationInput(const std::string& input, std::vector<std::string>& i
         return;
     }
     
-    std::vector<std::vector<int>> indexChunks;
 	unsigned int numThreads = std::min(static_cast<unsigned int>(processedIndices.size()), maxThreads);
+	std::vector<std::vector<int>> indexChunks = groupFilesIntoChunksForCpMvRm(processedIndices, isoFiles, numThreads, isDelete);
 
-	if (!isDelete) {
-		// Group indices by their base filename
-		std::unordered_map<std::string, std::vector<int>> groups;
-		for (int idx : processedIndices) {
-			std::string baseName = std::filesystem::path(isoFiles[idx - 1]).filename().string();
-			groups[baseName].push_back(idx);
-		}
-    
-		std::vector<int> uniqueNameFiles;
-		// Separate multi-file groups and collect unique files
-		for (auto& kv : groups) {
-			if (kv.second.size() > 1) {
-				indexChunks.push_back(kv.second);
-			} else {
-				uniqueNameFiles.push_back(kv.second[0]);
-			}
-		}
-    
-		// Calculate max files per chunk based on numThreads
-		size_t maxFilesPerChunk = std::max(1UL, numThreads > 0 ? (uniqueNameFiles.size() + numThreads - 1) / numThreads : 5);
-    
-		// Split unique files into chunks
-		for (size_t i = 0; i < uniqueNameFiles.size(); i += maxFilesPerChunk) {
-			auto end = std::min(i + maxFilesPerChunk, uniqueNameFiles.size());
-			std::vector<int> chunk(
-				uniqueNameFiles.begin() + i, 
-				uniqueNameFiles.begin() + end
-			);
-			indexChunks.emplace_back(chunk);
-		}
-	} else {
-		// For "rm", group indices into chunks based on numThreads
-		size_t maxFilesPerChunk = std::max(1UL, numThreads > 0 ? (processedIndices.size() + numThreads - 1) / numThreads : 10);
-    
-		for (size_t i = 0; i < processedIndices.size(); i += maxFilesPerChunk) {
-			std::vector<int> chunk;
-			auto end = std::min(i + maxFilesPerChunk, processedIndices.size());
-			for (size_t j = i; j < end; ++j) {
-				chunk.push_back(*(std::next(processedIndices.begin(), j)));
-			}
-			indexChunks.push_back(chunk);
-		}
-	}
-
-
+	// Flag for Rm abortion
     bool abortDel = false;
+    
     std::string processedUserDestDir = userDestDirRm(isoFiles, indexChunks, uniqueErrorMessages, userDestDir, 
                                                      operationColor, operationDescription, umountMvRmBreak, 
                                                      historyPattern, isDelete, isCopy, abortDel, overwriteExisting);
