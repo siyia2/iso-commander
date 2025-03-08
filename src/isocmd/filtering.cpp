@@ -105,108 +105,54 @@ std::string removeAnsiCodes(const std::string& input) {
 
 
 // Function to filter cached ISO files or mountpoints based on search query (case-insensitive)
-std::vector<std::string> filterFiles(const std::vector<std::string>::const_iterator begin, const std::vector<std::string>::const_iterator end, const std::string& query) {
-    
+std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query) {
     std::vector<std::string> filteredFiles;
-    std::vector<std::pair<std::string, bool>> queryTokens; // token and its case sensitivity flag
+    std::vector<std::pair<std::string, bool>> queryTokens;
     
     // Tokenize the query
     std::stringstream ss(query);
     std::string token;
     
     while (std::getline(ss, token, ';')) {
-        // Trim whitespace
         token.erase(0, token.find_first_not_of(" \t"));
         token.erase(token.find_last_not_of(" \t") + 1);
         
         if (!token.empty()) {
-            // Check each token individually for uppercase characters
-            bool hasUpperCase = std::any_of(token.begin(), token.end(), 
+            bool hasUpperCase = std::any_of(token.begin(), token.end(),
                 [](unsigned char c) { return std::isupper(c); });
             
-            // Store the original token and its case sensitivity flag
             queryTokens.push_back({token, hasUpperCase});
         }
     }
     
-    // Calculate the number of elements in the range
-    size_t numFiles = std::distance(begin, end);
-    
-    // This mutex will only be used for the final merge
-    std::mutex filterMutex;
-    
-    auto filterTask = [&](
-        std::vector<std::string>::const_iterator rangeBegin,
-        std::vector<std::string>::const_iterator rangeEnd) {
+    for (const std::string& file : files) {
+        std::string cleanFileName = removeAnsiCodes(file);
+        std::string fileNameLower = cleanFileName;
+        toLowerInPlace(fileNameLower);
         
-        std::vector<std::string> localFilteredFiles;
+        bool matchFound = false;
         
-        for (auto it = rangeBegin; it != rangeEnd; ++it) {
-            const std::string& file = *it;
-            std::string cleanFileName = removeAnsiCodes(file);  // Remove ANSI codes first
-            std::string fileNameLower = cleanFileName;
-            toLowerInPlace(fileNameLower);  // Convert once to lowercase for case-insensitive searches
-            
-            bool matchFound = false;
-            
-            for (const auto& [queryToken, isCaseSensitive] : queryTokens) {
-                if (isCaseSensitive) {
-                    // Case-sensitive search for this token
-                    if (!boyerMooreSearch(queryToken, cleanFileName).empty()) {
-                        matchFound = true;
-                        break;
-                    }
-                } else {
-                    // Case-insensitive search for this token
-                    std::string tokenLower = queryToken;
-                    toLowerInPlace(tokenLower);
-                    
-                    if (!boyerMooreSearch(tokenLower, fileNameLower).empty()) {
-                        matchFound = true;
-                        break;
-                    }
+        for (const auto& [queryToken, isCaseSensitive] : queryTokens) {
+            if (isCaseSensitive) {
+                if (!boyerMooreSearch(queryToken, cleanFileName).empty()) {
+                    matchFound = true;
+                    break;
                 }
-            }
-            
-            if (matchFound) {
-                localFilteredFiles.push_back(file);  // Push back the original file name with color codes
+            } else {
+                std::string tokenLower = queryToken;
+                toLowerInPlace(tokenLower);
+                
+                if (!boyerMooreSearch(tokenLower, fileNameLower).empty()) {
+                    matchFound = true;
+                    break;
+                }
             }
         }
         
-        // Merge local results into the global filteredFiles vector
-        std::lock_guard<std::mutex> lock(filterMutex);
-        filteredFiles.insert(filteredFiles.end(), localFilteredFiles.begin(), localFilteredFiles.end());
-    };
-    
-    size_t numThreads = std::min(static_cast<size_t>(maxThreads), numFiles);
-    
-    // Calculate the batch size based on the number of threads
-    size_t batchSize = (numFiles + numThreads - 1) / numThreads; // This ensures at least one file per thread
-    
-    std::vector<std::future<void>> futures;
-    
-    // Launch threads to process files in batches
-    auto it = begin;
-    for (size_t i = 0; i < numFiles; i += batchSize) {
-        auto batchStart = it;
-        
-        // Advance iterator by batchSize or to the end, whichever comes first
-        size_t advanceBy = std::min(batchSize, numFiles - i);
-        std::advance(it, advanceBy);
-        
-        // Launch each batch processing task asynchronously
-        futures.push_back(std::async(std::launch::async, filterTask, batchStart, it));
-    }
-    
-    // Wait for all threads to finish
-    for (auto& future : futures) {
-        future.wait();
+        if (matchFound) {
+            filteredFiles.push_back(file);
+        }
     }
     
     return filteredFiles;
-}
-
-// Wrapper function that accepts a vector directly for backward compatibility
-std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query) {
-    return filterFiles(files.begin(), files.end(), query);
 }
