@@ -53,6 +53,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
     bool isFiltered = false;
     bool needsClrScrn = true;
     bool umountMvRmBreak = false;
+    
     bool promptFlag = false;
     int maxDepth = 0;
 
@@ -75,7 +76,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         setupSignalHandlerCancellations();
         g_operationCancelled.store(false);
         resetVerboseSets(operationFiles, skippedMessages, operationFails, uniqueErrorMessages);
-        bool historyPattern = false;
+        bool filterHistory = false;
         bool verbose = false;
         clear_history();
         
@@ -158,8 +159,8 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                 while (true) {
                     resetVerboseSets(operationFiles, skippedMessages, operationFails, uniqueErrorMessages);
 
-                    historyPattern = true;
-                    loadHistory(historyPattern);
+                    filterHistory = true;
+                    loadHistory(filterHistory);
                     std::cout << "\033[1A\033[K";
 
                     std::string filterPrompt = "\001\033[1;38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001" + 
@@ -186,7 +187,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                         
                         if (!filterUnchanged && !newFilteredFiles.empty()) {
                             add_history(searchQuery.get());
-                            saveHistory(historyPattern);
+                            saveHistory(filterHistory);
                             needsClrScrn = true;
                             filteredFiles = std::move(newFilteredFiles);
                             isFiltered = true;
@@ -207,10 +208,10 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                     bool filterUnchanged = newFilteredFiles.size() == sourceList.size();
                     
                     if (!filterUnchanged && !newFilteredFiles.empty()) {
-                        historyPattern = true;
-                        loadHistory(historyPattern);
+                        filterHistory = true;
+                        loadHistory(filterHistory);
                         add_history(searchString.c_str());
-                        saveHistory(historyPattern);
+                        saveHistory(filterHistory);
                         filteredFiles = std::move(newFilteredFiles);
                         isFiltered = true;
                         needsClrScrn = true;
@@ -258,10 +259,11 @@ void processOperationForSelectedIsoFiles(const std::string& inputString,bool isM
         writeToUsb(inputString, activeList, uniqueErrorMessages);
     } else {
         isAtISOList.store(false);
-        bool historyPattern = false;
+        // Disable filter history
+        bool filterHistory = false;
         // Use const reference instead of copying
         const std::vector<std::string>& activeList = isFiltered ? filteredFiles : globalIsoFileList;
-         processOperationInput(inputString, activeList, operation, operationFiles, operationFails, uniqueErrorMessages, promptFlag, maxDepth, umountMvRmBreak, historyPattern, verbose, newISOFound);
+         processOperationInput(inputString, activeList, operation, operationFiles, operationFails, uniqueErrorMessages, promptFlag, maxDepth, umountMvRmBreak, filterHistory, verbose, newISOFound);
     }
 
     handleSelectIsoFilesResults(uniqueErrorMessages, operationFiles, operationFails, skippedMessages, operation, 

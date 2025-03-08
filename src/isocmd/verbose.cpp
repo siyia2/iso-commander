@@ -138,7 +138,7 @@ void reportErrorCpMvRm(const std::string& errorType, const std::string& srcDir, 
 // CACHE
 
 // Function that provides verbose output for manualRefreshCache
-void verboseIsoCacheRefresh(std::vector<std::string>& allIsoFiles, std::atomic<size_t>& totalFiles, std::vector<std::string>& validPaths, std::unordered_set<std::string>& invalidPaths, std::unordered_set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& historyPattern, const std::chrono::high_resolution_clock::time_point& start_time, std::atomic<bool>& newISOFound) {
+void verboseIsoCacheRefresh(std::vector<std::string>& allIsoFiles, std::atomic<size_t>& totalFiles, std::vector<std::string>& validPaths, std::unordered_set<std::string>& invalidPaths, std::unordered_set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& filterHistory, const std::chrono::high_resolution_clock::time_point& start_time, std::atomic<bool>& newISOFound) {
 	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
 	disable_ctrl_d();
 	bool saveSuccess;
@@ -219,7 +219,7 @@ void verboseIsoCacheRefresh(std::vector<std::string>& allIsoFiles, std::atomic<s
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     std::string initialDir = "";
-    manualRefreshCache(initialDir, promptFlag, maxDepth, historyPattern, newISOFound);
+    manualRefreshCache(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
 	}
 }
 

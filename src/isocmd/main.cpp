@@ -163,7 +163,7 @@ int main(int argc, char *argv[]) {
             submenu1(updateHasRun, isAtISOList, isImportRunning, newISOFound);
         } else {
 			bool promptFlag = true; // Enable interactive cache refresh prompt
-			bool historyPattern = false; // Do not save to filter history
+			bool filterHistory = false; // Do not save to filter history
 			int maxDepth = -1; // Traverse at maximum depth
             // Check if the input length is exactly 1
             if (choice.length() == 1) {
@@ -176,7 +176,7 @@ int main(int argc, char *argv[]) {
                     case '3':
 						isAtMain.store(false);
 						isAtISOList.store(false);
-                        manualRefreshCache(initialDir, promptFlag, maxDepth, historyPattern, newISOFound);
+                        manualRefreshCache(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
                         clearScrollBuffer();
                         break;
                     case '4':

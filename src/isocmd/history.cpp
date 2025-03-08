@@ -5,7 +5,7 @@
 
 // Default readline history save path
 const std::string historyFilePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/iso_commander_history_cache.txt";
-const std::string historyPatternFilePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/iso_commander_filter_cache.txt";
+const std::string filterHistoryFilePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/iso_commander_filter_cache.txt";
 
 //Maximum number of history entries at a time
 const int MAX_HISTORY_LINES = 50;
@@ -68,11 +68,11 @@ bool isHistoryFileEmpty(const std::string& filePath) {
 
 
 // Function to load history from readline
-void loadHistory(bool& historyPattern) {
+void loadHistory(bool& filterHistory) {
     // Only load history from file if it's not already populated in memory
     if (history_length == 0) {
-        std::string targetFilePath = !historyPattern ? 
-            historyFilePath : historyPatternFilePath;
+        std::string targetFilePath = !filterHistory ? 
+            historyFilePath : filterHistoryFilePath;
 
         int fd = open(targetFilePath.c_str(), O_RDONLY);
         if (fd == -1) {
@@ -102,9 +102,9 @@ void loadHistory(bool& historyPattern) {
 
 
 // Function to save history from readline
-void saveHistory(bool& historyPattern) {
-    std::string targetFilePath = !historyPattern ? 
-        historyFilePath : historyPatternFilePath;
+void saveHistory(bool& filterHistory) {
+    std::string targetFilePath = !filterHistory ? 
+        historyFilePath : filterHistoryFilePath;
 
     // Extract directory path from the target file path
     std::filesystem::path dirPath = std::filesystem::path(targetFilePath).parent_path();
@@ -162,7 +162,7 @@ void saveHistory(bool& historyPattern) {
     }
 
     // Determine max lines based on pattern flag
-    size_t maxLines = !historyPattern ? 
+    size_t maxLines = !filterHistory ? 
         MAX_HISTORY_LINES : MAX_HISTORY_PATTERN_LINES;
 
     // Trim excess lines if needed

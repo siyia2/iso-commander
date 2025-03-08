@@ -60,7 +60,7 @@ std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::unordered
 
 
 // Function to process selected indices for cpMvDel accordingly
-void processOperationInput(const std::string& input, const std::vector<std::string>& isoFiles, const std::string& process, std::unordered_set<std::string>& operationIsos, std::unordered_set<std::string>& operationErrors, std::unordered_set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& umountMvRmBreak, bool& historyPattern, bool& verbose, std::atomic<bool>& newISOFound) {
+void processOperationInput(const std::string& input, const std::vector<std::string>& isoFiles, const std::string& process, std::unordered_set<std::string>& operationIsos, std::unordered_set<std::string>& operationErrors, std::unordered_set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& umountMvRmBreak, bool& filterHistory, bool& verbose, std::atomic<bool>& newISOFound) {
     setupSignalHandlerCancellations();
     
     bool overwriteExisting = false;
@@ -89,7 +89,7 @@ void processOperationInput(const std::string& input, const std::vector<std::stri
     
     std::string processedUserDestDir = userDestDirRm(isoFiles, indexChunks, uniqueErrorMessages, userDestDir, 
                                                      operationColor, operationDescription, umountMvRmBreak, 
-                                                     historyPattern, isDelete, isCopy, abortDel, overwriteExisting);
+                                                     filterHistory, isDelete, isCopy, abortDel, overwriteExisting);
         
     g_operationCancelled.store(false);
     
@@ -158,11 +158,11 @@ void processOperationInput(const std::string& input, const std::vector<std::stri
     
 
     if (!isDelete) {
-        manualRefreshCache(userDestDir, promptFlag, maxDepth, historyPattern, newISOFound);
+        manualRefreshCache(userDestDir, promptFlag, maxDepth, filterHistory, newISOFound);
     }
     
     if (!isDelete && !operationIsos.empty()) {
-        saveHistory(historyPattern);
+        saveHistory(filterHistory);
         clear_history();
     }
 
@@ -348,7 +348,7 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::vector
 
 
 // Function to prompt for userDestDir or Delete confirmation including pagination
-std::string userDestDirRm(const std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::unordered_set<std::string>& uniqueErrorMessages, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& historyPattern, bool& isDelete, bool& isCopy, bool& abortDel, bool& overwriteExisting) {
+std::string userDestDirRm(const std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::unordered_set<std::string>& uniqueErrorMessages, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& filterHistory, bool& isDelete, bool& isCopy, bool& abortDel, bool& overwriteExisting) {
 
     // Display error messages if any
     auto displayErrors = [&]() {
@@ -385,8 +385,8 @@ std::string userDestDirRm(const std::vector<std::string>& isoFiles, std::vector<
             
             if (!isPageTurn) {
                 clear_history();
-                historyPattern = false;
-                loadHistory(historyPattern);
+                filterHistory = false;
+                loadHistory(filterHistory);
             }
         };
         

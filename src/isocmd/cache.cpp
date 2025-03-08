@@ -469,7 +469,7 @@ bool isValidDirectory(const std::string& path) {
 
 
 // Function that can delete or show stats for ISO cache it is called from within manualRefreshCache
-void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, const int& maxDepth, const bool& historyPattern, std::atomic<bool>& newISOFound) {
+void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, const int& maxDepth, const bool& filterHistory, std::atomic<bool>& newISOFound) {
 	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
 	disable_ctrl_d();
     const std::unordered_set<std::string> validInputs = {
@@ -497,7 +497,7 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
 
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        manualRefreshCache(initialDir, promptFlag, maxDepth, historyPattern, newISOFound);
+        manualRefreshCache(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
 
     } else if (inputSearch == "!clr") {
         if (std::remove(cacheFilePath.c_str()) != 0) {
@@ -505,7 +505,7 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
                       << cacheFilePath << "\001'\033[1;91m. File missing or inaccessible." << std::endl;
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            manualRefreshCache(initialDir, promptFlag, maxDepth, historyPattern, newISOFound);
+            manualRefreshCache(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
         } else {
             // Clean transformation cache for .iso entries
             for (auto it = transformationCache.begin(); it != transformationCache.end();) {
@@ -521,12 +521,12 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             std::vector<std::string>().swap(globalIsoFileList);
-            manualRefreshCache(initialDir, promptFlag, maxDepth, historyPattern, newISOFound);
+            manualRefreshCache(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
         }
 
     } else if (inputSearch == "!clr_paths" || inputSearch == "!clr_filter") {
         clearHistory(inputSearch);
-        manualRefreshCache(initialDir, promptFlag, maxDepth, historyPattern, newISOFound);
+        manualRefreshCache(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
 
     } else if (inputSearch == "*auto_on" || inputSearch == "*auto_off") {
         // Create directory if it doesn't exist
@@ -537,7 +537,7 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
                           << dirPath.string() << "\033[1;91m'.\033[0;1m\n";
                 std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                manualRefreshCache(initialDir, promptFlag, maxDepth, historyPattern, newISOFound);
+                manualRefreshCache(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
             }
         }
 
@@ -569,17 +569,17 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
 
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        manualRefreshCache(initialDir, promptFlag, maxDepth, historyPattern, newISOFound);
+        manualRefreshCache(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
 
     } else if (isValidInput(inputSearch)) {
         setDisplayMode(inputSearch);
-        manualRefreshCache(initialDir, promptFlag, maxDepth, historyPattern, newISOFound);
+        manualRefreshCache(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
     }
 }
 
 
 // Function for manual cache refresh
-void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, bool historyPattern, std::atomic<bool>& newISOFound) {
+void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, bool filterHistory, std::atomic<bool>& newISOFound) {
 	
 	enable_ctrl_d();
 	// Setup signal handler at the start of the operation
@@ -595,7 +595,7 @@ void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, 
             clearScrollBuffer();
         }
         
-        loadHistory(historyPattern);
+        loadHistory(filterHistory);
         
         const std::unordered_set<std::string> validInputs = {
 			"*fl_m", "*cl_m", "*fl_u", "*cl_u", "*fl_fo", "*cl_fo", "*fl_w", "*cl_w", "*fl_c", "*cl_c"
@@ -622,11 +622,11 @@ void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, 
 				helpSearches(isCpMv, import2ISO);
 				input = "";
 				std::string dummyDir = "";
-				manualRefreshCache(dummyDir, promptFlag, maxDepth, historyPattern, newISOFound);
+				manualRefreshCache(dummyDir, promptFlag, maxDepth, filterHistory, newISOFound);
 			}        
 			
             if (input == "stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter" || input == "*auto_off" || input == "*auto_on" || isValidInput(input)) {
-                cacheAndMiscSwitches(input, promptFlag, maxDepth, historyPattern, newISOFound);
+                cacheAndMiscSwitches(input, promptFlag, maxDepth, filterHistory, newISOFound);
                 return;
             }
             
@@ -718,11 +718,11 @@ void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, 
             std::cout << "\033[1A\033[K";
         }
 		if (!validPaths.empty() && !input.empty()) {
-			saveHistory(historyPattern);
+			saveHistory(filterHistory);
 			clear_history();
 		}
         verboseIsoCacheRefresh(allIsoFiles, totalFiles, validPaths, invalidPaths, 
-                               uniqueErrorMessages, promptFlag, maxDepth, historyPattern, start_time, newISOFound);
+                               uniqueErrorMessages, promptFlag, maxDepth, filterHistory, start_time, newISOFound);
     } else {
 		if (!g_operationCancelled.load()) {
 			// Save the combined cache to disk

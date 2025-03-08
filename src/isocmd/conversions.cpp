@@ -141,8 +141,8 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
         resetVerboseSets(processedErrors, successOuts, skippedOuts, failedOuts);
         clearScrollBuffer();
         clear_history();
-        bool historyPattern = false;
-        loadHistory(historyPattern);
+        bool filterHistory = false;
+        loadHistory(filterHistory);
         rl_bind_key('\f', clear_screen_and_buffer);
         rl_bind_key('\t', rl_complete);
         
@@ -228,7 +228,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
             // Update history if valid paths were processed
             if (!directoryPaths.empty()) {
                 add_history(inputSearch.c_str());
-                saveHistory(historyPattern);
+                saveHistory(filterHistory);
             }
             
             // Display search results
@@ -250,11 +250,11 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
 
 
 // Function to filter convert2ISO lists
-void filterQuery(std::vector<std::string>& files, bool& historyPattern, const std::string& filterPrompt, bool& needsScrnClr) {
+void filterQuery(std::vector<std::string>& files, bool& filterHistory, const std::string& filterPrompt, bool& needsScrnClr) {
     while (true) {
         clear_history(); // Clear the input history
-        historyPattern = true;
-        loadHistory(historyPattern); // Load input history if available
+        filterHistory = true;
+        loadHistory(filterHistory); // Load input history if available
 
         // Prompt the user for a search query
         std::unique_ptr<char, decltype(&std::free)> rawSearchQuery(readline(filterPrompt.c_str()), &std::free);
@@ -281,8 +281,8 @@ void filterQuery(std::vector<std::string>& files, bool& historyPattern, const st
 
         // Save the search query to history and update the file list
         add_history(rawSearchQuery.get());
-        saveHistory(historyPattern);
-        historyPattern = false;
+        saveHistory(filterHistory);
+        filterHistory = false;
         clear_history(); // Clear history to reset for future inputs
         files = filteredFiles; // Update the file list with the filtered results
         needsScrnClr = true;
@@ -320,7 +320,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 		enable_ctrl_d();
 		setupSignalHandlerCancellations();
 		g_operationCancelled.store(false);
-		bool historyPattern =false;
+		bool filterHistory =false;
         bool verbose = false; // Reset verbose mode
         resetVerboseSets(processedErrors, successOuts, skippedOuts, failedOuts);
         
@@ -383,17 +383,17 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         if (strcmp(rawInput.get(), "/") == 0) {
 			std::cout << "\033[1A\033[K";
 			filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;38;5;208m\002" + fileExtensionWithOutDots + "\001\033[1;94m\002, or ↵ to return: \001\033[0;1m\002";
-			    filterQuery(files, historyPattern, filterPrompt, needsScrnClr); // Call the filter query function
+			    filterQuery(files, filterHistory, filterPrompt, needsScrnClr); // Call the filter query function
 			isFiltered = files.size() != (fileType == "bin" || fileType == "img" ? binImgFilesCache.size() : (fileType == "mdf" ? mdfMdsFilesCache.size() : nrgFilesCache.size()));
 		} else if (rawInput.get()[0] == '/' && rawInput.get()[1] != '\0') {
 			// Directly filter the files based on the input without showing the filter prompt
 			std::string inputSearch(rawInput.get() + 1); // Skip the '/' character
 			auto filteredFiles = filterFiles(files, inputSearch);
 			if (!filteredFiles.empty() && !(filteredFiles.size() == files.size())) {
-				historyPattern = true;
-                loadHistory(historyPattern);
+				filterHistory = true;
+                loadHistory(filterHistory);
 				add_history(inputSearch.c_str()); // Save the filter pattern to history
-				saveHistory(historyPattern);
+				saveHistory(filterHistory);
 				
 				files = filteredFiles; // Update the file list with the filtered results
 				
@@ -917,10 +917,10 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
 
     // Update cache and prompt flags
     bool promptFlag = false;
-    bool historyPattern = false;
+    bool filterHistory = false;
     int maxDepth = 0;
     if (!successOuts.empty()) {
-        manualRefreshCache(result, promptFlag, maxDepth, historyPattern, newISOFound);
+        manualRefreshCache(result, promptFlag, maxDepth, filterHistory, newISOFound);
     }
 
 }
