@@ -449,6 +449,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 }
 
 
+// Function to calculate converted files size
 size_t calculateSizeForConverted(const std::vector<std::string>& filesToProcess, bool modeNrg, bool modeMdf) {
     size_t totalBytes = 0;
 
