@@ -41,7 +41,7 @@ For best experience execute with: `sudo isocmd`.
 
 * Multithreaded asynchronous task handling.
 * Lock-free operations.
-* Scalable from 1 to 100,000 ISO files.
+* Scalable from 1 to 10,000 ISO files.
 * Implements cutting-edge concurrent programming practices.
 
 
