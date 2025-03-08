@@ -161,10 +161,11 @@ int main(int argc, char *argv[]) {
 			isAtMain.store(false);
 			isAtISOList.store(false);
             submenu1(updateHasRun, isAtISOList, isImportRunning, newISOFound);
-        } else {
-			bool promptFlag = true; // Enable interactive cache refresh prompt
-			bool filterHistory = false; // Do not save to filter history
-			int maxDepth = -1; // Traverse at maximum depth
+        } else {	
+			bool promptFlag; // Flag for enabing interactive cache refresh prompt
+			bool filterHistory; // Filter history toggle
+			int maxDepth; // Traverse depth variable
+
             // Check if the input length is exactly 1
             if (choice.length() == 1) {
                 switch (choice[0]) {
@@ -176,6 +177,9 @@ int main(int argc, char *argv[]) {
                     case '3':
 						isAtMain.store(false);
 						isAtISOList.store(false);
+						promptFlag = true; // Enable cache refresh prompt
+						filterHistory = false; // Disable filter hsitory
+						maxDepth = -1; // Traverse at max depth
                         manualRefreshCache(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
                         clearScrollBuffer();
                         break;
