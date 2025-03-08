@@ -90,7 +90,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
         
         // Check for cancellation
         if (g_operationCancelled.load()) {
-            handleMountFailureAndSkipped(isoDirectory, isoFilename, "CXL", formatter, tempMountedFails, tempSkippedMessages, failedTasks, completedTasks, flushBuffers);
+            handleMountFailureAndSkipped(isoDirectory, isoFilename, "cxl", formatter, tempMountedFails, tempSkippedMessages, failedTasks, completedTasks, flushBuffers);
             continue;
         }
         
