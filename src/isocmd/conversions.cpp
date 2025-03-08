@@ -124,28 +124,12 @@ void parseInputSearchPaths(const std::string& inputSearch,
 
 // Function to select and convert files based on user's choice of file type
 void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose, std::atomic<bool>& newISOFound) {
-    // Prepare containers for files and caches
-    std::vector<std::string> files;
-    files.reserve(100);
-    binImgFilesCache.reserve(100);
-    mdfMdsFilesCache.reserve(100);
-    nrgFilesCache.reserve(100);
-    
-    // To keep track the number of prior cached files
-    int currentCacheOld = 0;
-    
-    // Tracking sets and vectors
-    std::vector<std::string> directoryPaths;
-    std::unordered_set<std::string> uniquePaths, processedErrors, processedErrorsFind, successOuts, 
-                           skippedOuts, failedOuts, 
-                           invalidDirectoryPaths, fileNames;
-                           
-    // Control flags
+    // Setup file type configuration
     std::string fileExtension, fileTypeName, fileType = fileTypeChoice;
     bool modeMdf = (fileType == "mdf");
     bool modeNrg = (fileType == "nrg");
 
-    // Configure file type specifics
+    // Configure file type specifics once
     if (fileType == "bin" || fileType == "img") {
         fileExtension = ".bin/.img";
         fileTypeName = "BIN/IMG";
@@ -159,138 +143,133 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
         std::cout << "Invalid file type choice. Supported types: BIN/IMG, MDF, NRG\n";
         return;
     }
-
+    
+    // Pre-allocate container space
+    std::vector<std::string> files;
+    files.reserve(100);
+    binImgFilesCache.reserve(100);
+    mdfMdsFilesCache.reserve(100);
+    nrgFilesCache.reserve(100);
+    
+    // Define prompt once
+    std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;38;5;208m\002" + fileExtension +
+                         "\001\033[1;94m\002 files and import them into \001\033[1;93m\002RAM\001\033[1;94m\002 cache, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
+    
     // Main processing loop
     while (true) {
-        // Reset control flags and clear tracking sets
+        // Reset state for each iteration
+        int currentCacheOld = 0;
+        std::vector<std::string> directoryPaths;
+        std::unordered_set<std::string> uniquePaths, processedErrors, processedErrorsFind;
+        std::unordered_set<std::string> successOuts, skippedOuts, failedOuts, invalidDirectoryPaths, fileNames;
+        bool list = false, clr = false, newFilesFound = false;
+
+        // Setup environment
         enable_ctrl_d();
         setupSignalHandlerCancellations();
-		g_operationCancelled.store(false);
-        bool list = false, clr = false;
+        g_operationCancelled.store(false);
         resetVerboseSets(processedErrors, successOuts, skippedOuts, failedOuts);
-        directoryPaths.clear();
-        invalidDirectoryPaths.clear();
-        uniquePaths.clear();
-        files.clear();
-        fileNames.clear();
-        processedErrorsFind.clear();
-		
-		clearScrollBuffer();
-
-        // Manage command history
+        clearScrollBuffer();
         clear_history();
         historyPattern = false;
         loadHistory(historyPattern);
-		
-		// Restore readline autocomplete and screen clear bindings
-		rl_bind_key('\f', clear_screen_and_buffer);
-		rl_bind_key('\t', rl_complete);
+        rl_bind_key('\f', clear_screen_and_buffer);
+        rl_bind_key('\t', rl_complete);
         
-        bool isCpMv= false;
-        
-        const std::unordered_set<std::string> validInputs = {
-			"*fl_m", "*cl_m", "*fl_u", "*cl_u", "*fl_fo", "*cl_fo", "*fl_w", "*cl_w", "*fl_c", "*cl_c"
-		};
-        
-        // Interactive prompt setup (similar to original code)
-        std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;38;5;208m\002" + fileExtension +
-                             "\001\033[1;94m\002 files and import them into \001\033[1;93m\002RAM\001\033[1;94m\002 cache, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
-
         // Get user input
         std::unique_ptr<char, decltype(&std::free)> mainSearch(readline(prompt.c_str()), &std::free);
         
-        // Check for EOF (Ctrl+D) or NULL input before processing
-        if (!mainSearch.get() || mainSearch.get()[0] == '\0' || std::all_of(mainSearch.get(), mainSearch.get() + strlen(mainSearch.get()), [](char c) { return c == ' '; })) {
-            break; // Exit the loop on EOF
+        // Check for exit conditions
+        if (!mainSearch.get() || mainSearch.get()[0] == '\0' || 
+            std::all_of(mainSearch.get(), mainSearch.get() + strlen(mainSearch.get()), 
+                       [](char c) { return c == ' '; })) {
+            break;
         }
-
-        // Trim leading and trailing whitespaces but keep spaces inside
-		std::string inputSearch = trimWhitespace(mainSearch.get());
         
+        // Process input
+        std::string inputSearch = trimWhitespace(mainSearch.get());
+        
+        // Handle special commands
         if (inputSearch == "!clr_paths" || inputSearch == "!clr_filter") {
-			clearHistory(inputSearch);
-			continue;
-		}
+            clearHistory(inputSearch);
+            continue;
+        }
         
         if (isValidInput(inputSearch)) {
-			setDisplayMode(inputSearch);
-			continue;
-		}
+            setDisplayMode(inputSearch);
+            continue;
+        }
         
         if (inputSearch == "?") {
-			bool import2ISO = false;
+            bool isCpMv = false, import2ISO = false;
             helpSearches(isCpMv, import2ISO);
             continue;
         }
-
-        // Determine input type
+        
+        // Determine operation type
         list = (inputSearch == "ls");
         clr = (inputSearch == "!clr");
-
-        // Handle cache clearing (similar to original code)
+        
+        // Handle cache clearing
         if (clr) {
-			clearRamCache(modeMdf, modeNrg);
-			continue;
-
-		}
-		 // Ram Cache emptiness checks and returns
+            clearRamCache(modeMdf, modeNrg);
+            continue;
+        }
+        
+        // Show cache contents if requested
         ramCacheList(files, list, fileExtension, binImgFilesCache, mdfMdsFilesCache, nrgFilesCache, modeMdf, modeNrg);
-
-        // Manage command history
+        
+        // Add spacing for non-list, non-clear operations
         if (!inputSearch.empty() && !list && !clr) {
             std::cout << " " << std::endl;
         }
-
-        // Timing setup
+        
+        // Start timing for performance measurement
         auto start_time = std::chrono::high_resolution_clock::now();
         
-        // New files tracking
-        bool newFilesFound = false;
-
-        // File collection (integrated file search logic)
-        if (!list) { 
-			// Parse input search paths
-			std::istringstream ss(inputSearch);
-			std::string path;
-    
-			while (std::getline(ss, path, ';')) {
-				if (!path.empty() && uniquePaths.insert(path).second) {
-					if (directoryExists(path)) {
-						directoryPaths.push_back(path);
-					} else {
-						invalidDirectoryPaths.insert("\033[1;91m" + path);
-					}
-				}
-			}
-    
-			// Find files with updated logic from the separate function
-			files = findFiles(directoryPaths, fileNames, currentCacheOld, fileType, 
-				[&](const std::string&, const std::string&) {
-					newFilesFound = true;
-				},
-				directoryPaths,
-				invalidDirectoryPaths, 
-				processedErrorsFind 
-			);
-		}
-		
-		if (!directoryPaths.empty()) {
-			add_history(inputSearch.c_str());
-            saveHistory(historyPattern);       
-		}
-		
-		
-		if (!list) {
-			verboseSearchResults(fileExtension, fileNames, invalidDirectoryPaths, newFilesFound, list, currentCacheOld, files, start_time, processedErrorsFind, directoryPaths);
-			if (!newFilesFound) {
-				continue;
-			}
-		}
-		if (!g_operationCancelled.load()) {
-			// File conversion workflow (using new modular function)
-			select_and_convert_to_iso(fileType, files, verbose, 
-									promptFlag, maxDepth, historyPattern, newISOFound, list);
-		}
+        // Process file search (if not just listing)
+        if (!list) {
+            // Parse input paths
+            std::istringstream ss(inputSearch);
+            std::string path;
+            
+            // Collect valid paths
+            while (std::getline(ss, path, ';')) {
+                if (!path.empty() && uniquePaths.insert(path).second) {
+                    if (directoryExists(path)) {
+                        directoryPaths.push_back(path);
+                    } else {
+                        invalidDirectoryPaths.insert("\033[1;91m" + path);
+                    }
+                }
+            }
+            
+            // Find matching files
+            files = findFiles(directoryPaths, fileNames, currentCacheOld, fileType,
+                             [&](const std::string&, const std::string&) { newFilesFound = true; },
+                             directoryPaths, invalidDirectoryPaths, processedErrorsFind);
+            
+            // Update history if valid paths were processed
+            if (!directoryPaths.empty()) {
+                add_history(inputSearch.c_str());
+                saveHistory(historyPattern);
+            }
+            
+            // Display search results
+            verboseSearchResults(fileExtension, fileNames, invalidDirectoryPaths, 
+                                newFilesFound, list, currentCacheOld, files, 
+                                start_time, processedErrorsFind, directoryPaths);
+            
+            if (!newFilesFound) {
+                continue;
+            }
+        }
+        
+        // Process files if operation wasn't cancelled
+        if (!g_operationCancelled.load()) {
+            select_and_convert_to_iso(fileType, files, verbose, promptFlag, 
+                                     maxDepth, historyPattern, newISOFound, list);
+        }
     }
 }
 
@@ -470,6 +449,52 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 }
 
 
+size_t calculateSizeForConverted(const std::vector<std::string>& filesToProcess, bool modeNrg, bool modeMdf) {
+    size_t totalBytes = 0;
+
+    if (modeNrg) {
+        for (const auto& file : filesToProcess) {
+            std::ifstream nrgFile(file, std::ios::binary);
+            if (nrgFile) {
+                // Seek to the end of the file to get the total size
+                nrgFile.seekg(0, std::ios::end);
+                size_t nrgFileSize = nrgFile.tellg();
+
+                // The ISO data starts after the 307,200-byte header
+                size_t isoDataSize = nrgFileSize - 307200;
+
+                // Add the ISO data size to the total bytes
+                totalBytes += isoDataSize;
+            }
+        }
+    } else if (modeMdf) {
+        for (const auto& file : filesToProcess) {
+            std::ifstream mdfFile(file, std::ios::binary);
+            if (mdfFile) {
+                MdfTypeInfo mdfInfo;
+                if (!mdfInfo.determineMdfType(mdfFile)) {
+                    continue;
+                }
+                mdfFile.seekg(0, std::ios::end);
+                size_t fileSize = mdfFile.tellg();
+                size_t numSectors = fileSize / mdfInfo.sector_size;
+                totalBytes += numSectors * mdfInfo.sector_data;
+            }
+        }
+    } else {
+        for (const auto& file : filesToProcess) {
+            std::ifstream ccdFile(file, std::ios::binary | std::ios::ate);
+            if (ccdFile) {
+                size_t fileSize = ccdFile.tellg();
+                totalBytes += (fileSize / sizeof(CcdSector)) * DATA_SIZE;
+            }
+        }
+    }
+
+    return totalBytes;
+}
+
+
 // Function to process user input and convert selected BIN/MDF/NRG files to ISO format
 void processInput(const std::string& input, std::vector<std::string>& fileList, const bool& modeMdf, const bool& modeNrg, std::unordered_set<std::string>& processedErrors, std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, bool& promptFlag, int& maxDepth, bool& historyPattern, bool& verbose, bool& needsScrnClr, std::atomic<bool>& newISOFound) {
 	// Setup signal handler at the start of the operation
@@ -519,47 +544,9 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
     }
 
     // Calculate total bytes and tasks
-    size_t totalBytes = 0;
     size_t totalTasks = filesToProcess.size();  // Each file is a task
-
-    if (modeNrg) {
-		for (const auto& file : filesToProcess) {
-			std::ifstream nrgFile(file, std::ios::binary);
-			if (nrgFile) {
-				// Seek to the end of the file to get the total size
-				nrgFile.seekg(0, std::ios::end);
-				size_t nrgFileSize = nrgFile.tellg();
-
-				// The ISO data starts after the 307,200-byte header
-				size_t isoDataSize = nrgFileSize - 307200;
-
-				// Add the ISO data size to the total bytes
-				totalBytes += isoDataSize;
-			}
-		}
-	} else if (modeMdf) {
-		for (const auto& file : filesToProcess) {
-			std::ifstream mdfFile(file, std::ios::binary);
-			if (mdfFile) {
-				MdfTypeInfo mdfInfo;
-				if (!mdfInfo.determineMdfType(mdfFile)) {
-					continue;
-				}
-				mdfFile.seekg(0, std::ios::end);
-				size_t fileSize = mdfFile.tellg();
-				size_t numSectors = fileSize / mdfInfo.sector_size;
-				totalBytes += numSectors * mdfInfo.sector_data;
-			}
-		}
-    } else {
-        for (const auto& file : filesToProcess) {
-            std::ifstream ccdFile(file, std::ios::binary | std::ios::ate);
-            if (ccdFile) {
-                size_t fileSize = ccdFile.tellg();
-                totalBytes += (fileSize / sizeof(CcdSector)) * DATA_SIZE;
-            }
-        }
-    }
+    
+    size_t totalBytes = calculateSizeForConverted(filesToProcess, modeNrg, modeMdf);
 
     std::atomic<size_t> completedBytes(0);
     std::atomic<size_t> completedTasks(0);
@@ -607,7 +594,6 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
 
 // Function to process a single batch of paths and find files for findFiles
 std::unordered_set<std::string> processBatchPaths(const std::vector<std::string>& batchPaths, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback,std::unordered_set<std::string>& processedErrorsFind) {
-    std::mutex fileNamesMutex;
     std::atomic<size_t> totalFiles{0};
     std::unordered_set<std::string> localFileNames;
     
@@ -646,7 +632,7 @@ std::unordered_set<std::string> processBatchPaths(const std::vector<std::string>
                         std::string fileName = entry.path().string();
                         // Thread-safe insertion
                         {
-                            std::lock_guard<std::mutex> lock(fileNamesMutex);
+                            std::lock_guard<std::mutex> lock(globalSetsMutex);
                             bool isInCache = false;
                             if (mode == "nrg") {
                                 isInCache = (std::find(nrgFilesCache.begin(), nrgFilesCache.end(), fileName) != nrgFilesCache.end());
@@ -687,133 +673,111 @@ std::unordered_set<std::string> processBatchPaths(const std::vector<std::string>
 
 // Function to search for .bin .img .nrg and mdf files
 std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, std::unordered_set<std::string>& fileNames, int& currentCacheOld, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, const std::vector<std::string>& directoryPaths, std::unordered_set<std::string>& invalidDirectoryPaths, std::unordered_set<std::string>& processedErrorsFind) {
-	
-	// Setup signal handler at the start of the operation
+    // Setup signal handler and reset cancellation flag
     setupSignalHandlerCancellations();
-        
-    // Reset cancellation flag
     g_operationCancelled.store(false);
-    
-	disableInput();
-	
-    // Thread-safe synchronization primitives
-    std::mutex pathsMutex;
-    
-    // Tracking sets and variables
-    std::unordered_set<std::string> processedValidPaths;
     
     // Disable input before processing
     disableInput();
-
-    // Consolidated set for all invalid paths
-    std::unordered_set<std::string> invalidPaths;
     
-    // Batch processing configuration
-    const size_t BATCH_SIZE = 100;  // Number of paths per batch
+    // Thread-safe synchronization primitives
+    std::mutex pathsMutex;
+    
+    // Choose the appropriate cache upfront
+    std::vector<std::string>* currentCache = nullptr;
+    if (mode == "bin") {
+        currentCacheOld = binImgFilesCache.size();
+        currentCache = &binImgFilesCache;
+    } else if (mode == "mdf") {
+        currentCacheOld = mdfMdsFilesCache.size();
+        currentCache = &mdfMdsFilesCache;
+    } else if (mode == "nrg") {
+        currentCacheOld = nrgFilesCache.size();
+        currentCache = &nrgFilesCache;
+    } else {
+        restoreInput();
+        return {};
+    }
+    
+    // Constants for batch processing
+    const size_t BATCH_SIZE = 100;
     const size_t MAX_CONCURRENT_BATCHES = maxThreads;
-
-    // Prepare batches of input paths
+    
+    // Create batches of unique input paths
     std::vector<std::vector<std::string>> pathBatches;
     std::vector<std::string> currentBatch;
-
-    // Group input paths into batches
+    std::unordered_set<std::string> processedValidPaths;
+    
     for (const auto& originalPath : inputPaths) {
         std::string path = std::filesystem::path(originalPath).string();
         
-        // Minimize critical section for checking unique paths
-        {
-            std::lock_guard<std::mutex> lock(pathsMutex);
-            if (!path.empty() && processedValidPaths.find(path) == processedValidPaths.end()) {
-                processedValidPaths.insert(path);
-                currentBatch.push_back(path);
-            }
+        // Skip empty or already processed paths
+        if (path.empty() || !processedValidPaths.insert(path).second) {
+            continue;
         }
-
-        // Create batches
+        
+        currentBatch.push_back(path);
+        
+        // Create a new batch when current one is full
         if (currentBatch.size() >= BATCH_SIZE) {
-            pathBatches.push_back(currentBatch);
-            currentBatch.clear();
+            pathBatches.push_back(std::move(currentBatch));
+            currentBatch = std::vector<std::string>();
         }
     }
-
+    
     // Add any remaining paths
     if (!currentBatch.empty()) {
-        pathBatches.push_back(currentBatch);
+        pathBatches.push_back(std::move(currentBatch));
     }
-
-    // Batch processing with thread pool
-    std::vector<std::future<std::unordered_set<std::string>>> batchFutures;
     
     // Process batches with thread pool
+    std::vector<std::future<std::unordered_set<std::string>>> batchFutures;
+    
     for (const auto& batch : pathBatches) {
-        batchFutures.push_back(std::async(std::launch::async, processBatchPaths, batch, mode, callback, std::ref(processedErrorsFind)));
-
-        // Limit concurrent batches
+        batchFutures.push_back(std::async(std::launch::async, processBatchPaths, 
+                                         batch, mode, callback, std::ref(processedErrorsFind)));
+        
+        // Limit concurrent batches and check for cancellation
         if (batchFutures.size() >= MAX_CONCURRENT_BATCHES) {
             for (auto& future : batchFutures) {
                 future.wait();
-                if (g_operationCancelled.load()) break;
+                if (g_operationCancelled.load()) {
+                    // Clean up and exit early if operation was cancelled
+                    restoreInput();
+                    return *currentCache;
+                }
             }
             batchFutures.clear();
         }
     }
-
+    
     // Collect results from all batches
     for (auto& future : batchFutures) {
         std::unordered_set<std::string> batchResults = future.get();
         fileNames.insert(batchResults.begin(), batchResults.end());
     }
-
-    // Update invalid directory paths
-    invalidDirectoryPaths.insert(invalidPaths.begin(), invalidPaths.end());
     
     verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
-
-    // Choose the appropriate cache
-    std::unordered_set<std::string> currentCacheSet;
-    std::vector<std::string>* currentCache = nullptr;
-
-    if (mode == "bin") {
-        currentCacheOld = binImgFilesCache.size();
-        currentCache = &binImgFilesCache;
-        currentCacheSet.insert(binImgFilesCache.begin(), binImgFilesCache.end());
-    } else if (mode == "mdf") {
-        currentCacheOld = mdfMdsFilesCache.size();
-        currentCache = &mdfMdsFilesCache;
-        currentCacheSet.insert(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end());
-    } else if (mode == "nrg") {
-        currentCacheOld = nrgFilesCache.size();
-        currentCache = &nrgFilesCache;
-        currentCacheSet.insert(nrgFilesCache.begin(), nrgFilesCache.end());
-    } else {
-        return {};
-    }
-
-    // Batch insert unique files
-    std::vector<std::string> batch;
-    const size_t batchInsertSize = 100;
-
+    
+    // Efficiently update cache with new files
+    std::unordered_set<std::string> currentCacheSet(currentCache->begin(), currentCache->end());
+    std::vector<std::string> newFiles;
+    
     for (const auto& fileName : fileNames) {
-        if (currentCacheSet.find(fileName) == currentCacheSet.end()) {
-            batch.push_back(fileName);
-            currentCacheSet.insert(fileName);
-
-            if (batch.size() == batchInsertSize) {
-                currentCache->insert(currentCache->end(), batch.begin(), batch.end());
-                batch.clear();
-            }
+        if (currentCacheSet.insert(fileName).second) {
+            newFiles.push_back(fileName);
         }
     }
-
-    // Insert remaining files
-    if (!batch.empty()) {
-        currentCache->insert(currentCache->end(), batch.begin(), batch.end());
+    
+    // Append all new files at once
+    if (!newFiles.empty()) {
+        currentCache->insert(currentCache->end(), newFiles.begin(), newFiles.end());
     }
     
     // Restore input
     flushStdin();
     restoreInput();
-
+    
     return *currentCache;
 }
 
