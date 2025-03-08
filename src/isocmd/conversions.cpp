@@ -351,14 +351,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         clear_history();	
 		if (needsScrnClr) {
         clearScrollBuffer(); // Clear the screen for new content
-        // Assist in automatic removal of non-existent entries from cache
-        if ((fileType == "bin" || fileType == "img") && (binImgFilesCache.size() != files.size()) && !binImgFilesCache.empty() && !isFiltered) {
-			files = binImgFilesCache;
-		} else if ((fileType == "mdf") && (mdfMdsFilesCache.size() != files.size()) && !mdfMdsFilesCache.empty() && !isFiltered) {
-			files = mdfMdsFilesCache;
-		} else if ((fileType == "nrg") && (nrgFilesCache.size() != files.size()) && !nrgFilesCache.empty()  && !isFiltered) {
-			files = nrgFilesCache;
-		}
+		
         if ((!list && !isFiltered) || isFiltered) {
 			sortFilesCaseInsensitive(files); // Sort the files case-insensitively
 			fileExtension == ".bin/.img" 
@@ -367,7 +360,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 				? sortFilesCaseInsensitive(mdfMdsFilesCache) 
 				: sortFilesCaseInsensitive(nrgFilesCache);
 		}
-        printList(files, "IMAGE_FILES", "conversions"); // Print the current list of files
+			printList(files, "IMAGE_FILES", "conversions"); // Print the current list of files
 		}
 		std::cout << "\n\n";
 		std::cout << "\033[1A\033[K";
@@ -421,14 +414,17 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 			std::string inputSearch(rawInput.get() + 1); // Skip the '/' character
 			auto filteredFiles = filterFiles(files, inputSearch);
 			if (!filteredFiles.empty() && !(filteredFiles.size() == files.size())) {
-				historyPattern = true;
                 loadHistory(historyPattern);
 				add_history(inputSearch.c_str()); // Save the filter pattern to history
 				saveHistory(historyPattern);
+				
 				files = filteredFiles; // Update the file list with the filtered results
+				
+				historyPattern = true;
 				isFiltered = true;
 				needsScrnClr = true;
 				historyPattern = false;
+                
                 clear_history();
 			} else {
 				std::cout << "\033[2A\033[K"; // Clear the line if no files match the filter
