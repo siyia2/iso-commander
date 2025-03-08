@@ -74,7 +74,7 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
     if (((binImgFilesCache.empty() && !modeMdf && !modeNrg) || 
          (mdfMdsFilesCache.empty() && modeMdf) || 
          (nrgFilesCache.empty() && modeNrg)) && list) {
-        std::cout << "\n\033[1;93mNo " << fileExtension << " file entries stored in RAM cache for potential ISO conversions.\033[1m\n";
+        std::cout << "\n\033[1;93mNo " << fileExtension << " entries stored in RAM for potential ISO conversions.\033[1m\n";
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         clearScrollBuffer();
@@ -189,12 +189,11 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, bool& promptFla
         // Show cache contents if requested
 		if (list) {
 			ramCacheList(files, list, fileExtension, binImgFilesCache, mdfMdsFilesCache, nrgFilesCache, modeMdf, modeNrg);
-			if (!files.empty()) {
-				// continue to image file list
-			} else {
+			if (files.empty()) {
 				continue;
 			}
-	   }
+			// If files is not empty, display corresponding list
+		}
         
         // Add spacing for non-list, non-clear operations
         if (!inputSearch.empty() && !list && !clr) {
@@ -391,16 +390,15 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 			std::string inputSearch(rawInput.get() + 1); // Skip the '/' character
 			auto filteredFiles = filterFiles(files, inputSearch);
 			if (!filteredFiles.empty() && !(filteredFiles.size() == files.size())) {
+				historyPattern = true;
                 loadHistory(historyPattern);
 				add_history(inputSearch.c_str()); // Save the filter pattern to history
 				saveHistory(historyPattern);
 				
 				files = filteredFiles; // Update the file list with the filtered results
 				
-				historyPattern = true;
 				isFiltered = true;
 				needsScrnClr = true;
-				historyPattern = false;
                 
                 clear_history();
 			} else {
