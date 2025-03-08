@@ -60,7 +60,7 @@ std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::unordered
 
 
 // Function to process selected indices for cpMvDel accordingly
-void processOperationInput(const std::string& input, const std::vector<std::string>& isoFiles, const std::string& process, std::unordered_set<std::string>& operationIsos, std::unordered_set<std::string>& operationErrors, std::unordered_set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& umountMvRmBreak, bool& filterHistory, bool& verbose, std::atomic<bool>& newISOFound) {
+void processOperationInput(const std::string& input, const std::vector<std::string>& isoFiles, const std::string& process, std::unordered_set<std::string>& operationIsos, std::unordered_set<std::string>& operationErrors, std::unordered_set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& filterHistory, bool& verbose, std::atomic<bool>& newISOFound) {
     setupSignalHandlerCancellations();
     
     bool overwriteExisting = false;
@@ -158,6 +158,8 @@ void processOperationInput(const std::string& input, const std::vector<std::stri
     
 
     if (!isDelete) {
+		bool promptFlag = false;
+        int maxDepth = 0;
         manualRefreshCache(userDestDir, promptFlag, maxDepth, filterHistory, newISOFound);
     }
     

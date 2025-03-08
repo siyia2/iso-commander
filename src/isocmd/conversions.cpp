@@ -919,10 +919,10 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
     }
 
     // Update cache and prompt flags
-    bool promptFlag = false;
-    bool filterHistory = false;
-    int maxDepth = 0;
     if (!successOuts.empty()) {
+		bool promptFlag = false;
+		bool filterHistory = false;
+		int maxDepth = 0;
         manualRefreshCache(result, promptFlag, maxDepth, filterHistory, newISOFound);
     }
 
