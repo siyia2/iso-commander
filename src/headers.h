@@ -41,6 +41,20 @@
 #include <unordered_set>
 
 
+bool processUserInputForIsoSelection(const std::string& inputString, bool isMount, bool isUnmount, bool write, 
+                                    bool& isFiltered, std::vector<std::string>& filteredFiles, 
+                                    std::vector<std::string>& isoDirs, std::unordered_set<std::string>& operationFiles, 
+                                    std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages,
+                                    std::unordered_set<std::string>& skippedMessages, bool& verbose, bool& needsClrScrn,
+                                    const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak,
+                                    bool& promptFlag, int& maxDepth, bool& historyPattern, std::atomic<bool>& newISOFound);
+                                    
+                                    void handleFilterPrompt(bool& isFiltered, std::vector<std::string>& filteredFiles, 
+                       const std::vector<std::string>& isoDirs, bool isUnmount, bool& historyPattern,
+                       std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& skippedMessages,
+                       std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages,
+                       bool& verbose, bool& needsClrScrn, const std::string& operation);
+
 // Create alias (fs) for the std::filesystem
 namespace fs = std::filesystem;
 
@@ -135,7 +149,6 @@ bool isValidInput(const std::string& input);
 void helpSelections();
 void helpSearches(bool isCpMv, bool import2ISO);
 void helpMappings();
-void clearHistory(const std::string& inputSearch);
 void setDisplayMode(const std::string& inputSearch);
 void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, bool& umountMvRmBreak, std::vector<std::string>& filteredFiles, bool& isFiltered, std::string& listSubtype, std::atomic<bool>& newISOFound);
 void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& maxDepth, bool& verbose, std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound);
@@ -173,6 +186,7 @@ bool isHistoryFileEmpty(const std::string& filePath);
 // voids
 void loadHistory(bool& historyPattern);
 void saveHistory(bool& historyPattern);
+void clearHistory(const std::string& inputSearch);
 
 
 // MOUNT
