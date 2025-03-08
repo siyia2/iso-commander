@@ -12,18 +12,14 @@ std::mutex updateListMutex;
 
 
 // Function to automatically update ISO list if auto-update is on
-void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, std::vector<std::string>& filteredFiles, std::vector<std::string>& sourceList, bool& isFiltered, std::string& listSubtype, std::atomic<bool>& newISOFound) {
+void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, std::vector<std::string>& filteredFiles, bool& isFiltered, std::string& listSubtype, std::atomic<bool>& newISOFound) {
     while (true) {
         std::this_thread::sleep_for(std::chrono::seconds(timeoutSeconds));
         
         if (!isImportRunning.load()) {
 			if (newISOFound.load() && isAtISOList.load()) {
-				clearAndLoadFiles(filteredFiles, isFiltered, listSubtype);
 				
-				{
-					std::lock_guard<std::mutex> lock(updateListMutex);
-					sourceList = isFiltered ? filteredFiles : globalIsoFileList;  // Update sourceList
-				}
+				clearAndLoadFiles(filteredFiles, isFiltered, listSubtype);
             
 				std::cout << "\n";
 				rl_on_new_line(); 
@@ -76,13 +72,14 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         enable_ctrl_d();
         setupSignalHandlerCancellations();
         g_operationCancelled.store(false);
-        // For non-umount operations, we show the global list.
-        if (!isUnmount)
-            isAtISOList.store(true);
-        verbose = false;
         resetVerboseSets(operationFiles, skippedMessages, operationFails, uniqueErrorMessages);
+        verbose = false;
         clear_history();
-        removeNonExistentPathsFromCache();
+        
+        if (!isUnmount) {
+			isAtISOList.store(true);
+			removeNonExistentPathsFromCache();
+		}
         
         // Load files based on operation type:
         // For non-umount, work with globalIsoFileList exclusively.
@@ -105,8 +102,7 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
         if (updateHasRun.load() && !isUnmount && !globalIsoFileList.empty()) {
             std::thread(refreshListAfterAutoUpdate, 1, std::ref(isAtISOList), 
                         std::ref(isImportRunning), std::ref(updateHasRun), 
-                        std::ref(filteredFiles), std::ref(globalIsoFileList), 
-                        std::ref(isFiltered), std::ref(listSubtype), std::ref(newISOFound)).detach();
+                        std::ref(filteredFiles), std::ref(isFiltered), std::ref(listSubtype), std::ref(newISOFound)).detach();
         }
         
         std::cout << "\033[1A\033[K";
