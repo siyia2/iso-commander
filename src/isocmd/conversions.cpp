@@ -680,9 +680,6 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
     // Disable input before processing
     disableInput();
     
-    // Thread-safe synchronization primitives
-    std::mutex pathsMutex;
-    
     // Choose the appropriate cache upfront
     std::vector<std::string>* currentCache = nullptr;
     if (mode == "bin") {
