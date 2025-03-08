@@ -278,7 +278,6 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
 void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<bool>& newISOFound);
 void select_and_convert_to_iso(const std::string& fileType, std::vector<std::string>& files, std::atomic<bool>& newISOFound, bool& list);
 void processInput(const std::string& input, std::vector<std::string>& fileList, const bool& modeMdf, const bool& modeNrg, std::unordered_set<std::string>& processedErrors, std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, bool& verbose, bool& needsScrnClr, std::atomic<bool>& newISOFound);
-void filterQuery(std::vector<std::string>& files, bool& filterHistory, const std::string& filterPrompt, bool& needsScrnClr);
 void clearRamCache (bool& modeMdf, bool& modeNrg);
 
 
