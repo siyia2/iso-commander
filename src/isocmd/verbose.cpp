@@ -83,6 +83,7 @@ void resetVerboseSets(std::unordered_set<std::string>& processedErrors,std::unor
 }
 
 
+// CP/MV/RM
 
 // Function to handle error reporting for Cp/Mv/Rm
 void reportErrorCpMvRm(const std::string& errorType, const std::string& srcDir, const std::string& srcFile,const std::string& destDir, const std::string& errorDetail, const std::string& operation, std::vector<std::string>& verboseErrors, std::atomic<size_t>* failedTasks, std::atomic<bool>& operationSuccessful, const std::function<void()>& batchInsertFunc) {
