@@ -104,45 +104,62 @@ std::string removeAnsiCodes(const std::string& input) {
 }
 
 
-// Function to filter cached ISO files or mountpoints based on search query (case-insensitive)
+// Function to filter cached ISO files or mountpoints based on search query (case-adaptive)
 std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query) {
+    // Reserve memory for filteredFiles to reduce reallocations.
     std::vector<std::string> filteredFiles;
-    std::vector<std::pair<std::string, bool>> queryTokens;
+    filteredFiles.reserve(files.size());
+
+    // Define a structure to hold both the original and precomputed lower-case version.
+    struct QueryToken {
+        std::string original;
+        std::string lower;  // computed only if needed
+        bool isCaseSensitive;
+    };
+    std::vector<QueryToken> queryTokens;
     
-    // Tokenize the query
+    // Tokenize the query and precompute lowercase for case-insensitive tokens.
     std::stringstream ss(query);
     std::string token;
-    
     while (std::getline(ss, token, ';')) {
         token.erase(0, token.find_first_not_of(" \t"));
         token.erase(token.find_last_not_of(" \t") + 1);
-        
         if (!token.empty()) {
             bool hasUpperCase = std::any_of(token.begin(), token.end(),
                 [](unsigned char c) { return std::isupper(c); });
-            
-            queryTokens.push_back({token, hasUpperCase});
+            QueryToken qt;
+            qt.original = token;
+            qt.isCaseSensitive = hasUpperCase;
+            if (!hasUpperCase) {
+                qt.lower = token;
+                toLowerInPlace(qt.lower);
+            }
+            queryTokens.push_back(std::move(qt));
         }
     }
     
+    // Determine if we need to convert file names to lowercase.
+    bool needLowerCaseFile = std::any_of(queryTokens.begin(), queryTokens.end(),
+                                         [](const QueryToken& qt) { return !qt.isCaseSensitive; });
+    
+    // Loop through each file and search for matches.
     for (const std::string& file : files) {
         std::string cleanFileName = removeAnsiCodes(file);
-        std::string fileNameLower = cleanFileName;
-        toLowerInPlace(fileNameLower);
+        std::string fileNameLower;
+        if (needLowerCaseFile) {
+            fileNameLower = cleanFileName;
+            toLowerInPlace(fileNameLower);
+        }
         
         bool matchFound = false;
-        
-        for (const auto& [queryToken, isCaseSensitive] : queryTokens) {
-            if (isCaseSensitive) {
-                if (!boyerMooreSearch(queryToken, cleanFileName).empty()) {
+        for (const auto& qt : queryTokens) {
+            if (qt.isCaseSensitive) {
+                if (!boyerMooreSearch(qt.original, cleanFileName).empty()) {
                     matchFound = true;
                     break;
                 }
             } else {
-                std::string tokenLower = queryToken;
-                toLowerInPlace(tokenLower);
-                
-                if (!boyerMooreSearch(tokenLower, fileNameLower).empty()) {
+                if (!boyerMooreSearch(qt.lower, fileNameLower).empty()) {
                     matchFound = true;
                     break;
                 }
@@ -156,3 +173,4 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
     
     return filteredFiles;
 }
+
