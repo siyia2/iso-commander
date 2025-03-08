@@ -34,42 +34,6 @@ void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOLi
 }
 
 
-void processOperationForSelectedIsoFiles(const std::string& inputString,bool isMount, bool isUnmount, bool write, bool isFiltered, const std::vector<std::string>& filteredFiles, std::vector<std::string>& isoDirs, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<std::string>& skippedMessages, bool verbose, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool promptFlag, int& maxDepth, bool& historyPattern, std::atomic<bool>& newISOFound) {
-    
-    clearScrollBuffer();
-    needsClrScrn = true;
-
-    if (isMount) {
-        isAtISOList.store(false);
-        // Use const reference instead of copying
-        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : globalIsoFileList;
-        processAndMountIsoFiles(inputString, activeList, operationFiles, skippedMessages, operationFails, uniqueErrorMessages, verbose);
-    } else if (isUnmount) {
-        umountMvRmBreak = true;
-        isAtISOList.store(false);
-        // For unmount operations, the list might need to be modified
-        if (isFiltered) {
-            prepareUnmount(inputString, filteredFiles, operationFiles, operationFails, uniqueErrorMessages, umountMvRmBreak, verbose);
-        } else {
-            prepareUnmount(inputString, isoDirs, operationFiles, operationFails, uniqueErrorMessages, umountMvRmBreak, verbose);
-        }
-    } else if (write) {
-        isAtISOList.store(false);
-        // Use const reference instead of copying
-        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : globalIsoFileList;
-        writeToUsb(inputString, activeList, uniqueErrorMessages);
-    } else {
-        isAtISOList.store(false);
-        // Use const reference instead of copying
-        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : globalIsoFileList;
-        processOperationInput(inputString, activeList, operation, operationFiles, operationFails, uniqueErrorMessages, promptFlag, maxDepth, umountMvRmBreak, historyPattern, verbose, newISOFound);
-    }
-
-    handleSelectIsoFilesResults(uniqueErrorMessages, operationFiles, operationFails, skippedMessages, operation, 
-                                 verbose, isMount, isFiltered, umountMvRmBreak, isUnmount, needsClrScrn, historyPattern);
-}
-
-
 // Main function to select and operate on ISOs by number for umount mount cp mv and rm
 void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& maxDepth, bool& verbose, std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
     // Bind readline keys
@@ -319,6 +283,44 @@ void selectForIsoFiles(const std::string& operation, bool& historyPattern, int& 
 }
 
 
+// Function to process operations from selectIsoFiles
+void processOperationForSelectedIsoFiles(const std::string& inputString,bool isMount, bool isUnmount, bool write, bool isFiltered, const std::vector<std::string>& filteredFiles, std::vector<std::string>& isoDirs, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<std::string>& skippedMessages, bool verbose, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool promptFlag, int& maxDepth, bool& historyPattern, std::atomic<bool>& newISOFound) {
+    
+    clearScrollBuffer();
+    needsClrScrn = true;
+
+    if (isMount) {
+        isAtISOList.store(false);
+        // Use const reference instead of copying
+        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : globalIsoFileList;
+        processAndMountIsoFiles(inputString, activeList, operationFiles, skippedMessages, operationFails, uniqueErrorMessages, verbose);
+    } else if (isUnmount) {
+        umountMvRmBreak = true;
+        isAtISOList.store(false);
+        // For unmount operations, the list might need to be modified
+        if (isFiltered) {
+            prepareUnmount(inputString, filteredFiles, operationFiles, operationFails, uniqueErrorMessages, umountMvRmBreak, verbose);
+        } else {
+            prepareUnmount(inputString, isoDirs, operationFiles, operationFails, uniqueErrorMessages, umountMvRmBreak, verbose);
+        }
+    } else if (write) {
+        isAtISOList.store(false);
+        // Use const reference instead of copying
+        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : globalIsoFileList;
+        writeToUsb(inputString, activeList, uniqueErrorMessages);
+    } else {
+        isAtISOList.store(false);
+        // Use const reference instead of copying
+        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : globalIsoFileList;
+        processOperationInput(inputString, activeList, operation, operationFiles, operationFails, uniqueErrorMessages, promptFlag, maxDepth, umountMvRmBreak, historyPattern, verbose, newISOFound);
+    }
+
+    handleSelectIsoFilesResults(uniqueErrorMessages, operationFiles, operationFails, skippedMessages, operation, 
+                                 verbose, isMount, isFiltered, umountMvRmBreak, isUnmount, needsClrScrn, historyPattern);
+}
+
+
+// Function to process results from selectIsoFiles
 void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& skippedMessages, const std::string& operation, bool verbose, bool isMount, bool isFiltered, bool umountMvRmBreak, bool isUnmount, bool& needsClrScrn, bool& historyPattern) {
     // Result handling and display
     if (!uniqueErrorMessages.empty() && operationFiles.empty() && operationFails.empty() && skippedMessages.empty()) {
