@@ -218,7 +218,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std:
 // stds
 std::string modifyDirectoryPath(const std::string& dir);
 std::string formatVerboseMessage(const std::string& messageType, const std::string& path);
-std::tuple<std::string, std::string, std::string> extractDirectoryAndFilenameFromMountPoint(const std::string& dir);
+std::tuple<const std::string&, const std::string&, const std::string&> extractDirectoryAndFilenameFromMountPoint(const std::string& dir);
 
 
 // CACHE
