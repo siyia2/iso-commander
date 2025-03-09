@@ -511,7 +511,7 @@ void displayCacheStatistics(const std::string& cacheFilePath, std::uintmax_t max
                   << "\n\033[1;92mLocation:\033[0m " << "'" << filterHistoryFilePath << "'\033[0;1m" << std::endl;
         
         std::cout << "\n\033[1;94m=== Buffered Entries ===\033[0m\n";
-        std::cout << "\033[1;96m\nPrecomputed String Data → RAM:\033[0m " << transformationCache.size() + parsingCacheUmount.size() << "\n";
+        std::cout << "\033[1;96m\nPrecomputed String Data → RAM:\033[0m " << transformationCache.size() + cachedParsesForUmount.size() << "\n";
         std::cout << "\n\033[1;92mISO → RAM:\033[0m " << globalIsoFileList.size() << "\n";
         std::cout << "\n\033[1;38;5;208mBIN/IMG → RAM:\033[0m " << binImgFilesCache.size() << "\n";
         std::cout << "\033[1;38;5;208mMDF → RAM:\033[0m " << mdfMdsFilesCache.size() << "\n";

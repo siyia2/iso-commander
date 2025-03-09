@@ -10,7 +10,7 @@
 const std::string MOUNTED_ISO_PATH = "/mnt";
 
 // Memory map for umount string transformations
-std::unordered_map<std::string, std::tuple<std::string, std::string, std::string>> parsingCacheUmount;
+std::unordered_map<std::string, std::tuple<std::string, std::string, std::string>> cachedParsesForUmount;
 
 
 // Function to load and display mount-points
@@ -59,7 +59,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
         std::cout << "\n\033[1;32m↵ to return...\033[0m\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         std::vector<std::string>().swap(isoDirs); // De-allocate memory for static vector
-        std::unordered_map<std::string, std::tuple<std::string, std::string, std::string>>().swap(parsingCacheUmount); //De-allocate memory map when no mounpoints exist
+        std::unordered_map<std::string, std::tuple<std::string, std::string, std::string>>().swap(cachedParsesForUmount); //De-allocate memory map when no mounpoints exist
         return false;
     }
 
@@ -75,12 +75,12 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
 }
 
 
-// Function toggle between long and short verbose logging in umount
-std::tuple<std::string, std::string, std::string> extractDirectoryAndFilenameFromMountPoint(std::string_view dir) {
+// Function to divide any mountpoint into three strings and cache the results
+std::tuple<std::string, std::string, std::string> parseMountPointComponents(std::string_view dir) {
     // Check cache with a string key converted from the string_view
     std::string dir_str(dir);
-    auto cacheIt = parsingCacheUmount.find(dir_str);
-    if (cacheIt != parsingCacheUmount.end()) {
+    auto cacheIt = cachedParsesForUmount.find(dir_str);
+    if (cacheIt != cachedParsesForUmount.end()) {
         return cacheIt->second;
     }
     
@@ -88,7 +88,7 @@ std::tuple<std::string, std::string, std::string> extractDirectoryAndFilenameFro
     if (underscorePos == std::string_view::npos) {
         // No underscore found, return the whole string as directory part
         auto result = std::make_tuple(dir_str, std::string(), std::string());
-        parsingCacheUmount[dir_str] = result;
+        cachedParsesForUmount[dir_str] = result;
         return result;
     }
     
@@ -99,7 +99,7 @@ std::tuple<std::string, std::string, std::string> extractDirectoryAndFilenameFro
         // No tilde after underscore, format is "directory_filename"
         std::string filenamePart(dir.substr(underscorePos + 1));
         auto result = std::make_tuple(directoryPart, filenamePart, std::string());
-        parsingCacheUmount[dir_str] = result;
+        cachedParsesForUmount[dir_str] = result;
         return result;
     }
     
@@ -107,7 +107,7 @@ std::tuple<std::string, std::string, std::string> extractDirectoryAndFilenameFro
     std::string filenamePart(dir.substr(underscorePos + 1, lastTildePos - underscorePos - 1));
     std::string hashPart(dir.substr(lastTildePos));
     auto result = std::make_tuple(directoryPart, filenamePart, hashPart);
-    parsingCacheUmount[dir_str] = result;
+    cachedParsesForUmount[dir_str] = result;
     return result;
 }
 
@@ -143,7 +143,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std:
 
     if (!hasRoot) {
         for (const auto& isoDir : isoDirs) {
-            auto dirParts = extractDirectoryAndFilenameFromMountPoint(isoDir);
+            auto dirParts = parseMountPointComponents(isoDir);
             std::string formattedDir;
             if (displayConfig::toggleFullListUmount) 
                 formattedDir = std::get<0>(dirParts);
@@ -175,7 +175,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std:
     for (const auto& [dir, result] : unmountResults) {
         if (g_operationCancelled.load()) break;
         bool isEmpty = isDirectoryEmpty(dir);
-        auto dirParts = extractDirectoryAndFilenameFromMountPoint(dir);
+        auto dirParts = parseMountPointComponents(dir);
         std::string formattedDir;
         if (displayConfig::toggleFullListUmount) 
             formattedDir = std::get<0>(dirParts);
@@ -198,7 +198,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std:
     if (g_operationCancelled.load()) {
         for (size_t i = unmountResults.size(); i < isoDirs.size(); ++i) {
             const std::string& isoDir = isoDirs[i];
-            auto dirParts = extractDirectoryAndFilenameFromMountPoint(isoDir);
+            auto dirParts = parseMountPointComponents(isoDir);
             std::string formattedDir;
             if (displayConfig::toggleFullListUmount) 
                 formattedDir = std::get<0>(dirParts);
