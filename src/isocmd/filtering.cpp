@@ -11,6 +11,7 @@ void toLowerInPlace(std::string& str) {
     }
 }
 
+
 // Boyer-Moore string search implementation for files
 std::vector<size_t> boyerMooreSearch(const std::string& pattern, const std::string& text) {
     const size_t patternLen = pattern.length();
@@ -180,4 +181,3 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
     
     return filteredFiles;
 }
-
