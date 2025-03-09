@@ -76,41 +76,39 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
 
 
 // Function toggle between long and short verbose logging in umount
-std::tuple<const std::string&, const std::string&, const std::string&> extractDirectoryAndFilenameFromMountPoint(const std::string& dir) {
-    // Check cache with the original string key
-    auto cacheIt = transformationCacheUmount.find(dir);
+std::tuple<std::string, std::string, std::string> extractDirectoryAndFilenameFromMountPoint(std::string_view dir) {
+    // Check cache with a string key converted from the string_view
+    std::string dir_str(dir);
+    auto cacheIt = transformationCacheUmount.find(dir_str);
     if (cacheIt != transformationCacheUmount.end()) {
-        const auto& cachedTuple = cacheIt->second;
-        return std::tie(
-            std::get<0>(cachedTuple), 
-            std::get<1>(cachedTuple), 
-            std::get<2>(cachedTuple)
-        );
+        return cacheIt->second;
     }
     
-    // Convert input to string_view for processing
-    std::string_view dir_view(dir);
-    
-    // Use string_view for find operations
-    size_t underscorePos = dir_view.find('_');
+    size_t underscorePos = dir.find('_');
     if (underscorePos == std::string_view::npos) {
-        auto& result = transformationCacheUmount[dir] = std::make_tuple(std::string(dir_view), "", "");
-        return std::tie(std::get<0>(result), std::get<1>(result), std::get<2>(result));
+        // No underscore found, return the whole string as directory part
+        auto result = std::make_tuple(dir_str, std::string(), std::string());
+        transformationCacheUmount[dir_str] = result;
+        return result;
     }
     
-    size_t lastTildePos = dir_view.find_last_of('~');
+    std::string directoryPart(dir.substr(0, underscorePos));
+    
+    size_t lastTildePos = dir.find_last_of('~');
     if (lastTildePos == std::string_view::npos || lastTildePos <= underscorePos) {
-        std::string directoryPart(dir_view.substr(0, underscorePos));
-        std::string filenamePart(dir_view.substr(underscorePos + 1));
-        auto& result = transformationCacheUmount[dir] = std::make_tuple(directoryPart, filenamePart, "");
-        return std::tie(std::get<0>(result), std::get<1>(result), std::get<2>(result));
+        // No tilde after underscore, format is "directory_filename"
+        std::string filenamePart(dir.substr(underscorePos + 1));
+        auto result = std::make_tuple(directoryPart, filenamePart, std::string());
+        transformationCacheUmount[dir_str] = result;
+        return result;
     }
     
-    // Extract parts using string_view and convert to strings
-    std::string filenamePart(dir_view.substr(underscorePos + 1, lastTildePos - underscorePos - 1));
-    std::string hashPart(dir_view.substr(lastTildePos));
-    auto& result = transformationCacheUmount[dir] = std::make_tuple("", filenamePart, hashPart);
-    return std::tie(std::get<0>(result), std::get<1>(result), std::get<2>(result));
+    // Format is "directory_filename~hash"
+    std::string filenamePart(dir.substr(underscorePos + 1, lastTildePos - underscorePos - 1));
+    std::string hashPart(dir.substr(lastTildePos));
+    auto result = std::make_tuple(directoryPart, filenamePart, hashPart);
+    transformationCacheUmount[dir_str] = result;
+    return result;
 }
 
 
