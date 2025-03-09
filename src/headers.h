@@ -63,7 +63,7 @@ extern std::vector<std::string> globalIsoFileList;
 extern std::unordered_map<std::string, std::string> transformationCache;
 
 // Cache for mount-points
-extern std::unordered_map<std::string, std::tuple<std::string, std::string, std::string>> transformationCacheUmount;
+extern std::unordered_map<std::string, std::tuple<std::string, std::string, std::string>> parsingCacheUmount;
 
 // Memory cached binImgFiles here
 extern std::vector<std::string> binImgFilesCache;
