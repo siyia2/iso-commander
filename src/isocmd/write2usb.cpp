@@ -473,13 +473,15 @@ char** completion_cb(const char* text, int start, int end) {
 std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::vector<IsoInfo>& selectedIsos, std::unordered_set<std::string>& uniqueErrorMessages) {
     while (true) {
 		
-		// Store the default values
-		int default_suppress_append = rl_completion_suppress_append;
-		int default_query_items = rl_completion_query_items;
-	
-		// Disable tab completion display but allow completion
-		rl_completion_suppress_append = 1;
-		rl_completion_query_items = 0;  // Never ask about displaying completions
+		// Disable readline completion list display for more than one items
+	rl_completion_display_matches_hook = [](char **matches, int num_matches, int max_length) {
+		// Mark parameters as unused to suppress warnings
+		(void)matches;
+		(void)num_matches;
+		(void)max_length;
+
+		// Do nothing so no list is printed
+	};
 		
         signal(SIGINT, SIG_IGN);  // Ignore Ctrl+C
         disable_ctrl_d();
@@ -587,8 +589,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         // Handle empty input
         if (!deviceInput || deviceInput.get()[0] == '\0') {
 			// Restore readline
-			rl_completion_suppress_append = default_suppress_append;
-			rl_completion_query_items = default_query_items;
+			rl_completion_display_matches_hook = rl_display_match_list;
 			rl_attempted_completion_function = nullptr;
             return {};
         }
@@ -658,8 +659,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 			// Restore readline bindings
             rl_bind_keyseq("\033[A", rl_get_previous_history);
             rl_bind_keyseq("\033[B", rl_get_next_history);
-			rl_completion_suppress_append = default_suppress_append;
-			rl_completion_query_items = default_query_items;
+			rl_completion_display_matches_hook = rl_display_match_list;
             rl_attempted_completion_function = nullptr;
             setupSignalHandlerCancellations();
             g_operationCancelled.store(false);
@@ -669,8 +669,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         // Restore readline bindings if not proceeding
         rl_bind_keyseq("\033[A", rl_get_previous_history);
         rl_bind_keyseq("\033[B", rl_get_next_history);
-		rl_completion_suppress_append = default_suppress_append;
-		rl_completion_query_items = default_query_items;
+		rl_completion_display_matches_hook = rl_display_match_list;
         rl_attempted_completion_function = nullptr;
         
         std::cout << "\n\033[1;93mWrite operation aborted by user.\033[0;1m\n";

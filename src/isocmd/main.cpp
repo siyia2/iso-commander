@@ -57,6 +57,9 @@ int main(int argc, char *argv[]) {
     }
     // Readline use semicolon as delimiter
     rl_completer_word_break_characters =";";
+    
+    // Readline do not repaint prompt on list completion
+    rl_completion_display_matches_hook = rl_display_match_list;
 
     const char* lockFile = "/tmp/isocmd.lock";
 
