@@ -83,6 +83,12 @@ extern const std::string historyFilePath;
 // Holds filter history
 extern const std::string filterHistoryFilePath;
 
+// Limit for max stored path entries
+extern const int MAX_HISTORY_LINES;
+
+// Limit for max stored filter entries
+extern const int MAX_HISTORY_PATTERN_LINES;
+
 // Holds configuration path
 extern const std::string configPath;
 
