@@ -910,13 +910,11 @@ void helpSearches(bool isCpMv, bool import2ISO) {
         }
 		std::cout << "   • Enter \033[1;33m'!clr_paths'\033[0m - Clear folder path history\n"
 				  << "   • Enter \033[1;33m'!clr_filter'\033[0m - Clear filter history\n" << std::endl;
-		std::cout << "\033[1;32m3. Special Display Command:\033[0m\n";
+		std::cout << "\033[1;32m3. Special Display " << (import2ISO ? "Command" : "Commands") << "\033[0m\n";
         if (!import2ISO) {
-            std::cout << "   • Enter \033[1;34m'ls'\033[0m - List corresponding cached entries\n\n";
+            std::cout << "   • Enter \033[1;34m'ls'\033[0m - List corresponding cached entries\n";
         }
-        if (import2ISO) {
-            std::cout << "   • Enter \033[1;34m'stats'\033[0m - View on-disk ISO cache statistics\n" << std::endl;
-        }
+            std::cout << "   • Enter \033[1;34m'stats'\033[0m - View on-disk ISO cache and RAM statistics\n" << std::endl;
 					
        std::cout << "\033[1;32m" << "4. Special Configuration Commands:\033[0m\n\n";
        

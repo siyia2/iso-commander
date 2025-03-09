@@ -8,9 +8,9 @@
 #include "../ccd.h"
 
 
-static std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles here
-static std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
-static std::vector<std::string> nrgFilesCache; // Memory cached nrgImgFiles here
+std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles here
+std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
+std::vector<std::string> nrgFilesCache; // Memory cached nrgImgFiles here
 
 // Function to clear Ram Cache and memory transformations for bin/img mdf nrg files
 void clearRamCache(bool& modeMdf, bool& modeNrg) {
@@ -159,6 +159,11 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
         
         // Process input
         std::string inputSearch = trimWhitespace(mainSearch.get());
+        
+        if (inputSearch == "stats") {
+			displayCacheStatistics(cacheFilePath, maxCacheSize, transformationCache, globalIsoFileList);
+			continue;
+		}
         
         // Handle special commands
         if (inputSearch == "!clr_paths" || inputSearch == "!clr_filter") {
