@@ -76,40 +76,41 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
 
 
 // Function toggle between long and short verbose logging in umount
-std::tuple<std::string, std::string, std::string> extractDirectoryAndFilenameFromMountPoint(const std::string& dir) {
-    // Convert input to string_view for processing
-    std::string_view dir_view(dir);
-
+std::tuple<const std::string&, const std::string&, const std::string&> extractDirectoryAndFilenameFromMountPoint(const std::string& dir) {
     // Check cache with the original string key
     auto cacheIt = transformationCacheUmount.find(dir);
     if (cacheIt != transformationCacheUmount.end()) {
-        return cacheIt->second;
+        const auto& cachedTuple = cacheIt->second;
+        return std::tie(
+            std::get<0>(cachedTuple), 
+            std::get<1>(cachedTuple), 
+            std::get<2>(cachedTuple)
+        );
     }
-
+    
+    // Convert input to string_view for processing
+    std::string_view dir_view(dir);
+    
     // Use string_view for find operations
     size_t underscorePos = dir_view.find('_');
     if (underscorePos == std::string_view::npos) {
-        auto result = std::make_tuple(std::string(dir_view), "", "");
-        transformationCacheUmount[dir] = result;
-        return result;
+        auto& result = transformationCacheUmount[dir] = std::make_tuple(std::string(dir_view), "", "");
+        return std::tie(std::get<0>(result), std::get<1>(result), std::get<2>(result));
     }
-
+    
     size_t lastTildePos = dir_view.find_last_of('~');
     if (lastTildePos == std::string_view::npos || lastTildePos <= underscorePos) {
         std::string directoryPart(dir_view.substr(0, underscorePos));
         std::string filenamePart(dir_view.substr(underscorePos + 1));
-        auto result = std::make_tuple(directoryPart, filenamePart, "");
-        transformationCacheUmount[dir] = result;
-        return result;
+        auto& result = transformationCacheUmount[dir] = std::make_tuple(directoryPart, filenamePart, "");
+        return std::tie(std::get<0>(result), std::get<1>(result), std::get<2>(result));
     }
-
+    
     // Extract parts using string_view and convert to strings
     std::string filenamePart(dir_view.substr(underscorePos + 1, lastTildePos - underscorePos - 1));
     std::string hashPart(dir_view.substr(lastTildePos));
-
-    auto result = std::make_tuple("", filenamePart, hashPart);
-    transformationCacheUmount[dir] = result;
-    return result;
+    auto& result = transformationCacheUmount[dir] = std::make_tuple("", filenamePart, hashPart);
+    return std::tie(std::get<0>(result), std::get<1>(result), std::get<2>(result));
 }
 
 
