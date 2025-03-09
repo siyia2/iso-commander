@@ -908,8 +908,16 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
 
         if (conversionSuccess) {
             chown(outputPath.c_str(), real_uid, real_gid); // Attempt to change ownership, ignore result
-            
-            localSuccessMsgs.push_back("\033[1mImage file converted to ISO:\033[0;1m \033[1;92m'" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m.\033[0;1m");
+            std::string fileNameLower = fileNameOnly;
+			toLowerInPlace(fileNameLower);
+
+			std::string fileType = 
+								fileNameLower.ends_with(".bin") ? "\033[1;38;5;208mBIN" : 
+								fileNameLower.ends_with(".img") ? "\033[1;38;5;208mIMG" : 
+								fileNameLower.ends_with(".mdf") ? "\033[1;38;5;208mMDF" : 
+								fileNameLower.ends_with(".nrg") ? "\033[1;38;5;208mNRG" : "Image";
+
+			localSuccessMsgs.push_back(fileType + " \033[0;1mfile converted to ISO:\033[0;1m \033[1;92m'" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m.\033[0;1m");
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
         } else {
             localFailedMsgs.push_back("\033[1;91mConversion of \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m " + 
