@@ -914,7 +914,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
         if (!import2ISO) {
             std::cout << "   • Enter \033[1;34m'ls'\033[0m - List corresponding cached entries\n";
         }
-            std::cout << "   • Enter \033[1;34m'stats'\033[0m - View on-disk ISO cache and RAM statistics\n" << std::endl;
+            std::cout << "   • Enter \033[1;34m'stats'\033[0m - Display app statistics\n" << std::endl;
 					
        std::cout << "\033[1;32m" << "4. Special Configuration Commands:\033[0m\n\n";
        

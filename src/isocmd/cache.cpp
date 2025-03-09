@@ -471,7 +471,7 @@ bool isValidDirectory(const std::string& path) {
 // Function to display on-disk and ram statistics
 void displayCacheStatistics(const std::string& cacheFilePath, std::uintmax_t maxCacheSize, const std::unordered_map<std::string, std::string>& transformationCache, const std::vector<std::string>& globalIsoFileList) {
     try {
-        std::cout << "\n\033[1;94m=== On-Disk ISO Cache ===\033[0m\n";
+        std::cout << "\n\033[1;94m=== On-Disk Cache ===\033[0m\n";
         
         std::filesystem::path filePath(cacheFilePath);
         std::uintmax_t fileSizeInBytes = std::filesystem::file_size(filePath);
@@ -484,15 +484,20 @@ void displayCacheStatistics(const std::string& cacheFilePath, std::uintmax_t max
         std::cout << "\n\033[1;92mCapacity:\033[0m " << std::fixed << std::setprecision(2) << fileSizeInMB << "MB" 
                   << "/" << std::setprecision(0) << cachesizeInMb << "MB" 
                   << " (" << std::setprecision(1) << usagePercentage << "%)"
-                  << " \n\033[1;92mEntries:\033[0m " << countNonEmptyLines(cacheFilePath) 
-                  << "\n\033[1;92mLocation:\033[0m " << "'" << cacheFilePath << "'\033[0;1m" << std::endl;
+                  << " \n\033[1;92mISO Entries:\033[0m " << countNonEmptyLines(cacheFilePath) 
+                  << "\n\033[1;92mLocation:\033[0m " << "'" << cacheFilePath << "'\033[0;1m\n";
+       std::cout  << "\n\033[1;94m=== On-Disk History ===\033[0m\n"
+                  << " \n\033[1;92mFolderPath History Entries:\033[0m " << countNonEmptyLines(historyFilePath) << "/50"
+                  << "\n\033[1;92mLocation:\033[0m " << "'" << historyFilePath << "'\033[0;1m"
+                  << " \n\033[1;92mFilter History Entries:\033[0m " << countNonEmptyLines(filterHistoryFilePath) << "/25"
+                  << "\n\033[1;92mLocation:\033[0m " << "'" << filterHistoryFilePath << "'\033[0;1m" << std::endl;
         
-        std::cout << "\n\033[1;94m=== RAM Statistics ===\033[0m\n";
-        std::cout << "\033[1;96m\nString Transformations in RAM:\033[0m " << transformationCache.size() << "\n";
-        std::cout << "\n\033[1;92mISO Files in RAM:\033[0m " << globalIsoFileList.size() << "\n";
-        std::cout << "\n\033[1;38;5;208mBIN/IMG Files in RAM:\033[0m " << binImgFilesCache.size() << "\n";
-        std::cout << "\033[1;38;5;208mMDF Files in RAM:\033[0m " << mdfMdsFilesCache.size() << "\n";
-        std::cout << "\033[1;38;5;208mNRG Files in RAM:\033[0m " << nrgFilesCache.size() << "\n";
+        std::cout << "\n\033[1;94m=== RAM Cache ===\033[0m\n";
+        std::cout << "\033[1;96m\nString Transformations → RAM:\033[0m " << transformationCache.size() << "\n";
+        std::cout << "\n\033[1;92mISO → RAM:\033[0m " << globalIsoFileList.size() << "\n";
+        std::cout << "\n\033[1;38;5;208mBIN/IMG → RAM:\033[0m " << binImgFilesCache.size() << "\n";
+        std::cout << "\033[1;38;5;208mMDF → RAM:\033[0m " << mdfMdsFilesCache.size() << "\n";
+        std::cout << "\033[1;38;5;208mNRG → RAM:\033[0m " << nrgFilesCache.size() << "\n";
     } catch (const std::filesystem::filesystem_error& e) {
         std::cerr << "\n\033[1;91mError: " << e.what() << std::endl;
     }
