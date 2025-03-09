@@ -655,6 +655,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         if (confirmation && (confirmation.get()[0] == 'y' || confirmation.get()[0] == 'Y')) {
             rl_bind_keyseq("\033[A", rl_get_previous_history);
             rl_bind_keyseq("\033[B", rl_get_next_history);
+            rl_completion_display_matches_hook = rl_display_match_list;
             setupSignalHandlerCancellations();
             g_operationCancelled.store(false);
             return validPairs;
@@ -789,7 +790,6 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     }
     flushStdin();
     restoreInput();
-    rl_completion_display_matches_hook = rl_display_match_list;
 }
 
 
