@@ -842,8 +842,8 @@ void helpSelections() {
     std::cout << "\n\033[1;36m===== Help Guide For Lists =====\033[0m\n" << std::endl;
     
     std::cout << "\033[1;32m1. Hotkeys:\033[0m\n"
-			   << "   • Quick Return:\033[1;93m Ctrl+d \033[0m\n"
-			   << "   • Clear Line:\033[1;93m Ctrl+u \033[0m\n" << std::endl;
+			   << "   • Quick Return:\033[1;33m Ctrl+d \033[0m\n"
+			   << "   • Clear Line:\033[1;33m Ctrl+u \033[0m\n" << std::endl;
     
     // Working with indices
     std::cout << "\033[1;32m2. Selecting Items:\033[0m\n"
@@ -882,9 +882,9 @@ void helpSearches(bool isCpMv, bool import2ISO) {
           << " Prompt =====\033[0m\n" << std::endl;
     
     std::cout << "\033[1;32m1. Hotkeys:\033[0m\n"
-			   << "   • Quick Return:\033[1;93m Ctrl+d \033[0m\n"
-			   << "   • Clear Line:\033[1;93m Ctrl+u \033[0m\n"
-               << "   • Refresh Screen:\033[1;93m Ctrl+l \033[0m\n" << std::endl;
+			   << "   • Quick Return:\033[1;33m Ctrl+d \033[0m\n"
+			   << "   • Clear Line:\033[1;33m Ctrl+u \033[0m\n"
+               << "   • Refresh Screen:\033[1;33m Ctrl+l \033[0m\n" << std::endl;
                
     std::cout << "\033[1;32m2. Selecting FolderPaths:\033[0m\n"
               << "   • Single directory: Enter a directory (e.g., '/directory/')\n"
@@ -941,9 +941,9 @@ void helpMappings() {
     std::cout << "\n\033[1;36m===== Help Guide For Mappings =====\033[0m\n" << std::endl;
     
     std::cout << "\033[1;32m1. Hotkeys:\033[0m\n"
-			  << "   • Quick Return:\033[1;93m Ctrl+d \033[0m\n"
-			  << "   • Clear Line:\033[1;93m Ctrl+u \033[0m\n"
-              << "   • Refresh Screen:\033[1;93m Ctrl+l \033[0m\n" << std::endl;
+			  << "   • Quick Return:\033[1;33m Ctrl+d \033[0m\n"
+			  << "   • Clear Line:\033[1;33m Ctrl+u \033[0m\n"
+              << "   • Refresh Screen:\033[1;33m Ctrl+l \033[0m\n" << std::endl;
     
     std::cout << "\033[1;32m2. Selecting Mappings:\033[0m\n"
 			  << "   • Mapping = NewISOIndex>RemovableUSBDevice\n"
