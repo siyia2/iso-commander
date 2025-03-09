@@ -598,8 +598,8 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
                    << magenta << filename << defaultColor << "\n";
         } else if (listType == "MOUNTED_ISOS") {
 			std::string dirName = items[i];
-			// Use the extractDirectoryAndFilenameFromIso function to get the components
-			auto [directoryPart, filenamePart, hashPart] = extractDirectoryAndFilenameFromIso(dirName);
+			// Use the extractDirectoryAndFilenameFromMountPoint function to get the components
+			auto [directoryPart, filenamePart, hashPart] = extractDirectoryAndFilenameFromMountPoint(dirName);
 			// Set displayPath and displayHash using the extracted components
 			displayPath = filenamePart;
 			displayHash = hashPart;

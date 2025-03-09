@@ -76,7 +76,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
 
 
 // Function toggle between long and short verbose logging in umount
-std::tuple<std::string, std::string, std::string> extractDirectoryAndFilenameFromIso(const std::string& dir) {
+std::tuple<std::string, std::string, std::string> extractDirectoryAndFilenameFromMountPoint(const std::string& dir) {
     // Convert input to string_view for processing
     std::string_view dir_view(dir);
 
@@ -144,7 +144,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std:
 
     if (!hasRoot) {
         for (const auto& isoDir : isoDirs) {
-            auto dirParts = extractDirectoryAndFilenameFromIso(isoDir);
+            auto dirParts = extractDirectoryAndFilenameFromMountPoint(isoDir);
             std::string formattedDir;
             if (displayConfig::toggleFullListUmount) 
                 formattedDir = std::get<0>(dirParts);
@@ -176,7 +176,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std:
     for (const auto& [dir, result] : unmountResults) {
         if (g_operationCancelled.load()) break;
         bool isEmpty = isDirectoryEmpty(dir);
-        auto dirParts = extractDirectoryAndFilenameFromIso(dir);
+        auto dirParts = extractDirectoryAndFilenameFromMountPoint(dir);
         std::string formattedDir;
         if (displayConfig::toggleFullListUmount) 
             formattedDir = std::get<0>(dirParts);
@@ -199,7 +199,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std:
     if (g_operationCancelled.load()) {
         for (size_t i = unmountResults.size(); i < isoDirs.size(); ++i) {
             const std::string& isoDir = isoDirs[i];
-            auto dirParts = extractDirectoryAndFilenameFromIso(isoDir);
+            auto dirParts = extractDirectoryAndFilenameFromMountPoint(isoDir);
             std::string formattedDir;
             if (displayConfig::toggleFullListUmount) 
                 formattedDir = std::get<0>(dirParts);
