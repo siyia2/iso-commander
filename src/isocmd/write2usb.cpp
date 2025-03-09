@@ -379,7 +379,7 @@ std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::strin
 
 
 // Struct to hold completion data for custom readline
-static struct CompleterData {
+struct CompleterData {
     const std::vector<IsoInfo>* sortedIsos = nullptr;
     const std::vector<std::string>* usbDevices = nullptr;
 } completerData;
@@ -790,6 +790,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     }
     flushStdin();
     restoreInput();
+    rl_completion_display_matches_hook = rl_display_match_list;
 }
 
 
