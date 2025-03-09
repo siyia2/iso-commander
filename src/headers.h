@@ -62,6 +62,15 @@ extern std::vector<std::string> globalIsoFileList;
 // Cache for directory and filename transformations
 extern std::unordered_map<std::string, std::string> transformationCache;
 
+// Memory cached binImgFiles here
+extern std::vector<std::string> binImgFilesCache;
+
+// Memory cached mdfImgFiles here
+extern std::vector<std::string> mdfMdsFilesCache;
+
+// Memory cached nrgImgFiles here
+extern std::vector<std::string> nrgFilesCache; 
+
 // Holds IsoCache directory name
 extern const std::string cacheFileName;
 
@@ -70,6 +79,9 @@ extern const std::string cacheFilePath;
 
 // Holds folder history directory path
 extern const std::string historyFilePath;
+
+// Holds filter history
+extern const std::string filterHistoryFilePath;
 
 // Holds configuration path
 extern const std::string configPath;
@@ -215,6 +227,8 @@ void loadCache(std::vector<std::string>& isoFiles);
 void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, bool filterHistory, std::atomic<bool>& newISOFound);
 void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages, std::atomic<size_t>& totalFiles, std::mutex& traverseFilesMutex, std::mutex& traverseErrorsMutex, int& maxDepth, bool& promptFlag);
 void backgroundCacheImport(std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound);
+void verboseIsoCacheRefresh(std::vector<std::string>& allIsoFiles, std::atomic<size_t>& totalFiles, std::vector<std::string>& validPaths, std::unordered_set<std::string>& invalidPaths, std::unordered_set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& filterHistory, const std::chrono::high_resolution_clock::time_point& start_time, std::atomic<bool>& newISOFound);
+void displayCacheStatistics(const std::string& cacheFilePath, std::uintmax_t maxCacheSize, const std::unordered_map<std::string, std::string>& transformationCache, const std::vector<std::string>& globalIsoFileList);
 void removeNonExistentPathsFromCache();
 
 
