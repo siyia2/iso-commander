@@ -470,6 +470,7 @@ bool isValidDirectory(const std::string& path) {
 
 // Function to display on-disk and ram statistics
 void displayCacheStatistics(const std::string& cacheFilePath, std::uintmax_t maxCacheSize, const std::unordered_map<std::string, std::string>& transformationCache, const std::vector<std::string>& globalIsoFileList) {
+	clearScrollBuffer();
     try {
         // Create files if they don't exist
         std::filesystem::path filePath(cacheFilePath);
@@ -518,7 +519,7 @@ void displayCacheStatistics(const std::string& cacheFilePath, std::uintmax_t max
     } catch (const std::filesystem::filesystem_error& e) {
         std::cerr << "\n\033[1;91mError: " << e.what() << std::endl;
     }
-    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+    std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
