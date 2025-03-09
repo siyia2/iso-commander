@@ -112,9 +112,9 @@ std::tuple<std::string, std::string, std::string> extractDirectoryAndFilenameFro
     return result;
 }
 
-void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std::string>& unmountedFiles, 
-                std::unordered_set<std::string>& unmountedErrors, std::atomic<size_t>* completedTasks, 
-                std::atomic<size_t>* failedTasks) {
+
+// Function to perform unmount using umount2
+void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std::string>& unmountedFiles, std::unordered_set<std::string>& unmountedErrors, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks) {
 
     VerboseMessageFormatter messageFormatter;
     const size_t BATCH_SIZE = 1000;
