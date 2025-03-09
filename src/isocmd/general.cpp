@@ -599,7 +599,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         } else if (listType == "MOUNTED_ISOS") {
 			std::string dirName = items[i];
 			// Use the extractDirectoryAndFilenameFromMountPoint function to get the components
-			auto [directoryPart, filenamePart, hashPart] = extractDirectoryAndFilenameFromMountPoint(dirName);
+			auto [directoryPart, filenamePart, hashPart] = parseMountPointComponents(dirName);
 			// Set displayPath and displayHash using the extracted components
 			displayPath = filenamePart;
 			displayHash = hashPart;
