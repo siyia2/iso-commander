@@ -509,7 +509,7 @@ void displayCacheStatistics(const std::string& cacheFilePath, std::uintmax_t max
                   << " \n\033[1;92mFilter History Entries:\033[0m " << countNonEmptyLines(filterHistoryFilePath) << "/" << MAX_HISTORY_PATTERN_LINES
                   << "\n\033[1;92mLocation:\033[0m " << "'" << filterHistoryFilePath << "'\033[0;1m" << std::endl;
         
-        std::cout << "\n\033[1;94m=== Buffers ===\033[0m\n";
+        std::cout << "\n\033[1;94m=== Buffered Entries ===\033[0m\n";
         std::cout << "\033[1;96m\nString Transformations → RAM:\033[0m " << transformationCache.size() + parsingCacheUmount.size() << "\n";
         std::cout << "\n\033[1;92mISO → RAM:\033[0m " << globalIsoFileList.size() << "\n";
         std::cout << "\n\033[1;38;5;208mBIN/IMG → RAM:\033[0m " << binImgFilesCache.size() << "\n";

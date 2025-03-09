@@ -841,17 +841,17 @@ void helpSelections() {
     // Title
     std::cout << "\n\033[1;36m===== Help Guide For Lists =====\033[0m\n" << std::endl;
     
+    std::cout << "\033[1;32m1. Hotkeys:\033[0m\n"
+			   << "   • Quick Return:\033[1;93m Ctrl+d \033[0m\n"
+			   << "   • Clear Line:\033[1;93m Ctrl+u \033[0m\n" << std::endl;
+    
     // Working with indices
-    std::cout << "\033[1;32m1. Selecting Items:\033[0m\n"
+    std::cout << "\033[1;32m2. Selecting Items:\033[0m\n"
               << "   • Single item: Enter a number (e.g., '1')\n"
               << "   • Multiple items: Separate with spaces (e.g., '1 5 6')\n"
               << "   • Range of items: Use a hyphen (e.g., '1-3')\n"
               << "   • Combine methods: '1-3 5 7-9'\n"
               << "   • Select all: Enter '00' (for mount/umount only)\n" << std::endl;
-    
-    std::cout << "\033[1;32m2. Hotkeys:\033[0m\n"
-			   << "   • Quick Return:\033[1;93m Ctrl+d \033[0m\n"
-			   << "   • Clear Line:\033[1;93m Ctrl+u \033[0m\n" << std::endl;
     
     // Special commands
     std::cout << "\033[1;32m3. Special Commands:\033[0m\n"
@@ -881,16 +881,18 @@ void helpSearches(bool isCpMv, bool import2ISO) {
           << (isCpMv ? "Cp/Mv FolderPath" : (import2ISO ? "Import2ISO FolderPath" : "Convert2ISO FolderPath")) 
           << " Prompt =====\033[0m\n" << std::endl;
     
-    std::cout << "\033[1;32m1. Selecting FolderPaths:\033[0m\n"
+    std::cout << "\033[1;32m1. Hotkeys:\033[0m\n"
+			   << "   • Quick Return:\033[1;93m Ctrl+d \033[0m\n"
+			   << "   • Clear Line:\033[1;93m Ctrl+u \033[0m\n"
+               << "   • Refresh Screen:\033[1;93m Ctrl+l \033[0m\n" << std::endl;
+               
+    std::cout << "\033[1;32m2. Selecting FolderPaths:\033[0m\n"
               << "   • Single directory: Enter a directory (e.g., '/directory/')\n"
               << "   • Multiple directories: Separate with ; (e.g., '/directory1/;/directory2/')" << (isCpMv ? "" : "\n") << std::endl;
     if (isCpMv) {
         std::cout << "   • Overwrite files for cp/mv: Append -o (e.g., '/directory/ -o' or '/directory1/;/directory2/ -o')\n" << std::endl;
     }
-    std::cout << "\033[1;32m2. Hotkeys:\033[0m\n"
-			   << "   • Quick Return:\033[1;93m Ctrl+d \033[0m\n"
-			   << "   • Clear Line:\033[1;93m Ctrl+u \033[0m\n"
-               << "   • Refresh Screen:\033[1;93m Ctrl+l \033[0m\n" << std::endl;
+    
     if (!isCpMv) {
         std::cout << "\033[1;32m3. Special Cleanup Commands:\033[0m\n";
         if (!import2ISO) {
@@ -938,14 +940,16 @@ void helpMappings() {
     // Title
     std::cout << "\n\033[1;36m===== Help Guide For Mappings =====\033[0m\n" << std::endl;
     
-    std::cout << "\033[1;32m1. Selecting Mappings:\033[0m\n"
-			  << "   • Mapping = NewISOIndex>RemovableUSBDevice\n"
-              << "   • Single mapping: Enter a mapping (e.g., '1>/dev/sdc')\n"
-              << "   • Multiple mappings: Separate with ; (e.g., '1>/dev/sdc;2>/dev/sdd' or '1>/dev/sdc;1>/dev/sdd')\n" << std::endl;
-    std::cout << "\033[1;32m2. Hotkeys:\033[0m\n"
+    std::cout << "\033[1;32m1. Hotkeys:\033[0m\n"
 			  << "   • Quick Return:\033[1;93m Ctrl+d \033[0m\n"
 			  << "   • Clear Line:\033[1;93m Ctrl+u \033[0m\n"
               << "   • Refresh Screen:\033[1;93m Ctrl+l \033[0m\n" << std::endl;
+    
+    std::cout << "\033[1;32m2. Selecting Mappings:\033[0m\n"
+			  << "   • Mapping = NewISOIndex>RemovableUSBDevice\n"
+              << "   • Single mapping: Enter a mapping (e.g., '1>/dev/sdc')\n"
+              << "   • Multiple mappings: Separate with ; (e.g., '1>/dev/sdc;2>/dev/sdd' or '1>/dev/sdc;1>/dev/sdd')\n" << std::endl;
+    
     std::cout << "\033[1;32m3. Tips:\033[0m\n"
               << "   • AutoComplete INDEX>DEVICE mappings with Tab\033[0m\n"
               << "   • Partitions are not eligible for write, only raw devices (e.g., '/dev/sdc')\n"
