@@ -487,9 +487,9 @@ void displayCacheStatistics(const std::string& cacheFilePath, std::uintmax_t max
                   << " \n\033[1;92mISO Entries:\033[0m " << countNonEmptyLines(cacheFilePath) 
                   << "\n\033[1;92mLocation:\033[0m " << "'" << cacheFilePath << "'\033[0;1m\n";
        std::cout  << "\n\033[1;94m=== On-Disk History ===\033[0m\n"
-                  << " \n\033[1;92mFolderPath History Entries:\033[0m " << countNonEmptyLines(historyFilePath) << "/50"
+                  << " \n\033[1;92mFolderPath History Entries:\033[0m " << countNonEmptyLines(historyFilePath)<< "/" << MAX_HISTORY_LINES
                   << "\n\033[1;92mLocation:\033[0m " << "'" << historyFilePath << "'\033[0;1m"
-                  << " \n\033[1;92mFilter History Entries:\033[0m " << countNonEmptyLines(filterHistoryFilePath) << "/25"
+                  << " \n\033[1;92mFilter History Entries:\033[0m " << countNonEmptyLines(filterHistoryFilePath) << "/" << MAX_HISTORY_PATTERN_LINES
                   << "\n\033[1;92mLocation:\033[0m " << "'" << filterHistoryFilePath << "'\033[0;1m" << std::endl;
         
         std::cout << "\n\033[1;94m=== RAM Cache ===\033[0m\n";
