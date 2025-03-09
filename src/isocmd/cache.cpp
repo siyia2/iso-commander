@@ -8,7 +8,7 @@
 const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.local/share/isocmd/database/"; // Construct the full path to the cache directory
 const std::string cacheFilePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/iso_commander_cache.txt";
 const std::string cacheFileName = "iso_commander_cache.txt";
-const uintmax_t maxCacheSize = 5 * 1024 * 1024; // 5MB
+const uintmax_t maxCacheSize = 1 * 1024 * 1024; // 1MB
 
 // Global mutex to protect counter cout
 std::mutex couNtMutex;
@@ -471,29 +471,45 @@ bool isValidDirectory(const std::string& path) {
 // Function to display on-disk and ram statistics
 void displayCacheStatistics(const std::string& cacheFilePath, std::uintmax_t maxCacheSize, const std::unordered_map<std::string, std::string>& transformationCache, const std::vector<std::string>& globalIsoFileList) {
     try {
+        // Create files if they don't exist
+        std::filesystem::path filePath(cacheFilePath);
+        if (!std::filesystem::exists(filePath)) {
+            std::ofstream createFile(cacheFilePath);
+            createFile.close();
+        }
+        
+        if (!std::filesystem::exists(historyFilePath)) {
+            std::ofstream createFile(historyFilePath);
+            createFile.close();
+        }
+        
+        if (!std::filesystem::exists(filterHistoryFilePath)) {
+            std::ofstream createFile(filterHistoryFilePath);
+            createFile.close();
+        }
+
         std::cout << "\n\033[1;94m=== On-Disk ISO Cache ===\033[0m\n";
         
-        std::filesystem::path filePath(cacheFilePath);
         std::uintmax_t fileSizeInBytes = std::filesystem::file_size(filePath);
         std::uintmax_t cachesizeInBytes = maxCacheSize;
         
-        double fileSizeInMB = fileSizeInBytes / (1024.0 * 1024.0);
-        double cachesizeInMb = cachesizeInBytes / (1024.0 * 1024.0);
+        double fileSizeInKB = fileSizeInBytes / 1024.0;
+        double cachesizeInKb = cachesizeInBytes / 1024.0;
         double usagePercentage = (fileSizeInBytes * 100.0) / cachesizeInBytes;
         
-        std::cout << "\n\033[1;92mCapacity:\033[0m " << std::fixed << std::setprecision(2) << fileSizeInMB << "MB" 
-                  << "/" << std::setprecision(0) << cachesizeInMb << "MB" 
+        std::cout << "\n\033[1;92mCapacity:\033[0m " << std::fixed << std::setprecision(0) << fileSizeInKB << "KB" 
+                  << "/" << std::setprecision(0) << cachesizeInKb << "KB" 
                   << " (" << std::setprecision(1) << usagePercentage << "%)"
                   << " \n\033[1;92mISO Entries:\033[0m " << countNonEmptyLines(cacheFilePath) 
                   << "\n\033[1;92mLocation:\033[0m " << "'" << cacheFilePath << "'\033[0;1m\n";
        
-       std::cout  << "\n\033[1;94m=== On-Disk History Cache ===\033[0m\n"
+        std::cout  << "\n\033[1;94m=== On-Disk History Cache ===\033[0m\n"
                   << " \n\033[1;92mFolderPath History Entries:\033[0m " << countNonEmptyLines(historyFilePath)<< "/" << MAX_HISTORY_LINES
                   << "\n\033[1;92mLocation:\033[0m " << "'" << historyFilePath << "'\033[0;1m"
                   << " \n\033[1;92mFilter History Entries:\033[0m " << countNonEmptyLines(filterHistoryFilePath) << "/" << MAX_HISTORY_PATTERN_LINES
                   << "\n\033[1;92mLocation:\033[0m " << "'" << filterHistoryFilePath << "'\033[0;1m" << std::endl;
         
-        std::cout << "\n\033[1;94m=== RAM Cache ===\033[0m\n";
+        std::cout << "\n\033[1;94m=== Buffers ===\033[0m\n";
         std::cout << "\033[1;96m\nString Transformations → RAM:\033[0m " << transformationCache.size() << "\n";
         std::cout << "\n\033[1;92mISO → RAM:\033[0m " << globalIsoFileList.size() << "\n";
         std::cout << "\n\033[1;38;5;208mBIN/IMG → RAM:\033[0m " << binImgFilesCache.size() << "\n";

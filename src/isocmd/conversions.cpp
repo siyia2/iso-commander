@@ -57,9 +57,9 @@ void clearRamCache(bool& modeMdf, bool& modeNrg) {
 
     // Display appropriate messages
     if (cacheIsEmpty && !transformationCacheWasCleared) {
-        std::cout << "\n\033[1;93m" << cacheType << " cache is empty. Nothing to clear.\033[0;1m\n";
+        std::cout << "\n\033[1;93m" << cacheType << " buffer is empty. Nothing to clear.\033[0;1m\n";
     } else {
-        std::cout << "\n\033[1;92m" << cacheType << " RAM cache cleared.\033[0;1m\n";
+        std::cout << "\n\033[1;92m" << cacheType << " buffer cleared.\033[0;1m\n";
     }
 
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
@@ -124,7 +124,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
     
     // Define prompt once
     std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;38;5;208m\002" + fileExtension +
-                         "\001\033[1;94m\002 files and import them into \001\033[1;93m\002RAM\001\033[1;94m\002 cache, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
+                         "\001\033[1;94m\002 files and store them into \001\033[1;93m\002RAM\001\033[1;94m\002, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
     
     // Main processing loop
     while (true) {
