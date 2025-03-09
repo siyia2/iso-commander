@@ -471,7 +471,7 @@ bool isValidDirectory(const std::string& path) {
 // Function to display on-disk and ram statistics
 void displayCacheStatistics(const std::string& cacheFilePath, std::uintmax_t maxCacheSize, const std::unordered_map<std::string, std::string>& transformationCache, const std::vector<std::string>& globalIsoFileList) {
     try {
-        std::cout << "\n\033[1;94m=== On-Disk Cache ===\033[0m\n";
+        std::cout << "\n\033[1;94m=== On-Disk ISO Cache ===\033[0m\n";
         
         std::filesystem::path filePath(cacheFilePath);
         std::uintmax_t fileSizeInBytes = std::filesystem::file_size(filePath);
@@ -486,7 +486,7 @@ void displayCacheStatistics(const std::string& cacheFilePath, std::uintmax_t max
                   << " (" << std::setprecision(1) << usagePercentage << "%)"
                   << " \n\033[1;92mISO Entries:\033[0m " << countNonEmptyLines(cacheFilePath) 
                   << "\n\033[1;92mLocation:\033[0m " << "'" << cacheFilePath << "'\033[0;1m\n";
-       std::cout  << "\n\033[1;94m=== On-Disk History ===\033[0m\n"
+       std::cout  << "\n\033[1;94m=== On-Disk History Cache ===\033[0m\n"
                   << " \n\033[1;92mFolderPath History Entries:\033[0m " << countNonEmptyLines(historyFilePath)<< "/" << MAX_HISTORY_LINES
                   << "\n\033[1;92mLocation:\033[0m " << "'" << historyFilePath << "'\033[0;1m"
                   << " \n\033[1;92mFilter History Entries:\033[0m " << countNonEmptyLines(filterHistoryFilePath) << "/" << MAX_HISTORY_PATTERN_LINES
