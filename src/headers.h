@@ -63,7 +63,7 @@ extern std::vector<std::string> globalIsoFileList;
 extern std::unordered_map<std::string, std::string> transformationCache;
 
 // Cache for mount-points
-extern std::unordered_map<std::string, std::tuple<std::string, std::string, std::string>> parsingCacheUmount;
+extern std::unordered_map<std::string, std::tuple<std::string, std::string, std::string>> cachedParsesForUmount;
 
 // Memory cached binImgFiles here
 extern std::vector<std::string> binImgFilesCache;
@@ -218,7 +218,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std:
 // stds
 std::string modifyDirectoryPath(const std::string& dir);
 std::string formatVerboseMessage(const std::string& messageType, const std::string& path);
-std::tuple<std::string, std::string, std::string> extractDirectoryAndFilenameFromMountPoint(std::string_view dir);
+std::tuple<std::string, std::string, std::string> parseMountPointComponents(std::string_view dir);
 
 
 // CACHE
