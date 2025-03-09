@@ -6,7 +6,11 @@
 #include "../umount.h"
 
 
+// Mounpoint location
 const std::string MOUNTED_ISO_PATH = "/mnt";
+
+// Memory map for umount string transformations
+std::unordered_map<std::string, std::tuple<std::string, std::string, std::string>> transformationCacheUmount;
 
 
 // Function to load and display mount-points
@@ -55,6 +59,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
         std::cout << "\n\033[1;32m↵ to return...\033[0m\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         std::vector<std::string>().swap(isoDirs); // De-allocate memory for static vector
+        std::unordered_map<std::string, std::tuple<std::string, std::string, std::string>>().swap(transformationCacheUmount); //De-allocate memory map when no mounpoints exist
         return false;
     }
 
@@ -70,38 +75,46 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
 }
 
 
-// Function toggle between long and short vebose logging in umount
-std::string modifyDirectoryPath(const std::string& dir) {
-    if (displayConfig::toggleFullListUmount) {
-        return dir;
-    }
-
-    // We know:
-    // - "/mnt/iso_" is 9 characters
-    // - The total length including '~' at the end is 6 characters from the start
-    
-    // First check if string is long enough
-    if (dir.length() < 9) {  // Must be at least as long as "/mnt/iso_"
-        return dir;
+// Function toggle between long and short verbose logging in umount
+std::tuple<std::string, std::string, std::string> extractDirectoryAndFilenameFromIso(const std::string& dir) {
+    // Check if we have a cached transformation
+    auto cacheIt = transformationCacheUmount.find(dir);
+    if (cacheIt != transformationCacheUmount.end()) {
+        return cacheIt->second;
     }
     
-    // Verify the '_' is where we expect it
-    if (dir[8] != '_') {
-        return dir;
+    // Find the first underscore in the input.
+    size_t underscorePos = dir.find('_');
+    if (underscorePos == std::string::npos) {
+        transformationCacheUmount[dir] = std::make_tuple(dir, "", "");
+        return std::make_tuple(dir, "", "");
     }
     
-    // Find the last '~'
+    // Find the last tilde.
     size_t lastTildePos = dir.find_last_of('~');
-    if (lastTildePos == std::string::npos) {
-        return dir;
+    if (lastTildePos == std::string::npos || lastTildePos <= underscorePos) {
+        // If no tilde exists or it's not after the underscore,
+        // return directory (before underscore), filename (everything after underscore), and an empty hash.
+        auto result = std::make_tuple(dir.substr(0, underscorePos), dir.substr(underscorePos + 1), "");
+        transformationCacheUmount[dir] = result;
+        return result;
     }
     
-    // Extract everything between the known '_' position and the '~'
-    return dir.substr(9, lastTildePos - 9);
+    // Extract the filename part only:
+    // Filename: substring from just after the underscore up to (but not including) the last tilde.
+    std::string filenamePart = dir.substr(underscorePos + 1, lastTildePos - underscorePos - 1);
+    
+    // Extract the hash part:
+    // Hash: substring from the last tilde to the end of the string.
+    std::string hashPart = dir.substr(lastTildePos);
+    
+    auto result = std::make_tuple("", filenamePart, hashPart);  // Empty directory part
+    transformationCacheUmount[dir] = result;
+    return result;
 }
 
 
-// Function to unmount ISO files
+// Then update the unmountISO function to handle the pair
 void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std::string>& unmountedFiles, std::unordered_set<std::string>& unmountedErrors, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks) {
 
     // Create the message formatter
@@ -144,13 +157,21 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std:
 
     if (!hasRoot) {
         for (const auto& isoDir : isoDirs) {
-            std::string modifiedDir = modifyDirectoryPath(isoDir);
+            auto dirParts = extractDirectoryAndFilenameFromIso(isoDir);
+            std::string formattedDir;
+            // Add /mnt/_
+            if (displayConfig::toggleFullListUmount) formattedDir = std::get<0>(dirParts);
+            // Add filename
+            formattedDir += std::get<1>(dirParts);
+            // Add ~ hash part
+			if (displayConfig::toggleFullListUmount) formattedDir += "\033[38;5;245m" + std::get<2>(dirParts) + "\033[0m";
+            
             
             if (!g_operationCancelled.load()) {
-                errorMessages.push_back(messageFormatter.format("root_error", modifiedDir));
+                errorMessages.push_back(messageFormatter.format("root_error", formattedDir));
                 failedTasks->fetch_add(1, std::memory_order_acq_rel);
             } else {
-                errorMessages.push_back(messageFormatter.format("cancel", modifiedDir));
+                errorMessages.push_back(messageFormatter.format("cancel", formattedDir));
             }
 
             // Check if we need to flush based on buffer sizes
@@ -178,17 +199,24 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std:
     for (const auto& [dir, result] : unmountResults) {
         if (g_operationCancelled.load()) break;
         bool isEmpty = isDirectoryEmpty(dir);
-        std::string modifiedDir = modifyDirectoryPath(dir);
+        auto dirParts = extractDirectoryAndFilenameFromIso(dir);
+        std::string formattedDir;
+        // Add /mnt/_
+        if (displayConfig::toggleFullListUmount) formattedDir = std::get<0>(dirParts);
+        // Add filename
+        formattedDir += std::get<1>(dirParts);
+        // Add ~ hash part
+		if (displayConfig::toggleFullListUmount) formattedDir += "\033[38;5;245m" + std::get<2>(dirParts) + "\033[0m";
 
         if (result == 0 || isEmpty) {
             // Successful unmount
             if (isEmpty && rmdir(dir.c_str()) == 0) {
-                successMessages.push_back(messageFormatter.format("success", modifiedDir));
+                successMessages.push_back(messageFormatter.format("success", formattedDir));
                 completedTasks->fetch_add(1, std::memory_order_acq_rel);
             }
         } else {
             // Failed unmount
-            errorMessages.push_back(messageFormatter.format("error", modifiedDir));
+            errorMessages.push_back(messageFormatter.format("error", formattedDir));
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
         }
 
@@ -199,8 +227,16 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std:
     // If cancellation occurred, process the remaining isoDirs as cancelled
     if (g_operationCancelled.load()) {
         for (size_t i = unmountResults.size(); i < isoDirs.size(); ++i) {
-            std::string modifiedDir = modifyDirectoryPath(isoDirs[i]);
-            errorMessages.push_back(messageFormatter.format("cancel", modifiedDir));
+            auto dirParts = extractDirectoryAndFilenameFromIso(isoDirs[i]);
+            std::string formattedDir;
+            // Add /mnt/_
+            if (displayConfig::toggleFullListUmount) formattedDir = std::get<0>(dirParts);
+            // Add filename
+            formattedDir += std::get<1>(dirParts);
+            // Add ~ hash part
+			if (displayConfig::toggleFullListUmount) formattedDir += "\033[38;5;245m" + std::get<2>(dirParts) + "\033[0m";
+            
+            errorMessages.push_back(messageFormatter.format("cancel", formattedDir));
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
             
             // Check if we need to flush based on buffer sizes

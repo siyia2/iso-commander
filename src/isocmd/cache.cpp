@@ -510,7 +510,7 @@ void displayCacheStatistics(const std::string& cacheFilePath, std::uintmax_t max
                   << "\n\033[1;92mLocation:\033[0m " << "'" << filterHistoryFilePath << "'\033[0;1m" << std::endl;
         
         std::cout << "\n\033[1;94m=== Buffers ===\033[0m\n";
-        std::cout << "\033[1;96m\nString Transformations → RAM:\033[0m " << transformationCache.size() << "\n";
+        std::cout << "\033[1;96m\nString Transformations → RAM:\033[0m " << transformationCache.size() + transformationCacheUmount.size() << "\n";
         std::cout << "\n\033[1;92mISO → RAM:\033[0m " << globalIsoFileList.size() << "\n";
         std::cout << "\n\033[1;38;5;208mBIN/IMG → RAM:\033[0m " << binImgFilesCache.size() << "\n";
         std::cout << "\033[1;38;5;208mMDF → RAM:\033[0m " << mdfMdsFilesCache.size() << "\n";
@@ -617,7 +617,6 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
 
 // Function for manual cache refresh
 void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, bool filterHistory, std::atomic<bool>& newISOFound) {
-	
 	enable_ctrl_d();
 	// Setup signal handler at the start of the operation
     setupSignalHandlerCancellations();

@@ -569,31 +569,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
             auto [dir, fname] = extractDirectoryAndFilename(items[i], listSubType);
             directory = dir;
             filename = fname;
-        } else if (listType == "MOUNTED_ISOS") {
-			std::string dirName = items[i];
-    
-			// Find the position of the first underscore
-			size_t firstUnderscorePos = dirName.find('_');
-    
-			// Find the position of the last tilde
-			size_t lastTildePos = dirName.find_last_of('~');
-    
-			// Extract displayPath (after first underscore and before last tilde)
-			if (firstUnderscorePos != std::string::npos && lastTildePos != std::string::npos && lastTildePos > firstUnderscorePos) {
-				displayPath = dirName.substr(firstUnderscorePos + 1, lastTildePos - (firstUnderscorePos + 1));
-			} else {
-				// If the conditions are not met, use the entire dirName (or handle it as needed)
-				displayPath = dirName;
-			}
-    
-			// Extract displayHash (from last tilde to the end, including the last tilde)
-			if (lastTildePos != std::string::npos) {
-				displayHash = dirName.substr(lastTildePos); // Start at lastTildePos instead of lastTildePos + 1
-			} else {
-				// If no tilde is found, set displayHash to an empty string (or handle it as needed)
-				displayHash = "";
-			}
-		} else if (listType == "IMAGE_FILES") {
+        } else if (listType == "IMAGE_FILES") {
             auto [dir, fname] = extractDirectoryAndFilename(items[i], "conversions");
 
             bool isSpecialExtension = false;
@@ -621,15 +597,22 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
                    << defaultColor << bold << "/"
                    << magenta << filename << defaultColor << "\n";
         } else if (listType == "MOUNTED_ISOS") {
-			if (displayConfig::toggleFullListUmount){
-            output << sequenceColor << indexStrings[i] << ". "
-                   << blueBold << "/mnt/iso_"
-                   << magentaBold << displayPath << grayBold << displayHash << reset << "\n";
+			std::string dirName = items[i];
+			// Use the extractDirectoryAndFilenameFromIso function to get the components
+			auto [directoryPart, filenamePart, hashPart] = extractDirectoryAndFilenameFromIso(dirName);
+			// Set displayPath and displayHash using the extracted components
+			displayPath = filenamePart;
+			displayHash = hashPart;
+    
+			if (displayConfig::toggleFullListUmount) {
+				output << sequenceColor << indexStrings[i] << ". "
+						<< blueBold << "/mnt/iso_"
+						<< magentaBold << displayPath << grayBold << displayHash << reset << "\n";
 			} else {
 				output << sequenceColor << indexStrings[i] << ". "
-                   << magentaBold << displayPath << "\n";
+						<< magentaBold << displayPath << "\n";
 			}
-        } else if (listType == "IMAGE_FILES") {
+		} else if (listType == "IMAGE_FILES") {
 		// Alternate sequence color like in "ISO_FILES"
 		const char* sequenceColor = (i % 2 == 0) ? red : green;
     
