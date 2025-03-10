@@ -650,9 +650,6 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         } 
         // Process other input commands for file processing
         else {
-            clearScrollBuffer();
-            std::cout << "\n\033[0;1m Processing \001\033[1;38;5;208m\002" + fileExtensionWithOutDots + 
-                      "\033[0;1m conversions... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";
             processInput(mainInputString, files, (fileType == "mdf"), (fileType == "nrg"), 
                          processedErrors, successOuts, skippedOuts, failedOuts, verbose, needsScrnClr, newISOFound);
             needsScrnClr = true;
@@ -764,6 +761,13 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
     size_t totalTasks = filesToProcess.size();  // Each file is a task
     
     size_t totalBytes = calculateSizeForConverted(filesToProcess, modeNrg, modeMdf);
+    std::string operation;
+    operation = modeMdf ? "\033[1;38;5;208mMDF\033[0;1m conversion" :
+           modeNrg ? "\033[1;38;5;208mNRG\033[0;1m conversion" :
+                     "\033[1;38;5;208mBIN/IMG\033[0;1m conversion";
+                     
+	clearScrollBuffer();
+    std::cout << "\n\033[0;1m Processing \001\033[1;38;5;208m\002" << operation << (totalTasks > 1 ? " tasks" : " task") << "\033[0;1m... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";
 
     std::atomic<size_t> completedBytes(0);
     std::atomic<size_t> completedTasks(0);
@@ -772,7 +776,7 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
 
     // Use the enhanced progress bar with task tracking
     std::thread progressThread(displayProgressBarWithSize, &completedBytes, 
-        totalBytes, &completedTasks, &failedTasks, totalTasks, &isProcessingComplete, &verbose);
+        totalBytes, &completedTasks, &failedTasks, totalTasks, &isProcessingComplete, &verbose, std::string(operation));
 
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;

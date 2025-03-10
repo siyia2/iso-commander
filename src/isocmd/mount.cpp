@@ -187,12 +187,14 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
 
 // Function to process input and mount ISO files asynchronously
 void processAndMountIsoFiles(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedFiles, std::unordered_set<std::string>& skippedMessages, std::unordered_set<std::string>& mountedFails, std::unordered_set<std::string>& uniqueErrorMessages, bool& verbose) {
-    std::unordered_set<int> indicesToProcess;
-    
-    // Setup signal handler
+    // Setup signal handler at the start of the operation
     setupSignalHandlerCancellations();
     
     g_operationCancelled.store(false);
+    
+    std::unordered_set<int> indicesToProcess;
+    
+    std::string coloredProcess = "\033[1;92mmount \033[0;1moperation";
 
     // Handle input ("00" = all files, else parse input)
     if (input == "00") {
@@ -208,10 +210,11 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     // Create ISO paths vector from selected indices
     std::vector<std::string> selectedIsoFiles;
     selectedIsoFiles.reserve(indicesToProcess.size());
-    for (int index : indicesToProcess)
-        selectedIsoFiles.push_back(isoFiles[index - 1]);
-
-    std::cout << "\n\033[0;1m Processing \033[1;92mmount\033[0;1m operations... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";
+    for (int index : indicesToProcess) {
+		selectedIsoFiles.push_back(isoFiles[index - 1]);
+	}
+        
+    std::cout << "\n\033[0;1m Processing \033[1;92mmount\033[0;1m" << (selectedIsoFiles.size() > 1 ? " tasks" : " task") << "... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";
 
     // Thread pool and task setup
     unsigned int numThreads = std::min(static_cast<unsigned int>(selectedIsoFiles.size()), maxThreads);
@@ -237,7 +240,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
             mountIsoFiles(chunk, mountedFiles, skippedMessages, mountedFails, &completedTasks, &failedTasks);
         }));
     }
-
+	
     // Start progress thread
     std::thread progressThread(
         displayProgressBarWithSize, 
@@ -247,7 +250,8 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
         &failedTasks,
         selectedIsoFiles.size(),
         &isProcessingComplete,
-        &verbose
+        &verbose,
+        std::string(coloredProcess)
     );
 
     // Wait for completion or cancellation

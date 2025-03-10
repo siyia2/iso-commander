@@ -70,6 +70,13 @@ void processOperationInput(const std::string& input, const std::vector<std::stri
     bool isDelete = (process == "rm");
     bool isMove   = (process == "mv");
     bool isCopy   = (process == "cp");
+    
+    std::string coloredProcess = 
+    isDelete ? "\033[1;91m" + process + " \033[0;1moperation" :
+    isMove   ? "\033[1;93m" + process + " \033[0;1moperation" :
+    isCopy   ? "\033[1;92m" + process + " \033[0;1moperation" :
+    process;
+    
     std::string operationDescription = isDelete ? "*PERMANENTLY DELETED*" : (isMove ? "*MOVED*" : "*COPIED*");
     std::string operationColor       = isDelete ? "\033[1;91m" : (isCopy ? "\033[1;92m" : "\033[1;93m");
 
@@ -99,8 +106,6 @@ void processOperationInput(const std::string& input, const std::vector<std::stri
     }
     uniqueErrorMessages.clear();
     clearScrollBuffer();
-    std::cout << "\n\033[0;1m Processing " + operationColor + process +
-                 "\033[0;1m operations... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";
 
     std::vector<std::string> filesToProcess;
     for (const auto& index : processedIndices) {
@@ -113,6 +118,10 @@ void processOperationInput(const std::string& input, const std::vector<std::stri
     size_t totalBytes = getTotalFileSize(filesToProcess);
     size_t totalTasks = filesToProcess.size();
     
+    std::cout << "\n\033[0;1m Processing " + operationColor + process +
+             "\033[0;1m " << (totalTasks > 1 ? "tasks" : "task") << "... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";
+                 
+
     // Adjust totals for copy/move operations with multiple destinations
     if (isCopy || isMove) {
         size_t destCount = std::count(processedUserDestDir.begin(), processedUserDestDir.end(), ';') + 1;
@@ -125,7 +134,7 @@ void processOperationInput(const std::string& input, const std::vector<std::stri
     // Start progress tracking in a separate thread.
     std::thread progressThread(displayProgressBarWithSize, &completedBytes, 
                                  totalBytes, &completedTasks, &failedTasks, 
-                                 totalTasks, &isProcessingComplete, &verbose);
+                                 totalTasks, &isProcessingComplete, &verbose, std::string(coloredProcess));
 
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;

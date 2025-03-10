@@ -403,7 +403,7 @@ size_t getTotalFileSize(const std::vector<std::string>& files) {
 
 
 // Function to display progress bar for native operations
-void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t totalBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, size_t totalTasks, std::atomic<bool>* isComplete, bool* verbose) {
+void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t totalBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, size_t totalTasks, std::atomic<bool>* isComplete, bool* verbose, const std::string& operation) {
     // Structs to handle terminal settings for non-blocking input
     struct termios oldt, newt;
     tcgetattr(STDIN_FILENO, &oldt);  // Get current terminal settings
@@ -495,6 +495,8 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 
         // If processing is complete, show a final message
         if (isComplete->load(std::memory_order_acquire)) {
+			clearScrollBuffer();
+			std::cout << "\n\033[0;1m " << operation << (!g_operationCancelled.load() ? " → \033[1;92mCOMPLETED\033[0;1m" : " → \033[1;93mINTERRUPTED\033[0;1m") << std::endl;
             std::cout << "\r[==================================================>] 100% ("
                       << completedTasks->load() << "/" << totalTasks << ") "
                       << (bytesTrackingEnabled ? "(" + formatSize(static_cast<double>(completedBytes->load())) + "/" + totalBytesFormatted + ") " : "")

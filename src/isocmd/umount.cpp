@@ -218,12 +218,14 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std:
 
 // Main function to send ISOs for unmount
 void prepareUnmount(const std::string& input, const std::vector<std::string>& currentFiles, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& verbose) {
-    // Setup signal handler
+    // Setup signal handler at the start of the operation
     setupSignalHandlerCancellations();
     
     g_operationCancelled.store(false);
-    
+        
     std::unordered_set<int> indicesToProcess;
+    
+    std::string coloredProcess = "\033[1;93mumount \033[0;1moperation";
 
     // Handle input ("00" = all files, else parse input)
     if (input == "00") {
@@ -240,11 +242,12 @@ void prepareUnmount(const std::string& input, const std::vector<std::string>& cu
     // Create selected files vector from indices
     std::vector<std::string> selectedMountpoints;
     selectedMountpoints.reserve(indicesToProcess.size());
-    for (int index : indicesToProcess)
+    for (int index : indicesToProcess) {
         selectedMountpoints.push_back(currentFiles[index - 1]);
+	}
 
     clearScrollBuffer();
-    std::cout << "\n\033[0;1m Processing \033[1;93mumount\033[0;1m operations... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";
+    std::cout << "\n\033[0;1m Processing \033[1;93mumount\033[0;1m" << (selectedMountpoints.size() > 1 ? " tasks" : " task") << "... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";
 
     // Thread pool setup
     unsigned int numThreads = std::min(static_cast<unsigned int>(selectedMountpoints.size()), maxThreads);
@@ -262,7 +265,8 @@ void prepareUnmount(const std::string& input, const std::vector<std::string>& cu
     std::atomic<size_t> completedTasks(0);
     std::atomic<size_t> failedTasks(0);
     std::atomic<bool> isProcessingComplete(false);
-
+    
+    
     // Start progress thread
     std::thread progressThread(
         displayProgressBarWithSize, 
@@ -272,7 +276,8 @@ void prepareUnmount(const std::string& input, const std::vector<std::string>& cu
         &failedTasks,
         selectedMountpoints.size(),
         &isProcessingComplete,
-        &verbose
+        &verbose,
+        std::string(coloredProcess)
     );
 
     // Enqueue chunk tasks
