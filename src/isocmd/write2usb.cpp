@@ -473,15 +473,14 @@ char** completion_cb(const char* text, int start, int end) {
 std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::vector<IsoInfo>& selectedIsos, std::unordered_set<std::string>& uniqueErrorMessages) {
     while (true) {
 		
-		// Disable readline completion list display for more than one items
-	rl_completion_display_matches_hook = [](char **matches, int num_matches, int max_length) {
-		// Mark parameters as unused to suppress warnings
-		(void)matches;
-		(void)num_matches;
-		(void)max_length;
-
-		// Do nothing so no list is printed
-	};
+        // Disable readline completion list display for more than one items
+        rl_completion_display_matches_hook = [](char **matches, int num_matches, int max_length) {
+            // Mark parameters as unused to suppress warnings
+            (void)matches;
+            (void)num_matches;
+            (void)max_length;
+            // Do nothing so no list is printed
+        };
 		
         signal(SIGINT, SIG_IGN);  // Ignore Ctrl+C
         disable_ctrl_d();
@@ -508,9 +507,9 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         for (size_t i = 0; i < sortedIsos.size(); ++i) {
             auto [shortDir, filename] = extractDirectoryAndFilename(sortedIsos[i].path, "write");
             devicePromptStream << "  \033[1;93m" << (i+1) << ">\033[0;1m " 
-                            << shortDir << "/\033[1;95m" << filename 
-                            << "\033[0;1m (\033[1;35m" << sortedIsos[i].sizeStr 
-                            << "\033[0;1m)\n";
+                               << shortDir << "/\033[1;95m" << filename 
+                               << "\033[0;1m (\033[1;35m" << sortedIsos[i].sizeStr 
+                               << "\033[0;1m)\n";
         }
 
         // Process and sort USB devices by capacity
@@ -554,16 +553,16 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                     devicePromptStream << "  \033[1;91m" << dev.path << " (error)\033[0;1m\n";
                 } else {
                     devicePromptStream << "  \033[1;93m" << dev.path 
-                                    << "\033[0;1m <" << dev.driveName 
-                                    << "> (\033[1;35m" << dev.sizeStr 
-                                    << "\033[0;1m)"
-                                    << (dev.mounted ? " \033[1;91m(mounted)\033[0;1m" : "") 
-                                    << "\n";
+                                       << "\033[0;1m <" << dev.driveName 
+                                       << "> (\033[1;35m" << dev.sizeStr 
+                                       << "\033[0;1m)"
+                                       << (dev.mounted ? " \033[1;91m(mounted)\033[0;1m" : "") 
+                                       << "\n";
                 }
             }
         }
 
-        // Prepare completion data
+        // Prepare completion data using sorted ISO list
         completerData.sortedIsos = &sortedIsos;
         completerData.usbDevices = &usbDevices;
 
@@ -588,9 +587,9 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         
         // Handle empty input
         if (!deviceInput || deviceInput.get()[0] == '\0') {
-			// Restore readline
-			rl_completion_display_matches_hook = rl_display_match_list;
-			rl_attempted_completion_function = nullptr;
+            // Restore readline
+            rl_completion_display_matches_hook = rl_display_match_list;
+            rl_attempted_completion_function = nullptr;
             return {};
         }
         
@@ -603,10 +602,10 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         
         if (deviceInput && *deviceInput) add_history(deviceInput.get());
 
-        // Parse mappings
+        // Parse mappings using sorted ISO list
         std::vector<std::string> errors;
         std::vector<std::string> isoFilenames;
-        for (const auto& iso : selectedIsos) {
+        for (const auto& iso : sortedIsos) {
             isoFilenames.push_back(iso.path);
         }
         
@@ -624,9 +623,9 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             continue;
         }
 
-        // Validate device mappings
+        // Validate device mappings using sortedIsos so the mapping indices match what was displayed
         bool permissions = false;
-        auto validPairs = validateDevices(deviceMap, selectedIsos, permissions);
+        auto validPairs = validateDevices(deviceMap, sortedIsos, permissions);
         if (validPairs.empty()) {
             continue;
         }
@@ -656,10 +655,10 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 
         // Process confirmation
         if (confirmation && (confirmation.get()[0] == 'y' || confirmation.get()[0] == 'Y')) {
-			// Restore readline bindings
+            // Restore readline bindings
             rl_bind_keyseq("\033[A", rl_get_previous_history);
             rl_bind_keyseq("\033[B", rl_get_next_history);
-			rl_completion_display_matches_hook = rl_display_match_list;
+            rl_completion_display_matches_hook = rl_display_match_list;
             rl_attempted_completion_function = nullptr;
             setupSignalHandlerCancellations();
             g_operationCancelled.store(false);
@@ -669,7 +668,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         // Restore readline bindings if not proceeding
         rl_bind_keyseq("\033[A", rl_get_previous_history);
         rl_bind_keyseq("\033[B", rl_get_next_history);
-		rl_completion_display_matches_hook = rl_display_match_list;
+        rl_completion_display_matches_hook = rl_display_match_list;
         rl_attempted_completion_function = nullptr;
         
         std::cout << "\n\033[1;93mWrite operation aborted by user.\033[0;1m\n";
@@ -706,9 +705,59 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     disableInput();
     clearScrollBuffer();
     std::cout << "\n\033[0;1mWriting... (\033[1;91mCtrl+c\033[0;1m:cancel)\n\n";
-    std::cout << "\033[s";
+    std::cout << "\033[s";  // Save cursor position
 
     auto startTime = std::chrono::high_resolution_clock::now();
+
+    // Initialize device information maps in main thread
+    std::unordered_map<std::string, std::string> deviceNames;
+    std::unordered_map<std::string, uint64_t> deviceSizes;
+    std::unordered_map<std::string, std::string> deviceSizeStrs;
+    
+    // Initialize device maps once in main thread
+    for (const auto& prog : progressData) {
+        if (deviceNames.find(prog.device) == deviceNames.end()) {
+            deviceNames[prog.device] = getDriveName(prog.device);
+            deviceSizes[prog.device] = getBlockDeviceSize(prog.device);
+            deviceSizeStrs[prog.device] = formatFileSize(deviceSizes[prog.device]);
+        }
+    }
+
+    // Helper lambda to display all progress entries
+    auto displayAllProgress = [&]() {
+        for (size_t i = 0; i < progressData.size(); ++i) {
+            const auto& prog = progressData[i];
+            std::string currentSize = formatFileSize(prog.bytesWritten.load());
+
+            std::cout << "\033[K"  // Clear line
+                    << ("\033[1;95m" + prog.filename + " \033[0;1m→ {" + 
+                      "\033[1;93m" + prog.device + "\033[0;1m \033[0;1m<" + 
+                      deviceNames[prog.device] + "> (\033[1;35m" + 
+                      deviceSizeStrs[prog.device] + "\033[0;1m)} \033[0;1m")
+                    << std::right
+                    << (prog.completed ? "\033[1;92mDONE\033[0;1m" :
+                        prog.failed ? "\033[1;91mFAIL\033[0;1m" :
+                        std::to_string(prog.progress) + "%")
+                    << " ["
+                    << currentSize
+                    << "/\033[1;35m"
+                    << prog.totalSize
+                    << "\033[0;1m] "
+                    << "\033[0;1m" + formatSpeed(prog.speed) + "\033[0;1m"
+                    << "\n";
+        }
+        std::cout << std::flush;
+    };
+
+    // Display progress lambda (modified to use helper)
+    auto displayProgress = [&]() {
+        while (!isProcessingComplete.load(std::memory_order_acquire) && 
+              !g_operationCancelled.load(std::memory_order_acquire)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            std::cout << "\033[u";  // Restore cursor position
+            displayAllProgress();
+        }
+    };
 
     // Launch tasks
     std::vector<std::future<void>> futures;
@@ -724,54 +773,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
         }));
     }
 
-    // Create separate maps for device information
-	std::unordered_map<std::string, std::string> deviceNames;
-	std::unordered_map<std::string, uint64_t> deviceSizes;
-	std::unordered_map<std::string, std::string> deviceSizeStrs;
-
-	// Initialize maps before the display loop
-	auto initDeviceMaps = [&]() {
-		for (const auto& prog : progressData) {
-			if (deviceNames.find(prog.device) == deviceNames.end()) {
-				deviceNames[prog.device] = getDriveName(prog.device);
-				deviceSizes[prog.device] = getBlockDeviceSize(prog.device);
-				deviceSizeStrs[prog.device] = formatFileSize(deviceSizes[prog.device]);
-			}
-		}
-	};
-
-	// Display progress lambda
-	auto displayProgress = [&]() {
-		// Initialize maps once
-		initDeviceMaps();
-
-		while (!isProcessingComplete.load(std::memory_order_acquire) && !g_operationCancelled.load(std::memory_order_acquire)) {
-			std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-			std::cout << "\033[u";
-			for (size_t i = 0; i < progressData.size(); ++i) {
-				const auto& prog = progressData[i];
-				std::string currentSize = formatFileSize(prog.bytesWritten.load());
-
-				std::cout << "\033[K"
-						<< ("\033[1;95m" + prog.filename + " \033[0;1m→ {" + 
-                          "\033[1;93m" + prog.device + "\033[0;1m \033[0;1m<" + deviceNames[prog.device] + "> (\033[1;35m" + deviceSizeStrs[prog.device] + "\033[0;1m)} \033[0;1m")
-						<< std::right
-						<< (prog.completed ? "\033[1;92mDONE\033[0;1m" :
-							prog.failed ? "\033[1;91mFAIL\033[0;1m" :
-							std::to_string(prog.progress) + "%")
-						<< " ["
-						<< currentSize
-						<< "/\033[1;35m"
-						<< prog.totalSize
-						<< "\033[0;1m] "
-						<< "\033[0;1m" + formatSpeed(prog.speed) + "\033[0;1m" // Always display speed
-						<< "\n";
-			}
-			std::cout << std::flush;
-		}
-	};
-
+    // Start progress display thread
     std::thread progressThread(displayProgress);
 
     // Wait for all tasks to complete
@@ -782,14 +784,20 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     
     isProcessingComplete.store(true, std::memory_order_release);
     progressThread.join();
+    
+    clearScrollBuffer();
+    std::cout << "\n";  // Move cursor up two lines and clear the line
+    
+    // Display the final progress update
+    displayAllProgress();
 
     auto endTime = std::chrono::high_resolution_clock::now();
-	auto duration = std::chrono::duration<double>(endTime - startTime).count();
+    auto duration = std::chrono::duration<double>(endTime - startTime).count();
 
-	std::cout << std::fixed << std::setprecision(1);
-	std::cout << "\n\033[0;1mCompleted: \033[1;92m" << completedTasks.load()
-			<< "\033[0;1m/\033[1;93m" << validPairs.size() 
-			<< "\033[0;1m in \033[0;1m" << duration << " seconds.\033[0;1m\n";
+    std::cout << std::fixed << std::setprecision(1);
+    std::cout << "\n\033[0;1mCompleted: \033[1;92m" << completedTasks.load()
+            << "\033[0;1m/\033[1;93m" << validPairs.size() 
+            << "\033[0;1m in \033[0;1m" << duration << " seconds.\033[0;1m\n";
     
     if (g_operationCancelled.load()) {
         std::cout << "\n\033[1;33mWrite operation interrupted by user.\033[0;1m\n";
