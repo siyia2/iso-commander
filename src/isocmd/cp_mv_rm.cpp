@@ -100,7 +100,7 @@ void processOperationInput(const std::string& input, const std::vector<std::stri
     uniqueErrorMessages.clear();
     clearScrollBuffer();
     std::cout << "\n\033[0;1m Processing " + operationColor + process +
-                 "\033[0;1m operations... (\033[1;91mCtrl + c\033[0;1m:cancel)\n";
+                 "\033[0;1m operations... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";
 
     std::vector<std::string> filesToProcess;
     for (const auto& index : processedIndices) {

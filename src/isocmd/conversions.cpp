@@ -652,7 +652,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         else {
             clearScrollBuffer();
             std::cout << "\n\033[0;1m Processing \001\033[1;38;5;208m\002" + fileExtensionWithOutDots + 
-                      "\033[0;1m conversions... (\033[1;91mCtrl + c\033[0;1m:cancel)\n";
+                      "\033[0;1m conversions... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";
             processInput(mainInputString, files, (fileType == "mdf"), (fileType == "nrg"), 
                          processedErrors, successOuts, skippedOuts, failedOuts, verbose, needsScrnClr, newISOFound);
             needsScrnClr = true;
@@ -911,12 +911,12 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
 			toLowerInPlace(fileNameLower);
 
 			std::string fileType = 
-								fileNameLower.ends_with(".bin") ? "\033[1;38;5;208mBIN" : 
-								fileNameLower.ends_with(".img") ? "\033[1;38;5;208mIMG" : 
-								fileNameLower.ends_with(".mdf") ? "\033[1;38;5;208mMDF" : 
-								fileNameLower.ends_with(".nrg") ? "\033[1;38;5;208mNRG" : "Image";
+								fileNameLower.ends_with(".bin") ? "\033[0;1m.bin" : 
+								fileNameLower.ends_with(".img") ? "\033[0;1m.bin" : 
+								fileNameLower.ends_with(".mdf") ? "\033[0;1m.mdf" : 
+								fileNameLower.ends_with(".nrg") ? "\033[0;1m.nrg" : "\033[0;1mImage";
 
-			localSuccessMsgs.push_back(fileType + " \033[0;1mfile converted to ISO:\033[0;1m \033[1;92m'" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m.\033[0;1m");
+			localSuccessMsgs.push_back(fileType + " file converted to ISO: \033[1;92m'" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m.\033[0;1m");
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
         } else {
             localFailedMsgs.push_back("\033[1;91mConversion of \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m " + 

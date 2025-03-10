@@ -705,7 +705,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
     disableInput();
     clearScrollBuffer();
-    std::cout << "\n\033[0;1mWriting... (\033[1;91mCtrl + c\033[0;1m:cancel)\n\n";
+    std::cout << "\n\033[0;1mWriting... (\033[1;91mCtrl+c\033[0;1m:cancel)\n\n";
     std::cout << "\033[s";
 
     auto startTime = std::chrono::high_resolution_clock::now();
