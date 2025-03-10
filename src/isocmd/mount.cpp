@@ -253,7 +253,6 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
     // Wait for completion or cancellation
     for (auto& future : mountFutures) {
         future.wait();
-        if (g_operationCancelled.load()) break;
     }
 
     // Cleanup

@@ -799,7 +799,6 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
 
     for (auto& future : futures) {
         future.wait();
-        if (g_operationCancelled.load()) break;
     }
 
     isProcessingComplete.store(true);

@@ -285,7 +285,6 @@ void prepareUnmount(const std::string& input, const std::vector<std::string>& cu
     // Wait for completion or cancellation
     for (auto& future : unmountFutures) {
         future.wait();
-        if (g_operationCancelled.load()) break;
     }
 
     // Cleanup

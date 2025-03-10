@@ -150,7 +150,6 @@ void processOperationInput(const std::string& input, const std::vector<std::stri
 
     for (auto& future : futures) {
         future.wait();
-       if (g_operationCancelled.load()) break;
     }
 
     isProcessingComplete.store(true);
