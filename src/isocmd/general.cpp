@@ -489,8 +489,8 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 
         // If processing is complete, show a final message
         if (isComplete->load(std::memory_order_acquire)) {
-            clearScrollBuffer();
-            std::cout << "\n\033[0;1m Processing for " << operation << "\033[0;1m" << (!g_operationCancelled.load() ? " → \033[1;92mCOMPLETED\033[0;1m" : " → \033[1;93mINTERRUPTED\033[0;1m") << std::endl;
+			std::cout << "\033[1A\033[1K";
+            std::cout << "\r\033[0;1m Processing for " << operation << "\033[0;1m" << (!g_operationCancelled.load() ? " → \033[1;92mCOMPLETED\033[0;1m" : " → \033[1;93mINTERRUPTED\033[0;1m") << std::endl;
             std::cout << "\r[==================================================>] 100% ("
                       << completedTasks->load() << "/" << totalTasks << ") "
                       << (bytesTrackingEnabled ? "(" + formatSize(static_cast<double>(completedBytes->load())) + "/" + totalBytesFormatted + ") " : "")

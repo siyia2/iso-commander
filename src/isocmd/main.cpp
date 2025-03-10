@@ -126,7 +126,6 @@ int main(int argc, char *argv[]) {
         
         // Check if auto update is running or has no paths to process
         static bool messagePrinted = false;
-        namespace fs = std::filesystem;
         if (search && !isHistoryFileEmpty(historyFilePath) && isImportRunning.load()) {
             std::cout << "\033[2m[Auto-update: running in the background...]\033[0m\n";
             messageActive.store(true);
