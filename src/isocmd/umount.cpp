@@ -92,7 +92,8 @@ std::tuple<std::string, std::string, std::string> parseMountPointComponents(std:
         return result;
     }
     
-    std::string directoryPart(dir.substr(0, underscorePos));
+    // Include the underscore in the directory part
+    std::string directoryPart(dir.substr(0, underscorePos + 1));
     
     size_t lastTildePos = dir.find_last_of('~');
     if (lastTildePos == std::string_view::npos || lastTildePos <= underscorePos) {
