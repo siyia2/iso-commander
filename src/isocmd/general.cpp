@@ -896,7 +896,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
     if (!isCpMv) {
         std::cout << "\033[1;32m3. Special Cleanup Commands:\033[0m\n";
         if (!import2ISO) {
-            std::cout << "   • Enter \033[1;33m'!clr'\033[0m - Clear corresponding RAM cache\n";
+            std::cout << "   • Enter \033[1;33m'!clr'\033[0m - Clear the corresponding buffer\n";
         }
         if (import2ISO) {
             std::cout << "   • Enter \033[1;33m'!clr'\033[0m - Clear on-disk ISO cache\n";
