@@ -606,7 +606,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     
 			if (displayConfig::toggleFullListUmount) {
 				output << sequenceColor << indexStrings[i] << ". "
-						<< blueBold << "/mnt/iso_"
+						<< blueBold << directoryPart
 						<< magentaBold << displayPath << grayBold << displayHash << reset << "\n";
 			} else {
 				output << sequenceColor << indexStrings[i] << ". "
