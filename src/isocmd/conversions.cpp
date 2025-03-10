@@ -762,7 +762,7 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
     
     size_t totalBytes = calculateSizeForConverted(filesToProcess, modeNrg, modeMdf);
 
-std::string operation = modeMdf ? (std::string("\033[1;38;5;208mMDF\033[0;1m") + (totalTasks > 1 ? " conversions" : " conversion")) :
+	std::string operation = modeMdf ? (std::string("\033[1;38;5;208mMDF\033[0;1m") + (totalTasks > 1 ? " conversions" : " conversion")) :
                        modeNrg ? (std::string("\033[1;38;5;208mNRG\033[0;1m") + (totalTasks > 1 ? " conversions" : " conversion")) :
                                  (std::string("\033[1;38;5;208mBIN/IMG\033[0;1m") + (totalTasks > 1 ? " conversions" : " conversion"));
                      
