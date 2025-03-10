@@ -761,13 +761,13 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
     size_t totalTasks = filesToProcess.size();  // Each file is a task
     
     size_t totalBytes = calculateSizeForConverted(filesToProcess, modeNrg, modeMdf);
-    std::string operation;
-    operation = modeMdf ? "\033[1;38;5;208mMDF\033[0;1m conversion" :
-           modeNrg ? "\033[1;38;5;208mNRG\033[0;1m conversion" :
-                     "\033[1;38;5;208mBIN/IMG\033[0;1m conversion";
+
+std::string operation = modeMdf ? (std::string("\033[1;38;5;208mMDF\033[0;1m") + (totalTasks > 1 ? " conversions" : " conversion")) :
+                       modeNrg ? (std::string("\033[1;38;5;208mNRG\033[0;1m") + (totalTasks > 1 ? " conversions" : " conversion")) :
+                                 (std::string("\033[1;38;5;208mBIN/IMG\033[0;1m") + (totalTasks > 1 ? " conversions" : " conversion"));
                      
 	clearScrollBuffer();
-    std::cout << "\n\033[0;1m Processing \001\033[1;38;5;208m\002" << operation << (totalTasks > 1 ? " tasks" : " task") << "\033[0;1m... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";
+    std::cout << "\n\033[0;1m Processing \001\033[1;38;5;208m\002" << operation << "\033[0;1m... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";
 
     std::atomic<size_t> completedBytes(0);
     std::atomic<size_t> completedTasks(0);

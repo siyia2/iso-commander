@@ -72,9 +72,9 @@ void processOperationInput(const std::string& input, const std::vector<std::stri
     bool isCopy   = (process == "cp");
     
     std::string coloredProcess = 
-    isDelete ? "\033[1;91m" + process + " \033[0;1moperation" :
-    isMove   ? "\033[1;93m" + process + " \033[0;1moperation" :
-    isCopy   ? "\033[1;92m" + process + " \033[0;1moperation" :
+    isDelete ? "\033[1;91m" + process :
+    isMove   ? "\033[1;93m" + process :
+    isCopy   ? "\033[1;92m" + process :
     process;
     
     std::string operationDescription = isDelete ? "*PERMANENTLY DELETED*" : (isMove ? "*MOVED*" : "*COPIED*");
@@ -117,17 +117,16 @@ void processOperationInput(const std::string& input, const std::vector<std::stri
     std::atomic<size_t> failedTasks(0);
     size_t totalBytes = getTotalFileSize(filesToProcess);
     size_t totalTasks = filesToProcess.size();
-    
-    std::cout << "\n\033[0;1m Processing " + operationColor + process +
-             "\033[0;1m " << (totalTasks > 1 ? "tasks" : "task") << "... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";
                  
-
     // Adjust totals for copy/move operations with multiple destinations
     if (isCopy || isMove) {
-        size_t destCount = std::count(processedUserDestDir.begin(), processedUserDestDir.end(), ';') + 1;
+		size_t destCount = std::count(processedUserDestDir.begin(), processedUserDestDir.end(), ';') + 1;
         totalBytes *= destCount;
         totalTasks *= destCount;
     }
+    
+    std::cout << "\n\033[0;1m Processing " << (totalTasks > 1 ? "tasks" : "task") << " for " << operationColor << process <<
+             "\033[0;1m... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";
     
     std::atomic<bool> isProcessingComplete(false);
 

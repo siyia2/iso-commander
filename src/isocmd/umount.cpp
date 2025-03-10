@@ -225,7 +225,7 @@ void prepareUnmount(const std::string& input, const std::vector<std::string>& cu
         
     std::unordered_set<int> indicesToProcess;
     
-    std::string coloredProcess = "\033[1;93mumount \033[0;1moperation";
+    std::string coloredProcess = "\033[1;93mumount";
 
     // Handle input ("00" = all files, else parse input)
     if (input == "00") {
@@ -247,7 +247,7 @@ void prepareUnmount(const std::string& input, const std::vector<std::string>& cu
 	}
 
     clearScrollBuffer();
-    std::cout << "\n\033[0;1m Processing \033[1;93mumount\033[0;1m" << (selectedMountpoints.size() > 1 ? " tasks" : " task") << "... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";
+    std::cout << "\n\033[0;1m Processing" << (selectedMountpoints.size() > 1 ? " tasks" : " task") << " for \033[1;93mumount\033[0;1m... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";
 
     // Thread pool setup
     unsigned int numThreads = std::min(static_cast<unsigned int>(selectedMountpoints.size()), maxThreads);
