@@ -448,13 +448,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         const size_t completedTasksValue = completedTasks->load(std::memory_order_acquire);
         const size_t failedTasksValue = failedTasks->load(std::memory_order_acquire);
         const size_t completedBytesValue = bytesTrackingEnabled ? completedBytes->load(std::memory_order_acquire) : 0;
-
-        // Check if all tasks are processed
-        const bool allTasksProcessed = (completedTasksValue + failedTasksValue) >= totalTasks;
-        if (allTasksProcessed) {
-            isComplete->store(true, std::memory_order_release);  // Mark as complete if all tasks are done
-        }
-
+        
         // Calculate task and byte progress
         double tasksProgress = static_cast<double>(completedTasksValue + failedTasksValue) / totalTasks;
         double overallProgress = tasksProgress;
@@ -495,8 +489,8 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 
         // If processing is complete, show a final message
         if (isComplete->load(std::memory_order_acquire)) {
-			clearScrollBuffer();
-			std::cout << "\n\033[0;1m " << operation << (!g_operationCancelled.load() ? " → \033[1;92mCOMPLETED\033[0;1m" : " → \033[1;93mINTERRUPTED\033[0;1m") << std::endl;
+            clearScrollBuffer();
+            std::cout << "\n\033[0;1m " << operation << (!g_operationCancelled.load() ? " → \033[1;92mCOMPLETED\033[0;1m" : " → \033[1;93mINTERRUPTED\033[0;1m") << std::endl;
             std::cout << "\r[==================================================>] 100% ("
                       << completedTasks->load() << "/" << totalTasks << ") "
                       << (bytesTrackingEnabled ? "(" + formatSize(static_cast<double>(completedBytes->load())) + "/" + totalBytesFormatted + ") " : "")
@@ -915,7 +909,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
        
 		if (import2ISO) { 
 			std::cout << "   \033[1;38;5;208mA. Auto-Update ISO Cache:\033[0m\n"
-                      << "      • Enter \033[1;35m'*auto_on'\033[0m or \033[1;35m'*auto_off'\033[0m - Enable/Disable ISO cache auto-update via stored folder paths (default: disabled)\n\n";
+                      << "      • Enter \033[1;35m'*auto_on'\033[0m or \033[1;35m'*auto_off'\033[0m - Enable/Disable ISO cache auto-update via stored folder paths (default:disabled)\n\n";
 		}
 				std::cout << "\033[1;38;5;208m   B. Set Default Display Modes (fl = full list, cl = compact list | default: cl, unmount → fl):\033[0m\n"
 						<<  "      • Mount list:       Enter \033[1;35m'*fl_m'\033[0m or \033[1;35m'*cl_m'\033[0m\n"
