@@ -443,64 +443,48 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
 
 
 // Blacklist function for MDF BIN IMG NRG
-bool blacklist(const std::filesystem::path& entry, const bool& processMdf, const bool& processNrg) {
-    // Check file size (minimum 5MB)
-    const uintmax_t MIN_SIZE = 5 * 1024 * 1024; // 5MB in bytes
-    try {
-        if (std::filesystem::file_size(entry) < MIN_SIZE) {
-            return false; // Skip files smaller than 5MB
-        }
-    } catch (const std::filesystem::filesystem_error& e) {
-        // Handle file access errors
-        return false; // Skip files with access issues
-    }
-
+bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, const bool& blacklistNrg) {
     const std::string filenameLower = entry.filename().string();
     const std::string ext = entry.extension().string();
     std::string extLower = ext;
     toLowerInPlace(extLower);
-    
-    // Check if file has the right extension
-    bool hasValidExtension = false;
-    
+
     // Default mode: .bin and .img files
-    if (!processMdf && !processNrg) {
-        hasValidExtension = (extLower == ".bin" || extLower == ".img");
+    if (!blacklistMdf && !blacklistNrg) {
+        if (!((extLower == ".bin" || extLower == ".img"))) {
+            return false;
+        }
     } 
     // MDF mode
-    else if (processMdf) {
-        hasValidExtension = (extLower == ".mdf");
+    else if (blacklistMdf) {
+        if (extLower != ".mdf") {
+            return false;
+        }
     } 
     // NRG mode
-    else if (processNrg) {
-        hasValidExtension = (extLower == ".nrg");
+    else if (blacklistNrg) {
+        if (extLower != ".nrg") {
+            return false;
+        }
     }
-    
-    // If the extension doesn't match what we're looking for, skip the file
-    if (!hasValidExtension) {
-        return false;
-    }
+
+    // Blacklisted keywords (previously commented out)
+    std::unordered_set<std::string> blacklistKeywords = {};
     
     // Convert filename to lowercase without extension
     std::string filenameLowerNoExt = filenameLower;
     filenameLowerNoExt.erase(filenameLowerNoExt.size() - ext.size());
-    
-    // Blacklist system or game file keywords
-    std::unordered_set<std::string> systemFileKeywords = {
-       "system", "boot", "game", "kernel", "iso", "update", "patch", 
-        "setup", "install", "driver", "firmware", "objects" "data"
-    };
-    
-    // Check for blacklisted system/game file keywords
-    for (const auto& keyword : systemFileKeywords) {
+
+    // Check blacklisted keywords
+    for (const auto& keyword : blacklistKeywords) {
         if (filenameLowerNoExt.find(keyword) != std::string::npos) {
-            return false; // Skip files with system/game keywords
+            return false;
         }
     }
-    
-    // If we got here, it's a data image file we want to process
+
     return true;
 }
+
 
 // Function to clear and load list for image files
 void clearAndLoadImageFiles(std::vector<std::string>& files, const std::string& fileType, bool& need2Sort, bool& isFiltered, bool& list) {
