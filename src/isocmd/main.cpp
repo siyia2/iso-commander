@@ -824,9 +824,59 @@ int naturalCompare(const std::string &a, const std::string &b) {
 
 // Sort files using a natural order, case-insensitive comparator.
 void sortFilesCaseInsensitive(std::vector<std::string>& files) {
-    std::sort(files.begin(), files.end(), [](const std::string& a, const std::string& b) {
-        return naturalCompare(a, b) < 0;
-    });
+    if (files.empty())
+        return;
+
+    const size_t n = files.size();
+    // Use at most one thread per element if n < maxThreads.
+    unsigned int numThreads = std::min<unsigned int>(maxThreads, static_cast<unsigned int>(n));
+    // Determine the chunk size so that each thread roughly gets the same number of elements.
+    size_t chunkSize = (n + numThreads - 1) / numThreads;
+
+    // Each pair holds the start and end indices of a sorted chunk.
+    std::vector<std::pair<size_t, size_t>> chunks;
+    // Futures to wait for each sorting task.
+    std::vector<std::future<void>> futures;
+
+    // Launch parallel sorting tasks.
+    for (unsigned int i = 0; i < numThreads; ++i) {
+        size_t start = i * chunkSize;
+        size_t end = std::min(n, (i + 1) * chunkSize);
+        if (start >= end)
+            break;
+        // Record this chunk's range.
+        chunks.emplace_back(start, end);
+        futures.push_back(std::async(std::launch::async, [start, end, &files]() {
+            std::sort(files.begin() + start, files.begin() + end, [](const std::string& a, const std::string& b) {
+                return naturalCompare(a, b) < 0;
+            });
+        }));
+    }
+
+    // Wait for all sorting tasks to complete.
+    for (auto &f : futures)
+        f.get();
+
+    // Merge sorted chunks pairwise until the entire vector is merged.
+    while (chunks.size() > 1) {
+        std::vector<std::pair<size_t, size_t>> newChunks;
+        for (size_t i = 0; i < chunks.size(); i += 2) {
+            if (i + 1 < chunks.size()) {
+                size_t start = chunks[i].first;
+                size_t mid = chunks[i + 1].first;
+                size_t end = chunks[i + 1].second;
+                std::inplace_merge(files.begin() + start, files.begin() + mid, files.begin() + end,
+                    [](const std::string& a, const std::string& b) {
+                        return naturalCompare(a, b) < 0;
+                    });
+                newChunks.emplace_back(start, end);
+            } else {
+                // Odd number of chunks: last one remains as is.
+                newChunks.push_back(chunks[i]);
+            }
+        }
+        chunks = std::move(newChunks);
+    }
 }
 
 
