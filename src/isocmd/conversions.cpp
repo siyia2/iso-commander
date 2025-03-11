@@ -792,7 +792,7 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
                                  (std::string("\033[1;38;5;208mBIN/IMG\033[0;1m") + (totalTasks > 1 ? " conversions" : " conversion"));
                      
 	clearScrollBuffer();
-    std::cout << "\n\033[0;1m Processing \001\033[1;38;5;208m\002" << operation << "\033[0;1m... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";
+    std::cout << "\n\033[0;1m Processing \001\033[1;38;5;208m\002" << operation << "\033[0;1m...(\033[1;91mCtrl+c\033[0;1m:cancel)\n";
 
     std::atomic<size_t> completedBytes(0);
     std::atomic<size_t> completedTasks(0);
