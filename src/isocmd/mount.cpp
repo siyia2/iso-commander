@@ -214,7 +214,7 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
 		selectedIsoFiles.push_back(isoFiles[index - 1]);
 	}
         
-    std::cout << "\n\033[0;1m Processing" << (selectedIsoFiles.size() > 1 ? " tasks" : " task") << " for \033[1;92mmount\033[0;1m... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";
+    std::cout << "\n\033[0;1m Processing" << (selectedIsoFiles.size() > 1 ? " tasks" : " task") << " for \033[1;92mmount \033[0;1moperation... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";
 
     // Thread pool and task setup
     unsigned int numThreads = std::min(static_cast<unsigned int>(selectedIsoFiles.size()), maxThreads);

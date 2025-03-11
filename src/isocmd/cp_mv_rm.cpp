@@ -72,9 +72,9 @@ void processOperationInput(const std::string& input, const std::vector<std::stri
     bool isCopy   = (process == "cp");
     
     std::string coloredProcess = 
-    isDelete ? "\033[1;91m" + process :
-    isMove   ? "\033[1;93m" + process :
-    isCopy   ? "\033[1;92m" + process :
+    isDelete ? "\033[1;91m" + process + " \033[0;1moperation" :
+    isMove   ? "\033[1;93m" + process + " \033[0;1moperation" :
+    isCopy   ? "\033[1;92m" + process + " \033[0;1moperation" :
     process;
     
     std::string operationDescription = isDelete ? "*PERMANENTLY DELETED*" : (isMove ? "*MOVED*" : "*COPIED*");
