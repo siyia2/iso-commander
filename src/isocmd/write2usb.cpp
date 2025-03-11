@@ -725,29 +725,30 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
     // Helper lambda to display all progress entries
     auto displayAllProgress = [&]() {
-        for (size_t i = 0; i < progressData.size(); ++i) {
-            const auto& prog = progressData[i];
-            std::string currentSize = formatFileSize(prog.bytesWritten.load());
+		for (size_t i = 0; i < progressData.size(); ++i) {
+			const auto& prog = progressData[i];
+			std::string currentSize = formatFileSize(prog.bytesWritten.load());
 
-            std::cout << "\033[K"  // Clear line
-                    << ("\033[1;95m" + prog.filename + " \033[0;1m→ {" + 
-                      "\033[1;93m" + prog.device + "\033[0;1m \033[0;1m<" + 
-                      deviceNames[prog.device] + "> (\033[1;35m" + 
-                      deviceSizeStrs[prog.device] + "\033[0;1m)} \033[0;1m")
-                    << std::right
-                    << (prog.completed ? "\033[1;92mDONE\033[0;1m" :
-                        prog.failed ? "\033[1;91mFAIL\033[0;1m" :
-                        std::to_string(prog.progress) + "%")
-                    << " ["
-                    << currentSize
-                    << "/\033[1;35m"
-                    << prog.totalSize
-                    << "\033[0;1m] "
-                    << "\033[0;1m" + formatSpeed(prog.speed) + "\033[0;1m"
-                    << "\n";
-        }
-        std::cout << std::flush;
-    };
+			std::cout << "\033[K"  // Clear line
+					<< ("\033[1;95m" + prog.filename + " \033[0;1m→ {" + 
+						"\033[1;93m" + prog.device + "\033[0;1m \033[0;1m<" + 
+						deviceNames[prog.device] + "> (\033[1;35m" + 
+						deviceSizeStrs[prog.device] + "\033[0;1m)} \033[0;1m")
+					<< std::right
+					<< (prog.completed ? "\033[1;92mDONE\033[0;1m" :
+						prog.failed ? "\033[1;91mFAIL\033[0;1m" :
+						g_operationCancelled.load() ? "\033[1;33mCXL\033[0;1m" :
+						std::to_string(prog.progress) + "%")
+					<< " ["
+					<< currentSize
+					<< "/\033[1;35m"
+					<< prog.totalSize
+					<< "\033[0;1m] "
+					<< "\033[0;1m" + formatSpeed(prog.speed) + "\033[0;1m"
+					<< "\n";
+		}
+		std::cout << std::flush;
+	};
 
     // Display progress lambda (modified to use helper)
     auto displayProgress = [&]() {
