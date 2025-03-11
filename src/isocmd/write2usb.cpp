@@ -704,7 +704,21 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
     disableInput();
     clearScrollBuffer();
-    std::cout << "\n\033[0;1mWriting... (\033[1;91mCtrl+c\033[0;1m:cancel)\n\n";
+    // Remember line number for the message we want to clear later
+    int messageLine = -1;
+    
+    // Get current cursor position
+    if (isatty(STDOUT_FILENO)) {
+        std::cout << "\033[6n" << std::flush;
+        char buf[32];
+        if (read(STDIN_FILENO, buf, sizeof(buf)) > 0) {
+            int row, col;
+            if (sscanf(buf, "\033[%d;%dR", &row, &col) == 2) {
+                messageLine = row;
+            }
+        }
+    }
+    std::cout << "\n\033[0;1mProcessing " << (totalTasks > 1 ? "tasks" : "task") << " for \033[1;93mwrite\033[0;1m operation...(\033[1;91mCtrl+c\033[0;1m:cancel)\n\n";
     std::cout << "\033[s";  // Save cursor position
 
     auto startTime = std::chrono::high_resolution_clock::now();
@@ -786,11 +800,12 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     isProcessingComplete.store(true, std::memory_order_release);
     progressThread.join();
     
-    clearScrollBuffer();
-    std::cout << "\n";  // Move cursor up two lines and clear the line
-    
-    // Display the final progress update
-    displayAllProgress();
+     if (messageLine > 0) {
+        std::cout << "\033[s";  // Save current position
+        std::cout << "\033[" << messageLine + 1 << ";1H\033[2K";  // Go to message line and clear it
+        std::cout << "\033[0;1mProcessing for \033[1;93mwrite\033[0;1m operation " << (!g_operationCancelled.load() ? "→ \033[1;92mCOMPLETED\033[0;1m\n" : "→ \033[1;33mINTERRUPTED\033[0;1m\n");
+        std::cout << "\033[u";  // Restore to current position
+    }
 
     auto endTime = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration<double>(endTime - startTime).count();
