@@ -487,7 +487,7 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
 
 
 // Function to clear and load list for image files
-void clearAndLoadImageFiles(std::vector<std::string>& files, const std::string& fileType, bool& need2Sort, bool& isFiltered, bool list) {
+void clearAndLoadImageFiles(std::vector<std::string>& files, const std::string& fileType, bool& need2Sort, bool& isFiltered, bool& list) {
     // Clear the screen for new content
     clearScrollBuffer(); 
     // Assist in automatic removal of non-existent entries from cache
