@@ -486,6 +486,35 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
 }
 
 
+// Function to clear and load list for image files
+void clearAndLoadImageFiles(std::vector<std::string>& files, const std::string& fileType, bool& need2Sort, bool& isFiltered, bool list) {
+    // Clear the screen for new content
+    clearScrollBuffer(); 
+    // Assist in automatic removal of non-existent entries from cache
+	files = 
+			(!isFiltered && !binImgFilesCache.empty() && (fileType == "bin" || fileType == "img") && binImgFilesCache.size() != files.size()) 
+				? (need2Sort = true, binImgFilesCache) 
+			: (!isFiltered && !mdfMdsFilesCache.empty() && fileType == "mdf" && mdfMdsFilesCache.size() != files.size()) 
+				? (need2Sort = true, mdfMdsFilesCache) 
+			: (!isFiltered && !nrgFilesCache.empty() && fileType == "nrg" && nrgFilesCache.size() != files.size()) 
+				? (need2Sort = true, nrgFilesCache) 
+			: files;
+            
+    if ((!list && !isFiltered) || isFiltered) {
+		if (need2Sort) {
+			sortFilesCaseInsensitive(files); // Sort the files case-insensitively
+				(fileType == "bin" || fileType == "img") 
+					? sortFilesCaseInsensitive(binImgFilesCache) 
+						: fileType == "mdf" 
+							? sortFilesCaseInsensitive(mdfMdsFilesCache) 
+						: sortFilesCaseInsensitive(nrgFilesCache);
+		}
+			need2Sort = false;
+	}
+    printList(files, "IMAGE_FILES", "conversions"); // Print the current list of files
+}
+
+
 // Combined function for filtering and converting files to ISO
 void select_and_convert_to_iso(const std::string& fileType, std::vector<std::string>& files, std::atomic<bool>& newISOFound, bool& list) {
 
@@ -519,31 +548,8 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         resetVerboseSets(processedErrors, successOuts, skippedOuts, failedOuts);
         
         clear_history();
-        if (needsScrnClr) {
-            clearScrollBuffer(); // Clear the screen for new content
-             // Assist in automatic removal of non-existent entries from cache
-			files = 
-				(!isFiltered && !binImgFilesCache.empty() && (fileType == "bin" || fileType == "img") && binImgFilesCache.size() != files.size()) 
-					? (need2Sort = true, binImgFilesCache) 
-				: (!isFiltered && !mdfMdsFilesCache.empty() && fileType == "mdf" && mdfMdsFilesCache.size() != files.size()) 
-					? (need2Sort = true, mdfMdsFilesCache) 
-				: (!isFiltered && !nrgFilesCache.empty() && fileType == "nrg" && nrgFilesCache.size() != files.size()) 
-					? (need2Sort = true, nrgFilesCache) 
-				: files;
-            
-            if ((!list && !isFiltered) || isFiltered) {
-				if (need2Sort) {
-                sortFilesCaseInsensitive(files); // Sort the files case-insensitively
-					fileExtension == ".bin/.img" 
-						? sortFilesCaseInsensitive(binImgFilesCache) 
-						: fileExtension == ".mdf" 
-							? sortFilesCaseInsensitive(mdfMdsFilesCache) 
-							: sortFilesCaseInsensitive(nrgFilesCache);
-				}
-				need2Sort = false;
-			}
-            printList(files, "IMAGE_FILES", "conversions"); // Print the current list of files
-        }
+        if (needsScrnClr) clearAndLoadImageFiles(files, fileType, need2Sort, isFiltered, list);
+        
         std::cout << "\n\n";
         std::cout << "\033[1A\033[K";
         
