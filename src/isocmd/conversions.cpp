@@ -1,5 +1,3 @@
-
-
 // SPDX-License-Identifier: GNU General Public License v2.0
 
 #include "../headers.h"
@@ -12,6 +10,7 @@
 std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles here
 std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
 std::vector<std::string> nrgFilesCache; // Memory cached nrgImgFiles here
+
 
 // Function to clear Ram Cache and memory transformations for bin/img mdf nrg files
 void clearRamCache(bool& modeMdf, bool& modeNrg) {
@@ -76,7 +75,7 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
     if (((binImgFilesCache.empty() && !modeMdf && !modeNrg) || 
          (mdfMdsFilesCache.empty() && modeMdf) || 
          (nrgFilesCache.empty() && modeNrg)) && list) {
-        std::cout << "\n\033[1;93mNo " << fileExtension << " entries stored in RAM for potential ISO conversions.\033[1m\n";
+        std::cout << "\n\033[1;93mNo " << fileExtension << " entries stored in RAM.\033[1m\n";
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         clearScrollBuffer();
