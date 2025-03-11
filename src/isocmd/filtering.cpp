@@ -16,74 +16,86 @@ void toLowerInPlace(std::string& str) {
 std::vector<size_t> boyerMooreSearch(const std::string& pattern, const std::string& text) {
     const size_t patternLen = pattern.length();
     const size_t textLen = text.length();
-    
-    // Early exit conditions
+    std::vector<size_t> matches;
+
+    // Early exit for trivial cases (unchanged)
     if (patternLen == 0 || textLen == 0 || patternLen > textLen) 
-        return {};
-    
-    // Single character optimization
+        return matches;
+
+    // Single character optimization (unchanged)
     if (patternLen == 1) {
-        std::vector<size_t> matches;
         for (size_t i = 0; i < textLen; ++i) 
             if (text[i] == pattern[0]) 
                 matches.push_back(i);
         return matches;
     }
-    
-    // Preprocess bad character shifts
-    std::vector<size_t> badCharShifts(256, patternLen);
-    for (size_t i = 0; i < patternLen - 1; ++i) 
-        badCharShifts[static_cast<unsigned char>(pattern[i])] = patternLen - i - 1;
-    
-    // Preprocess good suffix shifts
-    std::vector<size_t> goodSuffixShifts(patternLen, patternLen);
+
+    // Bad Character Heuristic preprocessing (unchanged)
+    std::vector<ssize_t> badCharShifts(256, -1);
+    for (size_t i = 0; i < patternLen; ++i) 
+        badCharShifts[static_cast<unsigned char>(pattern[i])] = i;
+
+    // Good Suffix Heuristic preprocessing (unchanged)
+    std::vector<size_t> goodSuffixShifts(patternLen + 1, patternLen);
     std::vector<size_t> suffixLengths(patternLen, 0);
-    
-    // Compute suffix lengths and good suffix shifts
-    suffixLengths[patternLen - 1] = patternLen;
-    size_t lastPrefixPosition = patternLen;
-    
-    for (int i = patternLen - 2; i >= 0; --i) {
-        if (memcmp(pattern.c_str() + i + 1, pattern.c_str() + patternLen - lastPrefixPosition, lastPrefixPosition - (i + 1)) == 0) {
-            suffixLengths[i] = lastPrefixPosition - (i + 1);
-            lastPrefixPosition = i + 1;
-        }
+
+    // Phase 1: Compute suffix lengths
+    for (size_t i = patternLen - 1; i > 0; --i) {
+        size_t k = 0;
+        while (k < i && pattern[i - 1 - k] == pattern[patternLen - 1 - k])
+            ++k;
+        suffixLengths[i] = k;
     }
-    
-    // Update good suffix shifts
+
+    // Phase 2: Compute prefix shifts
+    std::vector<bool> isPrefix(patternLen, false);
     for (size_t i = 0; i < patternLen; ++i) {
-        if (suffixLengths[i] == i + 1) {
-            for (size_t j = 0; j < patternLen - i - 1; ++j) 
-                if (goodSuffixShifts[j] == patternLen) 
-                    goodSuffixShifts[j] = patternLen - i - 1;
-        }
-        
-        if (suffixLengths[i] > 0) 
-            goodSuffixShifts[patternLen - suffixLengths[i]] = patternLen - i - 1;
+        if (suffixLengths[i] == i + 1) 
+            isPrefix[patternLen - 1 - i] = true;
     }
-    
+
+    // Phase 3: Compute good suffix shifts
+    for (size_t i = 0; i < patternLen - 1; ++i) {
+        const size_t j = patternLen - 1 - suffixLengths[i];
+        goodSuffixShifts[j] = patternLen - 1 - i;
+    }
+
+    // Handle full prefix matches
+    size_t longest_prefix_shift = patternLen;
+	for (size_t i = 0; i < patternLen; ++i) {
+		if (isPrefix[i]) {
+			longest_prefix_shift = patternLen - 1 - i;
+			break; // Longest prefix found first
+		}
+	}
+	for (size_t j = 0; j <= patternLen; ++j) {
+		if (goodSuffixShifts[j] == patternLen) {
+			goodSuffixShifts[j] = longest_prefix_shift;
+		}
+	}
+
     // Search phase
-    std::vector<size_t> matches;
-    for (size_t i = 0; i <= textLen - patternLen;) {
-        size_t skip = 0;
-        while (skip < patternLen && pattern[patternLen - 1 - skip] == text[i + patternLen - 1 - skip]) 
-            ++skip;
-        
-        // Pattern found
-        if (skip == patternLen) 
-            matches.push_back(i);
-        
-        // Compute shift
-        size_t badCharShift = (i + patternLen < textLen) 
-            ? badCharShifts[static_cast<unsigned char>(text[i + patternLen - 1])] 
-            : 1;
-        
-        size_t goodSuffixShift = goodSuffixShifts[skip];
-        
-        // Take the maximum shift
-        i += std::max(1ul, std::min(badCharShift, goodSuffixShift));
+    size_t textIndex = 0;
+    while (textIndex <= textLen - patternLen) {
+        int patternIndex = static_cast<int>(patternLen) - 1;
+        while (patternIndex >= 0 && pattern[patternIndex] == text[textIndex + patternIndex])
+            --patternIndex;
+
+        if (patternIndex < 0) {
+            matches.push_back(textIndex);
+            textIndex += goodSuffixShifts[0];
+        } else {
+            // Fixed bad character shift calculation
+            const ssize_t bcShift = patternIndex - badCharShifts[static_cast<unsigned char>(
+                text[textIndex + patternIndex]
+            )];
+            const size_t badCharShift = std::max<ssize_t>(1, bcShift);  // Ensure ≥1
+            const size_t goodSuffixShift = goodSuffixShifts[patternIndex + 1];
+            
+            textIndex += std::max(goodSuffixShift, badCharShift);
+        }
     }
-    
+
     return matches;
 }
 
@@ -114,11 +126,10 @@ std::string removeAnsiCodes(const std::string& input) {
 
 // Function to filter cached ISO files or mountpoints based on search query (case-adaptive)
 std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query) {
-    // Reserve memory for filteredFiles to reduce reallocations.
+    // Reserve memory for filteredFiles (we will merge per thread later).
     std::vector<std::string> filteredFiles;
-    filteredFiles.reserve(files.size());
 
-    // Define a structure to hold both the original and precomputed lower-case version.
+    // Structure to hold token information.
     struct QueryToken {
         std::string original;
         std::string lower;  // computed only if needed
@@ -150,33 +161,61 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
     bool needLowerCaseFile = std::any_of(queryTokens.begin(), queryTokens.end(),
                                          [](const QueryToken& qt) { return !qt.isCaseSensitive; });
     
-    // Loop through each file and search for matches.
-    for (const std::string& file : files) {
-        std::string cleanFileName = removeAnsiCodes(file);
-        std::string fileNameLower;
-        if (needLowerCaseFile) {
-            fileNameLower = cleanFileName;
-            toLowerInPlace(fileNameLower);
-        }
+    // Determine the number of threads to use.
+    unsigned int numThreads = maxThreads;
+    if (numThreads == 0) {
+        numThreads = 2; // Fallback if hardware_concurrency is not defined.
+    }
+    
+    const size_t totalFiles = files.size();
+    size_t chunkSize = (totalFiles + numThreads - 1) / numThreads;
+    
+    // Launch asynchronous tasks to process chunks of files.
+    std::vector<std::future<std::vector<std::string>>> futures;
+    for (unsigned int i = 0; i < numThreads; ++i) {
+        size_t start = i * chunkSize;
+        size_t end = std::min(totalFiles, (i + 1) * chunkSize);
+        if (start >= end)
+            break;
         
-        bool matchFound = false;
-        for (const auto& qt : queryTokens) {
-            if (qt.isCaseSensitive) {
-                if (!boyerMooreSearch(qt.original, cleanFileName).empty()) {
-                    matchFound = true;
-                    break;
+        futures.push_back(std::async(std::launch::async, [start, end, &files, &queryTokens, needLowerCaseFile]() -> std::vector<std::string> {
+            std::vector<std::string> localMatches;
+            for (size_t j = start; j < end; ++j) {
+                const std::string& file = files[j];
+                std::string cleanFileName = removeAnsiCodes(file);
+                std::string fileNameLower;
+                if (needLowerCaseFile) {
+                    fileNameLower = cleanFileName;
+                    toLowerInPlace(fileNameLower);
                 }
-            } else {
-                if (!boyerMooreSearch(qt.lower, fileNameLower).empty()) {
-                    matchFound = true;
-                    break;
+                
+                bool matchFound = false;
+                for (const auto& qt : queryTokens) {
+                    if (qt.isCaseSensitive) {
+                        if (!boyerMooreSearch(qt.original, cleanFileName).empty()) {
+                            matchFound = true;
+                            break;
+                        }
+                    } else {
+                        if (!boyerMooreSearch(qt.lower, fileNameLower).empty()) {
+                            matchFound = true;
+                            break;
+                        }
+                    }
+                }
+                if (matchFound) {
+                    localMatches.push_back(file);
                 }
             }
-        }
-        
-        if (matchFound) {
-            filteredFiles.push_back(file);
-        }
+            return localMatches;
+        }));
+    }
+    
+    // Merge the results from all threads.
+    for (auto& fut : futures) {
+        std::vector<std::string> localResult = fut.get();
+        filteredFiles.insert(filteredFiles.end(),
+                             localResult.begin(), localResult.end());
     }
     
     return filteredFiles;
