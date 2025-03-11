@@ -68,33 +68,6 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
     bool write = (operation == "write");
     
     std::string listSubtype = isMount ? "mount" : (write ? "write" : "cp_mv_rm");
-    
-    // Helper lambdas for adaptive filtering
-    auto containsUpperCase = [](const std::string& s) -> bool {
-        for (char ch : s) {
-            if (std::isupper(static_cast<unsigned char>(ch)))
-                return true;
-        }
-        return false;
-    };
-    
-    auto toLower = [](const std::string& s) -> std::string {
-        std::string lower = s;
-        std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-        return lower;
-    };
-    
-    // Helper lambda to split a string by a delimiter (semicolon in our case)
-    auto splitByDelimiter = [](const std::string& s, char delimiter) -> std::vector<std::string> {
-        std::vector<std::string> tokens;
-        std::string token;
-        std::istringstream tokenStream(s);
-        while (std::getline(tokenStream, token, delimiter)) {
-            if (!token.empty())
-                tokens.push_back(token);
-        }
-        return tokens;
-    };
 
     while (true) {
         enable_ctrl_d();
@@ -134,7 +107,6 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                         displayFiles.push_back(isoDirs[idx]);
                     }
                     if (!loadAndDisplayMountedISOs(isoDirs, displayFiles, isFiltered, umountMvRmBreak))
-                    
                         break;
                 } else {
                     std::vector<std::string> emptyVector; // Placeholder for filtered files when not filtered
@@ -198,7 +170,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         // Handle empty input or return
         if (inputString.empty()) {
             if (isFiltered) {
-                filteredIndices.clear(); // Clear indices to free memory
+                std::vector<long unsigned int>().swap(filteredIndices); // Clear indices to free memory
                 isFiltered = false;
                 continue;
             } else {
@@ -233,35 +205,16 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 
                     filterInput = searchQuery.get();
                     
-                    // Create new indices for filtered results
+                    // Use filterFiles to get filtered file paths
+                    const auto& sourceList = isUnmount ? isoDirs : globalIsoFileList;
+                    std::vector<std::string> filteredFiles = filterFiles(sourceList, filterInput);
+                    
+                    // Map filtered file paths back to their indices in the original list
                     filteredIndices.clear();
-                    
-                    // Split the filter input on semicolons into individual search terms
-                    std::vector<std::string> terms = splitByDelimiter(filterInput, ';');
-                    
-                    // Use the appropriate source collection based on current state
-                    const std::vector<std::string>& sourceList = isUnmount ? isoDirs : globalIsoFileList;
-                    size_t sourceSize = sourceList.size();
-                    
-                    for (size_t i = 0; i < sourceSize; ++i) {
-                        bool matchesAll = true;
-                        // Check each term individually
-                        for (const auto& term : terms) {
-                            bool caseSensitive = containsUpperCase(term);
-                            if (caseSensitive) {
-                                if (sourceList[i].find(term) == std::string::npos) {
-                                    matchesAll = false;
-                                    break;
-                                }
-                            } else {
-                                if (toLower(sourceList[i]).find(toLower(term)) == std::string::npos) {
-                                    matchesAll = false;
-                                    break;
-                                }
-                            }
-                        }
-                        if (matchesAll)
+                    for (size_t i = 0; i < sourceList.size(); ++i) {
+                        if (std::find(filteredFiles.begin(), filteredFiles.end(), sourceList[i]) != filteredFiles.end()) {
                             filteredIndices.push_back(i);
+                        }
                     }
                     
                     if (filteredIndices.empty()) {
@@ -269,17 +222,17 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                         continue;
                     }
                     
-                    if (filteredIndices.size() == sourceSize) {
+                    if (filteredIndices.size() == sourceList.size()) {
                         // Filter matches everything, no need to filter
-                        std::cout << "\033[2A\033[K";
-                        needsClrScrn = false;
-                        break;
+                        std::vector<long unsigned int>().swap(filteredIndices);
+                        isFiltered = false;
+                    } else {
+                        isFiltered = true;
                     }
                     
                     add_history(searchQuery.get());
                     saveHistory(filterHistory);
                     needsClrScrn = true;
-                    isFiltered = true;
                     clear_history();
                     break;
                 }
@@ -287,50 +240,37 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                 // Quick filter with /pattern
                 filterInput = inputString.substr(1);
                 if (!filterInput.empty()) {
+                    const auto& sourceList = isUnmount ? isoDirs : globalIsoFileList;
+                    std::vector<std::string> filteredFiles = filterFiles(sourceList, filterInput);
+                    
+                    // Map filtered file paths back to their indices in the original list
                     filteredIndices.clear();
-                    
-                    // Split the filter input on semicolons into individual search terms
-                    std::vector<std::string> terms = splitByDelimiter(filterInput, ';');
-                    
-                    // Use the appropriate source collection based on current state
-                    const std::vector<std::string>& sourceList = isUnmount ? isoDirs : globalIsoFileList;
-                    size_t sourceSize = sourceList.size();
-                    
-                    for (size_t i = 0; i < sourceSize; ++i) {
-                        bool matchesAll = true;
-                        // Check each term individually
-                        for (const auto& term : terms) {
-                            bool caseSensitive = containsUpperCase(term);
-                            if (caseSensitive) {
-                                if (sourceList[i].find(term) == std::string::npos) {
-                                    matchesAll = false;
-                                    break;
-                                }
-                            } else {
-                                if (toLower(sourceList[i]).find(toLower(term)) == std::string::npos) {
-                                    matchesAll = false;
-                                    break;
-                                }
-                            }
-                        }
-                        if (matchesAll)
+                    for (size_t i = 0; i < sourceList.size(); ++i) {
+                        if (std::find(filteredFiles.begin(), filteredFiles.end(), sourceList[i]) != filteredFiles.end()) {
                             filteredIndices.push_back(i);
+                        }
                     }
                     
-                    if (!filteredIndices.empty() && filteredIndices.size() != sourceSize) {
-                        filterHistory = true;
-                        loadHistory(filterHistory);
-                        add_history(filterInput.c_str());
-                        saveHistory(filterHistory);
-                        isFiltered = true;
-                        needsClrScrn = true;
+                    if (!filteredIndices.empty()) {
+                        if (filteredIndices.size() == sourceList.size()) {
+                            // Filter matches everything, no need to filter
+                            std::vector<long unsigned int>().swap(filteredIndices);
+                            isFiltered = false;
+                        } else {
+                            isFiltered = true;
+                            filterHistory = true;
+                            loadHistory(filterHistory);
+                            add_history(filterInput.c_str());
+                            saveHistory(filterHistory);
+                            needsClrScrn = true;
+                        }
                     }
                 }
             }
             continue;
         }
 
-        // Process operation for selected files - create temporary vectors only when needed
+        // Process operation for selected files
         std::vector<std::string> tempFilteredFiles;
         if (isFiltered) {
             const std::vector<std::string>& sourceList = isUnmount ? isoDirs : globalIsoFileList;
