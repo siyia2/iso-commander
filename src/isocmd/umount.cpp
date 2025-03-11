@@ -224,7 +224,7 @@ void prepareUnmount(const std::string& input, const std::vector<std::string>& cu
         
     std::unordered_set<int> indicesToProcess;
     
-    std::string coloredProcess = "\033[1;93mumount";
+    std::string coloredProcess = "\033[1;93mumount \033[0;1moperation";
 
     // Handle input ("00" = all files, else parse input)
     if (input == "00") {
