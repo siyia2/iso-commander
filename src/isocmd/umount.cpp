@@ -12,7 +12,6 @@ const std::string MOUNTED_ISO_PATH = "/mnt";
 // Memory map for umount string transformations
 std::unordered_map<std::string, std::tuple<std::string, std::string, std::string>> cachedParsesForUmount;
 
-
 // Function to load and display mount-points
 bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& umountMvRmBreak) {
     signal(SIGINT, SIG_IGN);  // Ignore Ctrl+C
