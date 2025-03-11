@@ -13,88 +13,85 @@ void toLowerInPlace(std::string& str) {
 
 
 // Boyer-Moore string search implementation for files
-std::vector<size_t> boyerMooreSearch(const std::string& pattern, const std::string& text) {
-    const size_t patternLen = pattern.length();
-    const size_t textLen = text.length();
+std::vector<size_t> boyerMooreSearch(const std::string &pattern, const std::string &text) {
     std::vector<size_t> matches;
+    size_t m = pattern.size();
+    size_t n = text.size();
+    
     // Early exit conditions
-    if (patternLen == 0 || textLen == 0 || patternLen > textLen) 
+    if(m == 0 || m > n)
         return matches;
-    // Single character optimization
-    if (patternLen == 1) {
-        matches.reserve(textLen / 2); // Heuristic preallocation
-        for (size_t i = 0; i < textLen; ++i) 
-            if (text[i] == pattern[0]) 
-                matches.push_back(i);
-        return matches;
+    
+    // --- Bad Character Rule Preprocessing ---
+    const int ALPHABET_SIZE = 256;
+    // For each character, record its last index in the pattern.
+    std::vector<int> badChar(ALPHABET_SIZE, -1);
+    for (int i = 0; i < static_cast<int>(m); i++) {
+        badChar[static_cast<unsigned char>(pattern[i])] = i;
     }
-    // Preprocess bad character shifts using last occurrence
-    std::vector<ssize_t> lastOccurrence(256, -1);
-    for (size_t i = 0; i < patternLen; ++i) 
-        lastOccurrence[static_cast<unsigned char>(pattern[i])] = i;
     
-    // Preprocess good suffix shifts
-    std::vector<size_t> goodSuffixShifts(patternLen + 1, patternLen);
-    std::vector<size_t> suffixLengths(patternLen + 1, 0);
+    // --- Good Suffix Rule Preprocessing ---
+    // suffix[i] will hold the length of the longest substring ending at position i
+    // which is also a suffix of the pattern.
+    std::vector<int> suffix(m, 0);
+    suffix[m - 1] = m;
+    int g = static_cast<int>(m) - 1; // the rightmost position of a matching suffix
+    int f = static_cast<int>(m) - 1; // a working index
     
-    // Calculate suffix lengths
-    // Use signed integers for f and g to avoid sign comparison issues
-    ssize_t f = 0, g = patternLen - 1;
-    suffixLengths[patternLen - 1] = patternLen;
-    
-    for (ssize_t i = patternLen - 2; i >= 0; --i) {
-        if (i > g && suffixLengths[i + patternLen - 1 - f] < static_cast<size_t>(i - g)) {
-            suffixLengths[i] = suffixLengths[i + patternLen - 1 - f];
-        } else {
-            if (i < g) g = i;
+    for (int i = static_cast<int>(m) - 2; i >= 0; i--) {
+        if (i > g && suffix[i + m - 1 - f] < i - g)
+            suffix[i] = suffix[i + m - 1 - f];
+        else {
+            if (i < g)
+                g = i;
             f = i;
-            while (g >= 0 && pattern[g] == pattern[g + patternLen - 1 - f]) {
-                --g;
-            }
-            suffixLengths[i] = f - g;
+            while (g >= 0 && pattern[g] == pattern[g + m - 1 - f])
+                g--;
+            suffix[i] = f - g;
         }
     }
     
-    // Calculate the shifts based on suffix lengths
-    for (size_t i = 0; i < patternLen; ++i) {
-        goodSuffixShifts[i] = patternLen;
-    }
-    
-    // Case 1: For each mismatch position, find the rightmost matching suffix
-    for (ssize_t i = patternLen - 1; i >= 0; --i) {
-        if (suffixLengths[i] == static_cast<size_t>(i + 1)) {  // This is a proper suffix that matches a prefix
-            for (size_t j = 0; j < patternLen - 1 - i; ++j) {
-                if (goodSuffixShifts[j] == patternLen) {
-                    goodSuffixShifts[j] = patternLen - 1 - i;
-                }
+    // Now build the goodSuffix shift table
+    std::vector<int> goodSuffix(m, static_cast<int>(m));
+    // First phase: set shift for the case where a suffix of the pattern matches a prefix.
+    int j = 0;
+    for (int i = static_cast<int>(m) - 1; i >= -1; i--) {
+        if (i == -1 || suffix[i] == i + 1) {
+            for (; j < static_cast<int>(m) - 1 - i; j++) {
+                if (goodSuffix[j] == static_cast<int>(m))
+                    goodSuffix[j] = static_cast<int>(m) - 1 - i;
             }
         }
     }
-    
-    // Case 2: For each position, find the longest suffix that matches elsewhere
-    for (size_t i = 0; i < patternLen - 1; ++i) {
-        goodSuffixShifts[patternLen - 1 - suffixLengths[i]] = 
-            patternLen - 1 - i;
+    // Second phase: for the remaining positions
+    for (int i = 0; i <= static_cast<int>(m) - 2; i++) {
+        goodSuffix[m - 1 - suffix[i]] = static_cast<int>(m) - 1 - i;
     }
     
-    // Search phase
-    matches.reserve((textLen - patternLen + 1) / 2); // Heuristic preallocation
-    size_t i = 0;
-    while (i <= textLen - patternLen) {
-        ssize_t j = patternLen - 1;  // Use ssize_t for j since we check j >= 0
-        while (j >= 0 && pattern[j] == text[i + j]) 
-            --j;
+    // --- Search Phase ---
+    int s = 0;  // s is the shift of the pattern with respect to the text
+    while (s <= static_cast<int>(n - m)) {
+        int j = static_cast<int>(m) - 1;
+        // Move backwards through the pattern while characters match.
+        while (j >= 0 && pattern[j] == text[s + j])
+            j--;
+        
         if (j < 0) {
-            matches.push_back(i);
-            i += goodSuffixShifts[0];
+            // A match is found at position s
+            matches.push_back(s);
+            // Shift pattern to align the next possible match using goodSuffix[0]
+            s += goodSuffix[0];
         } else {
-            size_t badCharShift = j - lastOccurrence[static_cast<unsigned char>(text[i + j])];
-            if (badCharShift < 1) 
-                badCharShift = 1;
-            size_t goodSuffixShift = goodSuffixShifts[j];
-            i += std::max(badCharShift, goodSuffixShift);
+            // Calculate the shift based on the bad character rule:
+            // j - last occurrence index of text[s+j] in the pattern.
+            int bcShift = j - badChar[static_cast<unsigned char>(text[s + j])];
+            // Use the precomputed good suffix shift.
+            int gsShift = goodSuffix[j];
+            // Advance by the maximum shift to ensure progress.
+            s += std::max(1, std::max(bcShift, gsShift));
         }
     }
+    
     return matches;
 }
 
