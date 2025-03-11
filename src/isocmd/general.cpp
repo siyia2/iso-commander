@@ -10,7 +10,6 @@ std::vector<std::string> globalIsoFileList;
 // Mutex to prevent race conditions when live updating ISO list
 std::mutex updateListMutex;
 
-
 // Function to automatically update ISO list if auto-update is on
 void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, bool& umountMvRmBreak, std::vector<std::string>& filteredFiles, bool& isFiltered, std::string& listSubtype, std::atomic<bool>& newISOFound) {
     while (true) {
