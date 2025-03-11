@@ -509,6 +509,14 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         }
     }
     
+    // Store a reference to the original file list to avoid duplicating large lists
+    const std::vector<std::string>& originalFiles = 
+        (fileType == "bin" || fileType == "img") ? binImgFilesCache :
+        (fileType == "mdf") ? mdfMdsFilesCache : nrgFilesCache;
+    
+    // Indices for filtered files to avoid storing duplicate strings
+    std::vector<size_t> filteredIndices;
+    
     // Main processing loop
     while (true) {
         enable_ctrl_d();
@@ -520,22 +528,35 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         clear_history();
         if (needsScrnClr) {
             clearScrollBuffer(); // Clear the screen for new content
-             // Assist in automatic removal of non-existent entries from cache
-			files = 
-				(!isFiltered && !binImgFilesCache.empty() && (fileType == "bin" || fileType == "img") && binImgFilesCache.size() != files.size()) ? binImgFilesCache :
-				(!isFiltered && !mdfMdsFilesCache.empty() && fileType == "mdf" && mdfMdsFilesCache.size() != files.size()) ? mdfMdsFilesCache :
-				(!isFiltered && !nrgFilesCache.empty() && fileType == "nrg" && nrgFilesCache.size() != files.size()) ? nrgFilesCache :
-				files;
+            
+            // Assist in automatic removal of non-existent entries from cache
+            if (!isFiltered && originalFiles.size() != files.size()) {
+                files = originalFiles;
+            }
             
             if ((!list && !isFiltered) || isFiltered) {
-                sortFilesCaseInsensitive(files); // Sort the files case-insensitively
-                fileExtension == ".bin/.img" 
-                    ? sortFilesCaseInsensitive(binImgFilesCache) 
-                    : fileExtension == ".mdf" 
-                        ? sortFilesCaseInsensitive(mdfMdsFilesCache) 
-                        : sortFilesCaseInsensitive(nrgFilesCache);
+                if (!isFiltered) {
+                    sortFilesCaseInsensitive(files); // Sort the files case-insensitively
+                    fileExtension == ".bin/.img" 
+                        ? sortFilesCaseInsensitive(binImgFilesCache) 
+                        : fileExtension == ".mdf" 
+                            ? sortFilesCaseInsensitive(mdfMdsFilesCache) 
+                            : sortFilesCaseInsensitive(nrgFilesCache);
+                }
             }
-            printList(files, "IMAGE_FILES", "conversions"); // Print the current list of files
+            
+            // Display the filtered list or the full list
+            if (isFiltered) {
+                // Create a temporary vector only for display purposes
+                std::vector<std::string> displayFiles;
+                displayFiles.reserve(filteredIndices.size());
+                for (size_t idx : filteredIndices) {
+                    displayFiles.push_back(originalFiles[idx]);
+                }
+                printList(displayFiles, "IMAGE_FILES", "conversions");
+            } else {
+                printList(files, "IMAGE_FILES", "conversions");
+            }
         }
         std::cout << "\n\n";
         std::cout << "\033[1A\033[K";
@@ -561,7 +582,18 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         if (mainInputString == "~") {
             displayConfig::toggleFullListConversions = !displayConfig::toggleFullListConversions;
             clearScrollBuffer();
-            printList(files, "IMAGE_FILES", "conversions");
+            
+            if (isFiltered) {
+                // Create a temporary vector only for display purposes
+                std::vector<std::string> displayFiles;
+                displayFiles.reserve(filteredIndices.size());
+                for (size_t idx : filteredIndices) {
+                    displayFiles.push_back(originalFiles[idx]);
+                }
+                printList(displayFiles, "IMAGE_FILES", "conversions");
+            } else {
+                printList(files, "IMAGE_FILES", "conversions");
+            }
             continue;
         }
 
@@ -569,11 +601,10 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         if (rawInput.get()[0] == '\0') {
             clearScrollBuffer();
             if (isFiltered) {
-                // Restore the original file list
-                files = (fileType == "bin" || fileType == "img") ? binImgFilesCache :
-                        (fileType == "mdf" ? mdfMdsFilesCache : nrgFilesCache);
+                // Restore view to the original file list
+                isFiltered = false;
+                filteredIndices.clear(); // Clear indices to free memory
                 needsScrnClr = true;
-                isFiltered = false; // Reset filter status
                 continue;
             } else {
                 break; // Exit the loop if no input
@@ -603,24 +634,34 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
                     break;
                 }
 
-                // Filter files based on the input search query
-                auto filteredFiles = filterFiles(files, inputSearch);
-                if (filteredFiles.empty()) {
+                // Filter files by storing indices instead of copying strings
+                filteredIndices.clear();
+                const std::vector<std::string>& sourceFiles = isFiltered ? files : originalFiles;
+                
+                // Use original case-sensitive comparison
+                for (size_t i = 0; i < sourceFiles.size(); ++i) {
+                    if (sourceFiles[i].find(inputSearch) != std::string::npos) {
+                        filteredIndices.push_back(i);
+                    }
+                }
+                
+                if (filteredIndices.empty()) {
                     std::cout << "\033[1A\033[K";
                     continue; // Skip if no files match the filter
                 }
-                if (filteredFiles.size() == files.size()) {
+                
+                if (filteredIndices.size() == sourceFiles.size()) {
                     std::cout << "\033[2A\033[K";
                     needsScrnClr = false;
                     break;
                 }
 
-                // Save the search query to history and update the file list
+                // Save the search query to history
                 add_history(rawSearchQuery.get());
                 saveHistory(filterHistory);
                 filterHistory = false;
                 clear_history(); // Clear history to reset for future inputs
-                files = filteredFiles; // Update the file list with the filtered results
+                
                 needsScrnClr = true;
                 isFiltered = true;
                 break;
@@ -630,18 +671,26 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         else if (rawInput.get()[0] == '/' && rawInput.get()[1] != '\0') {
             // Directly filter the files based on the input without showing the filter prompt
             std::string inputSearch(rawInput.get() + 1); // Skip the '/' character
-            auto filteredFiles = filterFiles(files, inputSearch);
-            if (!filteredFiles.empty() && !(filteredFiles.size() == files.size())) {
+            
+            // Filter files by storing indices instead of copying strings
+            filteredIndices.clear();
+            const std::vector<std::string>& sourceFiles = isFiltered ? files : originalFiles;
+            
+            // Use original case-sensitive comparison
+            for (size_t i = 0; i < sourceFiles.size(); ++i) {
+                if (sourceFiles[i].find(inputSearch) != std::string::npos) {
+                    filteredIndices.push_back(i);
+                }
+            }
+            
+            if (!filteredIndices.empty() && filteredIndices.size() != sourceFiles.size()) {
                 filterHistory = true;
                 loadHistory(filterHistory);
                 add_history(inputSearch.c_str()); // Save the filter pattern to history
                 saveHistory(filterHistory);
                 
-                files = filteredFiles; // Update the file list with the filtered results
-                
                 isFiltered = true;
                 needsScrnClr = true;
-                
                 clear_history();
             } else {
                 std::cout << "\033[2A\033[K"; // Clear the line if no files match the filter
@@ -650,8 +699,20 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         } 
         // Process other input commands for file processing
         else {
-            processInput(mainInputString, files, (fileType == "mdf"), (fileType == "nrg"), 
-                         processedErrors, successOuts, skippedOuts, failedOuts, verbose, needsScrnClr, newISOFound);
+            // Create a temporary working vector only when needed for processing
+            std::vector<std::string> workingFiles;
+            if (isFiltered) {
+                workingFiles.reserve(filteredIndices.size());
+                for (size_t idx : filteredIndices) {
+                    workingFiles.push_back(originalFiles[idx]);
+                }
+                processInput(mainInputString, workingFiles, (fileType == "mdf"), (fileType == "nrg"), 
+                             processedErrors, successOuts, skippedOuts, failedOuts, verbose, needsScrnClr, newISOFound);
+            } else {
+                processInput(mainInputString, files, (fileType == "mdf"), (fileType == "nrg"), 
+                             processedErrors, successOuts, skippedOuts, failedOuts, verbose, needsScrnClr, newISOFound);
+            }
+            
             needsScrnClr = true;
             if (verbose) {
                 verbosePrint(processedErrors, successOuts, skippedOuts, failedOuts, 3); // Print detailed logs if verbose mode is enabled
