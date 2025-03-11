@@ -160,19 +160,13 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
     // Determine if we need to convert file names to lowercase.
     bool needLowerCaseFile = std::any_of(queryTokens.begin(), queryTokens.end(),
                                          [](const QueryToken& qt) { return !qt.isCaseSensitive; });
-    
-    // Determine the number of threads to use.
-    unsigned int numThreads = maxThreads;
-    if (numThreads == 0) {
-        numThreads = 2; // Fallback if hardware_concurrency is not defined.
-    }
-    
+        
     const size_t totalFiles = files.size();
-    size_t chunkSize = (totalFiles + numThreads - 1) / numThreads;
+    size_t chunkSize = (totalFiles + maxThreads - 1) / numThreads;
     
     // Launch asynchronous tasks to process chunks of files.
     std::vector<std::future<std::vector<std::string>>> futures;
-    for (unsigned int i = 0; i < numThreads; ++i) {
+    for (unsigned int i = 0; i < maxThreads; ++i) {
         size_t start = i * chunkSize;
         size_t end = std::min(totalFiles, (i + 1) * chunkSize);
         if (start >= end)
