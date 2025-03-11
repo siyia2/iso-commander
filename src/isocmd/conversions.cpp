@@ -78,8 +78,8 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
         std::cout << "\n\033[1;93mNo " << fileExtension << " entries stored in RAM.\033[1m\n";
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        files.clear();
         clearScrollBuffer();
-        list = false;
         return;
     } else if (list) {
         if (!modeMdf && !modeNrg) {
