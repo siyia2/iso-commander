@@ -704,20 +704,10 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
     disableInput();
     clearScrollBuffer();
-    // Remember line number for the message we want to clear later
-    int messageLine = -1;
     
-    // Get current cursor position
-    if (isatty(STDOUT_FILENO)) {
-        std::cout << "\033[6n" << std::flush;
-        char buf[32];
-        if (read(STDIN_FILENO, buf, sizeof(buf)) > 0) {
-            int row, col;
-            if (sscanf(buf, "\033[%d;%dR", &row, &col) == 2) {
-                messageLine = row;
-            }
-        }
-    }
+    // Remember line number: one lien above the message we want to clear
+    int messageLine = 1;
+    
     std::cout << "\n\033[0;1mProcessing " << (totalTasks > 1 ? "tasks" : "task") << " for \033[1;93mwrite\033[0;1m operation...(\033[1;91mCtrl+c\033[0;1m:cancel)\n\n";
     std::cout << "\033[s";  // Save cursor position
 
