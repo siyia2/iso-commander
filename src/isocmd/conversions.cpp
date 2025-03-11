@@ -564,6 +564,11 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         
         std::string mainInputString(rawInput.get());
         
+        // To fix a hang
+        if (mainInputString.find("//") != std::string::npos) {
+			continue;
+		}
+        
         // Handle help request
         if (mainInputString == "?") {
             helpSelections();

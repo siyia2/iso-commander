@@ -117,6 +117,11 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 
         std::string inputString(input.get());
         
+        // To fix a hang
+        if (inputString.find("//") != std::string::npos) {
+			continue;
+		}
+        
         // Handle special commands
         if (inputString == "?") {
             isAtISOList.store(false);
