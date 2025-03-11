@@ -10,6 +10,7 @@ std::vector<std::string> globalIsoFileList;
 // Mutex to prevent race conditions when live updating ISO list
 std::mutex updateListMutex;
 
+
 // Function to automatically update ISO list if auto-update is on
 void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, bool& umountMvRmBreak, std::vector<std::string>& filteredFiles, bool& isFiltered, std::string& listSubtype, std::atomic<bool>& newISOFound) {
     while (true) {
@@ -413,7 +414,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
     int oldf = fcntl(STDIN_FILENO, F_GETFL, 0);  // Get current file descriptor flags
     fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);  // Set non-blocking mode
 
-    const int barWidth = 50;  // Width of the progress bar
+    const int barWidth = 51;  // Width of the progress bar
     bool enterPressed = false;  // Flag to detect if enter is pressed
     auto startTime = std::chrono::high_resolution_clock::now();  // Record start time
 
@@ -490,7 +491,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         if (isComplete->load(std::memory_order_acquire)) {
 			std::cout << "\033[1A\033[1K";
             std::cout << "\r\033[0;1m Processing for " << operation << "\033[0;1m" << (!g_operationCancelled.load() ? " → \033[1;92mCOMPLETED\033[0;1m" : " → \033[1;33mINTERRUPTED\033[0;1m") << std::endl;
-            std::cout << "\r[==================================================>] 100% ("
+            std::cout << "\r[===================================================>] 100% ("
                       << completedTasks->load() << "/" << totalTasks << ") "
                       << (bytesTrackingEnabled ? "(" + formatSize(static_cast<double>(completedBytes->load())) + "/" + totalBytesFormatted + ") " : "")
                       << "Time Elapsed: " << std::fixed << std::setprecision(1) << (elapsedSeconds) << "s\033[K";
@@ -879,7 +880,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
     std::cout << "\033[1;32m1. Hotkeys:\033[0m\n"
 			   << "   • Quick Return:\033[1;33m Ctrl+d \033[0m\n"
 			   << "   • Clear Line:\033[1;33m Ctrl+u \033[0m\n"
-               << "   • Refresh Screen:\033[1;33m Ctrl+l \033[0m\n" << std::endl;
+               << "   • Declutter Screen:\033[1;33m Ctrl+l \033[0m\n" << std::endl;
                
     std::cout << "\033[1;32m2. Selecting FolderPaths:\033[0m\n"
               << "   • Single directory: Enter a directory (e.g., '/directory/')\n"
@@ -938,7 +939,7 @@ void helpMappings() {
     std::cout << "\033[1;32m1. Hotkeys:\033[0m\n"
 			  << "   • Quick Return:\033[1;33m Ctrl+d \033[0m\n"
 			  << "   • Clear Line:\033[1;33m Ctrl+u \033[0m\n"
-              << "   • Refresh Screen:\033[1;33m Ctrl+l \033[0m\n" << std::endl;
+              << "   • Declutter Screen:\033[1;33m Ctrl+l \033[0m\n" << std::endl;
     
     std::cout << "\033[1;32m2. Selecting Mappings:\033[0m\n"
 			  << "   • Mapping = NewISOIndex>RemovableUSBDevice\n"
