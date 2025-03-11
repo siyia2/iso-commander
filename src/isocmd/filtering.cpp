@@ -162,7 +162,7 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
                                          [](const QueryToken& qt) { return !qt.isCaseSensitive; });
         
     const size_t totalFiles = files.size();
-    size_t chunkSize = (totalFiles + maxThreads - 1) / numThreads;
+    size_t chunkSize = (totalFiles + maxThreads - 1) / maxThreads;
     
     // Launch asynchronous tasks to process chunks of files.
     std::vector<std::future<std::vector<std::string>>> futures;
