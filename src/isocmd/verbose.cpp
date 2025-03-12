@@ -136,7 +136,7 @@ void reportErrorCpMvRm(const std::string& errorType, const std::string& srcDir, 
 }
 
 
-// CACHE
+// ISO DATABASE
 
 // Function that provides verbose output for manualRefreshForDatabase
 void verboseForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_t>& totalFiles, std::vector<std::string>& validPaths, std::unordered_set<std::string>& invalidPaths, std::unordered_set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& filterHistory, const std::chrono::high_resolution_clock::time_point& start_time, std::atomic<bool>& newISOFound) {
