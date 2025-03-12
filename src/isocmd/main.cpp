@@ -506,10 +506,12 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
     // Default values for required keys
     std::map<std::string, std::string> defaultConfig = {
         {"mount_list", "compact"},
-        {"umount_list", "full"}, // Default for umount is long
+        {"umount_list", "full"},
         {"cp_mv_rm_list", "compact"},
         {"write_list", "compact"},
-        {"conversion_lists", "compact"}
+        {"conversion_lists", "compact"},
+        {"auto_update", "0"},
+        {"pagination", "25"}
     };
 
     // If the file cannot be opened, write the default configuration and return it
@@ -530,57 +532,54 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
     // Read the existing configuration file
     std::string line;
     while (std::getline(inFile, line)) {
-        // Remove leading and trailing whitespace from the line
+        // Remove leading and trailing whitespace
         line.erase(0, line.find_first_not_of(" \t"));
         line.erase(line.find_last_not_of(" \t") + 1);
 
-        // Skip empty lines or comments (lines starting with '#')
+        // Skip empty lines or comments
         if (line.empty() || line[0] == '#') {
             continue;
         }
 
-        // Find the position of the '=' character
+        // Find '=' character
         size_t equalsPos = line.find('=');
         if (equalsPos == std::string::npos) {
             continue; // Skip lines without '='
         }
 
-        // Extract the key and value parts
+        // Extract key and value
         std::string key = line.substr(0, equalsPos);
         std::string valueStr = line.substr(equalsPos + 1);
 
-        // Remove leading and trailing whitespaces from both key and value
+        // Trim whitespace from key and value
         key.erase(0, key.find_first_not_of(" \t"));
         key.erase(key.find_last_not_of(" \t") + 1);
         valueStr.erase(0, valueStr.find_first_not_of(" \t"));
         valueStr.erase(valueStr.find_last_not_of(" \t") + 1);
 
-        // Check if the key is one of the required keys
+        // Validate and store configuration values
         if (defaultConfig.find(key) != defaultConfig.end()) {
-            // Check if the value is "short" or "long"
-            if (valueStr == "compact" || valueStr == "full") {
+            if (key == "auto_update" || key == "pagination") {
+                configMap[key] = valueStr;
+            } else if (valueStr == "compact" || valueStr == "full") {
                 configMap[key] = valueStr;
             } else {
-                configMap[key] = defaultConfig[key]; // Use default value for invalid value
+                configMap[key] = defaultConfig[key]; // Use default value if invalid
             }
-        } else if (key == "auto_update") {
-            // Handle auto_update separately if needed
-            configMap[key] = valueStr;
-        } else if (key == "pagination") {
-            // Handle auto_update separately if needed
-            configMap[key] = valueStr;
         }
     }
 
     // Add missing keys with default values
+    bool needsUpdate = false;
     for (const auto& pair : defaultConfig) {
         if (configMap.find(pair.first) == configMap.end()) {
-            configMap[pair.first] = pair.second; // Add default key-value pair
+            configMap[pair.first] = pair.second;
+            needsUpdate = true;
         }
     }
 
-    // Write the updated configuration back to the file (if any keys were missing)
-    if (configMap.size() > defaultConfig.size()) {
+    // If any default values were added, update the file
+    if (needsUpdate) {
         std::ofstream outFile(filePath);
         if (outFile) {
             for (const auto& pair : configMap) {
@@ -589,7 +588,7 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
         }
     }
 
-    // Set the boolean values based on the configMap
+    // Set boolean values
     displayConfig::toggleFullListMount = (configMap["mount_list"] == "full");
     displayConfig::toggleFullListUmount = (configMap["umount_list"] == "full");
     displayConfig::toggleFullListCpMvRm = (configMap["cp_mv_rm_list"] == "full");
@@ -598,6 +597,7 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
 
     return configMap;
 }
+
 
 
 // Function to write numer of entries per page for pagination
