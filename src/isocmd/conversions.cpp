@@ -525,6 +525,10 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
     // Containers to track file processing results
     std::unordered_set<std::string> processedErrors, successOuts, skippedOuts, failedOuts;
     
+    
+    // Reset page when entering this menu
+    currentPage = 0;
+    
     bool isFiltered = false; // Indicates if the file list is currently filtered
     bool needsScrnClr = true;
     bool filterHistory = false;
@@ -564,16 +568,10 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         
         std::string mainInputString(rawInput.get());
         
-        // To fix a hang
-        if (mainInputString.find("//") != std::string::npos) {
-			continue;
-		}
-        
-        // Handle help request
-        if (mainInputString == "?") {
-            helpSelections();
-            continue;
-        }
+		size_t totalPages = (files.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE;
+		bool validCommand = processCommand(mainInputString, totalPages, currentPage, needsScrnClr);
+		
+		if (validCommand) continue;
 
         // Handle user input for toggling the full list display
         if (mainInputString == "~") {

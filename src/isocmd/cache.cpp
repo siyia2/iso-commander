@@ -175,11 +175,12 @@ std::string getHomeDirectory() {
 
 
 // Utility function to clear screen buffer and load IsoFiles from cache to a global vector only for the first time and only for if the cache has been modified.
+// Update the clearAndLoadFiles function to integrate with pagination
 bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType, bool& umountMvRmBreak) {
-	
-	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
-	disable_ctrl_d();
-	
+    
+    signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+    disable_ctrl_d();
+    
     static std::filesystem::file_time_type lastModifiedTime;
 
     // Check if the cache file exists and has been modified
@@ -208,27 +209,28 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
     if (needToReload) {
         loadCache(globalIsoFileList);
         {
-			std::lock_guard<std::mutex> lock(updateListMutex);
-			sortFilesCaseInsensitive(globalIsoFileList);
-		}
+            std::lock_guard<std::mutex> lock(updateListMutex);
+            sortFilesCaseInsensitive(globalIsoFileList);
+        }
     }
     
     // Lock to prevent simultaneous access to std::cout
     {
         std::lock_guard<std::mutex> printLock(couNtMutex);
         if (umountMvRmBreak) {
-			filteredFiles = globalIsoFileList;
-			isFiltered = false;
-		}
+            filteredFiles = globalIsoFileList;
+            isFiltered = false;
+            currentPage = 0;
+        }
         printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType);
 
-		if (globalIsoFileList.empty()) {
-			std::cout << "\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n";
-			std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
-			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-			return false;
-		}
-	}
+        if (globalIsoFileList.empty()) {
+            std::cout << "\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n";
+            std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            return false;
+        }
+    }
 
     return true;
 }

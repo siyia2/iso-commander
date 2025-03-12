@@ -179,7 +179,7 @@ void processOperationInput(const std::string& input, const std::vector<std::stri
 }
 
 
-
+// Function that handles all pagination logic for a list of entries
 std::string handlePaginatedDisplay(const std::vector<std::string>& entries, const std::string& promptPrefix, const std::string& promptSuffix, const std::function<void()>& displayErrorsFn, const std::function<void()>& setupEnvironmentFn, bool& isPageTurn) {
     int totalEntries = entries.size();
     
@@ -197,9 +197,6 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, cons
     
     int totalPages = (totalEntries + entriesPerPage - 1) / entriesPerPage;
     int currentPage = 0;
-    
-    // Initialize the readline keybindings
-    initialize_readline_keybindings_for_pagination();
     
     while (true) {
         // Setup environment if function is provided
@@ -226,7 +223,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, cons
         
         if (totalPages > 1) {
             pageContent << "\n\033[1mPage " << (currentPage + 1) 
-                      << "/" << totalPages << " \033[1;94m(Ctrl + ←/→)\n\033[0;1m";
+                      << "/" << totalPages << " \033[1;94m(+/-) ↵\n\033[0m";
         }
         
         // Build the full prompt
@@ -241,23 +238,37 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, cons
         // Process input
         std::string userInput = trimWhitespace(input.get());
         
-        // Check for our special navigation markers
-        if (userInput.length() == 1) {
-            if (userInput[0] == '\001') {  // Ctrl+Left was pressed
-                currentPage = (currentPage - 1 + totalPages) % totalPages;  // Go to previous page
-                isPageTurn = true;
-                continue;
+        // Handle page navigation
+        bool isNavigation = false;
+        if (!userInput.empty()) {
+            // Check if this is just a navigation command
+            bool isJustNavigation = true;
+            for (char c : userInput) {
+                if (c != '+' && c != '-') {
+                    isJustNavigation = false;
+                    break;
+                }
             }
-            else if (userInput[0] == '\002') {  // Ctrl+Right was pressed
-                currentPage = (currentPage + 1) % totalPages;  // Go to next page
+            
+            if (isJustNavigation && (userInput.find('+') != std::string::npos || userInput.find('-') != std::string::npos)) {
+                int pageShift = 0;
+                if (userInput.find('+') != std::string::npos) {
+                    pageShift = std::count(userInput.begin(), userInput.end(), '+');
+                } else if (userInput.find('-') != std::string::npos) {
+                    pageShift = -std::count(userInput.begin(), userInput.end(), '-');
+                }
+
+                currentPage = (currentPage + pageShift + totalPages) % totalPages; // Circular navigation
                 isPageTurn = true;
+                isNavigation = true;
                 continue;
             }
         }
         
-        // If we get here, it's a regular input, not navigation
-        isPageTurn = false;
-        return userInput;
+        if (!isNavigation) {
+            isPageTurn = false;  // Reset flag for non-page-turn actions
+            return userInput;     // Return the final non-navigation input
+        }
     }
 }
 
@@ -322,7 +333,6 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::vector
             std::cout << "\n\033[1;93mDelete operation aborted by user.\033[0;1m\n";
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            uninitialize_readline_keybindings_for_pagination();
             return false;
         }
         
@@ -337,7 +347,6 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::vector
                 std::cout << "\n\033[1;93mDelete operation aborted by user.\033[0;1m\n";
                 std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                uninitialize_readline_keybindings_for_pagination();
                 return false;
             }
         }
@@ -417,7 +426,6 @@ std::string userDestDirRm(const std::vector<std::string>& isoFiles, std::vector<
             bool isCpMv = true;
             helpSearches(isCpMv, import2ISO);
             userDestDir = "";
-            uninitialize_readline_keybindings_for_pagination();
             return userDestDir;
         }
         
@@ -426,7 +434,6 @@ std::string userDestDirRm(const std::vector<std::string>& isoFiles, std::vector<
             umountMvRmBreak = false;
             userDestDir = "";
             clear_history();
-            uninitialize_readline_keybindings_for_pagination();
             return userDestDir;
         }
         
@@ -453,11 +460,10 @@ std::string userDestDirRm(const std::vector<std::string>& isoFiles, std::vector<
         
         if (!proceedWithDelete) {
             userDestDir = "";
-            uninitialize_readline_keybindings_for_pagination();
             return userDestDir;
         }
     }
-    uninitialize_readline_keybindings_for_pagination();
+    
     return userDestDir;
 }
 

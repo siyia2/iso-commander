@@ -34,6 +34,59 @@ void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOLi
 }
 
 
+bool processCommand(const std::string& command,
+                    size_t& totalPages,
+                    size_t& currentPage,
+                    bool& needsScreenClear) {
+    // Ignore commands that contain "//" to avoid hangs
+    if (command.find("//") != std::string::npos) {
+        return false;
+    }
+
+    // Handle "next" command
+    if (command == "n" || command == "next") {
+        if (currentPage < totalPages - 1) {
+            currentPage++;
+            needsScreenClear = true;
+        }
+        return true;
+    }
+
+    // Handle "prev" command
+    if (command == "p" || command == "prev" || command == "previous") {
+        if (currentPage > 0) {
+            currentPage--;
+            needsScreenClear = true;
+        }
+        return true;
+    }
+
+    // Handle go-to specific page command (e.g., "g3" goes to page 3)
+    if (command.size() >= 2 && command[0] == 'g' && std::isdigit(command[1])) {
+        try {
+            int pageNum = std::stoi(command.substr(1)) - 1; // convert to 0-based index
+            if (pageNum >= 0 && pageNum < static_cast<int>(totalPages)) {
+                currentPage = pageNum;
+                needsScreenClear = true;
+            }
+        } catch (...) {
+            // Ignore invalid page numbers
+        }
+        return true;
+    }
+
+    // Handle help command
+    if (command == "?") {
+        helpSelections();
+        return true;
+    }
+
+    // If no valid command was found
+    return false;
+}
+
+
+
 // Main function to select and operate on ISOs by number for umount mount cp mv and rm
 void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
     // Bind readline keys
@@ -54,6 +107,8 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
     bool needsClrScrn = true;
     bool umountMvRmBreak = false;
 
+    // Reset page when entering this menu
+    currentPage = 0;
 
     // Determine operation color and specific flags
     std::string operationColor = operation == "rm" ? "\033[1;91m" :
@@ -78,9 +133,9 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         clear_history();
         
         if (!isUnmount) {
-			removeNonExistentPathsFromCache();
-			isAtISOList.store(true);
-		}
+            removeNonExistentPathsFromCache();
+            isAtISOList.store(true);
+        }
         
         // Load files based on operation type
         if (needsClrScrn) {
@@ -101,7 +156,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                         std::ref(isImportRunning), std::ref(updateHasRun), std::ref(umountMvRmBreak),
                         std::ref(filteredFiles), std::ref(isFiltered), std::ref(listSubtype), std::ref(newISOFound)).detach();
         }
-        
+    
         
         std::cout << "\033[1A\033[K";
         
@@ -117,10 +172,17 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 
         std::string inputString(input.get());
         
+        const std::vector<std::string>& currentList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
+		size_t totalPages = (currentList.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE;
+        processCommand(inputString, totalPages, currentPage, needsClrScrn);
+        bool validCommand = processCommand(inputString, totalPages, currentPage, needsClrScrn);
+
+        if (validCommand) continue;
+        
         // To fix a hang
         if (inputString.find("//") != std::string::npos) {
-			continue;
-		}
+            continue;
+        }
         
         // Handle special commands
         if (inputString == "?") {
@@ -139,12 +201,13 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             needsClrScrn = true;
             continue;
         }
-
+     
         // Handle empty input or return
         if (inputString.empty()) {
             if (isFiltered) {
                 std::vector<std::string>().swap(filteredFiles);
                 isFiltered = false;
+                currentPage = 0; // Reset page when clearing filter
                 continue;
             } else {
                 return;
@@ -193,6 +256,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                             needsClrScrn = true;
                             filteredFiles = std::move(newFilteredFiles);
                             isFiltered = true;
+                            currentPage = 0; // Reset to first page after filtering
                             clear_history();
                             break;
                         }
@@ -216,6 +280,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                         saveHistory(filterHistory);
                         filteredFiles = std::move(newFilteredFiles);
                         isFiltered = true;
+                        currentPage = 0; // Reset to first page after filtering
                         needsClrScrn = true;
                     }
                 }
@@ -548,8 +613,25 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     static const char* magentaBold = "\033[95;1m";
     static const char* orangeBold = "\033[1;38;5;208m";
     static const char* grayBold = "\033[38;5;245m";
-        
-    size_t maxIndex = items.size();
+    static const char* cyanBold = "\033[1;96m";
+    
+    // Calculate pagination info
+    size_t totalItems = items.size();
+    size_t totalPages = (totalItems + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE; // Ceiling division
+    
+    // Adjust currentPage if it's out of bounds
+    if (totalPages == 0) {
+        currentPage = 0;
+    } else if (currentPage >= totalPages) {
+        currentPage = totalPages - 1;
+    }
+    
+    // Calculate start and end indices for the current page
+    size_t startIndex = currentPage * ITEMS_PER_PAGE;
+    size_t endIndex = std::min(startIndex + ITEMS_PER_PAGE, totalItems);
+    
+    // Calculate the maximum number of digits needed for indices
+    size_t maxIndex = totalItems;
     size_t numDigits = std::to_string(maxIndex).length();
 
     // Precompute padded index strings
@@ -562,7 +644,13 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     std::ostringstream output;
     output << "\n"; // Initial newline for visual spacing
 
-    for (size_t i = 0; i < items.size(); ++i) {
+    // Display pagination info at the top
+    output << cyanBold << "Page " << (currentPage + 1) << " of " << totalPages 
+           << " (Items " << (startIndex + 1) << "-" << endIndex << " of " << totalItems << ")"
+           << defaultColor << "\n\n";
+
+    // Display only the items for the current page
+    for (size_t i = startIndex; i < endIndex; ++i) {
         const char* sequenceColor = (i % 2 == 0) ? red : green;
         std::string directory, filename, displayPath, displayHash;
 
@@ -598,37 +686,48 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
                    << defaultColor << bold << "/"
                    << magenta << filename << defaultColor << "\n";
         } else if (listType == "MOUNTED_ISOS") {
-			std::string dirName = items[i];
-			// Use the extractDirectoryAndFilenameFromMountPoint function to get the components
-			auto [directoryPart, filenamePart, hashPart] = parseMountPointComponents(dirName);
-			// Set displayPath and displayHash using the extracted components
-			displayPath = filenamePart;
-			displayHash = hashPart;
+            std::string dirName = items[i];
+            // Use the extractDirectoryAndFilenameFromMountPoint function to get the components
+            auto [directoryPart, filenamePart, hashPart] = parseMountPointComponents(dirName);
+            // Set displayPath and displayHash using the extracted components
+            displayPath = filenamePart;
+            displayHash = hashPart;
     
-			if (displayConfig::toggleFullListUmount) {
-				output << sequenceColor << indexStrings[i] << ". "
-						<< blueBold << directoryPart
-						<< magentaBold << displayPath << grayBold << displayHash << reset << "\n";
-			} else {
-				output << sequenceColor << indexStrings[i] << ". "
-						<< magentaBold << displayPath << "\n";
-			}
-		} else if (listType == "IMAGE_FILES") {
-		// Alternate sequence color like in "ISO_FILES"
-		const char* sequenceColor = (i % 2 == 0) ? red : green;
+            if (displayConfig::toggleFullListUmount) {
+                output << sequenceColor << indexStrings[i] << ". "
+                        << blueBold << directoryPart
+                        << magentaBold << displayPath << grayBold << displayHash << reset << "\n";
+            } else {
+                output << sequenceColor << indexStrings[i] << ". "
+                        << magentaBold << displayPath << "\n";
+            }
+        } else if (listType == "IMAGE_FILES") {
+            // Alternate sequence color like in "ISO_FILES"
+            const char* sequenceColor = (i % 2 == 0) ? red : green;
     
-			if (directory.empty() && filename.empty()) {
-				// Standard case
-				output << sequenceColor << indexStrings[i] << ". "
-				<< reset << bold << items[i] << defaultColor << "\n";
-			} else {
-				// Special extension case (keep the filename sequence as orange bold)
-				output << sequenceColor << indexStrings[i] << ". "
-					<< reset << bold << directory << "/"
-					<< orangeBold << filename << defaultColor << "\n";
-			}
+            if (directory.empty() && filename.empty()) {
+                // Standard case
+                output << sequenceColor << indexStrings[i] << ". "
+                << reset << bold << items[i] << defaultColor << "\n";
+            } else {
+                // Special extension case (keep the filename sequence as orange bold)
+                output << sequenceColor << indexStrings[i] << ". "
+                    << reset << bold << directory << "/"
+                    << orangeBold << filename << defaultColor << "\n";
+            }
         }
     }
+
+    // Display pagination controls at the bottom
+    output << "\n" << cyanBold << "Pagination: ";
+    if (currentPage > 0) {
+        output << "[p] Previous | ";
+    }
+    if (currentPage < totalPages - 1) {
+        output << "[n] Next | ";
+    }
+    output << "[g#] Go to page | ";
+    output << defaultColor << "\n";
 
     std::cout << output.str();
 }
