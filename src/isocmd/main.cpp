@@ -503,36 +503,36 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
     std::map<std::string, std::string> configMap;
     std::ifstream inFile(filePath);
 
-    // Default values for required keys
-    std::map<std::string, std::string> defaultConfig = {
+    // Default values with a fixed order
+    std::vector<std::pair<std::string, std::string>> orderedDefaults = {
+        {"auto_update", "0"},
+        {"pagination", "25"},
         {"mount_list", "compact"},
         {"umount_list", "full"},
         {"cp_mv_rm_list", "compact"},
         {"write_list", "compact"},
-        {"conversion_lists", "compact"},
-        {"auto_update", "0"},
-        {"pagination", "25"}
+        {"conversion_lists", "compact"}
     };
 
     // If the file cannot be opened, write the default configuration and return it
     if (!inFile) {
         std::ofstream outFile(filePath);
         if (!outFile) {
-            return defaultConfig; // Return default config if file creation fails
+            return std::map<std::string, std::string>(orderedDefaults.begin(), orderedDefaults.end());
         }
 
-        // Write default configuration to the file
-        for (const auto& pair : defaultConfig) {
+        // Write default configuration in correct order
+        for (const auto& pair : orderedDefaults) {
             outFile << pair.first << " = " << pair.second << "\n";
         }
 
-        return defaultConfig;
+        return std::map<std::string, std::string>(orderedDefaults.begin(), orderedDefaults.end());
     }
 
-    // Read the existing configuration file
+    // Read existing config
     std::string line;
     while (std::getline(inFile, line)) {
-        // Remove leading and trailing whitespace
+        // Remove leading/trailing whitespace
         line.erase(0, line.find_first_not_of(" \t"));
         line.erase(line.find_last_not_of(" \t") + 1);
 
@@ -544,51 +544,49 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
         // Find '=' character
         size_t equalsPos = line.find('=');
         if (equalsPos == std::string::npos) {
-            continue; // Skip lines without '='
+            continue; // Skip malformed lines
         }
 
-        // Extract key and value
+        // Extract key and value, trim whitespace
         std::string key = line.substr(0, equalsPos);
         std::string valueStr = line.substr(equalsPos + 1);
 
-        // Trim whitespace from key and value
         key.erase(0, key.find_first_not_of(" \t"));
         key.erase(key.find_last_not_of(" \t") + 1);
         valueStr.erase(0, valueStr.find_first_not_of(" \t"));
         valueStr.erase(valueStr.find_last_not_of(" \t") + 1);
 
-        // Validate and store configuration values
-        if (defaultConfig.find(key) != defaultConfig.end()) {
-            if (key == "auto_update" || key == "pagination") {
+        // Store only valid keys
+        for (const auto& pair : orderedDefaults) {
+            if (key == pair.first) {
                 configMap[key] = valueStr;
-            } else if (valueStr == "compact" || valueStr == "full") {
-                configMap[key] = valueStr;
-            } else {
-                configMap[key] = defaultConfig[key]; // Use default value if invalid
+                break;
             }
         }
     }
 
+    inFile.close();
+
     // Add missing keys with default values
     bool needsUpdate = false;
-    for (const auto& pair : defaultConfig) {
+    for (const auto& pair : orderedDefaults) {
         if (configMap.find(pair.first) == configMap.end()) {
             configMap[pair.first] = pair.second;
             needsUpdate = true;
         }
     }
 
-    // If any default values were added, update the file
+    // Update the file if needed
     if (needsUpdate) {
         std::ofstream outFile(filePath);
         if (outFile) {
-            for (const auto& pair : configMap) {
-                outFile << pair.first << " = " << pair.second << "\n";
+            for (const auto& pair : orderedDefaults) {
+                outFile << pair.first << " = " << configMap[pair.first] << "\n";
             }
         }
     }
 
-    // Set boolean values
+    // Set boolean flags based on configMap
     displayConfig::toggleFullListMount = (configMap["mount_list"] == "full");
     displayConfig::toggleFullListUmount = (configMap["umount_list"] == "full");
     displayConfig::toggleFullListCpMvRm = (configMap["cp_mv_rm_list"] == "full");
@@ -606,7 +604,7 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
     std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
     if (!std::filesystem::exists(dirPath)) {
         if (!std::filesystem::create_directories(dirPath)) {
-            std::cerr << "\n\033[1;91mFailed to create directory: \033[1;91m'\033[1;93m" 
+            std::cerr << "\n\033[1;91mFailed to create directory: \033[1;93m'\033[1;93m" 
                       << dirPath.string() << "\033[1;91m'.\033[0;1m\n";
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
