@@ -217,6 +217,7 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
     {
         std::lock_guard<std::mutex> printLock(couNtMutex);
         if (umountMvRmBreak) {
+			if (isFiltered) currentPage = 0; //reset page if on filtered list and destructive list action mv/rm
             filteredFiles = globalIsoFileList;
             isFiltered = false;
         }
@@ -345,7 +346,7 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
 }
 
 
-// Function to load ISO cache from file
+// Function to load ISO database from file
 void loadFromDatabase(std::vector<std::string>& isoFiles) {
 
     int fd = open(cacheFilePath.c_str(), O_RDONLY);
@@ -398,7 +399,7 @@ void loadFromDatabase(std::vector<std::string>& isoFiles) {
 }
 
 
-// Function to save ISO cache to file
+// Function to save ISO cache to database
 bool saveToDatabase(const std::vector<std::string>& isoFiles, std::atomic<bool>& newISOFound) {
     std::filesystem::path cachePath = cacheDirectory;
     cachePath /= cacheFileName;
