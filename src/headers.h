@@ -42,7 +42,7 @@
                                     
 
 extern size_t currentPage;
-extern const size_t ITEMS_PER_PAGE;
+extern size_t ITEMS_PER_PAGE;
 
 // Create alias (fs) for the std::filesystem
 namespace fs = std::filesystem;
@@ -118,6 +118,7 @@ bool startsWithZero(const std::string& str);
 bool isNumeric(const std::string& str);
 bool isDirectoryEmpty(const std::string& path);
 bool readUserConfigUpdates(const std::string& filePath);
+bool paginationSet(const std::string& filePath);
 
 // ints
 int prevent_readline_keybindings(int, int);
@@ -144,6 +145,7 @@ void signalHandlerCancellations(int signal);
 void clearScrollBuffer();
 void setupReadlineToIgnoreCtrlC();
 void sortFilesCaseInsensitive(std::vector<std::string>& files);
+void updatePagination(const std::string& inputSearch, const std::string& configPath);
 void clearMessageAfterTimeout(int timeoutSeconds, std::atomic<bool>& isAtMain, std::atomic<bool>& isImportRunning, std::atomic<bool>& messageActive);
 void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname);
 
@@ -155,7 +157,7 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
 // GENERAL
 
 // bools
-bool processPagination(const std::string& command, size_t& totalPages, size_t& currentPage, bool& needsClrScrn, const bool isMount, const bool isUnmount, const bool isWrite, const bool isConversion, std::atomic<bool>& isAtISOList);
+bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPages, size_t& currentPage, bool& needsClrScrn, const bool isMount, const bool isUnmount, const bool isWrite, const bool isConversion, std::atomic<bool>& isAtISOList);
 bool isValidInput(const std::string& input);
 
 // voids
