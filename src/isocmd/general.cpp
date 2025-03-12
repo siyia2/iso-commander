@@ -909,7 +909,7 @@ void helpSelections() {
     
      // Selection tips
     std::cout << "\033[1;32m4. Tips:\033[0m\n"
-			  << "   • Filtering adjusts based on the case sensitivity of each term\033[0m\n"
+			  << "   • Filtering is adaptive, incremental, and independent of pagination\033[0m\n"
               << "   • If filtering has no matches, no message or list update is issued\n" << std::endl;
               
     // Prompt to continue
