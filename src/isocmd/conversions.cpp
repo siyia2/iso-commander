@@ -516,6 +516,7 @@ void clearAndLoadImageFiles(std::vector<std::string>& files, const std::string& 
 		}
 			need2Sort = false;
 	}
+	
     printList(files, "IMAGE_FILES", "conversions"); // Print the current list of files
 }
 
@@ -529,7 +530,6 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
     
     // Containers to track file processing results
     std::unordered_set<std::string> processedErrors, successOuts, skippedOuts, failedOuts;
-    
     
     // Reset page when entering this menu
     currentPage = 0;
@@ -592,6 +592,8 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
                 needsClrScrn = true;
                 isFiltered = false; // Reset filter status
                 need2Sort = false;
+                // Reset page when exiting filtered list
+				currentPage = 0;
                 continue;
             } else {
 				need2Sort = false;
