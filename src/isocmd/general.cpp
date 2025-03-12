@@ -34,20 +34,13 @@ void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOLi
 }
 
 
-bool processCommand(const std::string& command,
-                    size_t& totalPages,
-                    size_t& currentPage,
-                    bool& needsScreenClear) {
-    // Ignore commands that contain "//" to avoid hangs
-    if (command.find("//") != std::string::npos) {
-        return false;
-    }
-
+// Main pagination function
+bool processPagination(const std::string& command, size_t& totalPages, size_t& currentPage, bool& needsClrScrn, std::atomic<bool>& isAtISOList) {
     // Handle "next" command
     if (command == "n" || command == "next") {
         if (currentPage < totalPages - 1) {
             currentPage++;
-            needsScreenClear = true;
+            needsClrScrn = true;
         }
         return true;
     }
@@ -56,7 +49,7 @@ bool processCommand(const std::string& command,
     if (command == "p" || command == "prev" || command == "previous") {
         if (currentPage > 0) {
             currentPage--;
-            needsScreenClear = true;
+            needsClrScrn = true;
         }
         return true;
     }
@@ -67,19 +60,21 @@ bool processCommand(const std::string& command,
             int pageNum = std::stoi(command.substr(1)) - 1; // convert to 0-based index
             if (pageNum >= 0 && pageNum < static_cast<int>(totalPages)) {
                 currentPage = pageNum;
-                needsScreenClear = true;
+                needsClrScrn = true;
             }
         } catch (...) {
             // Ignore invalid page numbers
         }
         return true;
     }
-
-    // Handle help command
-    if (command == "?") {
-        helpSelections();
-        return true;
-    }
+    
+     // Handle special commands
+        if (command == "?") {
+            helpSelections();
+            isAtISOList.store(false);
+            needsClrScrn = true;
+			return true;
+        }
 
     // If no valid command was found
     return false;
@@ -174,23 +169,16 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         
         const std::vector<std::string>& currentList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
 		size_t totalPages = (currentList.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE;
-        processCommand(inputString, totalPages, currentPage, needsClrScrn);
-        bool validCommand = processCommand(inputString, totalPages, currentPage, needsClrScrn);
+        
+        bool validPaginationCommand = processPagination(inputString, totalPages, currentPage, needsClrScrn, isAtISOList);
 
-        if (validCommand) continue;
+        if (validPaginationCommand) continue;
         
         // To fix a hang
         if (inputString.find("//") != std::string::npos) {
             continue;
         }
         
-        // Handle special commands
-        if (inputString == "?") {
-            isAtISOList.store(false);
-            helpSelections();
-            needsClrScrn = true;
-            continue;
-        }
 
         if (inputString == "~") {
             // Toggle full list display based on operation type
@@ -721,12 +709,12 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     // Display pagination controls at the bottom
     output << "\n" << brownBold << "Pagination: ";
     if (currentPage > 0) {
-        output << "[p] Previous | ";
+        output << "[p] ↵ Previous | ";
     }
     if (currentPage < totalPages - 1) {
-        output << "[n] Next | ";
+        output << "[n] ↵ Next | ";
     }
-    output << "[g#] Go to page | ";
+    output << "[g#] ↵ Go to page | ";
     output << defaultColor << "\n";
 
     std::cout << output.str();

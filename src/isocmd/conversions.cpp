@@ -530,7 +530,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
     currentPage = 0;
     
     bool isFiltered = false; // Indicates if the file list is currently filtered
-    bool needsScrnClr = true;
+    bool needsClrScrn = true;
     bool filterHistory = false;
     bool need2Sort = true;
     std::string fileExtension = (fileType == "bin" || fileType == "img") ? ".bin/.img" 
@@ -552,7 +552,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         resetVerboseSets(processedErrors, successOuts, skippedOuts, failedOuts);
         
         clear_history();
-        if (needsScrnClr) clearAndLoadImageFiles(files, fileType, need2Sort, isFiltered, list);
+        if (needsClrScrn) clearAndLoadImageFiles(files, fileType, need2Sort, isFiltered, list);
         
         std::cout << "\n\n";
         std::cout << "\033[1A\033[K";
@@ -567,11 +567,12 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         if (!rawInput) break;
         
         std::string mainInputString(rawInput.get());
-        
+        std::atomic<bool> isAtISOList{false};
 		size_t totalPages = (files.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE;
-		bool validCommand = processCommand(mainInputString, totalPages, currentPage, needsScrnClr);
+		bool validPaginationCommand = processPagination(mainInputString, totalPages, currentPage, needsClrScrn, isAtISOList);
 		
-		if (validCommand) continue;
+		if (validPaginationCommand) continue;
+		
 
         // Handle user input for toggling the full list display
         if (mainInputString == "~") {
@@ -588,7 +589,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
                 // Restore the original file list
                 files = (fileType == "bin" || fileType == "img") ? binImgFilesCache :
                         (fileType == "mdf" ? mdfMdsFilesCache : nrgFilesCache);
-                needsScrnClr = true;
+                needsClrScrn = true;
                 isFiltered = false; // Reset filter status
                 need2Sort = false;
                 continue;
@@ -617,7 +618,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
                 // Exit the filter loop if input is empty or "/"
                 if (inputSearch.empty() || inputSearch == "/") {
                     std::cout << "\033[2A\033[K";
-                    needsScrnClr = false;
+                    needsClrScrn = false;
                     need2Sort = false;
                     break;
                 }
@@ -630,7 +631,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
                 }
                 if (filteredFiles.size() == files.size()) {
                     std::cout << "\033[2A\033[K";
-                    needsScrnClr = false;
+                    needsClrScrn = false;
                     need2Sort = false;
                     break;
                 }
@@ -642,7 +643,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
                 clear_history(); // Clear history to reset for future inputs
                 need2Sort = true;
                 files = filteredFiles; // Update the file list with the filtered results
-                needsScrnClr = true;
+                needsClrScrn = true;
                 isFiltered = true;
                 break;
             }
@@ -662,23 +663,23 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
                 files = filteredFiles; // Update the file list with the filtered results
                 
                 isFiltered = true;
-                needsScrnClr = true;
+                needsClrScrn = true;
                 
                 clear_history();
             } else {
                 std::cout << "\033[2A\033[K"; // Clear the line if no files match the filter
                 need2Sort = false;
-                needsScrnClr = false;
+                needsClrScrn = false;
             }
         } 
         // Process other input commands for file processing
         else {
             processInput(mainInputString, files, (fileType == "mdf"), (fileType == "nrg"), 
-                         processedErrors, successOuts, skippedOuts, failedOuts, verbose, needsScrnClr, newISOFound);
-            needsScrnClr = true;
+                         processedErrors, successOuts, skippedOuts, failedOuts, verbose, needsClrScrn, newISOFound);
+            needsClrScrn = true;
             if (verbose) {
                 verbosePrint(processedErrors, successOuts, skippedOuts, failedOuts, 3); // Print detailed logs if verbose mode is enabled
-                needsScrnClr = true;
+                needsClrScrn = true;
             }
         }
     }
@@ -733,7 +734,7 @@ size_t calculateSizeForConverted(const std::vector<std::string>& filesToProcess,
 
 
 // Function to process user input and convert selected BIN/MDF/NRG files to ISO format
-void processInput(const std::string& input, std::vector<std::string>& fileList, const bool& modeMdf, const bool& modeNrg, std::unordered_set<std::string>& processedErrors, std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, bool& verbose, bool& needsScrnClr, std::atomic<bool>& newISOFound) {
+void processInput(const std::string& input, std::vector<std::string>& fileList, const bool& modeMdf, const bool& modeNrg, std::unordered_set<std::string>& processedErrors, std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, bool& verbose, bool& needsClrScrn, std::atomic<bool>& newISOFound) {
 	// Setup signal handler at the start of the operation
     setupSignalHandlerCancellations();
     
@@ -754,7 +755,7 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
 		std::cout << "\n\033[1;91mNo valid input provided.\033[1;91m\n";
 		std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
 		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-		needsScrnClr = true;
+		needsClrScrn = true;
         return;
     }
 
