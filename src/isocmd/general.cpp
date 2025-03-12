@@ -419,7 +419,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
     int oldf = fcntl(STDIN_FILENO, F_GETFL, 0);  // Get current file descriptor flags
     fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);  // Set non-blocking mode
 
-    const int barWidth = 50;  // Width of the progress bar
+    const int barWidth = 55;  // Width of the progress bar
     bool enterPressed = false;  // Flag to detect if enter is pressed
     auto startTime = std::chrono::high_resolution_clock::now();  // Record start time
 
@@ -496,7 +496,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         if (isComplete->load(std::memory_order_acquire)) {
 			std::cout << "\033[1A\033[1K";
             std::cout << "\r\033[0;1m Processing for " << operation << "\033[0;1m" << (!g_operationCancelled.load() ? " → \033[1;92mCOMPLETED\033[0;1m" : " → \033[1;33mINTERRUPTED\033[0;1m") << std::endl;
-            std::cout << "\r[==================================================>] 100% ("
+            std::cout << "\r[===============================================>] 100% ("
                       << completedTasks->load() << "/" << totalTasks << ") "
                       << (bytesTrackingEnabled ? "(" + formatSize(static_cast<double>(completedBytes->load())) + "/" + totalBytesFormatted + ") " : "")
                       << "Time Elapsed: " << std::fixed << std::setprecision(1) << (elapsedSeconds) << "s\033[K";

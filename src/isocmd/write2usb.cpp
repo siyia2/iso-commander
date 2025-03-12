@@ -708,7 +708,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     // Remember line number: one lien above the message we want to clear
     int messageLine = 1;
     
-    std::cout << "\n\033[0;1mProcessing " << (totalTasks > 1 ? "tasks" : "task") << " for \033[1;93mwrite\033[0;1m operation...(\033[1;91mCtrl+c\033[0;1m:cancel)\n\n";
+    std::cout << "\n\033[0;1mProcessing " << (totalTasks > 1 ? "tasks" : "task") << " for \033[1;93mwrite\033[0;1m operation... (\033[1;91mCtrl+c\033[0;1m:cancel)\n\n";
     std::cout << "\033[s";  // Save cursor position
 
     auto startTime = std::chrono::high_resolution_clock::now();

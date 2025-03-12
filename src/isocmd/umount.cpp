@@ -167,32 +167,34 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std:
     unmountResults.reserve(isoDirs.size());
 
     for (const auto& isoDir : isoDirs) {
-        if (g_operationCancelled.load()) break;
-        int result = umount2(isoDir.c_str(), MNT_DETACH);
-        unmountResults.emplace_back(isoDir, result);
+        if (!g_operationCancelled.load()) {
+			int result = umount2(isoDir.c_str(), MNT_DETACH);
+			unmountResults.emplace_back(isoDir, result);
+		}
     }
 
     for (const auto& [dir, result] : unmountResults) {
-        if (g_operationCancelled.load()) break;
-        bool isEmpty = isDirectoryEmpty(dir);
-        auto dirParts = parseMountPointComponents(dir);
-        std::string formattedDir;
-        if (displayConfig::toggleFullListUmount) 
-            formattedDir = std::get<0>(dirParts);
-        formattedDir += std::get<1>(dirParts);
-        if (displayConfig::toggleFullListUmount) 
-            formattedDir += "\033[38;5;245m" + std::get<2>(dirParts) + "\033[0m";
+		if (!g_operationCancelled.load()) {
+			bool isEmpty = isDirectoryEmpty(dir);
+			auto dirParts = parseMountPointComponents(dir);
+			std::string formattedDir;
+			if (displayConfig::toggleFullListUmount) 
+				formattedDir = std::get<0>(dirParts);
+			formattedDir += std::get<1>(dirParts);
+			if (displayConfig::toggleFullListUmount) 
+				formattedDir += "\033[38;5;245m" + std::get<2>(dirParts) + "\033[0m";
 
-        if (result == 0 || isEmpty) {
-            if (isEmpty && rmdir(dir.c_str()) == 0) {
-                successMessages.push_back(messageFormatter.format("success", formattedDir));
-                completedTasks->fetch_add(1);
-            }
-        } else {
-            errorMessages.push_back(messageFormatter.format("error", formattedDir));
-            failedTasks->fetch_add(1);
-        }
-        checkAndFlush();
+			if (result == 0 || isEmpty) {
+				if (isEmpty && rmdir(dir.c_str()) == 0) {
+					successMessages.push_back(messageFormatter.format("success", formattedDir));
+					completedTasks->fetch_add(1);
+				}
+			} else {
+				errorMessages.push_back(messageFormatter.format("error", formattedDir));
+				failedTasks->fetch_add(1);
+			}
+			checkAndFlush();
+		}
     }
 
     if (g_operationCancelled.load()) {
@@ -246,7 +248,7 @@ void prepareUnmount(const std::string& input, const std::vector<std::string>& cu
 	}
 
     clearScrollBuffer();
-    std::cout << "\n\033[0;1m Processing" << (selectedMountpoints.size() > 1 ? " tasks" : " task") << " for \033[1;93mumount\033[0;1m operation...(\033[1;91mCtrl+c\033[0;1m:cancel)\n";
+    std::cout << "\n\033[0;1m Processing" << (selectedMountpoints.size() > 1 ? " tasks" : " task") << " for \033[1;93mumount\033[0;1m operation... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";
 
     // Thread pool setup
     unsigned int numThreads = std::min(static_cast<unsigned int>(selectedMountpoints.size()), maxThreads);
