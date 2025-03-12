@@ -401,7 +401,7 @@ void printMenu() {
 
 // GENERAL STUFF
 
-// function to read and map config file
+// Function to read and map config file
 std::map<std::string, std::string> readConfig(const std::string& configPath) {
     std::map<std::string, std::string> config;
     std::ifstream inFile(configPath);
@@ -431,70 +431,117 @@ std::map<std::string, std::string> readConfig(const std::string& configPath) {
 
 // Function to get AutomaticImportConfig status
 bool readUserConfigUpdates(const std::string& filePath) {
+    std::map<std::string, std::string> configMap;
     std::ifstream inFile(filePath);
+
+    // Default ordered settings
+    std::vector<std::pair<std::string, std::string>> orderedDefaults = {
+        {"auto_update", "0"},
+        {"pagination", "25"},
+        {"mount_list", "compact"},
+        {"umount_list", "full"},
+        {"cp_mv_rm_list", "compact"},
+        {"write_list", "compact"},
+        {"conversion_lists", "compact"}
+    };
+
+    // If file cannot be opened, return false
     if (!inFile) return false;
 
+    // Read file content
     std::string line;
     while (std::getline(inFile, line)) {
+        // Trim whitespace
         line.erase(0, line.find_first_not_of(" \t"));
         line.erase(line.find_last_not_of(" \t") + 1);
 
-        if (line.find("auto_update") == 0) {
-            size_t equalsPos = line.find('=');
-            if (equalsPos == std::string::npos) return false;
+        if (line.empty() || line[0] == '#') continue;
 
-            std::string valueStr = line.substr(equalsPos + 1);
-            valueStr.erase(0, valueStr.find_first_not_of(" \t"));
-            valueStr.erase(valueStr.find_last_not_of(" \t") + 1);
+        // Find '=' character
+        size_t equalsPos = line.find('=');
+        if (equalsPos == std::string::npos) continue;
 
-            try {
-                int userChoice = std::stoi(valueStr);
-                return (userChoice == 1);
-            } catch (...) {
-                return false;
+        // Extract key and value
+        std::string key = line.substr(0, equalsPos);
+        std::string valueStr = line.substr(equalsPos + 1);
+
+        key.erase(0, key.find_first_not_of(" \t"));
+        key.erase(key.find_last_not_of(" \t") + 1);
+        valueStr.erase(0, valueStr.find_first_not_of(" \t"));
+        valueStr.erase(valueStr.find_last_not_of(" \t") + 1);
+
+        // Store only recognized keys
+        for (const auto& pair : orderedDefaults) {
+            if (key == pair.first) {
+                configMap[key] = valueStr;
+                break;
+            }
+        }
+    }
+    inFile.close();
+
+    // Ensure default order and missing keys
+    bool needsUpdate = false;
+    for (const auto& pair : orderedDefaults) {
+        if (configMap.find(pair.first) == configMap.end()) {
+            configMap[pair.first] = pair.second;
+            needsUpdate = true;
+        }
+    }
+
+    // Update the file if missing keys were added
+    if (needsUpdate) {
+        std::ofstream outFile(filePath);
+        if (outFile) {
+            for (const auto& pair : orderedDefaults) {
+                outFile << pair.first << " = " << configMap[pair.first] << "\n";
             }
         }
     }
 
-    return false;
+    // Return auto_update setting
+    try {
+        return (std::stoi(configMap["auto_update"]) == 1);
+    } catch (...) {
+        return false;
+    }
 }
 
-
-// Function to set ITEMS_PER_PAGE by reading the config file
-bool paginationSet(const std::string& filePath) {    
+// Function to set ITEMS_PER_PAGE
+bool paginationSet(const std::string& filePath) {
+    std::map<std::string, std::string> configMap;
     std::ifstream inFile(filePath);
+
     if (!inFile) return false;
-    
+
     std::string line;
     while (std::getline(inFile, line)) {
-        // Trim leading whitespace
         line.erase(0, line.find_first_not_of(" \t"));
-        // Trim trailing whitespace
         line.erase(line.find_last_not_of(" \t") + 1);
-        
-        // Look for pagination setting
-        if (line.find("pagination") == 0) {
-            size_t equalsPos = line.find('=');
-            if (equalsPos == std::string::npos) return false;
-            
-            // Extract value after equals sign
-            std::string valueStr = line.substr(equalsPos + 1);
-            // Trim whitespace from value
-            valueStr.erase(0, valueStr.find_first_not_of(" \t"));
-            valueStr.erase(valueStr.find_last_not_of(" \t") + 1);
-            
+
+        if (line.empty() || line[0] == '#') continue;
+
+        size_t equalsPos = line.find('=');
+        if (equalsPos == std::string::npos) continue;
+
+        std::string key = line.substr(0, equalsPos);
+        std::string valueStr = line.substr(equalsPos + 1);
+
+        key.erase(0, key.find_first_not_of(" \t"));
+        key.erase(key.find_last_not_of(" \t") + 1);
+        valueStr.erase(0, valueStr.find_first_not_of(" \t"));
+        valueStr.erase(valueStr.find_last_not_of(" \t") + 1);
+
+        if (key == "pagination") {
             try {
-                // Convert string to integer
-                int paginationValue = std::stoi(valueStr);
-                // Set the global variable
-                ITEMS_PER_PAGE = paginationValue;
+                ITEMS_PER_PAGE = std::stoi(valueStr);
                 return true;
             } catch (...) {
                 return false;
             }
         }
     }
-    return false;  // Pagination setting not found
+    return false;
 }
 
 
@@ -597,14 +644,15 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
 }
 
 
-
 // Function to write numer of entries per page for pagination
 void updatePagination(const std::string& inputSearch, const std::string& configPath) {
+	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+	disable_ctrl_d();
     // Create directory if it doesn't exist
     std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
     if (!std::filesystem::exists(dirPath)) {
         if (!std::filesystem::create_directories(dirPath)) {
-            std::cerr << "\n\033[1;91mFailed to create directory: \033[1;93m'\033[1;93m" 
+            std::cerr << "\n\033[1;91mFailed to create directory: \033[1;93m'" 
                       << dirPath.string() << "\033[1;91m'.\033[0;1m\n";
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -615,15 +663,33 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
     // Extract the pagination value
     std::string paginationValueStr = inputSearch.substr(12);
     int paginationValue = std::stoi(paginationValueStr);
-    
-    // Update config in memory
+
+    // Read existing config into a map
     std::map<std::string, std::string> config = readConfig(configPath);
-    config["pagination"] = paginationValueStr;
-    
-    // Write all settings back to file
+
+    // Ensure "auto_update" and "pagination" are updated in correct order
+    if (config.find("pagination") != config.end()) {
+        config["pagination"] = paginationValueStr;
+    } else {
+        // If "pagination" doesn't exist, add it (ensure order)
+        config["pagination"] = paginationValueStr;
+    }
+
+    // Make sure all other settings maintain their default or existing values
+    std::vector<std::pair<std::string, std::string>> orderedDefaults = {
+        {"auto_update", config["auto_update"]}, // Ensure auto_update is maintained
+        {"pagination", paginationValueStr},     // Updated pagination value
+        {"mount_list", config["mount_list"]},
+        {"umount_list", config["umount_list"]},
+        {"cp_mv_rm_list", config["cp_mv_rm_list"]},
+        {"write_list", config["write_list"]},
+        {"conversion_lists", config["conversion_lists"]}
+    };
+
+    // Write all settings back to file in the correct order
     std::ofstream outFile(configPath);
     if (outFile.is_open()) {
-        for (const auto& [key, value] : config) {
+        for (const auto& [key, value] : orderedDefaults) {
             outFile << key << " = " << value << "\n";
         }
         outFile.close();
@@ -637,6 +703,7 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
     } else {
         std::cout << "\n\033[0;1mPagination status updated: \033[1;91mDisabled\033[0;1m." << std::endl;
     }
+
     
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
