@@ -634,47 +634,51 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
 
 // Function to write numer of entries per page for pagination
 void updatePagination(const std::string& inputSearch, const std::string& configPath) {
-	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
-	disable_ctrl_d();
+    signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+    disable_ctrl_d();
     // Create directory if it doesn't exist
     std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
     if (!std::filesystem::exists(dirPath)) {
         if (!std::filesystem::create_directories(dirPath)) {
             std::cerr << "\n\033[1;91mFailed to create directory: \033[1;93m'" 
-                      << dirPath.string() << "\033[1;91m'.\033[0;1m\n";
+                    << dirPath.string() << "\033[1;91m'.\033[0;1m\n";
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             return;
         }
     }
     
-    // Extract the pagination value
-    std::string paginationValueStr = inputSearch.substr(12);
-    int paginationValue = std::stoi(paginationValueStr);
-
-    // Read existing config into a map
-    std::map<std::string, std::string> config = readConfig(configPath);
-
-    // Ensure "auto_update" and "pagination" are updated in correct order
-    if (config.find("pagination") != config.end()) {
-        config["pagination"] = paginationValueStr;
-    } else {
-        // If "pagination" doesn't exist, add it (ensure order)
-        config["pagination"] = paginationValueStr;
+    int paginationValue = 0;
+    std::string paginationValueStr;
+    
+    try {
+        // Extract the pagination value
+        paginationValueStr = inputSearch.substr(12);
+        // Try to parse the pagination value
+        paginationValue = std::stoi(paginationValueStr);
     }
-
-    // Make sure all other settings maintain their default or existing values
+    catch (const std::invalid_argument&) {
+        std::cerr << "\n\033[1;91mInvalid pagination value: '\033[1;93m" 
+                << paginationValueStr << "\033[1;91m' is not a valid number.\033[0;1m\n";
+        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        return;
+    }
+    
+    // Rest of the function remains the same
+    std::map<std::string, std::string> config = readConfig(configPath);
+    config["pagination"] = std::to_string(paginationValue);
+    
     std::vector<std::pair<std::string, std::string>> orderedDefaults = {
-        {"auto_update", config["auto_update"]}, // Ensure auto_update is maintained
-        {"pagination", paginationValueStr},     // Updated pagination value
-        {"mount_list", config["mount_list"]},
-        {"umount_list", config["umount_list"]},
-        {"cp_mv_rm_list", config["cp_mv_rm_list"]},
-        {"write_list", config["write_list"]},
-        {"conversion_lists", config["conversion_lists"]}
+        {"auto_update", config.count("auto_update") ? config["auto_update"] : "true"},
+        {"pagination", std::to_string(paginationValue)},
+        {"mount_list", config.count("mount_list") ? config["mount_list"] : ""},
+        {"umount_list", config.count("umount_list") ? config["umount_list"] : ""},
+        {"cp_mv_rm_list", config.count("cp_mv_rm_list") ? config["cp_mv_rm_list"] : ""},
+        {"write_list", config.count("write_list") ? config["write_list"] : ""},
+        {"conversion_lists", config.count("conversion_lists") ? config["conversion_lists"] : ""}
     };
-
-    // Write all settings back to file in the correct order
+    
     std::ofstream outFile(configPath);
     if (outFile.is_open()) {
         for (const auto& [key, value] : orderedDefaults) {
@@ -683,15 +687,13 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
         outFile.close();
     }
     
-    // Update global variable
     ITEMS_PER_PAGE = paginationValue;
     if (paginationValue > 0) {
         std::cout << "\n\033[0;1mPagination status updated: \033[0m\033[1;97mMax entries per page set to \033[1;93m" 
-                  << paginationValue << "\033[1;97m.\033[0m" << std::endl;
+                << paginationValue << "\033[1;97m.\033[0m" << std::endl;
     } else {
         std::cout << "\n\033[0;1mPagination status updated: \033[1;91mDisabled\033[0;1m." << std::endl;
     }
-
     
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
