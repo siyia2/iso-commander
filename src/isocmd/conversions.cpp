@@ -533,6 +533,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
     bool needsClrScrn = true;
     bool filterHistory = false;
     bool need2Sort = true;
+
     std::string fileExtension = (fileType == "bin" || fileType == "img") ? ".bin/.img" 
                                : (fileType == "mdf") ? ".mdf" : ".nrg"; // Determine file extension based on type
     
@@ -567,20 +568,13 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         if (!rawInput) break;
         
         std::string mainInputString(rawInput.get());
+        
         std::atomic<bool> isAtISOList{false};
 		size_t totalPages = (files.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE;
-		bool validPaginationCommand = processPagination(mainInputString, totalPages, currentPage, needsClrScrn, isAtISOList);
+		bool validPaginationCommand = processPagination(mainInputString, totalPages, currentPage, needsClrScrn, false, false, false, true, isAtISOList);
 		
 		if (validPaginationCommand) continue;
-		
-
-        // Handle user input for toggling the full list display
-        if (mainInputString == "~") {
-            displayConfig::toggleFullListConversions = !displayConfig::toggleFullListConversions;
-            clearScrollBuffer();
-            printList(files, "IMAGE_FILES", "conversions");
-            continue;
-        }
+		        
 
         // Handle input for returning to the unfiltered list or exiting
         if (rawInput.get()[0] == '\0') {

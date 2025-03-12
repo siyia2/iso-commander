@@ -35,7 +35,7 @@ void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOLi
 
 
 // Main pagination function
-bool processPagination(const std::string& command, size_t& totalPages, size_t& currentPage, bool& needsClrScrn, std::atomic<bool>& isAtISOList) {
+bool processPagination(const std::string& command, size_t& totalPages, size_t& currentPage, bool& needsClrScrn, const bool isMount, const bool isUnmount, const bool isWrite, const bool isConversion, std::atomic<bool>& isAtISOList) {
     // Handle "next" command
     if (command == "n" || command == "next") {
         if (currentPage < totalPages - 1) {
@@ -74,6 +74,17 @@ bool processPagination(const std::string& command, size_t& totalPages, size_t& c
             isAtISOList.store(false);
             needsClrScrn = true;
 			return true;
+        }
+        
+        if (command == "~") {
+            // Toggle full list display based on operation type
+            if (isMount) displayConfig::toggleFullListMount = !displayConfig::toggleFullListMount;
+            else if (isUnmount) displayConfig::toggleFullListUmount = !displayConfig::toggleFullListUmount;
+            else if (isWrite) displayConfig::toggleFullListWrite = !displayConfig::toggleFullListWrite;
+            else if (isConversion)  displayConfig::toggleFullListConversions = !displayConfig::toggleFullListConversions;
+            else displayConfig::toggleFullListCpMvRm = !displayConfig::toggleFullListCpMvRm;
+            needsClrScrn = true;
+            return true;
         }
 
     // If no valid command was found
@@ -116,6 +127,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
     bool isMount = (operation == "mount");
     bool isUnmount = (operation == "umount");
     bool write = (operation == "write");
+    bool isConversion = false;
     
     std::string listSubtype = isMount ? "mount" : (write ? "write" : "cp_mv_rm");
     
@@ -170,7 +182,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         const std::vector<std::string>& currentList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
 		size_t totalPages = (currentList.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE;
         
-        bool validPaginationCommand = processPagination(inputString, totalPages, currentPage, needsClrScrn, isAtISOList);
+        bool validPaginationCommand = processPagination(inputString, totalPages, currentPage, needsClrScrn, isMount, isUnmount, write, isConversion, isAtISOList);
 
         if (validPaginationCommand) continue;
         
@@ -179,17 +191,6 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             continue;
         }
         
-
-        if (inputString == "~") {
-            // Toggle full list display based on operation type
-            if (isMount) displayConfig::toggleFullListMount = !displayConfig::toggleFullListMount;
-            else if (isUnmount) displayConfig::toggleFullListUmount = !displayConfig::toggleFullListUmount;
-            else if (write) displayConfig::toggleFullListWrite = !displayConfig::toggleFullListWrite;
-            else displayConfig::toggleFullListCpMvRm = !displayConfig::toggleFullListCpMvRm;
-            needsClrScrn = true;
-            continue;
-        }
-     
         // Handle empty input or return
         if (inputString.empty()) {
             if (isFiltered) {
