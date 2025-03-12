@@ -111,7 +111,10 @@ int main(int argc, char *argv[]) {
 	}
 	
 	// End of automatic cache import
+	
+	// Set entries per page in lists
 	paginationSet(configPath);
+	
     while (!exitProgram) {
 		// Calls prevent_clear_screen and tab completion
 		rl_bind_key('\f', prevent_readline_keybindings);
