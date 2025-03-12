@@ -20,7 +20,7 @@ std::atomic<bool> g_operationCancelled{false};
 
 // Pagination variables
 size_t currentPage = 0;
-size_t ITEMS_PER_PAGE = 5;
+size_t ITEMS_PER_PAGE = 25;
 
 // Default Display config options for lists
 namespace displayConfig {
@@ -111,7 +111,7 @@ int main(int argc, char *argv[]) {
 	}
 	
 	// End of automatic cache import
-
+	paginationSet(configPath);
     while (!exitProgram) {
 		// Calls prevent_clear_screen and tab completion
 		rl_bind_key('\f', prevent_readline_keybindings);
@@ -434,48 +434,68 @@ std::map<std::string, std::string> readConfig(const std::string& configPath) {
 // Function to get AutomaticImportConfig status
 bool readUserConfigUpdates(const std::string& filePath) {
     std::ifstream inFile(filePath);
-    if (!inFile) {
-        return false; // Default to false if file cannot be opened
-    }
+    if (!inFile) return false;
 
     std::string line;
     while (std::getline(inFile, line)) {
-        // Remove leading and trailing whitespace from the line
         line.erase(0, line.find_first_not_of(" \t"));
         line.erase(line.find_last_not_of(" \t") + 1);
 
-        // Check if the line starts with "auto_ISO_updates"
         if (line.find("auto_update") == 0) {
-            // Find the position of the '=' character
             size_t equalsPos = line.find('=');
-            if (equalsPos == std::string::npos) {
-                return false; // No '=' found, invalid format
-            }
+            if (equalsPos == std::string::npos) return false;
 
-            // Extract the value part (after '=')
             std::string valueStr = line.substr(equalsPos + 1);
-            // Remove leading and trailing whitespace from the value
             valueStr.erase(0, valueStr.find_first_not_of(" \t"));
             valueStr.erase(valueStr.find_last_not_of(" \t") + 1);
 
-            // Convert the value to an integer
             try {
                 int userChoice = std::stoi(valueStr);
-                // Check if the value is 0 or 1
-                if (userChoice == 0 || userChoice == 1) {
-                    return (userChoice == 1); // Return true if 1, false if 0
-                } else {
-                    return false; // Invalid value (not 0 or 1)
-                }
-            } catch (const std::invalid_argument&) {
-                return false; // Value is not a valid integer
-            } catch (const std::out_of_range&) {
-                return false; // Value is out of range for an integer
+                return (userChoice == 1);
+            } catch (...) {
+                return false;
             }
         }
     }
 
-    return false; // Key "auto_ISO_updates" not found in the file
+    return false;
+}
+
+
+bool paginationSet(const std::string& filePath) {    
+    std::ifstream inFile(filePath);
+    if (!inFile) return false;
+    
+    std::string line;
+    while (std::getline(inFile, line)) {
+        // Trim leading whitespace
+        line.erase(0, line.find_first_not_of(" \t"));
+        // Trim trailing whitespace
+        line.erase(line.find_last_not_of(" \t") + 1);
+        
+        // Look for pagination setting
+        if (line.find("pagination") == 0) {
+            size_t equalsPos = line.find('=');
+            if (equalsPos == std::string::npos) return false;
+            
+            // Extract value after equals sign
+            std::string valueStr = line.substr(equalsPos + 1);
+            // Trim whitespace from value
+            valueStr.erase(0, valueStr.find_first_not_of(" \t"));
+            valueStr.erase(valueStr.find_last_not_of(" \t") + 1);
+            
+            try {
+                // Convert string to integer
+                int paginationValue = std::stoi(valueStr);
+                // Set the global variable
+                ITEMS_PER_PAGE = paginationValue;
+                return true;
+            } catch (...) {
+                return false;
+            }
+        }
+    }
+    return false;  // Pagination setting not found
 }
 
 
@@ -547,6 +567,9 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
         } else if (key == "auto_update") {
             // Handle auto_update separately if needed
             configMap[key] = valueStr;
+        } else if (key == "pagination") {
+            // Handle auto_update separately if needed
+            configMap[key] = valueStr;
         }
     }
 
@@ -575,6 +598,51 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
     displayConfig::toggleFullListConversions = (configMap["conversion_lists"] == "full");
 
     return configMap;
+}
+
+
+// Function to write numer of entries per page for pagination
+void updatePagination(const std::string& inputSearch, const std::string& configPath) {
+    // Create directory if it doesn't exist
+    std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
+    if (!std::filesystem::exists(dirPath)) {
+        if (!std::filesystem::create_directories(dirPath)) {
+            std::cerr << "\n\033[1;91mFailed to create directory: \033[1;91m'\033[1;93m" 
+                      << dirPath.string() << "\033[1;91m'.\033[0;1m\n";
+            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            return;
+        }
+    }
+    
+    // Extract the pagination value
+    std::string paginationValueStr = inputSearch.substr(12);
+    int paginationValue = std::stoi(paginationValueStr);
+    
+    // Update config in memory
+    std::map<std::string, std::string> config = readConfig(configPath);
+    config["pagination"] = paginationValueStr;
+    
+    // Write all settings back to file
+    std::ofstream outFile(configPath);
+    if (outFile.is_open()) {
+        for (const auto& [key, value] : config) {
+            outFile << key << " = " << value << "\n";
+        }
+        outFile.close();
+    }
+    
+    // Update global variable
+    ITEMS_PER_PAGE = paginationValue;
+    if (paginationValue > 0) {
+        std::cout << "\n\033[0;1mPagination updated: \033[0m\033[1;97mMax entries per page set to \033[1;93m" 
+                  << paginationValue << "\033[1;97m.\033[0m" << std::endl;
+    } else {
+        std::cout << "\n\033[0;1mPagination: \033[1;91mDisabled\033[0;1m." << std::endl;
+    }
+    
+    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
 

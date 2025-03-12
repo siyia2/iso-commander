@@ -164,7 +164,12 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
 			displayCacheStatistics(cacheFilePath, maxCacheSize, transformationCache, globalIsoFileList);
 			continue;
 		}
-        
+		
+		if (inputSearch.starts_with("*pagination_")) {
+			updatePagination(inputSearch, configPath);
+			continue;
+		}
+		
         // Handle special commands
         if (inputSearch == "!clr_paths" || inputSearch == "!clr_filter") {
             clearHistory(inputSearch);

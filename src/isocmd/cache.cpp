@@ -530,10 +530,13 @@ void displayCacheStatistics(const std::string& cacheFilePath, std::uintmax_t max
 void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, const int& maxDepth, const bool& filterHistory, std::atomic<bool>& newISOFound) {
 	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
 	disable_ctrl_d();
+	
+	std::string initialDir = "";
+	
     const std::unordered_set<std::string> validInputs = {
         "*fl_m", "*cl_m", "*fl_u", "*cl_u", "*fl_fo", "*cl_fo", "*fl_w", "*cl_w", "*fl_c", "*cl_c"
     };
-	std::string initialDir = "";
+	
     if (inputSearch == "stats") {
         displayCacheStatistics(cacheFilePath, maxCacheSize, transformationCache, globalIsoFileList);
 
@@ -611,7 +614,10 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         manualRefreshCache(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
 
-    } else if (isValidInput(inputSearch)) {
+    } else if (inputSearch.substr(0, 12) == "*pagination_") {
+		updatePagination(inputSearch, configPath);
+        manualRefreshCache(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
+	} else if (isValidInput(inputSearch)) {
         setDisplayMode(inputSearch);
         manualRefreshCache(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
     }
@@ -665,7 +671,7 @@ void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, 
 				manualRefreshCache(dummyDir, promptFlag, maxDepth, filterHistory, newISOFound);
 			}        
 			
-            if (input == "stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter" || input == "*auto_off" || input == "*auto_on" || isValidInput(input)) {
+            if (input == "stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter" || input == "*auto_off" || input == "*auto_on" || isValidInput(input) || input.starts_with("*pagination_")) {
                 cacheAndMiscSwitches(input, promptFlag, maxDepth, filterHistory, newISOFound);
                 return;
             }
