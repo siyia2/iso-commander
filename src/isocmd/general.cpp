@@ -35,7 +35,14 @@ void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOLi
 
 
 // Main pagination function
-bool processPagination(const std::string& command, size_t& totalPages, size_t& currentPage, bool& needsClrScrn, const bool isMount, const bool isUnmount, const bool isWrite, const bool isConversion, std::atomic<bool>& isAtISOList) {
+bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPages, size_t& currentPage, bool& needsClrScrn, const bool isMount, const bool isUnmount, const bool isWrite, const bool isConversion, std::atomic<bool>& isAtISOList) {
+	
+	// To fix a hang
+	if (command.find("//") != std::string::npos) {
+		// true to continue loop in main
+		return true;
+	}
+	
     // Handle "next" command
     if (command == "n" || command == "next") {
         if (currentPage < totalPages - 1) {
@@ -90,7 +97,6 @@ bool processPagination(const std::string& command, size_t& totalPages, size_t& c
     // If no valid command was found
     return false;
 }
-
 
 
 // Main function to select and operate on ISOs by number for umount mount cp mv and rm
@@ -182,14 +188,9 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         const std::vector<std::string>& currentList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
 		size_t totalPages = (currentList.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE;
         
-        bool validPaginationCommand = processPagination(inputString, totalPages, currentPage, needsClrScrn, isMount, isUnmount, write, isConversion, isAtISOList);
+        bool validCommand = processPaginationHelpAndDisplay(inputString, totalPages, currentPage, needsClrScrn, isMount, isUnmount, write, isConversion, isAtISOList);
 
-        if (validPaginationCommand) continue;
-        
-        // To fix a hang
-        if (inputString.find("//") != std::string::npos) {
-            continue;
-        }
+        if (validCommand) continue;
         
         // Handle empty input or return
         if (inputString.empty()) {

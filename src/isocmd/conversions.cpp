@@ -571,9 +571,9 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         
         std::atomic<bool> isAtISOList{false};
 		size_t totalPages = (files.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE;
-		bool validPaginationCommand = processPagination(mainInputString, totalPages, currentPage, needsClrScrn, false, false, false, true, isAtISOList);
+		bool validCommand = processPaginationHelpAndDisplay(mainInputString, totalPages, currentPage, needsClrScrn, false, false, false, true, isAtISOList);
 		
-		if (validPaginationCommand) continue;
+		if (validCommand) continue;
 		        
 
         // Handle input for returning to the unfiltered list or exiting
