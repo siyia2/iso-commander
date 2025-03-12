@@ -465,6 +465,7 @@ bool readUserConfigUpdates(const std::string& filePath) {
 }
 
 
+// Function to set ITEMS_PER_PAGE by reading the config file
 bool paginationSet(const std::string& filePath) {    
     std::ifstream inFile(filePath);
     if (!inFile) return false;
