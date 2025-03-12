@@ -545,7 +545,7 @@ void updateAutoUpdateConfig(const std::string& configPath, const std::string& in
     std::map<std::string, std::string> config = readConfig(configPath);
 
     // Update the auto_update setting based on the input
-    config["auto_update"] = (inputSearch == "*auto_on") ? "1" : "0";
+    config["auto_update"] = (inputSearch == "*auto_on") ? "on" : "off";
 
     // Ensure settings maintain order and are written back to the file
     std::vector<std::pair<std::string, std::string>> orderedDefaults = {

@@ -435,10 +435,9 @@ std::map<std::string, std::string> readConfig(const std::string& configPath) {
 bool readUserConfigUpdates(const std::string& filePath) {
     std::map<std::string, std::string> configMap;
     std::ifstream inFile(filePath);
-
     // Default ordered settings
     std::vector<std::pair<std::string, std::string>> orderedDefaults = {
-        {"auto_update", "0"},
+        {"auto_update", "off"},
         {"pagination", "25"},
         {"mount_list", "compact"},
         {"umount_list", "full"},
@@ -446,32 +445,25 @@ bool readUserConfigUpdates(const std::string& filePath) {
         {"write_list", "compact"},
         {"conversion_lists", "compact"}
     };
-
     // If file cannot be opened, return false
     if (!inFile) return false;
-
     // Read file content
     std::string line;
     while (std::getline(inFile, line)) {
         // Trim whitespace
         line.erase(0, line.find_first_not_of(" \t"));
         line.erase(line.find_last_not_of(" \t") + 1);
-
         if (line.empty() || line[0] == '#') continue;
-
         // Find '=' character
         size_t equalsPos = line.find('=');
         if (equalsPos == std::string::npos) continue;
-
         // Extract key and value
         std::string key = line.substr(0, equalsPos);
         std::string valueStr = line.substr(equalsPos + 1);
-
         key.erase(0, key.find_first_not_of(" \t"));
         key.erase(key.find_last_not_of(" \t") + 1);
         valueStr.erase(0, valueStr.find_first_not_of(" \t"));
         valueStr.erase(valueStr.find_last_not_of(" \t") + 1);
-
         // Store only recognized keys
         for (const auto& pair : orderedDefaults) {
             if (key == pair.first) {
@@ -481,7 +473,6 @@ bool readUserConfigUpdates(const std::string& filePath) {
         }
     }
     inFile.close();
-
     // Ensure default order and missing keys
     bool needsUpdate = false;
     for (const auto& pair : orderedDefaults) {
@@ -490,7 +481,6 @@ bool readUserConfigUpdates(const std::string& filePath) {
             needsUpdate = true;
         }
     }
-
     // Update the file if missing keys were added
     if (needsUpdate) {
         std::ofstream outFile(filePath);
@@ -500,13 +490,8 @@ bool readUserConfigUpdates(const std::string& filePath) {
             }
         }
     }
-
     // Return auto_update setting
-    try {
-        return (std::stoi(configMap["auto_update"]) == 1);
-    } catch (...) {
-        return false;
-    }
+    return (configMap["auto_update"] == "on");
 }
 
 
@@ -555,7 +540,7 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
 
     // Default values with a fixed order
     std::vector<std::pair<std::string, std::string>> orderedDefaults = {
-        {"auto_update", "0"},
+        {"auto_update", "off"},
         {"pagination", "25"},
         {"mount_list", "compact"},
         {"umount_list", "full"},
