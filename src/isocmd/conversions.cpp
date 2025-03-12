@@ -161,7 +161,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
         std::string inputSearch = trimWhitespace(mainSearch.get());
         
         if (inputSearch == "stats") {
-			displayDatabaseStatistics(cacheFilePath, maxDatabaseSize, transformationCache, globalIsoFileList);
+			displayDatabaseStatistics(databaseFilePath, maxDatabaseSize, transformationCache, globalIsoFileList);
 			continue;
 		}
 		

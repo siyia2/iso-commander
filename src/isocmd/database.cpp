@@ -3,10 +3,10 @@
 #include "../headers.h"
 
 
-// Cache Variables
+// Database Variables
 
 const std::string databaseDirectory = std::string(std::getenv("HOME")) + "/.local/share/isocmd/database/"; // Construct the full path to the cache directory
-const std::string cacheFilePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/iso_commander_database.txt";
+const std::string databaseFilePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/iso_commander_database.txt";
 const std::string cacheFileName = "iso_commander_database.txt";
 const uintmax_t maxDatabaseSize = 1 * 1024 * 1024; // 1MB
 
@@ -16,14 +16,14 @@ std::mutex couNtMutex;
 // Function to remove non-existent paths from cache
 void removeNonExistentPathsFromDatabase() {
 	
-	if (!std::filesystem::exists(cacheFilePath)) {
+	if (!std::filesystem::exists(databaseFilePath)) {
         // If the file is missing, clear the ISO cache and return
         globalIsoFileList.clear();
         return;
     }
 
     // Open the cache file for reading
-    int fd = open(cacheFilePath.c_str(), O_RDONLY);
+    int fd = open(databaseFilePath.c_str(), O_RDONLY);
     if (fd == -1) {
         return;
     }
@@ -104,7 +104,7 @@ void removeNonExistentPathsFromDatabase() {
 	}
 
 	// Only rewrite the file if there are changes
-	std::ofstream updatedCacheFile(cacheFilePath, std::ios::out | std::ios::trunc);
+	std::ofstream updatedCacheFile(databaseFilePath, std::ios::out | std::ios::trunc);
 	if (!updatedCacheFile.is_open()) {
 		flock(fd, LOCK_UN);
 		close(fd);
@@ -112,7 +112,7 @@ void removeNonExistentPathsFromDatabase() {
 	}
 
     // Open the cache file for writing
-    fd = open(cacheFilePath.c_str(), O_WRONLY);
+    fd = open(databaseFilePath.c_str(), O_WRONLY);
     if (fd == -1) {
         return;
     }
@@ -142,7 +142,7 @@ void removeNonExistentPathsFromDatabase() {
 }
 
 
-// Count ISOCache entries for stats
+// Count Database entries for stats
 int countNonEmptyLines(const std::string& filePath) {
     std::ifstream file(filePath);
     if (!file.is_open()) {
@@ -164,7 +164,7 @@ int countNonEmptyLines(const std::string& filePath) {
 }
 
 
-// Set default cache dir
+// Set default home dir
 std::string getHomeDirectory() {
     const char* homeDir = getenv("HOME");
     if (homeDir) {
@@ -174,7 +174,7 @@ std::string getHomeDirectory() {
 }
 
 
-// Utility function to clear screen buffer and load IsoFiles from cache to a global vector only for the first time and only for if the cache has been modified.
+// Utility function to clear screen buffer and load IsoFiles from database to a global vector only for the first time and only for if the database file has been modified.
 bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType, bool& umountMvRmBreak) {
     
     signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
@@ -182,11 +182,11 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
     
     static std::filesystem::file_time_type lastModifiedTime;
 
-    // Check if the cache file exists and has been modified
+    // Check if the database file exists and has been modified
     bool needToReload = false;
-    if (std::filesystem::exists(cacheFilePath)) {
+    if (std::filesystem::exists(databaseFilePath)) {
         std::filesystem::file_time_type currentModifiedTime = 
-            std::filesystem::last_write_time(cacheFilePath);
+            std::filesystem::last_write_time(databaseFilePath);
 
         if (lastModifiedTime == std::filesystem::file_time_type{}) {
             // First time checking, always load
@@ -349,7 +349,7 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
 // Function to load ISO database from file
 void loadFromDatabase(std::vector<std::string>& isoFiles) {
 
-    int fd = open(cacheFilePath.c_str(), O_RDONLY);
+    int fd = open(databaseFilePath.c_str(), O_RDONLY);
     if (fd == -1) {
         return; // File doesn't exist or cannot be opened
     }
@@ -470,13 +470,13 @@ bool isValidDirectory(const std::string& path) {
 
 
 // Function to display on-disk and ram statistics
-void displayDatabaseStatistics(const std::string& cacheFilePath, std::uintmax_t maxDatabaseSize, const std::unordered_map<std::string, std::string>& transformationCache, const std::vector<std::string>& globalIsoFileList) {
+void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax_t maxDatabaseSize, const std::unordered_map<std::string, std::string>& transformationCache, const std::vector<std::string>& globalIsoFileList) {
 	clearScrollBuffer();
     try {
         // Create files if they don't exist
-        std::filesystem::path filePath(cacheFilePath);
+        std::filesystem::path filePath(databaseFilePath);
         if (!std::filesystem::exists(filePath)) {
-            std::ofstream createFile(cacheFilePath);
+            std::ofstream createFile(databaseFilePath);
             createFile.close();
         }
         
@@ -502,8 +502,8 @@ void displayDatabaseStatistics(const std::string& cacheFilePath, std::uintmax_t 
         std::cout << "\n\033[1;92mCapacity:\033[0m " << std::fixed << std::setprecision(0) << fileSizeInKB << "KB" 
                   << "/" << std::setprecision(0) << cachesizeInKb << "KB" 
                   << " (" << std::setprecision(1) << usagePercentage << "%)"
-                  << " \n\033[1;92mEntries:\033[0m " << countNonEmptyLines(cacheFilePath) 
-                  << "\n\033[1;92mLocation:\033[0m " << "'" << cacheFilePath << "'\033[0;1m\n";
+                  << " \n\033[1;92mEntries:\033[0m " << countNonEmptyLines(databaseFilePath) 
+                  << "\n\033[1;92mLocation:\033[0m " << "'" << databaseFilePath << "'\033[0;1m\n";
        
         std::cout  << "\n\033[1;94m=== History Database ===\033[0m\n"
                   << " \n\033[1;92mFolderPath History Entries:\033[0m " << countNonEmptyLines(historyFilePath)<< "/" << MAX_HISTORY_LINES
@@ -592,11 +592,11 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
     };
     
     if (inputSearch == "stats") {
-        displayDatabaseStatistics(cacheFilePath, maxDatabaseSize, transformationCache, globalIsoFileList);
+        displayDatabaseStatistics(databaseFilePath, maxDatabaseSize, transformationCache, globalIsoFileList);
     } else if (inputSearch == "!clr") {
-        if (std::remove(cacheFilePath.c_str()) != 0) {
+        if (std::remove(databaseFilePath.c_str()) != 0) {
             std::cerr << "\n\001\033[1;91mError clearing IsoCache: \001\033[1;93m'" 
-                      << cacheFilePath << "\001'\033[1;91m. File missing or inaccessible." << std::endl;
+                      << databaseFilePath << "\001'\033[1;91m. File missing or inaccessible." << std::endl;
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         } else {
@@ -610,7 +610,7 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
                 }
             }
             
-            std::cout << "\n\001\033[1;92mIsoCache cleared successfully\001\033[1;92m." << std::endl;
+            std::cout << "\n\001\033[1;92mISO database cleared successfully\001\033[1;92m." << std::endl;
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             std::vector<std::string>().swap(globalIsoFileList);
@@ -625,12 +625,12 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
         setDisplayMode(inputSearch);
     }
 
-    // Refresh the cache after handling any command
+    // Refresh the database after handling any command
     manualRefreshForDatabase(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
 }
 
 
-// Function for manual cache refresh
+// Function for manual database refresh
 void manualRefreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, bool filterHistory, std::atomic<bool>& newISOFound) {
 	enable_ctrl_d();
 	// Setup signal handler at the start of the operation
@@ -657,7 +657,7 @@ void manualRefreshForDatabase(std::string& initialDir, bool promptFlag, int maxD
 		rl_bind_key('\t', rl_complete);
 		
         bool isCpMv= false;
-        // Prompt the user to enter directory paths for manual cache refresh
+        // Prompt the user to enter directory paths for manual database refresh
 		std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;92m\002.iso\001\033[1;94m\002 files and import them into the \001\033[1;92m\002local\001\033[1;94m\002 database, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
         char* rawSearchQuery = readline(prompt.c_str());
         
@@ -777,7 +777,7 @@ void manualRefreshForDatabase(std::string& initialDir, bool promptFlag, int maxD
                                uniqueErrorMessages, promptFlag, maxDepth, filterHistory, start_time, newISOFound);
     } else {
 		if (!g_operationCancelled.load()) {
-			// Save the combined cache to disk
+			// Save the combined ISO to disk
 			saveToDatabase(allIsoFiles, newISOFound);
 		}
 	}

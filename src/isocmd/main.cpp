@@ -88,14 +88,14 @@ int main(int argc, char *argv[]) {
 
     bool exitProgram = false;
     
-    // Automatic ISO  cache Import
+    // Automatic ISO Import
     bool search = false;      
     
     std::map<std::string, std::string> config = readUserConfigLists(configPath);
     
     std::string choice;
     isImportRunning.store(false);
-    // Open the history file for automatic ISO cache imports
+    // Open the history file for automatic ISO import
     std::ifstream file(historyFilePath);
 	search = readUserConfigUpdates(configPath); 
     
@@ -107,7 +107,7 @@ int main(int argc, char *argv[]) {
 		updateHasRun.store(true);
 	}
 	
-	// End of automatic cache import
+	// End of automatic ISO import
 	
 	// Set entries per page in lists
 	paginationSet(configPath);
@@ -167,7 +167,7 @@ int main(int argc, char *argv[]) {
 			isAtISOList.store(false);
             submenu1(updateHasRun, isAtISOList, isImportRunning, newISOFound);
         } else {	
-			bool promptFlag; // Flag for enabing interactive cache refresh prompt
+			bool promptFlag; // Flag for enabing interactive refresh prompt
 			bool filterHistory; // Filter history toggle
 			int maxDepth; // Traverse depth variable
 
@@ -182,7 +182,7 @@ int main(int argc, char *argv[]) {
                     case '3':
 						isAtMain.store(false);
 						isAtISOList.store(false);
-						promptFlag = true; // Enable cache refresh prompt
+						promptFlag = true; // Enable prompt
 						filterHistory = false; // Disable filter hsitory
 						maxDepth = -1; // Traverse at max depth
                         manualRefreshForDatabase(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
