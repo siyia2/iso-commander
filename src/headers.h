@@ -155,7 +155,7 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
 // GENERAL
 
 // bools
-bool processCommand(const std::string& command, size_t& totalPages, size_t& currentPage, bool& needsScreenClear);
+bool processPagination(const std::string& command, size_t& totalPages, size_t& currentPage, bool& needsClrScrn, const bool isMount, const bool isUnmount, const bool isWrite, const bool isConversion, std::atomic<bool>& isAtISOList);
 bool isValidInput(const std::string& input);
 
 // voids
