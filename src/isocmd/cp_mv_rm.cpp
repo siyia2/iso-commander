@@ -179,33 +179,6 @@ void processOperationInput(const std::string& input, const std::vector<std::stri
 }
 
 
-// Custom key handlers for readline
-void initialize_readline_keybindings() {
-    // Bind Ctrl+Left (typically "\033[1;5D" in most terminals)
-    rl_bind_keyseq("\033[1;5D", [](int, int) -> int {
-        rl_done = 1;
-        rl_line_buffer[0] = '\001'; // Special marker for previous page
-        rl_line_buffer[1] = '\0';
-        return 0;
-    });
-    
-    // Bind Ctrl+Right (typically "\033[1;5C" in most terminals)
-    rl_bind_keyseq("\033[1;5C", [](int, int) -> int {
-        rl_done = 1;
-        rl_line_buffer[0] = '\002'; // Special marker for next page
-        rl_line_buffer[1] = '\0';
-        return 0;
-    });
-}
-
-
-// Rever the custom keys for readline
-void uninitialize_readline_keybindings() {
-    // Rebind Ctrl+Left and Ctrl+Right to a no-op function
-    rl_bind_keyseq("\033[1;5D", prevent_readline_keybindings);
-    rl_bind_keyseq("\033[1;5C", prevent_readline_keybindings);
-}
-
 
 std::string handlePaginatedDisplay(const std::vector<std::string>& entries, const std::string& promptPrefix, const std::string& promptSuffix, const std::function<void()>& displayErrorsFn, const std::function<void()>& setupEnvironmentFn, bool& isPageTurn) {
     int totalEntries = entries.size();
@@ -226,7 +199,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, cons
     int currentPage = 0;
     
     // Initialize the readline keybindings
-    initialize_readline_keybindings();
+    initialize_readline_keybindings_for_pagination();
     
     while (true) {
         // Setup environment if function is provided
@@ -349,7 +322,7 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::vector
             std::cout << "\n\033[1;93mDelete operation aborted by user.\033[0;1m\n";
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            uninitialize_readline_keybindings();
+            uninitialize_readline_keybindings_for_pagination();
             return false;
         }
         
@@ -364,7 +337,7 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::vector
                 std::cout << "\n\033[1;93mDelete operation aborted by user.\033[0;1m\n";
                 std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                uninitialize_readline_keybindings();
+                uninitialize_readline_keybindings_for_pagination();
                 return false;
             }
         }
@@ -444,7 +417,7 @@ std::string userDestDirRm(const std::vector<std::string>& isoFiles, std::vector<
             bool isCpMv = true;
             helpSearches(isCpMv, import2ISO);
             userDestDir = "";
-            uninitialize_readline_keybindings();
+            uninitialize_readline_keybindings_for_pagination();
             return userDestDir;
         }
         
@@ -453,7 +426,7 @@ std::string userDestDirRm(const std::vector<std::string>& isoFiles, std::vector<
             umountMvRmBreak = false;
             userDestDir = "";
             clear_history();
-            uninitialize_readline_keybindings();
+            uninitialize_readline_keybindings_for_pagination();
             return userDestDir;
         }
         
@@ -480,11 +453,11 @@ std::string userDestDirRm(const std::vector<std::string>& isoFiles, std::vector<
         
         if (!proceedWithDelete) {
             userDestDir = "";
-            uninitialize_readline_keybindings();
+            uninitialize_readline_keybindings_for_pagination();
             return userDestDir;
         }
     }
-    uninitialize_readline_keybindings();
+    uninitialize_readline_keybindings_for_pagination();
     return userDestDir;
 }
 
