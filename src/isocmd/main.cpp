@@ -635,10 +635,10 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
     // Update global variable
     ITEMS_PER_PAGE = paginationValue;
     if (paginationValue > 0) {
-        std::cout << "\n\033[0;1mPagination updated: \033[0m\033[1;97mMax entries per page set to \033[1;93m" 
+        std::cout << "\n\033[0;1mPagination status updated: \033[0m\033[1;97mMax entries per page set to \033[1;93m" 
                   << paginationValue << "\033[1;97m.\033[0m" << std::endl;
     } else {
-        std::cout << "\n\033[0;1mPagination: \033[1;91mDisabled\033[0;1m." << std::endl;
+        std::cout << "\n\033[0;1mPagination status updated: \033[1;91mDisabled\033[0;1m." << std::endl;
     }
     
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
@@ -674,34 +674,6 @@ void clearMessageAfterTimeout(int timeoutSeconds, std::atomic<bool>& isAtMain, s
 int prevent_readline_keybindings(int, int) {
     // Do nothing and return 0 
     return 0;
-}
-
-
-// Custom key handlers for readline pagination
-void initialize_readline_keybindings_for_pagination() {
-    // Bind Ctrl+Left (typically "\033[1;5D" in most terminals)
-    rl_bind_keyseq("\033[1;5D", [](int, int) -> int {
-        rl_done = 1;
-        rl_line_buffer[0] = '\001'; // Special marker for previous page
-        rl_line_buffer[1] = '\0';
-        return 0;
-    });
-    
-    // Bind Ctrl+Right (typically "\033[1;5C" in most terminals)
-    rl_bind_keyseq("\033[1;5C", [](int, int) -> int {
-        rl_done = 1;
-        rl_line_buffer[0] = '\002'; // Special marker for next page
-        rl_line_buffer[1] = '\0';
-        return 0;
-    });
-}
-
-
-// Revert the custom keys for readline pagination
-void uninitialize_readline_keybindings_for_pagination() {
-    // Rebind Ctrl+Left and Ctrl+Right to a no-op function
-    rl_bind_keyseq("\033[1;5D", prevent_readline_keybindings);
-    rl_bind_keyseq("\033[1;5C", prevent_readline_keybindings);
 }
 
 
