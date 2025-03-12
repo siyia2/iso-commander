@@ -177,15 +177,15 @@ void verboseIsoCacheRefresh(std::vector<std::string>& allIsoFiles, std::atomic<s
               << total_elapsed << " seconds\033[0;1m\n";
 
     if (g_operationCancelled) {
-        std::cout << "\n\033[1;93mCache refresh cancelled.\033[0;1m\n";
+        std::cout << "\n\033[1;93mDatabase refresh cancelled.\033[0;1m\n";
     } else if (!saveSuccess) {
-        std::cout << "\n\033[1;91mCache refresh failed. Unable to write to the cache file.\033[0;1m\n";
+        std::cout << "\n\033[1;91mDatabase refresh failed. Unable to write to the database.\033[0;1m\n";
     } else if (validPaths.empty()) {
-        std::cout << "\n\033[1;91mCache refresh failed due to lack of valid paths.\033[0;1m\n";
+        std::cout << "\n\033[1;91mDatabase refresh failed due to lack of valid paths.\033[0;1m\n";
     } else if (!invalidPaths.empty() || !uniqueErrorMessages.empty()) {
-        std::cout << "\n\033[1;93mCache refreshed with some errors.\033[0;1m\n";
+        std::cout << "\n\033[1;93mDatabase refreshed with some errors.\033[0;1m\n";
     } else {
-        std::cout << "\n\033[1;92mCache refreshed successfully.\033[0;1m\n";
+        std::cout << "\n\033[1;92mDatabase refreshed successfully.\033[0;1m\n";
     }
 
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";

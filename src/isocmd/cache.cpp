@@ -175,7 +175,6 @@ std::string getHomeDirectory() {
 
 
 // Utility function to clear screen buffer and load IsoFiles from cache to a global vector only for the first time and only for if the cache has been modified.
-// Update the clearAndLoadFiles function to integrate with pagination
 bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType, bool& umountMvRmBreak) {
     
     signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
@@ -490,7 +489,7 @@ void displayCacheStatistics(const std::string& cacheFilePath, std::uintmax_t max
             createFile.close();
         }
 
-        std::cout << "\n\033[1;94m=== On-Disk ISO Cache ===\033[0m\n";
+        std::cout << "\n\033[1;94m=== ISO Database ===\033[0m\n";
         
         std::uintmax_t fileSizeInBytes = std::filesystem::file_size(filePath);
         std::uintmax_t cachesizeInBytes = maxCacheSize;
@@ -505,10 +504,10 @@ void displayCacheStatistics(const std::string& cacheFilePath, std::uintmax_t max
                   << " \n\033[1;92mEntries:\033[0m " << countNonEmptyLines(cacheFilePath) 
                   << "\n\033[1;92mLocation:\033[0m " << "'" << cacheFilePath << "'\033[0;1m\n";
        
-        std::cout  << "\n\033[1;94m=== On-Disk History Cache ===\033[0m\n"
+        std::cout  << "\n\033[1;94m=== History Database ===\033[0m\n"
                   << " \n\033[1;92mFolderPath History Entries:\033[0m " << countNonEmptyLines(historyFilePath)<< "/" << MAX_HISTORY_LINES
                   << "\n\033[1;92mLocation:\033[0m " << "'" << historyFilePath << "'\033[0;1m"
-                  << " \n\033[1;92mFilter History Entries:\033[0m " << countNonEmptyLines(filterHistoryFilePath) << "/" << MAX_HISTORY_PATTERN_LINES
+                  << " \n\n\033[1;92mFilter History Entries:\033[0m " << countNonEmptyLines(filterHistoryFilePath) << "/" << MAX_HISTORY_PATTERN_LINES
                   << "\n\033[1;92mLocation:\033[0m " << "'" << filterHistoryFilePath << "'\033[0;1m" << std::endl;
         
         std::cout << "\n\033[1;94m=== Buffered Entries ===\033[0m\n";
@@ -658,7 +657,7 @@ void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, 
 		
         bool isCpMv= false;
         // Prompt the user to enter directory paths for manual cache refresh
-		std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;92m\002.iso\001\033[1;94m\002 files and import them into \001\033[1;92m\002on-disk\001\033[1;94m\002 cache, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
+		std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;92m\002.iso\001\033[1;94m\002 files and import them into the \001\033[1;92m\002local\001\033[1;94m\002 database, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
         char* rawSearchQuery = readline(prompt.c_str());
         
 
