@@ -4,8 +4,8 @@
 
 
 // Default readline history save path
-const std::string historyFilePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/iso_commander_history_cache.txt";
-const std::string filterHistoryFilePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/iso_commander_filter_cache.txt";
+const std::string historyFilePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/iso_commander_history_database.txt";
+const std::string filterHistoryFilePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/iso_commander_filter_database.txt";
 
 //Maximum number of history entries at a time
 const int MAX_HISTORY_LINES = 50;
@@ -195,10 +195,10 @@ void clearHistory(const std::string& inputSearch) {
     std::string historyType;
 
     if (inputSearch == "!clr_paths") {
-        filePath = basePath + "iso_commander_history_cache.txt";
+        filePath = basePath + "iso_commander_history_database.txt";
         historyType = "Path";
     } else if (inputSearch == "!clr_filter") {
-        filePath = basePath + "iso_commander_filter_cache.txt";
+        filePath = basePath + "iso_commander_filter_database.txt";
         historyType = "Filter";
     } else {
         std::cerr << "\n\001\033[1;91mInvalid command: \001\033[1;93m'" 

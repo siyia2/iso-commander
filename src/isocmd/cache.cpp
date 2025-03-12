@@ -6,8 +6,8 @@
 // Cache Variables
 
 const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.local/share/isocmd/database/"; // Construct the full path to the cache directory
-const std::string cacheFilePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/iso_commander_cache.txt";
-const std::string cacheFileName = "iso_commander_cache.txt";
+const std::string cacheFilePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/iso_commander_database.txt";
+const std::string cacheFileName = "iso_commander_database.txt";
 const uintmax_t maxCacheSize = 1 * 1024 * 1024; // 1MB
 
 // Global mutex to protect counter cout
