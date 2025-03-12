@@ -13,6 +13,8 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <filesystem>
+#include <fmt/core.h>
+#include <fmt/format.h>
 #include <fstream>
 #include <functional>
 #include <future>
@@ -39,10 +41,7 @@
 #include <vector>
 #include <unistd.h>
 #include <unordered_set>
-                                    
 
-extern size_t currentPage;
-extern size_t ITEMS_PER_PAGE;
 
 // Create alias (fs) for the std::filesystem
 namespace fs = std::filesystem;
@@ -104,6 +103,12 @@ extern std::atomic<bool> g_operationCancelled;
 // Max cache size limit for IsoCache
 extern const uintmax_t maxCacheSize;
 
+// Hold current page pagination
+extern size_t currentPage;
+
+// Hold max entries per page for pagination
+extern size_t ITEMS_PER_PAGE;
+
 
 //	ISO COMMANDER
 
@@ -128,8 +133,6 @@ int naturalCompare(const std::string &a, const std::string &b);
 // voids
 void printVersionNumber(const std::string& version);
 void printMenu();
-void initialize_readline_keybindings_for_pagination();
-void uninitialize_readline_keybindings_for_pagination();
 void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound);
 void submenu2(std::atomic<bool>& newISOFound);
 void print_ascii();
