@@ -596,7 +596,6 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType) {
     static const char* defaultColor = "\033[0m";
     static const char* bold = "\033[1m";
-    static const char* reset = "\033[0m";
     static const char* red = "\033[31;1m";
     static const char* green = "\033[32;1m";
     static const char* blueBold = "\033[94;1m";
@@ -605,134 +604,91 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     static const char* orangeBold = "\033[1;38;5;208m";
     static const char* grayBold = "\033[38;5;245m";
     static const char* brownBold = "\033[1;38;5;130m";
-    
-    // Determine if pagination should be disabled
+
+    // Determine pagination settings
     bool disablePagination = (ITEMS_PER_PAGE == 0 || items.size() <= ITEMS_PER_PAGE);
-    
-    // Calculate pagination info
     size_t totalItems = items.size();
-    size_t totalPages = disablePagination ? 1 : (totalItems + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE; // Ceiling division
-    
-    // If pagination is disabled, always show the first "page" (all items)
+    size_t totalPages = disablePagination ? 1 : (totalItems + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE;
     size_t effectiveCurrentPage = disablePagination ? 0 : currentPage;
-    
-    // Adjust currentPage if it's out of bounds
-    if (totalPages == 0) {
-        effectiveCurrentPage = 0;
-    } else if (effectiveCurrentPage >= totalPages) {
+
+    if (totalPages > 0 && effectiveCurrentPage >= totalPages)
         effectiveCurrentPage = totalPages - 1;
-    }
-    
-    // Calculate start and end indices
+
     size_t startIndex = disablePagination ? 0 : (effectiveCurrentPage * ITEMS_PER_PAGE);
     size_t endIndex = disablePagination ? totalItems : std::min(startIndex + ITEMS_PER_PAGE, totalItems);
-    
-    // Calculate the maximum number of digits needed for indices
-    size_t maxIndex = totalItems;
-    size_t numDigits = std::to_string(maxIndex).length();
 
     // Precompute padded index strings
-    std::vector<std::string> indexStrings(maxIndex);
-    for (size_t i = 0; i < maxIndex; ++i) {
-        indexStrings[i] = std::to_string(i + 1);
-        indexStrings[i].insert(0, numDigits - indexStrings[i].length(), ' ');
-    }
+    size_t numDigits = std::to_string(totalItems).length();
+    std::vector<std::string> indexStrings(totalItems);
+    for (size_t i = 0; i < totalItems; ++i)
+        indexStrings[i] = std::to_string(i + 1).insert(0, numDigits - std::to_string(i + 1).length(), ' ');
 
     std::ostringstream output;
-    output << "\n"; // Initial newline for visual spacing
+    output << "\n";
 
-    // Display pagination info at the top only if pagination is enabled
+    // Pagination header
     if (!disablePagination) {
-        output << brownBold << "Page " << (effectiveCurrentPage + 1) << " of " << totalPages 
+        output << brownBold << "Page " << (effectiveCurrentPage + 1) << " of " << totalPages
                << " (Items " << (startIndex + 1) << "-" << endIndex << " of " << totalItems << ")"
                << defaultColor << "\n\n";
     }
 
-    // Display only the items for the current page (or all items if pagination is disabled)
+    // Generate output for current page
     for (size_t i = startIndex; i < endIndex; ++i) {
-        const char* sequenceColor = (i % 2 == 0) ? red : green;
+        const char* sequenceColor = (i % 2 == 0) ? red : green; // Set alternating colors for all list types
         std::string directory, filename, displayPath, displayHash;
 
         if (listType == "ISO_FILES") {
             auto [dir, fname] = extractDirectoryAndFilename(items[i], listSubType);
             directory = dir;
             filename = fname;
+        } else if (listType == "MOUNTED_ISOS") {
+            auto [dirPart, pathPart, hashPart] = parseMountPointComponents(items[i]);
+            directory = dirPart;
+            displayPath = pathPart;
+            displayHash = hashPart;
         } else if (listType == "IMAGE_FILES") {
             auto [dir, fname] = extractDirectoryAndFilename(items[i], "conversions");
-
-            bool isSpecialExtension = false;
-            std::string extension = fname;
-            size_t dotPos = extension.rfind('.');
-
+            size_t dotPos = fname.rfind('.');
             if (dotPos != std::string::npos) {
-                extension = extension.substr(dotPos);
+                std::string extension = fname.substr(dotPos);
                 toLowerInPlace(extension);
-                isSpecialExtension = (extension == ".bin" || extension == ".img" ||
-                                      extension == ".mdf" || extension == ".nrg");
-            }
-
-            if (isSpecialExtension) {
-                directory = dir;
-                filename = fname;
-                sequenceColor = orangeBold;
+                if (extension == ".bin" || extension == ".img" || extension == ".mdf" || extension == ".nrg") {
+                    directory = dir;
+                    filename = fname;
+                    // Only change the filename color, not the sequence color
+                }
             }
         }
 
         // Build output based on listType
+        output << sequenceColor << indexStrings[i] << ". " << defaultColor << bold;
         if (listType == "ISO_FILES") {
-            output << sequenceColor << indexStrings[i] << ". "
-                   << defaultColor << bold << directory
-                   << defaultColor << bold << "/"
-                   << magenta << filename << defaultColor << "\n";
+            output << directory << defaultColor << bold << "/" << magenta << filename;
         } else if (listType == "MOUNTED_ISOS") {
-            std::string dirName = items[i];
-            // Use the extractDirectoryAndFilenameFromMountPoint function to get the components
-            auto [directoryPart, filenamePart, hashPart] = parseMountPointComponents(dirName);
-            // Set displayPath and displayHash using the extracted components
-            displayPath = filenamePart;
-            displayHash = hashPart;
-    
-            if (displayConfig::toggleFullListUmount) {
-                output << sequenceColor << indexStrings[i] << ". "
-                        << blueBold << directoryPart
-                        << magentaBold << displayPath << grayBold << displayHash << reset << "\n";
-            } else {
-                output << sequenceColor << indexStrings[i] << ". "
-                        << magentaBold << displayPath << "\n";
-            }
+            if (displayConfig::toggleFullListUmount)
+                output << blueBold << directory << magentaBold << displayPath << grayBold << displayHash;
+            else
+                output << magentaBold << displayPath;
         } else if (listType == "IMAGE_FILES") {
-            // Alternate sequence color like in "ISO_FILES"
-            const char* sequenceColor = (i % 2 == 0) ? red : green;
-    
-            if (directory.empty() && filename.empty()) {
-                // Standard case
-                output << sequenceColor << indexStrings[i] << ". "
-                << reset << bold << items[i] << defaultColor << "\n";
-            } else {
-                // Special extension case (keep the filename sequence as orange bold)
-                output << sequenceColor << indexStrings[i] << ". "
-                    << reset << bold << directory << "/"
-                    << orangeBold << filename << defaultColor << "\n";
-            }
+            if (!directory.empty() && !filename.empty())
+                output << directory << "/" << orangeBold << filename; // Special extension case
+            else
+                output << items[i]; // Standard case
         }
+        output << defaultColor << "\n";
     }
 
-    // Display pagination controls at the bottom only if pagination is enabled
+    // Pagination footer
     if (!disablePagination) {
         output << "\n" << brownBold << "Pagination: ";
-        if (effectiveCurrentPage > 0) {
-            output << "[p] ↵ Previous | ";
-        }
-        if (effectiveCurrentPage < totalPages - 1) {
-            output << "[n] ↵ Next | ";
-        }
-        output << "[g#] ↵ Go to page | ";
-        output << defaultColor << "\n";
+        if (effectiveCurrentPage > 0) output << "[p] ↵ Previous | ";
+        if (effectiveCurrentPage < totalPages - 1) output << "[n] ↵ Next | ";
+        output << "[g#] ↵ Go to page | " << defaultColor << "\n";
     }
 
     std::cout << output.str();
 }
-
 
 // Hold valid input for general use
 const std::unordered_map<char, std::string> settingMap = {
