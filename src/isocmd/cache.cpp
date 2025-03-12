@@ -582,27 +582,23 @@ void updateAutoUpdateConfig(const std::string& configPath, const std::string& in
 
 // Function that can delete or show stats for ISO cache it is called from within manualRefreshCache
 void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, const int& maxDepth, const bool& filterHistory, std::atomic<bool>& newISOFound) {
-	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
-	disable_ctrl_d();
-	
-	std::string initialDir = "";
-	
+    signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+    disable_ctrl_d();
+    
+    std::string initialDir = "";
+    
     const std::unordered_set<std::string> validInputs = {
         "*fl_m", "*cl_m", "*fl_u", "*cl_u", "*fl_fo", "*cl_fo", "*fl_w", "*cl_w", "*fl_c", "*cl_c"
     };
-	
+    
     if (inputSearch == "stats") {
         displayCacheStatistics(cacheFilePath, maxCacheSize, transformationCache, globalIsoFileList);
-
-        manualRefreshCache(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
-
     } else if (inputSearch == "!clr") {
         if (std::remove(cacheFilePath.c_str()) != 0) {
             std::cerr << "\n\001\033[1;91mError clearing IsoCache: \001\033[1;93m'" 
                       << cacheFilePath << "\001'\033[1;91m. File missing or inaccessible." << std::endl;
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            manualRefreshCache(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
         } else {
             // Clean transformation cache for .iso entries
             for (auto it = transformationCache.begin(); it != transformationCache.end();) {
@@ -613,28 +609,24 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
                     ++it;
                 }
             }
-			
+            
             std::cout << "\n\001\033[1;92mIsoCache cleared successfully\001\033[1;92m." << std::endl;
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             std::vector<std::string>().swap(globalIsoFileList);
-            manualRefreshCache(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
         }
-
     } else if (inputSearch == "!clr_paths" || inputSearch == "!clr_filter") {
         clearHistory(inputSearch);
-        manualRefreshCache(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
-
     } else if (inputSearch == "*auto_on" || inputSearch == "*auto_off") {
-		updateAutoUpdateConfig(configPath, inputSearch);
-		manualRefreshCache(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
-	} else if (inputSearch.substr(0, 12) == "*pagination_") {
-		updatePagination(inputSearch, configPath);
-        manualRefreshCache(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
-	} else if (isValidInput(inputSearch)) {
+        updateAutoUpdateConfig(configPath, inputSearch);
+    } else if (inputSearch.substr(0, 12) == "*pagination_") {
+        updatePagination(inputSearch, configPath);
+    } else if (isValidInput(inputSearch)) {
         setDisplayMode(inputSearch);
-        manualRefreshCache(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
     }
+
+    // Refresh the cache after handling any command
+    manualRefreshCache(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
 }
 
 
