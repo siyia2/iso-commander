@@ -675,7 +675,7 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
         {"mount_list", config.count("mount_list") ? config["mount_list"] : "compact"},
         {"umount_list", config.count("umount_list") ? config["umount_list"] : "full"},
         {"cp_mv_rm_list", config.count("cp_mv_rm_list") ? config["cp_mv_rm_list"] : "compact"},
-        {"write_list", config.count("write_list") ? config["write_list"] : ""},
+        {"write_list", config.count("write_list") ? config["write_list"] : "compact"},
         {"conversion_lists", config.count("conversion_lists") ? config["conversion_lists"] : "compact"}
     };
     
