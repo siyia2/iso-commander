@@ -217,6 +217,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std:
     flushTemporaryBuffers();
 }
 
+
 // Main function to send ISOs for unmount
 void prepareUnmount(const std::string& input, const std::vector<std::string>& currentFiles, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& verbose) {
     // Setup signal handler at the start of the operation
