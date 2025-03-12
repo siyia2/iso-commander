@@ -100,7 +100,7 @@ int main(int argc, char *argv[]) {
 	if (search) {
 		isImportRunning.store(true);
 		std::thread([&isImportRunning, &newISOFound]() {
-			backgroundCacheImport(isImportRunning, newISOFound);
+			backgroundDatabaseImport(isImportRunning, newISOFound);
 		}).detach();
 		updateHasRun.store(true);
 	}
@@ -183,7 +183,7 @@ int main(int argc, char *argv[]) {
 						promptFlag = true; // Enable cache refresh prompt
 						filterHistory = false; // Disable filter hsitory
 						maxDepth = -1; // Traverse at max depth
-                        manualRefreshCache(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
+                        manualRefreshForDatabase(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
                         clearScrollBuffer();
                         break;
                     case '4':
@@ -506,6 +506,7 @@ bool readUserConfigUpdates(const std::string& filePath) {
         return false;
     }
 }
+
 
 // Function to set ITEMS_PER_PAGE
 bool paginationSet(const std::string& filePath) {

@@ -161,7 +161,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
         std::string inputSearch = trimWhitespace(mainSearch.get());
         
         if (inputSearch == "stats") {
-			displayCacheStatistics(cacheFilePath, maxCacheSize, transformationCache, globalIsoFileList);
+			displayDatabaseStatistics(cacheFilePath, maxDatabaseSize, transformationCache, globalIsoFileList);
 			continue;
 		}
 		
@@ -972,6 +972,6 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
 		bool promptFlag = false;
 		bool filterHistory = false;
 		int maxDepth = 0;
-        manualRefreshCache(result, promptFlag, maxDepth, filterHistory, newISOFound);
+        manualRefreshForDatabase(result, promptFlag, maxDepth, filterHistory, newISOFound);
     }
 }

@@ -167,7 +167,7 @@ void processOperationInput(const std::string& input, const std::vector<std::stri
     if (!isDelete) {
 		bool promptFlag = false;
         int maxDepth = 0;
-        manualRefreshCache(userDestDir, promptFlag, maxDepth, filterHistory, newISOFound);
+        manualRefreshForDatabase(userDestDir, promptFlag, maxDepth, filterHistory, newISOFound);
     }
     
     if (!isDelete && !operationIsos.empty()) {

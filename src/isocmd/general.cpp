@@ -146,7 +146,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         clear_history();
         
         if (!isUnmount) {
-            removeNonExistentPathsFromCache();
+            removeNonExistentPathsFromDatabase();
             isAtISOList.store(true);
         }
         

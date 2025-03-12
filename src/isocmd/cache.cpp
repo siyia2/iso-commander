@@ -8,13 +8,13 @@
 const std::string cacheDirectory = std::string(std::getenv("HOME")) + "/.local/share/isocmd/database/"; // Construct the full path to the cache directory
 const std::string cacheFilePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/iso_commander_database.txt";
 const std::string cacheFileName = "iso_commander_database.txt";
-const uintmax_t maxCacheSize = 1 * 1024 * 1024; // 1MB
+const uintmax_t maxDatabaseSize = 1 * 1024 * 1024; // 1MB
 
 // Global mutex to protect counter cout
 std::mutex couNtMutex;
 
 // Function to remove non-existent paths from cache
-void removeNonExistentPathsFromCache() {
+void removeNonExistentPathsFromDatabase() {
 	
 	if (!std::filesystem::exists(cacheFilePath)) {
         // If the file is missing, clear the ISO cache and return
@@ -206,7 +206,7 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
     // Common operations
     clearScrollBuffer();
     if (needToReload) {
-        loadCache(globalIsoFileList);
+        loadFromDatabase(globalIsoFileList);
         {
             std::lock_guard<std::mutex> lock(updateListMutex);
             sortFilesCaseInsensitive(globalIsoFileList);
@@ -235,7 +235,7 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
 
 
 // Function to auto-import ISO files in cache without blocking the UI
-void backgroundCacheImport(std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
+void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
     std::vector<std::string> paths;
     int localMaxDepth = -1;
     bool localPromptFlag = false;
@@ -339,14 +339,14 @@ void backgroundCacheImport(std::atomic<bool>& isImportRunning, std::atomic<bool>
         future.wait();
     }
 
-    saveCache(allIsoFiles, newISOFound);
+    saveToDatabase(allIsoFiles, newISOFound);
 
     isImportRunning.store(false);
 }
 
 
 // Function to load ISO cache from file
-void loadCache(std::vector<std::string>& isoFiles) {
+void loadFromDatabase(std::vector<std::string>& isoFiles) {
 
     int fd = open(cacheFilePath.c_str(), O_RDONLY);
     if (fd == -1) {
@@ -399,7 +399,7 @@ void loadCache(std::vector<std::string>& isoFiles) {
 
 
 // Function to save ISO cache to file
-bool saveCache(const std::vector<std::string>& isoFiles, std::atomic<bool>& newISOFound) {
+bool saveToDatabase(const std::vector<std::string>& isoFiles, std::atomic<bool>& newISOFound) {
     std::filesystem::path cachePath = cacheDirectory;
     cachePath /= cacheFileName;
     if (!std::filesystem::exists(cacheDirectory) && !std::filesystem::create_directories(cacheDirectory)) {
@@ -409,7 +409,7 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::atomic<bool>& newI
         return false;
     }
     std::vector<std::string> existingCache;
-    loadCache(existingCache);
+    loadFromDatabase(existingCache);
     std::unordered_set<std::string> existingSet(existingCache.begin(), existingCache.end());
     
     // Only write if there are new entries
@@ -428,8 +428,8 @@ bool saveCache(const std::vector<std::string>& isoFiles, std::atomic<bool>& newI
     // Combine existing cache with new entries, respecting max size
     std::vector<std::string> combinedCache = existingCache;
     combinedCache.insert(combinedCache.end(), newEntries.begin(), newEntries.end());
-    if (combinedCache.size() > maxCacheSize) {
-        combinedCache.erase(combinedCache.begin(), combinedCache.begin() + (combinedCache.size() - maxCacheSize));
+    if (combinedCache.size() > maxDatabaseSize) {
+        combinedCache.erase(combinedCache.begin(), combinedCache.begin() + (combinedCache.size() - maxDatabaseSize));
     }
     
     int fd = open(cachePath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -469,7 +469,7 @@ bool isValidDirectory(const std::string& path) {
 
 
 // Function to display on-disk and ram statistics
-void displayCacheStatistics(const std::string& cacheFilePath, std::uintmax_t maxCacheSize, const std::unordered_map<std::string, std::string>& transformationCache, const std::vector<std::string>& globalIsoFileList) {
+void displayDatabaseStatistics(const std::string& cacheFilePath, std::uintmax_t maxDatabaseSize, const std::unordered_map<std::string, std::string>& transformationCache, const std::vector<std::string>& globalIsoFileList) {
 	clearScrollBuffer();
     try {
         // Create files if they don't exist
@@ -492,7 +492,7 @@ void displayCacheStatistics(const std::string& cacheFilePath, std::uintmax_t max
         std::cout << "\n\033[1;94m=== ISO Database ===\033[0m\n";
         
         std::uintmax_t fileSizeInBytes = std::filesystem::file_size(filePath);
-        std::uintmax_t cachesizeInBytes = maxCacheSize;
+        std::uintmax_t cachesizeInBytes = maxDatabaseSize;
         
         double fileSizeInKB = fileSizeInBytes / 1024.0;
         double cachesizeInKb = cachesizeInBytes / 1024.0;
@@ -579,8 +579,8 @@ void updateAutoUpdateConfig(const std::string& configPath, const std::string& in
 }
 
 
-// Function that can delete or show stats for ISO cache it is called from within manualRefreshCache
-void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, const int& maxDepth, const bool& filterHistory, std::atomic<bool>& newISOFound) {
+// Function that can delete or show stats for ISO cache it is called from within manualRefreshForDatabase
+void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const int& maxDepth, const bool& filterHistory, std::atomic<bool>& newISOFound) {
     signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
     disable_ctrl_d();
     
@@ -591,7 +591,7 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
     };
     
     if (inputSearch == "stats") {
-        displayCacheStatistics(cacheFilePath, maxCacheSize, transformationCache, globalIsoFileList);
+        displayDatabaseStatistics(cacheFilePath, maxDatabaseSize, transformationCache, globalIsoFileList);
     } else if (inputSearch == "!clr") {
         if (std::remove(cacheFilePath.c_str()) != 0) {
             std::cerr << "\n\001\033[1;91mError clearing IsoCache: \001\033[1;93m'" 
@@ -625,12 +625,12 @@ void cacheAndMiscSwitches(std::string& inputSearch, const bool& promptFlag, cons
     }
 
     // Refresh the cache after handling any command
-    manualRefreshCache(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
+    manualRefreshForDatabase(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
 }
 
 
 // Function for manual cache refresh
-void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, bool filterHistory, std::atomic<bool>& newISOFound) {
+void manualRefreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, bool filterHistory, std::atomic<bool>& newISOFound) {
 	enable_ctrl_d();
 	// Setup signal handler at the start of the operation
     setupSignalHandlerCancellations();
@@ -673,11 +673,11 @@ void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, 
 				helpSearches(isCpMv, import2ISO);
 				input = "";
 				std::string dummyDir = "";
-				manualRefreshCache(dummyDir, promptFlag, maxDepth, filterHistory, newISOFound);
+				manualRefreshForDatabase(dummyDir, promptFlag, maxDepth, filterHistory, newISOFound);
 			}        
 			
             if (input == "stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter" || input == "*auto_off" || input == "*auto_on" || isValidInput(input) || input.starts_with("*pagination_")) {
-                cacheAndMiscSwitches(input, promptFlag, maxDepth, filterHistory, newISOFound);
+                databaseSwitches(input, promptFlag, maxDepth, filterHistory, newISOFound);
                 return;
             }
             
@@ -772,12 +772,12 @@ void manualRefreshCache(std::string& initialDir, bool promptFlag, int maxDepth, 
 			saveHistory(filterHistory);
 			clear_history();
 		}
-        verboseIsoCacheRefresh(allIsoFiles, totalFiles, validPaths, invalidPaths, 
+        verboseForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, 
                                uniqueErrorMessages, promptFlag, maxDepth, filterHistory, start_time, newISOFound);
     } else {
 		if (!g_operationCancelled.load()) {
 			// Save the combined cache to disk
-			saveCache(allIsoFiles, newISOFound);
+			saveToDatabase(allIsoFiles, newISOFound);
 		}
 	}
 }
