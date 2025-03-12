@@ -124,6 +124,8 @@ int naturalCompare(const std::string &a, const std::string &b);
 // voids
 void printVersionNumber(const std::string& version);
 void printMenu();
+void initialize_readline_keybindings_for_pagination();
+void uninitialize_readline_keybindings_for_pagination();
 void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound);
 void submenu2(std::atomic<bool>& newISOFound);
 void print_ascii();
