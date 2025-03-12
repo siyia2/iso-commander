@@ -670,13 +670,13 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
     config["pagination"] = std::to_string(paginationValue);
     
     std::vector<std::pair<std::string, std::string>> orderedDefaults = {
-        {"auto_update", config.count("auto_update") ? config["auto_update"] : "true"},
+        {"auto_update", config.count("auto_update") ? config["auto_update"] : "off"},
         {"pagination", std::to_string(paginationValue)},
-        {"mount_list", config.count("mount_list") ? config["mount_list"] : ""},
-        {"umount_list", config.count("umount_list") ? config["umount_list"] : ""},
-        {"cp_mv_rm_list", config.count("cp_mv_rm_list") ? config["cp_mv_rm_list"] : ""},
+        {"mount_list", config.count("mount_list") ? config["mount_list"] : "compact"},
+        {"umount_list", config.count("umount_list") ? config["umount_list"] : "full"},
+        {"cp_mv_rm_list", config.count("cp_mv_rm_list") ? config["cp_mv_rm_list"] : "compact"},
         {"write_list", config.count("write_list") ? config["write_list"] : ""},
-        {"conversion_lists", config.count("conversion_lists") ? config["conversion_lists"] : ""}
+        {"conversion_lists", config.count("conversion_lists") ? config["conversion_lists"] : "compact"}
     };
     
     std::ofstream outFile(configPath);
