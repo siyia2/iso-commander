@@ -613,7 +613,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     static const char* magentaBold = "\033[95;1m";
     static const char* orangeBold = "\033[1;38;5;208m";
     static const char* grayBold = "\033[38;5;245m";
-    static const char* cyanBold = "\033[1;96m";
+    static const char* brownBold = "\033[1;38;5;130m";
     
     // Calculate pagination info
     size_t totalItems = items.size();
@@ -645,7 +645,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     output << "\n"; // Initial newline for visual spacing
 
     // Display pagination info at the top
-    output << cyanBold << "Page " << (currentPage + 1) << " of " << totalPages 
+    output << brownBold << "Page " << (currentPage + 1) << " of " << totalPages 
            << " (Items " << (startIndex + 1) << "-" << endIndex << " of " << totalItems << ")"
            << defaultColor << "\n\n";
 
@@ -719,7 +719,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     }
 
     // Display pagination controls at the bottom
-    output << "\n" << cyanBold << "Pagination: ";
+    output << "\n" << brownBold << "Pagination: ";
     if (currentPage > 0) {
         output << "[p] Previous | ";
     }
