@@ -41,6 +41,9 @@
 #include <unordered_set>
                                     
 
+extern size_t currentPage;
+extern const size_t ITEMS_PER_PAGE;
+
 // Create alias (fs) for the std::filesystem
 namespace fs = std::filesystem;
 
@@ -152,6 +155,7 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
 // GENERAL
 
 // bools
+bool processCommand(const std::string& command, size_t& totalPages, size_t& currentPage, bool& needsScreenClear);
 bool isValidInput(const std::string& input);
 
 // voids
