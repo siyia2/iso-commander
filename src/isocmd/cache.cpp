@@ -220,7 +220,6 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
         if (umountMvRmBreak) {
             filteredFiles = globalIsoFileList;
             isFiltered = false;
-            currentPage = 0;
         }
         printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType);
 

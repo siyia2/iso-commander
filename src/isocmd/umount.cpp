@@ -51,11 +51,6 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
     }
 
     isoDirs = std::move(newIsoDirs);
-    
-     if (umountMvRmBreak) {
-        // Reset pagination when needed
-        currentPage = 0;
-    }
 
     if (isoDirs.empty()) {
         clearScrollBuffer();
@@ -72,7 +67,6 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
     if (filteredFiles.size() == isoDirs.size() || umountMvRmBreak) {
 		filteredFiles = isoDirs;
         isFiltered = false;
-        currentPage = 0; // Reset to first page when clearing filters
     }
     printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS", "");
 

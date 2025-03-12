@@ -620,8 +620,8 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     output << "\n";
 
     if (!disablePagination) {
-        output << brownBold << "Page " << (effectiveCurrentPage + 1) << " of " << totalPages
-               << " (Items " << (startIndex + 1) << "-" << endIndex << " of " << totalItems << ")"
+        output << brownBold << "Page " << (effectiveCurrentPage + 1) << "/" << totalPages
+               << " (Items " << (startIndex + 1) << "-" << endIndex << "/" << totalItems << ")"
                << defaultColor << "\n\n";
     }
 
