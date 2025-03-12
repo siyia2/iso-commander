@@ -20,6 +20,8 @@ std::atomic<bool> g_operationCancelled{false};
 
 // Pagination variables
 size_t currentPage = 0;
+
+// Default max entries per listed page
 size_t ITEMS_PER_PAGE = 25;
 
 // Default Display config options for lists
