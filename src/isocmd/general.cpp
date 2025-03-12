@@ -973,7 +973,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
               << std::endl;
               
 		if (import2ISO) { 
-			std::cout << "   \033[1;38;5;208mC. Auto-Import (default: off):\033[0m\n"
+			std::cout << "   \033[1;38;5;208mC. Auto-Import (default: disabled):\033[0m\n"
             << "      • Enter \033[1;35m'*auto_on'\033[0m or \033[1;35m'*auto_off'\033[0m - Enable/Disable automatic ISO import from stored folder paths\n\n";
 		}
     }
@@ -1024,53 +1024,43 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view
         {"/home", "~"},
         {"/root", "/R"}
     }};
-    
-    // Check cache first for the entire result
-    std::string pathStr(path);
-    auto cacheIt = transformationCache.find(pathStr + ":" + location);
-    if (cacheIt != transformationCache.end()) {
-        // Parse the cached result which stores "directory|filename"
-        std::string cachedValue = cacheIt->second;
-        size_t separatorPos = cachedValue.find('|');
-        if (separatorPos != std::string::npos) {
-            return {
-                cachedValue.substr(0, separatorPos),
-                cachedValue.substr(separatorPos + 1)
-            };
-        }
-    }
-    
+
     // Find last slash efficiently
     auto lastSlashPos = path.find_last_of("/\\");
     if (lastSlashPos == std::string_view::npos) {
-        // Cache and return result for paths without directory component
-        std::string result = "|" + std::string(path);
-        transformationCache[pathStr + ":" + location] = result;
         return {"", std::string(path)};
     }
-    
-    // Handle full list mode cases
-    if ((displayConfig::toggleFullListMount && location == "mount") ||
-        (displayConfig::toggleFullListCpMvRm && location == "cp_mv_rm") ||
-        (displayConfig::toggleFullListConversions && location == "conversions") ||
-        (displayConfig::toggleFullListWrite && location == "write")) {
-        
-        std::string dir = std::string(path.substr(0, lastSlashPos));
-        std::string filename = std::string(path.substr(lastSlashPos + 1));
-        
-        // Cache the result
-        transformationCache[pathStr + ":" + location] = dir + "|" + filename;
-        
-        return {dir, filename};
+
+    // Early return for full list mode
+    if (displayConfig::toggleFullListMount && location == "mount") {
+        return {std::string(path.substr(0, lastSlashPos)), 
+                std::string(path.substr(lastSlashPos + 1))};
+    } else if (displayConfig::toggleFullListCpMvRm && location == "cp_mv_rm") {
+		 return {std::string(path.substr(0, lastSlashPos)), 
+                std::string(path.substr(lastSlashPos + 1))};
+	} else if (displayConfig::toggleFullListConversions && location == "conversions") {
+		return {std::string(path.substr(0, lastSlashPos)), 
+                std::string(path.substr(lastSlashPos + 1))};
+	} else if (displayConfig::toggleFullListWrite && location == "write") {
+		return {std::string(path.substr(0, lastSlashPos)), 
+                std::string(path.substr(lastSlashPos + 1))};
+	}
+
+    // Check cache first
+    auto cacheIt = transformationCache.find(std::string(path));
+    if (cacheIt != transformationCache.end()) {
+        return {cacheIt->second, std::string(path.substr(lastSlashPos + 1))};
     }
-    
-    // Process directory for shortening
+
+    // Optimize directory shortening
     std::string processedDir;
     processedDir.reserve(path.length() / 2);  // More conservative pre-allocation
+
     size_t start = 0;
     while (start < lastSlashPos) {
         auto end = path.find_first_of("/\\", start);
         if (end == std::string_view::npos) end = lastSlashPos;
+
         // More efficient component truncation
         size_t componentLength = end - start;
         size_t truncatePos = std::min({
@@ -1081,13 +1071,15 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view
             path.find('.', start) - start,
             size_t(16)
         });
+
         processedDir.append(path.substr(start, truncatePos));
         processedDir.push_back('/');
         start = end + 1;
     }
-    
+
     if (!processedDir.empty()) {
         processedDir.pop_back();  // Remove trailing slash
+
         // More efficient replacements using string_view
         for (const auto& [oldDir, newDir] : replacements) {
             size_t pos = 0;
@@ -1097,11 +1089,9 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view
             }
         }
     }
-    
-    std::string filename = std::string(path.substr(lastSlashPos + 1));
-    
-    // Cache the result with location-specific key
-    transformationCache[pathStr + ":" + location] = processedDir + "|" + filename;
-    
-    return {processedDir, filename};
+
+    // Cache the result
+    transformationCache[std::string(path)] = processedDir;
+
+    return {processedDir, std::string(path.substr(lastSlashPos + 1))};
 }
