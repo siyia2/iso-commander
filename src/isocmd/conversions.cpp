@@ -570,7 +570,8 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         std::string mainInputString(rawInput.get());
         
         std::atomic<bool> isAtISOList{false};
-		size_t totalPages = (files.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE;
+        
+		size_t totalPages = (ITEMS_PER_PAGE != 0) ? ((files.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE) : 0;
 		bool validCommand = processPaginationHelpAndDisplay(mainInputString, totalPages, currentPage, needsClrScrn, false, false, false, true, isAtISOList);
 		
 		if (validCommand) continue;

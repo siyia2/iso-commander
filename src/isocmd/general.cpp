@@ -186,7 +186,8 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         std::string inputString(input.get());
         
         const std::vector<std::string>& currentList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
-		size_t totalPages = (currentList.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE;
+		
+		size_t totalPages = (ITEMS_PER_PAGE != 0) ? ((currentList.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE) : 0;
         
         bool validCommand = processPaginationHelpAndDisplay(inputString, totalPages, currentPage, needsClrScrn, isMount, isUnmount, write, isConversion, isAtISOList);
 
@@ -605,20 +606,26 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     static const char* grayBold = "\033[38;5;245m";
     static const char* brownBold = "\033[1;38;5;130m";
     
+    // Determine if pagination should be disabled
+    bool disablePagination = (ITEMS_PER_PAGE == 0 || items.size() <= ITEMS_PER_PAGE);
+    
     // Calculate pagination info
     size_t totalItems = items.size();
-    size_t totalPages = (totalItems + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE; // Ceiling division
+    size_t totalPages = disablePagination ? 1 : (totalItems + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE; // Ceiling division
+    
+    // If pagination is disabled, always show the first "page" (all items)
+    size_t effectiveCurrentPage = disablePagination ? 0 : currentPage;
     
     // Adjust currentPage if it's out of bounds
     if (totalPages == 0) {
-        currentPage = 0;
-    } else if (currentPage >= totalPages) {
-        currentPage = totalPages - 1;
+        effectiveCurrentPage = 0;
+    } else if (effectiveCurrentPage >= totalPages) {
+        effectiveCurrentPage = totalPages - 1;
     }
     
-    // Calculate start and end indices for the current page
-    size_t startIndex = currentPage * ITEMS_PER_PAGE;
-    size_t endIndex = std::min(startIndex + ITEMS_PER_PAGE, totalItems);
+    // Calculate start and end indices
+    size_t startIndex = disablePagination ? 0 : (effectiveCurrentPage * ITEMS_PER_PAGE);
+    size_t endIndex = disablePagination ? totalItems : std::min(startIndex + ITEMS_PER_PAGE, totalItems);
     
     // Calculate the maximum number of digits needed for indices
     size_t maxIndex = totalItems;
@@ -634,12 +641,14 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     std::ostringstream output;
     output << "\n"; // Initial newline for visual spacing
 
-    // Display pagination info at the top
-    output << brownBold << "Page " << (currentPage + 1) << " of " << totalPages 
-           << " (Items " << (startIndex + 1) << "-" << endIndex << " of " << totalItems << ")"
-           << defaultColor << "\n\n";
+    // Display pagination info at the top only if pagination is enabled
+    if (!disablePagination) {
+        output << brownBold << "Page " << (effectiveCurrentPage + 1) << " of " << totalPages 
+               << " (Items " << (startIndex + 1) << "-" << endIndex << " of " << totalItems << ")"
+               << defaultColor << "\n\n";
+    }
 
-    // Display only the items for the current page
+    // Display only the items for the current page (or all items if pagination is disabled)
     for (size_t i = startIndex; i < endIndex; ++i) {
         const char* sequenceColor = (i % 2 == 0) ? red : green;
         std::string directory, filename, displayPath, displayHash;
@@ -708,16 +717,18 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         }
     }
 
-    // Display pagination controls at the bottom
-    output << "\n" << brownBold << "Pagination: ";
-    if (currentPage > 0) {
-        output << "[p] ↵ Previous | ";
+    // Display pagination controls at the bottom only if pagination is enabled
+    if (!disablePagination) {
+        output << "\n" << brownBold << "Pagination: ";
+        if (effectiveCurrentPage > 0) {
+            output << "[p] ↵ Previous | ";
+        }
+        if (effectiveCurrentPage < totalPages - 1) {
+            output << "[n] ↵ Next | ";
+        }
+        output << "[g#] ↵ Go to page | ";
+        output << defaultColor << "\n";
     }
-    if (currentPage < totalPages - 1) {
-        output << "[n] ↵ Next | ";
-    }
-    output << "[g#] ↵ Go to page | ";
-    output << defaultColor << "\n";
 
     std::cout << output.str();
 }

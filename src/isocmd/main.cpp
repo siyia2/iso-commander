@@ -18,6 +18,9 @@ int lockFileDescriptor = -1;
 // Global falg to track cancellation
 std::atomic<bool> g_operationCancelled{false};
 
+// Pagination variables
+size_t currentPage = 0;
+size_t ITEMS_PER_PAGE = 5;
 
 // Default Display config options for lists
 namespace displayConfig {

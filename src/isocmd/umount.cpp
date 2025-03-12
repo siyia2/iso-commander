@@ -6,10 +6,6 @@
 #include "../umount.h"
 
 
-// Add these globals near the beginning of your file
-size_t currentPage = 0;
-const size_t ITEMS_PER_PAGE = 25;
-
 // Mounpoint location
 const std::string MOUNTED_ISO_PATH = "/mnt";
 
