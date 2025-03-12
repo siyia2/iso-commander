@@ -626,7 +626,7 @@ void initialize_readline_keybindings_for_pagination() {
 }
 
 
-// Rever the custom keys for readline pagination
+// Revert the custom keys for readline pagination
 void uninitialize_readline_keybindings_for_pagination() {
     // Rebind Ctrl+Left and Ctrl+Right to a no-op function
     rl_bind_keyseq("\033[1;5D", prevent_readline_keybindings);
