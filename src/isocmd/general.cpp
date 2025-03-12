@@ -605,7 +605,6 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     static const char* grayBold = "\033[38;5;245m";
     static const char* brownBold = "\033[1;38;5;130m";
 
-    // Determine pagination settings
     bool disablePagination = (ITEMS_PER_PAGE == 0 || items.size() <= ITEMS_PER_PAGE);
     size_t totalItems = items.size();
     size_t totalPages = disablePagination ? 1 : (totalItems + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE;
@@ -617,25 +616,20 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     size_t startIndex = disablePagination ? 0 : (effectiveCurrentPage * ITEMS_PER_PAGE);
     size_t endIndex = disablePagination ? totalItems : std::min(startIndex + ITEMS_PER_PAGE, totalItems);
 
-    // Precompute padded index strings
-    size_t numDigits = std::to_string(totalItems).length();
-    std::vector<std::string> indexStrings(totalItems);
-    for (size_t i = 0; i < totalItems; ++i)
-        indexStrings[i] = std::to_string(i + 1).insert(0, numDigits - std::to_string(i + 1).length(), ' ');
-
     std::ostringstream output;
     output << "\n";
 
-    // Pagination header
     if (!disablePagination) {
         output << brownBold << "Page " << (effectiveCurrentPage + 1) << " of " << totalPages
                << " (Items " << (startIndex + 1) << "-" << endIndex << " of " << totalItems << ")"
                << defaultColor << "\n\n";
     }
 
-    // Generate output for current page
+    // Calculate padding based on current page's maximum index
+    size_t currentNumDigits = std::to_string(endIndex).length();
+
     for (size_t i = startIndex; i < endIndex; ++i) {
-        const char* sequenceColor = (i % 2 == 0) ? red : green; // Set alternating colors for all list types
+        const char* sequenceColor = (i % 2 == 0) ? red : green;
         std::string directory, filename, displayPath, displayHash;
 
         if (listType == "ISO_FILES") {
@@ -656,13 +650,17 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
                 if (extension == ".bin" || extension == ".img" || extension == ".mdf" || extension == ".nrg") {
                     directory = dir;
                     filename = fname;
-                    // Only change the filename color, not the sequence color
                 }
             }
         }
 
-        // Build output based on listType
-        output << sequenceColor << indexStrings[i] << ". " << defaultColor << bold;
+        // Dynamically pad index based on current page's needs
+        size_t currentIndex = i + 1;
+        std::string indexStr = std::to_string(currentIndex);
+        indexStr.insert(0, currentNumDigits - indexStr.length(), ' ');
+
+        output << sequenceColor << indexStr << ". " << defaultColor << bold;
+        
         if (listType == "ISO_FILES") {
             output << directory << defaultColor << bold << "/" << magenta << filename;
         } else if (listType == "MOUNTED_ISOS") {
@@ -672,14 +670,13 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
                 output << magentaBold << displayPath;
         } else if (listType == "IMAGE_FILES") {
             if (!directory.empty() && !filename.empty())
-                output << directory << "/" << orangeBold << filename; // Special extension case
+                output << directory << "/" << orangeBold << filename;
             else
-                output << items[i]; // Standard case
+                output << items[i];
         }
         output << defaultColor << "\n";
     }
 
-    // Pagination footer
     if (!disablePagination) {
         output << "\n" << brownBold << "Pagination: ";
         if (effectiveCurrentPage > 0) output << "[p] ↵ Previous | ";
@@ -689,6 +686,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
 
     std::cout << output.str();
 }
+
 
 // Hold valid input for general use
 const std::unordered_map<char, std::string> settingMap = {
