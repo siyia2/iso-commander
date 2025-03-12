@@ -68,11 +68,6 @@ int main(int argc, char *argv[]) {
 
     lockFileDescriptor = open(lockFile, O_CREAT | O_RDWR, 0666);
 
-    if (lockFileDescriptor == -1) {
-        std::cerr << "\033[93mAnother instance of isocmd is already running. If not run \"rm /tmp/isocmd.lock\".\n\033[0m";
-        return 1;
-    }
-
     struct flock fl;
     fl.l_type = F_WRLCK;  // Write lock
     fl.l_whence = SEEK_SET;
@@ -80,7 +75,7 @@ int main(int argc, char *argv[]) {
     fl.l_len = 0;  // Lock the whole file
 
     if (fcntl(lockFileDescriptor, F_SETLK, &fl) == -1) {
-        std::cerr << "\033[93mAnother instance of isocmd is already running.\n\033[0m";
+        std::cerr << "\033[93mAnother instance of isocmd is already running. If not run \'rm /tmp/isocmd.lock\'.\n\033[0m";
         close(lockFileDescriptor);
         return 1;
     }
