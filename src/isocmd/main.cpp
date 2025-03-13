@@ -822,6 +822,7 @@ void signalHandlerCancellations(int signal) {
     }
 }
 
+
 // Setup signal handling
 void setupSignalHandlerCancellations() {
     struct sigaction sa;
@@ -897,7 +898,7 @@ bool isDirectoryEmpty(const std::string& path) {
 }
 
 
-// Compare two strings in natural order, case-insensitively.
+// Compare two strings in natural order, case-insensitively
 int naturalCompare(const std::string &a, const std::string &b) {
     size_t i = 0, j = 0;
     while (i < a.size() && j < b.size()) {
@@ -946,15 +947,15 @@ int naturalCompare(const std::string &a, const std::string &b) {
 }
 
 
-// Sort files using a natural order, case-insensitive comparator.
+// Sort files using a natural order, case-insensitive comparator
 void sortFilesCaseInsensitive(std::vector<std::string>& files) {
     if (files.empty())
         return;
 
     const size_t n = files.size();
-    // Use at most one thread per element if n < maxThreads.
+    // Use at most one thread per element if n < maxThreads
     unsigned int numThreads = std::min<unsigned int>(maxThreads, static_cast<unsigned int>(n));
-    // Determine the chunk size so that each thread roughly gets the same number of elements.
+    // Determine the chunk size so that each thread roughly gets the same number of elements
     size_t chunkSize = (n + numThreads - 1) / numThreads;
 
     // Each pair holds the start and end indices of a sorted chunk.
@@ -977,11 +978,11 @@ void sortFilesCaseInsensitive(std::vector<std::string>& files) {
         }));
     }
 
-    // Wait for all sorting tasks to complete.
+    // Wait for all sorting tasks to complete
     for (auto &f : futures)
         f.get();
 
-    // Merge sorted chunks pairwise until the entire vector is merged.
+    // Merge sorted chunks pairwise until the entire vector is merged
     while (chunks.size() > 1) {
         std::vector<std::pair<size_t, size_t>> newChunks;
         for (size_t i = 0; i < chunks.size(); i += 2) {
@@ -995,7 +996,7 @@ void sortFilesCaseInsensitive(std::vector<std::string>& files) {
                     });
                 newChunks.emplace_back(start, end);
             } else {
-                // Odd number of chunks: last one remains as is.
+                // Odd number of chunks: last one remains as is
                 newChunks.push_back(chunks[i]);
             }
         }
