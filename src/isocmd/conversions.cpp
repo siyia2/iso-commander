@@ -193,6 +193,11 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
 			continue;
 		}
 		
+		if (inputSearch == "config") {
+			displayDatabaseStatistics(databaseFilePath, maxDatabaseSize, transformationCache, globalIsoFileList);
+			continue;
+		}
+		
 		if (inputSearch.starts_with("*pagination_")) {
 			updatePagination(inputSearch, configPath);
 			continue;

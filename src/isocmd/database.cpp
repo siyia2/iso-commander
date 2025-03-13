@@ -501,24 +501,24 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
         double cachesizeInKb = cachesizeInBytes / 1024.0;
         double usagePercentage = (fileSizeInBytes * 100.0) / cachesizeInBytes;
         
-        std::cout << "\n\033[1;92mCapacity:\033[0m " << std::fixed << std::setprecision(0) << fileSizeInKB << "KB" 
+        std::cout << "\n\033[1;92mCapacity:\033[1;97m " << std::fixed << std::setprecision(0) << fileSizeInKB << "KB" 
                   << "/" << std::setprecision(0) << cachesizeInKb << "KB" 
                   << " (" << std::setprecision(1) << usagePercentage << "%)"
-                  << " \n\033[1;92mEntries:\033[0m " << countNonEmptyLines(databaseFilePath) 
-                  << "\n\033[1;92mLocation:\033[0m " << "'" << databaseFilePath << "'\033[0;1m\n";
+                  << " \n\033[1;92mEntries:\033[1;97m " << countNonEmptyLines(databaseFilePath) 
+                  << "\n\033[1;92mLocation:\033[1;97m " << "'" << databaseFilePath << "'\033[0;1m\n";
        
         std::cout  << "\n\033[1;94m=== History Database ===\033[0m\n"
-                  << " \n\033[1;92mFolderPath Entries:\033[0m " << countNonEmptyLines(historyFilePath)<< "/" << MAX_HISTORY_LINES
-                  << "\n\033[1;92mLocation:\033[0m " << "'" << historyFilePath << "'\033[0;1m"
-                  << " \n\n\033[1;92mFilterTerm Entries:\033[0m " << countNonEmptyLines(filterHistoryFilePath) << "/" << MAX_HISTORY_PATTERN_LINES
-                  << "\n\033[1;92mLocation:\033[0m " << "'" << filterHistoryFilePath << "'\033[0;1m" << std::endl;
+                  << " \n\033[1;92mFolderPath Entries:\033[1;97m " << countNonEmptyLines(historyFilePath)<< "/" << MAX_HISTORY_LINES
+                  << "\n\033[1;92mLocation:\033[1;97m " << "'" << historyFilePath << "'\033[0;1m"
+                  << " \n\n\033[1;92mFilterTerm Entries:\033[1;97m " << countNonEmptyLines(filterHistoryFilePath) << "/" << MAX_HISTORY_PATTERN_LINES
+                  << "\n\033[1;92mLocation:\033[1;97m " << "'" << filterHistoryFilePath << "'\033[0;1m" << std::endl;
         
         std::cout << "\n\033[1;94m=== Buffered Entries ===\033[0m\n";
-        std::cout << "\033[1;96m\nString Data → RAM:\033[0m " << transformationCache.size() + cachedParsesForUmount.size() + originalPathsCache.size() << "\n";
-        std::cout << "\n\033[1;92mISO → RAM:\033[0m " << globalIsoFileList.size() << "\n";
-        std::cout << "\n\033[1;38;5;208mBIN/IMG → RAM:\033[0m " << binImgFilesCache.size() << "\n";
-        std::cout << "\033[1;38;5;208mMDF → RAM:\033[0m " << mdfMdsFilesCache.size() << "\n";
-        std::cout << "\033[1;38;5;208mNRG → RAM:\033[0m " << nrgFilesCache.size() << "\n";
+        std::cout << "\033[1;96m\nString Data → RAM:\033[1;97m " << transformationCache.size() + cachedParsesForUmount.size() + originalPathsCache.size() << "\n";
+        std::cout << "\n\033[1;92mISO → RAM:\033[1;97m " << globalIsoFileList.size() << "\n";
+        std::cout << "\n\033[1;38;5;208mBIN/IMG → RAM:\033[1;97m " << binImgFilesCache.size() << "\n";
+        std::cout << "\033[1;38;5;208mMDF → RAM:\033[1;97m " << mdfMdsFilesCache.size() << "\n";
+        std::cout << "\033[1;38;5;208mNRG → RAM:\033[1;97m " << nrgFilesCache.size() << "\n";
     } catch (const std::filesystem::filesystem_error& e) {
         std::cerr << "\n\033[1;91mError: " << e.what() << std::endl;
     }
@@ -582,6 +582,83 @@ void updateAutoUpdateConfig(const std::string& configPath, const std::string& in
 }
 
 
+// Function to read and display configuration options from config file
+void displayConfigurationOptions(const std::string& configPath) {
+    std::ifstream configFile(configPath);
+    
+    // If config file doesn't exist, create it with default options
+    if (!configFile.is_open()) {
+        std::vector<std::pair<std::string, std::string>> orderedDefaults = {
+            {"auto_update", "off"},
+            {"pagination", "25"},
+            {"mount_list", "compact"},
+            {"umount_list", "full"},
+            {"cp_mv_rm_list", "compact"},
+            {"write_list", "compact"},
+            {"conversion_lists", "compact"}
+        };
+        
+        // Create directory if it doesn't exist
+        std::filesystem::path configDir = std::filesystem::path(configPath).parent_path();
+        if (!configDir.empty() && !std::filesystem::exists(configDir)) {
+            try {
+                std::filesystem::create_directories(configDir);
+            } catch (const std::filesystem::filesystem_error& e) {
+                std::cerr << "\n\001\033[1;91mError: Could not create directory for config file: \001\033[1;93m'" 
+                          << configDir.string() << "\001'\033[1;91m. " << e.what() << std::endl;
+                std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                return;
+            }
+        }
+        
+        // Create config file with default values
+        std::ofstream newConfigFile(configPath);
+        if (!newConfigFile.is_open()) {
+            std::cerr << "\n\001\033[1;91mError: Could not create configuration file: \001\033[1;93m'" 
+                      << configPath << "\001'\033[1;91m." << std::endl;
+            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            return;
+        }
+        
+        // Write default values
+        newConfigFile << "# Default configuration file created on " << configPath << "\n";
+        for (const auto& [key, value] : orderedDefaults) {
+            newConfigFile << key << "=" << value << "\n";
+        }
+        newConfigFile.close();
+        
+        std::cout << "\n\001\033[1;92mCreated new configuration file with default settings.\001\033[0m\n" << std::endl;
+        
+        // Reopen for reading
+        configFile.open(configPath);
+        if (!configFile.is_open()) {
+            std::cerr << "\n\001\033[1;91mError: Could not open newly created configuration file.\001\033[1;91m" << std::endl;
+            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            return;
+        }
+    }
+    
+    std::cout << "\n\001\033[1;96m==== Configuration Options ====\001\033[0;1m\n" << std::endl;
+    
+    std::string line;
+    int lineNumber = 1;
+    while (std::getline(configFile, line)) {
+        if (!line.empty() && line[0] != '#') {  // Skip comments
+            std::cout << "\001\033[1;92m" << lineNumber << ". \001\033[1;97m" << line << "\001\033[0m" << std::endl;
+            lineNumber++;
+        }
+    }
+    
+    std::cout << "\n\001\033[1;93mConfiguration file: \001\033[1;97m" << configPath << "\001\033[0;1m" << std::endl;
+    
+    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+}
+
+
 // Function that can delete or show stats for ISO cache it is called from within manualRefreshForDatabase
 void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const int& maxDepth, const bool& filterHistory, std::atomic<bool>& newISOFound) {
     signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
@@ -595,6 +672,8 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
     
     if (inputSearch == "stats") {
         displayDatabaseStatistics(databaseFilePath, maxDatabaseSize, transformationCache, globalIsoFileList);
+    } else if (inputSearch == "config") {
+        displayConfigurationOptions(configPath);
     } else if (inputSearch == "!clr") {
         if (std::remove(databaseFilePath.c_str()) != 0) {
             std::cerr << "\n\001\033[1;91mError clearing IsoCache: \001\033[1;93m'" 
@@ -602,38 +681,37 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         } else {
-			// Clean transformationCache for .iso entries (case-insensitive)
-			for (auto it = transformationCache.begin(); it != transformationCache.end();) {
-				const std::string& key = it->first;
-				if (key.size() >= 4) {
-					// Extract the last 4 characters (extension)
-					std::string ext = key.substr(key.size() - 4);
-					// Convert extension to lowercase using toLowerInPlace
-					toLowerInPlace(ext);
-					if (ext == ".iso") {
-						it = transformationCache.erase(it);
-						continue;
-					}
-				}
-				++it;
-			}
-
-			// Clean originalPathsCache for .iso entries (case-insensitive)
-			for (auto it = originalPathsCache.begin(); it != originalPathsCache.end();) {
-				const std::string& key = it->first;
-				if (key.size() >= 4) {
-					// Extract the last 4 characters (extension)
-					std::string ext = key.substr(key.size() - 4);
-					// Convert extension to lowercase using toLowerInPlace
-					toLowerInPlace(ext);
-					if (ext == ".iso") {
-						it = originalPathsCache.erase(it);
-						continue;
-					}
-				}
-				++it;
-			}   
-			        
+            // Clean transformationCache for .iso entries (case-insensitive)
+            for (auto it = transformationCache.begin(); it != transformationCache.end();) {
+                const std::string& key = it->first;
+                if (key.size() >= 4) {
+                    // Extract the last 4 characters (extension)
+                    std::string ext = key.substr(key.size() - 4);
+                    // Convert extension to lowercase using toLowerInPlace
+                    toLowerInPlace(ext);
+                    if (ext == ".iso") {
+                        it = transformationCache.erase(it);
+                        continue;
+                    }
+                }
+                ++it;
+            }
+            // Clean originalPathsCache for .iso entries (case-insensitive)
+            for (auto it = originalPathsCache.begin(); it != originalPathsCache.end();) {
+                const std::string& key = it->first;
+                if (key.size() >= 4) {
+                    // Extract the last 4 characters (extension)
+                    std::string ext = key.substr(key.size() - 4);
+                    // Convert extension to lowercase using toLowerInPlace
+                    toLowerInPlace(ext);
+                    if (ext == ".iso") {
+                        it = originalPathsCache.erase(it);
+                        continue;
+                    }
+                }
+                ++it;
+            }   
+                    
             std::cout << "\n\001\033[1;92mISO database cleared successfully\001\033[1;92m." << std::endl;
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -648,7 +726,6 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
     } else if (isValidInput(inputSearch)) {
         setDisplayMode(inputSearch);
     }
-
     // Refresh the database after handling any command
     manualRefreshForDatabase(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
 }
@@ -701,7 +778,7 @@ void manualRefreshForDatabase(std::string& initialDir, bool promptFlag, int maxD
                     manualRefreshForDatabase(dummyDir, promptFlag, maxDepth, filterHistory, newISOFound);
                 }
                 
-                if (input == "stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter" || input == "*auto_off" || input == "*auto_on" || isValidInput(input) || input.starts_with("*pagination_")) {
+                if (input ==  "config" || input == "stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter" || input == "*auto_off" || input == "*auto_on" || isValidInput(input) || input.starts_with("*pagination_")) {
                     databaseSwitches(input, promptFlag, maxDepth, filterHistory, newISOFound);
                     return;
                 }

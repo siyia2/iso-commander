@@ -1029,13 +1029,14 @@ void helpSearches(bool isCpMv, bool import2ISO) {
         }
 		std::cout << "   • Enter \033[1;33m'!clr_paths'\033[0m - Clear folder path history\n"
 				  << "   • Enter \033[1;33m'!clr_filter'\033[0m - Clear filter history\n" << std::endl;
-		std::cout << "\033[1;32m4. Special Display " << (import2ISO ? "Command:" : "Commands:") << "\033[0m\n";
+		std::cout << "\033[1;32m4. Special Display Commands:\033[0m\n";
         if (!import2ISO) {
             std::cout << "   • Enter \033[1;34m'ls'\033[0m - List corresponding cached entries\n";
         }
-            std::cout << "   • Enter \033[1;34m'stats'\033[0m - Display app statistics\n" << std::endl;
+			std::cout << "   • Enter \033[1;34m'config'\033[0m - Display configuration options\n";
+            std::cout << "   • Enter \033[1;34m'stats'\033[0m - Display application statistics\n" << std::endl;
 					
-       std::cout << "\033[1;32m" << "5. Configuration Commands(~/.config/isocmd/config):\033[0m\n\n";
+       std::cout << "\033[1;32m" << "5. Configuration Commands:\033[0m\n\n";
        
 		std::cout << "   \033[1;38;5;208mA. Set Max Items/Page (default: 25):\033[0m\n"
           << "      • Enter '*pagination_{number}' (e.g., '*pagination_50')\n"
