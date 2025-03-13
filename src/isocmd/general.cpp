@@ -976,7 +976,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
               << std::endl;
               
 		if (import2ISO) { 
-			std::cout << "   \033[1;38;5;208mC. Auto-Update ISO Database (default: disabled):\033[0m\n"
+			std::cout << "   \033[1;38;5;208mC. Auto-Update ISO Database (Default: Disabled):\033[0m\n"
             << "      • Enter \033[1;35m'*auto_on'\033[0m or \033[1;35m'*auto_off'\033[0m - Enable/Disable automatic ISO imports from stored folder paths\n\n";
 		}
     }
