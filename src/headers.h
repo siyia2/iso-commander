@@ -143,6 +143,7 @@ void flushStdin();
 void disable_ctrl_d();
 void enable_ctrl_d();
 void disableInput();
+void customListingsFunction(char **matches, int num_matches, int max_length);
 void restoreInput();
 void restoreReadline();
 void disableReadlineForConfirmation();
