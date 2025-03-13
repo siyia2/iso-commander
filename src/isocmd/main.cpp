@@ -760,14 +760,14 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
     printf("\n");
     
     // Calculate how many items to display based on ITEMS_PER_PAGE
-    // If ITEMS_PER_PAGE is <= 0, show all matches
+    // If ITEMS_PER_PAGE <= 0, show all matches
     int items_to_display;
     if (ITEMS_PER_PAGE <= 0) {
-        items_to_display = num_matches - 1;
+        items_to_display = num_matches; // Removed the -1
     } else {
         // Fix signedness comparison issue by casting
-        items_to_display = ((size_t)(num_matches - 1) > ITEMS_PER_PAGE) ? 
-                           (int)ITEMS_PER_PAGE : (num_matches - 1);
+        items_to_display = ((size_t)num_matches > ITEMS_PER_PAGE) ? 
+                           (int)ITEMS_PER_PAGE : num_matches; // Removed the -1
     }
     
     // Print matches
@@ -780,9 +780,9 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
     
     // Only show the pagination message if we're actually limiting results
     // and ITEMS_PER_PAGE is positive
-    if (ITEMS_PER_PAGE > 0 && (size_t)(num_matches - 1) > ITEMS_PER_PAGE) {
+    if (ITEMS_PER_PAGE > 0 && (size_t)num_matches > ITEMS_PER_PAGE) {
         printf("\n[Showing %d/%d matches... increase pagination limit to display more]\n", 
-               items_to_display, num_matches - 1);
+               items_to_display, num_matches); // Removed the -1
     }
     
     // Move the cursor back to the saved position
