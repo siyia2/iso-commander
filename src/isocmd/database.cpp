@@ -471,6 +471,8 @@ bool isValidDirectory(const std::string& path) {
 
 // Function to display on-disk and ram statistics
 void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax_t maxDatabaseSize, const std::unordered_map<std::string, std::string>& transformationCache, const std::vector<std::string>& globalIsoFileList) {
+	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+    disable_ctrl_d();
 	clearScrollBuffer();
     try {
         // Create files if they don't exist
