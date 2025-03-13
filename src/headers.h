@@ -61,6 +61,9 @@ extern std::mutex couNtMutex;
 // For storing isoFiles in RAM cache
 extern std::vector<std::string> globalIsoFileList; 
 
+// Cache for original full paths
+extern std::unordered_map<std::string, std::string> originalPathsCache;
+
 // Cache for directory and filename transformations
 extern std::unordered_map<std::string, std::string> transformationCache;
 
@@ -141,6 +144,8 @@ void disable_ctrl_d();
 void enable_ctrl_d();
 void disableInput();
 void restoreInput();
+void restoreReadline();
+void disableReadlineForConfirmation();
 void configMap();
 void signalHandler(int signum);
 void setupSignalHandlerCancellations();
