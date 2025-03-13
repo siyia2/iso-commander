@@ -506,9 +506,9 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
                   << "\n\033[1;92mLocation:\033[0m " << "'" << databaseFilePath << "'\033[0;1m\n";
        
         std::cout  << "\n\033[1;94m=== History Database ===\033[0m\n"
-                  << " \n\033[1;92mFolderPath History Entries:\033[0m " << countNonEmptyLines(historyFilePath)<< "/" << MAX_HISTORY_LINES
+                  << " \n\033[1;92mFolderPath Entries:\033[0m " << countNonEmptyLines(historyFilePath)<< "/" << MAX_HISTORY_LINES
                   << "\n\033[1;92mLocation:\033[0m " << "'" << historyFilePath << "'\033[0;1m"
-                  << " \n\n\033[1;92mFilter History Entries:\033[0m " << countNonEmptyLines(filterHistoryFilePath) << "/" << MAX_HISTORY_PATTERN_LINES
+                  << " \n\n\033[1;92mFilterTerm Entries:\033[0m " << countNonEmptyLines(filterHistoryFilePath) << "/" << MAX_HISTORY_PATTERN_LINES
                   << "\n\033[1;92mLocation:\033[0m " << "'" << filterHistoryFilePath << "'\033[0;1m" << std::endl;
         
         std::cout << "\n\033[1;94m=== Buffered Entries ===\033[0m\n";

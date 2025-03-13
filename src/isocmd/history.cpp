@@ -4,7 +4,7 @@
 
 
 // Default readline history save path
-const std::string historyFilePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/iso_commander_history_database.txt";
+const std::string historyFilePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/iso_commander_path_database.txt";
 const std::string filterHistoryFilePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/iso_commander_filter_database.txt";
 
 //Maximum number of history entries at a time
