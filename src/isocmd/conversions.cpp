@@ -194,7 +194,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
 		}
 		
 		if (inputSearch == "config") {
-			displayDatabaseStatistics(databaseFilePath, maxDatabaseSize, transformationCache, globalIsoFileList);
+			displayConfigurationOptions(configPath);
 			continue;
 		}
 		
