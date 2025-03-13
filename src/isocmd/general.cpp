@@ -1037,7 +1037,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
 					
        std::cout << "\033[1;32m" << "5. Special Configuration Commands(~/.config/isocmd/config):\033[0m\n\n";
        
-		std::cout << "   \033[1;38;5;208mA. Set Max Items/Page For Lists (default: 25):\033[0m\n"
+		std::cout << "   \033[1;38;5;208mA. Set Max Items/Page (default: 25):\033[0m\n"
           << "      • Enter '*pagination_{number}' (e.g., '*pagination_50')\n"
           << "      • Disable: {number} <= 0 (e.g., '*pagination_-1' or '*pagination_0')\n"  << std::endl;
                      
