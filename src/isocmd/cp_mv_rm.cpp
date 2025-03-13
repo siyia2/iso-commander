@@ -223,7 +223,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, cons
         
         if (totalPages > 1) {
             pageContent << "\n\033[1mPage " << (currentPage + 1) 
-                      << "/" << totalPages << " \033[1;94m(+/-) ↵\n\033[0m";
+                      << "/" << totalPages << " \033[1;94m(n/p) or g<num> ↵\n\033[0m";
         }
         
         // Build the full prompt
@@ -241,27 +241,49 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, cons
         // Handle page navigation
         bool isNavigation = false;
         if (!userInput.empty()) {
-            // Check if this is just a navigation command
-            bool isJustNavigation = true;
-            for (char c : userInput) {
-                if (c != '+' && c != '-') {
-                    isJustNavigation = false;
-                    break;
+            // Check if this is a "go to page" command (e.g., "g4")
+            if (userInput.size() >= 2 && userInput[0] == 'g' && std::isdigit(userInput[1])) {
+                std::string pageNumStr = userInput.substr(1);
+                try {
+                    int requestedPage = std::stoi(pageNumStr);
+                    if (requestedPage >= 1 && requestedPage <= totalPages) {
+                        currentPage = requestedPage - 1;  // Convert to 0-based index
+                        isPageTurn = true;
+                        isNavigation = true;
+                        continue;
+                    }
+                } catch (const std::exception&) {
+                    // Invalid page number format, treat as regular input
                 }
             }
             
-            if (isJustNavigation && (userInput.find('+') != std::string::npos || userInput.find('-') != std::string::npos)) {
-                int pageShift = 0;
-                if (userInput.find('+') != std::string::npos) {
-                    pageShift = std::count(userInput.begin(), userInput.end(), '+');
-                } else if (userInput.find('-') != std::string::npos) {
-                    pageShift = -std::count(userInput.begin(), userInput.end(), '-');
+            // Check for n/p navigation - mark as navigation even if page doesn't change
+            if (userInput == "n" || userInput == "N") {
+                isNavigation = true;  // Mark as navigation regardless of page change
+                
+                // Next page, but only if not at the last page
+                if (currentPage < totalPages - 1) {
+                    currentPage++;
+                    isPageTurn = true;
+                    continue;
+                } else {
+                    // At last page, still mark as page turn to avoid triggering error display
+                    isPageTurn = true;
+                    continue;
                 }
-
-                currentPage = (currentPage + pageShift + totalPages) % totalPages; // Circular navigation
-                isPageTurn = true;
-                isNavigation = true;
-                continue;
+            } else if (userInput == "p" || userInput == "P") {
+                isNavigation = true;  // Mark as navigation regardless of page change
+                
+                // Previous page, but only if not at the first page
+                if (currentPage > 0) {
+                    currentPage--;
+                    isPageTurn = true;
+                    continue;
+                } else {
+                    // At first page, still mark as page turn to avoid triggering error display
+                    isPageTurn = true;
+                    continue;
+                }
             }
         }
         
