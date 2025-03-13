@@ -287,6 +287,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, cons
     }
 }
 
+
 // Function to generate entries for selected ISO files
 std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>& indexChunks, const std::vector<std::string>& isoFiles) {
     std::vector<std::string> entries;
