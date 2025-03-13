@@ -477,6 +477,8 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         rl_attempted_completion_function = nullptr;
         rl_bind_keyseq("\033[A", rl_get_previous_history);
         rl_bind_keyseq("\033[B", rl_get_next_history);
+        rl_bind_key('\f', prevent_readline_keybindings);
+        rl_bind_key('\t', prevent_readline_keybindings);
     };
     
     // Helper function to set up readline
@@ -511,14 +513,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         disable_ctrl_d();
         clearScrollBuffer();
 
-        // Display user input errors at top
-        if (!uniqueErrorMessages.empty()) {
-            std::cout << "\n";
-            for (const auto& err : uniqueErrorMessages) {
-                std::cout << err << "\n";
-            }
-            uniqueErrorMessages.clear();
-        }
+        displayErrors(uniqueErrorMessages);
 
         // Sort ISOs by size (descending)
         std::vector<IsoInfo> sortedIsos = selectedIsos;
@@ -528,7 +523,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 
         // Build device prompt with sorted ISOs
         std::ostringstream devicePromptStream;
-        devicePromptStream << "\n\033[0;1m Selected \033[1;92mISO \033[0;1mfor \033[1;93mwrite\033[0;1m:\n\n";
+        devicePromptStream << "\n\033[0;1m Selected \033[1;92mISO\033[0;1m:\n\n";
         for (size_t i = 0; i < sortedIsos.size(); ++i) {
             auto [shortDir, filename] = extractDirectoryAndFilename(sortedIsos[i].path, "write");
             devicePromptStream << "  \033[1;93m" << (i+1) << ">\033[0;1m " 
@@ -669,7 +664,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             g_operationCancelled.store(false);
             return validPairs;
         }
-        
+
         // Restore readline bindings if not proceeding
         restoreReadline();
         

@@ -180,7 +180,7 @@ void processOperationInput(const std::string& input, const std::vector<std::stri
 
 
 // Function that handles all pagination logic for a list of entries
-std::string handlePaginatedDisplay(const std::vector<std::string>& entries, const std::string& promptPrefix, const std::string& promptSuffix, const std::function<void()>& displayErrorsFn, const std::function<void()>& setupEnvironmentFn, bool& isPageTurn) {
+std::string handlePaginatedDisplay(const std::vector<std::string>& entries, std::unordered_set<std::string>& uniqueErrorMessages, const std::string& promptPrefix, const std::string& promptSuffix, const std::function<void()>& setupEnvironmentFn, bool& isPageTurn) {
     
     // Setup pagination parameters
     bool disablePagination = (ITEMS_PER_PAGE <= 0 || entries.size() <= ITEMS_PER_PAGE);
@@ -199,12 +199,9 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, cons
         size_t end = disablePagination ? totalEntries : std::min(start + ITEMS_PER_PAGE, totalEntries);
         
         // Clear the screen before displaying the new page
-        clearScrollBuffer(); 
+        clearScrollBuffer();
         
-        // Only display errors on non-page-turn iterations
-        if (!isPageTurn && displayErrorsFn) {
-            displayErrorsFn();
-        }
+        displayErrors(uniqueErrorMessages);
         
         std::ostringstream pageContent;
         
@@ -307,7 +304,7 @@ std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>&
 
 
 // Function to handle rm including pagination
-bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, const std::function<void()>& displayErrorsFn, bool& umountMvRmBreak, bool& abortDel) {
+bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages, std::vector<std::vector<int>>& indexChunks, bool& umountMvRmBreak, bool& abortDel) {
     
     bool isPageTurn = false;
     
@@ -332,9 +329,9 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::vector
         // Use the consolidated pagination function
         std::string userInput = handlePaginatedDisplay(
             entries,
+            uniqueErrorMessages,
             promptPrefix,
             promptSuffix,
-            displayErrorsFn,
             setupEnv,
             isPageTurn
         );
@@ -371,16 +368,6 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::vector
 
 // Function to prompt for userDestDir or Delete confirmation including pagination
 std::string userDestDirRm(const std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::unordered_set<std::string>& uniqueErrorMessages, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& filterHistory, bool& isDelete, bool& isCopy, bool& abortDel, bool& overwriteExisting) {
-
-    // Display error messages if any
-    auto displayErrors = [&]() {
-        if (!uniqueErrorMessages.empty()) {
-            std::cout << "\n";
-            for (const auto& err : uniqueErrorMessages) {
-                std::cout << err << "\n";
-            }
-        }
-    };
     
     // Generate entries for selected ISO files - used by both branches
 	std::vector<std::string> entries = generateIsoEntries(indexChunks, isoFiles);
@@ -390,8 +377,7 @@ std::string userDestDirRm(const std::vector<std::string>& isoFiles, std::vector<
     
     // Clear screen initially
     clearScrollBuffer();
-    displayErrors(); // Show errors on first display
-    
+        
     if (!isDelete) {
         // Copy/Move operation flow
         bool isPageTurn = false;
@@ -423,10 +409,10 @@ std::string userDestDirRm(const std::vector<std::string>& isoFiles, std::vector<
         
         // Use the consolidated pagination function
         std::string userInput = handlePaginatedDisplay(
-            entries, 
+            entries,
+            uniqueErrorMessages, 
             promptPrefix, 
             promptSuffix, 
-            displayErrors,
             setupEnv, 
             isPageTurn
         );
@@ -471,7 +457,7 @@ std::string userDestDirRm(const std::vector<std::string>& isoFiles, std::vector<
         add_history(historyInput.c_str());
     } else {
         // Delete operation flow - call the extracted function
-        bool proceedWithDelete = handleDeleteOperation(isoFiles, indexChunks, displayErrors, umountMvRmBreak, abortDel);
+        bool proceedWithDelete = handleDeleteOperation(isoFiles, uniqueErrorMessages, indexChunks, umountMvRmBreak, abortDel);
         
         if (!proceedWithDelete) {
             userDestDir = "";
