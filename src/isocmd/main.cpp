@@ -559,7 +559,6 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
     if (!inFile) {
         std::ofstream outFile(filePath);
         if (!outFile) {
-            std::cerr << "Error: Unable to create configuration file at '" << filePath << "'\n";
             return std::map<std::string, std::string>(orderedDefaults.begin(), orderedDefaults.end());
         }
 
