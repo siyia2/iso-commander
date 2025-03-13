@@ -794,101 +794,93 @@ bool isValidInput(const std::string& input) {
 
 // Function to write default display modes to config file
 void setDisplayMode(const std::string& inputSearch) {
-	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
-	disable_ctrl_d();
-    std::vector<std::string> configLines;
-    std::vector<std::string> settingKeys;
-    bool validInput = true;
-    std::string newValue;
-
-    // Read existing config lines
-    std::ifstream inFile(configPath);
-    if (inFile.is_open()) {
-        std::string line;
-        while (std::getline(inFile, line)) {
-            configLines.push_back(line);
+    signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+    disable_ctrl_d();
+    
+    bool success = false;
+    try {
+        std::vector<std::string> configLines;
+        std::vector<std::string> settingKeys;
+        std::string newValue;
+        
+        // Create directory if needed with error checking
+        std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
+        if (!std::filesystem::exists(dirPath)) {
+            std::error_code ec;
+            std::filesystem::create_directories(dirPath, ec);
+            if (ec) {
+                throw std::filesystem::filesystem_error(
+                    "Failed to create config directory", 
+                    dirPath, 
+                    ec);
+            }
         }
-        inFile.close();
-    }
-
-    // Create directory if needed
-    std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
-    if (!std::filesystem::exists(dirPath)) {
-        if (!std::filesystem::create_directories(dirPath)) {
-            std::cerr << "\n\033[1;91mFailed to create directory: \033[1;93m'" 
-                      << dirPath.string() << "'\033[1;91m.\033[0;1m\n";
-            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            return;
+        
+        // Read existing config lines
+        std::ifstream inFile(configPath);
+        if (inFile.is_open()) {
+            std::string line;
+            while (std::getline(inFile, line)) {
+                configLines.push_back(line);
+            }
+            inFile.close();
         }
-    }
-
-    // Parse input command and settings
-    if (inputSearch.size() < 4 || inputSearch[0] != '*' || 
-        (inputSearch.substr(1, 2) != "cl" && inputSearch.substr(1, 2) != "fl")) {
-        std::cerr << "\n\033[1;91mInvalid input format. Use '*cl' or '*fl' prefix.\033[0;1m\n";
-        validInput = false;
-    } else {
+        
         std::string command = inputSearch.substr(1, 2);
         size_t underscorePos = inputSearch.find('_', 3);
-        if (underscorePos == std::string::npos || underscorePos + 1 >= inputSearch.size()) {
-            std::cerr << "\n\033[1;91mExpected '_' followed by settings (e.g., *cl_mu).\033[0;1m\n";
-            validInput = false;
-        } else {
-            std::string settingsStr = inputSearch.substr(underscorePos + 1);
-            newValue = (command == "cl") ? "compact" : "full";
-
-            std::unordered_set<std::string> uniqueKeys;
-            for (char c : settingsStr) {
-                auto it = settingMap.find(c);
-                if (it != settingMap.end()) {
-                    const std::string& key = it->second;
-                    if (uniqueKeys.insert(key).second) {
-                        settingKeys.push_back(key);
-                    }
-                } else {
-                    std::cerr << "\n\033[1;91mInvalid setting character: '" << c << "'.\033[0;1m\n";
-                    validInput = false;
-                    break;
+        
+        std::string settingsStr = inputSearch.substr(underscorePos + 1);
+        newValue = (command == "cl") ? "compact" : "full";
+        std::unordered_set<std::string> uniqueKeys;
+        for (char c : settingsStr) {
+            auto it = settingMap.find(c);
+            if (it != settingMap.end()) {
+                const std::string& key = it->second;
+                if (uniqueKeys.insert(key).second) {
+                    settingKeys.push_back(key);
                 }
             }
         }
-    }
-
-    if (!validInput || settingKeys.empty()) {
-        if (validInput) std::cerr << "\n\033[1;91mNo valid settings specified.\033[0;1m\n";
-        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        return;
-    }
-
-    // Update config lines for each setting
-    std::unordered_set<std::string> unprocessedSettings(settingKeys.begin(), settingKeys.end());
-    for (auto& line : configLines) {
-        for (auto it = unprocessedSettings.begin(); it != unprocessedSettings.end();) {
-            const std::string& settingKey = *it;
-            if (line.find(settingKey + " =") == 0) {
-                line = settingKey + " = " + newValue;
-                it = unprocessedSettings.erase(it);
-            } else {
-                ++it;
+        
+        // Update config lines for each setting
+        std::unordered_set<std::string> unprocessedSettings(settingKeys.begin(), settingKeys.end());
+        for (auto& line : configLines) {
+            for (auto it = unprocessedSettings.begin(); it != unprocessedSettings.end();) {
+                const std::string& settingKey = *it;
+                if (line.find(settingKey + " =") == 0) {
+                    line = settingKey + " = " + newValue;
+                    it = unprocessedSettings.erase(it);
+                } else {
+                    ++it;
+                }
             }
         }
-    }
-
-    // Add new settings if they didn't exist
-    for (const auto& settingKey : unprocessedSettings) {
-        configLines.push_back(settingKey + " = " + newValue);
-    }
-
-    // Write updated config to file
-    std::ofstream outFile(configPath);
-    if (outFile.is_open()) {
-        for (const auto& line : configLines) {
-            outFile << line << "\n";
+        
+        // Add new settings if they didn't exist
+        for (const auto& settingKey : unprocessedSettings) {
+            configLines.push_back(settingKey + " = " + newValue);
         }
-        outFile.close();
-
+        
+        // Check if we have write permissions before attempting to write
+        std::error_code ec;
+        bool canWrite = true;
+        
+        // Check if the file exists and if not, check if we can create it
+        if (!std::filesystem::exists(configPath)) {
+            std::ofstream testFile(configPath);
+            if (!testFile) {
+                canWrite = false;
+            } else {
+                testFile.close();
+            }
+        } else {
+            // Check if the file is writable
+            std::filesystem::file_status status = std::filesystem::status(configPath, ec);
+            if (ec || (status.permissions() & std::filesystem::perms::owner_write) == std::filesystem::perms::none) {
+                canWrite = false;
+            }
+        }
+        
         // Update toggle flags for each affected setting
         for (const auto& settingKey : settingKeys) {
             if (settingKey == "mount_list") {
@@ -903,19 +895,22 @@ void setDisplayMode(const std::string& inputSearch) {
                 displayConfig::toggleFullListWrite = (newValue == "full");
             }
         }
-
+        
+        success = true;
+        
         // Display confirmation
         std::cout << "\n\033[0;1mDisplay mode set to \033[1;92m" << newValue << "\033[0;1m for:\n";
         for (const auto& key : settingKeys) {
             std::cout << "  - " << key << "\n";
         }
         std::cout << "\033[0;1m";
-    } else {
-        std::cerr << "\n\033[1;91mError: Unable to open configuration file for writing: \033[1;93m'"
-                  << configPath << "'\033[1;91m.\033[0;1m\n";
+    } catch (const std::exception& e) {
+        std::cerr << "\n\033[1;91mError: " << e.what() << "\033[0;1m\n";
     }
-
-    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+    
+    // Only show success message if actually successful
+    std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
+    
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 

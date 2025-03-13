@@ -617,16 +617,13 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
 
     // Update the file if needed
     if (needsUpdate) {
-        std::ofstream outFile(filePath);
-        if (!outFile) {
-            std::cerr << "\n\033[1;91mError: Unable to open configuration file for writing: \033[1;93m'"
-                  << configPath << "'\033[1;91m.\033[0;1m\n";
-        } else {
-            for (const auto& pair : orderedDefaults) {
-                outFile << pair.first << " = " << configMap[pair.first] << "\n";
-            }
-        }
-    }
+		std::ofstream outFile(filePath);
+		if (outFile) {
+			for (const auto& pair : orderedDefaults) {
+				outFile << pair.first << " = " << configMap[pair.first] << "\n";
+			}
+		}
+	}
 
     // Set boolean flags based on configMap
     displayConfig::toggleFullListMount = (configMap["mount_list"] == "full");
@@ -643,74 +640,60 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
 void updatePagination(const std::string& inputSearch, const std::string& configPath) {
     signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
     disable_ctrl_d();
-
-    // Create directory if it doesn't exist
-    std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
-    if (!std::filesystem::exists(dirPath)) {
-        if (!std::filesystem::create_directories(dirPath)) {
-            std::cerr << "\n\033[1;91mFailed to create directory: \033[1;93m'" 
-                      << dirPath.string() << "\033[1;91m'.\033[0;1m\n";
-            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            return;
-        }
-    }
-
-    int paginationValue = 0;
-    std::string paginationValueStr;
     
     try {
-        // Extract the pagination value
-        paginationValueStr = inputSearch.substr(12);
-        // Try to parse the pagination value
-        paginationValue = std::stoi(paginationValueStr);
-    }
-    catch (const std::invalid_argument&) {
-        std::cerr << "\n\033[1;91mInvalid pagination value: '\033[1;93m" 
-                  << paginationValueStr << "\033[1;91m' is not a valid number.\033[0;1m\n";
-        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        return;
-    }
-
-    // Read current configuration
-    std::map<std::string, std::string> config = readConfig(configPath);
-    config["pagination"] = std::to_string(paginationValue);
-
-    std::vector<std::pair<std::string, std::string>> orderedDefaults = {
-        {"auto_update", config.count("auto_update") ? config["auto_update"] : "off"},
-        {"pagination", std::to_string(paginationValue)},
-        {"mount_list", config.count("mount_list") ? config["mount_list"] : "compact"},
-        {"umount_list", config.count("umount_list") ? config["umount_list"] : "full"},
-        {"cp_mv_rm_list", config.count("cp_mv_rm_list") ? config["cp_mv_rm_list"] : "compact"},
-        {"write_list", config.count("write_list") ? config["write_list"] : "compact"},
-        {"conversion_lists", config.count("conversion_lists") ? config["conversion_lists"] : "compact"}
-    };
-
-    // Attempt to open the config file for writing
-    std::ofstream outFile(configPath);
-    if (outFile.is_open()) {
+        // Create directory if it doesn't exist
+        std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
+        if (!std::filesystem::exists(dirPath)) {
+            std::filesystem::create_directories(dirPath);
+        }
+        
+        // Extract and parse the pagination value
+        std::string paginationValueStr = inputSearch.substr(12);
+        int paginationValue = std::stoi(paginationValueStr);
+        
+        // Read current configuration
+        std::map<std::string, std::string> config = readConfig(configPath);
+        config["pagination"] = std::to_string(paginationValue);
+        
+        std::vector<std::pair<std::string, std::string>> orderedDefaults = {
+            {"auto_update", config.count("auto_update") ? config["auto_update"] : "off"},
+            {"pagination", std::to_string(paginationValue)},
+            {"mount_list", config.count("mount_list") ? config["mount_list"] : "compact"},
+            {"umount_list", config.count("umount_list") ? config["umount_list"] : "full"},
+            {"cp_mv_rm_list", config.count("cp_mv_rm_list") ? config["cp_mv_rm_list"] : "compact"},
+            {"write_list", config.count("write_list") ? config["write_list"] : "compact"},
+            {"conversion_lists", config.count("conversion_lists") ? config["conversion_lists"] : "compact"}
+        };
+        
+        // Attempt to open the config file for writing
+        std::ofstream outFile(configPath);
+        if (!outFile.is_open()) {
+            throw std::filesystem::filesystem_error(
+                "Unable to access configuration file", 
+                configPath, 
+                std::error_code());
+        }
+        
         // Write updated config values to the file
         for (const auto& [key, value] : orderedDefaults) {
             outFile << key << " = " << value << "\n";
         }
         outFile.close();
-    } else {
-        // If file couldn't be opened, display error and return
-        std::cerr << "\n\033[1;91mError: Unable to open configuration file for writing: \033[1;93m'"
-                  << configPath << "'\033[1;91m.\033[0;1m\n";
-        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        return;
-    }
-
-    // If file was successfully updated, set the pagination value
-    ITEMS_PER_PAGE = paginationValue;
-    if (paginationValue > 0) {
-        std::cout << "\n\033[0;1mPagination status updated: Max entries per page set to \033[1;93m" 
-                  << paginationValue << "\033[1;97m.\033[0m" << std::endl;
-    } else {
-        std::cout << "\n\033[0;1mPagination status updated: \033[1;91mDisabled\033[0;1m." << std::endl;
+        
+        // If file was successfully updated, set the pagination value
+        ITEMS_PER_PAGE = paginationValue;
+        if (paginationValue > 0) {
+            std::cout << "\n\033[0;1mPagination status updated: Max entries per page set to \033[1;93m" 
+                      << paginationValue << "\033[1;97m.\033[0m" << std::endl;
+        } else {
+            std::cout << "\n\033[0;1mPagination status updated: \033[1;91mDisabled\033[0;1m." << std::endl;
+        }
+    } catch (const std::invalid_argument&) {
+        std::cerr << "\n\033[1;91mInvalid pagination value: '\033[1;93m" 
+                  << inputSearch.substr(12) << "\033[1;91m' is not a valid number.\033[0;1m\n";
+    } catch (const std::exception& e) {
+        std::cerr << "\n\033[1;91mError: " << e.what() << std::endl;
     }
     
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
