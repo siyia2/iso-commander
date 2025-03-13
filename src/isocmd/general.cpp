@@ -1086,6 +1086,9 @@ void helpMappings() {
 // For memory mapping string transformations
 std::unordered_map<std::string, std::string> transformationCache;
 
+// For memory mapping original paths
+std::unordered_map<std::string, std::string> originalPathsCache;
+
 // Function to extract directory and filename from a given path
 std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view path, const std::string& location) {
     // Find last slash efficiently
@@ -1093,25 +1096,41 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view
     if (lastSlashPos == std::string_view::npos) {
         return {"", std::string(path)};
     }
-    // Early return for full list mode
+    
+    // Extract filename part once for reuse
+    std::string filename = std::string(path.substr(lastSlashPos + 1));
+    std::string fullPath = std::string(path);
+    
+    // Get original directory path
+    std::string originalDir;
+    
+    // Check if path is already in originalPathsCache
+    auto originalPathIt = originalPathsCache.find(fullPath);
+    if (originalPathIt != originalPathsCache.end()) {
+        originalDir = originalPathIt->second;
+    } else {
+        // Store original directory path
+        originalDir = std::string(path.substr(0, lastSlashPos));
+        originalPathsCache[fullPath] = originalDir;
+    }
+    
+    // Early return for full list mode - use original directory
     if (displayConfig::toggleFullListMount && location == "mount") {
-        return {std::string(path.substr(0, lastSlashPos)), 
-                std::string(path.substr(lastSlashPos + 1))};
+        return {originalDir, filename};
     } else if (displayConfig::toggleFullListCpMvRm && location == "cp_mv_rm") {
-        return {std::string(path.substr(0, lastSlashPos)), 
-                std::string(path.substr(lastSlashPos + 1))};
+        return {originalDir, filename};
     } else if (displayConfig::toggleFullListConversions && location == "conversions") {
-        return {std::string(path.substr(0, lastSlashPos)), 
-                std::string(path.substr(lastSlashPos + 1))};
+        return {originalDir, filename};
     } else if (displayConfig::toggleFullListWrite && location == "write") {
-        return {std::string(path.substr(0, lastSlashPos)), 
-                std::string(path.substr(lastSlashPos + 1))};
+        return {originalDir, filename};
     }
-    // Check cache first
-    auto cacheIt = transformationCache.find(std::string(path));
+    
+    // Check transformation cache
+    auto cacheIt = transformationCache.find(fullPath);
     if (cacheIt != transformationCache.end()) {
-        return {cacheIt->second, std::string(path.substr(lastSlashPos + 1))};
+        return {cacheIt->second, filename};
     }
+    
     // Optimize directory shortening
     std::string processedDir;
     processedDir.reserve(path.length() / 2);  // More conservative pre-allocation
@@ -1136,7 +1155,9 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view
         }
         start = end + 1;
     }
-    // Cache the result
-    transformationCache[std::string(path)] = processedDir;
-    return {processedDir, std::string(path.substr(lastSlashPos + 1))};
+    
+    // Cache the transformed result
+    transformationCache[fullPath] = processedDir;
+    
+    return {processedDir, filename};
 }
