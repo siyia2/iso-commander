@@ -471,16 +471,6 @@ char** completion_cb(const char* text, int start, int end) {
 
 // Function to display selectedIsos and devices for write
 std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::vector<IsoInfo>& selectedIsos, std::unordered_set<std::string>& uniqueErrorMessages) {
-    // Helper function to restore readline settings
-    auto restoreReadline = []() {
-        rl_completion_display_matches_hook = rl_display_match_list;
-        rl_attempted_completion_function = nullptr;
-        rl_bind_keyseq("\033[A", rl_get_previous_history);
-        rl_bind_keyseq("\033[B", rl_get_next_history);
-        rl_bind_key('\f', prevent_readline_keybindings);
-        rl_bind_key('\t', prevent_readline_keybindings);
-    };
-    
     // Helper function to set up readline
     auto setupReadline = []() {
         // Disable readline completion list display for more than one items
@@ -499,13 +489,6 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         rl_bind_keyseq("\033[B", rl_get_next_history);
     };
     
-    // Helper function to disable readline key bindings for confirmation
-    auto disableReadlineForConfirmation = []() {
-        rl_bind_key('\f', prevent_readline_keybindings);
-        rl_bind_key('\t', prevent_readline_keybindings);
-        rl_bind_keyseq("\033[A", prevent_readline_keybindings);
-        rl_bind_keyseq("\033[B", prevent_readline_keybindings);
-    };
 
     while (true) {
         setupReadline();

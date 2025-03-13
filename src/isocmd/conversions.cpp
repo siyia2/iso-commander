@@ -581,7 +581,6 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 		
 		if (validCommand) continue;
 		        
-
         // Handle input for returning to the unfiltered list or exiting
         if (rawInput.get()[0] == '\0') {
             clearScrollBuffer();
@@ -830,8 +829,8 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
     for (auto& future : futures) {
         future.wait();
     }
-
     isProcessingComplete.store(true);
+    signal(SIGINT, SIG_IGN);  // Ignore Ctrl+C after completion of futures
     progressThread.join();
 }
 

@@ -730,6 +730,26 @@ int prevent_readline_keybindings(int, int) {
 }
 
 
+// Function to restore readline history keys but prevent declutter and listings
+void restoreReadline() {
+    rl_completion_display_matches_hook = rl_display_match_list;
+    rl_attempted_completion_function = nullptr;
+    rl_bind_keyseq("\033[A", rl_get_previous_history);
+    rl_bind_keyseq("\033[B", rl_get_next_history);
+    rl_bind_key('\f', prevent_readline_keybindings);
+    rl_bind_key('\t', prevent_readline_keybindings);
+}
+
+
+// Function to disable readline history,declutter and listings
+void disableReadlineForConfirmation() {
+    rl_bind_key('\f', prevent_readline_keybindings);
+    rl_bind_key('\t', prevent_readline_keybindings);
+    rl_bind_keyseq("\033[A", prevent_readline_keybindings);
+    rl_bind_keyseq("\033[B", prevent_readline_keybindings);
+}
+
+
 // Function to clear scroll buffer in addition to clearing screen with ctrl+l
 int clear_screen_and_buffer(int, int) {
     // Clear scroll buffer and screen (works in most terminals)
