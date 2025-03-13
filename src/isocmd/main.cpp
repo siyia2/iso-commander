@@ -822,6 +822,15 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
     // Calculate rows needed
     int rows = (items_to_display + num_columns - 1) / num_columns;
     
+    // Function to check if a path is a directory
+    auto isDirectory = [](const char* path) -> bool {
+        struct stat path_stat;
+        if (stat(path, &path_stat) != 0) {
+            return false; // If stat fails, assume it's not a directory
+        }
+        return S_ISDIR(path_stat.st_mode);
+    };
+    
     // Function for smart truncation
     auto smartTruncate = [](const char* str, int max_width) -> std::string {
         std::string result(str);
@@ -862,14 +871,40 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
             int index = row + col * rows + 1;
             
             if (index <= items_to_display) {
-                const char* relative_path = matches[index] + base_len;
-                std::string truncated = smartTruncate(relative_path, column_width);
+                const char* full_path = matches[index];
+                const char* relative_path = full_path + base_len;
+                
+                // Check if the path is a directory
+                bool is_dir = isDirectory(full_path);
+                
+                // Apply color and format based on file type
+                std::string formatted;
+                
+                if (is_dir) {
+                    // Use blue color for directories and append a slash
+                    formatted = "\033[1;34m" + smartTruncate(relative_path, column_width - 1) + "/\033[0m";
+                } else {
+                    // Regular color for files
+                    formatted = smartTruncate(relative_path, column_width);
+                }
                 
                 // Last column doesn't need padding
                 if (col == num_columns - 1 || index == items_to_display) {
-                    printf("%s", truncated.c_str());
+                    printf("%s", formatted.c_str());
                 } else {
-                    printf("%-*s", total_column_width, truncated.c_str());
+                    // Need to handle ANSI escape codes when padding
+                    // Standard padding won't work correctly with color codes, so we add spaces manually
+                    int visible_length = strlen(relative_path);
+                    if (is_dir) visible_length++; // Account for the slash
+                    
+                    printf("%s", formatted.c_str());
+                    
+                    // Add appropriate spacing (accounting for truncation)
+                    int displayed_length = std::min((int)visible_length, column_width);
+                    int padding = total_column_width - displayed_length;
+                    for (int i = 0; i < padding; i++) {
+                        printf(" ");
+                    }
                 }
             }
         }
