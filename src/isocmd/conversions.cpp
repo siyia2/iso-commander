@@ -39,24 +39,52 @@ void clearRamCache(bool& modeMdf, bool& modeNrg) {
 
     // Manually remove items with matching extensions from transformationCache
     bool transformationCacheWasCleared = false;
+    bool originalCacheWasCleared = false;
+    
     for (auto it = transformationCache.begin(); it != transformationCache.end();) {
-        const std::string& key = it->first;
-        bool shouldErase = std::any_of(extensions.begin(), extensions.end(),
-            [&key](const std::string& ext) {
-                return key.size() >= ext.size() &&
-                       key.compare(key.size() - ext.size(), ext.size(), ext) == 0;
-            });
+		const std::string& key = it->first;
+		std::string keyLower = key; // Create a lowercase copy of the key
+		toLowerInPlace(keyLower);
 
-        if (shouldErase) {
-            it = transformationCache.erase(it);
-            transformationCacheWasCleared = true;
-        } else {
-            ++it;
-        }
-    }
+		bool shouldErase = std::any_of(extensions.begin(), extensions.end(),
+			[&keyLower](std::string ext) { // Pass by value to modify locally
+				toLowerInPlace(ext); // Convert extension to lowercase
+				return keyLower.size() >= ext.size() &&
+					keyLower.compare(keyLower.size() - ext.size(), ext.size(), ext) == 0;
+			});
+
+		if (shouldErase) {
+			it = transformationCache.erase(it);
+			transformationCacheWasCleared = true;
+		} else {
+			++it;
+		}
+	}
+
+	// Manually remove items with matching extensions from original cache
+	for (auto it = originalPathsCache.begin(); it != originalPathsCache.end();) {
+		const std::string& key = it->first;
+		std::string keyLower = key; // Create a lowercase copy of the key
+		toLowerInPlace(keyLower);
+
+		bool shouldErase = std::any_of(extensions.begin(), extensions.end(),
+			[&keyLower](std::string ext) { // Pass by value to modify locally
+				toLowerInPlace(ext); // Convert extension to lowercase
+				return keyLower.size() >= ext.size() &&
+					keyLower.compare(keyLower.size() - ext.size(), ext.size(), ext) == 0;
+			});
+
+		if (shouldErase) {
+			it = originalPathsCache.erase(it);
+			originalCacheWasCleared = true;
+		} else {
+			++it;
+		}
+	}
+
 
     // Display appropriate messages
-    if (cacheIsEmpty && !transformationCacheWasCleared) {
+    if (cacheIsEmpty && (!transformationCacheWasCleared || !originalCacheWasCleared)) {
         std::cout << "\n\033[1;93m" << cacheType << " buffer is empty. Nothing to clear.\033[0;1m\n";
     } else {
         std::cout << "\n\033[1;92m" << cacheType << " buffer cleared.\033[0;1m\n";

@@ -512,7 +512,7 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
                   << "\n\033[1;92mLocation:\033[0m " << "'" << filterHistoryFilePath << "'\033[0;1m" << std::endl;
         
         std::cout << "\n\033[1;94m=== Buffered Entries ===\033[0m\n";
-        std::cout << "\033[1;96m\nString Data → RAM:\033[0m " << transformationCache.size() + cachedParsesForUmount.size() << "\n";
+        std::cout << "\033[1;96m\nString Data → RAM:\033[0m " << transformationCache.size() + cachedParsesForUmount.size() + originalPathsCache.size() << "\n";
         std::cout << "\n\033[1;92mISO → RAM:\033[0m " << globalIsoFileList.size() << "\n";
         std::cout << "\n\033[1;38;5;208mBIN/IMG → RAM:\033[0m " << binImgFilesCache.size() << "\n";
         std::cout << "\033[1;38;5;208mMDF → RAM:\033[0m " << mdfMdsFilesCache.size() << "\n";
@@ -600,16 +600,38 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         } else {
-            // Clean transformation cache for .iso entries
-            for (auto it = transformationCache.begin(); it != transformationCache.end();) {
-                const std::string& key = it->first;
-                if (key.size() >= 4 && key.compare(key.size() - 4, 4, ".iso") == 0) {
-                    it = transformationCache.erase(it);
-                } else {
-                    ++it;
-                }
-            }
-            
+			// Clean transformationCache for .iso entries (case-insensitive)
+			for (auto it = transformationCache.begin(); it != transformationCache.end();) {
+				const std::string& key = it->first;
+				if (key.size() >= 4) {
+					// Extract the last 4 characters (extension)
+					std::string ext = key.substr(key.size() - 4);
+					// Convert extension to lowercase using toLowerInPlace
+					toLowerInPlace(ext);
+					if (ext == ".iso") {
+						it = transformationCache.erase(it);
+						continue;
+					}
+				}
+				++it;
+			}
+
+			// Clean originalPathsCache for .iso entries (case-insensitive)
+			for (auto it = originalPathsCache.begin(); it != originalPathsCache.end();) {
+				const std::string& key = it->first;
+				if (key.size() >= 4) {
+					// Extract the last 4 characters (extension)
+					std::string ext = key.substr(key.size() - 4);
+					// Convert extension to lowercase using toLowerInPlace
+					toLowerInPlace(ext);
+					if (ext == ".iso") {
+						it = originalPathsCache.erase(it);
+						continue;
+					}
+				}
+				++it;
+			}   
+			        
             std::cout << "\n\001\033[1;92mISO database cleared successfully\001\033[1;92m." << std::endl;
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
