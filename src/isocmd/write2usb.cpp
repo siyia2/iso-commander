@@ -506,7 +506,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 
         // Build device prompt with sorted ISOs
         std::ostringstream devicePromptStream;
-        devicePromptStream << "\n\033[0;1m Selected \033[1;92mISO\033[0;1m:\n\n";
+        devicePromptStream << "\n\033[0;1mSelected \033[1;92mISO\033[0;1m:\n\n";
         for (size_t i = 0; i < sortedIsos.size(); ++i) {
             auto [shortDir, filename] = extractDirectoryAndFilename(sortedIsos[i].path, "write");
             devicePromptStream << "  \033[1;93m" << (i+1) << ">\033[0;1m " 
