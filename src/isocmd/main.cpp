@@ -10,7 +10,7 @@ unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread:
 // Global mutex to protect the verbose sets
 std::mutex globalSetsMutex;
 
-const std::string configPath = std::string(getenv("HOME")) + "/.config/isocmd/config/config";
+const std::string configPath = std::string(getenv("HOME")) + "/.config/isocmd/config";
 
 // Global variables for cleanup
 int lockFileDescriptor = -1;
