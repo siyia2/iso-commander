@@ -13,8 +13,6 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <filesystem>
-#include <fmt/core.h>
-#include <fmt/format.h>
 #include <fstream>
 #include <functional>
 #include <future>
