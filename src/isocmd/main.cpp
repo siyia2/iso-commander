@@ -774,7 +774,7 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
     
     // Fix signedness comparison issue by casting
     if ((size_t)(num_matches - 1) > ITEMS_PER_PAGE) {
-        printf("\n[Showing %d/%d matches... increase pagination limit for more]\n", items_to_display, num_matches - 1);
+        printf("\n[Showing %d/%d matches... increase pagination limit to display more]\n", items_to_display, num_matches - 1);
     }
     
     // Move the cursor back to the saved position
