@@ -689,7 +689,7 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
     
     ITEMS_PER_PAGE = paginationValue;
     if (paginationValue > 0) {
-        std::cout << "\n\033[0;1mPagination status updated: \033[0m\033[1;97mMax entries per page set to \033[1;93m" 
+        std::cout << "\n\033[0;1mPagination status updated: Max entries per page set to \033[1;93m" 
                 << paginationValue << "\033[1;97m.\033[0m" << std::endl;
     } else {
         std::cout << "\n\033[0;1mPagination status updated: \033[1;91mDisabled\033[0;1m." << std::endl;
