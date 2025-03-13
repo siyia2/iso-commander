@@ -471,8 +471,16 @@ char** completion_cb(const char* text, int start, int end) {
 
 // Function to display selectedIsos and devices for write
 std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::vector<IsoInfo>& selectedIsos, std::unordered_set<std::string>& uniqueErrorMessages) {
-    while (true) {
-		
+    // Helper function to restore readline settings
+    auto restoreReadline = []() {
+        rl_completion_display_matches_hook = rl_display_match_list;
+        rl_attempted_completion_function = nullptr;
+        rl_bind_keyseq("\033[A", rl_get_previous_history);
+        rl_bind_keyseq("\033[B", rl_get_next_history);
+    };
+    
+    // Helper function to set up readline
+    auto setupReadline = []() {
         // Disable readline completion list display for more than one items
         rl_completion_display_matches_hook = [](char **matches, int num_matches, int max_length) {
             // Mark parameters as unused to suppress warnings
@@ -481,7 +489,24 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             (void)max_length;
             // Do nothing so no list is printed
         };
-		
+        
+        rl_attempted_completion_function = completion_cb;
+        rl_bind_key('\t', rl_complete);
+        rl_bind_key('\f', clear_screen_and_buffer);
+        rl_bind_keyseq("\033[A", rl_get_previous_history);
+        rl_bind_keyseq("\033[B", rl_get_next_history);
+    };
+    
+    // Helper function to disable readline key bindings for confirmation
+    auto disableReadlineForConfirmation = []() {
+        rl_bind_key('\f', prevent_readline_keybindings);
+        rl_bind_key('\t', prevent_readline_keybindings);
+        rl_bind_keyseq("\033[A", prevent_readline_keybindings);
+        rl_bind_keyseq("\033[B", prevent_readline_keybindings);
+    };
+
+    while (true) {
+        setupReadline();
         signal(SIGINT, SIG_IGN);  // Ignore Ctrl+C
         disable_ctrl_d();
         clearScrollBuffer();
@@ -503,7 +528,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 
         // Build device prompt with sorted ISOs
         std::ostringstream devicePromptStream;
-        devicePromptStream << "\n\033[0;1m Selected \033[1;92mISO\033[0;1m:\n\n";
+        devicePromptStream << "\n\033[0;1m Selected \033[1;92mISO \033[0;1mfor \033[1;93mwrite\033[0;1m:\n\n";
         for (size_t i = 0; i < sortedIsos.size(); ++i) {
             auto [shortDir, filename] = extractDirectoryAndFilename(sortedIsos[i].path, "write");
             devicePromptStream << "  \033[1;93m" << (i+1) << ">\033[0;1m " 
@@ -566,19 +591,9 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         completerData.sortedIsos = &sortedIsos;
         completerData.usbDevices = &usbDevices;
 
-        // Set up Readline
-        rl_attempted_completion_function = completion_cb;
-        rl_bind_key('\t', rl_complete);
-
         // Finalize prompt with usage instructions
         devicePromptStream << "\n\001\033[1;92m\002Mappings\001\033[1;94m\002 ↵ as \001\033[1;93m\002INDEX>DEVICE\001\033[1;94m\002, ? ↵ for help, ↵ to return:\001\033[0;1m\002 ";
         std::string devicePrompt = devicePromptStream.str();
-
-        // Restore readline functionality
-        rl_bind_key('\f', clear_screen_and_buffer);
-        rl_bind_key('\t', rl_complete);
-        rl_bind_keyseq("\033[A", rl_get_previous_history);
-        rl_bind_keyseq("\033[B", rl_get_next_history);
 
         // Get user input
         std::unique_ptr<char, decltype(&std::free)> deviceInput(
@@ -587,9 +602,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         
         // Handle empty input
         if (!deviceInput || deviceInput.get()[0] == '\0') {
-            // Restore readline
-            rl_completion_display_matches_hook = rl_display_match_list;
-            rl_attempted_completion_function = nullptr;
+            restoreReadline();
             return {};
         }
         
@@ -642,11 +655,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                       << iso.filename << "\033[0;1m\n";
         }
         
-        // Disable readline bindings for confirmation
-        rl_bind_key('\f', prevent_readline_keybindings);
-        rl_bind_key('\t', prevent_readline_keybindings);
-        rl_bind_keyseq("\033[A", prevent_readline_keybindings);
-        rl_bind_keyseq("\033[B", prevent_readline_keybindings);
+        disableReadlineForConfirmation();
 
         // Get confirmation
         std::unique_ptr<char, decltype(&std::free)> confirmation(
@@ -655,21 +664,14 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 
         // Process confirmation
         if (confirmation && (confirmation.get()[0] == 'y' || confirmation.get()[0] == 'Y')) {
-            // Restore readline bindings
-            rl_bind_keyseq("\033[A", rl_get_previous_history);
-            rl_bind_keyseq("\033[B", rl_get_next_history);
-            rl_completion_display_matches_hook = rl_display_match_list;
-            rl_attempted_completion_function = nullptr;
+            restoreReadline();
             setupSignalHandlerCancellations();
             g_operationCancelled.store(false);
             return validPairs;
         }
         
         // Restore readline bindings if not proceeding
-        rl_bind_keyseq("\033[A", rl_get_previous_history);
-        rl_bind_keyseq("\033[B", rl_get_next_history);
-        rl_completion_display_matches_hook = rl_display_match_list;
-        rl_attempted_completion_function = nullptr;
+        restoreReadline();
         
         std::cout << "\n\033[1;93mWrite operation aborted by user.\033[0;1m\n";
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
