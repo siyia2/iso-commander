@@ -340,7 +340,7 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::unorde
         rl_bind_key('\f', prevent_readline_keybindings);
         
         // Handle EOF
-        if (userInput.empty() && !isPageTurn) {
+        if (userInput.empty()) {
 			umountMvRmBreak = false;
             abortDel = true;
             return false;
