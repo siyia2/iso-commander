@@ -781,10 +781,10 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     // Wait for all tasks to complete
     for (auto& future : futures) {
         future.wait();
-        if (g_operationCancelled.load()) break;
     }
     
     isProcessingComplete.store(true, std::memory_order_release);
+    signal(SIGINT, SIG_IGN);  // Ignore Ctrl+C after completion of futures
     progressThread.join();
     
      if (messageLine > 0) {

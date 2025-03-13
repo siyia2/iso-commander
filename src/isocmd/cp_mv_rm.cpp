@@ -159,8 +159,9 @@ void processOperationInput(const std::string& input, const std::vector<std::stri
     for (auto& future : futures) {
         future.wait();
     }
-
+	
     isProcessingComplete.store(true);
+    signal(SIGINT, SIG_IGN);  // Ignore Ctrl+C after completion of futures
     progressThread.join();
     
 

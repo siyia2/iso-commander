@@ -362,6 +362,19 @@ void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMes
 }
 
 
+//Function to disblay errors from tokenization
+void displayErrors(std::unordered_set<std::string>& uniqueErrorMessages) {
+    // Display user input errors at the top
+    if (!uniqueErrorMessages.empty()) {
+        std::cout << "\n";
+        for (const auto& err : uniqueErrorMessages) {
+            std::cout << err << "\n";
+        }
+        uniqueErrorMessages.clear();
+    }
+}
+
+
 // General function to tokenize input strings
 void tokenizeInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<int>& processedIndices) {
     std::istringstream iss(input);
@@ -550,6 +563,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 
         // If processing is complete, show a final message
         if (isComplete->load(std::memory_order_acquire)) {
+			signal(SIGINT, SIG_IGN);  // Ignore Ctrl+C
 			std::cout << "\033[1A\033[1K";
             std::cout << "\r\033[0;1m Processing for " << operation << "\033[0;1m" << (!g_operationCancelled.load() ? " → \033[1;92mCOMPLETED\033[0;1m" : " → \033[1;33mINTERRUPTED\033[0;1m") << std::endl;
             std::cout << "\r[===============================================>] 100% ("

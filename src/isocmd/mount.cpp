@@ -261,5 +261,6 @@ void processAndMountIsoFiles(const std::string& input, const std::vector<std::st
 
     // Cleanup
     isProcessingComplete.store(true);
+    signal(SIGINT, SIG_IGN);  // Ignore Ctrl+C after completion of futures
     progressThread.join();
 }
