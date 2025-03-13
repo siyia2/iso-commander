@@ -770,7 +770,7 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
     // Print matches
     for (int i = 1; i <= items_to_display; i++) {
         if (i == 1 && num_matches > 1) {
-            printf("\n\033[1;38;5;130mTab Completion Matches:\033[0;1m\n\n");
+            printf("\n\033[1;38;5;130mTab Completion Matches (\033[1;93mCtrl+l\033[0;1m:clear\033[1;38;5;130m):\033[0;1m\n\n");
         }
         printf("%s\n", matches[i]);
     }
