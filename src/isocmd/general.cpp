@@ -911,7 +911,7 @@ void setDisplayMode(const std::string& inputSearch) {
         }
         std::cout << "\033[0;1m";
     } else {
-        std::cerr << "\n\033[1;91mFailed to write to config file: \033[1;93m'" 
+        std::cerr << "\n\033[1;91mError: Unable to open configuration file for writing: \033[1;93m'"
                   << configPath << "'\033[1;91m.\033[0;1m\n";
     }
 

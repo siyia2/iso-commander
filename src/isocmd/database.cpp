@@ -469,6 +469,87 @@ bool isValidDirectory(const std::string& path) {
 }
 
 
+// Function to read and display configuration options from config file
+void displayConfigurationOptions(const std::string& configPath) {
+    clearScrollBuffer();
+
+    // Lambda to report error messages and pause.
+    auto reportError = [&](const std::string &msg) {
+        std::cerr << "\n\033[1;91m" << msg << "\033[1;91m.\033[0;1m\n";
+        std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    };
+
+    // Lambda to create the default configuration file.
+    auto createDefaultConfig = [&]() -> bool {
+        std::vector<std::pair<std::string, std::string>> orderedDefaults = {
+            {"auto_update", "off"},
+            {"pagination", "25"},
+            {"mount_list", "compact"},
+            {"umount_list", "full"},
+            {"cp_mv_rm_list", "compact"},
+            {"write_list", "compact"},
+            {"conversion_lists", "compact"}
+        };
+
+        // Create the directory if it does not exist.
+        std::filesystem::path configDir = std::filesystem::path(configPath).parent_path();
+        if (!configDir.empty() && !std::filesystem::exists(configDir)) {
+            try {
+                std::filesystem::create_directories(configDir);
+            } catch (const std::filesystem::filesystem_error&) {
+                reportError("Unable to open configuration file for writing: \033[1;93m'" + configPath + "'");
+                return false;
+            }
+        }
+
+        // Create and write default values to the config file.
+        std::ofstream newConfigFile(configPath);
+        if (!newConfigFile.is_open()) {
+            reportError("Unable to open configuration file for writing: \033[1;93m'" + configPath + "'");
+            return false;
+        }
+        newConfigFile << "# Default configuration file created on " << configPath << "\n";
+        for (const auto& [key, value] : orderedDefaults) {
+            newConfigFile << key << "=" << value << "\n";
+        }
+        newConfigFile.close();
+        return true;
+    };
+
+    // Try to open the configuration file for reading.
+    std::ifstream configFile(configPath);
+    if (!configFile.is_open()) {
+        // Create default config if the file doesn't exist.
+        if (!createDefaultConfig()) {
+            return;
+        }
+        configFile.open(configPath);
+        if (!configFile.is_open()) {
+            reportError("Unable to open configuration file for reading: \033[1;93m'" + configPath + "'");
+            return;
+        }
+    }
+
+    // Display configuration options.
+    std::cout << "\n\033[1;96m==== Configuration Options ====\033[0;1m\n" << std::endl;
+    std::string line;
+    int lineNumber = 1;
+    while (std::getline(configFile, line)) {
+        if (!line.empty() && line[0] != '#') {  // Skip comment lines.
+            std::cout << "\033[1;92m" << lineNumber++ << ". \033[1;97m" 
+                      << line << "\033[0m" << std::endl;
+        }
+    }
+    configFile.close();
+
+    std::cout << "\n\033[1;93mConfiguration file: \033[1;97m" 
+              << configPath << "\033[0;1m" << std::endl;
+    std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+}
+
+
 // Function to display on-disk and ram statistics
 void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax_t maxDatabaseSize, const std::unordered_map<std::string, std::string>& transformationCache, const std::vector<std::string>& globalIsoFileList) {
 	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
@@ -577,83 +658,6 @@ void updateAutoUpdateConfig(const std::string& configPath, const std::string& in
                   << configPath << "'\033[1;91m.\033[0;1m\n";
     }
 
-    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-}
-
-
-// Function to read and display configuration options from config file
-void displayConfigurationOptions(const std::string& configPath) {
-    std::ifstream configFile(configPath);
-    
-    // If config file doesn't exist, create it with default options
-    if (!configFile.is_open()) {
-        std::vector<std::pair<std::string, std::string>> orderedDefaults = {
-            {"auto_update", "off"},
-            {"pagination", "25"},
-            {"mount_list", "compact"},
-            {"umount_list", "full"},
-            {"cp_mv_rm_list", "compact"},
-            {"write_list", "compact"},
-            {"conversion_lists", "compact"}
-        };
-        
-        // Create directory if it doesn't exist
-        std::filesystem::path configDir = std::filesystem::path(configPath).parent_path();
-        if (!configDir.empty() && !std::filesystem::exists(configDir)) {
-            try {
-                std::filesystem::create_directories(configDir);
-            } catch (const std::filesystem::filesystem_error& e) {
-                std::cerr << "\n\001\033[1;91mError: Could not create directory for config file: \001\033[1;93m'" 
-                          << configDir.string() << "\001'\033[1;91m. " << e.what() << std::endl;
-                std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                return;
-            }
-        }
-        
-        // Create config file with default values
-        std::ofstream newConfigFile(configPath);
-        if (!newConfigFile.is_open()) {
-            std::cerr << "\n\001\033[1;91mError: Could not create configuration file: \001\033[1;93m'" 
-                      << configPath << "\001'\033[1;91m." << std::endl;
-            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            return;
-        }
-        
-        // Write default values
-        newConfigFile << "# Default configuration file created on " << configPath << "\n";
-        for (const auto& [key, value] : orderedDefaults) {
-            newConfigFile << key << "=" << value << "\n";
-        }
-        newConfigFile.close();
-        
-        std::cout << "\n\001\033[1;92mCreated new configuration file with default settings.\001\033[0m\n" << std::endl;
-        
-        // Reopen for reading
-        configFile.open(configPath);
-        if (!configFile.is_open()) {
-            std::cerr << "\n\001\033[1;91mError: Could not open newly created configuration file.\001\033[1;91m" << std::endl;
-            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            return;
-        }
-    }
-    
-    std::cout << "\n\001\033[1;96m==== Configuration Options ====\001\033[0;1m\n" << std::endl;
-    
-    std::string line;
-    int lineNumber = 1;
-    while (std::getline(configFile, line)) {
-        if (!line.empty() && line[0] != '#') {  // Skip comments
-            std::cout << "\001\033[1;92m" << lineNumber << ". \001\033[1;97m" << line << "\001\033[0m" << std::endl;
-            lineNumber++;
-        }
-    }
-    
-    std::cout << "\n\001\033[1;93mConfiguration file: \001\033[1;97m" << configPath << "\001\033[0;1m" << std::endl;
-    
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
