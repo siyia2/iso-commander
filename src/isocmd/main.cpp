@@ -773,7 +773,7 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
     // Print matches
     for (int i = 1; i <= items_to_display; i++) {
         if (i == 1 && num_matches > 1) {
-            printf("\n\033[1;38;5;130mMatches\033[0;1m:\n");
+            printf("\n\033[1;38;5;130mTab Completion Matches:\033[0;1m\n\n");
         }
         printf("%s\n", matches[i]);
     }
@@ -781,7 +781,7 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
     // Only show the pagination message if we're actually limiting results
     // and ITEMS_PER_PAGE is positive
     if (ITEMS_PER_PAGE > 0 && (size_t)num_matches > ITEMS_PER_PAGE) {
-        printf("\n[Showing %d/%d matches... increase pagination limit to display more]\n", 
+        printf("\n\033[1;33m[Showing %d/%d matches... increase pagination limit to display more]\033[0;1m\n", 
                items_to_display, num_matches); // Removed the -1
     }
     
