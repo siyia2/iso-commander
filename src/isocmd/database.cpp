@@ -472,74 +472,83 @@ bool isValidDirectory(const std::string& path) {
 // Function to read and display configuration options from config file
 void displayConfigurationOptions(const std::string& configPath) {
     clearScrollBuffer();
-    signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
-    disable_ctrl_d();
-    
-    try {
-        // Try to open the configuration file for reading.
-        std::ifstream configFile(configPath);
-        if (!configFile.is_open()) {
-            // Create default config if the file doesn't exist.
-            // Create the directory if it does not exist.
-            std::filesystem::path configDir = std::filesystem::path(configPath).parent_path();
-            if (!configDir.empty() && !std::filesystem::exists(configDir)) {
+
+    // Lambda to report error messages and pause.
+    auto reportError = [&](const std::string &msg) {
+        std::cerr << "\n\033[1;91m" << msg << "\033[1;91m.\033[0;1m\n";
+        std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    };
+
+    // Lambda to create the default configuration file.
+    auto createDefaultConfig = [&]() -> bool {
+        std::vector<std::pair<std::string, std::string>> orderedDefaults = {
+            {"auto_update", "off"},
+            {"pagination", "25"},
+            {"mount_list", "compact"},
+            {"umount_list", "full"},
+            {"cp_mv_rm_list", "compact"},
+            {"write_list", "compact"},
+            {"conversion_lists", "compact"}
+        };
+
+        // Create the directory if it does not exist.
+        std::filesystem::path configDir = std::filesystem::path(configPath).parent_path();
+        if (!configDir.empty() && !std::filesystem::exists(configDir)) {
+            try {
                 std::filesystem::create_directories(configDir);
-            }
-            
-            // Create and write default values to the config file.
-            std::ofstream newConfigFile(configPath);
-            if (!newConfigFile.is_open()) {
-                throw std::filesystem::filesystem_error(
-                    "Unable to access configuration file", 
-                    configPath, 
-                    std::error_code());
-            }
-            
-            std::vector<std::pair<std::string, std::string>> orderedDefaults = {
-                {"auto_update", "off"},
-                {"pagination", "25"},
-                {"mount_list", "compact"},
-                {"umount_list", "full"},
-                {"cp_mv_rm_list", "compact"},
-                {"write_list", "compact"},
-                {"conversion_lists", "compact"}
-            };
-            
-            newConfigFile << "# Default configuration file created on " << configPath << "\n";
-            for (const auto& [key, value] : orderedDefaults) {
-                newConfigFile << key << "=" << value << "\n";
-            }
-            newConfigFile.close();
-            
-            configFile.open(configPath);
-            if (!configFile.is_open()) {
-                throw std::filesystem::filesystem_error(
-                    "Unable to access configuration file", 
-                    configPath, 
-                    std::error_code());
+            } catch (const std::filesystem::filesystem_error&) {
+                reportError("Unable to access configuration file: \033[1;93m'" + configPath + "'");
+                return false;
             }
         }
-        
-        // Display configuration options.
-        std::cout << "\n\033[1;96m==== Configuration Options ====\033[0;1m\n" << std::endl;
-        std::string line;
-        int lineNumber = 1;
-        while (std::getline(configFile, line)) {
-            if (!line.empty() && line[0] != '#') {  // Skip comment lines.
-                std::cout << "\033[1;92m" << lineNumber++ << ". \033[1;97m" 
-                          << line << "\033[0m" << std::endl;
-            }
+
+        // Create and write default values to the config file.
+        std::ofstream newConfigFile(configPath);
+        if (!newConfigFile.is_open()) {
+            reportError("Unable to access configuration file: \033[1;93m'" + configPath + "'");
+            return false;
         }
-        configFile.close();
-        std::cout << "\n\033[1;93mConfiguration file: \033[1;97m" 
-                  << configPath << "\033[0;1m" << std::endl;
-    } catch (const std::exception& e) {
-        std::cerr << "\n\033[1;91mError: " << e.what() << std::endl;
+        newConfigFile << "# Default configuration file created on " << configPath << "\n";
+        for (const auto& [key, value] : orderedDefaults) {
+            newConfigFile << key << "=" << value << "\n";
+        }
+        newConfigFile.close();
+        return true;
+    };
+
+    // Try to open the configuration file for reading.
+    std::ifstream configFile(configPath);
+    if (!configFile.is_open()) {
+        // Create default config if the file doesn't exist.
+        if (!createDefaultConfig()) {
+            return;
+        }
+        configFile.open(configPath);
+        if (!configFile.is_open()) {
+            reportError("Unable to access configuration file: \033[1;93m'" + configPath + "'");
+            return;
+        }
     }
-    
+
+    // Display configuration options.
+    std::cout << "\n\033[1;96m==== Configuration Options ====\033[0;1m\n" << std::endl;
+    std::string line;
+    int lineNumber = 1;
+    while (std::getline(configFile, line)) {
+        if (!line.empty() && line[0] != '#') {  // Skip comment lines.
+            std::cout << "\033[1;92m" << lineNumber++ << ". \033[1;97m" 
+                      << line << "\033[0m" << std::endl;
+        }
+    }
+    configFile.close();
+
+    std::cout << "\n\033[1;93mConfiguration file: \033[1;97m" 
+              << configPath << "\033[0;1m" << std::endl;
     std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
+
 
 // Function to display on-disk and ram statistics
 void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax_t maxDatabaseSize, const std::unordered_map<std::string, std::string>& transformationCache, const std::vector<std::string>& globalIsoFileList) {
@@ -592,7 +601,8 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
         std::cout << "\033[1;38;5;208mMDF → RAM:\033[1;97m " << mdfMdsFilesCache.size() << "\n";
         std::cout << "\033[1;38;5;208mNRG → RAM:\033[1;97m " << nrgFilesCache.size() << "\n";
     } catch (const std::filesystem::filesystem_error& e) {
-        std::cerr << "\n\033[1;91mError: " << e.what() << std::endl;
+        std::cerr << "\n\033[1;91mError: Unable to access configuration file: \033[1;93m'"
+                  << configPath << "'\033[1;91m.\033[0;1m\n";
     }
     std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -601,55 +611,54 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
 
 // Function to set the AutoUpdate switch in teh config file
 void updateAutoUpdateConfig(const std::string& configPath, const std::string& inputSearch) {
-    signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
-    disable_ctrl_d();
-    
-    try {
-        // Create directory if it doesn't exist
-        std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
-        if (!std::filesystem::exists(dirPath)) {
-            std::filesystem::create_directories(dirPath);
+	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+	disable_ctrl_d();
+    // Create directory if it doesn't exist
+    std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
+    if (!std::filesystem::exists(dirPath)) {
+        if (!std::filesystem::create_directories(dirPath)) {
+            std::cerr << "\n\033[1;91mFailed to create directory: \033[1;93m'" 
+                    << dirPath.string() << "\033[1;91m'.\033[0;1m\n";
+            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            return; // Ensure we exit to avoid unnecessary operations after failure
         }
-        
-        // Read the existing configuration
-        std::map<std::string, std::string> config = readConfig(configPath);
-        
-        // Update the auto_update setting based on the input
-        config["auto_update"] = (inputSearch == "*auto_on") ? "on" : "off";
-        
-        // Ensure settings maintain order and are written back to the file
-        std::vector<std::pair<std::string, std::string>> orderedDefaults = {
-            {"auto_update", config["auto_update"]},
-            {"pagination", config["pagination"]},
-            {"mount_list", config["mount_list"]},
-            {"umount_list", config["umount_list"]},
-            {"cp_mv_rm_list", config["cp_mv_rm_list"]},
-            {"write_list", config["write_list"]},
-            {"conversion_lists", config["conversion_lists"]}
-        };
-        
-        // Write all settings back to file in the correct order
-        std::ofstream outFile(configPath);
-        if (!outFile.is_open()) {
-            throw std::filesystem::filesystem_error(
-                "Unable to access configuration file", 
-                configPath, 
-                std::error_code());
-        }
-        
+    }
+
+    // Read the existing configuration (you need to implement this function or replace it)
+    std::map<std::string, std::string> config = readConfig(configPath);
+
+    // Update the auto_update setting based on the input
+    config["auto_update"] = (inputSearch == "*auto_on") ? "on" : "off";
+
+    // Ensure settings maintain order and are written back to the file
+    std::vector<std::pair<std::string, std::string>> orderedDefaults = {
+        {"auto_update", config["auto_update"]},       // Updated auto_update value
+        {"pagination", config["pagination"]},         // Existing pagination value
+        {"mount_list", config["mount_list"]},
+        {"umount_list", config["umount_list"]},
+        {"cp_mv_rm_list", config["cp_mv_rm_list"]},
+        {"write_list", config["write_list"]},
+        {"conversion_lists", config["conversion_lists"]}
+    };
+
+    // Write all settings back to file in the correct order
+    std::ofstream outFile(configPath);
+    if (outFile.is_open()) {
         for (const auto& [key, value] : orderedDefaults) {
             outFile << key << " = " << value << "\n";
         }
         outFile.close();
-        
+
         // Display the appropriate message based on the action
         std::cout << "\n\033[0;1mAutomatic background updates have been "
                 << (inputSearch == "*auto_on" ? "\033[1;92menabled" : "\033[1;91mdisabled")
                 << "\033[0;1m.\033[0;1m\n";
-    } catch (const std::exception& e) {
-        std::cerr << "\n\033[1;91mError: " << e.what() << std::endl;
+    } else {
+        std::cerr << "\n\033[1;91mError: Unable to access configuration file: \033[1;93m'"
+                  << configPath << "'\033[1;91m.\033[0;1m\n";
     }
-    
+
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
