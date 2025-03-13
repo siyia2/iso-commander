@@ -715,7 +715,7 @@ void manualRefreshForDatabase(std::string& initialDir, bool promptFlag, int maxD
         if (std::all_of(input.begin(), input.end(), [](char c) { return std::isspace(static_cast<unsigned char>(c)); })) {
             return;
         }
-
+		
         // Combine path validation and processing
         std::unordered_set<std::string> uniquePaths;
         std::vector<std::string> validPaths;
@@ -725,6 +725,11 @@ void manualRefreshForDatabase(std::string& initialDir, bool promptFlag, int maxD
         std::atomic<size_t> totalFiles{0};
 
         if (promptFlag) {
+			// Move the cursor to line 3 (2 lines down from the top)
+			std::cout << "\033[3H";
+			// Clear any listings if visible and leave a new line
+			std::cout << "\033[J";
+			std::cout << "\n";
             disableInput();
         }
 

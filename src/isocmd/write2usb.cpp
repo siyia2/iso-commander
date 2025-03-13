@@ -489,12 +489,20 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         rl_bind_keyseq("\033[B", rl_get_next_history);
     };
     
+    
 
     while (true) {
         setupReadline();
         signal(SIGINT, SIG_IGN);  // Ignore Ctrl+C
         disable_ctrl_d();
         clearScrollBuffer();
+        
+        if (selectedIsos.size() > ITEMS_PER_PAGE) {
+			std::cout << "\n\033[1;91mISO selections for \033[1;93mwrite\033[1;91m cannot exceed the current pagination limit of \033[1;93m" << ITEMS_PER_PAGE << "\033[1;91m!\033[0;1m\n";
+			std::cout << "\n\033[1;92m↵ to try again...\033[0;1m";
+			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			return {};
+		}
 
         displayErrors(uniqueErrorMessages);
 
@@ -684,10 +692,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
     disableInput();
     clearScrollBuffer();
-    
-    // Remember line number: one lien above the message we want to clear
-    int messageLine = 1;
-    
+
     std::cout << "\n\033[0;1mProcessing " << (totalTasks > 1 ? "tasks" : "task") << " for \033[1;93mwrite\033[0;1m operation... (\033[1;91mCtrl+c\033[0;1m:cancel)\n\n";
     std::cout << "\033[s";  // Save cursor position
 
@@ -770,12 +775,10 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     signal(SIGINT, SIG_IGN);  // Ignore Ctrl+C after completion of futures
     progressThread.join();
     
-     if (messageLine > 0) {
         std::cout << "\033[s";  // Save current position
-        std::cout << "\033[" << messageLine + 1 << ";1H\033[2K";  // Go to message line and clear it
+        std::cout << "\033[2H\033[2K";  // Go to message line and clear it
         std::cout << "\033[0;1mProcessing for \033[1;93mwrite\033[0;1m operation " << (!g_operationCancelled.load() ? "→ \033[1;92mCOMPLETED\033[0;1m\n" : "→ \033[1;33mINTERRUPTED\033[0;1m\n");
         std::cout << "\033[u";  // Restore to current position
-    }
 
     auto endTime = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration<double>(endTime - startTime).count();

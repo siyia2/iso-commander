@@ -33,6 +33,7 @@ namespace displayConfig {
     bool toggleFullListConversions = false;
 }
 
+
 // Main function
 int main(int argc, char *argv[]) {
 
@@ -63,7 +64,8 @@ int main(int argc, char *argv[]) {
     rl_completer_word_break_characters =";";
     
     // Readline do not repaint prompt on list completion
-    rl_completion_display_matches_hook = rl_display_match_list;
+    rl_completion_display_matches_hook = customListingsFunction;
+
 
     const char* lockFile = "/tmp/isocmd.lock";
 
@@ -617,7 +619,8 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
     if (needsUpdate) {
         std::ofstream outFile(filePath);
         if (!outFile) {
-            std::cerr << "\033[1;91mError: Unable to update configuration file at \033[1;93m'" << filePath << "'\033[1;91m.\033[0;1m\n";
+            std::cerr << "\n\033[1;91mError: Unable to open configuration file for writing: \033[1;93m'"
+                  << configPath << "'\033[1;91m.\033[0;1m\n";
         } else {
             for (const auto& pair : orderedDefaults) {
                 outFile << pair.first << " = " << configMap[pair.first] << "\n";
@@ -640,18 +643,19 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
 void updatePagination(const std::string& inputSearch, const std::string& configPath) {
     signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
     disable_ctrl_d();
+
     // Create directory if it doesn't exist
     std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
     if (!std::filesystem::exists(dirPath)) {
         if (!std::filesystem::create_directories(dirPath)) {
             std::cerr << "\n\033[1;91mFailed to create directory: \033[1;93m'" 
-                    << dirPath.string() << "\033[1;91m'.\033[0;1m\n";
+                      << dirPath.string() << "\033[1;91m'.\033[0;1m\n";
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             return;
         }
     }
-    
+
     int paginationValue = 0;
     std::string paginationValueStr;
     
@@ -663,16 +667,16 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
     }
     catch (const std::invalid_argument&) {
         std::cerr << "\n\033[1;91mInvalid pagination value: '\033[1;93m" 
-                << paginationValueStr << "\033[1;91m' is not a valid number.\033[0;1m\n";
+                  << paginationValueStr << "\033[1;91m' is not a valid number.\033[0;1m\n";
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         return;
     }
-    
-    // Rest of the function remains the same
+
+    // Read current configuration
     std::map<std::string, std::string> config = readConfig(configPath);
     config["pagination"] = std::to_string(paginationValue);
-    
+
     std::vector<std::pair<std::string, std::string>> orderedDefaults = {
         {"auto_update", config.count("auto_update") ? config["auto_update"] : "off"},
         {"pagination", std::to_string(paginationValue)},
@@ -682,19 +686,29 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
         {"write_list", config.count("write_list") ? config["write_list"] : "compact"},
         {"conversion_lists", config.count("conversion_lists") ? config["conversion_lists"] : "compact"}
     };
-    
+
+    // Attempt to open the config file for writing
     std::ofstream outFile(configPath);
     if (outFile.is_open()) {
+        // Write updated config values to the file
         for (const auto& [key, value] : orderedDefaults) {
             outFile << key << " = " << value << "\n";
         }
         outFile.close();
+    } else {
+        // If file couldn't be opened, display error and return
+        std::cerr << "\n\033[1;91mError: Unable to open configuration file for writing: \033[1;93m'"
+                  << configPath << "'\033[1;91m.\033[0;1m\n";
+        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        return;
     }
-    
+
+    // If file was successfully updated, set the pagination value
     ITEMS_PER_PAGE = paginationValue;
     if (paginationValue > 0) {
         std::cout << "\n\033[0;1mPagination status updated: Max entries per page set to \033[1;93m" 
-                << paginationValue << "\033[1;97m.\033[0m" << std::endl;
+                  << paginationValue << "\033[1;97m.\033[0m" << std::endl;
     } else {
         std::cout << "\n\033[0;1mPagination status updated: \033[1;91mDisabled\033[0;1m." << std::endl;
     }
@@ -735,9 +749,42 @@ int prevent_readline_keybindings(int, int) {
 }
 
 
+// Custom readline matching list function
+void customListingsFunction(char **matches, int num_matches, int max_length) {
+    (void)max_length; // Silencing unused parameter warning
+    
+    // Save the current cursor position
+    printf("\033[s");
+    // Clear any listings if visible and leave a new line
+	std::cout << "\033[J";
+    printf("\n");
+    
+    // Calculate how many items to display based on ITEMS_PER_PAGE
+    // Fix signedness comparison issue by casting
+    int items_to_display = ((size_t)(num_matches - 1) > ITEMS_PER_PAGE) ? 
+                           (int)ITEMS_PER_PAGE : (num_matches - 1);
+    
+    // Print matches
+    for (int i = 1; i <= items_to_display; i++) {
+        if (i == 1 && num_matches > 1) {
+            printf("\n\033[1;38;5;130mMatches\033[0;1m:\n");
+        }
+        printf("%s\n", matches[i]);
+    }
+    
+    // Fix signedness comparison issue by casting
+    if ((size_t)(num_matches - 1) > ITEMS_PER_PAGE) {
+        printf("\n[Showing %d/%d matches... increase pagination limit for more]\n", items_to_display, num_matches - 1);
+    }
+    
+    // Move the cursor back to the saved position
+    printf("\033[u");
+}
+
+
 // Function to restore readline history keys but prevent declutter and listings
 void restoreReadline() {
-    rl_completion_display_matches_hook = rl_display_match_list;
+    rl_completion_display_matches_hook = customListingsFunction;
     rl_attempted_completion_function = nullptr;
     rl_bind_keyseq("\033[A", rl_get_previous_history);
     rl_bind_keyseq("\033[B", rl_get_next_history);

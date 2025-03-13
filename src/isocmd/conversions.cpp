@@ -244,6 +244,11 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
         
         // Process file search (if not just listing)
         if (!list) {
+			// Move the cursor to line 3 (2 lines down from the top)
+			std::cout << "\033[3H";
+			// Clear any listings if visible and leave a new line
+			std::cout << "\033[J";
+			std::cout << "\n";
             // Parse input paths
             std::istringstream ss(inputSearch);
             std::string path;
