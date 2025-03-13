@@ -181,28 +181,30 @@ void processOperationInput(const std::string& input, const std::vector<std::stri
 
 // Function that handles all pagination logic for a list of entries
 std::string handlePaginatedDisplay(const std::vector<std::string>& entries, const std::string& promptPrefix, const std::string& promptSuffix, const std::function<void()>& displayErrorsFn, const std::function<void()>& setupEnvironmentFn, bool& isPageTurn) {
-    int totalEntries = entries.size();
     
     // Setup pagination parameters
-    int entriesPerPage;
-    if (totalEntries <= 25) {
-        entriesPerPage = totalEntries;  // Single page
-    } else {
-        entriesPerPage = std::max(25, (totalEntries + 4) / 5);
-        // Cap entriesPerPage at 100 if it exceeds, allowing more pages
-        if (entriesPerPage > 100) {
-            entriesPerPage = 100;
-        }
-    }
-    
-    int totalPages = (totalEntries + entriesPerPage - 1) / entriesPerPage;
-    int currentPage = 0;
-    bool disablePagination = (totalPages <= 1);
+    bool disablePagination = (ITEMS_PER_PAGE <= 0 || entries.size() <= ITEMS_PER_PAGE);
+    size_t totalPages = disablePagination ? 1 : ((entries.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE);
+    size_t currentPage = 0;
     
     while (true) {
         // Setup environment if function is provided
         if (setupEnvironmentFn) {
             setupEnvironmentFn();
+        }
+        
+        // Calculate start, end indices and total entries
+        size_t totalEntries = entries.size();
+        size_t start, end;
+        
+        if (disablePagination) {
+            // Show all entries on a single page
+            start = 0;
+            end = totalEntries;
+        } else {
+            // Calculate normal pagination
+            start = currentPage * ITEMS_PER_PAGE;
+            end = std::min(start + ITEMS_PER_PAGE, totalEntries);
         }
         
         // Clear the screen before displaying the new page
@@ -212,10 +214,6 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, cons
         if (!isPageTurn && displayErrorsFn) {
             displayErrorsFn();
         }
-        
-        // Create content for current page
-        int start = currentPage * entriesPerPage;
-        int end = std::min(start + entriesPerPage, totalEntries);
         
         std::ostringstream pageContent;
         
@@ -227,19 +225,16 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, cons
         }
         
         // Add the content for the current page
-        for (int i = start; i < end; ++i) {
+        for (size_t i = start; i < end; ++i) {
             pageContent << entries[i];
         }
         
-        // Add the footer pagination controls
-        if (totalPages > 1) {
-            // Add the requested pagination message at the bottom
-            if (!disablePagination) {
-                pageContent << "\n\033[1;38;5;130mPagination: ";  // brownBold
-                if (currentPage > 0) pageContent << "[p] ↵ Previous | ";
-                if (currentPage < totalPages - 1) pageContent << "[n] ↵ Next | ";
-                pageContent << "[g<num>] ↵ Go to | \033[0m\n";  // defaultColor
-            }
+        // Add the footer pagination controls only if pagination is enabled and needed
+        if (!disablePagination && totalPages > 1) {
+            pageContent << "\n\033[1;38;5;130mPagination: ";  // brownBold
+            if (currentPage > 0) pageContent << "[p] ↵ Previous | ";
+            if (currentPage < totalPages - 1) pageContent << "[n] ↵ Next | ";
+            pageContent << "[g<num>] ↵ Go to | \033[0m\n";  // defaultColor
         }
         
         // Build the full prompt
@@ -261,7 +256,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, cons
             if (userInput.size() >= 2 && userInput[0] == 'g' && std::isdigit(userInput[1])) {
                 std::string pageNumStr = userInput.substr(1);
                 try {
-                    int requestedPage = std::stoi(pageNumStr);
+                    size_t requestedPage = std::stoul(pageNumStr);
                     if (requestedPage >= 1 && requestedPage <= totalPages) {
                         currentPage = requestedPage - 1;  // Convert to 0-based index
                         isPageTurn = true;
