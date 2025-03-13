@@ -108,7 +108,7 @@ int main(int argc, char *argv[]) {
 	
 	// End of automatic ISO import
 	
-	// Set entries per page in lists
+	// Set max entries per page in lists
 	paginationSet(configPath);
 	
     while (!exitProgram) {
@@ -535,7 +535,6 @@ bool paginationSet(const std::string& filePath) {
 // Function to set list mode based on config file
 std::map<std::string, std::string> readUserConfigLists(const std::string& filePath) {
     std::map<std::string, std::string> configMap;
-    std::ifstream inFile(filePath);
 
     // Default values with a fixed order
     std::vector<std::pair<std::string, std::string>> orderedDefaults = {
@@ -548,14 +547,22 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
         {"conversion_lists", "compact"}
     };
 
-    // If the file cannot be opened, write the default configuration and return it
+    // Ensure the parent directory exists
+    fs::path configPath(filePath);
+    if (!fs::exists(configPath.parent_path()) && !configPath.parent_path().empty()) {
+        fs::create_directories(configPath.parent_path());
+    }
+
+    std::ifstream inFile(filePath);
+
+    // If the file cannot be opened, create and write defaults
     if (!inFile) {
         std::ofstream outFile(filePath);
         if (!outFile) {
+            std::cerr << "Error: Unable to create configuration file at '" << filePath << "'\n";
             return std::map<std::string, std::string>(orderedDefaults.begin(), orderedDefaults.end());
         }
 
-        // Write default configuration in correct order
         for (const auto& pair : orderedDefaults) {
             outFile << pair.first << " = " << pair.second << "\n";
         }
@@ -575,13 +582,11 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
             continue;
         }
 
-        // Find '=' character
         size_t equalsPos = line.find('=');
         if (equalsPos == std::string::npos) {
             continue; // Skip malformed lines
         }
 
-        // Extract key and value, trim whitespace
         std::string key = line.substr(0, equalsPos);
         std::string valueStr = line.substr(equalsPos + 1);
 
@@ -590,7 +595,6 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
         valueStr.erase(0, valueStr.find_first_not_of(" \t"));
         valueStr.erase(valueStr.find_last_not_of(" \t") + 1);
 
-        // Store only valid keys
         for (const auto& pair : orderedDefaults) {
             if (key == pair.first) {
                 configMap[key] = valueStr;
@@ -613,7 +617,9 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
     // Update the file if needed
     if (needsUpdate) {
         std::ofstream outFile(filePath);
-        if (outFile) {
+        if (!outFile) {
+            std::cerr << "\033[1;91mError: Unable to update configuration file at \033[1;93m'" << filePath << "'\033[1;91m.\033[0;1m\n";
+        } else {
             for (const auto& pair : orderedDefaults) {
                 outFile << pair.first << " = " << configMap[pair.first] << "\n";
             }
