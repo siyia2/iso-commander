@@ -343,9 +343,6 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::unorde
         if (userInput.empty() && !isPageTurn) {
 			umountMvRmBreak = false;
             abortDel = true;
-            std::cout << "\n\033[1;93mDelete operation aborted by user.\033[0;1m\n";
-            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             return false;
         }
         
@@ -357,7 +354,7 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::unorde
             } else {
                 umountMvRmBreak = false;
                 abortDel = true;
-                std::cout << "\n\033[1;93mDelete operation aborted by user.\033[0;1m\n";
+                std::cout << "\n\033[1;93mrm operation aborted by user.\033[0;1m\n";
                 std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 return false;
