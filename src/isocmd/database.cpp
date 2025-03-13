@@ -571,8 +571,8 @@ void updateAutoUpdateConfig(const std::string& configPath, const std::string& in
                 << (inputSearch == "*auto_on" ? "\033[1;92menabled" : "\033[1;91mdisabled")
                 << "\033[0;1m.\033[0;1m\n";
     } else {
-        std::cerr << "\n\033[1;91mFailed to write configuration, unable to access: \033[1;91m'" 
-                << configPath << "\033[1;91m'.\033[0;1m\n";
+        std::cerr << "\n\033[1;91mError: Unable to open configuration file for writing: \033[1;93m'"
+                  << configPath << "'\033[1;91m.\033[0;1m\n";
     }
 
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
@@ -654,156 +654,158 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
 
 // Function for manual database refresh
 void manualRefreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, bool filterHistory, std::atomic<bool>& newISOFound) {
-	enable_ctrl_d();
-	// Setup signal handler at the start of the operation
-    setupSignalHandlerCancellations();
+    try {
+        enable_ctrl_d();
+        // Setup signal handler at the start of the operation
+        setupSignalHandlerCancellations();
         
-    // Reset cancellation flag
-    g_operationCancelled.store(false);
-	
-    // Centralize input handling
-    std::string input = initialDir;
-    if (input.empty()) {
-        if (promptFlag) {
-            clearScrollBuffer();
-        }
+        // Reset cancellation flag
+        g_operationCancelled.store(false);
         
-        loadHistory(filterHistory);
-        
-        const std::unordered_set<std::string> validInputs = {
-			"*fl_m", "*cl_m", "*fl_u", "*cl_u", "*fl_fo", "*cl_fo", "*fl_w", "*cl_w", "*fl_c", "*cl_c"
-		};
-        
-        // Restore readline autocomplete and screen clear bindings
-        rl_bind_key('\f', clear_screen_and_buffer);
-		rl_bind_key('\t', rl_complete);
-		
-        bool isCpMv= false;
-        // Prompt the user to enter directory paths for manual database refresh
-		std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;92m\002.iso\001\033[1;94m\002 files and import them into the \001\033[1;92m\002local\001\033[1;94m\002 database, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
-        char* rawSearchQuery = readline(prompt.c_str());
-        
-
-        // Handle EOF (Ctrl+D) scenario
-        if (!rawSearchQuery) {
-            input.clear();  // Explicitly clear input to trigger early exit
-        } else {
-            std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
-            input = trimWhitespace(searchQuery.get());  // Trim only leading and trailing spaces
-			
-			if (input == "?") {
-				bool import2ISO = true;
-				helpSearches(isCpMv, import2ISO);
-				input = "";
-				std::string dummyDir = "";
-				manualRefreshForDatabase(dummyDir, promptFlag, maxDepth, filterHistory, newISOFound);
-			}        
-			
-            if (input == "stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter" || input == "*auto_off" || input == "*auto_on" || isValidInput(input) || input.starts_with("*pagination_")) {
-                databaseSwitches(input, promptFlag, maxDepth, filterHistory, newISOFound);
-                return;
+        // Centralize input handling
+        std::string input = initialDir;
+        if (input.empty()) {
+            if (promptFlag) {
+                clearScrollBuffer();
             }
             
-            if (!input.empty() && promptFlag) {
-                add_history(input.c_str());
-                std::cout << "\n";
+            loadHistory(filterHistory);
+            
+            const std::unordered_set<std::string> validInputs = {
+                "*fl_m", "*cl_m", "*fl_u", "*cl_u", "*fl_fo", "*cl_fo", "*fl_w", "*cl_w", "*fl_c", "*cl_c"
+            };
+            
+            // Restore readline autocomplete and screen clear bindings
+            rl_bind_key('\f', clear_screen_and_buffer);
+            rl_bind_key('\t', rl_complete);
+            
+            bool isCpMv = false;
+            // Prompt the user to enter directory paths for manual database refresh
+            std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;92m\002.iso\001\033[1;94m\002 files and import them into the \001\033[1;92m\002local\001\033[1;94m\002 database, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
+            char* rawSearchQuery = readline(prompt.c_str());
+            
+            // Handle EOF (Ctrl+D) scenario
+            if (!rawSearchQuery) {
+                input.clear();  // Explicitly clear input to trigger early exit
+            } else {
+                std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
+                input = trimWhitespace(searchQuery.get());  // Trim only leading and trailing spaces
+                
+                if (input == "?") {
+                    bool import2ISO = true;
+                    helpSearches(isCpMv, import2ISO);
+                    input = "";
+                    std::string dummyDir = "";
+                    manualRefreshForDatabase(dummyDir, promptFlag, maxDepth, filterHistory, newISOFound);
+                }
+                
+                if (input == "stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter" || input == "*auto_off" || input == "*auto_on" || isValidInput(input) || input.starts_with("*pagination_")) {
+                    databaseSwitches(input, promptFlag, maxDepth, filterHistory, newISOFound);
+                    return;
+                }
+                
+                if (!input.empty() && promptFlag) {
+                    add_history(input.c_str());
+                    std::cout << "\n";
+                }
             }
         }
-    }
 
-    // Early exit for empty or whitespace-only input
-    if (std::all_of(input.begin(), input.end(), [](char c) { return std::isspace(static_cast<unsigned char>(c)); })) {
-        return;
-    }
+        // Early exit for empty or whitespace-only input
+        if (std::all_of(input.begin(), input.end(), [](char c) { return std::isspace(static_cast<unsigned char>(c)); })) {
+            return;
+        }
 
-    // Combine path validation and processing
-    std::unordered_set<std::string> uniquePaths;  // Set to track unique paths
-	std::vector<std::string> validPaths;
-	std::unordered_set<std::string> invalidPaths;
-	std::unordered_set<std::string> uniqueErrorMessages;
-	std::vector<std::string> allIsoFiles;
-	std::atomic<size_t> totalFiles{0};
+        // Combine path validation and processing
+        std::unordered_set<std::string> uniquePaths;
+        std::vector<std::string> validPaths;
+        std::unordered_set<std::string> invalidPaths;
+        std::unordered_set<std::string> uniqueErrorMessages;
+        std::vector<std::string> allIsoFiles;
+        std::atomic<size_t> totalFiles{0};
 
-	if (promptFlag) {
-		disableInput();
-	}
+        if (promptFlag) {
+            disableInput();
+        }
 
-	auto start_time = std::chrono::high_resolution_clock::now();
+        auto start_time = std::chrono::high_resolution_clock::now();
 
-	// Single-pass path processing with concurrent file traversal
-	std::vector<std::future<void>> futures;
-	std::mutex processMutex;
-	std::mutex traverseErrorMutex;
+        // Single-pass path processing with concurrent file traversal
+        std::vector<std::future<void>> futures;
+        std::mutex processMutex;
+        std::mutex traverseErrorMutex;
 
-	std::istringstream iss(input);
-	std::string path;
-	std::size_t runningTasks = 0;
+        std::istringstream iss(input);
+        std::string path;
+        std::size_t runningTasks = 0;
 
-	while (std::getline(iss, path, ';')) {
-		if (!isValidDirectory(path)) {
-			if (promptFlag) {
-				invalidPaths.insert(path);
-			}
-			continue;
-		}
+        while (std::getline(iss, path, ';')) {
+            if (!isValidDirectory(path)) {
+                if (promptFlag) {
+                    invalidPaths.insert(path);
+                }
+                continue;
+            }
 
-		// Insert into set first to check for duplicates
-		if (uniquePaths.insert(path).second) { // insert() returns {iterator, bool}, second is true if inserted
-			validPaths.push_back(path);
-			futures.emplace_back(std::async(std::launch::async, 
-				[path, &allIsoFiles, &uniqueErrorMessages, &totalFiles, &processMutex, &traverseErrorMutex, &maxDepth, &promptFlag]() {
-					traverse(path, allIsoFiles, uniqueErrorMessages, 
-							totalFiles, processMutex, traverseErrorMutex, maxDepth, promptFlag);
-				}
-			));
+            if (uniquePaths.insert(path).second) {
+                validPaths.push_back(path);
+                futures.emplace_back(std::async(std::launch::async, 
+                    [path, &allIsoFiles, &uniqueErrorMessages, &totalFiles, &processMutex, &traverseErrorMutex, &maxDepth, &promptFlag]() {
+                        traverse(path, allIsoFiles, uniqueErrorMessages, totalFiles, processMutex, traverseErrorMutex, maxDepth, promptFlag);
+                    }
+                ));
 
-			if (++runningTasks >= maxThreads) {
-				for (auto& future : futures) {
-					future.wait();
-					if (g_operationCancelled.load()) break;
-				}
-				futures.clear();
-				runningTasks = 0;
-			}
-		}
-	}
+                if (++runningTasks >= maxThreads) {
+                    for (auto& future : futures) {
+                        future.wait();
+                        if (g_operationCancelled.load()) break;
+                    }
+                    futures.clear();
+                    runningTasks = 0;
+                }
+            }
+        }
 
-	// Wait for remaining tasks
-	for (auto& future : futures) {
-		future.wait();
-		if (g_operationCancelled.load()) break;
-	}
-    
-    // Post-processing
-    if (promptFlag) {
-		// Flush and Restore input after processing
-		flushStdin();
-		restoreInput();
-			
-        std::cout << "\r\033[0;1mTotal files processed: " << totalFiles;
+        for (auto& future : futures) {
+            future.wait();
+            if (g_operationCancelled.load()) break;
+        }
         
-        if (!invalidPaths.empty() || !validPaths.empty()) {
-            std::cout << "\n";
-        }
+        // Post-processing
+        if (promptFlag) {
+            flushStdin();
+            restoreInput();
+                
+            std::cout << "\r\033[0;1mTotal files processed: " << totalFiles;
+            
+            if (!invalidPaths.empty() || !validPaths.empty()) {
+                std::cout << "\n";
+            }
 
-        if (validPaths.empty()) {
-			input = "";
-			clear_history();
-            std::cout << "\033[1A\033[K";
+            if (validPaths.empty()) {
+                input = "";
+                clear_history();
+                std::cout << "\033[1A\033[K";
+            }
+            if (!validPaths.empty() && !input.empty()) {
+                saveHistory(filterHistory);
+                clear_history();
+            }
+            verboseForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, promptFlag, maxDepth, filterHistory, start_time, newISOFound);
+        } else {
+            if (!g_operationCancelled.load()) {
+                saveToDatabase(allIsoFiles, newISOFound);
+            }
         }
-		if (!validPaths.empty() && !input.empty()) {
-			saveHistory(filterHistory);
-			clear_history();
-		}
-        verboseForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, 
-                               uniqueErrorMessages, promptFlag, maxDepth, filterHistory, start_time, newISOFound);
-    } else {
-		if (!g_operationCancelled.load()) {
-			// Save the combined ISO to disk
-			saveToDatabase(allIsoFiles, newISOFound);
-		}
-	}
+    } catch (const std::exception& e) {
+        std::cerr << "\n\033[1;91mUnable to access ISO database: " << e.what() << std::endl;
+        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+		std::string dummyDir = "";
+        manualRefreshForDatabase(dummyDir, promptFlag, maxDepth, filterHistory, newISOFound);
+    }
 }
+
 
 
 // Function to traverse a directory and find ISO files

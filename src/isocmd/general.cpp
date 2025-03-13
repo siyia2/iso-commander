@@ -145,10 +145,19 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         bool filterHistory = false;
         clear_history();
         
-        if (!isUnmount) {
-            removeNonExistentPathsFromDatabase();
-            isAtISOList.store(true);
-        }
+        // Handle crashes when not enough permissions to access database
+        try {
+			if (!isUnmount) {
+				removeNonExistentPathsFromDatabase();
+				isAtISOList.store(true);
+			}
+		} catch (const std::exception& e) {
+			std::cerr << "\n\033[1;91mUnable to access ISO database: " << e.what() << std::endl;
+			// Handle the error gracefully, maybe set a flag or perform other necessary cleanup
+			std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
+			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			return;
+		}
         
         // Load files based on operation type
         if (needsClrScrn) {
