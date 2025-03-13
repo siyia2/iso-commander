@@ -1033,7 +1033,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
         if (!import2ISO) {
             std::cout << "   • Enter \033[1;34m'ls'\033[0m - List corresponding cached entries\n";
         }
-			std::cout << "   • Enter \033[1;34m'config'\033[0m - Display current configuration options\n";
+			std::cout << "   • Enter \033[1;34m'config'\033[0m - Display current configuration\n";
             std::cout << "   • Enter \033[1;34m'stats'\033[0m - Display application statistics\n" << std::endl;
 					
        std::cout << "\033[1;32m" << "5. Configuration Commands:\033[0m\n\n";
