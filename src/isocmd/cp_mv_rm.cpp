@@ -186,6 +186,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, cons
     bool disablePagination = (ITEMS_PER_PAGE <= 0 || entries.size() <= ITEMS_PER_PAGE);
     size_t totalPages = disablePagination ? 1 : ((entries.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE);
     size_t currentPage = 0;
+    size_t totalEntries = entries.size();
     
     while (true) {
         // Setup environment if function is provided
@@ -193,19 +194,9 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, cons
             setupEnvironmentFn();
         }
         
-        // Calculate start, end indices and total entries
-        size_t totalEntries = entries.size();
-        size_t start, end;
-        
-        if (disablePagination) {
-            // Show all entries on a single page
-            start = 0;
-            end = totalEntries;
-        } else {
-            // Calculate normal pagination
-            start = currentPage * ITEMS_PER_PAGE;
-            end = std::min(start + ITEMS_PER_PAGE, totalEntries);
-        }
+        // Calculate start and end indices
+        size_t start = disablePagination ? 0 : (currentPage * ITEMS_PER_PAGE);
+        size_t end = disablePagination ? totalEntries : std::min(start + ITEMS_PER_PAGE, totalEntries);
         
         // Clear the screen before displaying the new page
         clearScrollBuffer(); 
@@ -220,7 +211,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, cons
         // Add the header pagination info
         if (!disablePagination) {
             pageContent << "\033[1;38;5;130mPage " << (currentPage + 1) << "/" << totalPages
-                       << " (Items (" << (start + 1) << "-" << end << ")/\033[1;36m" << totalEntries << "\033[1;38;5;130m)"
+                       << " (Items (" << (start + 1) << "-" << end << ")/\033[1;93m" << totalEntries << "\033[1;38;5;130m)"
                        << "\033[0m\n\n";
         }
         
@@ -237,10 +228,8 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, cons
             pageContent << "[g<num>] ↵ Go to | \033[0m\n";  // defaultColor
         }
         
-        // Build the full prompt
-        std::string prompt = promptPrefix + pageContent.str() + promptSuffix;
-        
         // Get user input
+        std::string prompt = promptPrefix + pageContent.str() + promptSuffix;
         std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         if (!input.get()) {
             return "";  // Handle EOF or error
@@ -249,62 +238,54 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, cons
         // Process input
         std::string userInput = trimWhitespace(input.get());
         
-        // Handle page navigation
-        bool isNavigation = false;
+        // Handle navigation commands
         if (!userInput.empty()) {
+            bool isNavigation = false;
+            
             // Check if this is a "go to page" command (e.g., "g4")
             if (userInput.size() >= 2 && userInput[0] == 'g' && std::isdigit(userInput[1])) {
-                std::string pageNumStr = userInput.substr(1);
                 try {
-                    size_t requestedPage = std::stoul(pageNumStr);
+                    size_t requestedPage = std::stoul(userInput.substr(1));
+                    // Consider any go-to-page command as navigation, even if invalid
+                    isPageTurn = true;
+                    isNavigation = true;
+                    
+                    // Only change page if the number is valid
                     if (requestedPage >= 1 && requestedPage <= totalPages) {
                         currentPage = requestedPage - 1;  // Convert to 0-based index
-                        isPageTurn = true;
-                        isNavigation = true;
-                        continue;
                     }
                 } catch (const std::exception&) {
-                    // Invalid page number format, treat as regular input
+                    // Invalid page number format, treat as navigation but don't change page
+                    isPageTurn = true;
+                    isNavigation = true;
+                }
+            }
+            // Check for next/previous page navigation
+            else if (userInput == "n") {
+                isPageTurn = true;
+                isNavigation = true;
+                if (currentPage < totalPages - 1) {
+                    currentPage++;
+                }
+            }
+            else if (userInput == "p") {
+                isPageTurn = true;
+                isNavigation = true;
+                if (currentPage > 0) {
+                    currentPage--;
                 }
             }
             
-            // Check for n/p navigation - mark as navigation even if page doesn't change
-            if (userInput == "n") {
-                isNavigation = true;  // Mark as navigation regardless of page change
-                
-                // Next page, but only if not at the last page
-                if (currentPage < totalPages - 1) {
-                    currentPage++;
-                    isPageTurn = true;
-                    continue;
-                } else {
-                    // At last page, still mark as page turn to avoid triggering error display
-                    isPageTurn = true;
-                    continue;
-                }
-            } else if (userInput == "p") {
-                isNavigation = true;  // Mark as navigation regardless of page change
-                
-                // Previous page, but only if not at the first page
-                if (currentPage > 0) {
-                    currentPage--;
-                    isPageTurn = true;
-                    continue;
-                } else {
-                    // At first page, still mark as page turn to avoid triggering error display
-                    isPageTurn = true;
-                    continue;
-                }
+            if (isNavigation) {
+                continue;
             }
         }
         
-        if (!isNavigation) {
-            isPageTurn = false;  // Reset flag for non-page-turn actions
-            return userInput;     // Return the final non-navigation input
-        }
+        // Return non-navigation input
+        isPageTurn = false;
+        return userInput;
     }
 }
-
 
 // Function to generate entries for selected ISO files
 std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>& indexChunks, const std::vector<std::string>& isoFiles) {
