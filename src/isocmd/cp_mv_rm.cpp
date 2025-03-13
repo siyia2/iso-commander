@@ -197,6 +197,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, cons
     
     int totalPages = (totalEntries + entriesPerPage - 1) / entriesPerPage;
     int currentPage = 0;
+    bool disablePagination = (totalPages <= 1);
     
     while (true) {
         // Setup environment if function is provided
@@ -217,13 +218,28 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, cons
         int end = std::min(start + entriesPerPage, totalEntries);
         
         std::ostringstream pageContent;
+        
+        // Add the header pagination info
+        if (!disablePagination) {
+            pageContent << "\033[1;38;5;130mPage " << (currentPage + 1) << "/" << totalPages
+                       << " (Items (" << (start + 1) << "-" << end << ")/\033[1;36m" << totalEntries << "\033[1;38;5;130m)"
+                       << "\033[0m\n\n";
+        }
+        
+        // Add the content for the current page
         for (int i = start; i < end; ++i) {
             pageContent << entries[i];
         }
         
+        // Add the footer pagination controls
         if (totalPages > 1) {
-            pageContent << "\n\033[1mPage " << (currentPage + 1) 
-                      << "/" << totalPages << " \033[1;94m(n/p) or g<num> ↵\n\033[0m";
+            // Add the requested pagination message at the bottom
+            if (!disablePagination) {
+                pageContent << "\n\033[1;38;5;130mPagination: ";  // brownBold
+                if (currentPage > 0) pageContent << "[p] ↵ Previous | ";
+                if (currentPage < totalPages - 1) pageContent << "[n] ↵ Next | ";
+                pageContent << "[g<num>] ↵ Go to | \033[0m\n";  // defaultColor
+            }
         }
         
         // Build the full prompt
@@ -258,7 +274,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, cons
             }
             
             // Check for n/p navigation - mark as navigation even if page doesn't change
-            if (userInput == "n" || userInput == "N") {
+            if (userInput == "n") {
                 isNavigation = true;  // Mark as navigation regardless of page change
                 
                 // Next page, but only if not at the last page
@@ -271,7 +287,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, cons
                     isPageTurn = true;
                     continue;
                 }
-            } else if (userInput == "p" || userInput == "P") {
+            } else if (userInput == "p") {
                 isNavigation = true;  // Mark as navigation regardless of page change
                 
                 // Previous page, but only if not at the first page
@@ -332,7 +348,7 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::vector
     // Prefix and suffix for the prompt
     std::string promptPrefix = "\n";
     std::string promptSuffix = "\n\001\033[1;94m\002The selected \001\033[1;92m\002ISO\001\033[1;94m\002 will be " +
-        std::string("\001\033[1;91m\002*PERMANENTLY DELETED FROM DISK*\001\033[1;94m\002. Proceed? (y/n):\001\033[0;1m\002 ");
+        std::string("\001\033[1;91m\002*PERMANENTLY DELETED FROM DISK*\001\033[1;94m\002. Proceed? (Y/N):\001\033[0;1m\002 ");
     
     // Use the consolidated pagination function with custom input handling
     while (true) {
@@ -360,7 +376,7 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::vector
         
         // Process yes/no (only if not page turning)
         if (!isPageTurn) {
-            if (userInput == "y" || userInput == "Y") {
+            if (userInput == "Y") {
                 umountMvRmBreak = true;
                 return true;
             } else {

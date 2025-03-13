@@ -674,7 +674,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         output << "\n" << brownBold << "Pagination: ";
         if (effectiveCurrentPage > 0) output << "[p] ↵ Previous | ";
         if (effectiveCurrentPage < totalPages - 1) output << "[n] ↵ Next | ";
-        output << "[g#] ↵ Go to page | " << defaultColor << "\n";
+        output << "[g<num>] ↵ Go to | " << defaultColor << "\n";
     }
 
     std::cout << output.str();
