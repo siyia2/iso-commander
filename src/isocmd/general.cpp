@@ -76,23 +76,23 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
     }
     
      // Handle special commands
-        if (command == "?") {
-            helpSelections();
-            isAtISOList.store(false);
-            needsClrScrn = true;
-			return true;
-        }
+	if (command == "?") {
+		isAtISOList.store(false);
+		helpSelections();
+		needsClrScrn = true;
+		return true;
+	}
         
-        if (command == "~") {
-            // Toggle full list display based on operation type
-            if (isMount) displayConfig::toggleFullListMount = !displayConfig::toggleFullListMount;
-            else if (isUnmount) displayConfig::toggleFullListUmount = !displayConfig::toggleFullListUmount;
-            else if (isWrite) displayConfig::toggleFullListWrite = !displayConfig::toggleFullListWrite;
-            else if (isConversion)  displayConfig::toggleFullListConversions = !displayConfig::toggleFullListConversions;
-            else displayConfig::toggleFullListCpMvRm = !displayConfig::toggleFullListCpMvRm;
-            needsClrScrn = true;
-            return true;
-        }
+	if (command == "~") {
+		// Toggle full list display based on operation type
+		if (isMount) displayConfig::toggleFullListMount = !displayConfig::toggleFullListMount;
+		else if (isUnmount) displayConfig::toggleFullListUmount = !displayConfig::toggleFullListUmount;
+		else if (isWrite) displayConfig::toggleFullListWrite = !displayConfig::toggleFullListWrite;
+		else if (isConversion)  displayConfig::toggleFullListConversions = !displayConfig::toggleFullListConversions;
+		else displayConfig::toggleFullListCpMvRm = !displayConfig::toggleFullListCpMvRm;
+		needsClrScrn = true;
+		return true;
+	}
 
     // If no valid command was found
     return false;
