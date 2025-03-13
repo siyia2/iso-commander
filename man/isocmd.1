@@ -45,21 +45,17 @@ Ported from original C tools by Salvatore Santagati (mdf2iso), Grégory Kokanosk
 
 Creates and updates an ISO database (max 1MB, ~10,000 entries).
 
-Database locations:
-
-User mode: ~/.local/share/isocmd/database/iso_commander_database.txt
-
-Root mode: /root/.local/share/isocmd/database/iso_commander_database.txt
+Database location: ~/.local/share/isocmd/database/iso_commander_database.txt
 
 .TP
-.B Automatic ISO Database Management
+.B Automatic ISO Cache Management
 
-Automatically updates database for deleted, moved, copied, or converted files.
+Automatically syncs database for deleted, moved, copied, or converted files.
 
 .TP
 .B Built-in Filtering
 
-Adaptive Incremental Filtering: For terms with uppercase letters it becomes case-sensitive and case-insensitive for those without, scope is narrowed with each iteration.
+Adaptive Incremental Filtering: Uppercase terms are case-sensitive; lowercase are not. Scope narrows with each iteration.
 
 Supports two modes: 1)rapid (/name1;name2) and 2)regular (/)  with browsable history.
 
@@ -106,9 +102,9 @@ The configuration file is located at \fI~/.config/isocmd/config\fR, using a key-
 .B auto_update
 Controls automatic update behavior for ISO database. Auto-update runs in the background upon startup and scans any stored paths from readline history for .iso files.
 .br
-Values: off (disabled), on (enabled)
+Values: 0 (disabled), 1 (enabled)
 .br
-Default: off
+Default: 0
 .TP
 .B pagination
 Controls the max entries per listed page for all regular image and ISO lists.
