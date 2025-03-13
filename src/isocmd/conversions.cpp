@@ -265,10 +265,15 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
                              directoryPaths, invalidDirectoryPaths, processedErrorsFind);
             
             // Update history if valid paths were processed
-            if (!directoryPaths.empty()) {
-                add_history(inputSearch.c_str());
-                saveHistory(filterHistory);
-            }
+            try {
+				if (!directoryPaths.empty()) {
+					add_history(inputSearch.c_str());
+					saveHistory(filterHistory);
+				}
+			} catch (const std::exception& e) {
+				std::cerr << "\n\n\033[1;91mUnable to access local database: " << e.what();
+			// Optionally, you can log the error or take other actions here
+			}
             
             // Display search results
             verboseSearchResults(fileExtension, fileNames, invalidDirectoryPaths, 
@@ -664,10 +669,14 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
                     need2Sort = false;
                     break;
                 }
-
                 // Save the search query to history and update the file list
-                add_history(rawSearchQuery.get());
-                saveHistory(filterHistory);
+				try {
+					add_history(rawSearchQuery.get());
+					saveHistory(filterHistory);
+				} catch (const std::exception& e) {
+					// Optionally, you can log the error or take other actions here
+				}
+                
                 filterHistory = false;
                 clear_history(); // Clear history to reset for future inputs
                 need2Sort = true;
@@ -685,8 +694,12 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
             if (!filteredFiles.empty() && !(filteredFiles.size() == files.size())) {
                 filterHistory = true;
                 loadHistory(filterHistory);
-                add_history(inputSearch.c_str()); // Save the filter pattern to history
-                saveHistory(filterHistory);
+                try {
+					add_history(inputSearch.c_str());
+					saveHistory(filterHistory);
+				} catch (const std::exception& e) {
+					// Optionally, you can log the error or take other actions here
+				}
                 
                 need2Sort = true;
                 files = filteredFiles; // Update the file list with the filtered results
