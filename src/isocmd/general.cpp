@@ -1025,10 +1025,10 @@ void helpSearches(bool isCpMv, bool import2ISO) {
             std::cout << "   • Enter \033[1;33m'!clr'\033[0m - Clear the corresponding buffer\n";
         }
         if (import2ISO) {
-            std::cout << "   • Enter \033[1;33m'!clr'\033[0m - Clear on-disk ISO cache\n";
+            std::cout << "   • Enter \033[1;33m'!clr'\033[0m - Clear ISO database\n";
         }
-		std::cout << "   • Enter \033[1;33m'!clr_paths'\033[0m - Clear folder path history\n"
-				  << "   • Enter \033[1;33m'!clr_filter'\033[0m - Clear filter history\n" << std::endl;
+		std::cout << "   • Enter \033[1;33m'!clr_paths'\033[0m - Clear FolderPath database\n"
+				  << "   • Enter \033[1;33m'!clr_filter'\033[0m - Clear FilterTerm database\n" << std::endl;
 		std::cout << "\033[1;32m4. Special Display Commands:\033[0m\n";
         if (!import2ISO) {
             std::cout << "   • Enter \033[1;34m'ls'\033[0m - List corresponding cached entries\n";

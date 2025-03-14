@@ -197,10 +197,10 @@ void clearHistory(const std::string& inputSearch) {
 
     if (inputSearch == "!clr_paths") {
         filePath = basePath + "iso_commander_path_database.txt";
-        historyType = "Path";
+        historyType = "FolderPath";
     } else if (inputSearch == "!clr_filter") {
         filePath = basePath + "iso_commander_filter_database.txt";
-        historyType = "Filter";
+        historyType = "FilterTerm";
     } else {
         std::cerr << "\n\001\033[1;91mInvalid command: \001\033[1;93m'" 
                   << inputSearch << "'\001\033[1;91m." << std::endl;
