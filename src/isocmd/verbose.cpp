@@ -194,16 +194,16 @@ void verboseForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_
               << total_elapsed << " seconds\033[0;1m\n";
 
     if (g_operationCancelled) {
-        std::cout << "\n\033[1;93mDatabase refresh: Cancelled.\033[0;1m\n";
+        std::cout << "\n\033[1;93mDatabase refresh cancelled.\033[0;1m\n";
     } else if (!allIsoFiles.empty() && newISOFound.load() && !saveSuccess) {
-        std::cout << "\n\033[1;91mDatabase refresh failed: Unable to write to the database.\033[0;1m\n";
+        std::cout << "\n\033[1;91mDatabase refresh failed: Unable to access the database file.\033[0;1m\n";
     } else if (validPaths.empty()) {
         std::cout << "\n\033[1;91mDatabase refresh failed: Lack of valid paths.\033[0;1m\n";
 	} else if (!allIsoFiles.empty() && !newISOFound.load() && !saveSuccess){
         std::cout << "\n\033[1;93mNo new ISO found for database import.\033[0;1m\n";
     } else if (!allIsoFiles.empty() && saveSuccess && newISOFound.load()){
 		int result = countDifferentEntries(allIsoFiles, globalIsoFileList);
-		std::cout << "\n\033[1;92mDatabase refresh successful: \033[1;95m" << result << "\033[1;92m new ISO imported.\033[0;1m\n";
+		std::cout << "\n\033[1;92mDatabase refreshed successfully: \033[1;95m" << result << "\033[1;92m new ISO imported.\033[0;1m\n";
 	}
 
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
