@@ -667,7 +667,7 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
         displayConfigurationOptions(configPath);
     } else if (inputSearch == "!clr") {
         if (std::remove(databaseFilePath.c_str()) != 0) {
-            std::cerr << "\n\001\033[1;91mError clearing IsoCache: \001\033[1;93m'" 
+            std::cerr << "\n\001\033[1;91mError clearing ISO database: \001\033[1;93m'" 
                       << databaseFilePath << "\001'\033[1;91m. File missing or inaccessible." << std::endl;
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
