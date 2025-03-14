@@ -158,6 +158,7 @@ int countDifferentEntries(const std::vector<std::string>& allIsoFiles, const std
     return count;
 }
 
+
 // Function that provides verbose output for manualRefreshForDatabase
 void verboseForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_t>& totalFiles, std::vector<std::string>& validPaths, std::unordered_set<std::string>& invalidPaths, std::unordered_set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& filterHistory, const std::chrono::high_resolution_clock::time_point& start_time, std::atomic<bool>& newISOFound) {
     signal(SIGINT, SIG_IGN);
