@@ -187,7 +187,6 @@ void verboseForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_
     } else if (!allIsoFiles.empty() && saveSuccess && newISOFound.load()){
 		std::cout << "\n\033[1;92m\033[1;95m" << std::max(0, static_cast<int>(allIsoFiles.size() - globalIsoFileList.size()))
 				<< "\033[1;92m new ISO found and imported to database.\033[0;1m\n";
-		newISOFound.store(false);
 	}
 
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
