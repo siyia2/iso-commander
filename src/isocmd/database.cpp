@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GNU General Public License v2.0
 
 #include "../headers.h"
+#include "../threadpool.h"
 
 
 // Database Variables
@@ -240,12 +241,6 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
     std::vector<std::string> paths;
     int localMaxDepth = -1;
     bool localPromptFlag = false;
-    const size_t maxThreadsX2 = (std::thread::hardware_concurrency() == 0 ? 4 : std::thread::hardware_concurrency()) * 2;
-
-    // Local condition variable and mutex
-    std::condition_variable cv;
-    std::mutex threadMutex;
-    std::atomic<size_t> activeThreads{0};
 
     // Read paths from file
     {
@@ -254,7 +249,6 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
             isImportRunning.store(false);
             return;
         }
-
         std::string line;
         while (std::getline(file, line)) {
             std::istringstream iss(line);
@@ -279,11 +273,13 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
             paths.erase(it);
         }
     }
-
-    // Sort and filter paths
-    std::sort(paths.begin(), paths.end(),
-        [](const std::string& a, const std::string& b) { return a.size() < b.size(); });
-
+    
+    // Sort paths by length
+    std::sort(paths.begin(), paths.end(), [](const std::string& a, const std::string& b) {
+        return a.size() < b.size();
+    });
+    
+    // Filter out subdirectories
     std::vector<std::string> finalPaths;
     for (const auto& path : paths) {
         bool isSubdir = false;
@@ -299,49 +295,37 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
             finalPaths.push_back(path);
         }
     }
-
-    // Process paths with thread limit
+    
+    // Set up data structures for processing
     std::vector<std::string> allIsoFiles;
     std::atomic<size_t> totalFiles{0};
     std::unordered_set<std::string> uniqueErrorMessages;
     std::mutex processMutex;
     std::mutex traverseErrorMutex;
+    
+    // Create a thread pool based on the available hardware threads.
+    size_t numThreads = (std::thread::hardware_concurrency() == 0 ? 4 : std::thread::hardware_concurrency()) * 2;
 
+    ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
+    
+    // Enqueue tasks for each valid directory
     for (const auto& path : finalPaths) {
         if (isValidDirectory(path)) {
-            // Wait until the number of active threads is less than maxThreads * 2
-            std::unique_lock<std::mutex> lock(threadMutex);
-            cv.wait(lock, [&]() { return activeThreads < maxThreadsX2; });
-
-            // Increment the active thread count
-            activeThreads++;
-
-            // Launch the task asynchronously
-            futures.push_back(std::async(std::launch::async, [&, path]() {
+            futures.emplace_back(pool.enqueue([&, path]() {
                 traverse(path, allIsoFiles, uniqueErrorMessages,
                          totalFiles, processMutex, traverseErrorMutex,
                          localMaxDepth, localPromptFlag);
-
-                // Decrement the active thread count when done
-                {
-                    std::unique_lock<std::mutex> lock(threadMutex);
-                    activeThreads--;
-                }
-
-                // Notify the waiting thread that a thread has finished
-                cv.notify_one();
             }));
         }
     }
-
+    
     // Wait for all tasks to complete
     for (auto& future : futures) {
         future.wait();
     }
-
+    
     saveToDatabase(allIsoFiles, newISOFound);
-
     isImportRunning.store(false);
 }
 
