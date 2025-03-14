@@ -138,6 +138,23 @@ void reportErrorCpMvRm(const std::string& errorType, const std::string& srcDir, 
 
 // ISO DATABASE
 
+// Function to count differences between new and old ISO files
+int countDifferentEntries(const std::vector<std::string>& allIsoFiles, const std::vector<std::string>& globalIsoFileList) {
+    // Convert the globalIsoFileList to a set for O(1) lookups
+    std::unordered_set<std::string> globalSet(globalIsoFileList.begin(), globalIsoFileList.end());
+    
+    // Count items in allIsoFiles that are not in globalIsoFileList
+    int count = 0;
+    for (const auto& file : allIsoFiles) {
+        if (globalSet.find(file) == globalSet.end()) {
+            count++;
+        }
+    }
+    
+    return count;
+}
+
+
 // Function that provides verbose output for manualRefreshForDatabase
 void verboseForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_t>& totalFiles, std::vector<std::string>& validPaths, std::unordered_set<std::string>& invalidPaths, std::unordered_set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& filterHistory, const std::chrono::high_resolution_clock::time_point& start_time, std::atomic<bool>& newISOFound) {
     signal(SIGINT, SIG_IGN);
@@ -177,16 +194,16 @@ void verboseForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_
               << total_elapsed << " seconds\033[0;1m\n";
 
     if (g_operationCancelled) {
-        std::cout << "\n\033[1;93mDatabase refresh cancelled.\033[0;1m\n";
+        std::cout << "\n\033[1;93mDatabase refresh: Cancelled.\033[0;1m\n";
     } else if (!allIsoFiles.empty() && newISOFound.load() && !saveSuccess) {
-        std::cout << "\n\033[1;91mDatabase refresh failed. Unable to write to the database.\033[0;1m\n";
+        std::cout << "\n\033[1;91mDatabase refresh failed: Unable to write to the database.\033[0;1m\n";
     } else if (validPaths.empty()) {
-        std::cout << "\n\033[1;91mDatabase refresh failed due to lack of valid paths.\033[0;1m\n";
+        std::cout << "\n\033[1;91mDatabase refresh failed: Lack of valid paths.\033[0;1m\n";
 	} else if (!allIsoFiles.empty() && !newISOFound.load() && !saveSuccess){
         std::cout << "\n\033[1;93mNo new ISO found for database import.\033[0;1m\n";
     } else if (!allIsoFiles.empty() && saveSuccess && newISOFound.load()){
-		std::cout << "\n\033[1;92mDatabase refreshed: \033[1;95m" << std::max(0, static_cast<int>(allIsoFiles.size() - globalIsoFileList.size()))
-				<< "\033[1;92m new ISO imported.\033[0;1m\n";
+		int result = countDifferentEntries(allIsoFiles, globalIsoFileList);
+		std::cout << "\n\033[1;92mDatabase refresh successful: \033[1;95m" << result << "\033[1;92m new ISO imported.\033[0;1m\n";
 	}
 
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
