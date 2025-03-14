@@ -178,14 +178,15 @@ void verboseForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_
 
     if (g_operationCancelled) {
         std::cout << "\n\033[1;93mDatabase refresh cancelled.\033[0;1m\n";
-    } else if (!saveSuccess) {
+    } else if (!allIsoFiles.empty() && newISOFound.load() && !saveSuccess) {
         std::cout << "\n\033[1;91mDatabase refresh failed. Unable to write to the database.\033[0;1m\n";
     } else if (validPaths.empty()) {
         std::cout << "\n\033[1;91mDatabase refresh failed due to lack of valid paths.\033[0;1m\n";
-	} else if (!newISOFound.load()){
-        std::cout << "\n\033[1;93mNo ISO found for processing.\033[0;1m\n";
-    } else if (!allIsoFiles.empty() && saveSuccess){
-		std::cout << "\n\033[1;92mDatabase refreshed successfully. \033[1;95m" << allIsoFiles.size() << "\033[1;92m ISO found and processed.\033[0;1m\n";
+	} else if (!allIsoFiles.empty() && !newISOFound.load() && !saveSuccess){
+        std::cout << "\n\033[1;93mNo new ISO found for database import.\033[0;1m\n";
+    } else if (!allIsoFiles.empty() && saveSuccess && newISOFound.load()){
+		std::cout << "\n\033[1;92m\033[1;95m" << std::max(0, static_cast<int>(allIsoFiles.size() - globalIsoFileList.size()))
+				<< "\033[1;92m new ISO found and imported to database.\033[0;1m\n";
 		newISOFound.store(false);
 	}
 
