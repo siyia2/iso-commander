@@ -196,7 +196,7 @@ void clearHistory(const std::string& inputSearch) {
     std::string historyType;
 
     if (inputSearch == "!clr_paths") {
-        filePath = basePath + "iso_commander_history_database.txt";
+        filePath = basePath + "iso_commander_path_database.txt";
         historyType = "Path";
     } else if (inputSearch == "!clr_filter") {
         filePath = basePath + "iso_commander_filter_database.txt";
