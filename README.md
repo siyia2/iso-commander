@@ -20,14 +20,14 @@ For best experience execute with: `sudo isocmd`.
 
 * Minimizes disk thrashing.
 * Optimizes file access performance.
-* Optional automatic cache updates.
+* Optional automatic import to database.
 
 
 🖥️ Advanced Terminal Interface:
 
 * Robust tab completion.
 * Comprehensive command history.
-* Advanced progress tracking.
+* Advanced progress tracking and pagination.
 
 
 ⚡ High-Performance Architecture:
