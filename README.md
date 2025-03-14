@@ -16,7 +16,7 @@ For best experience execute with: `sudo isocmd`.
 
 ## ✨ Features
 
-💾 Intelligent ISO Caching:
+💾 Smart ISO Storage & Retrieval:
 
 * Minimizes disk thrashing.
 * Optimizes file access performance.
