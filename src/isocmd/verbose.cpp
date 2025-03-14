@@ -182,11 +182,12 @@ void verboseForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_
         std::cout << "\n\033[1;91mDatabase refresh failed. Unable to write to the database.\033[0;1m\n";
     } else if (validPaths.empty()) {
         std::cout << "\n\033[1;91mDatabase refresh failed due to lack of valid paths.\033[0;1m\n";
-    } else if (!invalidPaths.empty() || !uniqueErrorMessages.empty()) {
-        std::cout << "\n\033[1;93mDatabase refreshed with some errors.\033[0;1m\n";
-    } else {
-        std::cout << "\n\033[1;92mDatabase refreshed successfully.\033[0;1m\n";
-    }
+	} else if (!newISOFound.load()){
+        std::cout << "\n\033[1;93mNo ISO found for processing.\033[0;1m\n";
+    } else if (!allIsoFiles.empty() && saveSuccess){
+		std::cout << "\n\033[1;92mDatabase refreshed successfully. \033[1;95m" << allIsoFiles.size() << "\033[1;92m ISO found and processed.\033[0;1m\n";
+		newISOFound.store(false);
+	}
 
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');

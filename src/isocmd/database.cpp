@@ -7,7 +7,7 @@
 
 const std::string databaseDirectory = std::string(std::getenv("HOME")) + "/.local/share/isocmd/database/"; // Construct the full path to the cache directory
 const std::string databaseFilePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/iso_commander_database.txt";
-const std::string cacheFileName = "iso_commander_database.txt";
+const std::string databaseFilename = "iso_commander_database.txt";
 const uintmax_t maxDatabaseSize = 1 * 1024 * 1024; // 1MB
 
 // Global mutex to protect counter cout
@@ -402,7 +402,7 @@ void loadFromDatabase(std::vector<std::string>& isoFiles) {
 // Function to save ISO cache to database
 bool saveToDatabase(const std::vector<std::string>& isoFiles, std::atomic<bool>& newISOFound) {
     std::filesystem::path cachePath = databaseDirectory;
-    cachePath /= cacheFileName;
+    cachePath /= databaseFilename;
     if (!std::filesystem::exists(databaseDirectory) && !std::filesystem::create_directories(databaseDirectory)) {
         return false;
     }
