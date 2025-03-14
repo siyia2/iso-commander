@@ -140,20 +140,23 @@ void reportErrorCpMvRm(const std::string& errorType, const std::string& srcDir, 
 
 // Function to count differences between new and old ISO files
 int countDifferentEntries(const std::vector<std::string>& allIsoFiles, const std::vector<std::string>& globalIsoFileList) {
-    // Convert the globalIsoFileList to a set for O(1) lookups
-    std::unordered_set<std::string> globalSet(globalIsoFileList.begin(), globalIsoFileList.end());
-    
-    // Count items in allIsoFiles that are not in globalIsoFileList
+    // Use string_view to avoid extra allocations
+    std::unordered_set<std::string_view> globalSet;
+    globalSet.reserve(globalIsoFileList.size());  // Reserve memory to avoid rehashing
+
+    for (const auto& file : globalIsoFileList) {
+        globalSet.insert(file);  // Insert string_views pointing to existing strings
+    }
+
     int count = 0;
     for (const auto& file : allIsoFiles) {
         if (globalSet.find(file) == globalSet.end()) {
             count++;
         }
     }
-    
+
     return count;
 }
-
 
 // Function that provides verbose output for manualRefreshForDatabase
 void verboseForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_t>& totalFiles, std::vector<std::string>& validPaths, std::unordered_set<std::string>& invalidPaths, std::unordered_set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& filterHistory, const std::chrono::high_resolution_clock::time_point& start_time, std::atomic<bool>& newISOFound) {
