@@ -578,8 +578,7 @@ void updatePendingItemsForFilteredView(std::vector<PendingItem>& pendingItems,
 void updatePendingItemsForUnfilteredView(std::vector<PendingItem>& pendingItems,
                                         const std::vector<std::string>& unfilteredFiles);
                                         
-void displayPendingItems(const std::vector<PendingItem>& pendingItems, 
-                        const std::string& fileExtensionWithOutDots);
+void displayPendingItems(const std::vector<PendingItem>& pendingItems);
                         
 void addToPendingItems(std::vector<PendingItem>& pendingItems, 
                       const std::string& indexStr, 
@@ -669,9 +668,9 @@ void updatePendingItemsForUnfilteredView(std::vector<PendingItem>& pendingItems,
 
 
 // Modified function to display pending items
-void displayPendingItems(const std::vector<PendingItem>& pendingItems, const std::string& fileExtensionWithOutDots) {
+void displayPendingItems(const std::vector<PendingItem>& pendingItems) {
     if (!pendingItems.empty()) {
-        std::cout << "\n\033[1;95mPending " << fileExtensionWithOutDots << " operation on indices: ";
+        std::cout << "\n\033[1;95mMarked indices: ";
         for (size_t i = 0; i < pendingItems.size(); ++i) {
             std::cout << "\033[1;93m" << pendingItems[i].displayIndex;
             if (i < pendingItems.size() - 1) {
@@ -883,7 +882,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         
         // Display pending indices if there are any
         if (hasPendingExecution && !pendingItems.empty()) {
-            displayPendingItems(pendingItems, fileExtensionWithOutDots);
+            displayPendingItems(pendingItems);
         }
         
         std::cout << "\n\n";
