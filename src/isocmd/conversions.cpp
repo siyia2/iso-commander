@@ -584,6 +584,20 @@ void displayPendingItems(const std::vector<PendingItem>& pendingItems,
 void addToPendingItems(std::vector<PendingItem>& pendingItems, 
                       const std::string& indexStr, 
                       const std::vector<std::string>& files);
+                      
+                      void handle_filtering(const std::string& mainInputString, std::vector<std::string>& files, 
+                     const std::string& fileExtensionWithOutDots, 
+                     std::vector<PendingItem>& pendingItems, bool& hasPendingExecution, 
+                     bool& isFiltered, bool& needsClrScrn, bool& filterHistory, bool& need2Sort);
+                     
+                     void processInputIndices(const std::string& input, std::vector<std::string>& files, // Changed from const reference to non-const reference
+                        std::vector<PendingItem>& pendingItems,
+                        bool isMDF, bool isNRG, 
+                        std::unordered_set<std::string>& processedErrors,
+                        std::unordered_set<std::string>& successOuts,
+                        std::unordered_set<std::string>& skippedOuts,
+                        std::unordered_set<std::string>& failedOuts,
+                        bool& verbose, bool& needsClrScrn, std::atomic<bool>& newISOFound);
 
 // Helper function to process the actual files - this replaces the missing processFiles function
 // by calling the existing processInput function with the indices matching the file paths
@@ -997,6 +1011,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         }
     }
 }
+
 
 
 // Function to calculate converted files size
