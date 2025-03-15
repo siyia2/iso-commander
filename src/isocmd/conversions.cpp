@@ -565,7 +565,7 @@ void clearAndLoadImageFiles(std::vector<std::string>& files, const std::string& 
 
 
 // Handle filtering for select_and_convert_to_iso
-void handle_filtering(const std::string& mainInputString, std::vector<std::string>& files, const std::string& fileExtensionWithOutDots, std::vector<std::string>& pendingIndices, bool& hasPendingExecution, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, bool& need2Sort) {
+void handle_filtering(const std::string& mainInputString, std::vector<std::string>& files, const std::string& fileExtensionWithOutDots, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, bool& need2Sort) {
     
     if (mainInputString == "/") {
         std::cout << "\033[1A\033[K";
@@ -584,7 +584,7 @@ void handle_filtering(const std::string& mainInputString, std::vector<std::strin
 
             // Exit the filter loop if input is empty or "/"
             if (inputSearch.empty() || inputSearch == "/") {
-                std::cout << (hasPendingExecution ? "\033[4A\033[K" : "\033[2A\033[K");
+                std::cout << (hasPendingProcess ? "\033[4A\033[K" : "\033[2A\033[K");
                 needsClrScrn = false;
                 need2Sort = false;
                 break;
@@ -597,7 +597,7 @@ void handle_filtering(const std::string& mainInputString, std::vector<std::strin
                 continue; // Skip if no files match the filter
             }
             if (filteredFiles.size() == files.size()) {
-                std::cout << (hasPendingExecution ? "\033[4A\033[K" : "\033[2A\033[K");
+                std::cout << (hasPendingProcess ? "\033[4A\033[K" : "\033[2A\033[K");
                 needsClrScrn = false;
                 need2Sort = false;
                 break;
@@ -617,7 +617,7 @@ void handle_filtering(const std::string& mainInputString, std::vector<std::strin
             needsClrScrn = true;
             isFiltered = true;
             pendingIndices.clear();
-            hasPendingExecution = false;
+            hasPendingProcess = false;
             break;
         }
     } else if (mainInputString[0] == '/' && mainInputString.size() > 1) {
@@ -640,11 +640,11 @@ void handle_filtering(const std::string& mainInputString, std::vector<std::strin
             isFiltered = true;
             needsClrScrn = true;
             pendingIndices.clear();
-            hasPendingExecution = false;
+            hasPendingProcess = false;
             
             clear_history();
         } else {
-            std::cout << (hasPendingExecution ? "\033[4A\033[K" : "\033[2A\033[K"); // Clear the line if no files match the filter
+            std::cout << (hasPendingProcess ? "\033[4A\033[K" : "\033[2A\033[K"); // Clear the line if no files match the filter
             need2Sort = false;
             needsClrScrn = false;
         }
@@ -664,7 +664,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
     
     // New vector to store delayed execution indices
     std::vector<std::string> pendingIndices;
-    bool hasPendingExecution = false;
+    bool hasPendingProcess = false;
     
     // Reset page when entering this menu
     currentPage = 0;
@@ -696,7 +696,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         if (needsClrScrn) clearAndLoadImageFiles(files, fileType, need2Sort, isFiltered, list);
         
         // Display pending indices if there are any
-         if (hasPendingExecution && !pendingIndices.empty()) {
+         if (hasPendingProcess && !pendingIndices.empty()) {
                 std::cout << "\n\033[1;35mMarked indices: " << (isFiltered ? "\033[1;96mF⊳\033[1;35m " : "");
                 for (size_t i = 0; i < pendingIndices.size(); ++i) {
                     std::cout << "\033[1;93m" << pendingIndices[i];
@@ -704,7 +704,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
                         std::cout << ", ";
                     }
                 }
-                std::cout << "\033[1;35m ([\033[1;93mexec\033[1;35m] ↵ to execute [\033[1;93mclr\033[1;35m] ↵ to clear)\033[0;1m\n";
+                std::cout << "\033[1;35m ([\033[1;93mexec\033[1;35m] ↵ to process [\033[1;93mclr\033[1;35m] ↵ to clear)\033[0;1m\n";
             }
             
         
@@ -725,8 +725,8 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         // Check for clear pending command
         if (mainInputString == "clr") {
             pendingIndices.clear();
-            hasPendingExecution = false;
-            if (hasPendingExecution) {
+            hasPendingProcess = false;
+            if (hasPendingProcess) {
 				std::cout << "\033[4A\033[K";
 			}
             continue;
@@ -747,7 +747,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
                 files = (fileType == "bin" || fileType == "img") ? binImgFilesCache :
                         (fileType == "mdf" ? mdfMdsFilesCache : nrgFilesCache);
                 pendingIndices.clear();
-                hasPendingExecution = false;
+                hasPendingProcess = false;
                 needsClrScrn = true;
                 isFiltered = false; // Reset filter status
                 need2Sort = false;
@@ -760,8 +760,8 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
             }
         }
         
-        // Check for "exec" command to execute pending operations
-        if (mainInputString == "exec" && hasPendingExecution && !pendingIndices.empty()) {
+        // Check for "proc" command to execute pending operations
+        if (mainInputString == "proc" && hasPendingProcess && !pendingIndices.empty()) {
             // Combine all pending indices into a single string as if they were entered normally
             std::string combinedIndices = "";
             for (size_t i = 0; i < pendingIndices.size(); ++i) {
@@ -784,7 +784,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 
         // Handle filter commands
         if (mainInputString == "/" || (!mainInputString.empty() && mainInputString[0] == '/')) {
-            handle_filtering(mainInputString, files, fileExtensionWithOutDots, pendingIndices, hasPendingExecution, isFiltered, needsClrScrn, filterHistory, need2Sort);
+            handle_filtering(mainInputString, files, fileExtensionWithOutDots, pendingIndices, hasPendingProcess, isFiltered, needsClrScrn, filterHistory, need2Sort);
             continue;
         }
         
@@ -808,7 +808,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
                 }
                 
                 if (!pendingIndices.empty()) {
-                    hasPendingExecution = true;
+                    hasPendingProcess = true;
                     needsClrScrn = true;
                     continue;
                 }
