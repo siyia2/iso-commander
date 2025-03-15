@@ -775,44 +775,12 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
             processInput(combinedIndices, files, (fileType == "mdf"), (fileType == "nrg"), 
                         processedErrors, successOuts, skippedOuts, failedOuts, verbose, needsClrScrn, newISOFound);
             
-            // Clear pending operations
-            pendingIndices.clear();
-            hasPendingExecution = false;
-            
             needsClrScrn = true;
             if (verbose) {
                 verbosePrint(processedErrors, successOuts, skippedOuts, failedOuts, 3);
             }
             continue;
-        }
-        
-        // Add combined execution of pending and new indices
-        if (hasPendingExecution && !pendingIndices.empty() && 
-            mainInputString.find(';') == std::string::npos && // Not creating new pending indices
-            mainInputString.find('/') == std::string::npos) { // Not a filter command
-            
-            // Combine pending indices with the new input
-            std::string combinedIndices = "";
-            for (size_t i = 0; i < pendingIndices.size(); ++i) {
-                combinedIndices += pendingIndices[i];
-                combinedIndices += " ";
-            }
-            combinedIndices += mainInputString; // Add the newly entered indices
-            
-            // Process the combined selection
-            processInput(combinedIndices, files, (fileType == "mdf"), (fileType == "nrg"), 
-                        processedErrors, successOuts, skippedOuts, failedOuts, verbose, needsClrScrn, newISOFound);
-            
-            // Clear pending operations after execution
-            pendingIndices.clear();
-            hasPendingExecution = false;
-            
-            needsClrScrn = true;
-            if (verbose) {
-                verbosePrint(processedErrors, successOuts, skippedOuts, failedOuts, 3);
-            }
-            continue;
-        }
+        }       
 
         // Handle filter commands
         if (mainInputString == "/" || (!mainInputString.empty() && mainInputString[0] == '/')) {

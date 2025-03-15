@@ -131,6 +131,7 @@ bool handlePendingInduction(const std::string& inputString, std::vector<std::str
 }
 
 
+// Function to handle filtering for selectForIsoFiles
 bool handleFiltering(const std::string& inputString,std::vector<std::string>& filteredFiles,bool& isFiltered,bool& needsClrScrn,const std::string& operationColor,const std::string& operation,bool isUnmount,const std::vector<std::string>& isoDirs,std::vector<std::string>& pendingIndices,bool& hasPendingExecution,bool& filterHistory,std::unordered_set<std::string>& operationFiles,std::unordered_set<std::string>& skippedMessages,std::unordered_set<std::string>& operationFails,std::unordered_set<std::string>& uniqueErrorMessages) {
     
     if (inputString != "/" && (inputString.empty() || inputString[0] != '/')) {
@@ -214,6 +215,7 @@ bool handleFiltering(const std::string& inputString,std::vector<std::string>& fi
 }
 
 
+// Function to handle Pending Execution
 bool handlePendingExecution(const std::string& inputString,std::vector<std::string>& pendingIndices,bool& hasPendingExecution,bool isMount,bool isUnmount,bool write,bool isFiltered, std::vector<std::string>& filteredFiles,std::vector<std::string>& isoDirs,std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& skippedMessages,std::unordered_set<std::string>& operationFails,std::unordered_set<std::string>& uniqueErrorMessages, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool& filterHistory, std::atomic<bool>& newISOFound) {
     
     if (hasPendingExecution && !pendingIndices.empty() && inputString == "exec") {
@@ -234,32 +236,6 @@ bool handlePendingExecution(const std::string& inputString,std::vector<std::stri
                  filterHistory, newISOFound);
                  
         // Clear pending operations
-        pendingIndices.clear();
-        hasPendingExecution = false;
-        return true;
-    }
-    
-    // Handle combining pending indices with new selection
-    if (hasPendingExecution && !pendingIndices.empty() && 
-        inputString.find(';') == std::string::npos && // Not creating new pending indices
-        inputString.find('/') == std::string::npos) { // Not a filter command
-
-        // Combine pending indices with the new input
-        std::string combinedIndices = "";
-        for (size_t i = 0; i < pendingIndices.size(); ++i) {
-            combinedIndices += pendingIndices[i];
-            combinedIndices += " ";
-        }
-        combinedIndices += inputString; // Add the newly entered indices
-
-        // Process the combined selection
-        processOperationForSelectedIsoFiles(combinedIndices, isMount, isUnmount, write, isFiltered, 
-                filteredFiles, isoDirs, operationFiles, 
-                operationFails, uniqueErrorMessages, skippedMessages,
-                needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
-                filterHistory, newISOFound);
-         
-        // Clear pending operations after execution
         pendingIndices.clear();
         hasPendingExecution = false;
         return true;
