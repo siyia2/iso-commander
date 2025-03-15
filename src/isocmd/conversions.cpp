@@ -608,16 +608,17 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         if (needsClrScrn) clearAndLoadImageFiles(files, fileType, need2Sort, isFiltered, list);
         
         // Display pending indices if there are any
-        if (hasPendingExecution && !pendingIndices.empty()) {
-            std::cout << "\n\033[1;95mPending conversion operation on indices: ";
-            for (size_t i = 0; i < pendingIndices.size(); ++i) {
-                std::cout << "\033[1;93m" << pendingIndices[i];
-                if (i < pendingIndices.size() - 1) {
-                    std::cout << ", ";
+         if (hasPendingExecution && !pendingIndices.empty()) {
+                std::cout << "\n\033[1;95mPending " << fileExtensionWithOutDots << " operation on indices: ";
+                for (size_t i = 0; i < pendingIndices.size(); ++i) {
+                    std::cout << "\033[1;93m" << pendingIndices[i];
+                    if (i < pendingIndices.size() - 1) {
+                        std::cout << ", ";
+                    }
                 }
+                std::cout << "\033[1;35m ([\033[1;93mexec\033[1;35m] ↵ to execute [\033[1;93mclr\033[1;35m] ↵ to clear')\033[0;1m\n";
             }
-            std::cout << "\033[1;35m ([\033[1;93mexec\033[1;35m] ↵ to execute [\033[1;93mclr\033[1;35m] ↵ to clear')\033[0;1m\n";
-        }
+            
         
         std::cout << "\n\n";
         std::cout << "\033[1A\033[K";
@@ -637,6 +638,9 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         if (mainInputString == "clr") {
             pendingIndices.clear();
             hasPendingExecution = false;
+            if (hasPendingExecution) {
+				std::cout << "\033[4A\033[K";
+			}
             continue;
         }
         
@@ -740,7 +744,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
 
                 // Exit the filter loop if input is empty or "/"
                 if (inputSearch.empty() || inputSearch == "/") {
-                    std::cout << "\033[2A\033[K";
+                  std::cout << (hasPendingExecution ? "\033[4A\033[K" : "\033[2A\033[K");
                     needsClrScrn = false;
                     need2Sort = false;
                     break;
