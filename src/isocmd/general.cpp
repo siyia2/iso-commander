@@ -111,6 +111,10 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
     // Static vector renamed to isoDirs: used exclusively for umount
     static std::vector<std::string> isoDirs; 
     
+    // New vector to store delayed execution indices
+    std::vector<std::string> pendingIndices;
+    bool hasPendingExecution = false;
+    
     globalIsoFileList.reserve(100);
     filteredFiles.reserve(100);
     isoDirs.reserve(100);
@@ -168,6 +172,19 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                 if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak))
                     break;
             }
+            
+            // Display pending indices if there are any
+            if (hasPendingExecution && !pendingIndices.empty()) {
+                std::cout << "\n\033[1;95mPending " << operation << " operation on indices: ";
+                for (size_t i = 0; i < pendingIndices.size(); ++i) {
+                    std::cout << "\033[1;93m" << pendingIndices[i];
+                    if (i < pendingIndices.size() - 1) {
+                        std::cout << ", ";
+                    }
+                }
+                std::cout << "\033[1;35m ([\033[1;93mexec\033[1;35m] ↵ to execute [\033[1;93mclr\033[1;35m] ↵ to clear')\033[0;1m\n";
+            }
+            
             std::cout << "\n\n";
             // Flag for initiating screen clearing on destructive list actions e.g. Umount/Mv/Rm
             umountMvRmBreak = false;
@@ -189,8 +206,13 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         
-        if (!input.get())
-            break;
+        if (!input.get()) break;
+            
+            if (input && std::strcmp(input.get(), "clr") == 0) {
+				pendingIndices.clear();
+				hasPendingExecution = false;
+				continue;
+			}
 
         std::string inputString(input.get());
         
@@ -206,6 +228,8 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         if (inputString.empty()) {
             if (isFiltered) {
                 std::vector<std::string>().swap(filteredFiles);
+                pendingIndices.clear();
+				hasPendingExecution = false;
                 isFiltered = false;
                 currentPage = 0; // Reset page when clearing filter
                 continue;
@@ -213,6 +237,56 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                 return;
             }
         }
+
+        // Check for "exec" command to execute pending operations
+        if (inputString == "exec" && hasPendingExecution && !pendingIndices.empty()) {
+            // Combine all pending indices into a single string as if they were entered normally
+            std::string combinedIndices = "";
+            for (size_t i = 0; i < pendingIndices.size(); ++i) {
+                combinedIndices += pendingIndices[i];
+                if (i < pendingIndices.size() - 1) {
+                    combinedIndices += " ";
+                }
+            }
+            
+            // Process the pending operations
+            processOperationForSelectedIsoFiles(combinedIndices, isMount, isUnmount, write, isFiltered, 
+                     filteredFiles, isoDirs, operationFiles, 
+                     operationFails, uniqueErrorMessages, skippedMessages,
+                     needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
+                     filterHistory, newISOFound);
+                     
+            // Clear pending operations
+            pendingIndices.clear();
+            hasPendingExecution = false;
+            continue;
+        }
+        
+        // Add this new block to handle combining pending indices with new selection
+		if (hasPendingExecution && !pendingIndices.empty() && 
+			inputString.find(';') == std::string::npos && // Not creating new pending indices
+			inputString.find('/') == std::string::npos) { // Not a filter command
+    
+			// Combine pending indices with the new input
+			std::string combinedIndices = "";
+			for (size_t i = 0; i < pendingIndices.size(); ++i) {
+				combinedIndices += pendingIndices[i];
+				combinedIndices += " ";
+			}
+			combinedIndices += inputString; // Add the newly entered indices
+    
+			// Process the combined selection
+			processOperationForSelectedIsoFiles(combinedIndices, isMount, isUnmount, write, isFiltered, 
+					filteredFiles, isoDirs, operationFiles, 
+					operationFails, uniqueErrorMessages, skippedMessages,
+					needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
+					filterHistory, newISOFound);
+             
+			// Clear pending operations after execution
+			pendingIndices.clear();
+			hasPendingExecution = false;
+			continue;
+		}
 
         // Handle filtering operations
         if (inputString == "/" || (inputString[0] == '/' && inputString.length() > 1)) {
@@ -254,6 +328,8 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                             add_history(searchQuery.get());
                             saveHistory(filterHistory);
                             needsClrScrn = true;
+                            pendingIndices.clear();
+							hasPendingExecution = false;
                             filteredFiles = std::move(newFilteredFiles);
                             isFiltered = true;
                             currentPage = 0; // Reset to first page after filtering
@@ -288,14 +364,43 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             continue;
         }
 
-        // Process operation for selected files
+        // Check if input contains a semicolon for delayed execution
+        if (inputString.find(';') != std::string::npos && inputString.find('/') == std::string::npos) {
+            // Strip the semicolon from the input
+            std::string indicesInput = inputString.substr(0, inputString.find(';'));
+            
+            // Trim whitespace from the end
+            while (!indicesInput.empty() && std::isspace(indicesInput.back())) {
+                indicesInput.pop_back();
+            }
+            
+            if (!indicesInput.empty()) {
+                // Parse and store the indices
+                std::istringstream iss(indicesInput);
+                std::string token;
+                
+                while (iss >> token) {
+                    pendingIndices.push_back(token);
+                }
+                
+                if (!pendingIndices.empty()) {
+                    hasPendingExecution = true;
+                    needsClrScrn = true;
+                    continue;
+                }
+            }
+        }
+
+        // Process operation for selected files if no semicolon detected
         processOperationForSelectedIsoFiles(inputString, isMount, isUnmount, write, isFiltered, 
                  filteredFiles, isoDirs, operationFiles, 
                  operationFails, uniqueErrorMessages, skippedMessages,
                  needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
                  filterHistory, newISOFound);
+                 
     }
 }
+
 
 
 // Function to process operations from selectIsoFiles
