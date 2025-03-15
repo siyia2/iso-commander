@@ -100,7 +100,7 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
 
 
 // Parse pending indices
-bool handlePendingInduction(const std::string& inputString, std::vector<std::string>& pendingIndices, bool& hasPendingExecution, bool& needsClrScrn) {
+bool handlePendingInduction(const std::string& inputString, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& needsClrScrn) {
     if (inputString.find(';') == std::string::npos || inputString.find('/') != std::string::npos) {
         return false;
     }
@@ -122,7 +122,7 @@ bool handlePendingInduction(const std::string& inputString, std::vector<std::str
         }
         
         if (!pendingIndices.empty()) {
-            hasPendingExecution = true;
+            hasPendingProcess = true;
             needsClrScrn = true;
             return true;
         }
@@ -132,7 +132,7 @@ bool handlePendingInduction(const std::string& inputString, std::vector<std::str
 
 
 // Function to handle filtering for selectForIsoFiles
-bool handleFiltering(const std::string& inputString,std::vector<std::string>& filteredFiles,bool& isFiltered,bool& needsClrScrn,const std::string& operationColor,const std::string& operation,bool isUnmount,const std::vector<std::string>& isoDirs,std::vector<std::string>& pendingIndices,bool& hasPendingExecution,bool& filterHistory,std::unordered_set<std::string>& operationFiles,std::unordered_set<std::string>& skippedMessages,std::unordered_set<std::string>& operationFails,std::unordered_set<std::string>& uniqueErrorMessages) {
+bool handleFiltering(const std::string& inputString,std::vector<std::string>& filteredFiles,bool& isFiltered,bool& needsClrScrn,const std::string& operationColor,const std::string& operation,bool isUnmount,const std::vector<std::string>& isoDirs,std::vector<std::string>& pendingIndices,bool& hasPendingProcess,bool& filterHistory,std::unordered_set<std::string>& operationFiles,std::unordered_set<std::string>& skippedMessages,std::unordered_set<std::string>& operationFails,std::unordered_set<std::string>& uniqueErrorMessages) {
     
     if (inputString != "/" && (inputString.empty() || inputString[0] != '/')) {
         return false;
@@ -179,7 +179,7 @@ bool handleFiltering(const std::string& inputString,std::vector<std::string>& fi
                     saveHistory(filterHistory);
                     needsClrScrn = true;
                     pendingIndices.clear();
-                    hasPendingExecution = false;
+                    hasPendingProcess = false;
                     filteredFiles = std::move(newFilteredFiles);
                     isFiltered = true;
                     currentPage = 0; // Reset to first page after filtering
@@ -216,9 +216,9 @@ bool handleFiltering(const std::string& inputString,std::vector<std::string>& fi
 
 
 // Function to handle Pending Execution
-bool handlePendingProcess(const std::string& inputString,std::vector<std::string>& pendingIndices,bool& hasPendingExecution,bool isMount,bool isUnmount,bool write,bool isFiltered, std::vector<std::string>& filteredFiles,std::vector<std::string>& isoDirs,std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& skippedMessages,std::unordered_set<std::string>& operationFails,std::unordered_set<std::string>& uniqueErrorMessages, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool& filterHistory, std::atomic<bool>& newISOFound) {
+bool handlePendingProcess(const std::string& inputString,std::vector<std::string>& pendingIndices,bool& hasPendingProcess,bool isMount,bool isUnmount,bool write,bool isFiltered, std::vector<std::string>& filteredFiles,std::vector<std::string>& isoDirs,std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& skippedMessages,std::unordered_set<std::string>& operationFails,std::unordered_set<std::string>& uniqueErrorMessages, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool& filterHistory, std::atomic<bool>& newISOFound) {
     
-    if (hasPendingExecution && !pendingIndices.empty() && inputString == "proc") {
+    if (hasPendingProcess && !pendingIndices.empty() && inputString == "proc") {
         // Combine all pending indices into a single string as if they were entered normally
         std::string combinedIndices = "";
         for (size_t i = 0; i < pendingIndices.size(); ++i) {
@@ -256,7 +256,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
     
     // New vector to store delayed execution indices
     std::vector<std::string> pendingIndices;
-    bool hasPendingExecution = false;
+    bool hasPendingProcess = false;
     
     globalIsoFileList.reserve(100);
     filteredFiles.reserve(100);
@@ -317,7 +317,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             }
             
             // Display pending indices if there are any
-            if (hasPendingExecution && !pendingIndices.empty()) {
+            if (hasPendingProcess && !pendingIndices.empty()) {
                 std::cout << "\n\033[1;35mMarked indices: " << (isFiltered ? "\033[1;96mF⊳\033[1;35m " : "");
                 for (size_t i = 0; i < pendingIndices.size(); ++i) {
                     std::cout << "\033[1;93m" << pendingIndices[i];
@@ -353,7 +353,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             
             if (input && std::strcmp(input.get(), "clr") == 0) {
 				pendingIndices.clear();
-				hasPendingExecution = false;
+				hasPendingProcess = false;
 				continue;
 			}
 			
@@ -376,7 +376,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             if (isFiltered) {
                 std::vector<std::string>().swap(filteredFiles);
                 pendingIndices.clear();
-				hasPendingExecution = false;
+				hasPendingProcess = false;
                 isFiltered = false;
                 currentPage = 0; // Reset page when clearing filter
                 continue;
@@ -386,7 +386,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         }
 
         // Handle pending execution
-        bool pendingExecuted = handlePendingProcess(inputString, pendingIndices, hasPendingExecution, isMount, isUnmount, write, isFiltered, 
+        bool pendingExecuted = handlePendingProcess(inputString, pendingIndices, hasPendingProcess, isMount, isUnmount, write, isFiltered, 
                                                      filteredFiles, isoDirs, operationFiles, skippedMessages, operationFails, uniqueErrorMessages,
                                                      needsClrScrn, operation, isAtISOList, umountMvRmBreak, filterHistory, newISOFound);
         if (pendingExecuted) {
@@ -395,7 +395,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 
         // Handle filtering operations
         bool filteringHandled = handleFiltering(inputString, filteredFiles, isFiltered, needsClrScrn, operationColor, 
-                                              operation, isUnmount, isoDirs, pendingIndices, hasPendingExecution, 
+                                              operation, isUnmount, isoDirs, pendingIndices, hasPendingProcess, 
                                               filterHistory, operationFiles, skippedMessages, operationFails, 
                                               uniqueErrorMessages);
         if (filteringHandled) {
@@ -403,7 +403,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         }
 
         // Handle pending induction (delayed execution with ;)
-        bool pendingHandled = handlePendingInduction(inputString, pendingIndices, hasPendingExecution, needsClrScrn);
+        bool pendingHandled = handlePendingInduction(inputString, pendingIndices, hasPendingProcess, needsClrScrn);
         if (pendingHandled) {
             continue;
         }
