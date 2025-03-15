@@ -99,7 +99,7 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
 }
 
 
-// Main function to select and operate on ISOs by number for umount mount cp mv and rm
+// Parse pending indices
 bool handlePendingInduction(const std::string& inputString, std::vector<std::string>& pendingIndices, bool& hasPendingExecution, bool& needsClrScrn) {
     if (inputString.find(';') == std::string::npos || inputString.find('/') != std::string::npos) {
         return false;
@@ -245,6 +245,7 @@ bool handlePendingExecution(const std::string& inputString,std::vector<std::stri
 }
 
 
+// Main function to select and operate on ISOs by number for umount mount cp mv and rm
 void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
     // Bind readline keys
     rl_bind_key('\f', prevent_readline_keybindings);
