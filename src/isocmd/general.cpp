@@ -131,90 +131,6 @@ bool handlePendingInduction(const std::string& inputString, std::vector<std::str
 }
 
 
-// Function to handle filtering for selectForIsoFiles
-bool handleFiltering(const std::string& inputString,std::vector<std::string>& filteredFiles,bool& isFiltered,bool& needsClrScrn,const std::string& operationColor,const std::string& operation,bool isUnmount,const std::vector<std::string>& isoDirs,std::vector<std::string>& pendingIndices,bool& hasPendingProcess,bool& filterHistory,std::unordered_set<std::string>& operationFiles,std::unordered_set<std::string>& skippedMessages,std::unordered_set<std::string>& operationFails,std::unordered_set<std::string>& uniqueErrorMessages) {
-    
-    if (inputString != "/" && (inputString.empty() || inputString[0] != '/')) {
-        return false;
-    }
-    
-    pendingIndices.clear();
-
-    bool isFilterPrompt = (inputString == "/");
-    std::string searchString;
-
-    if (isFilterPrompt) {
-        // Interactive filter prompt
-        while (true) {
-            resetVerboseSets(operationFiles, skippedMessages, operationFails, uniqueErrorMessages);
-
-            filterHistory = true;
-            loadHistory(filterHistory);
-            std::cout << "\033[1A\033[K";
-
-            std::string filterPrompt = "\001\033[1;38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001" + 
-                                      operationColor + "\002" + operation + 
-                                      "\001\033[1;94m\002, or ↵ to return: \001\033[0;1m\002";
-            std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
-
-            if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
-                
-                clear_history();
-                needsClrScrn = isFiltered ? true : false;
-                break;
-            }
-
-            searchString = searchQuery.get();
-            
-            // Perform filtering using the improved function
-            const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
-            
-            if (!searchString.empty()) {
-                auto newFilteredFiles = filterFiles(sourceList, searchString);
-                
-                bool filterUnchanged = newFilteredFiles.size() == sourceList.size();
-                
-                if (!filterUnchanged && !newFilteredFiles.empty()) {
-                    add_history(searchQuery.get());
-                    saveHistory(filterHistory);
-                    needsClrScrn = true;
-                    pendingIndices.clear();
-                    hasPendingProcess = false;
-                    filteredFiles = std::move(newFilteredFiles);
-                    isFiltered = true;
-                    currentPage = 0; // Reset to first page after filtering
-                    clear_history();
-                    break;
-                }
-            }
-            clear_history();
-        }
-    } else {
-        // Quick filter with /pattern
-        searchString = inputString.substr(1);
-        
-        if (!searchString.empty()) {
-            const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
-            auto newFilteredFiles = filterFiles(sourceList, searchString);
-            
-            bool filterUnchanged = newFilteredFiles.size() == sourceList.size();
-            
-            if (!filterUnchanged && !newFilteredFiles.empty()) {
-                filterHistory = true;
-                loadHistory(filterHistory);
-                add_history(searchString.c_str());
-                saveHistory(filterHistory);
-                filteredFiles = std::move(newFilteredFiles);
-                isFiltered = true;
-                currentPage = 0; // Reset to first page after filtering
-                needsClrScrn = true;
-            }
-        }
-    }
-    return true;
-}
-
-
 // Function to handle Pending Execution
 bool handlePendingProcess(const std::string& inputString,std::vector<std::string>& pendingIndices,bool& hasPendingProcess,bool isMount,bool isUnmount,bool write,bool isFiltered, std::vector<std::string>& filteredFiles,std::vector<std::string>& isoDirs,std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& skippedMessages,std::unordered_set<std::string>& operationFails,std::unordered_set<std::string>& uniqueErrorMessages, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool& filterHistory, std::atomic<bool>& newISOFound) {
     
@@ -265,6 +181,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
     bool isFiltered = false;
     bool needsClrScrn = true;
     bool umountMvRmBreak = false;
+    bool filterHistory = false;
 
     // Reset page when entering this menu
     currentPage = 0;
@@ -289,22 +206,22 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         setupSignalHandlerCancellations();
         g_operationCancelled.store(false);
         resetVerboseSets(operationFiles, skippedMessages, operationFails, uniqueErrorMessages);
-        bool filterHistory = false;
+        filterHistory = false;
         clear_history();
         
         // Handle crashes when not enough permissions to access database
         try {
-			if (!isUnmount) {
-				removeNonExistentPathsFromDatabase();
-				isAtISOList.store(true);
-			}
-		} catch (const std::exception& e) {
-			std::cerr << "\n\033[1;91mUnable to access ISO database: " << e.what() << std::endl;
-			// Handle the error gracefully, maybe set a flag or perform other necessary cleanup
-			std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
-			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-			return;
-		}
+            if (!isUnmount) {
+                removeNonExistentPathsFromDatabase();
+                isAtISOList.store(true);
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "\n\033[1;91mUnable to access ISO database: " << e.what() << std::endl;
+            // Handle the error gracefully, maybe set a flag or perform other necessary cleanup
+            std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            return;
+        }
         
         // Load files based on operation type
         if (needsClrScrn) {
@@ -351,21 +268,21 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         
         if (!input.get()) break;
             
-            if (input && std::strcmp(input.get(), "clr") == 0) {
-				pendingIndices.clear();
-				hasPendingProcess = false;
-				continue;
-			}
-			
-		if (input && input[0] == ';') {
+        if (input && std::strcmp(input.get(), "clr") == 0) {
+            pendingIndices.clear();
+            hasPendingProcess = false;
+            continue;
+        }
+        
+        if (input && input[0] == ';') {
 			continue;
 		}
 
         std::string inputString(input.get());
         
         const std::vector<std::string>& currentList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
-		
-		size_t totalPages = (ITEMS_PER_PAGE != 0) ? ((currentList.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE) : 0;
+        
+        size_t totalPages = (ITEMS_PER_PAGE != 0) ? ((currentList.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE) : 0;
         
         bool validCommand = processPaginationHelpAndDisplay(inputString, totalPages, currentPage, needsClrScrn, isMount, isUnmount, write, isConversion, isAtISOList);
 
@@ -376,7 +293,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             if (isFiltered) {
                 std::vector<std::string>().swap(filteredFiles);
                 pendingIndices.clear();
-				hasPendingProcess = false;
+                hasPendingProcess = false;
                 isFiltered = false;
                 currentPage = 0; // Reset page when clearing filter
                 continue;
@@ -387,20 +304,92 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 
         // Handle pending execution
         bool pendingExecuted = handlePendingProcess(inputString, pendingIndices, hasPendingProcess, isMount, isUnmount, write, isFiltered, 
-                                                     filteredFiles, isoDirs, operationFiles, skippedMessages, operationFails, uniqueErrorMessages,
-                                                     needsClrScrn, operation, isAtISOList, umountMvRmBreak, filterHistory, newISOFound);
+                                                    filteredFiles, isoDirs, operationFiles, skippedMessages, operationFails, uniqueErrorMessages,
+                                                    needsClrScrn, operation, isAtISOList, umountMvRmBreak, filterHistory, newISOFound);
         if (pendingExecuted) {
             continue;
         }
 
+        // --- FILTERING FUNCTIONALITY BEGINS HERE ---
         // Handle filtering operations
-        bool filteringHandled = handleFiltering(inputString, filteredFiles, isFiltered, needsClrScrn, operationColor, 
-                                              operation, isUnmount, isoDirs, pendingIndices, hasPendingProcess, 
-                                              filterHistory, operationFiles, skippedMessages, operationFails, 
-                                              uniqueErrorMessages);
-        if (filteringHandled) {
+        if (inputString == "/" || (inputString.size() > 0 && inputString[0] == '/')) {
+            bool isFilterPrompt = (inputString == "/");
+            std::string searchString;
+            
+            if (isFilterPrompt) {
+                // Interactive filter prompt
+                while (true) {
+                    resetVerboseSets(operationFiles, skippedMessages, operationFails, uniqueErrorMessages);
+                    filterHistory = true;
+                    loadHistory(filterHistory);
+                    std::cout << "\033[1A\033[K";
+                    std::string filterPrompt = "\001\033[1;38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001" + 
+                                              operationColor + "\002" + operation + 
+                                              "\001\033[1;94m\002, or ↵ to return: \001\033[0;1m\002";
+                    std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
+                    if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
+                        
+                        clear_history();
+                        needsClrScrn = isFiltered ? true : false;
+                        break;
+                    }
+                    searchString = searchQuery.get();
+                    
+                    // Perform filtering using the improved function
+                    const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
+                    
+                    if (!searchString.empty()) {
+                        auto newFilteredFiles = filterFiles(sourceList, searchString);
+                        
+                        bool filterUnchanged = newFilteredFiles.size() == sourceList.size();
+                        bool hasResults = !newFilteredFiles.empty();
+                        
+                        if (!filterUnchanged && hasResults) {
+                            add_history(searchQuery.get());
+                            saveHistory(filterHistory);
+                            needsClrScrn = true;
+                            pendingIndices.clear();
+                            hasPendingProcess = false;
+                            filteredFiles = std::move(newFilteredFiles);
+                            isFiltered = true;
+                            currentPage = 0; // Reset to first page after filtering
+                            clear_history();
+                            break;
+                        } else if (!hasResults) {
+                            continue;
+                        }
+                    }
+                    clear_history();
+                }
+            } else {
+                // Quick filter with /pattern
+                searchString = inputString.substr(1);
+                
+                if (!searchString.empty()) {
+                    const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
+                    auto newFilteredFiles = filterFiles(sourceList, searchString);
+                    
+                    bool filterUnchanged = newFilteredFiles.size() == sourceList.size();
+                    bool hasResults = !newFilteredFiles.empty();
+                    
+                    if (!filterUnchanged && hasResults) {
+                        filterHistory = true;
+                        loadHistory(filterHistory);
+                        add_history(searchString.c_str());
+                        saveHistory(filterHistory);
+                        needsClrScrn = true;
+                        pendingIndices.clear();
+                        hasPendingProcess = false;
+                        filteredFiles = std::move(newFilteredFiles);
+                        isFiltered = true;
+                        currentPage = 0; // Reset to first page after filtering
+                        needsClrScrn = true;
+                    }
+                }
+            }
             continue;
         }
+        // --- FILTERING FUNCTIONALITY ENDS HERE ---
 
         // Handle pending induction (delayed execution with ;)
         bool pendingHandled = handlePendingInduction(inputString, pendingIndices, hasPendingProcess, needsClrScrn);
@@ -410,10 +399,10 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 
         // Process operation for selected ISO files if no special handling needed
         processOperationForSelectedIsoFiles(inputString, isMount, isUnmount, write, isFiltered, 
-                 filteredFiles, isoDirs, operationFiles, 
-                 operationFails, uniqueErrorMessages, skippedMessages,
-                 needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
-                 filterHistory, newISOFound);
+                                           filteredFiles, isoDirs, operationFiles, 
+                                           operationFails, uniqueErrorMessages, skippedMessages,
+                                           needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
+                                           filterHistory, newISOFound);
     }
 }
 
