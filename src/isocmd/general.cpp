@@ -318,7 +318,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             
             // Display pending indices if there are any
             if (hasPendingExecution && !pendingIndices.empty()) {
-                std::cout << "\n\033[1;35mMarked items: " << (isFiltered ? "\033[1;96mF⊳\033[1;35m " : "");
+                std::cout << "\n\033[1;35mMarked indices: " << (isFiltered ? "\033[1;96mF⊳\033[1;35m " : "");
                 for (size_t i = 0; i < pendingIndices.size(); ++i) {
                     std::cout << "\033[1;93m" << pendingIndices[i];
                     if (i < pendingIndices.size() - 1) {
@@ -1101,8 +1101,8 @@ void helpSelections() {
 			  << "   • Enter \033[1;34m'n'\033[0m - Go to next page if pages > 1\n"
 			  << "   • Enter \033[1;34m'p'\033[0m - Go to previous page if pages > 1\n"
 			  << "   • Enter \033[1;34m'g<num>'\033[0m - Go to page if pages > 1 (e.g, 'g3')\n"
-			  << "   • Enter \033[1;34m'exec'\033[0m - Execute operation for pending items\n"
-			  << "   • Enter \033[1;34m'clr'\033[0m - Clear pending items\n" << std::endl;
+			  << "   • Enter \033[1;34m'exec'\033[0m - Execute operation for pending indices\n"
+			  << "   • Enter \033[1;34m'clr'\033[0m - Clear pending indices\n" << std::endl;
               
     
      // Selection tips
