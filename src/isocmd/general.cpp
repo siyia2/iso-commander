@@ -216,7 +216,7 @@ bool handleFiltering(const std::string& inputString,std::vector<std::string>& fi
 
 bool handlePendingExecution(const std::string& inputString,std::vector<std::string>& pendingIndices,bool& hasPendingExecution,bool isMount,bool isUnmount,bool write,bool isFiltered, std::vector<std::string>& filteredFiles,std::vector<std::string>& isoDirs,std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& skippedMessages,std::unordered_set<std::string>& operationFails,std::unordered_set<std::string>& uniqueErrorMessages, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool& filterHistory, std::atomic<bool>& newISOFound) {
     
-    if (inputString == "exec" && hasPendingExecution && !pendingIndices.empty()) {
+    if (hasPendingExecution && !pendingIndices.empty() && inputString == "exec") {
         // Combine all pending indices into a single string as if they were entered normally
         std::string combinedIndices = "";
         for (size_t i = 0; i < pendingIndices.size(); ++i) {
@@ -344,7 +344,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             
             // Display pending indices if there are any
             if (hasPendingExecution && !pendingIndices.empty()) {
-                std::cout << "\n\033[1;95mPending " << operation << " operation on indices: ";
+                std::cout << "\n\033[1;35mMarked indices: " << (isFiltered ? "\033[1;96mF⊳\033[1;35m " : "");
                 for (size_t i = 0; i < pendingIndices.size(); ++i) {
                     std::cout << "\033[1;93m" << pendingIndices[i];
                     if (i < pendingIndices.size() - 1) {
