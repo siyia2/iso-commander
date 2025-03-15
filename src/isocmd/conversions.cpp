@@ -704,7 +704,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
                         std::cout << ", ";
                     }
                 }
-                std::cout << "\033[1;35m ([\033[1;93mexec\033[1;35m] ↵ to execute [\033[1;93mclr\033[1;35m] ↵ to clear')\033[0;1m\n";
+                std::cout << "\033[1;35m ([\033[1;93mexec\033[1;35m] ↵ to execute [\033[1;93mclr\033[1;35m] ↵ to clear)\033[0;1m\n";
             }
             
         
