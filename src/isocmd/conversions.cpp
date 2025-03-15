@@ -564,8 +564,127 @@ void clearAndLoadImageFiles(std::vector<std::string>& files, const std::string& 
 }
 
 
-// Handle filtering for select_and_convert_to_iso
-void handle_filtering(const std::string& mainInputString, std::vector<std::string>& files, const std::string& fileExtensionWithOutDots, std::vector<std::string>& pendingIndices, bool& hasPendingExecution, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, bool& need2Sort) {
+// Define the PendingItem structure
+struct PendingItem {
+    std::string filePath;  // The actual file path
+    std::string displayIndex;  // The display index when it was added
+};
+
+// Forward declarations of helper functions
+void updatePendingItemsForFilteredView(std::vector<PendingItem>& pendingItems, 
+                                      const std::vector<std::string>& originalFiles, 
+                                      const std::vector<std::string>& filteredFiles);
+                                      
+void updatePendingItemsForUnfilteredView(std::vector<PendingItem>& pendingItems,
+                                        const std::vector<std::string>& unfilteredFiles);
+                                        
+void displayPendingItems(const std::vector<PendingItem>& pendingItems, 
+                        const std::string& fileExtensionWithOutDots);
+                        
+void addToPendingItems(std::vector<PendingItem>& pendingItems, 
+                      const std::string& indexStr, 
+                      const std::vector<std::string>& files);
+
+// Helper function to process the actual files - this replaces the missing processFiles function
+// by calling the existing processInput function with the indices matching the file paths
+void processSelectedFiles(const std::vector<std::string>& filesToProcess, 
+                         std::vector<std::string>& files,  // Changed from const reference to non-const reference
+                         bool isMDF, bool isNRG, 
+                         std::unordered_set<std::string>& processedErrors,
+                         std::unordered_set<std::string>& successOuts,
+                         std::unordered_set<std::string>& skippedOuts,
+                         std::unordered_set<std::string>& failedOuts,
+                         bool& verbose, std::atomic<bool>& newISOFound) {
+    
+    // Convert file paths back to indices for use with the existing processInput function
+    std::string indicesStr;
+    for (const auto& filePath : filesToProcess) {
+        auto it = std::find(files.begin(), files.end(), filePath);
+        if (it != files.end()) {
+            int index = std::distance(files.begin(), it) + 1; // 1-based indexing
+            indicesStr += std::to_string(index) + " ";
+        }
+    }
+    
+    if (!indicesStr.empty()) {
+        // Use existing processInput function
+        bool dummyNeedsClrScrn = true; // Dummy variable since we don't need to use the return value
+        processInput(indicesStr, files, isMDF, isNRG, 
+                    processedErrors, successOuts, skippedOuts, failedOuts, 
+                    verbose, dummyNeedsClrScrn, newISOFound);
+    }
+}
+
+// Helper function to update pending items when switching to filtered view
+void updatePendingItemsForFilteredView(std::vector<PendingItem>& pendingItems, 
+                                      const std::vector<std::string>& originalFiles, 
+                                      const std::vector<std::string>& filteredFiles) {
+    // Create a new pending items list that contains only the files that remain after filtering
+    std::vector<PendingItem> updatedPendingItems;
+    
+    for (const auto& item : pendingItems) {
+        // Find if this file is present in the filtered list
+        auto it = std::find(filteredFiles.begin(), filteredFiles.end(), item.filePath);
+        if (it != filteredFiles.end()) {
+            // If found, add it with its new index in the filtered list
+            int newIndex = std::distance(filteredFiles.begin(), it) + 1; // +1 for 1-based indexing
+            updatedPendingItems.push_back({item.filePath, std::to_string(newIndex)});
+        }
+    }
+    
+    // Update the pending items list
+    pendingItems = updatedPendingItems;
+}
+
+// Helper function to update pending items when returning to unfiltered view
+void updatePendingItemsForUnfilteredView(std::vector<PendingItem>& pendingItems,
+                                        const std::vector<std::string>& unfilteredFiles) {
+    // Update indices based on the unfiltered list
+    for (auto& item : pendingItems) {
+        // Find this file's position in the unfiltered list
+        auto it = std::find(unfilteredFiles.begin(), unfilteredFiles.end(), item.filePath);
+        if (it != unfilteredFiles.end()) {
+            int newIndex = std::distance(unfilteredFiles.begin(), it) + 1; // +1 for 1-based indexing
+            item.displayIndex = std::to_string(newIndex);
+        }
+    }
+}
+
+// Modified function to display pending items
+void displayPendingItems(const std::vector<PendingItem>& pendingItems, const std::string& fileExtensionWithOutDots) {
+    if (!pendingItems.empty()) {
+        std::cout << "\n\033[1;95mPending " << fileExtensionWithOutDots << " operation on indices: ";
+        for (size_t i = 0; i < pendingItems.size(); ++i) {
+            std::cout << "\033[1;93m" << pendingItems[i].displayIndex;
+            if (i < pendingItems.size() - 1) {
+                std::cout << ", ";
+            }
+        }
+        std::cout << "\033[1;35m ([\033[1;93mexec\033[1;35m] ↵ to execute [\033[1;93mclr\033[1;35m] ↵ to clear')\033[0;1m\n";
+    }
+}
+
+// Modified function to add indices to pending list
+void addToPendingItems(std::vector<PendingItem>& pendingItems, const std::string& indexStr, 
+                      const std::vector<std::string>& files) {
+    try {
+        int idx = std::stoi(indexStr);
+        if (idx > 0 && idx <= static_cast<int>(files.size())) {
+            // Convert to 0-based index for the vector
+            int vectorIdx = idx - 1;
+            // Store both the file path and the display index
+            pendingItems.push_back({files[vectorIdx], indexStr});
+        }
+    } catch (const std::exception& e) {
+        // Handle invalid integer input
+    }
+}
+
+// Updated function to handle filtering with index mapping
+void handle_filtering(const std::string& mainInputString, std::vector<std::string>& files, 
+                     const std::string& fileExtensionWithOutDots, 
+                     std::vector<PendingItem>& pendingItems, bool& hasPendingExecution, 
+                     bool& isFiltered, bool& needsClrScrn, bool& filterHistory, bool& need2Sort) {
     
     if (mainInputString == "/") {
         std::cout << "\033[1A\033[K";
@@ -602,6 +721,7 @@ void handle_filtering(const std::string& mainInputString, std::vector<std::strin
                 need2Sort = false;
                 break;
             }
+            
             // Save the search query to history and update the file list
             try {
                 add_history(rawSearchQuery.get());
@@ -610,14 +730,16 @@ void handle_filtering(const std::string& mainInputString, std::vector<std::strin
                 // Optionally, you can log the error or take other actions here
             }
             
+            // Update pending indices to reflect the new filtered list
+            updatePendingItemsForFilteredView(pendingItems, files, filteredFiles);
+            
             filterHistory = false;
             clear_history(); // Clear history to reset for future inputs
             need2Sort = true;
             files = filteredFiles; // Update the file list with the filtered results
             needsClrScrn = true;
             isFiltered = true;
-            pendingIndices.clear();
-            hasPendingExecution = false;
+            hasPendingExecution = !pendingItems.empty();
             break;
         }
     } else if (mainInputString[0] == '/' && mainInputString.size() > 1) {
@@ -634,13 +756,14 @@ void handle_filtering(const std::string& mainInputString, std::vector<std::strin
                 // Optionally, you can log the error or take other actions here
             }
             
+            // Update pending indices to reflect the new filtered list
+            updatePendingItemsForFilteredView(pendingItems, files, filteredFiles);
+            
             need2Sort = true;
             files = filteredFiles; // Update the file list with the filtered results
-            
             isFiltered = true;
             needsClrScrn = true;
-            pendingIndices.clear();
-            hasPendingExecution = false;
+            hasPendingExecution = !pendingItems.empty();
             
             clear_history();
         } else {
@@ -651,10 +774,52 @@ void handle_filtering(const std::string& mainInputString, std::vector<std::strin
     }
 }
 
+// New helper function to parse indices and process them
+void processInputIndices(const std::string& input, std::vector<std::string>& files, // Changed from const reference to non-const reference
+                        std::vector<PendingItem>& pendingItems,
+                        bool isMDF, bool isNRG, 
+                        std::unordered_set<std::string>& processedErrors,
+                        std::unordered_set<std::string>& successOuts,
+                        std::unordered_set<std::string>& skippedOuts,
+                        std::unordered_set<std::string>& failedOuts,
+                        bool& verbose, bool& needsClrScrn, std::atomic<bool>& newISOFound) {
+    std::istringstream iss(input);
+    std::string token;
+    std::vector<std::string> filesToProcess;
+    
+    while (iss >> token) {
+        // Special case for "v" token (verbose mode)
+        if (token == "v") {
+            verbose = true;
+            continue;
+        }
+        
+        try {
+            int idx = std::stoi(token);
+            if (idx > 0 && idx <= static_cast<int>(files.size())) {
+                // Convert to 0-based index for the vector
+                int vectorIdx = idx - 1;
+                filesToProcess.push_back(files[vectorIdx]);
+                
+                // Also add to pending items for reference
+                pendingItems.push_back({files[vectorIdx], token});
+            }
+        } catch (const std::exception& e) {
+            // Handle invalid integer input - skip this token
+            continue;
+        }
+    }
+    
+    if (!filesToProcess.empty()) {
+        // Now process the collected files
+        processSelectedFiles(filesToProcess, files, isMDF, isNRG, 
+                           processedErrors, successOuts, skippedOuts, failedOuts, 
+                           verbose, newISOFound);
+    }
+}
 
-// Main function to select and convert image files based on type to ISO
+// Modified version of select_and_convert_to_iso
 void select_and_convert_to_iso(const std::string& fileType, std::vector<std::string>& files, std::atomic<bool>& newISOFound, bool& list) {
-
     // Bind keys for preventing clear screen and enabling tab completion
     rl_bind_key('\f', prevent_readline_keybindings);
     rl_bind_key('\t', prevent_readline_keybindings);
@@ -662,8 +827,8 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
     // Containers to track file processing results
     std::unordered_set<std::string> processedErrors, successOuts, skippedOuts, failedOuts;
     
-    // New vector to store delayed execution indices
-    std::vector<std::string> pendingIndices;
+    // Updated: Use PendingItem structure instead of just strings
+    std::vector<PendingItem> pendingItems;
     bool hasPendingExecution = false;
     
     // Reset page when entering this menu
@@ -673,6 +838,9 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
     bool needsClrScrn = true;
     bool filterHistory = false;
     bool need2Sort = true;
+    
+    // Store the original unfiltered list for reference
+    std::vector<std::string> unfilteredFiles = files;
 
     std::string fileExtension = (fileType == "bin" || fileType == "img") ? ".bin/.img" 
                                : (fileType == "mdf") ? ".mdf" : ".nrg"; // Determine file extension based on type
@@ -696,17 +864,9 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         if (needsClrScrn) clearAndLoadImageFiles(files, fileType, need2Sort, isFiltered, list);
         
         // Display pending indices if there are any
-         if (hasPendingExecution && !pendingIndices.empty()) {
-                std::cout << "\n\033[1;95mPending " << fileExtensionWithOutDots << " operation on indices: ";
-                for (size_t i = 0; i < pendingIndices.size(); ++i) {
-                    std::cout << "\033[1;93m" << pendingIndices[i];
-                    if (i < pendingIndices.size() - 1) {
-                        std::cout << ", ";
-                    }
-                }
-                std::cout << "\033[1;35m ([\033[1;93mexec\033[1;35m] ↵ to execute [\033[1;93mclr\033[1;35m] ↵ to clear')\033[0;1m\n";
-            }
-            
+        if (hasPendingExecution && !pendingItems.empty()) {
+            displayPendingItems(pendingItems, fileExtensionWithOutDots);
+        }
         
         std::cout << "\n\n";
         std::cout << "\033[1A\033[K";
@@ -724,11 +884,11 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         
         // Check for clear pending command
         if (mainInputString == "clr") {
-            pendingIndices.clear();
+            pendingItems.clear();
             hasPendingExecution = false;
             if (hasPendingExecution) {
-				std::cout << "\033[4A\033[K";
-			}
+                std::cout << "\033[4A\033[K";
+            }
             continue;
         }
         
@@ -746,8 +906,10 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
                 // Restore the original file list
                 files = (fileType == "bin" || fileType == "img") ? binImgFilesCache :
                         (fileType == "mdf" ? mdfMdsFilesCache : nrgFilesCache);
-                pendingIndices.clear();
-                hasPendingExecution = false;
+                
+                // Update the indices for the pending items to match the unfiltered view
+                updatePendingItemsForUnfilteredView(pendingItems, files);
+                
                 needsClrScrn = true;
                 isFiltered = false; // Reset filter status
                 need2Sort = false;
@@ -761,22 +923,26 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         }
         
         // Check for "exec" command to execute pending operations
-        if (mainInputString == "exec" && hasPendingExecution && !pendingIndices.empty()) {
-            // Combine all pending indices into a single string as if they were entered normally
-            std::string combinedIndices = "";
-            for (size_t i = 0; i < pendingIndices.size(); ++i) {
-                combinedIndices += pendingIndices[i];
-                if (i < pendingIndices.size() - 1) {
-                    combinedIndices += " ";
+        if (mainInputString == "exec" && hasPendingExecution && !pendingItems.empty()) {
+            // Collect actual files to process based on stored file paths
+            std::vector<std::string> filesToProcess;
+            for (const auto& item : pendingItems) {
+                // Find the file in the current list
+                auto it = std::find(files.begin(), files.end(), item.filePath);
+                if (it != files.end()) {
+                    filesToProcess.push_back(item.filePath);
                 }
             }
             
-            // Process the pending operations
-            processInput(combinedIndices, files, (fileType == "mdf"), (fileType == "nrg"), 
-                        processedErrors, successOuts, skippedOuts, failedOuts, verbose, needsClrScrn, newISOFound);
+            // Process the collected files
+            if (!filesToProcess.empty()) {
+                processSelectedFiles(filesToProcess, files, (fileType == "mdf"), (fileType == "nrg"),
+                                   processedErrors, successOuts, skippedOuts, failedOuts, 
+                                   verbose, newISOFound);
+            }
             
             // Clear pending operations
-            pendingIndices.clear();
+            pendingItems.clear();
             hasPendingExecution = false;
             
             needsClrScrn = true;
@@ -786,37 +952,9 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
             continue;
         }
         
-        // Add combined execution of pending and new indices
-        if (hasPendingExecution && !pendingIndices.empty() && 
-            mainInputString.find(';') == std::string::npos && // Not creating new pending indices
-            mainInputString.find('/') == std::string::npos) { // Not a filter command
-            
-            // Combine pending indices with the new input
-            std::string combinedIndices = "";
-            for (size_t i = 0; i < pendingIndices.size(); ++i) {
-                combinedIndices += pendingIndices[i];
-                combinedIndices += " ";
-            }
-            combinedIndices += mainInputString; // Add the newly entered indices
-            
-            // Process the combined selection
-            processInput(combinedIndices, files, (fileType == "mdf"), (fileType == "nrg"), 
-                        processedErrors, successOuts, skippedOuts, failedOuts, verbose, needsClrScrn, newISOFound);
-            
-            // Clear pending operations after execution
-            pendingIndices.clear();
-            hasPendingExecution = false;
-            
-            needsClrScrn = true;
-            if (verbose) {
-                verbosePrint(processedErrors, successOuts, skippedOuts, failedOuts, 3);
-            }
-            continue;
-        }
-
         // Handle filter commands
         if (mainInputString == "/" || (!mainInputString.empty() && mainInputString[0] == '/')) {
-            handle_filtering(mainInputString, files, fileExtensionWithOutDots, pendingIndices, hasPendingExecution, isFiltered, needsClrScrn, filterHistory, need2Sort);
+            handle_filtering(mainInputString, files, fileExtensionWithOutDots, pendingItems, hasPendingExecution, isFiltered, needsClrScrn, filterHistory, need2Sort);
             continue;
         }
         
@@ -831,15 +969,15 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
             }
             
             if (!indicesInput.empty()) {
-                // Parse and store the indices
+                // Parse and add indices to pending items
                 std::istringstream iss(indicesInput);
                 std::string token;
                 
                 while (iss >> token) {
-                    pendingIndices.push_back(token);
+                    addToPendingItems(pendingItems, token, files);
                 }
                 
-                if (!pendingIndices.empty()) {
+                if (!pendingItems.empty()) {
                     hasPendingExecution = true;
                     needsClrScrn = true;
                     continue;
@@ -848,8 +986,9 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         }
         // Process other input commands for file processing
         else {
-            processInput(mainInputString, files, (fileType == "mdf"), (fileType == "nrg"), 
-                         processedErrors, successOuts, skippedOuts, failedOuts, verbose, needsClrScrn, newISOFound);
+            // Updated version of processInput that handles our new way of dealing with indices
+            processInputIndices(mainInputString, files, pendingItems, (fileType == "mdf"), (fileType == "nrg"), 
+                             processedErrors, successOuts, skippedOuts, failedOuts, verbose, needsClrScrn, newISOFound);
             needsClrScrn = true;
             if (verbose) {
                 verbosePrint(processedErrors, successOuts, skippedOuts, failedOuts, 3); // Print detailed logs if verbose mode is enabled
