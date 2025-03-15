@@ -131,7 +131,8 @@ bool handlePendingInduction(const std::string& inputString, std::vector<std::str
 }
 
 
-bool handleFiltering(const std::string& inputString,std::vector<std::string>& filteredFiles,bool& isFiltered,bool& needsClrScrn,const std::string& operationColor,const std::string& operation,bool isUnmount,const std::vector<std::string>& isoDirs,std::vector<std::string>& pendingIndices,bool& hasPendingExecution,bool& filterHistory,std::unordered_set<std::string>& operationFiles,std::unordered_set<std::string>& skippedMessages,std::unordered_set<std::string>& operationFails,std::unordered_set<std::string>& uniqueErrorMessages) {
+// Handle filtering for selectForIsoFiles 
+bool handleFiltering(const std::string& inputString,std::vector<std::string>& filteredFiles, bool& isFiltered, bool& needsClrScrn, const std::string& operationColor, const std::string& operation, bool isUnmount, const std::vector<std::string>& isoDirs,std::vector<std::string>& pendingIndices, bool& hasPendingExecution, bool& filterHistory, std::unordered_set<std::string>& operationFiles,std::unordered_set<std::string>& skippedMessages,std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages) {
     
     if (inputString != "/" && (inputString.empty() || inputString[0] != '/')) {
         return false;
@@ -214,7 +215,8 @@ bool handleFiltering(const std::string& inputString,std::vector<std::string>& fi
 }
 
 
-bool handlePendingExecution(const std::string& inputString,std::vector<std::string>& pendingIndices,bool& hasPendingExecution,bool isMount,bool isUnmount,bool write,bool isFiltered, std::vector<std::string>& filteredFiles,std::vector<std::string>& isoDirs,std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& skippedMessages,std::unordered_set<std::string>& operationFails,std::unordered_set<std::string>& uniqueErrorMessages, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool& filterHistory, std::atomic<bool>& newISOFound) {
+// Handle pending executions for selectForIsoFiles
+bool handlePendingExecution(const std::string& inputString,std::vector<std::string>& pendingIndices, bool& hasPendingExecution, bool isMount, bool isUnmount, bool write, bool isFiltered, std::vector<std::string>& filteredFiles,std::vector<std::string>& isoDirs, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& skippedMessages, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool& filterHistory, std::atomic<bool>& newISOFound) {
     
     if (inputString == "exec" && hasPendingExecution && !pendingIndices.empty()) {
         // Combine all pending indices into a single string as if they were entered normally
@@ -269,6 +271,7 @@ bool handlePendingExecution(const std::string& inputString,std::vector<std::stri
 }
 
 
+// Main function to select ISO files for mount/umount/cp/mv/rm/write
 void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
     // Bind readline keys
     rl_bind_key('\f', prevent_readline_keybindings);
