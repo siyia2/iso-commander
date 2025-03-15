@@ -1092,6 +1092,7 @@ void helpSelections() {
               << "   • Multiple items: Separate with spaces (e.g., '1 5 6')\n"
               << "   • Range of items: Use a hyphen (e.g., '1-3')\n"
               << "   • Combine methods: '1-3 5 7-9'\n"
+              << "   • Mark as pending: Enter '1-3 5 7-9;'\n"
               << "   • Select all: Enter '00' (for mount/umount only)\n" << std::endl;
     
     // Special commands
@@ -1100,11 +1101,13 @@ void helpSelections() {
 			  << "   • Enter \033[1;34m'n'\033[0m - Go to next page if pages > 1\n"
 			  << "   • Enter \033[1;34m'p'\033[0m - Go to previous page if pages > 1\n"
 			  << "   • Enter \033[1;34m'g<num>'\033[0m - Go to page if pages > 1 (e.g, 'g3')\n"
+			  << "   • Enter \033[1;34m'exec'\033[0m - Execute operation for pending\n"
               << "   • Enter \033[1;34m'/'\033[0m - Filter the current list based on search terms (e.g., 'term' or 'term1;term2')\n"
               << "   • Enter \033[1;34m'/term1;term2'\033[0m - Directly filter the list for items containing 'term1' or 'term2'\n" << std::endl;
     
      // Selection tips
     std::cout << "\033[1;32m4. Tips:\033[0m\n"
+			  << "   • The scope of pending items depends on current filter status\033[0m\n"
 			  << "   • Filtering is adaptive, incremental, and unconstrained by pagination\033[0m\n"
               << "   • If filtering has no matches, no message or list update is issued\n" << std::endl;
               
