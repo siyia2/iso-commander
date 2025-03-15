@@ -100,6 +100,175 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
 
 
 // Main function to select and operate on ISOs by number for umount mount cp mv and rm
+bool handlePendingInduction(const std::string& inputString, std::vector<std::string>& pendingIndices, bool& hasPendingExecution, bool& needsClrScrn) {
+    if (inputString.find(';') == std::string::npos || inputString.find('/') != std::string::npos) {
+        return false;
+    }
+
+    std::string indicesInput = inputString.substr(0, inputString.find(';'));
+    
+    // Trim whitespace from the end
+    while (!indicesInput.empty() && std::isspace(indicesInput.back())) {
+        indicesInput.pop_back();
+    }
+    
+    if (!indicesInput.empty()) {
+        // Parse and store the indices
+        std::istringstream iss(indicesInput);
+        std::string token;
+        
+        while (iss >> token) {
+            pendingIndices.push_back(token);
+        }
+        
+        if (!pendingIndices.empty()) {
+            hasPendingExecution = true;
+            needsClrScrn = true;
+            return true;
+        }
+    }
+    return false;
+}
+
+
+bool handleFiltering(const std::string& inputString,std::vector<std::string>& filteredFiles,bool& isFiltered,bool& needsClrScrn,const std::string& operationColor,const std::string& operation,bool isUnmount,const std::vector<std::string>& isoDirs,std::vector<std::string>& pendingIndices,bool& hasPendingExecution,bool& filterHistory,std::unordered_set<std::string>& operationFiles,std::unordered_set<std::string>& skippedMessages,std::unordered_set<std::string>& operationFails,std::unordered_set<std::string>& uniqueErrorMessages) {
+    
+    if (inputString != "/" && (inputString.empty() || inputString[0] != '/')) {
+        return false;
+    }
+    
+    pendingIndices.clear();
+
+    bool isFilterPrompt = (inputString == "/");
+    std::string searchString;
+
+    if (isFilterPrompt) {
+        // Interactive filter prompt
+        while (true) {
+            resetVerboseSets(operationFiles, skippedMessages, operationFails, uniqueErrorMessages);
+
+            filterHistory = true;
+            loadHistory(filterHistory);
+            std::cout << "\033[1A\033[K";
+
+            std::string filterPrompt = "\001\033[1;38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001" + 
+                                      operationColor + "\002" + operation + 
+                                      "\001\033[1;94m\002, or ↵ to return: \001\033[0;1m\002";
+            std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
+
+            if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
+                
+                clear_history();
+                needsClrScrn = isFiltered ? true : false;
+                break;
+            }
+
+            searchString = searchQuery.get();
+            
+            // Perform filtering using the improved function
+            const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
+            
+            if (!searchString.empty()) {
+                auto newFilteredFiles = filterFiles(sourceList, searchString);
+                
+                bool filterUnchanged = newFilteredFiles.size() == sourceList.size();
+                
+                if (!filterUnchanged && !newFilteredFiles.empty()) {
+                    add_history(searchQuery.get());
+                    saveHistory(filterHistory);
+                    needsClrScrn = true;
+                    pendingIndices.clear();
+                    hasPendingExecution = false;
+                    filteredFiles = std::move(newFilteredFiles);
+                    isFiltered = true;
+                    currentPage = 0; // Reset to first page after filtering
+                    clear_history();
+                    break;
+                }
+            }
+            clear_history();
+        }
+    } else {
+        // Quick filter with /pattern
+        searchString = inputString.substr(1);
+        
+        if (!searchString.empty()) {
+            const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
+            auto newFilteredFiles = filterFiles(sourceList, searchString);
+            
+            bool filterUnchanged = newFilteredFiles.size() == sourceList.size();
+            
+            if (!filterUnchanged && !newFilteredFiles.empty()) {
+                filterHistory = true;
+                loadHistory(filterHistory);
+                add_history(searchString.c_str());
+                saveHistory(filterHistory);
+                filteredFiles = std::move(newFilteredFiles);
+                isFiltered = true;
+                currentPage = 0; // Reset to first page after filtering
+                needsClrScrn = true;
+            }
+        }
+    }
+    return true;
+}
+
+
+bool handlePendingExecution(const std::string& inputString,std::vector<std::string>& pendingIndices,bool& hasPendingExecution,bool isMount,bool isUnmount,bool write,bool isFiltered, std::vector<std::string>& filteredFiles,std::vector<std::string>& isoDirs,std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& skippedMessages,std::unordered_set<std::string>& operationFails,std::unordered_set<std::string>& uniqueErrorMessages, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool& filterHistory, std::atomic<bool>& newISOFound) {
+    
+    if (inputString == "exec" && hasPendingExecution && !pendingIndices.empty()) {
+        // Combine all pending indices into a single string as if they were entered normally
+        std::string combinedIndices = "";
+        for (size_t i = 0; i < pendingIndices.size(); ++i) {
+            combinedIndices += pendingIndices[i];
+            if (i < pendingIndices.size() - 1) {
+                combinedIndices += " ";
+            }
+        }
+        
+        // Process the pending operations
+        processOperationForSelectedIsoFiles(combinedIndices, isMount, isUnmount, write, isFiltered, 
+                 filteredFiles, isoDirs, operationFiles, 
+                 operationFails, uniqueErrorMessages, skippedMessages,
+                 needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
+                 filterHistory, newISOFound);
+                 
+        // Clear pending operations
+        pendingIndices.clear();
+        hasPendingExecution = false;
+        return true;
+    }
+    
+    // Handle combining pending indices with new selection
+    if (hasPendingExecution && !pendingIndices.empty() && 
+        inputString.find(';') == std::string::npos && // Not creating new pending indices
+        inputString.find('/') == std::string::npos) { // Not a filter command
+
+        // Combine pending indices with the new input
+        std::string combinedIndices = "";
+        for (size_t i = 0; i < pendingIndices.size(); ++i) {
+            combinedIndices += pendingIndices[i];
+            combinedIndices += " ";
+        }
+        combinedIndices += inputString; // Add the newly entered indices
+
+        // Process the combined selection
+        processOperationForSelectedIsoFiles(combinedIndices, isMount, isUnmount, write, isFiltered, 
+                filteredFiles, isoDirs, operationFiles, 
+                operationFails, uniqueErrorMessages, skippedMessages,
+                needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
+                filterHistory, newISOFound);
+         
+        // Clear pending operations after execution
+        pendingIndices.clear();
+        hasPendingExecution = false;
+        return true;
+    }
+    
+    return false;
+}
+
+
 void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
     // Bind readline keys
     rl_bind_key('\f', prevent_readline_keybindings);
@@ -238,169 +407,37 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             }
         }
 
-        // Check for "exec" command to execute pending operations
-        if (inputString == "exec" && hasPendingExecution && !pendingIndices.empty()) {
-            // Combine all pending indices into a single string as if they were entered normally
-            std::string combinedIndices = "";
-            for (size_t i = 0; i < pendingIndices.size(); ++i) {
-                combinedIndices += pendingIndices[i];
-                if (i < pendingIndices.size() - 1) {
-                    combinedIndices += " ";
-                }
-            }
-            
-            // Process the pending operations
-            processOperationForSelectedIsoFiles(combinedIndices, isMount, isUnmount, write, isFiltered, 
-                     filteredFiles, isoDirs, operationFiles, 
-                     operationFails, uniqueErrorMessages, skippedMessages,
-                     needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
-                     filterHistory, newISOFound);
-                     
-            // Clear pending operations
-            pendingIndices.clear();
-            hasPendingExecution = false;
+        // Handle pending execution
+        bool pendingExecuted = handlePendingExecution(inputString, pendingIndices, hasPendingExecution, isMount, isUnmount, write, isFiltered, 
+                                                     filteredFiles, isoDirs, operationFiles, skippedMessages, operationFails, uniqueErrorMessages,
+                                                     needsClrScrn, operation, isAtISOList, umountMvRmBreak, filterHistory, newISOFound);
+        if (pendingExecuted) {
             continue;
         }
-        
-        // Add this new block to handle combining pending indices with new selection
-		if (hasPendingExecution && !pendingIndices.empty() && 
-			inputString.find(';') == std::string::npos && // Not creating new pending indices
-			inputString.find('/') == std::string::npos) { // Not a filter command
-    
-			// Combine pending indices with the new input
-			std::string combinedIndices = "";
-			for (size_t i = 0; i < pendingIndices.size(); ++i) {
-				combinedIndices += pendingIndices[i];
-				combinedIndices += " ";
-			}
-			combinedIndices += inputString; // Add the newly entered indices
-    
-			// Process the combined selection
-			processOperationForSelectedIsoFiles(combinedIndices, isMount, isUnmount, write, isFiltered, 
-					filteredFiles, isoDirs, operationFiles, 
-					operationFails, uniqueErrorMessages, skippedMessages,
-					needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
-					filterHistory, newISOFound);
-             
-			// Clear pending operations after execution
-			pendingIndices.clear();
-			hasPendingExecution = false;
-			continue;
-		}
 
         // Handle filtering operations
-        if (inputString == "/" || (inputString[0] == '/' && inputString.length() > 1)) {
-            bool isFilterPrompt = (inputString == "/");
-            std::string searchString;
-            
-            if (isFilterPrompt) {
-                // Interactive filter prompt
-                while (true) {
-                    resetVerboseSets(operationFiles, skippedMessages, operationFails, uniqueErrorMessages);
-
-                    filterHistory = true;
-                    loadHistory(filterHistory);
-                    std::cout << "\033[1A\033[K";
-
-                    std::string filterPrompt = "\001\033[1;38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001" + 
-                                              operationColor + "\002" + operation + 
-                                              "\001\033[1;94m\002, or ↵ to return: \001\033[0;1m\002";
-                    std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
-
-                    if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
-                        
-                        clear_history();
-                        needsClrScrn = isFiltered ? true : false;
-                        break;
-                    }
-
-                    searchString = searchQuery.get();
-                    
-                    // Perform filtering using the improved function
-                    const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
-                    
-                    if (!searchString.empty()) {
-                        auto newFilteredFiles = filterFiles(sourceList, searchString);
-                        
-                        bool filterUnchanged = newFilteredFiles.size() == sourceList.size();
-                        
-                        if (!filterUnchanged && !newFilteredFiles.empty()) {
-                            add_history(searchQuery.get());
-                            saveHistory(filterHistory);
-                            needsClrScrn = true;
-                            pendingIndices.clear();
-							hasPendingExecution = false;
-                            filteredFiles = std::move(newFilteredFiles);
-                            isFiltered = true;
-                            currentPage = 0; // Reset to first page after filtering
-                            clear_history();
-                            break;
-                        }
-                    }
-                    clear_history();
-                }
-            } else {
-                // Quick filter with /pattern
-                searchString = inputString.substr(1);
-                
-                if (!searchString.empty()) {
-                    const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
-                    auto newFilteredFiles = filterFiles(sourceList, searchString);
-                    
-                    bool filterUnchanged = newFilteredFiles.size() == sourceList.size();
-                    
-                    if (!filterUnchanged && !newFilteredFiles.empty()) {
-                        filterHistory = true;
-                        loadHistory(filterHistory);
-                        add_history(searchString.c_str());
-                        saveHistory(filterHistory);
-                        filteredFiles = std::move(newFilteredFiles);
-                        isFiltered = true;
-                        currentPage = 0; // Reset to first page after filtering
-                        needsClrScrn = true;
-                    }
-                }
-            }
+        bool filteringHandled = handleFiltering(inputString, filteredFiles, isFiltered, needsClrScrn, operationColor, 
+                                              operation, isUnmount, isoDirs, pendingIndices, hasPendingExecution, 
+                                              filterHistory, operationFiles, skippedMessages, operationFails, 
+                                              uniqueErrorMessages);
+        if (filteringHandled) {
             continue;
         }
 
-        // Check if input contains a semicolon for delayed execution
-        if (inputString.find(';') != std::string::npos && inputString.find('/') == std::string::npos) {
-            // Strip the semicolon from the input
-            std::string indicesInput = inputString.substr(0, inputString.find(';'));
-            
-            // Trim whitespace from the end
-            while (!indicesInput.empty() && std::isspace(indicesInput.back())) {
-                indicesInput.pop_back();
-            }
-            
-            if (!indicesInput.empty()) {
-                // Parse and store the indices
-                std::istringstream iss(indicesInput);
-                std::string token;
-                
-                while (iss >> token) {
-                    pendingIndices.push_back(token);
-                }
-                
-                if (!pendingIndices.empty()) {
-                    hasPendingExecution = true;
-                    needsClrScrn = true;
-                    continue;
-                }
-            }
+        // Handle pending induction (delayed execution with ;)
+        bool pendingHandled = handlePendingInduction(inputString, pendingIndices, hasPendingExecution, needsClrScrn);
+        if (pendingHandled) {
+            continue;
         }
 
-        // Process operation for selected files if no semicolon detected
+        // Process operation for selected ISO files if no special handling needed
         processOperationForSelectedIsoFiles(inputString, isMount, isUnmount, write, isFiltered, 
                  filteredFiles, isoDirs, operationFiles, 
                  operationFails, uniqueErrorMessages, skippedMessages,
                  needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
                  filterHistory, newISOFound);
-                 
     }
 }
-
 
 
 // Function to process operations from selectIsoFiles
