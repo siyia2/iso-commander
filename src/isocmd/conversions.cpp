@@ -1076,7 +1076,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
         auto [outDirectory, outFileNameOnly] = extractDirectoryAndFilename(outputPath, "conversions");
 
         if (conversionSuccess) {
-            chown(outputPath.c_str(), real_uid, real_gid); // Attempt to change ownership, ignore result
+            [[maybe_unused]] int ret = chown(outputPath.c_str(), real_uid, real_gid); // Attempt to change ownership, ignore result
             std::string fileNameLower = fileNameOnly;
 			toLowerInPlace(fileNameLower);
 

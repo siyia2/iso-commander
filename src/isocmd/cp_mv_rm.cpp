@@ -686,7 +686,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, const std:
 
     // Change ownership function (no return value)
     auto changeOwnership = [&](const fs::path& path) {
-        chown(path.c_str(), real_uid, real_gid); // Attempt to change ownership, ignore result
+        [[maybe_unused]] int ret = chown(path.c_str(), real_uid, real_gid); // Attempt to change ownership, ignore result
     };
 
     auto executeOperation = [&](const std::vector<std::string>& files) {
