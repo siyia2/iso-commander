@@ -44,7 +44,7 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
 	}
 	
     // Handle "next" command
-    if (command == "n" || command == "next") {
+    if (command == "n") {
         if (currentPage < totalPages - 1) {
             currentPage++;
             needsClrScrn = true;
@@ -53,7 +53,7 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
     }
 
     // Handle "prev" command
-    if (command == "p" || command == "prev" || command == "previous") {
+    if (command == "p") {
         if (currentPage > 0) {
             currentPage--;
             needsClrScrn = true;
@@ -234,10 +234,7 @@ bool handlePendingExecution(const std::string& inputString,std::vector<std::stri
                  operationFails, uniqueErrorMessages, skippedMessages,
                  needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
                  filterHistory, newISOFound);
-                 
-        // Clear pending operations
-        pendingIndices.clear();
-        hasPendingExecution = false;
+
         return true;
     }
     
