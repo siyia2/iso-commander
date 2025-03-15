@@ -564,7 +564,95 @@ void clearAndLoadImageFiles(std::vector<std::string>& files, const std::string& 
 }
 
 
-// Combined function for filtering and converting files to ISO
+// Handle filtering for select_and_convert_to_iso
+void handle_filtering(const std::string& mainInputString, std::vector<std::string>& files, const std::string& fileExtensionWithOutDots, std::vector<std::string>& pendingIndices, bool& hasPendingExecution, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, bool& need2Sort) {
+    
+    if (mainInputString == "/") {
+        std::cout << "\033[1A\033[K";
+        std::string filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;38;5;208m\002" + 
+                                    fileExtensionWithOutDots + "\001\033[1;94m\002, or ↵ to return: \001\033[0;1m\002";
+        
+        // Inline filter query functionality
+        while (true) {
+            clear_history(); // Clear the input history
+            filterHistory = true;
+            loadHistory(filterHistory); // Load input history if available
+
+            // Prompt the user for a search query
+            std::unique_ptr<char, decltype(&std::free)> rawSearchQuery(readline(filterPrompt.c_str()), &std::free);
+            std::string inputSearch(rawSearchQuery.get());
+
+            // Exit the filter loop if input is empty or "/"
+            if (inputSearch.empty() || inputSearch == "/") {
+                std::cout << (hasPendingExecution ? "\033[4A\033[K" : "\033[2A\033[K");
+                needsClrScrn = false;
+                need2Sort = false;
+                break;
+            }
+
+            // Filter files based on the input search query
+            auto filteredFiles = filterFiles(files, inputSearch);
+            if (filteredFiles.empty()) {
+                std::cout << "\033[1A\033[K";
+                continue; // Skip if no files match the filter
+            }
+            if (filteredFiles.size() == files.size()) {
+                std::cout << "\033[2A\033[K";
+                needsClrScrn = false;
+                need2Sort = false;
+                break;
+            }
+            // Save the search query to history and update the file list
+            try {
+                add_history(rawSearchQuery.get());
+                saveHistory(filterHistory);
+            } catch (const std::exception& e) {
+                // Optionally, you can log the error or take other actions here
+            }
+            
+            filterHistory = false;
+            clear_history(); // Clear history to reset for future inputs
+            need2Sort = true;
+            files = filteredFiles; // Update the file list with the filtered results
+            needsClrScrn = true;
+            isFiltered = true;
+            pendingIndices.clear();
+            hasPendingExecution = false;
+            break;
+        }
+    } else if (mainInputString[0] == '/' && mainInputString.size() > 1) {
+        // Directly filter the files based on the input without showing the filter prompt
+        std::string inputSearch(mainInputString.substr(1)); // Skip the '/' character
+        auto filteredFiles = filterFiles(files, inputSearch);
+        if (!filteredFiles.empty() && !(filteredFiles.size() == files.size())) {
+            filterHistory = true;
+            loadHistory(filterHistory);
+            try {
+                add_history(inputSearch.c_str());
+                saveHistory(filterHistory);
+            } catch (const std::exception& e) {
+                // Optionally, you can log the error or take other actions here
+            }
+            
+            need2Sort = true;
+            files = filteredFiles; // Update the file list with the filtered results
+            
+            isFiltered = true;
+            needsClrScrn = true;
+            pendingIndices.clear();
+            hasPendingExecution = false;
+            
+            clear_history();
+        } else {
+            std::cout << (hasPendingExecution ? "\033[4A\033[K" : "\033[2A\033[K"); // Clear the line if no files match the filter
+            need2Sort = false;
+            needsClrScrn = false;
+        }
+    }
+}
+
+
+// Main function to select and convert image files based on type to ISO
 void select_and_convert_to_iso(const std::string& fileType, std::vector<std::string>& files, std::atomic<bool>& newISOFound, bool& list) {
 
     // Bind keys for preventing clear screen and enabling tab completion
@@ -726,91 +814,12 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
             continue;
         }
 
-        // Handle filter command with prompt
-        if (strcmp(rawInput.get(), "/") == 0) {
-            std::cout << "\033[1A\033[K";
-            std::string filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;38;5;208m\002" + 
-                                      fileExtensionWithOutDots + "\001\033[1;94m\002, or ↵ to return: \001\033[0;1m\002";
-            
-            // Inline filter query functionality
-            while (true) {
-                clear_history(); // Clear the input history
-                filterHistory = true;
-                loadHistory(filterHistory); // Load input history if available
-
-                // Prompt the user for a search query
-                std::unique_ptr<char, decltype(&std::free)> rawSearchQuery(readline(filterPrompt.c_str()), &std::free);
-                std::string inputSearch(rawSearchQuery.get());
-
-                // Exit the filter loop if input is empty or "/"
-                if (inputSearch.empty() || inputSearch == "/") {
-                  std::cout << (hasPendingExecution ? "\033[4A\033[K" : "\033[2A\033[K");
-                    needsClrScrn = false;
-                    need2Sort = false;
-                    break;
-                }
-
-                // Filter files based on the input search query
-                auto filteredFiles = filterFiles(files, inputSearch);
-                if (filteredFiles.empty()) {
-                    std::cout << "\033[1A\033[K";
-                    continue; // Skip if no files match the filter
-                }
-                if (filteredFiles.size() == files.size()) {
-                    std::cout << "\033[2A\033[K";
-                    needsClrScrn = false;
-                    need2Sort = false;
-                    break;
-                }
-                // Save the search query to history and update the file list
-                try {
-                    add_history(rawSearchQuery.get());
-                    saveHistory(filterHistory);
-                } catch (const std::exception& e) {
-                    // Optionally, you can log the error or take other actions here
-                }
-                
-                filterHistory = false;
-                clear_history(); // Clear history to reset for future inputs
-                need2Sort = true;
-                files = filteredFiles; // Update the file list with the filtered results
-                needsClrScrn = true;
-                isFiltered = true;
-                pendingIndices.clear();
-                hasPendingExecution = false;
-                break;
-            }
-        } 
-        // Handle direct filter command
-        else if (rawInput.get()[0] == '/' && rawInput.get()[1] != '\0') {
-            // Directly filter the files based on the input without showing the filter prompt
-            std::string inputSearch(rawInput.get() + 1); // Skip the '/' character
-            auto filteredFiles = filterFiles(files, inputSearch);
-            if (!filteredFiles.empty() && !(filteredFiles.size() == files.size())) {
-                filterHistory = true;
-                loadHistory(filterHistory);
-                try {
-                    add_history(inputSearch.c_str());
-                    saveHistory(filterHistory);
-                } catch (const std::exception& e) {
-                    // Optionally, you can log the error or take other actions here
-                }
-                
-                need2Sort = true;
-                files = filteredFiles; // Update the file list with the filtered results
-                
-                isFiltered = true;
-                needsClrScrn = true;
-                pendingIndices.clear();
-                hasPendingExecution = false;
-                
-                clear_history();
-            } else {
-                std::cout << "\033[2A\033[K"; // Clear the line if no files match the filter
-                need2Sort = false;
-                needsClrScrn = false;
-            }
-        } 
+        // Handle filter commands
+        if (mainInputString == "/" || (!mainInputString.empty() && mainInputString[0] == '/')) {
+            handle_filtering(mainInputString, files, fileExtensionWithOutDots, pendingIndices, hasPendingExecution, isFiltered, needsClrScrn, filterHistory, need2Sort);
+            continue;
+        }
+        
         // Check if input contains a semicolon for delayed execution
         else if (mainInputString.find(';') != std::string::npos) {
             // Strip the semicolon from the input
