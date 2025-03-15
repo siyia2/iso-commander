@@ -387,84 +387,121 @@ static struct CompleterData {
 
 // Custom readline completion for write2usb function
 char** completion_cb(const char* text, int start, int end) {
-	
     rl_attempted_completion_over = 1; // Tell Readline we'll handle completion
-
     char** matches = nullptr;
     std::string current_word(rl_line_buffer + start, end - start);
-
+    
     // Check if the current word contains a '>' character
     bool is_device_completion = (current_word.find('>') != std::string::npos);
-
+    
     // Handle ISO index completion (N> format)
     if (!is_device_completion) {
         // Complete ISO indexes from sortedIsos
         if (completerData.sortedIsos) {
-            matches = rl_completion_matches(text, [](const char* text, int state) -> char* {
-                static size_t list_index;
-                if (!state) {
-                    list_index = 0;
-                    // Prevent trailing whitespace from being appended
-						rl_completion_append_character = '\0';
+            // First collect all possible completions
+            std::vector<std::string> possible_completions;
+            size_t list_index = 0;
+            while (list_index < completerData.sortedIsos->size()) {
+                const std::string opt = std::to_string(++list_index) + ">";
+                if (opt.find(text) == 0)
+                    possible_completions.push_back(opt);
+            }
+            
+            // Check if all possible completions are already in the prompt
+            bool all_present = true;
+            std::string full_line(rl_line_buffer);
+            for (const auto& comp : possible_completions) {
+                if (full_line.find(comp) == std::string::npos) {
+                    all_present = false;
+                    break;
                 }
-
-                while (list_index < completerData.sortedIsos->size()) {
-                    const std::string opt = std::to_string(++list_index) + ">";
-                    if (opt.find(text) == 0)
-                        return strdup(opt.c_str());
+            }
+            
+            // Only provide completions if not all are present
+            if (!all_present && !possible_completions.empty()) {
+                matches = rl_completion_matches(text, [](const char* text, int state) -> char* {
+                    static size_t list_index;
+                    if (!state) {
+                        list_index = 0;
                         // Prevent trailing whitespace from being appended
-						rl_completion_append_character = '\0';
-                }
-                return (char*)nullptr; // Explicitly cast nullptr to char*
-            });
+                        rl_completion_append_character = '\0';
+                    }
+                    while (list_index < completerData.sortedIsos->size()) {
+                        const std::string opt = std::to_string(++list_index) + ">";
+                        if (opt.find(text) == 0)
+                            return strdup(opt.c_str());
+                    }
+                    return (char*)nullptr; // Explicitly cast nullptr to char*
+                });
+            }
         }
     }
     // Handle device path completion
     else {
-    // Complete device paths from usbDevices
-    if (completerData.usbDevices) {
-        // Convert the full text to a std::string
-        std::string fullText(text);
-        // Find the last '>' character to separate the prefix from the device part
-        size_t pos = fullText.find_last_of('>');
-        std::string prefix, deviceSubText;
-        if (pos != std::string::npos) {
-            prefix = fullText.substr(0, pos + 1);
-            deviceSubText = fullText.substr(pos + 1);
-        } else {
-            // Fallback if for some reason there is no '>' character
-            deviceSubText = fullText;
+        // Complete device paths from usbDevices
+        if (completerData.usbDevices) {
+            // Convert the full text to a std::string
+            std::string fullText(text);
+            // Find the last '>' character to separate the prefix from the device part
+            size_t pos = fullText.find_last_of('>');
+            std::string prefix, deviceSubText;
+            if (pos != std::string::npos) {
+                prefix = fullText.substr(0, pos + 1);
+                deviceSubText = fullText.substr(pos + 1);
+            } else {
+                // Fallback if for some reason there is no '>' character
+                deviceSubText = fullText;
+            }
+            
+            // Collect all possible device completions
+            std::vector<std::string> possible_device_completions;
+            for (size_t i = 0; i < completerData.usbDevices->size(); i++) {
+                const std::string& dev = (*completerData.usbDevices)[i];
+                if (dev.find(deviceSubText) == 0) {
+                    std::string completion = prefix + dev;
+                    possible_device_completions.push_back(completion);
+                }
+            }
+            
+            // Check if all possible completions are already in the prompt
+            bool all_present = true;
+            std::string full_line(rl_line_buffer);
+            for (const auto& comp : possible_device_completions) {
+                if (full_line.find(comp) == std::string::npos) {
+                    all_present = false;
+                    break;
+                }
+            }
+            
+            // Only provide completions if not all are present
+            if (!all_present && !possible_device_completions.empty()) {
+                // Use static variables to pass data to the lambda (to avoid capture issues)
+                static std::string s_prefix;
+                static std::string s_deviceSubText;
+                s_prefix = prefix;
+                s_deviceSubText = deviceSubText;
+                
+                // Prevent trailing whitespace from being appended
+                rl_completion_append_character = '\0';
+                matches = rl_completion_matches(fullText.c_str(), [](const char* /*unused*/, int state) -> char* {
+                    static size_t list_index;
+                    if (!state) {
+                        list_index = 0;
+                    }
+                    while (list_index < completerData.usbDevices->size()) {
+                        const std::string& dev = (*completerData.usbDevices)[list_index++];
+                        // Check if the device name starts with the device part
+                        if (dev.find(s_deviceSubText) == 0) {
+                            // Prepend the prefix to the matched device name
+                            std::string completion = s_prefix + dev;
+                            return strdup(completion.c_str());
+                        }
+                    }
+                    return (char*)nullptr;
+                });
+            }
         }
-
-        // Use static variables to pass data to the lambda (to avoid capture issues)
-        static std::string s_prefix;
-        static std::string s_deviceSubText;
-        s_prefix = prefix;
-        s_deviceSubText = deviceSubText;
-        
-        // Prevent trailing whitespace from being appended
-        rl_completion_append_character = '\0';
-
-			matches = rl_completion_matches(fullText.c_str(), [](const char* /*unused*/, int state) -> char* {
-				static size_t list_index;
-				if (!state) {
-					list_index = 0;
-				}
-
-				while (list_index < completerData.usbDevices->size()) {
-					const std::string& dev = (*completerData.usbDevices)[list_index++];
-					// Check if the device name starts with the device part
-					if (dev.find(s_deviceSubText) == 0) {
-						// Prepend the prefix to the matched device name
-						std::string completion = s_prefix + dev;
-						return strdup(completion.c_str());
-					}
-				}
-				return (char*)nullptr;
-			});
-		}
-	}
-
+    }
     return matches;
 }
 
