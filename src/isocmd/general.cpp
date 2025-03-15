@@ -417,7 +417,7 @@ bool handlePendingExecutionForContext(const std::string& inputString, std::vecto
 
 
 // Function to display unified pending indices message
-void displayPendingIndicesMessage(const std::vector<std::string>& filteredIndices, const std::vector<std::string>& nonFilteredIndices,bool hasPendingExecutionFiltered, bool hasPendingExecutionNonFiltered, const std::string& operation) {
+void displayPendingIndicesMessage(const std::vector<std::string>& filteredIndices, const std::vector<std::string>& nonFilteredIndices,bool hasPendingExecutionFiltered, bool hasPendingExecutionNonFiltered) {
     
     // Skip if no pending operations
     if ((!hasPendingExecutionFiltered || filteredIndices.empty()) && 
@@ -658,8 +658,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             
             // Display a unified pending indices message
             displayPendingIndicesMessage(pendingIndicesFiltered, pendingIndicesNonFiltered, 
-                                        hasPendingExecutionFiltered, hasPendingExecutionNonFiltered, 
-                                        operation);
+                                        hasPendingExecutionFiltered, hasPendingExecutionNonFiltered);
             
             std::cout << "\n\n";
             umountMvRmBreak = false;
