@@ -216,7 +216,7 @@ bool handleFiltering(const std::string& inputString,std::vector<std::string>& fi
 
 
 // Function to handle Pending Execution
-bool handlePendingExecution(const std::string& inputString,std::vector<std::string>& pendingIndices,bool& hasPendingExecution,bool isMount,bool isUnmount,bool write,bool isFiltered, std::vector<std::string>& filteredFiles,std::vector<std::string>& isoDirs,std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& skippedMessages,std::unordered_set<std::string>& operationFails,std::unordered_set<std::string>& uniqueErrorMessages, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool& filterHistory, std::atomic<bool>& newISOFound) {
+bool handlePendingProcess(const std::string& inputString,std::vector<std::string>& pendingIndices,bool& hasPendingExecution,bool isMount,bool isUnmount,bool write,bool isFiltered, std::vector<std::string>& filteredFiles,std::vector<std::string>& isoDirs,std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& skippedMessages,std::unordered_set<std::string>& operationFails,std::unordered_set<std::string>& uniqueErrorMessages, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool& filterHistory, std::atomic<bool>& newISOFound) {
     
     if (hasPendingExecution && !pendingIndices.empty() && inputString == "proc") {
         // Combine all pending indices into a single string as if they were entered normally
@@ -386,7 +386,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         }
 
         // Handle pending execution
-        bool pendingExecuted = handlePendingExecution(inputString, pendingIndices, hasPendingExecution, isMount, isUnmount, write, isFiltered, 
+        bool pendingExecuted = handlePendingProcess(inputString, pendingIndices, hasPendingExecution, isMount, isUnmount, write, isFiltered, 
                                                      filteredFiles, isoDirs, operationFiles, skippedMessages, operationFails, uniqueErrorMessages,
                                                      needsClrScrn, operation, isAtISOList, umountMvRmBreak, filterHistory, newISOFound);
         if (pendingExecuted) {
