@@ -1092,7 +1092,7 @@ void helpSelections() {
               << "   • Multiple items: Separate with spaces (e.g., '1 5 6')\n"
               << "   • Range of items: Use a hyphen (e.g., '1-3')\n"
               << "   • Combine methods: '1-3 5 7-9'\n"
-              << "   • Mark as pending: Enter '1-3 5 7-9;'\n"
+              << "   • Mark as pending: Append a semicolon '1-3 5 7-9;'\n"
               << "   • Select all: Enter '00' (for mount/umount only)\n" << std::endl;
     
     // Special commands
