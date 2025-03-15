@@ -99,7 +99,7 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
 }
 
 
-// Revised handlePendingInduction remains the same
+// Function to parse and store indices for Pending Induction
 bool handlePendingInduction(const std::string& inputString, std::vector<std::string>& pendingIndices, bool& hasPendingExecution, bool& needsClrScrn) {
     if (inputString.find(';') == std::string::npos || inputString.find('/') != std::string::npos) {
         return false;
@@ -129,6 +129,7 @@ bool handlePendingInduction(const std::string& inputString, std::vector<std::str
     }
     return false;
 }
+
 
 // Handle filtering for selectForIsoFiles 
 bool handleFiltering(const std::string& inputString,std::vector<std::string>& filteredFiles, bool& isFiltered, bool& needsClrScrn, const std::string& operationColor, const std::string& operation, bool isUnmount, const std::vector<std::string>& isoDirs,std::vector<std::string>& pendingIndices, bool& hasPendingExecution, bool& filterHistory, std::unordered_set<std::string>& operationFiles,std::unordered_set<std::string>& skippedMessages,std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages) {
