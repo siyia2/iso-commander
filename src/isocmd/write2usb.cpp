@@ -763,7 +763,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 					<< std::right
 					<< (prog.completed ? "\033[1;92mDONE\033[0;1m" :
 						prog.failed ? "\033[1;91mFAIL\033[0;1m" :
-						g_operationCancelled.load() ? "\033[1;33mCXL\033[0;1m" :
+						g_operationCancelled.load() ? "\033[1;93mCXL\033[0;1m" :
 						std::to_string(prog.progress) + "%")
 					<< " ["
 					<< currentSize
