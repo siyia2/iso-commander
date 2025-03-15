@@ -633,36 +633,40 @@ void processSelectedFiles(const std::vector<std::string>& filesToProcess,
 void updatePendingItemsForFilteredView(std::vector<PendingItem>& pendingItems, 
                                       const std::vector<std::string>& originalFiles, 
                                       const std::vector<std::string>& filteredFiles) {
-    // Create a new pending items list that contains only the files that remain after filtering
     std::vector<PendingItem> updatedPendingItems;
     
     for (const auto& item : pendingItems) {
-        // Find if this file is present in the filtered list
-        auto it = std::find(filteredFiles.begin(), filteredFiles.end(), item.filePath);
-        if (it != filteredFiles.end()) {
-            // If found, add it with its new index in the filtered list
-            int newIndex = std::distance(filteredFiles.begin(), it) + 1; // +1 for 1-based indexing
+        auto filteredIt = std::find(filteredFiles.begin(), filteredFiles.end(), item.filePath);
+        auto originalIt = std::find(originalFiles.begin(), originalFiles.end(), item.filePath);
+        
+        if (filteredIt != filteredFiles.end()) {
+            // If file exists in filtered view, update index
+            int newIndex = std::distance(filteredFiles.begin(), filteredIt) + 1; // 1-based index
             updatedPendingItems.push_back({item.filePath, std::to_string(newIndex)});
+        } else if (originalIt != originalFiles.end()) {
+            // Keep the original index if file is filtered out
+            int originalIndex = std::distance(originalFiles.begin(), originalIt) + 1;
+            updatedPendingItems.push_back({item.filePath, std::to_string(originalIndex)});
         }
     }
     
-    // Update the pending items list
     pendingItems = updatedPendingItems;
 }
+
 
 // Helper function to update pending items when returning to unfiltered view
 void updatePendingItemsForUnfilteredView(std::vector<PendingItem>& pendingItems,
                                         const std::vector<std::string>& unfilteredFiles) {
-    // Update indices based on the unfiltered list
     for (auto& item : pendingItems) {
-        // Find this file's position in the unfiltered list
         auto it = std::find(unfilteredFiles.begin(), unfilteredFiles.end(), item.filePath);
         if (it != unfilteredFiles.end()) {
-            int newIndex = std::distance(unfilteredFiles.begin(), it) + 1; // +1 for 1-based indexing
-            item.displayIndex = std::to_string(newIndex);
+            int originalIndex = std::distance(unfilteredFiles.begin(), it) + 1; // 1-based index
+            item.displayIndex = std::to_string(originalIndex);
         }
     }
 }
+
+
 
 // Modified function to display pending items
 void displayPendingItems(const std::vector<PendingItem>& pendingItems, const std::string& fileExtensionWithOutDots) {
@@ -730,7 +734,7 @@ void handle_filtering(const std::string& mainInputString, std::vector<std::strin
                 continue; // Skip if no files match the filter
             }
             if (filteredFiles.size() == files.size()) {
-                std::cout << "\033[2A\033[K";
+                std::cout << (hasPendingExecution ? "\033[4A\033[K" : "\033[2A\033[K");
                 needsClrScrn = false;
                 need2Sort = false;
                 break;
