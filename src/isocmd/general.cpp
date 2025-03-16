@@ -259,10 +259,10 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                 for (size_t i = 0; i < pendingIndices.size(); ++i) {
                     std::cout << "\033[1;93m" << pendingIndices[i];
                     if (i < pendingIndices.size() - 1) {
-                        std::cout << ", ";
+                        std::cout << " ";
                     }
                 }
-                std::cout << "\033[1;35m ([\033[1;93mproc\033[1;35m] ↵ to process [\033[1;93mclr\033[1;35m] ↵ to clear)\033[0;1m\n";
+                std::cout << "\033[1;35m ([\033[1;96mproc\033[1;35m] ↵ to process [\033[1;93mclr\033[1;35m] ↵ to clear)\033[0;1m\n";
             }
             
             std::cout << "\n\n";
