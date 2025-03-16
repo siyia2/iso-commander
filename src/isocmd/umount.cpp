@@ -65,11 +65,14 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
     clearScrollBuffer();
 
     if (filteredFiles.size() == isoDirs.size() || umountMvRmBreak) {
-		if (isFiltered) currentPage = 0; //reset page if on filtered list and destructive list action umount
+		if (isFiltered) {
+			pendingIndices.clear();
+			hasPendingProcess = false;
+			currentPage = 0; //reset page if on filtered list and destructive list action umount
+		}
 		filteredFiles = isoDirs;
         isFiltered = false;
-        pendingIndices.clear();
-		hasPendingProcess = false;
+        
     }
     printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS", "", pendingIndices, hasPendingProcess);
 
