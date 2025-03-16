@@ -255,7 +255,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             
             // Display pending indices if there are any
             if (hasPendingProcess && !pendingIndices.empty()) {
-                std::cout << "\n\033[1;35mMarked indices: " << (isFiltered ? "\033[1;96mF⊳\033[1;35m " : "");
+                std::cout << "\n\033[1;35mPending: " << (isFiltered ? "\033[1;96mF⊳\033[1;35m " : "");
                 for (size_t i = 0; i < pendingIndices.size(); ++i) {
                     std::cout << "\033[1;93m" << pendingIndices[i];
                     if (i < pendingIndices.size() - 1) {
@@ -1115,13 +1115,13 @@ void helpSelections() {
 			  << "   • Enter \033[1;34m'n'\033[0m - Go to next page if pages > 1\n"
 			  << "   • Enter \033[1;34m'p'\033[0m - Go to previous page if pages > 1\n"
 			  << "   • Enter \033[1;34m'g<num>'\033[0m - Go to page if pages > 1 (e.g, 'g3')\n"
-			  << "   • Enter \033[1;34m'proc'\033[0m - Process pending indices\n"
-			  << "   • Enter \033[1;34m'clr'\033[0m - Clear pending indices\n" << std::endl;
+			  << "   • Enter \033[1;34m'proc'\033[0m - Process pending items\n"
+			  << "   • Enter \033[1;34m'clr'\033[0m - Clear pending items\n" << std::endl;
               
     
      // Selection tips
     std::cout << "\033[1;32m4. Tips:\033[0m\n"
-			  << "   • Pending indices are constrained by filtered/unfiltered status\033[0m\n"
+			  << "   • Pending items are constrained by filtered/unfiltered status\033[0m\n"
 			  << "   • Filtering is adaptive, incremental, and unconstrained by pagination\033[0m\n"
               << "   • If filtering has no matches, no message or list update is issued\n" << std::endl;
               

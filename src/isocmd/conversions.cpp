@@ -700,7 +700,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         
         // Display pending indices if there are any
          if (hasPendingProcess && !pendingIndices.empty()) {
-                std::cout << "\n\033[1;35mMarked indices: " << (isFiltered ? "\033[1;96mF⊳\033[1;35m " : "");
+                std::cout << "\n\033[1;35mPending: " << (isFiltered ? "\033[1;96mF⊳\033[1;35m " : "");
                 for (size_t i = 0; i < pendingIndices.size(); ++i) {
                     std::cout << "\033[1;93m" << pendingIndices[i];
                     if (i < pendingIndices.size() - 1) {
