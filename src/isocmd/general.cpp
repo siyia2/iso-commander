@@ -642,18 +642,18 @@ void restoreInput(struct termios *oldt, int oldf) {
 // Function to display progress bar for native operations
 void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t totalBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, size_t totalTasks, std::atomic<bool>* isComplete, bool* verbose,  const std::string& operation) {
     // Set up terminal for non-blocking input
-	disableInputForProgressBar(&oldt, &oldf);
+    disableInputForProgressBar(&oldt, &oldf);
 
     const int processingBarWidth = 55;
     int finalBarWidth = 45; // Default to 45
-	
-	// Check if operation starts with BIN/IMG, MDF, or NRG to modify final bar width
-	if (operation.find("MDF") != std::string::npos || 
-		operation.find("NRG") != std::string::npos || 
-		operation.find("BIN/IMG") != std::string::npos) {
-		finalBarWidth = 48;
-	}
-	
+    
+    // Check if operation starts with BIN/IMG, MDF, or NRG to modify final bar width
+    if (operation.find("MDF") != std::string::npos || 
+        operation.find("NRG") != std::string::npos || 
+        operation.find("BIN/IMG") != std::string::npos) {
+        finalBarWidth = 48;
+    }
+    
     bool enterPressed = false;
     auto startTime = std::chrono::high_resolution_clock::now();
     const bool bytesTrackingEnabled = (completedBytes != nullptr);
@@ -716,7 +716,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         double speed = bytesTrackingEnabled && elapsedSeconds > 0.0 ? 
             (static_cast<double>(completedBytesValue) / elapsedSeconds) : 0.0;
         
-        // Construct the progress bar display
+        // Construct the progress bar display - first line
         std::stringstream ss;
         ss << "\r[";
         for (int i = 0; i < barWidth; ++i) {
@@ -725,18 +725,21 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         ss << "] " << std::fixed << std::setprecision(0) << (overallProgress * 100.0)
            << "% (" << completedTasksValue << "/" << totalTasks << ")";
         
-        // Add byte and speed information if enabled
-		if (bytesTrackingEnabled) {
-			ss << " (" << formatSize(static_cast<double>(completedBytesValue)) 
-			<< "/" << totalBytesFormatted << ")";
-    
-			if (!isFinal) {
-				ss << " " << formatSize(speed) << "/s";
-			}
-		}
-        
-        // Add elapsed time
+        // Add elapsed time to first line
         ss << " Time Elapsed: " << std::fixed << std::setprecision(1) << elapsedSeconds << "s\033[K";
+        
+        // Add byte and speed information on a new line if enabled
+        if (bytesTrackingEnabled) {
+            ss << "\n\r";  // New line for size information
+            ss << " Size: " << formatSize(static_cast<double>(completedBytesValue)) 
+               << "/" << totalBytesFormatted;
+    
+            if (!isFinal) {
+                ss << " Speed: " << formatSize(speed) << "/s";
+            }
+            ss << "\033[K";  // Clear to the end of line
+        }
+        
         return ss.str();
     };
     
@@ -747,14 +750,25 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         while (read(STDIN_FILENO, &ch, 1) > 0);
         
         // Display current progress
-        std::cout << renderProgressBar() << std::flush;
+        std::string progressOutput = renderProgressBar();
+        std::cout << progressOutput << std::flush;
+        
+        // Move cursor back up if we have a multi-line output (for updating in place)
+        if (bytesTrackingEnabled && !isComplete->load(std::memory_order_acquire)) {
+            std::cout << "\033[1A";  // Move cursor up one line
+        }
         
         // If processing is complete, show a final message
         if (isComplete->load(std::memory_order_acquire) && !enterPressed) {
             signal(SIGINT, SIG_IGN);  // Ignore Ctrl+C after completion
             
-            // Show completion status
-            std::cout << "\033[1A\033[1K";
+            // Show completion status (need to account for multi-line output)
+            if (bytesTrackingEnabled) {
+                std::cout << "\033[1J\033[2A\033[K";  // Move up two lines and clear
+            } else {
+                std::cout << "\033[1J\033[1A\033[1K";  // Move up one line and clear
+            }
+            
             std::cout << "\r\033[0;1m Processing for " << operation << "\033[0;1m" 
                       << (!g_operationCancelled.load() ? " → \033[1;92mCOMPLETED\033[0;1m" : 
                           " → \033[1;33mINTERRUPTED\033[0;1m") << std::endl;
@@ -790,7 +804,6 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
     
     // Final restoration of terminal settings
     restoreInput(&oldt, oldf);
-
 }
 
 
