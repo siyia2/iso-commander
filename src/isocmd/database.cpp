@@ -214,6 +214,7 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
 				pendingIndices.clear();
 				hasPendingProcess =false;
 			}
+			// Optimization sort only if (needToReload) from database
             sortFilesCaseInsensitive(globalIsoFileList);
         }
     }
@@ -222,7 +223,7 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
     {
         std::lock_guard<std::mutex> printLock(couNtMutex);
         if (umountMvRmBreak) {
-			if (isFiltered) currentPage = 0; //reset page if on filtered list and destructive list action mv/rm
+			if (isFiltered) currentPage = 0; //reset page if on filtered list and destructive list action mv/rm/umount
             filteredFiles = globalIsoFileList;
             isFiltered = false;
         }
