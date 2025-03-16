@@ -271,9 +271,10 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         if (input && std::strcmp(input.get(), "clr") == 0) {
             pendingIndices.clear();
             hasPendingProcess = false;
+            needsClrScrn = true;
             continue;
         }
-        
+        // check if first char is ; and skip
         if (input && input[0] == ';') {
 			continue;
 		}

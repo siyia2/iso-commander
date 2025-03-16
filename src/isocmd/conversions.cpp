@@ -726,12 +726,14 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         if (mainInputString == "clr") {
             pendingIndices.clear();
             hasPendingProcess = false;
-            if (hasPendingProcess) {
-				std::cout << "\033[4A\033[K";
-			}
+			needsClrScrn = true;
             continue;
         }
-        
+        // check if first char is ; and skip
+        if (rawInput && rawInput.get()[0] == ';') {
+			continue;
+		}
+		
         std::atomic<bool> isAtISOList{false};
         
         size_t totalPages = (ITEMS_PER_PAGE != 0) ? ((files.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE) : 0;
