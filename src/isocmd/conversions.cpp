@@ -704,10 +704,10 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
                 for (size_t i = 0; i < pendingIndices.size(); ++i) {
                     std::cout << "\033[1;93m" << pendingIndices[i];
                     if (i < pendingIndices.size() - 1) {
-                        std::cout << ", ";
+                        std::cout << " ";
                     }
                 }
-                std::cout << "\033[1;35m ([\033[1;93mproc\033[1;35m] ↵ to process [\033[1;93mclr\033[1;35m] ↵ to clear)\033[0;1m\n";
+                std::cout << "\033[1;35m ([\033[1;96mproc\033[1;35m] ↵ to process [\033[1;93mclr\033[1;35m] ↵ to clear)\033[0;1m\n";
             }
             
         
@@ -734,6 +734,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         }
         // check if first char is ; and skip
         if (rawInput && rawInput.get()[0] == ';') {
+			 std::cout << (hasPendingProcess ? "\033[4A\033[K" : "\033[2A\033[K"); // Clear the line if no files match the filter
 			continue;
 		}
 		
