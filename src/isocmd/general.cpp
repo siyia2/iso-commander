@@ -262,7 +262,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                         std::cout << " ";
                     }
                 }
-                std::cout << "\033[1;35m ([\033[1;96mproc\033[1;35m] ↵ to process [\033[1;93mclr\033[1;35m] ↵ to clear)\033[0;1m\n";
+                std::cout << "\033[1;35m ([\033[1;92mproc\033[1;35m] ↵ to process [\033[1;93mclr\033[1;35m] ↵ to clear)\033[0;1m\n";
             }
             
             std::cout << "\n\n";
