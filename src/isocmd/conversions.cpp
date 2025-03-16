@@ -721,7 +721,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         }
         // check if first char is ; and skip
         if (rawInput && rawInput.get()[0] == ';') {
-			 std::cout << "\033[2A\033[K"; // Clear the line if no files match the filter
+			 std::cout << "\033[2A\033[K"; // Clear the line when entering ;
 			continue;
 		}
 		
