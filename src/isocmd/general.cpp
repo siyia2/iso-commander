@@ -716,22 +716,28 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         double speed = bytesTrackingEnabled && elapsedSeconds > 0.0 ? 
             (static_cast<double>(completedBytesValue) / elapsedSeconds) : 0.0;
         
-        // Construct the progress bar display - first line
+        // Construct the progress bar display
         std::stringstream ss;
+        
+        // First line: progress bar with percentage, task count, and time elapsed
         ss << "\r[";
         for (int i = 0; i < barWidth; ++i) {
             ss << (i < progressPos ? "=" : (i == progressPos && !isFinal ? ">" : " "));
         }
         ss << "] " << std::fixed << std::setprecision(0) << (overallProgress * 100.0)
-           << "% (" << completedTasksValue << "/" << totalTasks << ")";
+           << "% (" << completedTasksValue << "/" << totalTasks << ") Time Elapsed: " 
+           << std::fixed << std::setprecision(1) << elapsedSeconds << "s\033[K";
         
-        // Add elapsed time to first line
-        ss << " Time Elapsed: " << std::fixed << std::setprecision(1) << elapsedSeconds << "s\033[K";
-        
-        // Add byte and speed information on a new line if enabled
+        // Second line: size information right under the percentage part
         if (bytesTrackingEnabled) {
-            ss << "\n\r";  // New line for size information
-            ss << " Size: " << formatSize(static_cast<double>(completedBytesValue)) 
+            // Calculate position to align "Completed" under the percentage
+            int percentPos = barWidth + 3; // This positions "Completed" under the percentage
+            ss << "\n\r";
+            // Add spaces to align "Completed" under the percentage value
+            for (int i = 0; i < percentPos; i++) {
+                ss << " ";
+            }
+            ss << "Completed: " << formatSize(static_cast<double>(completedBytesValue)) 
                << "/" << totalBytesFormatted;
     
             if (!isFinal) {
@@ -764,9 +770,9 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             
             // Show completion status (need to account for multi-line output)
             if (bytesTrackingEnabled) {
-                std::cout << "\033[1J\033[2A\033[K";  // Move up two lines and clear
+                std::cout << "\033[1J\033[2A";  // Clear above and move up two lines
             } else {
-                std::cout << "\033[1J\033[1A\033[1K";  // Move up one line and clear
+                std::cout << "\033[1J\033[1A";  // Clear above and move up one line
             }
             
             std::cout << "\r\033[0;1m Processing for " << operation << "\033[0;1m" 
