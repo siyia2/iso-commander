@@ -738,7 +738,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             for (int i = 0; i < percentPos; i++) {
                 ss << " ";
             }
-            ss << "Completed: " << formatSize(static_cast<double>(completedBytesValue)) 
+            ss << "Processed: " << formatSize(static_cast<double>(completedBytesValue)) 
                << "/" << totalBytesFormatted;
 
             // Add a new line and align the speed info under "Completed"
