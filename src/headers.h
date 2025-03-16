@@ -164,6 +164,7 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
 // GENERAL
 
 // bools
+bool handlePendingInduction(const std::string& inputString, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& needsClrScrn);
 bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPages, size_t& currentPage, bool& needsClrScrn, const bool isMount, const bool isUnmount, const bool isWrite, const bool isConversion, std::atomic<bool>& isAtISOList);
 bool isValidInput(const std::string& input);
 
