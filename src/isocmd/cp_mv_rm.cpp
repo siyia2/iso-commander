@@ -125,7 +125,7 @@ void processOperationInput(const std::string& input, const std::vector<std::stri
         totalTasks *= destCount;
     }
     
-    std::cout << "\n\033[0;1m Processing " << (totalTasks > 1 ? "tasks" : "task") << " for " << operationColor << process <<
+    std::cout << "\n\033[0;1m Processing " << operationColor << process <<
              " \033[0;1moperation\033[0;1m... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";
     
     std::atomic<bool> isProcessingComplete(false);

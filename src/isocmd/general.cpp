@@ -179,7 +179,7 @@ bool handlePendingProcess(const std::string& inputString,std::vector<std::string
 
 
 // Function to hanlde filtering for selectForIsoFiles
-bool handleFilterOperation(const std::string& inputString, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, std::vector<std::string>& pendingIndices, bool& hasPendingProcess,size_t& currentPage, const std::string& operation, const std::string& operationColor, const std::vector<std::string>& isoDirs, bool isUnmount) {
+bool handleFilterOperation(const std::string& inputString, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, const std::string& operation, const std::string& operationColor, const std::vector<std::string>& isoDirs, bool isUnmount) {
     // Check if this is a filtering operation
     if (inputString != "/" && (inputString.size() == 0 || inputString[0] != '/')) {
         return false;  // Not a filtering operation
@@ -644,14 +644,15 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
     // Set up terminal for non-blocking input
     disableInputForProgressBar(&oldt, &oldf);
 
-    const int processingBarWidth = 55;
-    int finalBarWidth = 45; // Default to 45
+    int processingBarWidth = 46; // Default to 46
+    int finalBarWidth = 40; // Default to 40
     
     // Check if operation starts with BIN/IMG, MDF, or NRG to modify final bar width
     if (operation.find("MDF") != std::string::npos || 
         operation.find("NRG") != std::string::npos || 
         operation.find("BIN/IMG") != std::string::npos) {
-        finalBarWidth = 48;
+        processingBarWidth = 49;
+        finalBarWidth = 41;
     }
     
     bool enterPressed = false;
@@ -739,9 +740,15 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             }
             ss << "Completed: " << formatSize(static_cast<double>(completedBytesValue)) 
                << "/" << totalBytesFormatted;
-    
+
+            // Add a new line and align the speed info under "Completed"
+            ss << "\n\r";
+            for (int i = 0; i < percentPos; i++) {
+                ss << " ";
+            }
+            
             if (!isFinal) {
-                ss << " Speed: " << formatSize(speed) << "/s";
+                ss << "Speed: " << formatSize(speed) << "/s";
             }
             ss << "\033[K";  // Clear to the end of line
         }
@@ -761,7 +768,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         
         // Move cursor back up if we have a multi-line output (for updating in place)
         if (bytesTrackingEnabled && !isComplete->load(std::memory_order_acquire)) {
-            std::cout << "\033[1A";  // Move cursor up one line
+            std::cout << "\033[2A";  // Move cursor up one line
         }
         
         // If processing is complete, show a final message
@@ -770,14 +777,25 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             
             // Show completion status (need to account for multi-line output)
             if (bytesTrackingEnabled) {
-                std::cout << "\033[1J\033[2A";  // Clear above and move up two lines
+                std::cout << "\033[1J\033[3A";  // Clear above and move up two lines
             } else {
                 std::cout << "\033[1J\033[1A";  // Clear above and move up one line
             }
             
-            std::cout << "\r\033[0;1m Processing for " << operation << "\033[0;1m" 
-                      << (!g_operationCancelled.load() ? " → \033[1;92mCOMPLETED\033[0;1m" : 
-                          " → \033[1;33mINTERRUPTED\033[0;1m") << std::endl;
+            // Get current task counts for status determination
+            const size_t completedTasksValue = completedTasks->load(std::memory_order_acquire);
+            const size_t failedTasksValue = failedTasks->load(std::memory_order_acquire);
+            
+            // Using ternary operators to determine status based on task completion
+            std::cout << "\r\033[0;1m Result: " << operation << "\033[0;1m → " 
+                      << (!g_operationCancelled.load() 
+                          ? (failedTasksValue > 0 
+                             ? (completedTasksValue > 0 
+                                ? "\033[1;93mPARTIAL" // Yellow, some completed, some failed
+                                : "\033[1;91mFAILED")  // Red, none completed, some failed
+                             : "\033[1;92mCOMPLETED") // Green, all completed successfully
+                          : "\033[1;33mINTERRUPTED") // Yellow, operation cancelled
+                      << "\033[0;1m" << std::endl;
             
             // Show final progress bar
             std::cout << renderProgressBar(true);
@@ -790,7 +808,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             
             // Restore terminal settings for input
             restoreInput(&oldt, oldf);
-            
+            if (bytesTrackingEnabled) std::cout << "\033[2A";
             // Prompt for verbose output
             const std::string prompt = "\033[1;94mDisplay verbose output? (y/n):\033[0;1m ";
             std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
