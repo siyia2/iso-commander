@@ -223,11 +223,15 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
     {
         std::lock_guard<std::mutex> printLock(couNtMutex);
         if (umountMvRmBreak) {
-			if (isFiltered) currentPage = 0; //reset page if on filtered list and destructive list action mv/rm
+			if (isFiltered) {
+				//reset pending flags if filtered and for destructive list action mv/rm
+				pendingIndices.clear();
+				hasPendingProcess = false;
+				currentPage = 0;
+			}
             filteredFiles = globalIsoFileList;
             isFiltered = false;
-            pendingIndices.clear();
-			hasPendingProcess = false;
+            
         }
         printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType, pendingIndices, hasPendingProcess);
         
