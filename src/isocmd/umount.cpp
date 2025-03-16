@@ -68,6 +68,8 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
 		if (isFiltered) currentPage = 0; //reset page if on filtered list and destructive list action umount
 		filteredFiles = isoDirs;
         isFiltered = false;
+        pendingIndices.clear();
+		hasPendingProcess = false;
     }
     printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS", "", pendingIndices, hasPendingProcess);
 

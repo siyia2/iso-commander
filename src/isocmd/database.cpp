@@ -212,7 +212,7 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
             std::lock_guard<std::mutex> lock(updateListMutex);
             if (!isFiltered) {
 				pendingIndices.clear();
-				hasPendingProcess =false;
+				hasPendingProcess = false;
 			}
 			// Optimization sort only if (needToReload) from database
             sortFilesCaseInsensitive(globalIsoFileList);
@@ -223,9 +223,11 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
     {
         std::lock_guard<std::mutex> printLock(couNtMutex);
         if (umountMvRmBreak) {
-			if (isFiltered) currentPage = 0; //reset page if on filtered list and destructive list action mv/rm/umount
+			if (isFiltered) currentPage = 0; //reset page if on filtered list and destructive list action mv/rm
             filteredFiles = globalIsoFileList;
             isFiltered = false;
+            pendingIndices.clear();
+			hasPendingProcess = false;
         }
         printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType, pendingIndices, hasPendingProcess);
         
