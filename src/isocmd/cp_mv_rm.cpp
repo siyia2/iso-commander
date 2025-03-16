@@ -368,98 +368,112 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::unorde
 std::string userDestDirRm(const std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::unordered_set<std::string>& uniqueErrorMessages, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& filterHistory, bool& isDelete, bool& isCopy, bool& abortDel, bool& overwriteExisting) {
     
     // Generate entries for selected ISO files - used by both branches
-	std::vector<std::string> entries = generateIsoEntries(indexChunks, isoFiles);
-	
-	 // Sort the entries using the natural comparison
+    std::vector<std::string> entries = generateIsoEntries(indexChunks, isoFiles);
+    
+    // Sort the entries using the natural comparison
     sortFilesCaseInsensitive(entries);
     
     // Clear screen initially
     clearScrollBuffer();
-        
-    if (!isDelete) {
-        // Copy/Move operation flow
-        bool isPageTurn = false;
-        
-        // Setup environment function
-        auto setupEnv = [&]() {
-            enable_ctrl_d();
-            setupSignalHandlerCancellations();
-            g_operationCancelled.store(false);
-            rl_bind_key('\f', clear_screen_and_buffer);
-            rl_bind_key('\t', rl_complete);
+    
+    bool shouldContinue = true;
+    std::string userInput;
+    
+    while (shouldContinue) {  // Add a loop to allow continuing execution
+        if (!isDelete) {
+            // Copy/Move operation flow
+            bool isPageTurn = false;
             
-            if (!isCopy) {
-                umountMvRmBreak = true;
+            // Setup environment function
+            auto setupEnv = [&]() {
+                enable_ctrl_d();
+                setupSignalHandlerCancellations();
+                g_operationCancelled.store(false);
+                rl_bind_key('\f', clear_screen_and_buffer);
+                rl_bind_key('\t', rl_complete);
+                
+                if (!isCopy) {
+                    umountMvRmBreak = true;
+                }
+                
+                if (!isPageTurn) {
+                    clear_history();
+                    filterHistory = false;
+                    loadHistory(filterHistory);
+                }
+            };
+            
+            // Prefix and suffix for the prompt
+            std::string promptPrefix = "\n";
+            std::string promptSuffix = "\n\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ for selected \001\033[1;92m\002ISO\001\033[1;94m\002 to be " + 
+                operationColor + operationDescription + 
+                "\001\033[1;94m\002 into, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
+            
+            // Use the consolidated pagination function
+            userInput = handlePaginatedDisplay(
+                entries,
+                uniqueErrorMessages, 
+                promptPrefix, 
+                promptSuffix, 
+                setupEnv, 
+                isPageTurn
+            );
+            
+            // After pagination, handle the input
+            rl_bind_key('\f', prevent_readline_keybindings);
+            rl_bind_key('\t', prevent_readline_keybindings);
+            
+            // Handle help command
+            if (userInput == "?") {
+                bool import2ISO = false;
+                bool isCpMv = true;
+                helpSearches(isCpMv, import2ISO);
+                userDestDir = "";
+                // Continue the loop instead of using 'continue'
+                continue;
             }
             
-            if (!isPageTurn) {
+            // Handle empty input (return)
+            if (userInput.empty()) {
+                umountMvRmBreak = false;
+                userDestDir = "";
                 clear_history();
-                filterHistory = false;
-                loadHistory(filterHistory);
+                shouldContinue = false;  // Exit the loop
+                continue;
             }
-        };
-        
-        // Prefix and suffix for the prompt
-        std::string promptPrefix = "\n";
-        std::string promptSuffix = "\n\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ for selected \001\033[1;92m\002ISO\001\033[1;94m\002 to be " + 
-            operationColor + operationDescription + 
-            "\001\033[1;94m\002 into, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
-        
-        // Use the consolidated pagination function
-        std::string userInput = handlePaginatedDisplay(
-            entries,
-            uniqueErrorMessages, 
-            promptPrefix, 
-            promptSuffix, 
-            setupEnv, 
-            isPageTurn
-        );
-        
-        // After pagination, handle the input
-        rl_bind_key('\f', prevent_readline_keybindings);
-        rl_bind_key('\t', prevent_readline_keybindings);
-        
-        // Handle help command
-        if (userInput == "?") {
-            bool import2ISO = false;
-            bool isCpMv = true;
-            helpSearches(isCpMv, import2ISO);
-            userDestDir = "";
-            return userDestDir;
-        }
-        
-        // Handle empty input (return)
-        if (userInput.empty()) {
-            umountMvRmBreak = false;
-            userDestDir = "";
-            clear_history();
-            return userDestDir;
-        }
-        
-        // Process destination directory including possible -o flag
-        userDestDir = userInput;
-        
-        // Check for overwrite flag
-        if (userDestDir.size() >= 3 && userDestDir.substr(userDestDir.size() - 3) == " -o") {
-            overwriteExisting = true;
-            userDestDir = userDestDir.substr(0, userDestDir.size() - 3);
+            
+            // Process destination directory including possible -o flag
+            userDestDir = userInput;
+            
+            // Check for overwrite flag
+            if (userDestDir.size() >= 3 && userDestDir.substr(userDestDir.size() - 3) == " -o") {
+                overwriteExisting = true;
+                userDestDir = userDestDir.substr(0, userDestDir.size() - 3);
+            } else {
+                overwriteExisting = false;
+            }
+            
+            // Add to history without the overwrite flag
+            std::string historyInput = userInput;
+            if (historyInput.size() >= 3 && historyInput.substr(historyInput.size() - 3) == " -o") {
+                historyInput = historyInput.substr(0, historyInput.size() - 3);
+            }
+            add_history(historyInput.c_str());
+            
+            // Exit the loop after processing
+            shouldContinue = false;
         } else {
-            overwriteExisting = false;
-        }
-        
-        // Add to history without the overwrite flag
-        std::string historyInput = userInput;
-        if (historyInput.size() >= 3 && historyInput.substr(historyInput.size() - 3) == " -o") {
-            historyInput = historyInput.substr(0, historyInput.size() - 3);
-        }
-        add_history(historyInput.c_str());
-    } else {
-        // Delete operation flow - call the extracted function
-        bool proceedWithDelete = handleDeleteOperation(isoFiles, uniqueErrorMessages, indexChunks, umountMvRmBreak, abortDel);
-        
-        if (!proceedWithDelete) {
-            userDestDir = "";
-            return userDestDir;
+            // Delete operation flow - call the extracted function
+            bool proceedWithDelete = handleDeleteOperation(isoFiles, uniqueErrorMessages, indexChunks, umountMvRmBreak, abortDel);
+            
+            if (!proceedWithDelete) {
+                userDestDir = "";
+                shouldContinue = false;  // Exit the loop
+                continue;
+            }
+            
+            // Exit the loop after processing
+            shouldContinue = false;
         }
     }
     
