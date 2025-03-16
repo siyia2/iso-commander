@@ -1101,7 +1101,7 @@ void helpSelections() {
     
      // Selection tips
     std::cout << "\033[1;32m4. Tips:\033[0m\n"
-			  << "   • Pending indices are limited by current filter/unfiltered status\033[0m\n"
+			  << "   • Pending indices are constrained by filtered/unfiltered status\033[0m\n"
 			  << "   • Filtering is adaptive, incremental, and unconstrained by pagination\033[0m\n"
               << "   • If filtering has no matches, no message or list update is issued\n" << std::endl;
               
