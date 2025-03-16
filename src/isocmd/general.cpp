@@ -644,16 +644,19 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
     // Set up terminal for non-blocking input
     disableInputForProgressBar(&oldt, &oldf);
 
-    int processingBarWidth = 46; // Default to 46
-    int finalBarWidth = 40; // Default to 40
+    int processingBarWidth = 42; // Default to 42
+    int finalBarWidth = 30; // Default to 30
     
-    // Check if operation starts with BIN/IMG, MDF, or NRG to modify final bar width
-    if (operation.find("MDF") != std::string::npos || 
-        operation.find("NRG") != std::string::npos || 
-        operation.find("BIN/IMG") != std::string::npos) {
-        processingBarWidth = 49;
-        finalBarWidth = 41;
-    }
+    if (operation.find("mount") != std::string::npos || 
+    operation.find("umount") != std::string::npos) {
+		processingBarWidth = 46;
+		finalBarWidth = 31;
+	} else if (operation.find("MDF") != std::string::npos || 
+           operation.find("NRG") != std::string::npos || 
+           operation.find("BIN/IMG") != std::string::npos) {
+		processingBarWidth = 49;
+		finalBarWidth = 41;
+	}
     
     bool enterPressed = false;
     auto startTime = std::chrono::high_resolution_clock::now();
@@ -808,7 +811,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             
             // Restore terminal settings for input
             restoreInput(&oldt, oldf);
-            if (bytesTrackingEnabled) std::cout << "\033[2A";
+            if (bytesTrackingEnabled) std::cout << "\033[1A";
             // Prompt for verbose output
             const std::string prompt = "\033[1;94mDisplay verbose output? (y/n):\033[0;1m ";
             std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);

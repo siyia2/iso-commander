@@ -71,12 +71,6 @@ void processOperationInput(const std::string& input, const std::vector<std::stri
     bool isMove   = (process == "mv");
     bool isCopy   = (process == "cp");
     
-    std::string coloredProcess = 
-    isDelete ? "\033[1;91m" + process + " \033[0;1moperation" :
-    isMove   ? "\033[1;93m" + process + " \033[0;1moperation" :
-    isCopy   ? "\033[1;92m" + process + " \033[0;1moperation" :
-    process;
-    
     std::string operationDescription = isDelete ? "*PERMANENTLY DELETED*" : (isMove ? "*MOVED*" : "*COPIED*");
     std::string operationColor       = isDelete ? "\033[1;91m" : (isCopy ? "\033[1;92m" : "\033[1;93m");
 
@@ -125,8 +119,14 @@ void processOperationInput(const std::string& input, const std::vector<std::stri
         totalTasks *= destCount;
     }
     
-    std::cout << "\n\033[0;1m Processing " << operationColor << process <<
-             " \033[0;1moperation\033[0;1m... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";
+    std::cout << "\n\033[0;1m Processing " << (totalTasks > 1 ? "tasks" : "task") << " for " << operationColor << process <<
+             "\033[0;1m... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";
+             
+             std::string coloredProcess = 
+    isDelete ? std::string("\033[1;91m") + process + "\033[0;1m" + (totalTasks > 1 ? " tasks" : " task") :
+    isMove   ? std::string("\033[1;93m") + process + "\033[0;1m" + (totalTasks > 1 ? " tasks" : " task") :
+    isCopy   ? std::string("\033[1;92m") + process + "\033[0;1m" + (totalTasks > 1 ? " tasks" : " task") :
+    process + (totalTasks > 1 ? " tasks" : " task");
     
     std::atomic<bool> isProcessingComplete(false);
 
