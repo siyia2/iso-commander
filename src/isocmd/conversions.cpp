@@ -535,7 +535,7 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
 
 
 // Function to clear and load list for image files
-void clearAndLoadImageFiles(std::vector<std::string>& files, const std::string& fileType, bool& need2Sort, bool& isFiltered, bool& list) {
+void clearAndLoadImageFiles(std::vector<std::string>& files, const std::string& fileType, bool& need2Sort, bool& isFiltered, bool& list,std::vector<std::string>& pendingIndices, bool& hasPendingProcess) {
     // Clear the screen for new content
     clearScrollBuffer(); 
     // Assist in automatic removal of non-existent entries from cache
@@ -563,7 +563,7 @@ void clearAndLoadImageFiles(std::vector<std::string>& files, const std::string& 
 			need2Sort = false;
 	}
 	
-    printList(files, "IMAGE_FILES", "conversions"); // Print the current list of files
+    printList(files, "IMAGE_FILES", "conversions", pendingIndices, hasPendingProcess); // Print the current list of files
 }
 
 
@@ -587,7 +587,7 @@ void handle_filtering(const std::string& mainInputString, std::vector<std::strin
 
             // Exit the filter loop if input is empty or "/"
             if (inputSearch.empty() || inputSearch == "/") {
-                std::cout << (hasPendingProcess ? "\033[4A\033[K" : "\033[2A\033[K");
+                std::cout << "\033[2A\033[K";
                 needsClrScrn = false;
                 need2Sort = false;
                 break;
@@ -600,7 +600,7 @@ void handle_filtering(const std::string& mainInputString, std::vector<std::strin
                 continue; // Skip if no files match the filter
             }
             if (filteredFiles.size() == files.size()) {
-                std::cout << (hasPendingProcess ? "\033[4A\033[K" : "\033[2A\033[K");
+                std::cout << "\033[2A\033[K";
                 needsClrScrn = false;
                 need2Sort = false;
                 break;
@@ -647,7 +647,7 @@ void handle_filtering(const std::string& mainInputString, std::vector<std::strin
             
             clear_history();
         } else {
-            std::cout << (hasPendingProcess ? "\033[4A\033[K" : "\033[2A\033[K"); // Clear the line if no files match the filter
+            std::cout << "\033[2A\033[K"; // Clear the line if no files match the filter
             need2Sort = false;
             needsClrScrn = false;
         }
@@ -696,20 +696,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         resetVerboseSets(processedErrors, successOuts, skippedOuts, failedOuts);
         
         clear_history();
-        if (needsClrScrn) clearAndLoadImageFiles(files, fileType, need2Sort, isFiltered, list);
-        
-        // Display pending indices if there are any
-         if (hasPendingProcess && !pendingIndices.empty()) {
-                std::cout << "\n\033[1;35mPending: " << (isFiltered ? "\033[1;96mF⊳\033[1;35m " : "");
-                for (size_t i = 0; i < pendingIndices.size(); ++i) {
-                    std::cout << "\033[1;93m" << pendingIndices[i];
-                    if (i < pendingIndices.size() - 1) {
-                        std::cout << " ";
-                    }
-                }
-                std::cout << "\033[1;35m ([\033[1;92mproc\033[1;35m] ↵ to process [\033[1;93mclr\033[1;35m] ↵ to clear)\033[0;1m\n";
-            }
-            
+        if (needsClrScrn) clearAndLoadImageFiles(files, fileType, need2Sort, isFiltered, list, pendingIndices, hasPendingProcess);
         
         std::cout << "\n\n";
         std::cout << "\033[1A\033[K";
@@ -734,7 +721,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         }
         // check if first char is ; and skip
         if (rawInput && rawInput.get()[0] == ';') {
-			 std::cout << (hasPendingProcess ? "\033[4A\033[K" : "\033[2A\033[K"); // Clear the line if no files match the filter
+			 std::cout << "\033[2A\033[K"; // Clear the line if no files match the filter
 			continue;
 		}
 		

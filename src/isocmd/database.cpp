@@ -176,7 +176,7 @@ std::string getHomeDirectory() {
 
 
 // Utility function to clear screen buffer and load IsoFiles from database to a global vector only for the first time and only for if the database file has been modified.
-bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType, bool& umountMvRmBreak) {
+bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess) {
     
     signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
     disable_ctrl_d();
@@ -210,6 +210,10 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
         loadFromDatabase(globalIsoFileList);
         {
             std::lock_guard<std::mutex> lock(updateListMutex);
+            if (!isFiltered) {
+				pendingIndices.clear();
+				hasPendingProcess =false;
+			}
             sortFilesCaseInsensitive(globalIsoFileList);
         }
     }
@@ -222,8 +226,8 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
             filteredFiles = globalIsoFileList;
             isFiltered = false;
         }
-        printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType);
-
+        printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType, pendingIndices, hasPendingProcess);
+        
         if (globalIsoFileList.empty()) {
             std::cout << "\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n";
             std::cout << "\n\033[1;32m↵ to return...\033[0;1m";

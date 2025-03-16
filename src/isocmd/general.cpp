@@ -12,14 +12,14 @@ std::mutex updateListMutex;
 
 
 // Function to automatically update ISO list if auto-update is on
-void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, bool& umountMvRmBreak, std::vector<std::string>& filteredFiles, bool& isFiltered, std::string& listSubtype, std::atomic<bool>& newISOFound) {
+void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, bool& umountMvRmBreak, std::vector<std::string>& filteredFiles, bool& isFiltered, std::string& listSubtype, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, std::atomic<bool>& newISOFound) {
     while (true) {
         std::this_thread::sleep_for(std::chrono::seconds(timeoutSeconds));
         
         if (!isImportRunning.load()) {
 			if (newISOFound.load() && isAtISOList.load()) {
 				
-				clearAndLoadFiles(filteredFiles, isFiltered, listSubtype, umountMvRmBreak);
+				clearAndLoadFiles(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess);
             
 				std::cout << "\n";
 				rl_on_new_line(); 
@@ -246,25 +246,13 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         // Load files based on operation type
         if (needsClrScrn) {
             if (!isUnmount) {
-                if (!clearAndLoadFiles(filteredFiles, isFiltered, listSubtype, umountMvRmBreak))
+                if (!clearAndLoadFiles(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess))
                     break;
             } else {
-                if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak))
+                if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak, pendingIndices, hasPendingProcess))
                     break;
             }
-            
-            // Display pending indices if there are any
-            if (hasPendingProcess && !pendingIndices.empty()) {
-                std::cout << "\n\033[1;35mPending: " << (isFiltered ? "\033[1;96mF⊳\033[1;35m " : "");
-                for (size_t i = 0; i < pendingIndices.size(); ++i) {
-                    std::cout << "\033[1;93m" << pendingIndices[i];
-                    if (i < pendingIndices.size() - 1) {
-                        std::cout << " ";
-                    }
-                }
-                std::cout << "\033[1;35m ([\033[1;92mproc\033[1;35m] ↵ to process [\033[1;93mclr\033[1;35m] ↵ to clear)\033[0;1m\n";
-            }
-            
+			
             std::cout << "\n\n";
             // Flag for initiating screen clearing on destructive list actions e.g. Umount/Mv/Rm
             umountMvRmBreak = false;
@@ -273,7 +261,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         if (updateHasRun.load() && !isUnmount && !globalIsoFileList.empty()) {
             std::thread(refreshListAfterAutoUpdate, 1, std::ref(isAtISOList), 
                         std::ref(isImportRunning), std::ref(updateHasRun), std::ref(umountMvRmBreak),
-                        std::ref(filteredFiles), std::ref(isFiltered), std::ref(listSubtype), std::ref(newISOFound)).detach();
+                        std::ref(filteredFiles), std::ref(isFiltered), std::ref(listSubtype), std::ref(pendingIndices), std::ref(hasPendingProcess), std::ref(newISOFound)).detach();
         }
     
         
@@ -798,7 +786,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 
 
 // Function to print all required lists
-void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType) {
+void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType, std::vector<std::string>& pendingIndices, bool& hasPendingProcess) {
     static const char* defaultColor = "\033[0m";
     static const char* bold = "\033[1m";
     static const char* red = "\033[31;1m";
@@ -880,6 +868,18 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         if (effectiveCurrentPage > 0) output << "[p] ↵ Previous | ";
         if (effectiveCurrentPage < totalPages - 1) output << "[n] ↵ Next | ";
         output << "[g<num>] ↵ Go to | " << defaultColor << "\n";
+    }
+    
+    // Display pending indices if there are any
+    if (hasPendingProcess && !pendingIndices.empty()) {
+        output << "\n\033[1;35mPending: ";
+        for (size_t i = 0; i < pendingIndices.size(); ++i) {
+            output << "\033[1;93m" << pendingIndices[i];
+            if (i < pendingIndices.size() - 1) {
+                output << " ";
+            }
+        }
+        output << "\033[1;35m ([\033[1;92mproc\033[1;35m] ↵ to process [\033[1;93mclr\033[1;35m] ↵ to clear)\033[0;1m\n";
     }
 
     std::cout << output.str();

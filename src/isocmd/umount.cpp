@@ -13,7 +13,7 @@ const std::string MOUNTED_ISO_PATH = "/mnt";
 std::unordered_map<std::string, std::tuple<std::string, std::string, std::string>> cachedParsesForUmount;
 
 // Function to load and display mount-points
-bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& umountMvRmBreak) {
+bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess) {
     signal(SIGINT, SIG_IGN);  // Ignore Ctrl+C
     disable_ctrl_d();
 
@@ -69,7 +69,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
 		filteredFiles = isoDirs;
         isFiltered = false;
     }
-    printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS", "");
+    printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS", "", pendingIndices, hasPendingProcess);
 
     return true;
 }
