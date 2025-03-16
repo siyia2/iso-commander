@@ -540,15 +540,18 @@ void clearAndLoadImageFiles(std::vector<std::string>& files, const std::string& 
     clearScrollBuffer(); 
     // Assist in automatic removal of non-existent entries from cache
 	files = 
-			(!isFiltered && !binImgFilesCache.empty() && (fileType == "bin" || fileType == "img") && binImgFilesCache.size() != files.size()) 
-				? (need2Sort = true, binImgFilesCache) 
-			: (!isFiltered && !mdfMdsFilesCache.empty() && fileType == "mdf" && mdfMdsFilesCache.size() != files.size()) 
-				? (need2Sort = true, mdfMdsFilesCache) 
-			: (!isFiltered && !nrgFilesCache.empty() && fileType == "nrg" && nrgFilesCache.size() != files.size()) 
-				? (need2Sort = true, nrgFilesCache) 
-			: files;
+    (!isFiltered && !binImgFilesCache.empty() && (fileType == "bin" || fileType == "img") &&
+     (binImgFilesCache.size() != files.size() || !std::equal(binImgFilesCache.begin(), binImgFilesCache.end(), files.begin())))
+        ? (need2Sort = true, binImgFilesCache) 
+    : (!isFiltered && !mdfMdsFilesCache.empty() && fileType == "mdf" &&
+       (mdfMdsFilesCache.size() != files.size() || !std::equal(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end(), files.begin())))
+        ? (need2Sort = true, mdfMdsFilesCache) 
+    : (!isFiltered && !nrgFilesCache.empty() && fileType == "nrg" &&
+       (nrgFilesCache.size() != files.size() || !std::equal(nrgFilesCache.begin(), nrgFilesCache.end(), files.begin())))
+        ? (need2Sort = true, nrgFilesCache) 
+    : files;
             
-    if ((!list && !isFiltered) || isFiltered) {
+    if (!list) {
 		if (need2Sort) {
 			sortFilesCaseInsensitive(files); // Sort the files case-insensitively
 				(fileType == "bin" || fileType == "img") 
