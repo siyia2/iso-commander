@@ -214,7 +214,7 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
 				pendingIndices.clear();
 				hasPendingProcess = false;
 			}
-			// Optimization sort only if (needToReload) from database
+			// Optimization: sort only if (needToReload) from database
             sortFilesCaseInsensitive(globalIsoFileList);
         }
     }

@@ -39,7 +39,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
     }
     currentHash += newIsoDirs.size();
 
-    // Only sort if the set of directories has changed
+    // Optimization: sort only if the set of directories has changed
     if (currentHash != previousHash) {
         sortFilesCaseInsensitive(newIsoDirs);
         // Cache the sorted vector and update the hash
