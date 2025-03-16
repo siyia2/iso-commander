@@ -791,34 +791,12 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         if (mainInputString == "/" || (!mainInputString.empty() && mainInputString[0] == '/')) {
             handle_filtering(mainInputString, files, fileExtensionWithOutDots, pendingIndices, hasPendingProcess, isFiltered, needsClrScrn, filterHistory, need2Sort);
             continue;
-        }
-        
-        // Check if input contains a semicolon for delayed execution
+        }// Check if input contains a semicolon for delayed execution
         else if (mainInputString.find(';') != std::string::npos) {
-            // Strip the semicolon from the input
-            std::string indicesInput = mainInputString.substr(0, mainInputString.find(';'));
-            
-            // Trim whitespace from the end
-            while (!indicesInput.empty() && std::isspace(indicesInput.back())) {
-                indicesInput.pop_back();
-            }
-            
-            if (!indicesInput.empty()) {
-                // Parse and store the indices
-                std::istringstream iss(indicesInput);
-                std::string token;
-                
-                while (iss >> token) {
-                    pendingIndices.push_back(token);
-                }
-                
-                if (!pendingIndices.empty()) {
-                    hasPendingProcess = true;
-                    needsClrScrn = true;
-                    continue;
-                }
-            }
-        }
+			if (handlePendingInduction(mainInputString, pendingIndices, hasPendingProcess, needsClrScrn)) {
+				continue; // Continue the loop if new indices were processed
+			}
+		}
         // Process other input commands for file processing
         else {
             processInput(mainInputString, files, (fileType == "mdf"), (fileType == "nrg"), 

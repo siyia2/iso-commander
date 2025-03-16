@@ -99,12 +99,14 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
 }
 
 
-// Parse pending indices
+// Parse pending indices and remove duplicates
 bool handlePendingInduction(const std::string& inputString, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& needsClrScrn) {
+    // Check if the input contains a semicolon and does not contain a slash
     if (inputString.find(';') == std::string::npos || inputString.find('/') != std::string::npos) {
         return false;
     }
 
+    // Strip the semicolon from the input
     std::string indicesInput = inputString.substr(0, inputString.find(';'));
     
     // Trim whitespace from the end
@@ -117,9 +119,27 @@ bool handlePendingInduction(const std::string& inputString, std::vector<std::str
         std::istringstream iss(indicesInput);
         std::string token;
         
-        while (iss >> token) {
-            pendingIndices.push_back(token);
+        // Use a set to track duplicates
+        std::unordered_set<std::string> uniqueTokens;
+        
+        // Add existing pending indices to the set to ensure no duplicates
+        for (const auto& index : pendingIndices) {
+            uniqueTokens.insert(index);
         }
+        
+        // Temporarily store new indices to preserve order
+        std::vector<std::string> newIndices;
+        
+        // Parse new indices and add them to the vector if they are not duplicates
+        while (iss >> token) {
+            if (uniqueTokens.find(token) == uniqueTokens.end()) { // Check if the token is not already in the set
+                newIndices.push_back(token); // Add to the newIndices vector
+                uniqueTokens.insert(token); // Add to the set to track duplicates
+            }
+        }
+        
+        // Append new indices to pendingIndices
+        pendingIndices.insert(pendingIndices.end(), newIndices.begin(), newIndices.end());
         
         if (!pendingIndices.empty()) {
             hasPendingProcess = true;
