@@ -538,7 +538,8 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
 void clearAndLoadImageFiles(std::vector<std::string>& files, const std::string& fileType, bool& need2Sort, bool& isFiltered, bool& list,std::vector<std::string>& pendingIndices, bool& hasPendingProcess) {
     // Clear the screen for new content
     clearScrollBuffer(); 
-    // Assist in automatic removal of non-existent entries from cache
+    
+    // Optimization: sort only if found files are different from cache or it is their first listing
 	files = 
     (!isFiltered && !binImgFilesCache.empty() && (fileType == "bin" || fileType == "img") &&
      (binImgFilesCache.size() != files.size() || !std::equal(binImgFilesCache.begin(), binImgFilesCache.end(), files.begin())))
