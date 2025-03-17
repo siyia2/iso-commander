@@ -212,9 +212,7 @@ bool handleFilterOperation(const std::string& inputString, std::vector<std::stri
                 auto newFilteredFiles = filterFiles(sourceList, searchString);
                 
                 bool filterUnchanged = newFilteredFiles.size() == sourceList.size();
-                
-                if (filterUnchanged) std::vector<std::string>().swap(filteredFiles);
-                
+                                
                 bool hasResults = !newFilteredFiles.empty();
                 
                 if (!filterUnchanged && hasResults) {
@@ -243,9 +241,7 @@ bool handleFilterOperation(const std::string& inputString, std::vector<std::stri
             auto newFilteredFiles = filterFiles(sourceList, searchString);
             
             bool filterUnchanged = newFilteredFiles.size() == sourceList.size();
-            
-            if (filterUnchanged) std::vector<std::string>().swap(filteredFiles);
-            
+                        
             bool hasResults = !newFilteredFiles.empty();
             
             if (!filterUnchanged && hasResults) {
