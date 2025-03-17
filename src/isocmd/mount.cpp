@@ -7,13 +7,20 @@
 
 // Function to check if a mountpoint isAlreadyMounted
 bool isAlreadyMounted(const std::string& mountPoint) {
-    struct statvfs vfs;
-    if (statvfs(mountPoint.c_str(), &vfs) != 0) {
-        return false; // Error or doesn't exist
+    // Create a new table and directly find target
+    struct libmnt_table* tb = mnt_new_table_from_file("/proc/mounts");
+    if (!tb) {
+        return false;
     }
-
-    // Check if it's a mount point
-    return (vfs.f_flag & ST_NODEV) == 0;
+    
+    // Look for our mount point directly without using a cache
+    struct libmnt_fs* fs = mnt_table_find_target(tb, mountPoint.c_str(), MNT_ITER_BACKWARD);
+    bool isMounted = (fs != NULL);
+    
+    // Clean up
+    mnt_unref_table(tb);
+    
+    return isMounted;
 }
 
 
