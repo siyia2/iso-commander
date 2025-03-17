@@ -645,12 +645,12 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
     disableInputForProgressBar(&oldt, &oldf);
 
     int processingBarWidth = 42; // Default to 42
-    int finalBarWidth = 30; // Default to 30
+    int finalBarWidth = 31; // Default to 30
     
     if (operation.find("mount") != std::string::npos || 
     operation.find("umount") != std::string::npos) {
 		processingBarWidth = 46;
-		finalBarWidth = 33;
+		finalBarWidth = 34;
 	} else if (operation.find("MDF") != std::string::npos || 
            operation.find("NRG") != std::string::npos || 
            operation.find("BIN/IMG") != std::string::npos) {
@@ -790,7 +790,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             const size_t failedTasksValue = failedTasks->load(std::memory_order_acquire);
             
             // Using ternary operators to determine status based on task completion
-            std::cout << "\r\033[0;1m Result: " << operation << "\033[0;1m → " 
+            std::cout << "\r\033[0;1m Outcome: " << operation << "\033[0;1m → " 
                       << (!g_operationCancelled.load() 
                           ? (failedTasksValue > 0 
                              ? (completedTasksValue > 0 
