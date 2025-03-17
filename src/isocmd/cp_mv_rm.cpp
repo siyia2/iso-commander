@@ -12,7 +12,7 @@ std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::unordered
     std::vector<std::vector<int>> indexChunks;
 
     if (!isDelete) {
-        // Group indices by their base filename
+        // Group indices by their identical filename into a single chunk for proccessing them in the same thread to avoid collisions when doing cp/mv with -o
         std::unordered_map<std::string, std::vector<int>> groups;
         for (int idx : processedIndicesVector) {
             std::string baseName = std::filesystem::path(isoFiles[idx - 1]).filename().string();
