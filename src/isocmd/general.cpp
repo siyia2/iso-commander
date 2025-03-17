@@ -1170,7 +1170,7 @@ void helpSelections() {
               << "   • Enter \033[1;34m'/term1;term2'\033[0m - Directly filter the list for items containing 'term1' or 'term2'\n"
 			  << "   • Enter \033[1;34m'n'\033[0m - Go to next page if pages > 1\n"
 			  << "   • Enter \033[1;34m'p'\033[0m - Go to previous page if pages > 1\n"
-			  << "   • Enter \033[1;34m'g<num>'\033[0m - Go to page if pages > 1 (e.g, 'g3')\n"
+			  << "   • Enter \033[1;34m'g<num>'\033[0m - Go to page if pages > 1 (e.g., 'g3')\n"
 			  << "   • Enter \033[1;34m'proc'\033[0m - Process pending items\n"
 			  << "   • Enter \033[1;34m'clr'\033[0m - Clear pending items\n" << std::endl;
               

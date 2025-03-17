@@ -18,7 +18,7 @@ int lockFileDescriptor = -1;
 // Global falg to track cancellation
 std::atomic<bool> g_operationCancelled{false};
 
-// Pagination variables
+// Hold current page for pagination
 size_t currentPage = 0;
 
 // Default max entries per listed page
