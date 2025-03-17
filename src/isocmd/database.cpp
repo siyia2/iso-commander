@@ -229,7 +229,7 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
 				hasPendingProcess = false;
 				currentPage = 0;
 			}
-            filteredFiles = globalIsoFileList;
+			std::vector<std::string>().swap(filteredFiles);
             isFiltered = false;
             
         }
