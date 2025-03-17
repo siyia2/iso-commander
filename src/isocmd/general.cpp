@@ -353,11 +353,17 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         // Generate prompt
         std::string prompt = (isFiltered ? "\001\033[1;96m\002F⊳ \001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001" : "\001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001")
                            + operationColor + "\002" + operation 
-                           + "\001\033[1;94m\002, ? ↵ for help, ↵ to return:\001\033[0;1m\002 ";
+                           + "\001\033[1;94m\002, ? ↵ for help, < ↵ to return:\001\033[0;1m\002 ";
 
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         
-        if (!input.get()) break;
+        if (input && input[0] == '<') {
+			break;
+		}
+        
+        if (!input || std::strlen(input.get()) == 0) {
+			continue; // Skip the loop iteration and re-prompt
+		}
             
         if (input && std::strcmp(input.get(), "clr") == 0) {
             pendingIndices.clear();

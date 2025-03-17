@@ -704,7 +704,7 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         
         // Build the user prompt string dynamically
         std::string prompt = (isFiltered ? "\001\033[1;96m\002F⊳ \001\033[1;38;5;208m\002" : "\001\033[1;38;5;208m\002")
-                         + fileExtensionWithOutDots + "\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion, ? ↵ for help, ↵ to return:\001\033[0;1m\002 ";
+                         + fileExtensionWithOutDots + "\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion, ? ↵ for help, < ↵ to return:\001\033[0;1m\002 ";
         
         // Get user input
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
@@ -713,28 +713,8 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
         
         std::string mainInputString(rawInput.get());
         
-        // Check for clear pending command
-        if (mainInputString == "clr") {
-            pendingIndices.clear();
-            hasPendingProcess = false;
-			needsClrScrn = true;
-            continue;
-        }
-        // check if first char is ; and skip
-        if (rawInput && rawInput.get()[0] == ';') {
-			 std::cout << "\033[2A\033[K"; // Clear the line when entering ;
-			continue;
-		}
-		
-        std::atomic<bool> isAtISOList{false};
-        
-        size_t totalPages = (ITEMS_PER_PAGE != 0) ? ((files.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE) : 0;
-        bool validCommand = processPaginationHelpAndDisplay(mainInputString, totalPages, currentPage, needsClrScrn, false, false, false, true, isAtISOList);
-        
-        if (validCommand) continue;
-                
-        // Handle input for returning to the unfiltered list or exiting
-        if (rawInput.get()[0] == '\0') {
+        // Check specifically for "<" to return/exit
+        if (mainInputString == "<") {
             clearScrollBuffer();
             if (isFiltered) {
                 // Restore the original file list
@@ -750,8 +730,35 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
                 continue;
             } else {
                 need2Sort = false;
-                break; // Exit the loop if no input
+                break; // Exit the loop
             }
+        }
+        
+        // Check for clear pending command
+        if (mainInputString == "clr") {
+            pendingIndices.clear();
+            hasPendingProcess = false;
+            needsClrScrn = true;
+            continue;
+        }
+        
+        // check if first char is ; and skip
+        if (rawInput && rawInput.get()[0] == ';') {
+             std::cout << "\033[2A\033[K"; // Clear the line when entering ;
+            continue;
+        }
+        
+        std::atomic<bool> isAtISOList{false};
+        
+        size_t totalPages = (ITEMS_PER_PAGE != 0) ? ((files.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE) : 0;
+        bool validCommand = processPaginationHelpAndDisplay(mainInputString, totalPages, currentPage, needsClrScrn, false, false, false, true, isAtISOList);
+        
+        if (validCommand) continue;
+                
+        // Handle input for blank Enter - just continue the loop
+        if (rawInput.get()[0] == '\0') {
+            std::cout << "\033[2A\033[K"; // Clear the line when entering blank enter
+            continue; // Just continue the loop
         }
         
         // Check for "proc" command to execute pending operations
@@ -782,10 +789,10 @@ void select_and_convert_to_iso(const std::string& fileType, std::vector<std::str
             continue;
         }// Check if input contains a semicolon for delayed execution
         else if (mainInputString.find(';') != std::string::npos) {
-			if (handlePendingInduction(mainInputString, pendingIndices, hasPendingProcess, needsClrScrn)) {
-				continue; // Continue the loop if new indices were processed
-			}
-		}
+            if (handlePendingInduction(mainInputString, pendingIndices, hasPendingProcess, needsClrScrn)) {
+                continue; // Continue the loop if new indices were processed
+            }
+        }
         // Process other input commands for file processing
         else {
             processInput(mainInputString, files, (fileType == "mdf"), (fileType == "nrg"), 
