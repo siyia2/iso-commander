@@ -313,7 +313,12 @@ bool& abortDel) {
         );
 
         rl_bind_key('\f', prevent_readline_keybindings);
-
+		
+		// Continue loop on possible accidental blank enters
+		if (userInput == "") {
+			continue;
+		}
+		
         // If CTRL+D was pressed, userInput will be our special signal
         if (userInput == "EOF_SIGNAL") {
             umountMvRmBreak = false;
