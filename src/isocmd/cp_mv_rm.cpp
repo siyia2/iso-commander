@@ -181,7 +181,7 @@ void processOperationInput(const std::string& input, const std::vector<std::stri
 
 
 // Function that handles all pagination logic for a list of entries
-std::string handlePaginatedDisplay(const std::vector<std::string>& entries, std::unordered_set<std::string>& uniqueErrorMessages, const std::string& promptPrefix, const std::string& promptSuffix, const std::function<void()>& setupEnvironmentFn, bool& isPageTurn) {
+std::string handlePaginatedDisplay(const std::vector<std::string>& entries, std::unordered_set<std::string>& uniqueErrorMessages, const std::string& promptPrefix, const std::string& promptSuffix, const std::function<void()>& setupEnvironmentFn, bool& isPageTurn, bool& isDelete) {
     
     // Setup pagination parameters
     bool disablePagination = (ITEMS_PER_PAGE <= 0 || entries.size() <= ITEMS_PER_PAGE);
@@ -233,9 +233,11 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, std:
             return "";  // Handle EOF or error
         }
         
+        if (!isDelete && input && input.get()[0] == '\0') continue;
+        
         // Process input
         std::string userInput = trimWhitespace(input.get());
-        
+                
         // Handle navigation commands
         if (!userInput.empty()) {
             bool isNavigation = false;
@@ -305,7 +307,7 @@ std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>&
 
 
 // Function to handle rm including pagination
-bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages, std::vector<std::vector<int>>& indexChunks, bool& umountMvRmBreak, bool& abortDel) {
+bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages, std::vector<std::vector<int>>& indexChunks, bool& umountMvRmBreak, bool& abortDel, bool& isDelete) {
     
     bool isPageTurn = false;
     
@@ -334,7 +336,8 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::unorde
             promptPrefix,
             promptSuffix,
             setupEnv,
-            isPageTurn
+            isPageTurn,
+            isDelete
         );
         
         rl_bind_key('\f', prevent_readline_keybindings);
@@ -361,6 +364,78 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::unorde
             }
         }
     }
+}
+
+
+// Function to validate Linux file paths
+bool isValidLinuxPath(const std::string& path) {
+    // Check if path starts with a forward slash (absolute path)
+    if (path.empty() || path[0] != '/') {
+        return false;
+    }
+    
+    // Check for invalid characters in path
+    const std::string invalidChars = "|><&*?`$()[]{}\"'\\";
+    
+    for (char c : invalidChars) {
+        if (path.find(c) != std::string::npos) {
+            return false;
+        }
+    }
+    
+    // Check for control characters
+    for (char c : path) {
+        if (iscntrl(static_cast<unsigned char>(c))) {
+            return false;
+        }
+    }
+    
+    // Avoid paths that are just spaces
+    bool isOnlySpaces = true;
+    for (char c : path) {
+        if (c != ' ' && c != '\t') {
+            isOnlySpaces = false;
+            break;
+        }
+    }
+    
+    if (isOnlySpaces && !path.empty()) {
+        return false;
+    }
+    
+    // Check if path exists
+    struct stat pathStat;
+    if (stat(path.c_str(), &pathStat) != 0) {
+        return false; // Path doesn't exist
+    }
+    
+    // Ensure it's a directory
+    if (!S_ISDIR(pathStat.st_mode)) {
+        return false; // Path exists but is not a directory
+    }
+    
+    return true;
+}
+
+
+// Function to print the error message for Cp/Mv in userDestDirRm
+std::string getPathErrorMessage(const std::string& path) {
+    if (path.empty() || path[0] != '/')
+        return "\001\033[1;91m\002Error: Path \001\033[1;93m\002'" + path + "'\001\033[1;91m\002 must be absolute (start with '/').\001\033[0m\002";
+    
+    const std::string invalidChars = "|><&*?`$()[]{}\"'\\";
+    for (char c : invalidChars)
+        if (path.find(c) != std::string::npos)
+            return "\001\033[1;91m\002Error: Invalid characters in path \001\033[1;93m\002'" + path + "'\001\033[1;91m\002.\001\033[0m\002";
+    
+    struct stat pathStat;
+    if (stat(path.c_str(), &pathStat) != 0)
+        return "\001\033[1;91m\002Error: Path \001\033[1;93m\002'" + path + "'\001\033[1;91m\002 does not exist.\001\033[0m\002";
+    
+    if (!S_ISDIR(pathStat.st_mode))
+        return "\001\033[1;91m\002Error: \001\033[1;93m\002'" + path + "'\001\033[1;91m\002 is not a directory.\001\033[0m\002";
+    
+    return ""; // No error
 }
 
 
@@ -407,7 +482,7 @@ std::string userDestDirRm(const std::vector<std::string>& isoFiles, std::vector<
             std::string promptPrefix = "\n";
             std::string promptSuffix = "\n\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ for selected \001\033[1;92m\002ISO\001\033[1;94m\002 to be " + 
                 operationColor + operationDescription + 
-                "\001\033[1;94m\002 into, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
+                "\001\033[1;94m\002 into, ? ↵ for help, < ↵ to return:\n\001\033[0;1m\002";
             
             // Use the consolidated pagination function
             userInput = handlePaginatedDisplay(
@@ -416,7 +491,8 @@ std::string userDestDirRm(const std::vector<std::string>& isoFiles, std::vector<
                 promptPrefix, 
                 promptSuffix, 
                 setupEnv, 
-                isPageTurn
+                isPageTurn,
+                isDelete
             );
             
             // After pagination, handle the input
@@ -434,7 +510,7 @@ std::string userDestDirRm(const std::vector<std::string>& isoFiles, std::vector<
             }
             
             // Handle empty input (return)
-            if (userInput.empty()) {
+            if (userInput == "<") {
                 umountMvRmBreak = false;
                 userDestDir = "";
                 clear_history();
@@ -442,15 +518,58 @@ std::string userDestDirRm(const std::vector<std::string>& isoFiles, std::vector<
                 continue;
             }
             
-            // Process destination directory including possible -o flag
+            // Validate the path before processing
             userDestDir = userInput;
             
-            // Check for overwrite flag
+            // Check for overwrite flag and remove it for validation
+            bool hasOverwriteFlag = false;
             if (userDestDir.size() >= 3 && userDestDir.substr(userDestDir.size() - 3) == " -o") {
-                overwriteExisting = true;
+                hasOverwriteFlag = true;
                 userDestDir = userDestDir.substr(0, userDestDir.size() - 3);
+            }
+            
+            // Validate multiple paths (separated by semicolons)
+            bool pathsValid = true;
+            std::string invalidPath;
+            
+            // Split the input by semicolons
+            std::vector<std::string> paths;
+            size_t startPos = 0;
+            size_t delimPos;
+            
+            while ((delimPos = userDestDir.find(';', startPos)) != std::string::npos) {
+                paths.push_back(userDestDir.substr(startPos, delimPos - startPos));
+                startPos = delimPos + 1;
+            }
+            paths.push_back(userDestDir.substr(startPos)); // Add the last path
+            
+            // Validate each individual path
+            for (const auto& path : paths) {
+                // Trim spaces from path
+                std::string trimmedPath = path;
+                trimmedPath.erase(0, trimmedPath.find_first_not_of(" \t"));
+                trimmedPath.erase(trimmedPath.find_last_not_of(" \t") + 1);
+                
+                if (!isValidLinuxPath(trimmedPath)) {
+                    pathsValid = false;
+                    invalidPath = path;
+                    break;
+                }
+            }
+            
+            if (!pathsValid) {
+                uniqueErrorMessages.insert(getPathErrorMessage(invalidPath));
+                userDestDir = "";
+                continue; // Try again
+            }
+            
+            // Restore overwrite flag if it was present
+            if (hasOverwriteFlag) {
+                overwriteExisting = true;
+                userDestDir = userInput.substr(0, userInput.size() - 3); // Remove the " -o" flag
             } else {
                 overwriteExisting = false;
+                userDestDir = userInput;
             }
             
             // Add to history without the overwrite flag
@@ -464,7 +583,7 @@ std::string userDestDirRm(const std::vector<std::string>& isoFiles, std::vector<
             shouldContinue = false;
         } else {
             // Delete operation flow - call the extracted function
-            bool proceedWithDelete = handleDeleteOperation(isoFiles, uniqueErrorMessages, indexChunks, umountMvRmBreak, abortDel);
+            bool proceedWithDelete = handleDeleteOperation(isoFiles, uniqueErrorMessages, indexChunks, umountMvRmBreak, abortDel, isDelete);
             
             if (!proceedWithDelete) {
                 userDestDir = "";
