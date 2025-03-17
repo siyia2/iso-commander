@@ -181,111 +181,92 @@ void processOperationInput(const std::string& input, const std::vector<std::stri
 
 
 // Function that handles all pagination logic for a list of entries
-std::string handlePaginatedDisplay(const std::vector<std::string>& entries, std::unordered_set<std::string>& uniqueErrorMessages, const std::string& promptPrefix, const std::string& promptSuffix, const std::function<void()>& setupEnvironmentFn, bool& isPageTurn, bool& isDelete) {
-    
+std::string handlePaginatedDisplay(const std::vector<std::string>& entries, std::unordered_set<std::string>& uniqueErrorMessages, const std::string& promptPrefix, const std::string& promptSuffix, const std::function<void()>& setupEnvironmentFn, bool& isPageTurn) {
     // Setup pagination parameters
     bool disablePagination = (ITEMS_PER_PAGE <= 0 || entries.size() <= ITEMS_PER_PAGE);
     size_t totalPages = disablePagination ? 1 : ((entries.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE);
     size_t currentPage = 0;
     size_t totalEntries = entries.size();
-    
+
     while (true) {
-        // Setup environment if function is provided
         if (setupEnvironmentFn) {
             setupEnvironmentFn();
         }
-        
-        // Calculate start and end indices
+
         size_t start = disablePagination ? 0 : (currentPage * ITEMS_PER_PAGE);
         size_t end = disablePagination ? totalEntries : std::min(start + ITEMS_PER_PAGE, totalEntries);
-        
-        // Clear the screen before displaying the new page
+
         clearScrollBuffer();
-        
         displayErrors(uniqueErrorMessages);
-        
+
         std::ostringstream pageContent;
-        
-        // Add the header pagination info
         if (!disablePagination) {
             pageContent << "\033[1;38;5;130mPage " << (currentPage + 1) << "/" << totalPages
-                       << " (Items (" << (start + 1) << "-" << end << ")/\033[1;93m" << totalEntries << "\033[1;38;5;130m)"
-                       << "\033[0m\n\n";
+                        << " (Items (" << (start + 1) << "-" << end << ")/\033[1;93m" << totalEntries << "\033[1;38;5;130m)"
+                        << "\033[0m\n\n";
         }
-        
-        // Add the content for the current page
+
         for (size_t i = start; i < end; ++i) {
             pageContent << entries[i];
         }
-        
-        // Add the footer pagination controls only if pagination is enabled and needed
+
         if (!disablePagination && totalPages > 1) {
-            pageContent << "\n\033[1;38;5;130mPagination: ";  // brownBold
+            pageContent << "\n\033[1;38;5;130mPagination: ";
             if (currentPage > 0) pageContent << "[p] ↵ Previous | ";
             if (currentPage < totalPages - 1) pageContent << "[n] ↵ Next | ";
-            pageContent << "[g<num>] ↵ Go to | \033[0m\n";  // defaultColor
+            pageContent << "[g<num>] ↵ Go to | \033[0m\n";
         }
-        
-        // Get user input
+
         std::string prompt = promptPrefix + pageContent.str() + promptSuffix;
         std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
+
+        // When readline returns null (CTRL+D), return a special signal
         if (!input.get()) {
-            return "";  // Handle EOF or error
+            return "EOF_SIGNAL";
         }
-        
-        if (!isDelete && input && input.get()[0] == '\0') continue;
-        
-        // Process input
+
         std::string userInput = trimWhitespace(input.get());
-                
-        // Handle navigation commands
+
+        // Navigation commands
         if (!userInput.empty()) {
             bool isNavigation = false;
-            
-            // Check if this is a "go to page" command (e.g., "g4")
+
             if (userInput.size() >= 2 && userInput[0] == 'g' && std::isdigit(userInput[1])) {
                 try {
                     size_t requestedPage = std::stoul(userInput.substr(1));
-                    // Consider any go-to-page command as navigation, even if invalid
                     isPageTurn = true;
                     isNavigation = true;
-                    
-                    // Only change page if the number is valid
                     if (requestedPage >= 1 && requestedPage <= totalPages) {
-                        currentPage = requestedPage - 1;  // Convert to 0-based index
+                        currentPage = requestedPage - 1;
                     }
                 } catch (const std::exception&) {
-                    // Invalid page number format, treat as navigation but don't change page
                     isPageTurn = true;
                     isNavigation = true;
                 }
-            }
-            // Check for next/previous page navigation
-            else if (userInput == "n") {
+            } else if (userInput == "n") {
                 isPageTurn = true;
                 isNavigation = true;
                 if (currentPage < totalPages - 1) {
                     currentPage++;
                 }
-            }
-            else if (userInput == "p") {
+            } else if (userInput == "p") {
                 isPageTurn = true;
                 isNavigation = true;
                 if (currentPage > 0) {
                     currentPage--;
                 }
             }
-            
+
             if (isNavigation) {
                 continue;
             }
         }
-        
-        // Return non-navigation input
+
         isPageTurn = false;
         return userInput;
     }
 }
+
 
 
 // Function to generate entries for selected ISO files
@@ -307,49 +288,39 @@ std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>&
 
 
 // Function to handle rm including pagination
-bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages, std::vector<std::vector<int>>& indexChunks, bool& umountMvRmBreak, bool& abortDel, bool& isDelete) {
-    
+bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages, std::vector<std::vector<int>>& indexChunks, bool& umountMvRmBreak,
+bool& abortDel) {
     bool isPageTurn = false;
-    
-    // Setup environment function
     auto setupEnv = [&]() {
         rl_bind_key('\f', clear_screen_and_buffer);
     };
-    
-    // Generate entries for selected ISO files
-    std::vector<std::string> entries = generateIsoEntries(indexChunks, isoFiles);
 
-    // Sort the entries using the natural comparison
+    std::vector<std::string> entries = generateIsoEntries(indexChunks, isoFiles);
     sortFilesCaseInsensitive(entries);
-    
-    // Prefix and suffix for the prompt
+
     std::string promptPrefix = "\n";
-    std::string promptSuffix = "\n\001\033[1;94m\002The selected \001\033[1;92m\002ISO\001\033[1;94m\002 will be " +
-        std::string("\001\033[1;91m\002*PERMANENTLY DELETED FROM DISK*\001\033[1;94m\002. Proceed? (Y/N):\001\033[0;1m\002 ");
-    
-    // Use the consolidated pagination function with custom input handling
+    std::string promptSuffix = std::string("\n\001\033[1;94m\002The selected \001\033[1;92m\002ISO\001\033[1;94m\002 will be ") +
+    "\001\033[1;91m\002*PERMANENTLY DELETED FROM DISK*\001\033[1;94m\002. Proceed? (Y/N):\001\033[0;1m\002 ";
+
     while (true) {
-        // Use the consolidated pagination function
         std::string userInput = handlePaginatedDisplay(
             entries,
             uniqueErrorMessages,
             promptPrefix,
             promptSuffix,
             setupEnv,
-            isPageTurn,
-            isDelete
+            isPageTurn
         );
-        
+
         rl_bind_key('\f', prevent_readline_keybindings);
-        
-        // Handle EOF
-        if (userInput.empty()) {
-			umountMvRmBreak = false;
+
+        // If CTRL+D was pressed, userInput will be our special signal
+        if (userInput == "EOF_SIGNAL") {
+            umountMvRmBreak = false;
             abortDel = true;
             return false;
         }
-        
-        // Process yes/no (only if not page turning)
+
         if (!isPageTurn) {
             if (userInput == "Y") {
                 umountMvRmBreak = true;
@@ -365,6 +336,7 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::unorde
         }
     }
 }
+
 
 
 // Function to validate Linux file paths
@@ -440,164 +412,146 @@ std::string getPathErrorMessage(const std::string& path) {
 
 
 // Function to prompt for userDestDir or Delete confirmation including pagination
-std::string userDestDirRm(const std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::unordered_set<std::string>& uniqueErrorMessages, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& filterHistory, bool& isDelete, bool& isCopy, bool& abortDel, bool& overwriteExisting) {
-    
-    // Generate entries for selected ISO files - used by both branches
+std::string userDestDirRm(const std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::unordered_set<std::string>& uniqueErrorMessages, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& filterHistory, bool& isDelete, bool& isCopy, bool& abortDel,
+bool& overwriteExisting){
     std::vector<std::string> entries = generateIsoEntries(indexChunks, isoFiles);
-    
-    // Sort the entries using the natural comparison
     sortFilesCaseInsensitive(entries);
-    
-    // Clear screen initially
     clearScrollBuffer();
-    
+
     bool shouldContinue = true;
     std::string userInput;
-    
-    while (shouldContinue) {  // Add a loop to allow continuing execution
+
+    while (shouldContinue) {
         if (!isDelete) {
-            // Copy/Move operation flow
             bool isPageTurn = false;
-            
-            // Setup environment function
             auto setupEnv = [&]() {
                 enable_ctrl_d();
                 setupSignalHandlerCancellations();
                 g_operationCancelled.store(false);
                 rl_bind_key('\f', clear_screen_and_buffer);
                 rl_bind_key('\t', rl_complete);
-                
                 if (!isCopy) {
                     umountMvRmBreak = true;
                 }
-                
                 if (!isPageTurn) {
                     clear_history();
                     filterHistory = false;
                     loadHistory(filterHistory);
                 }
             };
-            
-            // Prefix and suffix for the prompt
+
             std::string promptPrefix = "\n";
-            std::string promptSuffix = "\n\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ for selected \001\033[1;92m\002ISO\001\033[1;94m\002 to be " + 
-                operationColor + operationDescription + 
+            std::string promptSuffix = "\n\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ for selected \001\033[1;92m\002ISO\001\033[1;94m\002 to be " +
+                operationColor + operationDescription +
                 "\001\033[1;94m\002 into, ? ↵ for help, < ↵ to return:\n\001\033[0;1m\002";
-            
-            // Use the consolidated pagination function
+
             userInput = handlePaginatedDisplay(
                 entries,
-                uniqueErrorMessages, 
-                promptPrefix, 
-                promptSuffix, 
-                setupEnv, 
-                isPageTurn,
-                isDelete
+                uniqueErrorMessages,
+                promptPrefix,
+                promptSuffix,
+                setupEnv,
+                isPageTurn
             );
-            
-            // After pagination, handle the input
+
             rl_bind_key('\f', prevent_readline_keybindings);
             rl_bind_key('\t', prevent_readline_keybindings);
-            
-            // Handle help command
+
+            // Check if CTRL+D (EOF) was pressed
+            if (userInput == "EOF_SIGNAL") {
+                shouldContinue = false;
+                break;
+            }
+
             if (userInput == "?") {
                 bool import2ISO = false;
                 bool isCpMv = true;
                 helpSearches(isCpMv, import2ISO);
                 userDestDir = "";
-                // Continue the loop instead of using 'continue'
                 continue;
             }
-            
-            // Handle empty input (return)
+
             if (userInput == "<") {
                 umountMvRmBreak = false;
                 userDestDir = "";
                 clear_history();
-                shouldContinue = false;  // Exit the loop
+                shouldContinue = false;
                 continue;
             }
-            
+
+            // Blank enter (empty string) simply continues the loop
+            if (userInput.empty()) {
+                continue;
+            }
+
             // Validate the path before processing
             userDestDir = userInput;
-            
+
             // Check for overwrite flag and remove it for validation
             bool hasOverwriteFlag = false;
             if (userDestDir.size() >= 3 && userDestDir.substr(userDestDir.size() - 3) == " -o") {
                 hasOverwriteFlag = true;
                 userDestDir = userDestDir.substr(0, userDestDir.size() - 3);
             }
-            
-            // Validate multiple paths (separated by semicolons)
+
             bool pathsValid = true;
             std::string invalidPath;
-            
-            // Split the input by semicolons
             std::vector<std::string> paths;
             size_t startPos = 0;
             size_t delimPos;
-            
+
             while ((delimPos = userDestDir.find(';', startPos)) != std::string::npos) {
                 paths.push_back(userDestDir.substr(startPos, delimPos - startPos));
                 startPos = delimPos + 1;
             }
-            paths.push_back(userDestDir.substr(startPos)); // Add the last path
-            
-            // Validate each individual path
+            paths.push_back(userDestDir.substr(startPos));
+
             for (const auto& path : paths) {
-                // Trim spaces from path
                 std::string trimmedPath = path;
                 trimmedPath.erase(0, trimmedPath.find_first_not_of(" \t"));
                 trimmedPath.erase(trimmedPath.find_last_not_of(" \t") + 1);
-                
                 if (!isValidLinuxPath(trimmedPath)) {
                     pathsValid = false;
                     invalidPath = path;
                     break;
                 }
             }
-            
             if (!pathsValid) {
                 uniqueErrorMessages.insert(getPathErrorMessage(invalidPath));
                 userDestDir = "";
-                continue; // Try again
+                continue;
             }
-            
-            // Restore overwrite flag if it was present
+
             if (hasOverwriteFlag) {
                 overwriteExisting = true;
-                userDestDir = userInput.substr(0, userInput.size() - 3); // Remove the " -o" flag
+                userDestDir = userInput.substr(0, userInput.size() - 3);
             } else {
                 overwriteExisting = false;
                 userDestDir = userInput;
             }
-            
-            // Add to history without the overwrite flag
+
             std::string historyInput = userInput;
             if (historyInput.size() >= 3 && historyInput.substr(historyInput.size() - 3) == " -o") {
                 historyInput = historyInput.substr(0, historyInput.size() - 3);
             }
             add_history(historyInput.c_str());
-            
-            // Exit the loop after processing
+
             shouldContinue = false;
         } else {
-            // Delete operation flow - call the extracted function
-            bool proceedWithDelete = handleDeleteOperation(isoFiles, uniqueErrorMessages, indexChunks, umountMvRmBreak, abortDel, isDelete);
-            
+            // Delete operation flow
+            bool proceedWithDelete = handleDeleteOperation(isoFiles, uniqueErrorMessages, indexChunks, umountMvRmBreak, abortDel);
             if (!proceedWithDelete) {
                 userDestDir = "";
-                shouldContinue = false;  // Exit the loop
+                shouldContinue = false;
                 continue;
             }
-            
-            // Exit the loop after processing
             shouldContinue = false;
         }
     }
-    
+
     return userDestDir;
 }
+
 
 
 // Function to buffer file copying
