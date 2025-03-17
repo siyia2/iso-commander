@@ -210,6 +210,7 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
         loadFromDatabase(globalIsoFileList);
         {
             std::lock_guard<std::mutex> lock(updateListMutex);
+            // Clear any pending automatically unless user is on filtered list(already filtered lists are unaffected by main list changes)
             if (!isFiltered) {
 				pendingIndices.clear();
 				hasPendingProcess = false;
@@ -224,12 +225,11 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
         std::lock_guard<std::mutex> printLock(couNtMutex);
         if (umountMvRmBreak) {
 			if (isFiltered) {
-				//reset pending flags if filtered and for destructive list action mv/rm
+				// Reset pending flags if filtered but only for destructive list actions mv/rm (because they can modify already filtered lists)
 				pendingIndices.clear();
 				hasPendingProcess = false;
 				currentPage = 0;
 			}
-			std::vector<std::string>().swap(filteredFiles);
             isFiltered = false;
             
         }

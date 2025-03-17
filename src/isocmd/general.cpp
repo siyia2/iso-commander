@@ -363,7 +363,6 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         // Check specifically for "<" to return/exit
         if (inputString == "<") {
             if (isFiltered) {
-                std::vector<std::string>().swap(filteredFiles);
                 pendingIndices.clear();
                 hasPendingProcess = false;
                 isFiltered = false;
