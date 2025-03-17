@@ -350,34 +350,44 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
            
         std::cout << "\033[1A\033[K";
         
-        // Generate prompt
+        // Generate prompt - updated to remove "↵" after "<"
         std::string prompt = (isFiltered ? "\001\033[1;96m\002F⊳ \001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001" : "\001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001")
                            + operationColor + "\002" + operation 
                            + "\001\033[1;94m\002, ? ↵ for help, < ↵ to return:\001\033[0;1m\002 ";
 
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         
-        if (input && input[0] == '<') {
-			break;
-		}
-        
-        if (!input || std::strlen(input.get()) == 0) {
-			continue; // Skip the loop iteration and re-prompt
-		}
+        if (!input.get()) break;
             
-        if (input && std::strcmp(input.get(), "clr") == 0) {
+        std::string inputString(input.get());
+        
+        // Check specifically for "<" to return/exit
+        if (inputString == "<") {
+            if (isFiltered) {
+                std::vector<std::string>().swap(filteredFiles);
+                pendingIndices.clear();
+                hasPendingProcess = false;
+                isFiltered = false;
+                needsClrScrn = true;
+                currentPage = 0; // Reset page when clearing filter
+                continue;
+            } else {
+                return; // Exit the function
+            }
+        }
+            
+        if (inputString == "clr") {
             pendingIndices.clear();
             hasPendingProcess = false;
             needsClrScrn = true;
             continue;
         }
+        
         // check if first char is ; and skip
         if (input && input[0] == ';') {
-			continue;
-		}
+            continue;
+        }
 
-        std::string inputString(input.get());
-        
         const std::vector<std::string>& currentList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
         
         size_t totalPages = (ITEMS_PER_PAGE != 0) ? ((currentList.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE) : 0;
@@ -386,18 +396,10 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 
         if (validCommand) continue;
         
-        // Handle empty input or return
+        // Handle empty input - just continue the loop
         if (inputString.empty()) {
-            if (isFiltered) {
-                std::vector<std::string>().swap(filteredFiles);
-                pendingIndices.clear();
-                hasPendingProcess = false;
-                isFiltered = false;
-                currentPage = 0; // Reset page when clearing filter
-                continue;
-            } else {
-                return;
-            }
+            needsClrScrn = false; // Optionally keep the current screen
+            continue; // Just continue the loop
         }
 
         // Handle pending execution
@@ -409,11 +411,11 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         }
 
         // Handle filtering operations
-		if (handleFilterOperation(inputString, filteredFiles, isFiltered, needsClrScrn, 
-									filterHistory, pendingIndices, hasPendingProcess, 
-									currentPage, operation, operationColor, isoDirs, isUnmount)) {
-				continue;
-		}
+        if (handleFilterOperation(inputString, filteredFiles, isFiltered, needsClrScrn, 
+                                    filterHistory, pendingIndices, hasPendingProcess, 
+                                    currentPage, operation, operationColor, isoDirs, isUnmount)) {
+                continue;
+        }
 
         // Handle pending induction (delayed execution with ;)
         bool pendingHandled = handlePendingInduction(inputString, pendingIndices, hasPendingProcess, needsClrScrn);
