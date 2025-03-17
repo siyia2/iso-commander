@@ -45,6 +45,9 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
         // Cache the sorted vector and update the hash
         lastSortedDirs = newIsoDirs;
         previousHash = currentHash;
+        // reset pending if list changed
+        pendingIndices.clear();
+		hasPendingProcess = false;
     } else {
         // Reuse the cached sorted vector if nothing has changed
         newIsoDirs = lastSortedDirs;
@@ -65,12 +68,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
     clearScrollBuffer();
 
     if (filteredFiles.size() == isoDirs.size() || umountMvRmBreak) {
-		if (isFiltered) {
-			//reset pending flags if on filtered list and destructive list action umount
-			pendingIndices.clear();
-			hasPendingProcess = false;
-			currentPage = 0; 
-		}
+		if (isFiltered) currentPage = 0; 
 		filteredFiles = isoDirs;
         isFiltered = false;
         
