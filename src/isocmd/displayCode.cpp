@@ -2,6 +2,7 @@
 
 #include "../headers.h"
 #include "../display.h"
+#include "../filtering.h"
 
 
 // Default Display config options for lists
@@ -52,6 +53,12 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
             // Clear any pending automatically
 				pendingIndices.clear();
 				hasPendingProcess = false;
+				if (isFiltered) {
+					// Clear the filtering stack when returning to unfiltered mode
+					filteringStack.clear();
+					isFiltered = false;
+					
+				}
 			// Optimization: sort only if (needToReload) from database
             sortFilesCaseInsensitive(globalIsoFileList);
         }
@@ -61,7 +68,7 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
     {
         std::lock_guard<std::mutex> printLock(couNtMutex);
         if (umountMvRmBreak) {
-			// Clear the filtering stack when returning to unfiltered mode
+			// Clear the filtering stack when returning to unfiltered mode from list modifications with Cp/Mv
 			filteringStack.clear();
 			isFiltered = false;
 		}
