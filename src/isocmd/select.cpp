@@ -129,6 +129,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         
         // check if first char is ; and skip
         if (input && input[0] == ';') {
+			needsClrScrn = false;
             continue;
         }
 
