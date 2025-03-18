@@ -176,7 +176,7 @@ int countDifferentEntries(const std::vector<std::string>& allIsoFiles, const std
 }
 
 
-// Function that provides verbose output for manualRefreshForDatabase
+// Function that provides verbose output for refreshForDatabase
 void verboseForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_t>& totalFiles, std::vector<std::string>& validPaths, std::unordered_set<std::string>& invalidPaths, std::unordered_set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& filterHistory, const std::chrono::high_resolution_clock::time_point& start_time, std::atomic<bool>& newISOFound) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
@@ -230,7 +230,7 @@ void verboseForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     std::string initialDir = ""; // Create a std::string object
-	manualRefreshForDatabase(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
+	refreshForDatabase(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
 }
 
 
