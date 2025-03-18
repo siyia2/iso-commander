@@ -88,6 +88,7 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
 // Mounpoint location
 const std::string MOUNTED_ISO_PATH = "/mnt";
 
+
 // Function to load and display mount-points
 bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess) {
     signal(SIGINT, SIG_IGN);  // Ignore Ctrl+C
@@ -155,7 +156,6 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
 }
 
 
-
 // Function to clear and load list for image files
 void clearAndLoadImageFiles(std::vector<std::string>& files, const std::string& fileType, bool& need2Sort, bool& isFiltered, bool& list,std::vector<std::string>& pendingIndices, bool& hasPendingProcess) {
     // Clear the screen for new content
@@ -188,4 +188,3 @@ void clearAndLoadImageFiles(std::vector<std::string>& files, const std::string& 
 	
     printList(files, "IMAGE_FILES", "conversions", pendingIndices, hasPendingProcess, isFiltered); // Print the current list of files
 }
-
