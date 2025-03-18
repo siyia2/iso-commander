@@ -4,14 +4,20 @@
 #include "../threadpool.h"
 
 
+//GENERAL SECTION
+
+
 // Function to check if a directory input is valid for searches
 bool isValidDirectory(const std::string& path) {
     return std::filesystem::is_directory(path);
 }
 
 
-// Function for manual database refresh for displaying ISO list
-void manualRefreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, bool filterHistory, std::atomic<bool>& newISOFound) {
+// ISO SECTION
+
+
+// Function for interactive and non-interactive ISO database refresh
+void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, bool filterHistory, std::atomic<bool>& newISOFound) {
     try {
         enable_ctrl_d();
         // Setup signal handler at the start of the operation
@@ -54,7 +60,7 @@ void manualRefreshForDatabase(std::string& initialDir, bool promptFlag, int maxD
                     helpSearches(isCpMv, import2ISO);
                     input = "";
                     std::string dummyDir = "";
-                    manualRefreshForDatabase(dummyDir, promptFlag, maxDepth, filterHistory, newISOFound);
+                    refreshForDatabase(dummyDir, promptFlag, maxDepth, filterHistory, newISOFound);
                 }
                 
                 if (input ==  "config" || input == "stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter" || input == "*auto_off" || input == "*auto_on" || isValidInput(input) || input.starts_with("*pagination_")) {
@@ -169,7 +175,7 @@ void manualRefreshForDatabase(std::string& initialDir, bool promptFlag, int maxD
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         std::string dummyDir = "";
-        manualRefreshForDatabase(dummyDir, promptFlag, maxDepth, filterHistory, newISOFound);
+        refreshForDatabase(dummyDir, promptFlag, maxDepth, filterHistory, newISOFound);
     }
 }
 
@@ -262,11 +268,11 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
     }
 }
 
+// IMAGE SECTION
+
 
 // Function to check and list stored ram cache
-void ramCacheList(std::vector<std::string>& files, bool& list, const std::string& fileExtension, 
-                  const std::vector<std::string>& binImgFilesCache, const std::vector<std::string>& mdfMdsFilesCache, 
-                  const std::vector<std::string>& nrgFilesCache, bool modeMdf, bool modeNrg) {
+void ramCacheList(std::vector<std::string>& files, bool& list, const std::string& fileExtension, const std::vector<std::string>& binImgFilesCache, const std::vector<std::string>& mdfMdsFilesCache, const std::vector<std::string>& nrgFilesCache, bool modeMdf, bool modeNrg) {
     
     // Ignore the SIGINT signal (Ctrl+C) to prevent the program from being interrupted by the user
     signal(SIGINT, SIG_IGN);        
@@ -286,7 +292,7 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
         // Wait for the user to press Enter before continuing
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         
-        // Clear files to avoid glitches when using search&found followed by !clr in the same iteration
+        // Clear files to avoid glitches when using search followed by !clr in the same iteration
         files.clear();
         
         // Clear screen and scrollbuffer

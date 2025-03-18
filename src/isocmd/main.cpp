@@ -168,7 +168,7 @@ int main(int argc, char *argv[]) {
 						promptFlag = true; // Enable prompt
 						filterHistory = false; // Disable filter hsitory
 						maxDepth = -1; // Traverse at max depth
-                        manualRefreshForDatabase(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
+                        refreshForDatabase(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
                         clearScrollBuffer();
                         break;
                     case '4':
