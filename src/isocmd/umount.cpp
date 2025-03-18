@@ -8,25 +8,12 @@
 
 // Function to check if directory is empty for umount
 bool isDirectoryEmpty(const std::string& path) {
-    DIR* dir = opendir(path.c_str());
-    if (dir == nullptr) {
-        return false;  // Unable to open directory
+    if (!std::filesystem::exists(path)) {
+        return false;
     }
     
-    errno = 0;  // Reset errno
-    struct dirent* entry;
-    while ((entry = readdir(dir)) != nullptr) {
-        if (strcmp(entry->d_name, ".") != 0 && 
-            strcmp(entry->d_name, "..") != 0) {
-            closedir(dir);
-            return false;  // Found a real entry, directory not empty
-        }
-    }
-    
-    // Check if readdir() set errno
-    bool isEmpty = (errno == 0);
-    closedir(dir);
-    return isEmpty;
+    return std::filesystem::directory_iterator(path) == 
+           std::filesystem::directory_iterator();
 }
 
 
