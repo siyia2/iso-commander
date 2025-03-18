@@ -15,7 +15,7 @@ const uintmax_t maxDatabaseSize = 1 * 1024 * 1024; // 1MB
 std::mutex couNtMutex;
 
 
-// Function to remove non-existent paths from cache
+// Function to remove non-existent paths from database and cache
 void removeNonExistentPathsFromDatabase() {
     // Check if the database file exists
     if (!fs::exists(databaseFilePath)) {
