@@ -39,7 +39,8 @@ void helpSelections() {
     
      // Selection tips
     std::cout << "\033[1;32m4. Tips:\033[0m\n"
-			  << "   • Pending item selection is restricted to each generated list\033[0m\n"
+			  << "   • Pending items are linked to each generated list\033[0m\n"
+			  << "   • ^(<num>) can be marked as pending and processed later in the unfiltered list\033[0m\n"
 			  << "   • Filtering is adaptive, incremental, and unconstrained by pagination\033[0m\n"
               << "   • If filtering has no matches, no message or list update is issued\n" << std::endl;
               
