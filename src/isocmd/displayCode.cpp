@@ -61,7 +61,7 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
     {
         std::lock_guard<std::mutex> printLock(couNtMutex);
         if (umountMvRmBreak) isFiltered = false;
-        printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType, pendingIndices, hasPendingProcess);
+        printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType, pendingIndices, hasPendingProcess, isFiltered);
         
         if (globalIsoFileList.empty()) {
             std::cout << "\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n";
@@ -137,7 +137,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
         isFiltered = false;
         
     }
-    printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS", "", pendingIndices, hasPendingProcess);
+    printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS", "", pendingIndices, hasPendingProcess, isFiltered);
 
     return true;
 }
@@ -174,6 +174,6 @@ void clearAndLoadImageFiles(std::vector<std::string>& files, const std::string& 
 			need2Sort = false;
 	}
 	
-    printList(files, "IMAGE_FILES", "conversions", pendingIndices, hasPendingProcess); // Print the current list of files
+    printList(files, "IMAGE_FILES", "conversions", pendingIndices, hasPendingProcess, isFiltered); // Print the current list of files
 }
 

@@ -2,6 +2,8 @@
 
 #include "../headers.h"
 #include "../display.h"
+#include "../filtering.h"
+
 
 
 // For storing isoFiles in RAM
@@ -12,7 +14,7 @@ std::mutex updateListMutex;
 
 
 // Function to print all required lists
-void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType, std::vector<std::string>& pendingIndices, bool& hasPendingProcess) {
+void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& isFiltered) {
     static const char* defaultColor = "\033[0m";
     static const char* bold = "\033[1m";
     static const char* red = "\033[31;1m";
@@ -23,6 +25,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     static const char* orangeBold = "\033[1;38;5;208m";
     static const char* grayBold = "\033[38;5;245m";
     static const char* brownBold = "\033[1;38;5;130m";
+    static const char* yellowBold = "\033[1;93m";
 
     bool disablePagination = (ITEMS_PER_PAGE == 0 || items.size() <= ITEMS_PER_PAGE);
     size_t totalItems = items.size();
@@ -46,32 +49,49 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
 
     // Calculate padding based on current page's maximum index
     size_t currentNumDigits = std::to_string(endIndex).length();
-
+    
     for (size_t i = startIndex; i < endIndex; ++i) {
         const char* sequenceColor = (i % 2 == 0) ? red : green;
         std::string directory, filename, displayPath, displayHash;
+        
+        // Get the item to display
+        std::string currentItem = items[i];
 
         if (listType == "ISO_FILES") {
-            auto [dir, fname] = extractDirectoryAndFilename(items[i], listSubType);
+            auto [dir, fname] = extractDirectoryAndFilename(currentItem, listSubType);
             directory = dir;
             filename = fname;
         } else if (listType == "MOUNTED_ISOS") {
-            auto [dirPart, pathPart, hashPart] = parseMountPointComponents(items[i]);
+            auto [dirPart, pathPart, hashPart] = parseMountPointComponents(currentItem);
             directory = dirPart;
             displayPath = pathPart;
             displayHash = hashPart;
         } else if (listType == "IMAGE_FILES") {
-            auto [dir, fname] = extractDirectoryAndFilename(items[i], "conversions");
+            auto [dir, fname] = extractDirectoryAndFilename(currentItem, "conversions");
             directory = dir;
             filename = fname;
         }
 
-        // Dynamically pad index based on current page's needs
-        size_t currentIndex = i + 1;
-        std::string indexStr = std::to_string(currentIndex);
-        indexStr.insert(0, currentNumDigits - indexStr.length(), ' ');
-
-        output << sequenceColor << indexStr << ". " << defaultColor << bold;
+        // Display index - if filtered, show original index
+        size_t currentIndex;
+        if (isFiltered && i < filteringStack.back().originalIndices.size()) {
+            // Use the original index from our stack (adding 1 for display)
+            currentIndex = filteringStack.back().originalIndices[i] + 1;
+            // Display both the filtered index and the original index
+            std::string filteredIndexStr = std::to_string(i + 1);
+            std::string originalIndexStr = std::to_string(currentIndex);
+            filteredIndexStr.insert(0, currentNumDigits - filteredIndexStr.length(), ' ');
+            
+            output << sequenceColor << filteredIndexStr << "." << defaultColor << bold;
+            output << "(^" << yellowBold << originalIndexStr << defaultColor << bold << ") ";
+        } else {
+            // Just use the regular index for non-filtered items
+            currentIndex = i + 1;
+            std::string indexStr = std::to_string(currentIndex);
+            indexStr.insert(0, currentNumDigits - indexStr.length(), ' ');
+            
+            output << sequenceColor << indexStr << ". " << defaultColor << bold;
+        }
         
         if (listType == "ISO_FILES") {
             output << directory << defaultColor << bold << "/" << magenta << filename;
@@ -84,7 +104,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
             if (!directory.empty() && !filename.empty())
                 output << directory << "/" << orangeBold << filename;
             else
-                output << items[i];
+                output << currentItem;
         }
         output << defaultColor << "\n";
     }
@@ -110,7 +130,6 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
 
     std::cout << output.str();
 }
-
 
 
 // Blacklist function for MDF BIN IMG NRG

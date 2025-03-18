@@ -2,6 +2,11 @@
 
 #include "../headers.h"
 #include "../threadpool.h"
+#include "../filtering.h"
+
+
+// Global vector to track if filtering stack has items
+std::vector<FilteringState> filteringStack;
 
 
 // Function to hanlde filtering for selectForIsoFiles
@@ -45,14 +50,22 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
                 // First, get a temporary filtered result based solely on file names
                 auto tempFiltered = filterFiles(sourceList, searchString);
                 
-                // Build new filtered files with original indices attached (adjusted by one).
+                // Build new filtered files and update the filtering stack
                 std::vector<std::string> newFilteredFiles;
+                std::vector<size_t> newIndices;
+                
                 for (size_t i = 0; i < sourceList.size(); ++i) {
                     // Check if the file at the original index is in the filtered results
                     if (std::find(tempFiltered.begin(), tempFiltered.end(), sourceList[i]) != tempFiltered.end()) {
-						newFilteredFiles.push_back("\033[1;93m:" + std::to_string(i + 1) + "\033[0;1m" + sourceList[i]);
-
-					}
+                        newFilteredFiles.push_back(sourceList[i]); // Store only the file string without index
+                        
+                        // Map to the original index, accounting for previous filtering
+                        size_t originalIdx = i;
+                        if (isFiltered && i < filteringStack.back().originalIndices.size()) {
+                            originalIdx = filteringStack.back().originalIndices[i];
+                        }
+                        newIndices.push_back(originalIdx);
+                    }
                 }
                 
                 bool filterUnchanged = newFilteredFiles.size() == sourceList.size();
@@ -63,7 +76,21 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
                     add_history(searchQuery.get()); // Save filter query to history
                     saveHistory(filterHistory);
                     needsClrScrn = true;
-                    filteredFiles = std::move(newFilteredFiles); // Update filtered results with indices
+                    filteredFiles = std::move(newFilteredFiles); // Update filtered results without indices
+                    
+                    // Update filtering stack
+                    FilteringState newState;
+                    newState.originalIndices = std::move(newIndices);
+                    newState.isFiltered = true;
+                    
+                    if (isFiltered) {
+                        // Replace the top of the stack with the new filtering state
+                        filteringStack.back() = newState;
+                    } else {
+                        // Add a new filtering state to the stack
+                        filteringStack.push_back(newState);
+                    }
+                    
                     isFiltered = true;
                     clear_history();
                     return true;
@@ -81,12 +108,21 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
             const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
             auto tempFiltered = filterFiles(sourceList, searchString);
             
-            // Build new filtered files with original indices attached (adjusted by one).
+            // Build new filtered files and update the filtering stack
             std::vector<std::string> newFilteredFiles;
+            std::vector<size_t> newIndices;
+            
             for (size_t i = 0; i < sourceList.size(); ++i) {
-                 if (std::find(tempFiltered.begin(), tempFiltered.end(), sourceList[i]) != tempFiltered.end()) {
-                   newFilteredFiles.push_back("\033[1;93m:" + std::to_string(i + 1) + "\033[0;1m" + sourceList[i]);
-                }        
+                if (std::find(tempFiltered.begin(), tempFiltered.end(), sourceList[i]) != tempFiltered.end()) {
+                    newFilteredFiles.push_back(sourceList[i]); // Store only the file string without index
+                    
+                    // Map to the original index, accounting for previous filtering
+                    size_t originalIdx = i;
+                    if (isFiltered && i < filteringStack.back().originalIndices.size()) {
+                        originalIdx = filteringStack.back().originalIndices[i];
+                    }
+                    newIndices.push_back(originalIdx);
+                }
             }
             
             bool filterUnchanged = newFilteredFiles.size() == sourceList.size();
@@ -100,6 +136,20 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
                 saveHistory(filterHistory);
                 needsClrScrn = true;
                 filteredFiles = std::move(newFilteredFiles);
+                
+                // Update filtering stack
+                FilteringState newState;
+                newState.originalIndices = std::move(newIndices);
+                newState.isFiltered = true;
+                
+                if (isFiltered) {
+                    // Replace the top of the stack with the new filtering state
+                    filteringStack.back() = newState;
+                } else {
+                    // Add a new filtering state to the stack
+                    filteringStack.push_back(newState);
+                }
+                
                 isFiltered = true;
             }
         }
@@ -108,12 +158,8 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
     return true;  // Filtering operation was handled
 }
 
-
-
-
 // Handle filtering for select_and_convert_to_iso
 void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<std::string>& files, const std::string& fileExtensionWithOutDots, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, bool& need2Sort) {
-    
     if (mainInputString == "/") {
         std::cout << "\033[1A\033[K";
         std::string filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;38;5;208m\002" + 
@@ -161,15 +207,38 @@ void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<
             clear_history(); // Clear history to reset for future inputs
             need2Sort = true;
             
-            // Build new filtered files with original indices adjusted by one.
+            // Build new filtered files and update filtering stack
             std::vector<std::string> newFiltered;
+            std::vector<size_t> newIndices;
+            
             for (size_t i = 0; i < files.size(); ++i) {
                 if (std::find(tempFiltered.begin(), tempFiltered.end(), files[i]) != tempFiltered.end()) {
-                    newFiltered.push_back(std::to_string(i + 1) + ": " + files[i]);
+                    newFiltered.push_back(files[i]); // Store the original item without index
+                    
+                    // Map to the original index, accounting for previous filtering
+                    size_t originalIdx = i;
+                    if (isFiltered && !filteringStack.empty() && i < filteringStack.back().originalIndices.size()) {
+                        originalIdx = filteringStack.back().originalIndices[i];
+                    }
+                    newIndices.push_back(originalIdx);
                 }
             }
             
             files = newFiltered; // Update the file list with the filtered results
+            
+            // Update filtering stack
+            FilteringState newState;
+            newState.originalIndices = std::move(newIndices);
+            newState.isFiltered = true;
+            
+            if (isFiltered && !filteringStack.empty()) {
+                // Replace the top of the stack with the new filtering state
+                filteringStack.back() = newState;
+            } else {
+                // Add a new filtering state to the stack
+                filteringStack.push_back(newState);
+            }
+            
             needsClrScrn = true;
             isFiltered = true;
             break;
@@ -189,15 +258,39 @@ void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<
             }
             
             need2Sort = true;
-            // Build new filtered files with indices adjusted by one.
+            
+            // Build new filtered files and update filtering stack
             std::vector<std::string> newFiltered;
+            std::vector<size_t> newIndices;
+            
             for (size_t i = 0; i < files.size(); ++i) {
                 if (std::find(tempFiltered.begin(), tempFiltered.end(), files[i]) != tempFiltered.end()) {
-                   newFiltered.push_back("\033[1;93m:" + std::to_string(i + 1) + "\033[0;1m" + files[i]);
-                }     
+                    newFiltered.push_back(files[i]); // Store the original item without index
+                    
+                    // Map to the original index, accounting for previous filtering
+                    size_t originalIdx = i;
+                    if (isFiltered && !filteringStack.empty() && i < filteringStack.back().originalIndices.size()) {
+                        originalIdx = filteringStack.back().originalIndices[i];
+                    }
+                    newIndices.push_back(originalIdx);
+                }
             }
             
             files = newFiltered; // Update the file list with the filtered results
+            
+            // Update filtering stack
+            FilteringState newState;
+            newState.originalIndices = std::move(newIndices);
+            newState.isFiltered = true;
+            
+            if (isFiltered && !filteringStack.empty()) {
+                // Replace the top of the stack with the new filtering state
+                filteringStack.back() = newState;
+            } else {
+                // Add a new filtering state to the stack
+                filteringStack.push_back(newState);
+            }
+            
             isFiltered = true;
             needsClrScrn = true;
             
