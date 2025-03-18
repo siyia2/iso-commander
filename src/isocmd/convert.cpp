@@ -145,6 +145,6 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
 		bool promptFlag = false;
 		bool filterHistory = false;
 		int maxDepth = 0;
-        manualRefreshForDatabase(result, promptFlag, maxDepth, filterHistory, newISOFound);
+        refreshForDatabase(result, promptFlag, maxDepth, filterHistory, newISOFound);
     }
 }

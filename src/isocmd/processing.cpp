@@ -303,7 +303,7 @@ void processOperationInput(const std::string& input, const std::vector<std::stri
     if (!isDelete) {
         bool promptFlag = false;
         int maxDepth = 0;
-        manualRefreshForDatabase(userDestDir, promptFlag, maxDepth, filterHistory, newISOFound);
+        refreshForDatabase(userDestDir, promptFlag, maxDepth, filterHistory, newISOFound);
     }
     
     // Save history and clear it if it's not a delete operation
