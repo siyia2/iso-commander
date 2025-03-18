@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GNU General Public License v2.0
 
 #include "../headers.h"
+#include "../threadpool.h"
 
 
 // Function to check if a directory input is valid for searches
@@ -82,25 +83,19 @@ void manualRefreshForDatabase(std::string& initialDir, bool promptFlag, int maxD
         std::atomic<size_t> totalFiles{0};
 
         if (promptFlag) {
-			// Move the cursor to line 3 (2 lines down from the top)
-			std::cout << "\033[3H";
-			// Clear any listings if visible and leave a new line
-			std::cout << "\033[J";
-			std::cout << "\n";
+            // Move the cursor to line 3 (2 lines down from the top)
+            std::cout << "\033[3H";
+            // Clear any listings if visible and leave a new line
+            std::cout << "\033[J";
+            std::cout << "\n";
             disableInput();
         }
 
         auto start_time = std::chrono::high_resolution_clock::now();
 
-        // Single-pass path processing with concurrent file traversal
-        std::vector<std::future<void>> futures;
-        std::mutex processMutex;
-        std::mutex traverseErrorMutex;
-
+        // First, process input paths and collect valid ones
         std::istringstream iss(input);
         std::string path;
-        std::size_t runningTasks = 0;
-
         while (std::getline(iss, path, ';')) {
             if (!isValidDirectory(path)) {
                 if (promptFlag) {
@@ -108,42 +103,51 @@ void manualRefreshForDatabase(std::string& initialDir, bool promptFlag, int maxD
                 }
                 continue;
             }
-
             if (uniquePaths.insert(path).second) {
                 validPaths.push_back(path);
-                futures.emplace_back(std::async(std::launch::async, 
-                    [path, &allIsoFiles, &uniqueErrorMessages, &totalFiles, &processMutex, &traverseErrorMutex, &maxDepth, &promptFlag]() {
-                        traverse(path, allIsoFiles, uniqueErrorMessages, totalFiles, processMutex, traverseErrorMutex, maxDepth, promptFlag);
-                    }
-                ));
-
-                if (++runningTasks >= maxThreads) {
-                    for (auto& future : futures) {
-                        future.wait();
-                        if (g_operationCancelled.load()) break;
-                    }
-                    futures.clear();
-                    runningTasks = 0;
-                }
             }
         }
-
-        for (auto& future : futures) {
-            future.wait();
-            if (g_operationCancelled.load()) break;
+        
+        // Use the global maxThreads variable. Determine numThreads as the minimum of valid paths and maxThreads.
+        int numThreads = std::min(static_cast<int>(validPaths.size()), static_cast<int>(maxThreads));
+        if (numThreads == 0) {
+            // No valid paths to process, return early
+            return;
         }
+        
+        {
+			ThreadPool pool(numThreads);
+
+			// Mutexes for synchronization shared across tasks
+			std::mutex processMutex;
+			std::mutex traverseErrorMutex;
+
+			// Enqueue tasks into the thread pool
+			std::vector<std::future<void>> futures;
+			for (const auto& validPath : validPaths) {
+				futures.emplace_back(pool.enqueue([&, validPath]() {
+					traverse(validPath, allIsoFiles, uniqueErrorMessages, totalFiles,
+							 processMutex, traverseErrorMutex, maxDepth, promptFlag);
+				}));
+			}
+			
+			// Wait for all tasks to finish
+			for (auto& future : futures) {
+				future.wait();
+				if (g_operationCancelled.load()) break;
+			}
+
+			// When this block ends, the ThreadPool destructor will clean up the threads.
+		}
         
         // Post-processing
         if (promptFlag) {
             flushStdin();
             restoreInput();
-                
             std::cout << "\r\033[0;1mTotal files processed: " << totalFiles;
-            
             if (!invalidPaths.empty() || !validPaths.empty()) {
                 std::cout << "\n";
             }
-
             if (validPaths.empty()) {
                 input = "";
                 clear_history();
@@ -153,7 +157,8 @@ void manualRefreshForDatabase(std::string& initialDir, bool promptFlag, int maxD
                 saveHistory(filterHistory);
                 clear_history();
             }
-            verboseForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, promptFlag, maxDepth, filterHistory, start_time, newISOFound);
+            verboseForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths,
+                               uniqueErrorMessages, promptFlag, maxDepth, filterHistory, start_time, newISOFound);
         } else {
             if (!g_operationCancelled.load()) {
                 saveToDatabase(allIsoFiles, newISOFound);
@@ -162,11 +167,13 @@ void manualRefreshForDatabase(std::string& initialDir, bool promptFlag, int maxD
     } catch (const std::exception& e) {
         std::cerr << "\n\033[1;91mUnable to access ISO database: " << e.what() << std::endl;
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-		std::string dummyDir = "";
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        std::string dummyDir = "";
         manualRefreshForDatabase(dummyDir, promptFlag, maxDepth, filterHistory, newISOFound);
     }
 }
+
+
 
 
 // Function to traverse a directory and find ISO files
@@ -531,7 +538,6 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
 
 // Modified findFiles that spawns one thread per unique path.
 std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, std::unordered_set<std::string>& fileNames, int& currentCacheOld, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, const std::vector<std::string>& directoryPaths, std::unordered_set<std::string>& invalidDirectoryPaths, std::unordered_set<std::string>& processedErrorsFind) {
-    
     // Setup signal handler and reset cancellation flag
     setupSignalHandlerCancellations();
     g_operationCancelled.store(false);
@@ -555,32 +561,48 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
         return {};
     }
     
-    // Create threads for each unique input path
+    // Create threads for each unique input path using a thread pool.
     std::vector<std::future<std::unordered_set<std::string>>> threadFutures;
     std::unordered_set<std::string> processedValidPaths;
+    std::vector<std::string> uniquePaths;
     
     for (const auto& originalPath : inputPaths) {
         std::string path = std::filesystem::path(originalPath).string();
-        
-        // Skip empty or already processed paths
+        // Skip empty or already processed paths.
         if (path.empty() || !processedValidPaths.insert(path).second) {
             continue;
         }
-        
-        // Spawn a thread for this single path using processPaths
-        threadFutures.push_back(std::async(std::launch::async, processPaths, 
-                                           path, mode, callback, std::ref(processedErrorsFind)));
+        uniquePaths.push_back(path);
     }
     
-    // Collect results from all threads
-    for (auto& future : threadFutures) {
-        std::unordered_set<std::string> threadResult = future.get();
-        fileNames.insert(threadResult.begin(), threadResult.end());
+    int numThreads = std::min(static_cast<int>(uniquePaths.size()), static_cast<int>(maxThreads));
+    if (numThreads == 0) {
+        flushStdin();
+        restoreInput();
+        return *currentCache;
     }
+    
+    {
+        // Create a local thread pool. When this block exits, the pool's destructor
+        // will stop and join all threads.
+        ThreadPool pool(numThreads);
+    
+        for (const auto& path : uniquePaths) {
+            threadFutures.push_back(pool.enqueue([path, &mode, &callback, &processedErrorsFind]() -> std::unordered_set<std::string> {
+                return processPaths(path, mode, callback, std::ref(processedErrorsFind));
+            }));
+        }
+    
+        // Wait for all tasks to finish and collect results.
+        for (auto& future : threadFutures) {
+            std::unordered_set<std::string> threadResult = future.get();
+            fileNames.insert(threadResult.begin(), threadResult.end());
+        }
+    } // The thread pool is automatically cleaned up here.
     
     verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
     
-    // Efficiently update cache with new files
+    // Efficiently update cache with new files.
     std::unordered_set<std::string> currentCacheSet(currentCache->begin(), currentCache->end());
     std::vector<std::string> newFiles;
     
@@ -590,12 +612,12 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
         }
     }
     
-    // Append all new files at once
+    // Append all new files at once.
     if (!newFiles.empty()) {
         currentCache->insert(currentCache->end(), newFiles.begin(), newFiles.end());
     }
     
-    // Restore input
+    // Restore input.
     flushStdin();
     restoreInput();
     
