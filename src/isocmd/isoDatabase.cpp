@@ -14,10 +14,11 @@ const uintmax_t maxDatabaseSize = 1 * 1024 * 1024; // 1MB
 // Global mutex to protect counter cout
 std::mutex couNtMutex;
 
+
 // Function to remove non-existent paths from cache
 void removeNonExistentPathsFromDatabase() {
-	
-	if (!std::filesystem::exists(databaseFilePath)) {
+    // Check if the database file exists
+    if (!fs::exists(databaseFilePath)) {
         // If the file is missing, clear the ISO cache and return
         globalIsoFileList.clear();
         return;
@@ -68,21 +69,23 @@ void removeNonExistentPathsFromDatabase() {
     flock(fd, LOCK_UN);
     close(fd);
 
+    // Use a thread pool to check paths in parallel
+    ThreadPool pool(maxThreads);
+
     // Determine batch size
-    const size_t maxThreads = std::thread::hardware_concurrency();
     const size_t batchSize = std::max(cache.size() / maxThreads + 1, static_cast<size_t>(2));
 
     // Create a vector to hold futures
     std::vector<std::future<std::vector<std::string>>> futures;
 
-    // Process paths in batches
+    // Process paths in batches using the thread pool
     for (size_t i = 0; i < cache.size(); i += batchSize) {
         auto begin = cache.begin() + i;
         auto end = std::min(begin + batchSize, cache.end());
-            futures.push_back(std::async(std::launch::async, [begin, end]() {
+        futures.emplace_back(pool.enqueue([begin, end]() {
             std::vector<std::string> result;
             for (auto it = begin; it != end; ++it) {
-                if (std::filesystem::exists(*it)) {
+                if (fs::exists(*it)) {
                     result.push_back(*it);
                 }
             }
@@ -96,50 +99,35 @@ void removeNonExistentPathsFromDatabase() {
         auto result = future.get();
         retainedPaths.insert(retainedPaths.end(), std::make_move_iterator(result.begin()), std::make_move_iterator(result.end()));
     }
-    
+
     // Check if the retained paths are the same as the original cache
-	if (cache.size() == retainedPaths.size() && 
-		std::equal(cache.begin(), cache.end(), retainedPaths.begin())) {
-		// No changes needed, return without modifying the file
-		return;
-	}
-
-	// Only rewrite the file if there are changes
-	std::ofstream updatedCacheFile(databaseFilePath, std::ios::out | std::ios::trunc);
-	if (!updatedCacheFile.is_open()) {
-		flock(fd, LOCK_UN);
-		close(fd);
-		return;
-	}
-
-    // Open the cache file for writing
-    fd = open(databaseFilePath.c_str(), O_WRONLY);
-    if (fd == -1) {
+    if (cache.size() == retainedPaths.size() &&
+        std::equal(cache.begin(), cache.end(), retainedPaths.begin())) {
+        // No changes needed, return without modifying the file
         return;
     }
 
-    // Lock the file to prevent concurrent access
-    if (flock(fd, LOCK_EX) == -1) {
-        close(fd);
+    // Open the file for writing, create if necessary, truncate it
+    int writeFd = open(databaseFilePath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (writeFd == -1) {
         return;
     }
 
-    // Write the retained paths to the updated cache file
-    if (!updatedCacheFile.is_open()) {
-        flock(fd, LOCK_UN);
-        close(fd);
+    // Acquire exclusive lock
+    if (flock(writeFd, LOCK_EX) == -1) {
+        close(writeFd);
         return;
     }
 
-    for (const std::string& path : retainedPaths) {
-		if (std::filesystem::exists(path)) {
-			updatedCacheFile << path << '\n';
-		}
-	}
+    // Write retainedPaths
+    for (const auto& path : retainedPaths) {
+        std::string line = path + '\n';
+        write(writeFd, line.c_str(), line.size());
+    }
 
-    // RAII: Close the file and release the lock
-    flock(fd, LOCK_UN);
-    close(fd);
+    // Release lock and close
+    flock(writeFd, LOCK_UN);
+    close(writeFd);
 }
 
 
@@ -271,173 +259,229 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
 
 // Function to load ISO database from file
 void loadFromDatabase(std::vector<std::string>& isoFiles) {
-
+    // Open the database file in read-only mode
     int fd = open(databaseFilePath.c_str(), O_RDONLY);
     if (fd == -1) {
-        return; // File doesn't exist or cannot be opened
+        return; // File doesn't exist or cannot be opened, exit the function
     }
 
-    // Acquire a shared lock using flock
+    // Acquire a shared lock using flock to allow multiple readers but no writers
     if (flock(fd, LOCK_SH) == -1) {
-        close(fd);
+        close(fd); // Release the file descriptor if locking fails
         return;
     }
 
+    // Get file statistics to check its size and other attributes
     struct stat fileStat;
     if (fstat(fd, &fileStat) == -1 || fileStat.st_size == 0) {
+        // If fstat fails or the file is empty, release the lock and close the file
         flock(fd, LOCK_UN);
         close(fd);
-        isoFiles.clear();
+        isoFiles.clear(); // Clear the output vector
         return;
     }
 
+    // Store the file size for later use
     const auto fileSize = fileStat.st_size;
 
+    // Map the file into memory for efficient reading
     char* mappedFile = static_cast<char*>(mmap(nullptr, fileSize, PROT_READ, MAP_PRIVATE, fd, 0));
     if (mappedFile == MAP_FAILED) {
+        // If mmap fails, release the lock and close the file
         flock(fd, LOCK_UN);
         close(fd);
         return;
     }
 
+    // Vector to store the loaded ISO file paths
     std::vector<std::string> loadedFiles;
 
+    // Iterate through the mapped file to read lines (ISO file paths)
     char* start = mappedFile;
     char* end = mappedFile + fileSize;
     while (start < end) {
+        // Find the end of the current line
         char* lineEnd = std::find(start, end, '\n');
+        // Extract the line as a string
         std::string line(start, lineEnd);
-        start = lineEnd + 1;
+        start = lineEnd + 1; // Move to the start of the next line
 
+        // If the line is not empty, add it to the loadedFiles vector
         if (!line.empty()) {
             loadedFiles.push_back(std::move(line));
         }
     }
 
+    // Unmap the memory and release the file lock
     munmap(mappedFile, fileSize);
     flock(fd, LOCK_UN);
     close(fd);
 
+    // Swap the loaded files with the input vector to update it
     isoFiles.swap(loadedFiles);
 }
 
 
 // Function to save ISO cache to database
 bool saveToDatabase(const std::vector<std::string>& isoFiles, std::atomic<bool>& newISOFound) {
+    // Construct the full path to the database file
     std::filesystem::path cachePath = databaseDirectory;
     cachePath /= databaseFilename;
+
+    // Create the database directory if it doesn't exist
     if (!std::filesystem::exists(databaseDirectory) && !std::filesystem::create_directories(databaseDirectory)) {
-        return false;
+        return false; // Return false if directory creation fails
     }
+    // Check if the database path is a valid directory
     if (!std::filesystem::is_directory(databaseDirectory)) {
         return false;
     }
+
+    // Load the existing cache from the database
     std::vector<std::string> existingCache;
     loadFromDatabase(existingCache);
+
+    // Convert the existing cache to a set for efficient lookup
     std::unordered_set<std::string> existingSet(existingCache.begin(), existingCache.end());
     
-    // Only write if there are new entries
+    // Vector to store new entries that are not already in the cache
     std::vector<std::string> newEntries;
+
+    // Iterate through the input ISO files to find new entries
     for (const auto& iso : isoFiles) {
         if (existingSet.find(iso) == existingSet.end()) {
+            // If the ISO file is not in the existing cache, add it to newEntries
             newEntries.push_back(iso);
             newISOFound.store(true); // Set the atomic variable to true when a new ISO is found
-            loadFromDatabase(globalIsoFileList);
+            loadFromDatabase(globalIsoFileList); // Reload the global ISO file list
         }
     }
     
+    // If no new entries are found, set newISOFound to false and return
     if (newEntries.empty()) {
-		newISOFound.store(false);
+        newISOFound.store(false);
         return false; // No new entries, don't modify cache
     }
     
-    // Combine existing cache with new entries, respecting max size
+    // Combine the existing cache with new entries, respecting the maximum size limit
     std::vector<std::string> combinedCache = existingCache;
     combinedCache.insert(combinedCache.end(), newEntries.begin(), newEntries.end());
     if (combinedCache.size() > maxDatabaseSize) {
+        // If the combined cache exceeds the maximum size, remove the oldest entries
         combinedCache.erase(combinedCache.begin(), combinedCache.begin() + (combinedCache.size() - maxDatabaseSize));
     }
     
+    // Open the database file for writing, creating it if it doesn't exist
     int fd = open(cachePath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd == -1) {
-        return false;
+        return false; // Return false if the file cannot be opened
     }
+
+    // Acquire an exclusive lock to prevent other processes from writing
     if (flock(fd, LOCK_EX) == -1) {
-        close(fd);
+        close(fd); // Release the file descriptor if locking fails
         return false;
     }
     
+    // Write the combined cache to the file
     bool success = true;
     for (const auto& entry : combinedCache) {
         std::string line = entry + "\n";
         if (write(fd, line.data(), line.size()) == -1) {
-            success = false;
+            success = false; // Set success to false if writing fails
             break;
         }
     }
     
+    // Release the lock and close the file
     flock(fd, LOCK_UN);
     close(fd);
+
+    // Return whether the operation was successful
     return success;
 }
 
 
 // Function to display on-disk and ram statistics
 void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax_t maxDatabaseSize, const std::unordered_map<std::string, std::string>& transformationCache, const std::vector<std::string>& globalIsoFileList) {
-	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
-    disable_ctrl_d();
-	clearScrollBuffer();
+    signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C signal to prevent interruption
+    disable_ctrl_d();               // Disable Ctrl+D to avoid unwanted program termination
+    clearScrollBuffer();            // Clear any buffered data from the scroll buffer
+
     try {
-        // Create files if they don't exist
+        // Create the database file if it does not exist
         std::filesystem::path filePath(databaseFilePath);
         if (!std::filesystem::exists(filePath)) {
             std::ofstream createFile(databaseFilePath);
-            createFile.close();
+            createFile.close();  // Close the file after creation
         }
         
+        // Create history file if it doesn't exist
         if (!std::filesystem::exists(historyFilePath)) {
             std::ofstream createFile(historyFilePath);
-            createFile.close();
-        }
-        
-        if (!std::filesystem::exists(filterHistoryFilePath)) {
-            std::ofstream createFile(filterHistoryFilePath);
-            createFile.close();
+            createFile.close();  // Close the file after creation
         }
 
+        // Create filter history file if it doesn't exist
+        if (!std::filesystem::exists(filterHistoryFilePath)) {
+            std::ofstream createFile(filterHistoryFilePath);
+            createFile.close();  // Close the file after creation
+        }
+
+        // Display the statistics for the ISO database
         std::cout << "\n\033[1;94m=== ISO Database ===\033[0m\n";
         
+        // Get the file size in bytes
         std::uintmax_t fileSizeInBytes = std::filesystem::file_size(filePath);
         std::uintmax_t cachesizeInBytes = maxDatabaseSize;
         
+        // Convert file size and cache size to kilobytes
         double fileSizeInKB = fileSizeInBytes / 1024.0;
         double cachesizeInKb = cachesizeInBytes / 1024.0;
+        
+        // Calculate the usage percentage of the database file
         double usagePercentage = (fileSizeInBytes * 100.0) / cachesizeInBytes;
         
+        // Display the capacity, file size, and usage percentage of the database
         std::cout << "\n\033[1;92mCapacity:\033[1;97m " << std::fixed << std::setprecision(0) << fileSizeInKB << "KB" 
                   << "/" << std::setprecision(0) << cachesizeInKb << "KB" 
                   << " (" << std::setprecision(1) << usagePercentage << "%)"
                   << " \n\033[1;92mEntries:\033[1;97m " << countNonEmptyLines(databaseFilePath) 
                   << "\n\033[1;92mLocation:\033[1;97m " << "'" << databaseFilePath << "'\033[0;1m\n";
        
+        // Display the statistics for the history database
         std::cout  << "\n\033[1;94m=== History Database ===\033[0m\n"
                   << " \n\033[1;92mFolderPath Entries:\033[1;97m " << countNonEmptyLines(historyFilePath)<< "/" << MAX_HISTORY_LINES
                   << "\n\033[1;92mLocation:\033[1;97m " << "'" << historyFilePath << "'\033[0;1m"
                   << " \n\n\033[1;92mFilterTerm Entries:\033[1;97m " << countNonEmptyLines(filterHistoryFilePath) << "/" << MAX_HISTORY_PATTERN_LINES
                   << "\n\033[1;92mLocation:\033[1;97m " << "'" << filterHistoryFilePath << "'\033[0;1m" << std::endl;
         
+        // Display the buffered entries in RAM
         std::cout << "\n\033[1;94m=== Buffered Entries ===\033[0m\n";
+        
+        // Show the total number of transformation cache entries in RAM
         std::cout << "\033[1;96m\nString Data → RAM:\033[1;97m " << transformationCache.size() + cachedParsesForUmount.size() + originalPathsCache.size() << "\n";
+        
+        // Show the number of ISO files in RAM
         std::cout << "\n\033[1;92mISO → RAM:\033[1;97m " << globalIsoFileList.size() << "\n";
+        
+        // Show the number of BIN/IMG files in RAM
         std::cout << "\n\033[1;38;5;208mBIN/IMG → RAM:\033[1;97m " << binImgFilesCache.size() << "\n";
+        
+        // Show the number of MDF files in RAM
         std::cout << "\033[1;38;5;208mMDF → RAM:\033[1;97m " << mdfMdsFilesCache.size() << "\n";
+        
+        // Show the number of NRG files in RAM
         std::cout << "\033[1;38;5;208mNRG → RAM:\033[1;97m " << nrgFilesCache.size() << "\n";
     } catch (const std::filesystem::filesystem_error& e) {
+        // Handle filesystem errors (e.g., unable to access a configuration file)
         std::cerr << "\n\033[1;91mError: Unable to access configuration file: \033[1;93m'"
                   << configPath << "'\033[1;91m.\033[0;1m\n";
     }
+
+    // Prompt the user to press Enter to return
     std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');  // Wait for the user to press Enter
 }
 
 

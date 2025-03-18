@@ -73,7 +73,7 @@ void manualRefreshForDatabase(std::string& initialDir, bool promptFlag, int maxD
         if (std::all_of(input.begin(), input.end(), [](char c) { return std::isspace(static_cast<unsigned char>(c)); })) {
             return;
         }
-		
+        
         // Combine path validation and processing
         std::unordered_set<std::string> uniquePaths;
         std::vector<std::string> validPaths;
@@ -93,9 +93,10 @@ void manualRefreshForDatabase(std::string& initialDir, bool promptFlag, int maxD
 
         auto start_time = std::chrono::high_resolution_clock::now();
 
-        // First, process input paths and collect valid ones
         std::istringstream iss(input);
         std::string path;
+
+        // Process all paths first to build validPaths list
         while (std::getline(iss, path, ';')) {
             if (!isValidDirectory(path)) {
                 if (promptFlag) {
@@ -103,51 +104,51 @@ void manualRefreshForDatabase(std::string& initialDir, bool promptFlag, int maxD
                 }
                 continue;
             }
+
             if (uniquePaths.insert(path).second) {
                 validPaths.push_back(path);
             }
         }
-        
-        // Use the global maxThreads variable. Determine numThreads as the minimum of valid paths and maxThreads.
-        int numThreads = std::min(static_cast<int>(validPaths.size()), static_cast<int>(maxThreads));
-        if (numThreads == 0) {
-            // No valid paths to process, return early
-            return;
-        }
-        
-        {
-			ThreadPool pool(numThreads);
 
-			// Mutexes for synchronization shared across tasks
+        // Now create the thread pool based on valid paths count
+        unsigned int numThreads = std::min(static_cast<unsigned int>(validPaths.size()), maxThreads);
+        {
+			// Create a thread pool for concurrent file traversal
+			ThreadPool pool(numThreads);
+			std::vector<std::future<void>> futures;
 			std::mutex processMutex;
 			std::mutex traverseErrorMutex;
 
-			// Enqueue tasks into the thread pool
-			std::vector<std::future<void>> futures;
+			// Queue tasks for each valid path
 			for (const auto& validPath : validPaths) {
-				futures.emplace_back(pool.enqueue([&, validPath]() {
-					traverse(validPath, allIsoFiles, uniqueErrorMessages, totalFiles,
-							 processMutex, traverseErrorMutex, maxDepth, promptFlag);
-				}));
+				futures.emplace_back(
+					pool.enqueue([validPath, &allIsoFiles, &uniqueErrorMessages, &totalFiles, 
+								  &processMutex, &traverseErrorMutex, &maxDepth, &promptFlag]() {
+						traverse(validPath, allIsoFiles, uniqueErrorMessages, totalFiles, 
+								processMutex, traverseErrorMutex, maxDepth, promptFlag);
+					})
+				);
 			}
-			
-			// Wait for all tasks to finish
+
+			// Wait for all tasks to complete, checking for cancellation
 			for (auto& future : futures) {
 				future.wait();
 				if (g_operationCancelled.load()) break;
 			}
-
-			// When this block ends, the ThreadPool destructor will clean up the threads.
+			// When out of scope threads automatically cleanup-up
 		}
         
         // Post-processing
         if (promptFlag) {
             flushStdin();
             restoreInput();
+                
             std::cout << "\r\033[0;1mTotal files processed: " << totalFiles;
+            
             if (!invalidPaths.empty() || !validPaths.empty()) {
                 std::cout << "\n";
             }
+
             if (validPaths.empty()) {
                 input = "";
                 clear_history();
@@ -157,8 +158,7 @@ void manualRefreshForDatabase(std::string& initialDir, bool promptFlag, int maxD
                 saveHistory(filterHistory);
                 clear_history();
             }
-            verboseForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths,
-                               uniqueErrorMessages, promptFlag, maxDepth, filterHistory, start_time, newISOFound);
+            verboseForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, promptFlag, maxDepth, filterHistory, start_time, newISOFound);
         } else {
             if (!g_operationCancelled.load()) {
                 saveToDatabase(allIsoFiles, newISOFound);
@@ -176,14 +176,14 @@ void manualRefreshForDatabase(std::string& initialDir, bool promptFlag, int maxD
 
 // Function to traverse a directory and find ISO files
 void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages, std::atomic<size_t>& totalFiles, std::mutex& traverseFilesMutex, std::mutex& traverseErrorsMutex, int& maxDepth, bool& promptFlag) {
-    const size_t BATCH_SIZE = 100;
-    std::vector<std::string> localIsoFiles;
+    const size_t BATCH_SIZE = 100; // Batch size for collecting ISO files
+    std::vector<std::string> localIsoFiles; // Temporary container to hold found ISO file paths in each batch
     
-    std::atomic<bool> g_CancelledMessageAdded{false};
-    // Reset cancellation flag
+    std::atomic<bool> g_CancelledMessageAdded{false}; // Flag to ensure cancellation message is added only once
+    // Reset the cancellation flag to false
     g_operationCancelled.store(false);
 
-
+    // Case insensitive string comparison function
     auto iequals = [](const std::string_view& a, const std::string_view& b) {
         return std::equal(a.begin(), a.end(), b.begin(), b.end(),
                          [](unsigned char a, unsigned char b) {
@@ -192,58 +192,72 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
     };
 
     try {
+        // Start a recursive directory traversal
         auto options = std::filesystem::directory_options::none;
         for (auto it = std::filesystem::recursive_directory_iterator(path, options); 
-			it != std::filesystem::recursive_directory_iterator(); ++it) {
-			if (g_operationCancelled.load()) {
-				if (!g_CancelledMessageAdded.exchange(true)) {
-					std::lock_guard<std::mutex> lock(globalSetsMutex);
-					uniqueErrorMessages.clear();
-					uniqueErrorMessages.insert("\n\033[1;33mISO search interrupted by user.\033[0;1m");
-				}
-				break;
-			}
-                if (maxDepth >= 0 && it.depth() > maxDepth) {
-                    it.disable_recursion_pending();
-                    continue;
+             it != std::filesystem::recursive_directory_iterator(); ++it) {
+            
+            // If operation is cancelled, break out of the loop
+            if (g_operationCancelled.load()) {
+                if (!g_CancelledMessageAdded.exchange(true)) {
+                    std::lock_guard<std::mutex> lock(globalSetsMutex); // Lock to prevent race conditions while accessing global error messages
+                    uniqueErrorMessages.clear(); // Clear previous errors
+                    uniqueErrorMessages.insert("\n\033[1;33mISO search interrupted by user.\033[0;1m"); // Add cancellation message
                 }
+                break;
+            }
 
-                const auto& entry = *it;
-                if (promptFlag && entry.is_regular_file()) {
-                    totalFiles.fetch_add(1, std::memory_order_acq_rel);
-                    if (totalFiles % 100 == 0) { // Update display periodically
-						std::lock_guard<std::mutex> lock(couNtMutex);
-                        std::cout << "\r\033[0;1mTotal files processed: " << totalFiles << std::flush;
-                    }
+            // If maxDepth is set and current directory depth exceeds it, disable further recursion
+            if (maxDepth >= 0 && it.depth() > maxDepth) {
+                it.disable_recursion_pending(); // Stop further recursive searches in this directory
+                continue;
+            }
+
+            const auto& entry = *it; // Get current directory entry
+
+            // If promptFlag is true and entry is a regular file, update the processed file count
+            if (promptFlag && entry.is_regular_file()) {
+                totalFiles.fetch_add(1, std::memory_order_acq_rel); // Safely increment total file count
+                if (totalFiles % 100 == 0) { // Update the display every 100 files
+                    std::lock_guard<std::mutex> lock(couNtMutex); // Lock to avoid race conditions on shared resources
+                    std::cout << "\r\033[0;1mTotal files processed: " << totalFiles << std::flush; // Display total files processed
                 }
+            }
 
-                if (!entry.is_regular_file()) continue;
+            // Skip non-regular files (directories, symlinks, etc.)
+            if (!entry.is_regular_file()) continue;
 
-                const auto& filePath = entry.path();
-                if (!iequals(filePath.extension().string(), ".iso")) continue;
+            const auto& filePath = entry.path(); // Get file path
 
-                localIsoFiles.push_back(filePath.string());
+            // Skip files that do not have .iso extension (case insensitive)
+            if (!iequals(filePath.extension().string(), ".iso")) continue;
 
-                if (localIsoFiles.size() >= BATCH_SIZE) {
-                    std::lock_guard<std::mutex> lock(traverseFilesMutex);
-                    isoFiles.insert(isoFiles.end(), localIsoFiles.begin(), localIsoFiles.end());
-                    localIsoFiles.clear();
-                }
-			}
+            // Add valid ISO file paths to localIsoFiles vector
+            localIsoFiles.push_back(filePath.string());
 
-        // Merge leftovers
+            // Once the batch size is reached, move the files to the main isoFiles vector
+            if (localIsoFiles.size() >= BATCH_SIZE) {
+                std::lock_guard<std::mutex> lock(traverseFilesMutex); // Lock to safely access shared isoFiles
+                isoFiles.insert(isoFiles.end(), localIsoFiles.begin(), localIsoFiles.end()); // Merge files into the main vector
+                localIsoFiles.clear(); // Clear the local container for the next batch
+            }
+        }
+
+        // After finishing the traversal, merge any remaining ISO files in localIsoFiles
         if (!localIsoFiles.empty()) {
             std::lock_guard<std::mutex> lock(traverseFilesMutex);
             isoFiles.insert(isoFiles.end(), localIsoFiles.begin(), localIsoFiles.end());
         }
 
-        // Merge errors
+    // Catch and handle any filesystem errors encountered during the traversal
     } catch (const std::filesystem::filesystem_error& e) {
         std::string formattedError = "\n\033[1;91mError traversing directory: " + 
-                                    path.string() + " - " + e.what() + "\033[0;1m";
+                                     path.string() + " - " + e.what() + "\033[0;1m";
+        
+        // If promptFlag is set, log the error message
         if (promptFlag) {
-            std::lock_guard<std::mutex> errorLock(traverseErrorsMutex);
-            uniqueErrorMessages.insert(formattedError);
+            std::lock_guard<std::mutex> errorLock(traverseErrorsMutex); // Lock to prevent race conditions while accessing errors
+            uniqueErrorMessages.insert(formattedError); // Insert the error message
         }
     }
 }

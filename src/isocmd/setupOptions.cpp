@@ -3,33 +3,50 @@
 #include "../headers.h"
 #include "../display.h"
 
-const std::string configPath = std::string(getenv("HOME")) + ".config/isocmd/config";
+const std::string configPath = std::string(getenv("HOME")) + "/.config/isocmd/config";
 
 
-// Function to read and map config file
+// Function to read a configuration file and store key-value pairs in a map
 std::map<std::string, std::string> readConfig(const std::string& configPath) {
+    // Declare a map to store configuration key-value pairs
     std::map<std::string, std::string> config;
+    
+    // Open the file at the given configPath
     std::ifstream inFile(configPath);
     
+    // Lambda function to trim leading and trailing spaces from a string
     auto trim = [](std::string str) {
+        // Remove leading spaces
         str.erase(0, str.find_first_not_of(" "));
+        // Remove trailing spaces
         str.erase(str.find_last_not_of(" ") + 1);
         return str;
     };
     
+    // Check if the file was successfully opened
     if (inFile.is_open()) {
         std::string line;
+        // Read the file line by line
         while (std::getline(inFile, line)) {
+            // Find the position of the first '=' character in the line
             size_t equalPos = line.find('=');
+            
+            // If '=' is found, it indicates a key-value pair
             if (equalPos != std::string::npos) {
+                // Extract the key (substring before '=')
                 std::string key = line.substr(0, equalPos);
+                // Extract the value (substring after '=')
                 std::string value = line.substr(equalPos + 1);
+                
+                // Trim any extra spaces from key and value, then store them in the map
                 config[trim(key)] = trim(value);
             }
         }
+        // Close the file after reading
         inFile.close();
     }
     
+    // Return the populated map
     return config;
 }
 
@@ -99,39 +116,57 @@ bool readUserConfigUpdates(const std::string& filePath) {
 
 
 // Function to set ITEMS_PER_PAGE
+// Function to read the configuration file and set pagination settings
 bool paginationSet(const std::string& filePath) {
+    // Declare a map to store the configuration key-value pairs (unused in this function, but could be used later)
     std::map<std::string, std::string> configMap;
+
+    // Open the file at the given file path
     std::ifstream inFile(filePath);
 
+    // If the file couldn't be opened, return false
     if (!inFile) return false;
 
     std::string line;
+    // Read the file line by line
     while (std::getline(inFile, line)) {
+        // Trim leading and trailing whitespace and tabs from the line
         line.erase(0, line.find_first_not_of(" \t"));
         line.erase(line.find_last_not_of(" \t") + 1);
 
+        // If the line is empty or starts with a comment ('#'), skip it
         if (line.empty() || line[0] == '#') continue;
 
+        // Find the position of the first '=' character in the line (indicating key-value pair)
         size_t equalsPos = line.find('=');
+        // If no '=' is found, skip this line as it doesn't contain a key-value pair
         if (equalsPos == std::string::npos) continue;
 
+        // Extract the key (substring before the '=')
         std::string key = line.substr(0, equalsPos);
+        // Extract the value (substring after the '=')
         std::string valueStr = line.substr(equalsPos + 1);
 
+        // Trim leading and trailing whitespace and tabs from both key and value
         key.erase(0, key.find_first_not_of(" \t"));
         key.erase(key.find_last_not_of(" \t") + 1);
         valueStr.erase(0, valueStr.find_first_not_of(" \t"));
         valueStr.erase(valueStr.find_last_not_of(" \t") + 1);
 
+        // If the key is "pagination", try to convert the value to an integer
         if (key == "pagination") {
             try {
+                // Attempt to set the ITEMS_PER_PAGE variable with the parsed value
                 ITEMS_PER_PAGE = std::stoi(valueStr);
-                return true;
+                return true;  // Return true if the value is successfully set
             } catch (...) {
+                // If an error occurs during conversion (e.g., invalid format), return false
                 return false;
             }
         }
     }
+
+    // Return false if "pagination" key was not found or any error occurred
     return false;
 }
 

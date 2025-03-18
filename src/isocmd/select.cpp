@@ -341,24 +341,47 @@ std::vector<std::string> nrgFilesCache; // Memory cached nrgImgFiles here
 
 
 // Function to check and list stored ram cache
-void ramCacheList(std::vector<std::string>& files, bool& list, const std::string& fileExtension, const std::vector<std::string>& binImgFilesCache, const std::vector<std::string>& mdfMdsFilesCache, const std::vector<std::string>& nrgFilesCache, bool modeMdf, bool modeNrg) {
-	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
-	disable_ctrl_d();
+void ramCacheList(std::vector<std::string>& files, bool& list, const std::string& fileExtension, 
+                  const std::vector<std::string>& binImgFilesCache, const std::vector<std::string>& mdfMdsFilesCache, 
+                  const std::vector<std::string>& nrgFilesCache, bool modeMdf, bool modeNrg) {
+    
+    // Ignore the SIGINT signal (Ctrl+C) to prevent the program from being interrupted by the user
+    signal(SIGINT, SIG_IGN);        
+    
+    // Disable the Ctrl+D keypress functionality
+    disable_ctrl_d();
+    
+    // Check if there are no files in RAM for the specified mode, and if listing is enabled
     if (((binImgFilesCache.empty() && !modeMdf && !modeNrg) || 
          (mdfMdsFilesCache.empty() && modeMdf) || 
          (nrgFilesCache.empty() && modeNrg)) && list) {
+        
+        // Notify the user that no files of the specified type are stored in RAM
         std::cout << "\n\033[1;93mNo " << fileExtension << " entries stored in RAM.\033[1m\n";
         std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+        
+        // Wait for the user to press Enter before continuing
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        
+        // Clear files to avoid glitches when using search&found followed by !clr in the same iteration
         files.clear();
+        
+        // Clear screen and scrollbuffer
         clearScrollBuffer();
+        
+        // Exit the function early as no files are available for listing
         return;
     } else if (list) {
+        // If the mode is not MDF or NRG, use the bin image files from the cache
         if (!modeMdf && !modeNrg) {
             files = binImgFilesCache;
-        } else if (modeMdf) {
+        } 
+        // If the mode is MDF, use the MDF/MDS files from the cache
+        else if (modeMdf) {
             files = mdfMdsFilesCache;
-        } else if (modeNrg) {
+        } 
+        // If the mode is NRG, use the NRG files from the cache
+        else if (modeNrg) {
             files = nrgFilesCache;
         }
     }

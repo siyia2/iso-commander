@@ -171,85 +171,104 @@ size_t getTotalFileSize(const std::vector<std::string>& files) {
 
 // Function to process selected indices for cpMvDel accordingly
 void processOperationInput(const std::string& input, const std::vector<std::string>& isoFiles, const std::string& process, std::unordered_set<std::string>& operationIsos, std::unordered_set<std::string>& operationErrors, std::unordered_set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& filterHistory, bool& verbose, std::atomic<bool>& newISOFound) {
+    // Set up signal handlers for cancellation
     setupSignalHandlerCancellations();
     
+    // Initialize flags and variables
     bool overwriteExisting = false;
     std::string userDestDir;
     std::unordered_set<int> processedIndices;
 
+    // Determine the type of operation (delete, move, copy)
     bool isDelete = (process == "rm");
     bool isMove   = (process == "mv");
     bool isCopy   = (process == "cp");
     
+    // Operation description and color formatting for output
     std::string operationDescription = isDelete ? "*PERMANENTLY DELETED*" : (isMove ? "*MOVED*" : "*COPIED*");
     std::string operationColor       = isDelete ? "\033[1;91m" : (isCopy ? "\033[1;92m" : "\033[1;93m");
 
-    // Parse the input to fill processedIndices.
+    // Parse the input and determine which file indices are selected for processing
     tokenizeInput(input, isoFiles, uniqueErrorMessages, processedIndices);
 
+    // If no files are selected, return early and do not perform any operation
     if (processedIndices.empty()) {
         umountMvRmBreak = false;
         return;
     }
     
-	unsigned int numThreads = std::min(static_cast<unsigned int>(processedIndices.size()), maxThreads);
-	std::vector<std::vector<int>> indexChunks = groupFilesIntoChunksForCpMvRm(processedIndices, isoFiles, numThreads, isDelete);
+    // Determine the number of threads to use (up to the number of processed indices or maxThreads)
+    unsigned int numThreads = std::min(static_cast<unsigned int>(processedIndices.size()), maxThreads);
+    
+    // Group the files into chunks for parallel processing
+    std::vector<std::vector<int>> indexChunks = groupFilesIntoChunksForCpMvRm(processedIndices, isoFiles, numThreads, isDelete);
 
-	// Flag for Rm abortion
+    // Flag for aborting delete operation
     bool abortDel = false;
     
+    // Process the user's destination directory and handle errors
     std::string processedUserDestDir = userDestDirRm(isoFiles, indexChunks, uniqueErrorMessages, userDestDir, 
                                                      operationColor, operationDescription, umountMvRmBreak, 
                                                      filterHistory, isDelete, isCopy, abortDel, overwriteExisting);
         
+    // Clear the operation cancel flag
     g_operationCancelled.store(false);
     
+    // If the processed directory is empty (for move/copy) or if delete is aborted, clear errors and exit
     if ((processedUserDestDir == "" && (isCopy || isMove)) || abortDel) {
         uniqueErrorMessages.clear();
         return;
     }
     uniqueErrorMessages.clear();
+    
+    // Clear the scroll buffer for output
     clearScrollBuffer();
 
+    // Prepare a list of files to process based on selected indices
     std::vector<std::string> filesToProcess;
     for (const auto& index : processedIndices) {
         filesToProcess.push_back(isoFiles[index - 1]);
     }
 
+    // Track progress with atomic variables for bytes and task completion
     std::atomic<size_t> completedBytes(0);
     std::atomic<size_t> completedTasks(0);
     std::atomic<size_t> failedTasks(0);
-    size_t totalBytes = getTotalFileSize(filesToProcess);
-    size_t totalTasks = filesToProcess.size();
+    size_t totalBytes = getTotalFileSize(filesToProcess);  // Calculate total file size to process
+    size_t totalTasks = filesToProcess.size();  // Number of tasks to process
                  
-    // Adjust totals for copy/move operations with multiple destinations
+    // Adjust totals if there are multiple destinations for copy/move operations
     if (isCopy || isMove) {
-		size_t destCount = std::count(processedUserDestDir.begin(), processedUserDestDir.end(), ';') + 1;
+        size_t destCount = std::count(processedUserDestDir.begin(), processedUserDestDir.end(), ';') + 1;
         totalBytes *= destCount;
         totalTasks *= destCount;
     }
     
+    // Print out the operation details and progress information
     std::cout << "\n\033[0;1m Processing " << (totalTasks > 1 ? "tasks" : "task") << " for " << operationColor << process <<
              "\033[0;1m... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";
              
-             std::string coloredProcess = 
+    // Set the colored operation name (delete, move, or copy)
+    std::string coloredProcess = 
     isDelete ? std::string("\033[1;91m") + process + "\033[0;1m" + (totalTasks > 1 ? " tasks" : " task") :
     isMove   ? std::string("\033[1;93m") + process + "\033[0;1m" + (totalTasks > 1 ? " tasks" : " task") :
     isCopy   ? std::string("\033[1;92m") + process + "\033[0;1m" + (totalTasks > 1 ? " tasks" : " task") :
     process + (totalTasks > 1 ? " tasks" : " task");
     
+    // Atomic flag for tracking if processing is complete
     std::atomic<bool> isProcessingComplete(false);
 
-    // Start progress tracking in a separate thread.
+    // Start progress tracking in a separate thread
     std::thread progressThread(displayProgressBarWithSize, &completedBytes, 
                                  totalBytes, &completedTasks, &failedTasks, 
                                  totalTasks, &isProcessingComplete, &verbose, std::string(coloredProcess));
 
+    // Create a thread pool to handle the file operations
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
     futures.reserve(indexChunks.size());
 
-    // For each chunk, create a vector of file names and enqueue the operation.
+    // For each chunk, create a vector of file names and enqueue the operation
     for (const auto& chunk : indexChunks) {
         std::vector<std::string> isoFilesInChunk;
         isoFilesInChunk.reserve(chunk.size());
@@ -266,26 +285,34 @@ void processOperationInput(const std::string& input, const std::vector<std::stri
         }));
     }
 
+    // Wait for all threads to complete
     for (auto& future : futures) {
         future.wait();
     }
 	
+    // Mark processing as complete
     isProcessingComplete.store(true);
-    signal(SIGINT, SIG_IGN);  // Ignore Ctrl+C after completion of futures
+    
+    // Ignore Ctrl+C after completion
+    signal(SIGINT, SIG_IGN);  
+    
+    // Wait for the progress thread to finish
     progressThread.join();
     
-
+    // If not a delete operation, refresh the database for ISO files
     if (!isDelete) {
-		bool promptFlag = false;
+        bool promptFlag = false;
         int maxDepth = 0;
         manualRefreshForDatabase(userDestDir, promptFlag, maxDepth, filterHistory, newISOFound);
     }
     
+    // Save history and clear it if it's not a delete operation
     if (!isDelete && !operationIsos.empty()) {
         saveHistory(filterHistory);
         clear_history();
     }
 
+    // Clear the history after the operation is complete
     clear_history();
 }
 
@@ -338,32 +365,39 @@ size_t calculateSizeForConverted(const std::vector<std::string>& filesToProcess,
 
 // Function to process user input and convert selected BIN/MDF/NRG files to ISO format
 void processInput(const std::string& input, std::vector<std::string>& fileList, const bool& modeMdf, const bool& modeNrg, std::unordered_set<std::string>& processedErrors, std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, bool& verbose, bool& needsClrScrn, std::atomic<bool>& newISOFound) {
-	// Setup signal handler at the start of the operation
+    // Setup signal handler for cancellation (e.g., for Ctrl+C)
     setupSignalHandlerCancellations();
     
+    // Initialize the cancellation flag for the operation
     g_operationCancelled.store(false);
     
+    // Store paths of selected files
     std::unordered_set<std::string> selectedFilePaths;
     std::string concatenatedFilePaths;
 
+    // Track indices of files that are processed
     std::unordered_set<int> processedIndices;
+    // Tokenize the input and populate processedIndices with valid file indices
     if (!(input.empty() || std::all_of(input.begin(), input.end(), isspace))){
-		tokenizeInput(input, fileList, processedErrors, processedIndices);
-	} else {
-		return;
-	}
+        tokenizeInput(input, fileList, processedErrors, processedIndices);
+    } else {
+        return;  // If input is empty or contains only whitespaces, exit early
+    }
     
+    // If no valid files were processed, show a message and exit
     if (processedIndices.empty()) {
-		clearScrollBuffer();
-		std::cout << "\n\033[1;91mNo valid input provided.\033[1;91m\n";
-		std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-		needsClrScrn = true;
+        clearScrollBuffer();  // Clear the screen buffer
+        std::cout << "\n\033[1;91mNo valid input provided.\033[1;91m\n";  // Error message
+        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";  // Wait for user input to continue
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');  // Ignore input
+        needsClrScrn = true;  // Set flag for screen clearing
         return;
     }
 
-    // Ensure safe unsigned conversion of number of threads
+    // Ensure safe unsigned conversion for the number of threads to use
     unsigned int numThreads = std::min(static_cast<unsigned int>(processedIndices.size()), maxThreads);
+    
+    // Chunk the processed files into manageable sizes for processing (max 5 files per chunk)
     std::vector<std::vector<size_t>> indexChunks;
     const size_t maxFilesPerChunk = 5;
 
@@ -372,6 +406,7 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
     size_t chunkSize = std::min(maxFilesPerChunk, filesPerThread);
 
     auto it = processedIndices.begin();
+    // Divide processed indices into chunks
     for (size_t i = 0; i < totalFiles; i += chunkSize) {
         auto chunkEnd = std::next(it, std::min(chunkSize, 
             static_cast<size_t>(std::distance(it, processedIndices.end()))));
@@ -379,36 +414,40 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
         it = chunkEnd;
     }
     
+    // Create a list of files to process based on the indices
     std::vector<std::string> filesToProcess;
     for (const auto& index : processedIndices) {
         filesToProcess.push_back(fileList[index - 1]);
     }
 
-    // Calculate total bytes and tasks
-    size_t totalTasks = filesToProcess.size();  // Each file is a task
-    
+    // Calculate the total size of the files to be converted (in bytes) and the total number of tasks
+    size_t totalTasks = filesToProcess.size();
     size_t totalBytes = calculateSizeForConverted(filesToProcess, modeNrg, modeMdf);
 
-	std::string operation = modeMdf ? (std::string("\033[1;38;5;208mMDF\033[0;1m") + (totalTasks > 1 ? " conversions" : " conversion")) :
+    // Determine operation name based on the mode (MDF, NRG, BIN/IMG)
+    std::string operation = modeMdf ? (std::string("\033[1;38;5;208mMDF\033[0;1m") + (totalTasks > 1 ? " conversions" : " conversion")) :
                        modeNrg ? (std::string("\033[1;38;5;208mNRG\033[0;1m") + (totalTasks > 1 ? " conversions" : " conversion")) :
                                  (std::string("\033[1;38;5;208mBIN/IMG\033[0;1m") + (totalTasks > 1 ? " conversions" : " conversion"));
                      
-	clearScrollBuffer();
-    std::cout << "\n\033[0;1m Processing \001\033[1;38;5;208m\002" << operation << "\033[0;1m... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";
+    clearScrollBuffer();  // Clear the screen buffer before displaying progress
+    std::cout << "\n\033[0;1m Processing \001\033[1;38;5;208m\002" << operation << "\033[0;1m... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";  // Display operation message
 
+    // Atomic variables to track the progress (bytes and tasks completed, failed tasks)
     std::atomic<size_t> completedBytes(0);
     std::atomic<size_t> completedTasks(0);
     std::atomic<size_t> failedTasks(0);
     std::atomic<bool> isProcessingComplete(false);
 
-    // Use the enhanced progress bar with task tracking
+    // Create a thread for progress tracking (e.g., progress bar)
     std::thread progressThread(displayProgressBarWithSize, &completedBytes, 
         totalBytes, &completedTasks, &failedTasks, totalTasks, &isProcessingComplete, &verbose, std::string(operation));
 
+    // Create a thread pool and store the futures for each file processing task
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
     futures.reserve(indexChunks.size());
 
+    // Enqueue file conversion tasks to the thread pool
     for (const auto& chunk : indexChunks) {
         std::vector<std::string> imageFilesInChunk;
         imageFilesInChunk.reserve(chunk.size());
@@ -419,19 +458,27 @@ void processInput(const std::string& input, std::vector<std::string>& fileList, 
             [&fileList](size_t index) { return fileList[index - 1]; }
         );
 
+        // Add the file processing task to the thread pool
         futures.emplace_back(pool.enqueue([imageFilesInChunk = std::move(imageFilesInChunk), 
             &fileList, &successOuts, &skippedOuts, &failedOuts, 
             modeMdf, modeNrg, &completedBytes, &completedTasks, &failedTasks, &newISOFound]() {
-            // Process each file with task tracking
+            // Process each file (convert to ISO) and update progress
             convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts, 
                 modeMdf, modeNrg, &completedBytes, &completedTasks, &failedTasks, newISOFound);
         }));
     }
 
+    // Wait for all file processing tasks to finish
     for (auto& future : futures) {
         future.wait();
     }
+
+    // Mark the processing as complete
     isProcessingComplete.store(true);
-    signal(SIGINT, SIG_IGN);  // Ignore Ctrl+C after completion of futures
+    
+    // Disable Ctrl+C interrupt after the operation is complete
+    signal(SIGINT, SIG_IGN);  
+    
+    // Wait for the progress thread to finish
     progressThread.join();
 }

@@ -319,62 +319,85 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<s
 }
 
 
-// Function to parse device mappings for errors
+// Function to parse device mappings from a string and validate the mappings
 std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::string& pairString, const std::vector<std::string>& selectedIsos, std::vector<std::string>& errors) {
     
+    // Vector to hold the final device mappings (index, device)
     std::vector<std::pair<size_t, std::string>> deviceMap;
+    
+    // Unordered set to keep track of devices already used (to prevent duplicates)
     std::unordered_set<std::string> usedDevices;
+    
+    // Create a string stream from the input pair string to read individual pairs
     std::istringstream pairStream(pairString);
     std::string pair;
     
+    // Clear previous errors
     errors.clear();
     
+    // Read pairs separated by ';' from the input string
     while (std::getline(pairStream, pair, ';')) {
-        // Trim whitespace
-        pair.erase(pair.find_last_not_of(" \t\n\r\f\v") + 1);
-        pair.erase(0, pair.find_first_not_of(" \t\n\r\f\v"));
+        // Trim leading and trailing whitespace from the pair
+        pair.erase(pair.find_last_not_of(" \t\n\r\f\v") + 1);  // Remove trailing whitespace
+        pair.erase(0, pair.find_first_not_of(" \t\n\r\f\v"));    // Remove leading whitespace
+        
+        // Skip empty pairs
         if (pair.empty()) continue;
         
+        // Find the position of the '>' separator between index and device
         size_t sepPos = pair.find('>');
         if (sepPos == std::string::npos) {
+            // If no '>' is found, the format is invalid; log error and skip the pair
             errors.push_back("Invalid pair format: '" + pair + "'");
             continue;
         }
         
+        // Extract the index part (before '>') and the device part (after '>')
         std::string indexStr = pair.substr(0, sepPos);
         std::string device = pair.substr(sepPos + 1);
         
         try {
+            // Try to convert the index string to a size_t
             size_t index = std::stoul(indexStr);
+            
+            // Check if the index is valid (within the range of selected ISOs)
             if (index < 1 || index > selectedIsos.size()) {
                 errors.push_back("Invalid index " + indexStr);
                 continue;
             }
             
+            // Check if the device has been used already
             if (usedDevices.count(device)) {
                 errors.push_back("Device " + device + " used multiple times");
                 continue;
             }
             
+            // Add the valid mapping (index, device) to the deviceMap
             deviceMap.emplace_back(index, device);
-            usedDevices.insert(device);
+            usedDevices.insert(device);  // Mark this device as used
+            
         } catch (...) {
+            // If index conversion fails, log the error
             errors.push_back("Invalid index: '" + indexStr + "'");
         }
     }
     
-    // Validate all selected ISOs have at least one mapping
+    // Validate that all selected ISOs have at least one device mapping
     std::unordered_set<size_t> mappedIndices;
+    // Collect all indices that have been mapped to a device
     for (const auto& [index, device] : deviceMap) {
         mappedIndices.insert(index);
     }
     
+    // Check if each index from 1 to the number of selected ISOs is mapped
     for (size_t i = 1; i <= selectedIsos.size(); ++i) {
         if (mappedIndices.find(i) == mappedIndices.end()) {
+            // If an ISO index is not mapped, add an error
             errors.push_back("Missing mapping for ISO " + std::to_string(i));
         }
     }
     
+    // Return the vector of valid device mappings
     return deviceMap;
 }
 
