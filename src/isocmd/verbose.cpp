@@ -100,6 +100,20 @@ void resetVerboseSets(std::unordered_set<std::string>& processedErrors,std::unor
 }
 
 
+
+//Function to disblay errors from tokenization
+void displayErrors(std::unordered_set<std::string>& uniqueErrorMessages) {
+    // Display user input errors at the top
+    if (!uniqueErrorMessages.empty()) {
+        std::cout << "\n";
+        for (const auto& err : uniqueErrorMessages) {
+            std::cout << err << "\n";
+        }
+        uniqueErrorMessages.clear();
+    }
+}
+
+
 // CP/MV/RM
 
 // Function to handle error reporting for Cp/Mv/Rm

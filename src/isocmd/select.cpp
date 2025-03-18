@@ -295,11 +295,8 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         // Check specifically for "<" to return/exit
         if (inputString == "<") {
             if (isFiltered) {
-                pendingIndices.clear();
-                hasPendingProcess = false;
                 isFiltered = false;
                 needsClrScrn = true;
-                currentPage = 0; // Reset page when clearing filter
                 continue;
             } else {
                 return; // Exit the function
@@ -343,8 +340,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 
         // Handle filtering operations
         if (handleFilteringForISO(inputString, filteredFiles, isFiltered, needsClrScrn, 
-                                    filterHistory, pendingIndices, hasPendingProcess, 
-                                    currentPage, operation, operationColor, isoDirs, isUnmount)) {
+                                    filterHistory, operation, operationColor, isoDirs, isUnmount)) {
                 continue;
         }
 
@@ -435,13 +431,9 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
                 // Restore the original file list
                 files = (fileType == "bin" || fileType == "img") ? binImgFilesCache :
                         (fileType == "mdf" ? mdfMdsFilesCache : nrgFilesCache);
-                pendingIndices.clear();
-                hasPendingProcess = false;
                 needsClrScrn = true;
                 isFiltered = false; // Reset filter status
                 need2Sort = false;
-                // Reset page when exiting filtered list
-                currentPage = 0;
                 continue;
             } else {
                 need2Sort = false;
@@ -502,7 +494,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 
         // Handle filter commands
         if (mainInputString == "/" || (!mainInputString.empty() && mainInputString[0] == '/')) {
-            handleFilteringConvert2ISO(mainInputString, files, fileExtensionWithOutDots, pendingIndices, hasPendingProcess, isFiltered, needsClrScrn, filterHistory, need2Sort);
+            handleFilteringConvert2ISO(mainInputString, files, fileExtensionWithOutDots, isFiltered, needsClrScrn, filterHistory, need2Sort);
             continue;
         }// Check if input contains a semicolon for delayed execution
         else if (mainInputString.find(';') != std::string::npos) {

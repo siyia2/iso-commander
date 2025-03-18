@@ -49,11 +49,9 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
         loadFromDatabase(globalIsoFileList);
         {
             std::lock_guard<std::mutex> lock(updateListMutex);
-            // Clear any pending automatically unless user is on filtered list(already filtered lists are unaffected by main list changes)
-            if (!isFiltered) {
+            // Clear any pending automatically
 				pendingIndices.clear();
 				hasPendingProcess = false;
-			}
 			// Optimization: sort only if (needToReload) from database
             sortFilesCaseInsensitive(globalIsoFileList);
         }
@@ -62,16 +60,7 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
     // Lock to prevent simultaneous access to std::cout
     {
         std::lock_guard<std::mutex> printLock(couNtMutex);
-        if (umountMvRmBreak) {
-			if (isFiltered) {
-				// Reset pending flags if filtered but only for destructive list actions mv/rm (because they can modify already filtered lists)
-				pendingIndices.clear();
-				hasPendingProcess = false;
-				currentPage = 0;
-			}
-            isFiltered = false;
-            
-        }
+        if (umountMvRmBreak) isFiltered = false;
         printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType, pendingIndices, hasPendingProcess);
         
         if (globalIsoFileList.empty()) {
@@ -122,7 +111,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
         // Cache the sorted vector and update the hash
         lastSortedDirs = newIsoDirs;
         previousHash = currentHash;
-        // reset pending if list changed
+        // reset pending if list has changed
         pendingIndices.clear();
 		hasPendingProcess = false;
     } else {
@@ -145,8 +134,6 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
     clearScrollBuffer();
 
     if (filteredFiles.size() == isoDirs.size() || umountMvRmBreak) {
-		if (isFiltered) currentPage = 0;
-		std::vector<std::string>().swap(filteredFiles); 
         isFiltered = false;
         
     }
@@ -188,18 +175,5 @@ void clearAndLoadImageFiles(std::vector<std::string>& files, const std::string& 
 	}
 	
     printList(files, "IMAGE_FILES", "conversions", pendingIndices, hasPendingProcess); // Print the current list of files
-}
-
-
-//Function to disblay errors from tokenization
-void displayErrors(std::unordered_set<std::string>& uniqueErrorMessages) {
-    // Display user input errors at the top
-    if (!uniqueErrorMessages.empty()) {
-        std::cout << "\n";
-        for (const auto& err : uniqueErrorMessages) {
-            std::cout << err << "\n";
-        }
-        uniqueErrorMessages.clear();
-    }
 }
 

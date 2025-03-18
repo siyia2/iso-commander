@@ -5,7 +5,7 @@
 
 
 // Function to hanlde filtering for selectForIsoFiles
-bool handleFilteringForISO(const std::string& inputString, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, const std::string& operation, const std::string& operationColor, const std::vector<std::string>& isoDirs, bool isUnmount) {
+bool handleFilteringForISO(const std::string& inputString, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, const std::string& operation, const std::string& operationColor, const std::vector<std::string>& isoDirs, bool isUnmount) {
     // Check if the input indicates a filtering operation (must start with '/')
     if (inputString != "/" && (inputString.empty() || inputString[0] != '/')) {
         return false;  // Not a filtering operation
@@ -23,8 +23,8 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
             
             // Construct the prompt message with color formatting
             std::string filterPrompt = "\001\033[1;38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001" + 
-                                      operationColor + "\002" + operation + 
-                                      "\001\033[1;94m\002, or ↵ to return: \001\033[0;1m\002";
+                                         operationColor + "\002" + operation + 
+                                         "\001\033[1;94m\002, or ↵ to return: \001\033[0;1m\002";
             
             // Get user input using readline
             std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
@@ -42,7 +42,18 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
             const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
             
             if (!searchString.empty()) {
-                auto newFilteredFiles = filterFiles(sourceList, searchString);
+                // First, get a temporary filtered result based solely on file names
+                auto tempFiltered = filterFiles(sourceList, searchString);
+                
+                // Build new filtered files with original indices attached (adjusted by one).
+                std::vector<std::string> newFilteredFiles;
+                for (size_t i = 0; i < sourceList.size(); ++i) {
+                    // Check if the file at the original index is in the filtered results
+                    if (std::find(tempFiltered.begin(), tempFiltered.end(), sourceList[i]) != tempFiltered.end()) {
+						newFilteredFiles.push_back("\033[1;93m:" + std::to_string(i + 1) + "\033[0;1m" + sourceList[i]);
+
+					}
+                }
                 
                 bool filterUnchanged = newFilteredFiles.size() == sourceList.size();
                 bool hasResults = !newFilteredFiles.empty();
@@ -52,11 +63,8 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
                     add_history(searchQuery.get()); // Save filter query to history
                     saveHistory(filterHistory);
                     needsClrScrn = true;
-                    pendingIndices.clear(); // Clear pending indices
-                    hasPendingProcess = false; // Reset pending process flag
-                    filteredFiles = std::move(newFilteredFiles); // Update filtered results
+                    filteredFiles = std::move(newFilteredFiles); // Update filtered results with indices
                     isFiltered = true;
-                    currentPage = 0; // Reset to first page after filtering
                     clear_history();
                     return true;
                 } else if (!hasResults) {
@@ -71,7 +79,15 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
         
         if (!searchString.empty()) {
             const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
-            auto newFilteredFiles = filterFiles(sourceList, searchString);
+            auto tempFiltered = filterFiles(sourceList, searchString);
+            
+            // Build new filtered files with original indices attached (adjusted by one).
+            std::vector<std::string> newFilteredFiles;
+            for (size_t i = 0; i < sourceList.size(); ++i) {
+                 if (std::find(tempFiltered.begin(), tempFiltered.end(), sourceList[i]) != tempFiltered.end()) {
+                   newFilteredFiles.push_back("\033[1;93m:" + std::to_string(i + 1) + "\033[0;1m" + sourceList[i]);
+                }        
+            }
             
             bool filterUnchanged = newFilteredFiles.size() == sourceList.size();
             bool hasResults = !newFilteredFiles.empty();
@@ -83,11 +99,8 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
                 add_history(searchString.c_str()); // Save query to history
                 saveHistory(filterHistory);
                 needsClrScrn = true;
-                pendingIndices.clear(); // Clear pending indices
-                hasPendingProcess = false; // Reset pending process flag
                 filteredFiles = std::move(newFilteredFiles);
                 isFiltered = true;
-                currentPage = 0; // Reset to first page
             }
         }
     }
@@ -96,8 +109,10 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
 }
 
 
+
+
 // Handle filtering for select_and_convert_to_iso
-void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<std::string>& files, const std::string& fileExtensionWithOutDots, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, bool& need2Sort) {
+void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<std::string>& files, const std::string& fileExtensionWithOutDots, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, bool& need2Sort) {
     
     if (mainInputString == "/") {
         std::cout << "\033[1A\033[K";
@@ -122,13 +137,13 @@ void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<
                 break;
             }
 
-            // Filter files based on the input search query
-            auto filteredFiles = filterFiles(files, inputSearch);
-            if (filteredFiles.empty()) {
+            // Get the temporary filtered list (without indices)
+            auto tempFiltered = filterFiles(files, inputSearch);
+            if (tempFiltered.empty()) {
                 std::cout << "\033[1A\033[K";
                 continue; // Skip if no files match the filter
             }
-            if (filteredFiles.size() == files.size()) {
+            if (tempFiltered.size() == files.size()) {
                 std::cout << "\033[2A\033[K";
                 needsClrScrn = false;
                 need2Sort = false;
@@ -139,40 +154,52 @@ void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<
                 add_history(rawSearchQuery.get());
                 saveHistory(filterHistory);
             } catch (const std::exception& e) {
-                // Optionally, you can log the error or take other actions here
+                // Optionally, log the error or handle it
             }
             
             filterHistory = false;
             clear_history(); // Clear history to reset for future inputs
             need2Sort = true;
-            files = filteredFiles; // Update the file list with the filtered results
+            
+            // Build new filtered files with original indices adjusted by one.
+            std::vector<std::string> newFiltered;
+            for (size_t i = 0; i < files.size(); ++i) {
+                if (std::find(tempFiltered.begin(), tempFiltered.end(), files[i]) != tempFiltered.end()) {
+                    newFiltered.push_back(std::to_string(i + 1) + ": " + files[i]);
+                }
+            }
+            
+            files = newFiltered; // Update the file list with the filtered results
             needsClrScrn = true;
             isFiltered = true;
-            pendingIndices.clear();
-            hasPendingProcess = false;
             break;
         }
     } else if (mainInputString[0] == '/' && mainInputString.size() > 1) {
-        // Directly filter the files based on the input without showing the filter prompt
+        // Direct filtering mode without showing the filter prompt
         std::string inputSearch(mainInputString.substr(1)); // Skip the '/' character
-        auto filteredFiles = filterFiles(files, inputSearch);
-        if (!filteredFiles.empty() && !(filteredFiles.size() == files.size())) {
+        auto tempFiltered = filterFiles(files, inputSearch);
+        if (!tempFiltered.empty() && tempFiltered.size() != files.size()) {
             filterHistory = true;
             loadHistory(filterHistory);
             try {
                 add_history(inputSearch.c_str());
                 saveHistory(filterHistory);
             } catch (const std::exception& e) {
-                // Optionally, you can log the error or take other actions here
+                // Optionally, log the error or handle it
             }
             
             need2Sort = true;
-            files = filteredFiles; // Update the file list with the filtered results
+            // Build new filtered files with indices adjusted by one.
+            std::vector<std::string> newFiltered;
+            for (size_t i = 0; i < files.size(); ++i) {
+                if (std::find(tempFiltered.begin(), tempFiltered.end(), files[i]) != tempFiltered.end()) {
+                   newFiltered.push_back("\033[1;93m:" + std::to_string(i + 1) + "\033[0;1m" + files[i]);
+                }     
+            }
             
+            files = newFiltered; // Update the file list with the filtered results
             isFiltered = true;
             needsClrScrn = true;
-            pendingIndices.clear();
-            hasPendingProcess = false;
             
             clear_history();
         } else {
