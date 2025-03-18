@@ -70,6 +70,10 @@ void helpSearches(bool isCpMv, bool import2ISO) {
               << "   • Multiple directories: Separate with ; (e.g., '/directory1/;/directory2/')" << (isCpMv ? "" : "\n") << std::endl;
     if (isCpMv) {
         std::cout << "   • Overwrite files for cp/mv: Append -o (e.g., '/directory/ -o' or '/directory1/;/directory2/ -o')\n" << std::endl;
+        
+        std::cout << "\033[1;32m2. Tips:\033[0m\n"
+        << "   • Performing mv on single destination path on the same device is instant\n"
+        << "   • Performing mv on multiple destination paths utilizes cp and fs::remove (slower)\n" << std::endl;
     }
     
     if (!isCpMv) {
