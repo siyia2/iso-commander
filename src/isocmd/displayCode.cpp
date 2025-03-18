@@ -67,7 +67,7 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
     {
         std::lock_guard<std::mutex> printLock(couNtMutex);
         if (umountMvRmBreak) {
-			// Clear the filtering stack when returning to unfiltered mode from list modifications with Cp/Mv
+			// Clear the filtering stack when returning to unfiltered mode from list modifications with Mv/Rm
 			filteringStack.clear();
 			isFiltered = false;
 		}
