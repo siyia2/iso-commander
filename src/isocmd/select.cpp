@@ -163,8 +163,9 @@ bool handlePendingProcess(const std::string& inputString,std::vector<std::string
 
 
 // Function to automatically update ISO list if auto-update is on
-void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, bool& umountMvRmBreak, std::vector<std::string>& filteredFiles, bool& isFiltered, std::string& listSubtype, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, std::atomic<bool>& newISOFound) {
+void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, bool& umountMvRmBreak, std::vector<std::string>& filteredFiles, bool& isFiltered, std::string& listSubtype, std::vector<std::string>& pendingIndices, bool& hasPendingProcess,std::string& operationColor, const std::string& operation, std::atomic<bool>& newISOFound) {
     // Continuously checks for conditions at intervals specified by timeoutSeconds
+    
     while (true) {
         // Sleep for the given timeout (1s) before checking the conditions
         std::this_thread::sleep_for(std::chrono::seconds(timeoutSeconds));
@@ -177,10 +178,12 @@ void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOLi
 
                 // If conditions are met, clear and reload the filtered file list with the updated data
                 clearAndLoadFiles(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess);
-            
+				std::string prompt = "\001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001"
+                           + operationColor + "\002" + operation 
+                           + "\001\033[1;94m\002, ? ↵ for help, < ↵ to return:\001\033[0;1m\002 ";
                 // Output a new line to indicate that the list has been updated
                 std::cout << "\n";
-                rl_on_new_line();  // Move the cursor to the new line
+                rl_set_prompt(prompt.c_str());
                 rl_redisplay();    // Refresh the readline interface to display updated content
             }
 
@@ -277,13 +280,14 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         if (updateHasRun.load() && !isUnmount && !globalIsoFileList.empty()) {
             std::thread(refreshListAfterAutoUpdate, 1, std::ref(isAtISOList), 
                         std::ref(isImportRunning), std::ref(updateHasRun), std::ref(umountMvRmBreak),
-                        std::ref(filteredFiles), std::ref(isFiltered), std::ref(listSubtype), std::ref(pendingIndices), std::ref(hasPendingProcess), std::ref(newISOFound)).detach();
+                        std::ref(filteredFiles), std::ref(isFiltered), std::ref(listSubtype), std::ref(pendingIndices), 
+                        std::ref(hasPendingProcess), std::ref(operationColor), std::ref(operation), std::ref(newISOFound)).detach();
         }
            
         std::cout << "\033[1A\033[K";
         
         // Generate prompt - updated to remove "↵" after "<"
-        std::string prompt = ("\001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001")
+        std::string prompt = (isFiltered ? "\001\033[1;96m\002F⊳ \001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001" : "\001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001")
                            + operationColor + "\002" + operation 
                            + "\001\033[1;94m\002, ? ↵ for help, < ↵ to return:\001\033[0;1m\002 ";
 
@@ -417,7 +421,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         std::cout << "\033[1A\033[K";
         
         // Build the user prompt string dynamically
-        std::string prompt = ("\001\033[1;38;5;208m\002")
+        std::string prompt = (isFiltered ? "\001\033[1;96m\002F⊳ \001\033[1;38;5;208m\002" : "\001\033[1;38;5;208m\002")
                          + fileExtensionWithOutDots + "\001\033[1;94m\002 ↵ for \001\033[1;92m\002ISO\001\033[1;94m\002 conversion, ? ↵ for help, < ↵ to return:\001\033[0;1m\002 ";
         
         // Get user input
