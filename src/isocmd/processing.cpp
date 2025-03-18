@@ -156,6 +156,19 @@ std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::unordered
 }
 
 
+// Function to get the total size of files
+size_t getTotalFileSize(const std::vector<std::string>& files) {
+    size_t totalSize = 0;
+    for (const auto& file : files) {
+        struct stat st;
+        if (stat(file.c_str(), &st) == 0) {
+            totalSize += st.st_size;
+        }
+    }
+    return totalSize;
+}
+
+
 // Function to process selected indices for cpMvDel accordingly
 void processOperationInput(const std::string& input, const std::vector<std::string>& isoFiles, const std::string& process, std::unordered_set<std::string>& operationIsos, std::unordered_set<std::string>& operationErrors, std::unordered_set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& filterHistory, bool& verbose, std::atomic<bool>& newISOFound) {
     setupSignalHandlerCancellations();

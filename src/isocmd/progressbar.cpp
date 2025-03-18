@@ -3,18 +3,6 @@
 #include "../headers.h"
 
 
-// Function to get the total size of files
-size_t getTotalFileSize(const std::vector<std::string>& files) {
-    size_t totalSize = 0;
-    for (const auto& file : files) {
-        struct stat st;
-        if (stat(file.c_str(), &st) == 0) {
-            totalSize += st.st_size;
-        }
-    }
-    return totalSize;
-}
-
 // Terminal blocking for progress bar
 
 struct termios oldt;
@@ -40,6 +28,7 @@ void restoreInput(struct termios *oldt, int oldf) {
     tcsetattr(STDIN_FILENO, TCSANOW, oldt);
     fcntl(STDIN_FILENO, F_SETFL, oldf);
 }
+
 
 // End of terminal blocking for progress bar
 
