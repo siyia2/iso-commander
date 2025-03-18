@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GNU General Public License v2.0
 
 #include "../headers.h"
+#include "../threadpool.h"
 
 
 // Function to hanlde filtering for selectForIsoFiles
@@ -295,6 +296,7 @@ std::string removeAnsiCodes(const std::string& input) {
 std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query) {
     // Reserve memory for filteredFiles (we will merge per thread later).
     std::vector<std::string> filteredFiles;
+    ThreadPool pool(maxThreads);  // Initialize ThreadPool
 
     // Structure to hold token information.
     struct QueryToken {
@@ -341,10 +343,10 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
     // Determine the chunk size for dividing work among threads.
     size_t chunkSize = (totalFiles + maxThreads - 1) / maxThreads;
     
-    // Vector to store async tasks.
+    // Vector to store futures for thread pool tasks
     std::vector<std::future<std::vector<std::string>>> futures;
 
-    // Launch asynchronous tasks to process chunks of files.
+    // Submit tasks to the thread pool
     for (unsigned int i = 0; i < maxThreads; ++i) {
         size_t start = i * chunkSize;
         size_t end = std::min(totalFiles, (i + 1) * chunkSize);
@@ -353,8 +355,8 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
         if (start >= end)
             break;
         
-        // Launch a parallel task for processing a subset of files.
-        futures.push_back(std::async(std::launch::async, [start, end, &files, &queryTokens, needLowerCaseFile]() -> std::vector<std::string> {
+        // Submit a task to the thread pool
+        futures.emplace_back(pool.enqueue([start, end, &files, &queryTokens, needLowerCaseFile]() -> std::vector<std::string> {
             std::vector<std::string> localMatches; // Store matching files for this thread.
 
             for (size_t j = start; j < end; ++j) {
@@ -398,7 +400,7 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
         }));
     }
     
-    // Merge results from all threads.
+    // Merge results from all thread pool tasks
     for (auto& fut : futures) {
         std::vector<std::string> localResult = fut.get();
         filteredFiles.insert(filteredFiles.end(),
