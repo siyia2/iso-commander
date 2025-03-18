@@ -175,12 +175,13 @@ void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOLi
 
             // Check if a new ISO was found and the list is at the ISO list
             if (newISOFound.load() && isAtISOList.load()) {
-
                 // If conditions are met, clear and reload the filtered file list with the updated data
                 clearAndLoadFiles(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess);
+                // Prompt for refreshed readline
 				std::string prompt = "\001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001"
                            + operationColor + "\002" + operation 
                            + "\001\033[1;94m\002, ? ↵ for help, < ↵ to return:\001\033[0;1m\002 ";
+                           
                 // Output a new line to indicate that the list has been updated
                 std::cout << "\n";
                 rl_set_prompt(prompt.c_str());
