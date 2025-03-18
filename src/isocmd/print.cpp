@@ -83,7 +83,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
             filteredIndexStr.insert(0, currentNumDigits - filteredIndexStr.length(), ' ');
             
             output << sequenceColor << filteredIndexStr << "." << defaultColor << bold;
-            output << "(^" << yellowBold << originalIndexStr << defaultColor << bold << ") ";
+            output << "^(" << yellowBold << originalIndexStr << defaultColor << bold << ") ";
         } else {
             // Just use the regular index for non-filtered items
             currentIndex = i + 1;
