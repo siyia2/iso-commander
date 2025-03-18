@@ -60,7 +60,11 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
     // Lock to prevent simultaneous access to std::cout
     {
         std::lock_guard<std::mutex> printLock(couNtMutex);
-        if (umountMvRmBreak) isFiltered = false;
+        if (umountMvRmBreak) {
+			// Clear the filtering stack when returning to unfiltered mode
+			filteringStack.clear();
+			isFiltered = false;
+		}
         printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType, pendingIndices, hasPendingProcess, isFiltered);
         
         if (globalIsoFileList.empty()) {
@@ -134,6 +138,8 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
     clearScrollBuffer();
 
     if (filteredFiles.size() == isoDirs.size() || umountMvRmBreak) {
+		// Clear the filtering stack when returning to unfiltered mode
+        filteringStack.clear();
         isFiltered = false;
         
     }

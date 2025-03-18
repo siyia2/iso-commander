@@ -297,7 +297,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         if (inputString == "<") {
             if (isFiltered) {
                 isFiltered = false;
-                // clear the filtering stack when returning to unfiltered mode
+                // Clear the filtering stack when returning to unfiltered mode
                 filteringStack.clear();
                 needsClrScrn = true;
                 continue;
@@ -436,7 +436,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
                         (fileType == "mdf" ? mdfMdsFilesCache : nrgFilesCache);
                 needsClrScrn = true;
                 isFiltered = false; // Reset filter status
-                // clear the filtering stack when returning to unfiltered mode
+                // Clear the filtering stack when returning to unfiltered mode
                 filteringStack.clear();
                 need2Sort = false;
                 continue;
