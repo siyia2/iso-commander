@@ -3,6 +3,12 @@
 #include "../headers.h"
 
 
+// Function to check if a directory input is valid for searches
+bool isValidDirectory(const std::string& path) {
+    return std::filesystem::is_directory(path);
+}
+
+
 // Function for manual database refresh for displaying ISO list
 void manualRefreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, bool filterHistory, std::atomic<bool>& newISOFound) {
     try {

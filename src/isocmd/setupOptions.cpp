@@ -3,6 +3,9 @@
 #include "../headers.h"
 #include "../display.h"
 
+const std::string configPath = std::string(getenv("HOME")) + ".config/isocmd/config";
+
+
 // Function to read and map config file
 std::map<std::string, std::string> readConfig(const std::string& configPath) {
     std::map<std::string, std::string> config;

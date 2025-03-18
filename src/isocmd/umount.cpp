@@ -6,6 +6,30 @@
 #include "../umount.h"
 
 
+// Function to check if directory is empty for umount
+bool isDirectoryEmpty(const std::string& path) {
+    DIR* dir = opendir(path.c_str());
+    if (dir == nullptr) {
+        return false;  // Unable to open directory
+    }
+    
+    errno = 0;  // Reset errno
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != nullptr) {
+        if (strcmp(entry->d_name, ".") != 0 && 
+            strcmp(entry->d_name, "..") != 0) {
+            closedir(dir);
+            return false;  // Found a real entry, directory not empty
+        }
+    }
+    
+    // Check if readdir() set errno
+    bool isEmpty = (errno == 0);
+    closedir(dir);
+    return isEmpty;
+}
+
+
 // Function to perform unmount using umount2
 void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std::string>& unmountedFiles, std::unordered_set<std::string>& unmountedErrors, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks) {
 

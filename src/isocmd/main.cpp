@@ -7,28 +7,9 @@
 // Get max available CPU cores for global use, fallback is 2 cores
 unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
-// Global mutex to protect the verbose sets
-std::mutex globalSetsMutex;
-
-const std::string configPath = std::string(getenv("HOME")) + "/.config/isocmd/config";
 
 // Global falg to track cancellation
 std::atomic<bool> g_operationCancelled{false};
-
-// Hold current page for pagination
-size_t currentPage = 0;
-
-// Default max entries per listed page
-size_t ITEMS_PER_PAGE = 25;
-
-// Default Display config options for lists
-namespace displayConfig {
-    bool toggleFullListMount = false;
-    bool toggleFullListUmount = true;
-    bool toggleFullListCpMvRm = false;
-    bool toggleFullListWrite = false;
-    bool toggleFullListConversions = false;
-}
 
 
 // Main function

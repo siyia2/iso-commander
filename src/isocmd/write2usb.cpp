@@ -131,6 +131,132 @@ std::vector<std::string> getRemovableDevices() {
 }
 
 
+// Function to check if block device is usb for write2usb
+bool isUsbDevice(const std::string& devicePath) {
+    try {
+		// Early return if path doesn't start with "/dev/"
+        if (devicePath.substr(0, 5) != "/dev/") {
+            return false;
+        }
+        // Extract device name (e.g., "sdb" from "/dev/sdb")
+        size_t lastSlash = devicePath.find_last_of('/');
+        std::string deviceName = (lastSlash == std::string::npos) ? 
+            devicePath : devicePath.substr(lastSlash + 1);
+            
+        // Skip if empty or is a partition (contains numbers)
+        if (deviceName.empty() || 
+            std::any_of(deviceName.begin(), deviceName.end(), ::isdigit)) {
+            return false;
+        }
+
+        // Base sysfs path
+        std::string sysPath = "/sys/block/" + deviceName;
+        if (!std::filesystem::exists(sysPath)) {
+            return false;
+        }
+
+        bool isUsb = false;
+
+        // Method 1: Check device/vendor ID in device path
+        std::error_code ec;
+        std::string resolvedPath = std::filesystem::canonical(sysPath, ec).string();
+        if (!ec) {
+            // Look for patterns like "usb" or "0951" (common USB vendor IDs)
+            isUsb = resolvedPath.find("/usb") != std::string::npos;
+        }
+
+        // Method 2: Check various uevent locations
+        std::vector<std::string> ueventPaths = {
+            sysPath + "/device/uevent",
+            sysPath + "/uevent"
+        };
+
+        for (const auto& path : ueventPaths) {
+            std::ifstream uevent(path);
+            std::string line;
+            while (std::getline(uevent, line)) {
+                // Check for various USB indicators
+                if (line.find("ID_BUS=usb") != std::string::npos ||
+                    line.find("DRIVER=usb") != std::string::npos ||
+                    line.find("ID_USB") != std::string::npos) {
+                    isUsb = true;
+                    break;
+                }
+            }
+            if (isUsb) break;
+        }
+
+        // Method 3: Check if device has USB-specific attributes
+        std::vector<std::string> usbIndicators = {
+            sysPath + "/device/speed",      // USB speed attribute
+            sysPath + "/device/version",    // USB version
+            sysPath + "/device/manufacturer" // USB manufacturer
+        };
+
+        for (const auto& path : usbIndicators) {
+            if (std::filesystem::exists(path)) {
+                isUsb = true;
+                break;
+            }
+        }
+
+        // Only consider it a USB device if we found USB indicators AND
+        // can verify it's removable (if removable info is available)
+        std::string removablePath = sysPath + "/removable";
+        std::ifstream removableFile(removablePath);
+        std::string removable;
+        if (removableFile && std::getline(removableFile, removable)) {
+            return isUsb && (removable == "1");
+        }
+
+        // If we can't check removable status, rely on USB indicators alone
+        return isUsb;
+
+    } catch (const std::exception&) {
+        return false;
+    }
+}
+
+
+// Function to check if usb device is mounted for write2usb
+bool isDeviceMounted(const std::string& device) {
+    std::ifstream mountsFile("/proc/mounts");
+    if (!mountsFile.is_open()) {
+        return false; // Can't check mounts, assume not mounted for safety
+    }
+
+    std::string line;
+    std::string deviceName = device;
+    
+    // Remove "/dev/" prefix if present for consistent comparison
+    if (deviceName.substr(0, 5) == "/dev/") {
+        deviceName = deviceName.substr(5);
+    }
+    
+    while (std::getline(mountsFile, line)) {
+        std::istringstream iss(line);
+        std::string mountDevice;
+        iss >> mountDevice;
+        
+        // Remove "/dev/" prefix from mounted device for comparison
+        if (mountDevice.substr(0, 5) == "/dev/") {
+            mountDevice = mountDevice.substr(5);
+        }
+        
+        // Check if the device or any of its partitions are mounted
+        if (mountDevice == deviceName || 
+            (mountDevice.find(deviceName) == 0 && 
+             std::isdigit(mountDevice[deviceName.length()]))) {
+            mountsFile.close();
+            return true;
+        }
+    }
+    
+    mountsFile.close();
+    return false;
+}
+
+
 // Function used for pair (ISO>DEVICE) validation
 std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<std::pair<size_t, std::string>>& deviceMap, const std::vector<IsoInfo>& selectedIsos, bool& permissions) {
     

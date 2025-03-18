@@ -3,6 +3,12 @@
 #include "../headers.h"
 
 
+// Function to check if a file already exists for conversion output
+bool fileExists(const std::string& fullPath) {
+        return std::filesystem::exists(fullPath);
+}
+
+
 // Function to convert a BIN/IMG/MDF/NRG file to ISO format
 void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, const bool& modeMdf, const bool& modeNrg, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, std::atomic<bool>& newISOFound) {
 

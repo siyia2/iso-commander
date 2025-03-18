@@ -3,6 +3,20 @@
 #include "../headers.h"
 
 
+// Function to check if a string starts with '0' for tokenize input
+bool startsWithZero(const std::string& str) {
+    return !str.empty() && str[0] == '0';
+}
+
+
+// Function to check if a string is numeric for tokenize
+bool isNumeric(const std::string& str) {
+    return std::all_of(str.begin(), str.end(), [](char c) {
+        return std::isdigit(c);
+    });
+}
+
+
 // General function to tokenize input strings
 void tokenizeInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<int>& processedIndices) {
     std::istringstream iss(input);

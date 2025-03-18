@@ -4,6 +4,16 @@
 #include "../display.h"
 
 
+// Default Display config options for lists
+namespace displayConfig {
+    bool toggleFullListMount = false;
+    bool toggleFullListUmount = true;
+    bool toggleFullListCpMvRm = false;
+    bool toggleFullListWrite = false;
+    bool toggleFullListConversions = false;
+}
+
+
 // Function to automatically update ISO list if auto-update is on
 void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, bool& umountMvRmBreak, std::vector<std::string>& filteredFiles, bool& isFiltered, std::string& listSubtype, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, std::atomic<bool>& newISOFound) {
     while (true) {

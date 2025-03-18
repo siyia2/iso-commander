@@ -4,6 +4,13 @@
 #include "../display.h"
 
 
+// Hold current page for pagination
+size_t currentPage = 0;
+
+// Default max entries per listed page
+size_t ITEMS_PER_PAGE = 25;
+
+
 // Main pagination function
 bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPages, size_t& currentPage, bool& needsClrScrn, const bool isMount, const bool isUnmount, const bool isWrite, const bool isConversion, std::atomic<bool>& isAtISOList) {
 	

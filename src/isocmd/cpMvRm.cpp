@@ -98,6 +98,57 @@ std::string getPathErrorMessage(const std::string& path) {
 }
 
 
+// Function to validate Linux file paths for Cp/Mv FolderPath prompt
+bool isValidLinuxPath(const std::string& path) {
+    // Check if path starts with a forward slash (absolute path)
+    if (path.empty() || path[0] != '/') {
+        return false;
+    }
+    
+    // Check for invalid characters in path
+    const std::string invalidChars = "|><&*?`$()[]{}\"'\\";
+    
+    for (char c : invalidChars) {
+        if (path.find(c) != std::string::npos) {
+            return false;
+        }
+    }
+    
+    // Check for control characters
+    for (char c : path) {
+        if (iscntrl(static_cast<unsigned char>(c))) {
+            return false;
+        }
+    }
+    
+    // Avoid paths that are just spaces
+    bool isOnlySpaces = true;
+    for (char c : path) {
+        if (c != ' ' && c != '\t') {
+            isOnlySpaces = false;
+            break;
+        }
+    }
+    
+    if (isOnlySpaces && !path.empty()) {
+        return false;
+    }
+    
+    // Check if path exists
+    struct stat pathStat;
+    if (stat(path.c_str(), &pathStat) != 0) {
+        return false; // Path doesn't exist
+    }
+    
+    // Ensure it's a directory
+    if (!S_ISDIR(pathStat.st_mode)) {
+        return false; // Path exists but is not a directory
+    }
+    
+    return true;
+}
+
+
 // Function to prompt for userDestDir or Delete confirmation including pagination
 std::string userDestDirRm(const std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::unordered_set<std::string>& uniqueErrorMessages, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& filterHistory, bool& isDelete, bool& isCopy, bool& abortDel,
 bool& overwriteExisting){
