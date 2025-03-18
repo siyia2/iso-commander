@@ -41,7 +41,7 @@
 #include <unordered_set>
 
 
-// Create alias (fs) for the std::filesystem
+// Global alias (fs) for the std::filesystem
 namespace fs = std::filesystem;
 
 // Get max available CPU cores for global use
@@ -110,7 +110,7 @@ extern size_t currentPage;
 // Hold max entries per page for pagination
 extern size_t ITEMS_PER_PAGE;
 
-// Global variable to lock program
+// Global variable to lock the program into one instance
 extern int lockFileDescriptor;
 
 
