@@ -7,6 +7,192 @@
 // ISO SELECTION
 
 
+// Function to process results from selectIsoFiles
+void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& skippedMessages, const std::string& operation, bool& verbose, bool isMount, bool& isFiltered, bool& umountMvRmBreak, bool isUnmount, bool& needsClrScrn) {
+    // Result handling and display
+    if (!uniqueErrorMessages.empty() && operationFiles.empty() && operationFails.empty() && skippedMessages.empty()) {
+        clearScrollBuffer();
+        needsClrScrn = true;
+        std::cout << "\n\033[1;91mNo valid input provided.\033[0;1m\n\n\033[1;32m↵ to continue...\033[0;1m";
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    } else if (verbose) {
+        clearScrollBuffer();
+        needsClrScrn = true;
+        std::unordered_set<std::string> conditionalSet = isMount ? skippedMessages : std::unordered_set<std::string>{};
+        std::unordered_set<std::string> emptySet{};
+        verbosePrint(operationFiles, operationFails, conditionalSet, uniqueErrorMessages, isMount ? 2 : 1);
+    }
+
+    // Reset filter for certain operations
+    if ((operation == "mv" || operation == "rm" || operation == "umount") && isFiltered && umountMvRmBreak) {
+        clear_history();
+        needsClrScrn = true;
+    }
+
+    // For non-umount operations, if there are no ISOs in the global list, inform the user.
+    if (!isUnmount && globalIsoFileList.empty()) {
+        clearScrollBuffer();
+        needsClrScrn = true;
+        std::cout << "\n\033[1;93mNo ISO available for " << operation << ".\033[0m\n\n";
+        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        return;
+    }
+}
+
+
+// Function to process operations from selectIsoFiles
+void processOperationForSelectedIsoFiles(const std::string& inputString, bool isMount, bool isUnmount, bool write, bool& isFiltered, const std::vector<std::string>& filteredFiles, std::vector<std::string>& isoDirs, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<std::string>& skippedMessages, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool& filterHistory, std::atomic<bool>& newISOFound) {
+    
+    clearScrollBuffer();
+    // Default flags
+    needsClrScrn = true;
+    bool verbose = false;
+    
+    if (isMount || isUnmount) {
+        isAtISOList.store(false);
+        
+        // Determine which list to use
+        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : 
+                                                    (isUnmount ? isoDirs : globalIsoFileList);
+        
+        // Set umountMvRmBreak for unmount operations
+        if (isUnmount) {
+            umountMvRmBreak = true;
+        }
+        
+        // Use the merged function for both mount and unmount
+        processIsoOperations(inputString, activeList, operationFiles, skippedMessages, 
+                            operationFails, uniqueErrorMessages, umountMvRmBreak, verbose, isUnmount);
+    } else if (write) {
+        isAtISOList.store(false);
+        // Use const reference instead of copying
+        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : globalIsoFileList;
+        writeToUsb(inputString, activeList, uniqueErrorMessages);
+    } else {
+        isAtISOList.store(false);
+        // Use const reference instead of copying
+        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : globalIsoFileList;
+        processOperationInput(inputString, activeList, operation, operationFiles, operationFails, 
+                             uniqueErrorMessages, umountMvRmBreak, filterHistory, verbose, newISOFound);
+    }
+    
+    handleSelectIsoFilesResults(uniqueErrorMessages, operationFiles, operationFails, skippedMessages, 
+                               operation, verbose, isMount, isFiltered, umountMvRmBreak, isUnmount, needsClrScrn);
+}
+
+
+// Parse pending indices and remove duplicates
+bool handlePendingInduction(const std::string& inputString, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& needsClrScrn) {
+    // Check if the input contains a semicolon and does not contain a slash
+    if (inputString.find(';') == std::string::npos || inputString.find('/') != std::string::npos) {
+        return false;
+    }
+
+    // Strip the semicolon from the input
+    std::string indicesInput = inputString.substr(0, inputString.find(';'));
+    
+    // Trim whitespace from the end
+    while (!indicesInput.empty() && std::isspace(indicesInput.back())) {
+        indicesInput.pop_back();
+    }
+    
+    if (!indicesInput.empty()) {
+        // Parse and store the indices
+        std::istringstream iss(indicesInput);
+        std::string token;
+        
+        // Use a set to track duplicates
+        std::unordered_set<std::string> uniqueTokens;
+        
+        // Add existing pending indices to the set to ensure no duplicates
+        for (const auto& index : pendingIndices) {
+            uniqueTokens.insert(index);
+        }
+        
+        // Temporarily store new indices to preserve order
+        std::vector<std::string> newIndices;
+        
+        // Parse new indices and add them to the vector if they are not duplicates
+        while (iss >> token) {
+            if (uniqueTokens.find(token) == uniqueTokens.end()) { // Check if the token is not already in the set
+                newIndices.push_back(token); // Add to the newIndices vector
+                uniqueTokens.insert(token); // Add to the set to track duplicates
+            }
+        }
+        
+        // Append new indices to pendingIndices
+        pendingIndices.insert(pendingIndices.end(), newIndices.begin(), newIndices.end());
+        
+        if (!pendingIndices.empty()) {
+            hasPendingProcess = true;
+            needsClrScrn = true;
+            return true;
+        }
+    }
+    return false;
+}
+
+
+// Function to handle Pending Execution
+bool handlePendingProcess(const std::string& inputString,std::vector<std::string>& pendingIndices,bool& hasPendingProcess,bool isMount,bool isUnmount,bool write,bool isFiltered, std::vector<std::string>& filteredFiles,std::vector<std::string>& isoDirs,std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& skippedMessages,std::unordered_set<std::string>& operationFails,std::unordered_set<std::string>& uniqueErrorMessages, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool& filterHistory, std::atomic<bool>& newISOFound) {
+    
+    if (hasPendingProcess && !pendingIndices.empty() && inputString == "proc") {
+        // Combine all pending indices into a single string as if they were entered normally
+        std::string combinedIndices = "";
+        for (size_t i = 0; i < pendingIndices.size(); ++i) {
+            combinedIndices += pendingIndices[i];
+            if (i < pendingIndices.size() - 1) {
+                combinedIndices += " ";
+            }
+        }
+        
+        // Process the pending operations
+        processOperationForSelectedIsoFiles(combinedIndices, isMount, isUnmount, write, isFiltered, 
+                 filteredFiles, isoDirs, operationFiles, 
+                 operationFails, uniqueErrorMessages, skippedMessages,
+                 needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
+                 filterHistory, newISOFound);
+
+        return true;
+    }
+    
+    return false;
+}
+
+
+// Function to automatically update ISO list if auto-update is on
+void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, bool& umountMvRmBreak, std::vector<std::string>& filteredFiles, bool& isFiltered, std::string& listSubtype, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, std::atomic<bool>& newISOFound) {
+    // Continuously checks for conditions at intervals specified by timeoutSeconds
+    while (true) {
+        // Sleep for the given timeout (1s) before checking the conditions
+        std::this_thread::sleep_for(std::chrono::seconds(timeoutSeconds));
+
+        // Only proceed if the import process is not running
+        if (!isImportRunning.load()) {
+
+            // Check if a new ISO was found and the list is at the ISO list
+            if (newISOFound.load() && isAtISOList.load()) {
+
+                // If conditions are met, clear and reload the filtered file list with the updated data
+                clearAndLoadFiles(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess);
+            
+                // Output a new line to indicate that the list has been updated
+                std::cout << "\n";
+                rl_on_new_line();  // Move the cursor to the new line
+                rl_redisplay();    // Refresh the readline interface to display updated content
+            }
+
+            // Reset flags indicating update status and new ISO discovery
+            updateHasRun.store(false);  // Reset update status flag
+            newISOFound.store(false);   // Reset the flag for newly found ISO
+            
+            break;
+        }
+    }
+}
+
+
 // Main function to select and operate on ISOs by number for umount mount cp mv and rm
 void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
     // Bind readline keys
@@ -178,161 +364,6 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 }
 
 
-// Parse pending indices and remove duplicates
-bool handlePendingInduction(const std::string& inputString, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& needsClrScrn) {
-    // Check if the input contains a semicolon and does not contain a slash
-    if (inputString.find(';') == std::string::npos || inputString.find('/') != std::string::npos) {
-        return false;
-    }
-
-    // Strip the semicolon from the input
-    std::string indicesInput = inputString.substr(0, inputString.find(';'));
-    
-    // Trim whitespace from the end
-    while (!indicesInput.empty() && std::isspace(indicesInput.back())) {
-        indicesInput.pop_back();
-    }
-    
-    if (!indicesInput.empty()) {
-        // Parse and store the indices
-        std::istringstream iss(indicesInput);
-        std::string token;
-        
-        // Use a set to track duplicates
-        std::unordered_set<std::string> uniqueTokens;
-        
-        // Add existing pending indices to the set to ensure no duplicates
-        for (const auto& index : pendingIndices) {
-            uniqueTokens.insert(index);
-        }
-        
-        // Temporarily store new indices to preserve order
-        std::vector<std::string> newIndices;
-        
-        // Parse new indices and add them to the vector if they are not duplicates
-        while (iss >> token) {
-            if (uniqueTokens.find(token) == uniqueTokens.end()) { // Check if the token is not already in the set
-                newIndices.push_back(token); // Add to the newIndices vector
-                uniqueTokens.insert(token); // Add to the set to track duplicates
-            }
-        }
-        
-        // Append new indices to pendingIndices
-        pendingIndices.insert(pendingIndices.end(), newIndices.begin(), newIndices.end());
-        
-        if (!pendingIndices.empty()) {
-            hasPendingProcess = true;
-            needsClrScrn = true;
-            return true;
-        }
-    }
-    return false;
-}
-
-
-// Function to handle Pending Execution
-bool handlePendingProcess(const std::string& inputString,std::vector<std::string>& pendingIndices,bool& hasPendingProcess,bool isMount,bool isUnmount,bool write,bool isFiltered, std::vector<std::string>& filteredFiles,std::vector<std::string>& isoDirs,std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& skippedMessages,std::unordered_set<std::string>& operationFails,std::unordered_set<std::string>& uniqueErrorMessages, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool& filterHistory, std::atomic<bool>& newISOFound) {
-    
-    if (hasPendingProcess && !pendingIndices.empty() && inputString == "proc") {
-        // Combine all pending indices into a single string as if they were entered normally
-        std::string combinedIndices = "";
-        for (size_t i = 0; i < pendingIndices.size(); ++i) {
-            combinedIndices += pendingIndices[i];
-            if (i < pendingIndices.size() - 1) {
-                combinedIndices += " ";
-            }
-        }
-        
-        // Process the pending operations
-        processOperationForSelectedIsoFiles(combinedIndices, isMount, isUnmount, write, isFiltered, 
-                 filteredFiles, isoDirs, operationFiles, 
-                 operationFails, uniqueErrorMessages, skippedMessages,
-                 needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
-                 filterHistory, newISOFound);
-
-        return true;
-    }
-    
-    return false;
-}
-
-
-// Function to process operations from selectIsoFiles
-void processOperationForSelectedIsoFiles(const std::string& inputString, bool isMount, bool isUnmount, bool write, bool& isFiltered, const std::vector<std::string>& filteredFiles, std::vector<std::string>& isoDirs, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<std::string>& skippedMessages, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool& filterHistory, std::atomic<bool>& newISOFound) {
-    
-    clearScrollBuffer();
-    // Default flags
-    needsClrScrn = true;
-    bool verbose = false;
-    
-    if (isMount || isUnmount) {
-        isAtISOList.store(false);
-        
-        // Determine which list to use
-        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : 
-                                                    (isUnmount ? isoDirs : globalIsoFileList);
-        
-        // Set umountMvRmBreak for unmount operations
-        if (isUnmount) {
-            umountMvRmBreak = true;
-        }
-        
-        // Use the merged function for both mount and unmount
-        processIsoOperations(inputString, activeList, operationFiles, skippedMessages, 
-                            operationFails, uniqueErrorMessages, umountMvRmBreak, verbose, isUnmount);
-    } else if (write) {
-        isAtISOList.store(false);
-        // Use const reference instead of copying
-        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : globalIsoFileList;
-        writeToUsb(inputString, activeList, uniqueErrorMessages);
-    } else {
-        isAtISOList.store(false);
-        // Use const reference instead of copying
-        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : globalIsoFileList;
-        processOperationInput(inputString, activeList, operation, operationFiles, operationFails, 
-                             uniqueErrorMessages, umountMvRmBreak, filterHistory, verbose, newISOFound);
-    }
-    
-    handleSelectIsoFilesResults(uniqueErrorMessages, operationFiles, operationFails, skippedMessages, 
-                               operation, verbose, isMount, isFiltered, umountMvRmBreak, isUnmount, needsClrScrn);
-}
-
-
-
-// Function to process results from selectIsoFiles
-void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& skippedMessages, const std::string& operation, bool& verbose, bool isMount, bool& isFiltered, bool& umountMvRmBreak, bool isUnmount, bool& needsClrScrn) {
-    // Result handling and display
-    if (!uniqueErrorMessages.empty() && operationFiles.empty() && operationFails.empty() && skippedMessages.empty()) {
-        clearScrollBuffer();
-        needsClrScrn = true;
-        std::cout << "\n\033[1;91mNo valid input provided.\033[0;1m\n\n\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-    } else if (verbose) {
-        clearScrollBuffer();
-        needsClrScrn = true;
-        std::unordered_set<std::string> conditionalSet = isMount ? skippedMessages : std::unordered_set<std::string>{};
-        std::unordered_set<std::string> emptySet{};
-        verbosePrint(operationFiles, operationFails, conditionalSet, uniqueErrorMessages, isMount ? 2 : 1);
-    }
-
-    // Reset filter for certain operations
-    if ((operation == "mv" || operation == "rm" || operation == "umount") && isFiltered && umountMvRmBreak) {
-        clear_history();
-        needsClrScrn = true;
-    }
-
-    // For non-umount operations, if there are no ISOs in the global list, inform the user.
-    if (!isUnmount && globalIsoFileList.empty()) {
-        clearScrollBuffer();
-        needsClrScrn = true;
-        std::cout << "\n\033[1;93mNo ISO available for " << operation << ".\033[0m\n\n";
-        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        return;
-    }
-}
-
-
 // IMAGE SELECTION
 
 std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles here
@@ -340,140 +371,8 @@ std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
 std::vector<std::string> nrgFilesCache; // Memory cached nrgImgFiles here
 
 
-// Function to check and list stored ram cache
-void ramCacheList(std::vector<std::string>& files, bool& list, const std::string& fileExtension, 
-                  const std::vector<std::string>& binImgFilesCache, const std::vector<std::string>& mdfMdsFilesCache, 
-                  const std::vector<std::string>& nrgFilesCache, bool modeMdf, bool modeNrg) {
-    
-    // Ignore the SIGINT signal (Ctrl+C) to prevent the program from being interrupted by the user
-    signal(SIGINT, SIG_IGN);        
-    
-    // Disable the Ctrl+D keypress functionality
-    disable_ctrl_d();
-    
-    // Check if there are no files in RAM for the specified mode, and if listing is enabled
-    if (((binImgFilesCache.empty() && !modeMdf && !modeNrg) || 
-         (mdfMdsFilesCache.empty() && modeMdf) || 
-         (nrgFilesCache.empty() && modeNrg)) && list) {
-        
-        // Notify the user that no files of the specified type are stored in RAM
-        std::cout << "\n\033[1;93mNo " << fileExtension << " entries stored in RAM.\033[1m\n";
-        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-        
-        // Wait for the user to press Enter before continuing
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        
-        // Clear files to avoid glitches when using search&found followed by !clr in the same iteration
-        files.clear();
-        
-        // Clear screen and scrollbuffer
-        clearScrollBuffer();
-        
-        // Exit the function early as no files are available for listing
-        return;
-    } else if (list) {
-        // If the mode is not MDF or NRG, use the bin image files from the cache
-        if (!modeMdf && !modeNrg) {
-            files = binImgFilesCache;
-        } 
-        // If the mode is MDF, use the MDF/MDS files from the cache
-        else if (modeMdf) {
-            files = mdfMdsFilesCache;
-        } 
-        // If the mode is NRG, use the NRG files from the cache
-        else if (modeNrg) {
-            files = nrgFilesCache;
-        }
-    }
-}
-
-
-// Function to clear Ram Cache and memory transformations for bin/img mdf nrg files
-void clearRamCache(bool& modeMdf, bool& modeNrg) {
-	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
-	disable_ctrl_d();
-    std::vector<std::string> extensions;
-    std::string cacheType;
-    bool cacheIsEmpty = false;
-
-    if (!modeMdf && !modeNrg) {
-        extensions = {".bin", ".img"};
-        cacheType = "BIN/IMG";
-        cacheIsEmpty = binImgFilesCache.empty();
-        if (!cacheIsEmpty) std::vector<std::string>().swap(binImgFilesCache);
-    } else if (modeMdf) {
-        extensions = {".mdf"};
-        cacheType = "MDF";
-        cacheIsEmpty = mdfMdsFilesCache.empty();
-        if (!cacheIsEmpty) std::vector<std::string>().swap(mdfMdsFilesCache);
-    } else if (modeNrg) {
-        extensions = {".nrg"};
-        cacheType = "NRG";
-        cacheIsEmpty = nrgFilesCache.empty();
-        if (!cacheIsEmpty) std::vector<std::string>().swap(nrgFilesCache);
-    }
-
-    // Manually remove items with matching extensions from transformationCache
-    bool transformationCacheWasCleared = false;
-    bool originalCacheWasCleared = false;
-    
-    for (auto it = transformationCache.begin(); it != transformationCache.end();) {
-		const std::string& key = it->first;
-		std::string keyLower = key; // Create a lowercase copy of the key
-		toLowerInPlace(keyLower);
-
-		bool shouldErase = std::any_of(extensions.begin(), extensions.end(),
-			[&keyLower](std::string ext) { // Pass by value to modify locally
-				toLowerInPlace(ext); // Convert extension to lowercase
-				return keyLower.size() >= ext.size() &&
-					keyLower.compare(keyLower.size() - ext.size(), ext.size(), ext) == 0;
-			});
-
-		if (shouldErase) {
-			it = transformationCache.erase(it);
-			transformationCacheWasCleared = true;
-		} else {
-			++it;
-		}
-	}
-
-	// Manually remove items with matching extensions from original cache
-	for (auto it = originalPathsCache.begin(); it != originalPathsCache.end();) {
-		const std::string& key = it->first;
-		std::string keyLower = key; // Create a lowercase copy of the key
-		toLowerInPlace(keyLower);
-
-		bool shouldErase = std::any_of(extensions.begin(), extensions.end(),
-			[&keyLower](std::string ext) { // Pass by value to modify locally
-				toLowerInPlace(ext); // Convert extension to lowercase
-				return keyLower.size() >= ext.size() &&
-					keyLower.compare(keyLower.size() - ext.size(), ext.size(), ext) == 0;
-			});
-
-		if (shouldErase) {
-			it = originalPathsCache.erase(it);
-			originalCacheWasCleared = true;
-		} else {
-			++it;
-		}
-	}
-
-
-    // Display appropriate messages
-    if (cacheIsEmpty && (!transformationCacheWasCleared || !originalCacheWasCleared)) {
-        std::cout << "\n\033[1;93m" << cacheType << " buffer is empty. Nothing to clear.\033[0;1m\n";
-    } else {
-        std::cout << "\n\033[1;92m" << cacheType << " buffer cleared.\033[0;1m\n";
-    }
-
-    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-    clearScrollBuffer();
-}
-
-
 // Main function to select and convert image files based on type to ISO
-void select_and_convert_to_iso(const std::string& fileType, std::vector<std::string>& files, std::atomic<bool>& newISOFound, bool& list) {
+void selectForImageFiles(const std::string& fileType, std::vector<std::string>& files, std::atomic<bool>& newISOFound, bool& list) {
 
     // Bind keys for preventing clear screen and enabling tab completion
     rl_bind_key('\f', prevent_readline_keybindings);

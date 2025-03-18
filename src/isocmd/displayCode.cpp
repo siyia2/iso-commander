@@ -14,38 +14,6 @@ namespace displayConfig {
 }
 
 
-// Function to automatically update ISO list if auto-update is on
-void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, bool& umountMvRmBreak, std::vector<std::string>& filteredFiles, bool& isFiltered, std::string& listSubtype, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, std::atomic<bool>& newISOFound) {
-    // Continuously checks for conditions at intervals specified by timeoutSeconds
-    while (true) {
-        // Sleep for the given timeout (1s) before checking the conditions
-        std::this_thread::sleep_for(std::chrono::seconds(timeoutSeconds));
-
-        // Only proceed if the import process is not running
-        if (!isImportRunning.load()) {
-
-            // Check if a new ISO was found and the list is at the ISO list
-            if (newISOFound.load() && isAtISOList.load()) {
-
-                // If conditions are met, clear and reload the filtered file list with the updated data
-                clearAndLoadFiles(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess);
-            
-                // Output a new line to indicate that the list has been updated
-                std::cout << "\n";
-                rl_on_new_line();  // Move the cursor to the new line
-                rl_redisplay();    // Refresh the readline interface to display updated content
-            }
-
-            // Reset flags indicating update status and new ISO discovery
-            updateHasRun.store(false);  // Reset update status flag
-            newISOFound.store(false);   // Reset the flag for newly found ISO
-            
-            break;
-        }
-    }
-}
-
-
 // Utility function to clear screen buffer and load IsoFiles from database to a global vector only for the first time and only for if the database file has been modified.
 bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess) {
     

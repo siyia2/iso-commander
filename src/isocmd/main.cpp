@@ -7,10 +7,14 @@
 // Get max available CPU cores for global use, fallback is 2 cores
 unsigned int maxThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 2;
 
-
 // Global falg to track cancellation
 std::atomic<bool> g_operationCancelled{false};
 
+
+// Print the version number of the program
+void printVersionNumber(const std::string& version) {	
+    std::cout << "\x1B[32mIso Commander v" << version << "\x1B[0m\n"; // Output the version number in green color
+}
 
 // Main function
 int main(int argc, char *argv[]) {
@@ -183,10 +187,4 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
-
-// Print the version number of the program
-void printVersionNumber(const std::string& version) {
-	
-    std::cout << "\x1B[32mIso Commander v" << version << "\x1B[0m\n"; // Output the version number in green color
-}
 
