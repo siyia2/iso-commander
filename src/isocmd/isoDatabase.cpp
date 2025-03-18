@@ -546,7 +546,7 @@ void updateAutoUpdateConfig(const std::string& configPath, const std::string& in
 }
 
 
-// Function that can delete or show stats for ISO cache it is called from within manualRefreshForDatabase
+// Function that can delete or show stats for ISO cache it is called from within refreshForDatabase
 void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const int& maxDepth, const bool& filterHistory, std::atomic<bool>& newISOFound) {
     signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
     disable_ctrl_d();
@@ -614,5 +614,5 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
         setDisplayMode(inputSearch);
     }
     // Refresh the database after handling any command
-    manualRefreshForDatabase(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
+    refreshForDatabase(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
 }
