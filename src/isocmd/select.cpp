@@ -184,6 +184,7 @@ void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOLi
                            
                 // Output a new line to indicate that the list has been updated
                 std::cout << "\n";
+                // Refresh readline pompt explicitly to eliminate a glitch when returning from filtered list to source upon updates
                 rl_set_prompt(prompt.c_str());
                 rl_redisplay();    // Refresh the readline interface to display updated content
             }
