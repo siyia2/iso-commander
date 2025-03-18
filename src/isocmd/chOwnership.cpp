@@ -3,7 +3,7 @@
 #include "../headers.h"
 
 
-// Function to get the sudo invoker ID in a thread safe manner
+// Thread-safe function to get sudo invoker ID for assigning ownership to Cp/Mv/Conversion output files
 void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname) {
     // Reset output parameters to prevent any uninitialized memory issues
     real_uid = static_cast<uid_t>(-1);
