@@ -6,6 +6,9 @@ High performance `ISO` manager written in pure C++. `ISOs` are mounted under `/m
 
 For best experience execute with: `sudo isocmd`.
 
+![iso-commander-demo](https://github.com/user-attachments/assets/3d30dedd-6e41-421f-a892-ee5293d75ebf)
+
+
 ## ✨ Features
 
 💾 Smart ISO Storage & Retrieval:
