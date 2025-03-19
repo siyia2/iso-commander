@@ -1,6 +1,7 @@
 # iso-commander
 
-![iso-commander-demo](https://github.com/user-attachments/assets/3d30dedd-6e41-421f-a892-ee5293d75ebf)
+![iso-commander-demo](https://github.com/user-attachments/assets/8ac9677b-a056-4373-88d0-e457e4d4a53c)
+
 
 Port of bash shell program mounter_elite to C++ 
 https://github.com/siyia2/mounter_elite
@@ -20,9 +21,9 @@ For best experience execute with: `sudo isocmd`.
 
 🖥️ Advanced Terminal Interface:
 
-* Robust tab completion.
+* Robust tab completion and pagination.
 * Comprehensive command history.
-* Advanced progress tracking and pagination.
+* Advanced progress tracking.
 
 
 ⚡ High-Performance Architecture:
