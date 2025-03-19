@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GNU General Public License v2.0
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #ifndef MOUNT_H
 #define MOUNT_H
