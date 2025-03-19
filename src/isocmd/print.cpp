@@ -8,9 +8,6 @@
 // For storing isoFiles in RAM
 std::vector<std::string> globalIsoFileList;
 
-// Mutex to prevent race conditions when live updating ISO list
-std::mutex updateListMutex;
-
 
 // Function to print all required lists
 void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& isFiltered) {
