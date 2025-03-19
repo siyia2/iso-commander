@@ -3,6 +3,7 @@
 #include "../headers.h"
 #include "../display.h"
 
+
 const std::string configPath = std::string(getenv("HOME")) + "/.config/isocmd/config";
 
 
