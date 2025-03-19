@@ -17,7 +17,60 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
     }
     
     bool isFilterPrompt = (inputString == "/"); // Determine if this is an interactive filter prompt
-    std::string searchString;
+    
+    // Function to apply filtering based on search string
+    auto applyFilter = [&](const std::string& searchString) -> bool {
+        if (searchString.empty()) {
+            return false;
+        }
+        
+        const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
+        auto tempFiltered = filterFiles(sourceList, searchString);
+        
+        // Build new filtered files and update the filtering stack
+        std::vector<std::string> newFilteredFiles;
+        std::vector<size_t> newIndices;
+        
+        for (size_t i = 0; i < sourceList.size(); ++i) {
+            if (std::find(tempFiltered.begin(), tempFiltered.end(), sourceList[i]) != tempFiltered.end()) {
+                newFilteredFiles.push_back(sourceList[i]); // Store only the file string without index
+                
+                // Map to the original index, accounting for previous filtering
+                size_t originalIdx = i;
+                if (isFiltered && i < filteringStack.back().originalIndices.size()) {
+                    originalIdx = filteringStack.back().originalIndices[i];
+                }
+                newIndices.push_back(originalIdx);
+            }
+        }
+        
+        bool filterUnchanged = newFilteredFiles.size() == sourceList.size();
+        bool hasResults = !newFilteredFiles.empty();
+        
+        // If filtering has results and changes the list, update the filtered list
+        if (!filterUnchanged && hasResults) {
+            needsClrScrn = true;
+            filteredFiles = std::move(newFilteredFiles);
+            
+            // Update filtering stack
+            FilteringState newState;
+            newState.originalIndices = std::move(newIndices);
+            newState.isFiltered = true;
+            
+            if (isFiltered) {
+                // Replace the top of the stack with the new filtering state
+                filteringStack.back() = newState;
+            } else {
+                // Add a new filtering state to the stack
+                filteringStack.push_back(newState);
+            }
+            
+            isFiltered = true;
+            return true;
+        }
+        
+        return hasResults;  // Return if there were any results
+    };
     
     if (isFilterPrompt) {
         // Interactive filter prompt loop
@@ -41,141 +94,116 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
                 return true;
             }
             
-            searchString = searchQuery.get();
+            std::string searchString = searchQuery.get();
             
-            // Determine the source list for filtering
-            const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
-            
-            if (!searchString.empty()) {
-                // First, get a temporary filtered result based solely on file names
-                auto tempFiltered = filterFiles(sourceList, searchString);
-                
-                // Build new filtered files and update the filtering stack
-                std::vector<std::string> newFilteredFiles;
-                std::vector<size_t> newIndices;
-                
-                for (size_t i = 0; i < sourceList.size(); ++i) {
-                    // Check if the file at the original index is in the filtered results
-                    if (std::find(tempFiltered.begin(), tempFiltered.end(), sourceList[i]) != tempFiltered.end()) {
-                        newFilteredFiles.push_back(sourceList[i]); // Store only the file string without index
-                        
-                        // Map to the original index, accounting for previous filtering
-                        size_t originalIdx = i;
-                        if (isFiltered && i < filteringStack.back().originalIndices.size()) {
-                            originalIdx = filteringStack.back().originalIndices[i];
-                        }
-                        newIndices.push_back(originalIdx);
-                    }
-                }
-                
-                bool filterUnchanged = newFilteredFiles.size() == sourceList.size();
-                bool hasResults = !newFilteredFiles.empty();
-                
-                // If the filtering produced new results, update the filtered list
-                if (!filterUnchanged && hasResults) {
-                    add_history(searchQuery.get()); // Save filter query to history
-                    saveHistory(filterHistory);
-                    needsClrScrn = true;
-                    filteredFiles = std::move(newFilteredFiles); // Update filtered results without indices
-                    
-                    // Update filtering stack
-                    FilteringState newState;
-                    newState.originalIndices = std::move(newIndices);
-                    newState.isFiltered = true;
-                    
-                    if (isFiltered) {
-                        // Replace the top of the stack with the new filtering state
-                        filteringStack.back() = newState;
-                    } else {
-                        // Add a new filtering state to the stack
-                        filteringStack.push_back(newState);
-                    }
-                    
-                    isFiltered = true;
-                    clear_history();
-                    return true;
-                } else if (!hasResults) {
-                    continue; // No results, prompt again
-                }
+            if (applyFilter(searchString)) {
+                add_history(searchQuery.get()); // Save filter query to history
+                saveHistory(filterHistory);
+                clear_history();
+                return true;
             }
-            clear_history();
         }
     } else {
         // Quick filtering mode with /pattern
-        searchString = inputString.substr(1); // Extract search term after '/'
+        std::string searchString = inputString.substr(1); // Extract search term after '/'
         
-        if (!searchString.empty()) {
-            const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
-            auto tempFiltered = filterFiles(sourceList, searchString);
-            
-            // Build new filtered files and update the filtering stack
-            std::vector<std::string> newFilteredFiles;
-            std::vector<size_t> newIndices;
-            
-            for (size_t i = 0; i < sourceList.size(); ++i) {
-                if (std::find(tempFiltered.begin(), tempFiltered.end(), sourceList[i]) != tempFiltered.end()) {
-                    newFilteredFiles.push_back(sourceList[i]); // Store only the file string without index
-                    
-                    // Map to the original index, accounting for previous filtering
-                    size_t originalIdx = i;
-                    if (isFiltered && i < filteringStack.back().originalIndices.size()) {
-                        originalIdx = filteringStack.back().originalIndices[i];
-                    }
-                    newIndices.push_back(originalIdx);
-                }
-            }
-            
-            bool filterUnchanged = newFilteredFiles.size() == sourceList.size();
-            bool hasResults = !newFilteredFiles.empty();
-            
-            // If filtering has results, update the filtered list
-            if (!filterUnchanged && hasResults) {
-                filterHistory = true;
-                loadHistory(filterHistory);
-                add_history(searchString.c_str()); // Save query to history
-                saveHistory(filterHistory);
-                needsClrScrn = true;
-                filteredFiles = std::move(newFilteredFiles);
-                
-                // Update filtering stack
-                FilteringState newState;
-                newState.originalIndices = std::move(newIndices);
-                newState.isFiltered = true;
-                
-                if (isFiltered) {
-                    // Replace the top of the stack with the new filtering state
-                    filteringStack.back() = newState;
-                } else {
-                    // Add a new filtering state to the stack
-                    filteringStack.push_back(newState);
-                }
-                
-                isFiltered = true;
-            }
+        if (applyFilter(searchString)) {
+            filterHistory = true;
+            loadHistory(filterHistory);
+            add_history(searchString.c_str()); // Save query to history
+            saveHistory(filterHistory);
         }
     }
     
     return true;  // Filtering operation was handled
 }
 
+
 // Handle filtering for select_and_convert_to_iso
 void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<std::string>& files, const std::string& fileExtensionWithOutDots, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, bool& need2Sort) {
+    // Exit early if not a filtering command
+    if (mainInputString.empty() || (mainInputString != "/" && mainInputString[0] != '/')) {
+        return;
+    }
+    
+    // Function to apply filtering based on search string
+    auto applyFilter = [&](const std::string& searchString) -> bool {
+        if (searchString.empty()) {
+            return false;
+        }
+        
+        auto tempFiltered = filterFiles(files, searchString);
+        
+        // Check if the filter produces valid, different results
+        if (tempFiltered.empty() || tempFiltered.size() == files.size()) {
+            return false;
+        }
+        
+        // Build new filtered files and update filtering stack
+        std::vector<std::string> newFiltered;
+        std::vector<size_t> newIndices;
+        
+        for (size_t i = 0; i < files.size(); ++i) {
+            if (std::find(tempFiltered.begin(), tempFiltered.end(), files[i]) != tempFiltered.end()) {
+                newFiltered.push_back(files[i]); // Store the original item without index
+                
+                // Map to the original index, accounting for previous filtering
+                size_t originalIdx = i;
+                if (isFiltered && !filteringStack.empty() && i < filteringStack.back().originalIndices.size()) {
+                    originalIdx = filteringStack.back().originalIndices[i];
+                }
+                newIndices.push_back(originalIdx);
+            }
+        }
+        
+        files = newFiltered; // Update the file list with the filtered results
+        
+        // Update filtering stack
+        FilteringState newState;
+        newState.originalIndices = std::move(newIndices);
+        newState.isFiltered = true;
+        
+        if (isFiltered && !filteringStack.empty()) {
+            filteringStack.back() = newState; // Replace the top state
+        } else {
+            filteringStack.push_back(newState); // Add new state
+        }
+        
+        needsClrScrn = true;
+        isFiltered = true;
+        need2Sort = true;
+        
+        return true;
+    };
+    
+    // Function to handle filter history
+    auto handleHistory = [&](const std::string& query) {
+        filterHistory = true;
+        loadHistory(filterHistory);
+        try {
+            add_history(query.c_str());
+            saveHistory(filterHistory);
+        } catch (const std::exception& e) {
+            // Optionally, log the error or handle it
+        }
+    };
+    
     if (mainInputString == "/") {
+        // Interactive filter prompt loop
         std::cout << "\033[1A\033[K";
         std::string filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;38;5;208m\002" + 
-                                    fileExtensionWithOutDots + "\001\033[1;94m\002, or ↵ to return: \001\033[0;1m\002";
+                                   fileExtensionWithOutDots + "\001\033[1;94m\002, or ↵ to return: \001\033[0;1m\002";
         
-        // Inline filter query functionality
         while (true) {
-            clear_history(); // Clear the input history
+            clear_history();
             filterHistory = true;
-            loadHistory(filterHistory); // Load input history if available
+            loadHistory(filterHistory);
 
-            // Prompt the user for a search query
+            // Prompt for search query
             std::unique_ptr<char, decltype(&std::free)> rawSearchQuery(readline(filterPrompt.c_str()), &std::free);
             std::string inputSearch(rawSearchQuery.get());
 
-            // Exit the filter loop if input is empty or "/"
+            // Exit if input is empty or "/"
             if (inputSearch.empty() || inputSearch == "/") {
                 std::cout << "\033[2A\033[K";
                 needsClrScrn = false;
@@ -183,120 +211,25 @@ void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<
                 break;
             }
 
-            // Get the temporary filtered list (without indices)
-            auto tempFiltered = filterFiles(files, inputSearch);
-            if (tempFiltered.empty()) {
-                std::cout << "\033[1A\033[K";
-                continue; // Skip if no files match the filter
-            }
-            if (tempFiltered.size() == files.size()) {
-                std::cout << "\033[2A\033[K";
-                needsClrScrn = false;
-                need2Sort = false;
+            if (applyFilter(inputSearch)) {
+                handleHistory(inputSearch);
+                filterHistory = false;
+                clear_history();
                 break;
-            }
-            // Save the search query to history and update the file list
-            try {
-                add_history(rawSearchQuery.get());
-                saveHistory(filterHistory);
-            } catch (const std::exception& e) {
-                // Optionally, log the error or handle it
-            }
-            
-            filterHistory = false;
-            clear_history(); // Clear history to reset for future inputs
-            need2Sort = true;
-            
-            // Build new filtered files and update filtering stack
-            std::vector<std::string> newFiltered;
-            std::vector<size_t> newIndices;
-            
-            for (size_t i = 0; i < files.size(); ++i) {
-                if (std::find(tempFiltered.begin(), tempFiltered.end(), files[i]) != tempFiltered.end()) {
-                    newFiltered.push_back(files[i]); // Store the original item without index
-                    
-                    // Map to the original index, accounting for previous filtering
-                    size_t originalIdx = i;
-                    if (isFiltered && !filteringStack.empty() && i < filteringStack.back().originalIndices.size()) {
-                        originalIdx = filteringStack.back().originalIndices[i];
-                    }
-                    newIndices.push_back(originalIdx);
-                }
-            }
-            
-            files = newFiltered; // Update the file list with the filtered results
-            
-            // Update filtering stack
-            FilteringState newState;
-            newState.originalIndices = std::move(newIndices);
-            newState.isFiltered = true;
-            
-            if (isFiltered && !filteringStack.empty()) {
-                // Replace the top of the stack with the new filtering state
-                filteringStack.back() = newState;
             } else {
-                // Add a new filtering state to the stack
-                filteringStack.push_back(newState);
+                std::cout << "\033[1A\033[K"; // Clear line for retry
+                continue;
             }
-            
-            needsClrScrn = true;
-            isFiltered = true;
-            break;
         }
-    } else if (mainInputString[0] == '/' && mainInputString.size() > 1) {
-        // Direct filtering mode without showing the filter prompt
-        std::string inputSearch(mainInputString.substr(1)); // Skip the '/' character
-        auto tempFiltered = filterFiles(files, inputSearch);
-        if (!tempFiltered.empty() && tempFiltered.size() != files.size()) {
-            filterHistory = true;
-            loadHistory(filterHistory);
-            try {
-                add_history(inputSearch.c_str());
-                saveHistory(filterHistory);
-            } catch (const std::exception& e) {
-                // Optionally, log the error or handle it
-            }
-            
-            need2Sort = true;
-            
-            // Build new filtered files and update filtering stack
-            std::vector<std::string> newFiltered;
-            std::vector<size_t> newIndices;
-            
-            for (size_t i = 0; i < files.size(); ++i) {
-                if (std::find(tempFiltered.begin(), tempFiltered.end(), files[i]) != tempFiltered.end()) {
-                    newFiltered.push_back(files[i]); // Store the original item without index
-                    
-                    // Map to the original index, accounting for previous filtering
-                    size_t originalIdx = i;
-                    if (isFiltered && !filteringStack.empty() && i < filteringStack.back().originalIndices.size()) {
-                        originalIdx = filteringStack.back().originalIndices[i];
-                    }
-                    newIndices.push_back(originalIdx);
-                }
-            }
-            
-            files = newFiltered; // Update the file list with the filtered results
-            
-            // Update filtering stack
-            FilteringState newState;
-            newState.originalIndices = std::move(newIndices);
-            newState.isFiltered = true;
-            
-            if (isFiltered && !filteringStack.empty()) {
-                // Replace the top of the stack with the new filtering state
-                filteringStack.back() = newState;
-            } else {
-                // Add a new filtering state to the stack
-                filteringStack.push_back(newState);
-            }
-            
-            isFiltered = true;
-            needsClrScrn = true;
-            
+    } else if (mainInputString.size() > 1) {
+        // Direct filtering mode with /pattern
+        std::string inputSearch = mainInputString.substr(1); // Skip the '/' character
+        
+        if (applyFilter(inputSearch)) {
+            handleHistory(inputSearch);
             clear_history();
         } else {
-            std::cout << "\033[2A\033[K"; // Clear the line if no files match the filter
+            std::cout << "\033[2A\033[K"; // Clear the line if no files match
             need2Sort = false;
             needsClrScrn = false;
         }
