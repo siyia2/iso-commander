@@ -27,12 +27,20 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
         const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
         auto tempFiltered = filterFiles(sourceList, searchString);
         
+        // Convert the tempFiltered vector to an unordered_set for O(1) lookups
+        std::unordered_set<std::string> filteredSet(tempFiltered.begin(), tempFiltered.end());
+        
         // Build new filtered files and update the filtering stack
         std::vector<std::string> newFilteredFiles;
         std::vector<size_t> newIndices;
         
+        // Pre-allocate memory to avoid reallocations
+        newFilteredFiles.reserve(filteredSet.size());
+        newIndices.reserve(filteredSet.size());
+        
         for (size_t i = 0; i < sourceList.size(); ++i) {
-            if (std::find(tempFiltered.begin(), tempFiltered.end(), sourceList[i]) != tempFiltered.end()) {
+            // O(1) lookup using unordered_set instead of O(n) with std::find
+            if (filteredSet.find(sourceList[i]) != filteredSet.end()) {
                 newFilteredFiles.push_back(sourceList[i]); // Store only the file string without index
                 
                 // Map to the original index, accounting for previous filtering
@@ -50,19 +58,21 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
         // If filtering has results and changes the list, update the filtered list
         if (!filterUnchanged && hasResults) {
             needsClrScrn = true;
+            
+            // Use move semantics to avoid unnecessary copying
             filteredFiles = std::move(newFilteredFiles);
             
             // Update filtering stack
             FilteringState newState;
-            newState.originalIndices = std::move(newIndices);
+            newState.originalIndices = std::move(newIndices); // Using move semantics
             newState.isFiltered = true;
             
             if (isFiltered) {
                 // Replace the top of the stack with the new filtering state
-                filteringStack.back() = newState;
+                filteringStack.back() = std::move(newState); // Using move semantics
             } else {
                 // Add a new filtering state to the stack
-                filteringStack.push_back(newState);
+                filteringStack.push_back(std::move(newState)); // Using move semantics
             }
             
             isFiltered = true;
@@ -139,12 +149,20 @@ void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<
             return false;
         }
         
+        // Convert tempFiltered to unordered_set for O(1) lookups
+        std::unordered_set<std::string> filteredSet(tempFiltered.begin(), tempFiltered.end());
+        
         // Build new filtered files and update filtering stack
         std::vector<std::string> newFiltered;
         std::vector<size_t> newIndices;
         
+        // Pre-allocate memory to avoid reallocations
+        newFiltered.reserve(filteredSet.size());
+        newIndices.reserve(filteredSet.size());
+        
         for (size_t i = 0; i < files.size(); ++i) {
-            if (std::find(tempFiltered.begin(), tempFiltered.end(), files[i]) != tempFiltered.end()) {
+            // O(1) lookup using unordered_set instead of O(n) with std::find
+            if (filteredSet.find(files[i]) != filteredSet.end()) {
                 newFiltered.push_back(files[i]); // Store the original item without index
                 
                 // Map to the original index, accounting for previous filtering
@@ -156,7 +174,8 @@ void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<
             }
         }
         
-        files = newFiltered; // Update the file list with the filtered results
+        // Use move semantics to transfer ownership
+        files = std::move(newFiltered); // Update the file list with the filtered results
         
         // Update filtering stack
         FilteringState newState;
@@ -164,9 +183,9 @@ void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<
         newState.isFiltered = true;
         
         if (isFiltered && !filteringStack.empty()) {
-            filteringStack.back() = newState; // Replace the top state
+            filteringStack.back() = std::move(newState); // Replace the top state using move
         } else {
-            filteringStack.push_back(newState); // Add new state
+            filteringStack.push_back(std::move(newState)); // Add new state using move
         }
         
         needsClrScrn = true;
@@ -201,6 +220,15 @@ void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<
 
             // Prompt for search query
             std::unique_ptr<char, decltype(&std::free)> rawSearchQuery(readline(filterPrompt.c_str()), &std::free);
+            
+            // Check for null before dereferencing
+            if (!rawSearchQuery) {
+                std::cout << "\033[2A\033[K";
+                needsClrScrn = false;
+                need2Sort = false;
+                break;
+            }
+            
             std::string inputSearch(rawSearchQuery.get());
 
             // Exit if input is empty or "/"
