@@ -16,6 +16,27 @@
 
 // MDF2ISO
 
+/*  $Id: mdf2iso.c, 22/05/05 
+
+    Copyright (C) 2004,2005 Salvatore Santagati <salvatore.santagati@gmail.com>   
+
+    This program is free software; you can redistribute it and/or modify  
+    it under the terms of the GNU General Public License as published by  
+    the Free Software Foundation; either version 2 of the License, or     
+    (at your option) any later version.                                   
+
+    This program is distributed in the hope that it will be useful,       
+    but WITHOUT ANY WARRANTY; without even the implied warranty of        
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         
+    GNU General Public License for more details.                          
+
+    You should have received a copy of the GNU General Public License     
+    along with this program; if not, write to the                         
+    Free Software Foundation, Inc.,                                       
+    59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.        
+*/
+
+
 bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std::atomic<size_t>* completedBytes) {
     // Early cancellation check
     if (g_operationCancelled.load()) {
@@ -142,6 +163,30 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
 
 // CCD2ISO
 
+/***************************************************************************
+ *   Copyright (C) 2003 by Danny Kurniawan                                 *
+ *   danny_kurniawan@users.sourceforge.net                                 *
+ *                                                                         *
+ *   Contributors:                                                         *
+ *   - Kerry Harris <tomatoe-source@users.sourceforge.net>                 *
+ *                                                                         *
+ *   This program is free software; you can redistribute it and/or modify  *
+ *   it under the terms of the GNU General Public License as published by  *
+ *   the Free Software Foundation; either version 2 of the License, or     *
+ *   (at your option) any later version.                                   *
+ *                                                                         *
+ *   This program is distributed in the hope that it will be useful,       *
+ *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
+ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
+ *   GNU General Public License for more details.                          *
+ *                                                                         *
+ *   You should have received a copy of the GNU General Public License     *
+ *   along with this program; if not, write to the                         *
+ *   Free Software Foundation, Inc.,                                       *
+ *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
+ ***************************************************************************/
+ 
+
 bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std::atomic<size_t>* completedBytes) {
    // Early cancellation check
     if (g_operationCancelled.load()) {
@@ -222,7 +267,31 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
     return true;
 }
 
+
 // NRG2ISO
+
+// SPDX-License-Identifier: LGPL-2.0-only
+
+/* 
+   01/05/2003 Nrg2Iso v 0.1
+
+   Copyright (C) 2003 Grégory Kokanosky <gregory.kokanosky@free.fr>
+
+   This library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Library General Public
+   License version 2 as published by the Free Software Foundation.
+
+   This library is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Library General Public License for more details.
+
+   You should have received a copy of the GNU Library General Public License
+   along with this library; see the file COPYING.LIB.  If not, write to
+   the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+   Boston, MA 02111-1307, USA.
+*/
+
 
 bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile, std::atomic<size_t>* completedBytes) {
     // Early cancellation check
