@@ -16,7 +16,6 @@
 #include <future>
 #include <iostream>
 #include <map>
-#include <memory>
 #include <random>
 #include <thread>
 #include <unordered_map>
