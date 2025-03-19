@@ -5,6 +5,10 @@
 #include "../filtering.h"
 
 
+// Mutex to prevent race conditions when live updating ISO list
+std::mutex updateListMutex;
+
+
 // Default Display config options for lists
 namespace displayConfig {
     bool toggleFullListMount = false;

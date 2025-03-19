@@ -5,7 +5,6 @@
 #include "../filtering.h"
 
 
-
 // For storing isoFiles in RAM
 std::vector<std::string> globalIsoFileList;
 
@@ -129,48 +128,4 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     }
 
     std::cout << output.str();
-}
-
-
-// Blacklist function for MDF BIN IMG NRG
-bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, const bool& blacklistNrg) {
-    const std::string filenameLower = entry.filename().string();
-    const std::string ext = entry.extension().string();
-    std::string extLower = ext;
-    toLowerInPlace(extLower);
-
-    // Default mode: .bin and .img files
-    if (!blacklistMdf && !blacklistNrg) {
-        if (!((extLower == ".bin" || extLower == ".img"))) {
-            return false;
-        }
-    } 
-    // MDF mode
-    else if (blacklistMdf) {
-        if (extLower != ".mdf") {
-            return false;
-        }
-    } 
-    // NRG mode
-    else if (blacklistNrg) {
-        if (extLower != ".nrg") {
-            return false;
-        }
-    }
-
-    // Blacklisted keywords (previously commented out)
-    std::unordered_set<std::string> blacklistKeywords = {};
-    
-    // Convert filename to lowercase without extension
-    std::string filenameLowerNoExt = filenameLower;
-    filenameLowerNoExt.erase(filenameLowerNoExt.size() - ext.size());
-
-    // Check blacklisted keywords
-    for (const auto& keyword : blacklistKeywords) {
-        if (filenameLowerNoExt.find(keyword) != std::string::npos) {
-            return false;
-        }
-    }
-
-    return true;
 }

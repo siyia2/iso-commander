@@ -401,6 +401,51 @@ void clearRamCache(bool& modeMdf, bool& modeNrg) {
 }
 
 
+
+// Blacklist function for MDF BIN IMG NRG
+bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, const bool& blacklistNrg) {
+    const std::string filenameLower = entry.filename().string();
+    const std::string ext = entry.extension().string();
+    std::string extLower = ext;
+    toLowerInPlace(extLower);
+
+    // Default mode: .bin and .img files
+    if (!blacklistMdf && !blacklistNrg) {
+        if (!((extLower == ".bin" || extLower == ".img"))) {
+            return false;
+        }
+    } 
+    // MDF mode
+    else if (blacklistMdf) {
+        if (extLower != ".mdf") {
+            return false;
+        }
+    } 
+    // NRG mode
+    else if (blacklistNrg) {
+        if (extLower != ".nrg") {
+            return false;
+        }
+    }
+
+    // Blacklisted keywords (previously commented out)
+    std::unordered_set<std::string> blacklistKeywords = {};
+    
+    // Convert filename to lowercase without extension
+    std::string filenameLowerNoExt = filenameLower;
+    filenameLowerNoExt.erase(filenameLowerNoExt.size() - ext.size());
+
+    // Check blacklisted keywords
+    for (const auto& keyword : blacklistKeywords) {
+        if (filenameLowerNoExt.find(keyword) != std::string::npos) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+
 // Function to process a single batch of paths and find files for findFiles
 std::unordered_set<std::string> processPaths(const std::string& path, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, std::unordered_set<std::string>& processedErrorsFind) {
     
