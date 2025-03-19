@@ -8,7 +8,7 @@
 
 // Danny Kurniawan and Kerry Harris (ccd2iso).
 
-// Note: Their original code has been modernized and ported to C++.
+// Note: The original code has been modernized and ported to C++.
 
 /***************************************************************************
  *   Copyright (C) 2003 by Danny Kurniawan                                 *
