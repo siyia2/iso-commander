@@ -39,8 +39,8 @@ void helpSelections() {
     
      // Selection tips
     std::cout << "\033[1;32m4. Tips:\033[0m\n"
-			  << "   • List indexes apply only to the list they were generated from\033[0m\n"
-			  << "   • ^(src<num>) can be marked as pending and processed later in src list\033[0m\n"
+			  << "   • Regular indexes correspond only to the list they were generated from\033[0m\n"
+			  << "   • ^(Index) corresponds solely to src list\033[0m\n"
 			  << "   • Filtering is adaptive, incremental, and unconstrained by pagination\033[0m\n"
               << "   • If filtering has no matches, no message or list update is issued\n" << std::endl;
               
