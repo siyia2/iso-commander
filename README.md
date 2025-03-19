@@ -1,6 +1,6 @@
 # iso-commander
 
-![iso-commander-demo](https://github.com/user-attachments/assets/8ac9677b-a056-4373-88d0-e457e4d4a53c)
+![iso-commander-demo](https://github.com/user-attachments/assets/05610018-6590-4278-aeea-cb51a8c7be40)
 
 
 Port of bash shell program mounter_elite to C++ 
