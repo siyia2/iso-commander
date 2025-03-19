@@ -1,15 +1,13 @@
 # iso-commander
+
+![iso-commander-demo](https://github.com/user-attachments/assets/3d30dedd-6e41-421f-a892-ee5293d75ebf)
+
 Port of bash shell program mounter_elite to C++ 
 https://github.com/siyia2/mounter_elite
 
 High performance `ISO` manager written in pure C++. `ISOs` are mounted under `/mnt/iso_{name}` format and conversions are stored in their respective source directories. `ROOT` access is required for `mount` `umount` and `write` operations.
 
 For best experience execute with: `sudo isocmd`.
-
-Preview:
-
-![iso-commander-demo](https://github.com/user-attachments/assets/3d30dedd-6e41-421f-a892-ee5293d75ebf)
-
 
 ## ✨ Features
 
