@@ -183,6 +183,7 @@ void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOLi
                            + "\001\033[1;94m\002, ? ↵ for help, < ↵ to return:\001\033[0;1m\002 ";
                 // Output a new line to indicate that the list has been updated
                 std::cout << "\n";
+                rl_on_new_line(); 
                 rl_set_prompt(prompt.c_str());
                 rl_redisplay();    // Refresh the readline interface to display updated content
             }
