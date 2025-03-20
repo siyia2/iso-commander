@@ -43,8 +43,7 @@ void processIsoOperations(const std::string& input, const std::vector<std::strin
     std::cout << "\n\033[0;1m Processing" << (selectedFiles.size() > 1 ? " tasks" : " task") 
               << " for " << operationColor << operationName << "\033[0;1m... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";
     
-    std::string coloredProcess = std::string(operationColor + operationName + "\033[0;1m") 
-                                 + (selectedFiles.size() > 1 ? " tasks" : " task");
+    std::string coloredProcess = operationColor + operationName + "\033[0;1m";
     
     // Thread pool setup
     unsigned int numThreads = std::min(static_cast<unsigned int>(selectedFiles.size()), maxThreads);
@@ -250,10 +249,10 @@ void processOperationInput(const std::string& input, const std::vector<std::stri
              
     // Set the colored operation name (delete, move, or copy)
     std::string coloredProcess = 
-    isDelete ? std::string("\033[1;91m") + process + "\033[0;1m" + (totalTasks > 1 ? " tasks" : " task") :
-    isMove   ? std::string("\033[1;93m") + process + "\033[0;1m" + (totalTasks > 1 ? " tasks" : " task") :
-    isCopy   ? std::string("\033[1;92m") + process + "\033[0;1m" + (totalTasks > 1 ? " tasks" : " task") :
-    process + (totalTasks > 1 ? " tasks" : " task");
+    isDelete ? std::string("\033[1;91m") + process + "\033[0;1m" :
+    isMove   ? std::string("\033[1;93m") + process + "\033[0;1m" :
+    isCopy   ? std::string("\033[1;92m") + process + "\033[0;1m" :
+    process;
     
     // Atomic flag for tracking if processing is complete
     std::atomic<bool> isProcessingComplete(false);

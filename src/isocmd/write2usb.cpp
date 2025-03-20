@@ -722,7 +722,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     }
     
     size_t completedTasksValue = completedTasks.load();
-    std::string operation = "write";
+    std::string operation = "\033[1;93mwrite\033[0;1m";
     
     std::cout << "\r\033[0;1mStatus: " << operation << "\033[0;1m → " 
               << (!g_operationCancelled.load() 
