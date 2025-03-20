@@ -76,8 +76,8 @@ Special thanks to the original authors of the conversion tools:
 * Danny Kurniawan and Kerry Harris (ccd2iso).
 
 Original Liscenses:
-ccd2iso -> GPL2 or later
-mdf2iso -> GPL2 or later
-nrg2iso -> GPL3 (as of 2021)
+- ccd2iso -> GPL2 or later
+- mdf2iso -> GPL2 or later
+- nrg2iso -> GPL3 (as of 2021)
 
  Note: Their original code has been modernized and ported to C++.
