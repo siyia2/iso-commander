@@ -115,7 +115,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
 
 			std::string fileType = 
 								fileNameLower.ends_with(".bin") ? "\033[0;1m.bin" : 
-								fileNameLower.ends_with(".img") ? "\033[0;1m.bin" : 
+								fileNameLower.ends_with(".img") ? "\033[0;1m.img" : 
 								fileNameLower.ends_with(".mdf") ? "\033[0;1m.mdf" : 
 								fileNameLower.ends_with(".nrg") ? "\033[0;1m.nrg" : "\033[0;1mImage";
 
