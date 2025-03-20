@@ -4,7 +4,7 @@
 #define CCD_H
 
 
-// Special thanks to the original authors of the ccd2iso:
+// Special thanks to the original authors of ccd2iso:
 
 // Danny Kurniawan and Kerry Harris (ccd2iso).
 
