@@ -75,7 +75,7 @@ Special thanks to the original authors of the conversion tools:
 * Grégory Kokanosky (nrg2iso).
 * Danny Kurniawan and Kerry Harris (ccd2iso).
 
-Original Liscenses:
+Original Licenses:
 - ccd2iso -> GPL2 or later
 - mdf2iso -> GPL2 or later
 - nrg2iso -> GPL3 (as of 2021)
