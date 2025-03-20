@@ -4,7 +4,7 @@
 #define MDF_H
 
 
-// Special thanks to the original authors of mdf2iso:
+// Special thanks to the original author of mdf2iso:
 
 // Salvatore Santagati (mdf2iso).
 
