@@ -646,30 +646,30 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
     // Helper lambda to display all progress entries
     auto displayAllProgress = [&]() {
-		for (size_t i = 0; i < progressData.size(); ++i) {
-			const auto& prog = progressData[i];
-			std::string currentSize = formatFileSize(prog.bytesWritten.load());
+        for (size_t i = 0; i < progressData.size(); ++i) {
+            const auto& prog = progressData[i];
+            std::string currentSize = formatFileSize(prog.bytesWritten.load());
 
-			std::cout << "\033[K"  // Clear line
-					<< ("\033[1;95m" + prog.filename + " \033[0;1m→ {" + 
-						"\033[1;93m" + prog.device + "\033[0;1m \033[0;1m<" + 
-						deviceNames[prog.device] + "> (\033[1;35m" + 
-						deviceSizeStrs[prog.device] + "\033[0;1m)} \033[0;1m")
-					<< std::right
-					<< (prog.completed ? "\033[1;92mDONE\033[0;1m" :
-						prog.failed ? "\033[1;91mFAIL\033[0;1m" :
-						g_operationCancelled.load() ? "\033[1;93mCXL\033[0;1m" :
-						std::to_string(prog.progress) + "%")
-					<< " ["
-					<< currentSize
-					<< "/\033[1;35m"
-					<< prog.totalSize
-					<< "\033[0;1m] "
-					<< "\033[0;1m" + formatSpeed(prog.speed) + "\033[0;1m"
-					<< "\n";
-		}
-		std::cout << std::flush;
-	};
+            std::cout << "\033[K"  // Clear line
+                    << ("\033[1;95m" + prog.filename + " \033[0;1m→ {" + 
+                        "\033[1;93m" + prog.device + "\033[0;1m \033[0;1m<" + 
+                        deviceNames[prog.device] + "> (\033[1;35m" + 
+                        deviceSizeStrs[prog.device] + "\033[0;1m)} \033[0;1m")
+                    << std::right
+                    << (prog.completed ? "\033[1;92mDONE\033[0;1m" :
+                        prog.failed ? "\033[1;91mFAIL\033[0;1m" :
+                        g_operationCancelled.load() ? "\033[1;93mCXL\033[0;1m" :
+                        std::to_string(prog.progress) + "%")
+                    << " ["
+                    << currentSize
+                    << "/\033[1;35m"
+                    << prog.totalSize
+                    << "\033[0;1m] "
+                    << "\033[0;1m" + formatSpeed(prog.speed) + "\033[0;1m"
+                    << "\n";
+        }
+        std::cout << std::flush;
+    };
 
     // Display progress lambda (modified to use helper)
     auto displayProgress = [&]() {
@@ -692,6 +692,9 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
                 progressData[i].completed.store(true);
                 completedTasks.fetch_add(1);
             }
+            else {
+                progressData[i].failed.store(true);
+            }
         }));
     }
 
@@ -707,10 +710,31 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     signal(SIGINT, SIG_IGN);  // Ignore Ctrl+C after completion of futures
     progressThread.join();
     
-        std::cout << "\033[s";  // Save current position
-        std::cout << "\033[2H\033[2K";  // Go to message line and clear it
-        std::cout << "\033[0;1mProcessing for \033[1;93mwrite\033[0;1m operation " << (!g_operationCancelled.load() ? "→ \033[1;92mCOMPLETED\033[0;1m\n" : "→ \033[1;33mINTERRUPTED\033[0;1m\n");
-        std::cout << "\033[u";  // Restore to current position
+    std::cout << "\033[s";  // Save current position
+    std::cout << "\033[2H\033[2K";  // Go to message line and clear it
+    
+    // Count failed tasks
+    size_t failedTasksValue = 0;
+    for (const auto& prog : progressData) {
+        if (prog.failed.load()) {
+            failedTasksValue++;
+        }
+    }
+    
+    size_t completedTasksValue = completedTasks.load();
+    std::string operation = "write";
+    
+    std::cout << "\r\033[0;1mStatus: " << operation << "\033[0;1m → " 
+              << (!g_operationCancelled.load() 
+                  ? (failedTasksValue > 0 
+                     ? (completedTasksValue > 0 
+                        ? "\033[1;93mPARTIAL" // Yellow, some completed, some failed
+                        : "\033[1;91mFAILED")  // Red, none completed, some failed
+                     : "\033[1;92mCOMPLETED") // Green, all completed successfully
+                  : "\033[1;33mINTERRUPTED") // Yellow, operation cancelled
+              << "\033[0;1m" << std::endl;
+    
+    std::cout << "\033[u";  // Restore to current position
 
     auto endTime = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration<double>(endTime - startTime).count();
