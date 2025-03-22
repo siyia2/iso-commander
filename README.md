@@ -16,7 +16,7 @@ For best experience execute with: `sudo isocmd`.
 
 * Minimizes disk thrashing.
 * Optimizes file access performance.
-* Optional automatic import to database.
+* Optional automatic imports to database.
 
 
 🖥️ Advanced Terminal Interface:
@@ -78,6 +78,6 @@ Special thanks to the original authors of the conversion tools:
 Original Licenses:
 - ccd2iso -> GPL2 or later
 - mdf2iso -> GPL2 or later
-- nrg2iso -> GPL3 (as of 2021)
+- nrg2iso -> GPL3 or later (as of 2021)
 
  Note: Their original code has been modernized and ported to C++.
