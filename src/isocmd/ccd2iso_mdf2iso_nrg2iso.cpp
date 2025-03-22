@@ -40,7 +40,7 @@
 bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std::atomic<size_t>* completedBytes) {
     // Early cancellation check
     if (g_operationCancelled.load()) {
-		g_operationCancelled.store(true);
+        g_operationCancelled.store(true);
         return false;
     }
         
@@ -58,7 +58,7 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
     
     // Check cancellation before opening output file
     if (g_operationCancelled.load()) {
-		g_operationCancelled.store(true);
+        g_operationCancelled.store(true);
         return false;
     }
     
@@ -67,8 +67,10 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
         return false;
     }
     
-    // Disable internal buffering for more direct writes
-    isoFile.rdbuf()->pubsetbuf(nullptr, 0);
+    // Enable internal buffering (removed the line that disabled buffering)
+    // Optionally, you can set a custom buffer size like this:
+    // char buffer[65536]; // 64KB buffer
+    // isoFile.rdbuf()->pubsetbuf(buffer, sizeof(buffer));
     
     // Determine MDF format
     size_t seek_ecc = 0, sector_size = 0, seek_head = 0, sector_data = 0;
@@ -190,18 +192,19 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
 bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std::atomic<size_t>* completedBytes) {
    // Early cancellation check
     if (g_operationCancelled.load()) {
-		g_operationCancelled.store(true);
+        g_operationCancelled.store(true);
         return false;
     }
         
     std::ifstream ccdFile(ccdPath, std::ios::binary);
     if (!ccdFile) return false;
-
     std::ofstream isoFile(isoPath, std::ios::binary);
     if (!isoFile) return false;
-
-    // Disable internal buffering for more direct writes
-    isoFile.rdbuf()->pubsetbuf(nullptr, 0);
+    
+    // Enable internal buffering (removed the line that disabled buffering)
+    // Optionally, you can set a custom buffer size like this:
+    // char buffer[65536]; // 64KB buffer
+    // isoFile.rdbuf()->pubsetbuf(buffer, sizeof(buffer));
     
     CcdSector sector;
     size_t sectorNum = 0;
@@ -214,7 +217,6 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
             g_operationCancelled.store(true);
             return false;
         }
-
         size_t bytesWritten = 0;
         
         switch (sector.sectheader.header.mode) {
@@ -234,7 +236,6 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
             default:
                 return false;
         }
-
         // Check cancellation immediately after writing sector data
         if (g_operationCancelled.load()) {
             isoFile.close();
@@ -242,17 +243,14 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
             g_operationCancelled.store(true);
             return false;
         }
-
         // Validate write operation
         if (!isoFile || bytesWritten != DATA_SIZE) {
             return false;
         }
-
         // Update progress
         if (completedBytes) {
             completedBytes->fetch_add(bytesWritten, std::memory_order_relaxed);
         }
-
         // Check cancellation after updating progress
         if (g_operationCancelled.load()) {
             isoFile.close();
@@ -263,7 +261,6 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
         
         sectorNum++;
     }
-
     return true;
 }
 
