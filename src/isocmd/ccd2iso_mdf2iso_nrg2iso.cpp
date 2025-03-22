@@ -67,7 +67,7 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
         return false;
     }
     
-    // Enable internal buffering (removed the line that disabled buffering)
+    // Enable internal buffering (by default standard buffer size is utilized)
     // Optionally, you can set a custom buffer size like this:
     // char buffer[65536]; // 64KB buffer
     // isoFile.rdbuf()->pubsetbuf(buffer, sizeof(buffer));
@@ -201,7 +201,7 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
     std::ofstream isoFile(isoPath, std::ios::binary);
     if (!isoFile) return false;
     
-    // Enable internal buffering (removed the line that disabled buffering)
+    // Enable internal buffering (by default standard buffer size is utilized)
     // Optionally, you can set a custom buffer size like this:
     // char buffer[65536]; // 64KB buffer
     // isoFile.rdbuf()->pubsetbuf(buffer, sizeof(buffer));
