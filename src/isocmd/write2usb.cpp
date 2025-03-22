@@ -740,7 +740,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     auto duration = std::chrono::duration<double>(endTime - startTime).count();
 
     std::cout << std::fixed << std::setprecision(1);
-    std::cout << "\n\033[0;1mCompleted: \033[1;92m" << completedTasks.load()
+    std::cout << "\n\033[0;1mSuccessful: \033[1;92m" << completedTasks.load()
             << "\033[0;1m/\033[1;93m" << validPairs.size() 
             << "\033[0;1m in \033[0;1m" << duration << " seconds.\033[0;1m\n";
     
