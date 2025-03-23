@@ -32,9 +32,6 @@ void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, s
 		rl_bind_key('\f', prevent_readline_keybindings);
 		rl_bind_key('\t', prevent_readline_keybindings);
 		
-		// Reset page when entering this menu
-		currentPage = 0;
-		
 		isAtISOList.store(false);
 		
         clearScrollBuffer();
