@@ -163,7 +163,7 @@ bool handlePendingProcess(const std::string& inputString,std::vector<std::string
 
 
 // Function to automatically update ISO list if auto-update is on
-void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, bool& umountMvRmBreak, std::vector<std::string>& filteredFiles, bool& isFiltered, std::string& listSubtype, std::vector<std::string>& pendingIndices, bool& hasPendingProcess,std::string& operationColor, const std::string& operation, std::atomic<bool>& newISOFound) {
+void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, bool& umountMvRmBreak, std::vector<std::string>& filteredFiles, bool& isFiltered, std::string& listSubtype, std::vector<std::string>& pendingIndices, bool& hasPendingProcess,std::string& operationColor, const std::string& operation, size_t& currentPage, std::atomic<bool>& newISOFound) {
     // Continuously checks for conditions at intervals specified by timeoutSeconds
     
     while (true) {
@@ -177,7 +177,7 @@ void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOLi
             if (newISOFound.load() && isAtISOList.load()) {
 
                 // If conditions are met, clear and reload the filtered file list with the updated data
-                clearAndLoadFiles(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess);
+                clearAndLoadFiles(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage);
                 // Reconstruct and use non-filtered prompt to avoid graphical glitch
 				std::string prompt = "\001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001"
                            + operationColor + "\002" + operation 
@@ -225,7 +225,8 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
     bool filterHistory = false;
 
     // Reset page when entering this menu
-    currentPage = 0;
+    size_t currentPage = 0;
+    // Variable to store current page
     size_t originalPage = currentPage;
 
     // Determine operation color and specific flags
@@ -251,6 +252,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         filterHistory = false;
         clear_history();
         
+        // Store currentPage for unfiltered list
         if (!isFiltered) originalPage = currentPage;
         
         // Handle crashes when not enough permissions to access database
@@ -270,10 +272,10 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         // Load files based on operation type
         if (needsClrScrn) {
             if (!isUnmount) {
-                if (!clearAndLoadFiles(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess))
+                if (!clearAndLoadFiles(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage))
                     break;
             } else {
-                if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak, pendingIndices, hasPendingProcess))
+                if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage))
                     break;
             }
 			
@@ -286,7 +288,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             std::thread(refreshListAfterAutoUpdate, 1, std::ref(isAtISOList), 
                         std::ref(isImportRunning), std::ref(updateHasRun), std::ref(umountMvRmBreak),
                         std::ref(filteredFiles), std::ref(isFiltered), std::ref(listSubtype), std::ref(pendingIndices), 
-                        std::ref(hasPendingProcess), std::ref(operationColor), std::ref(operation), std::ref(newISOFound)).detach();
+                        std::ref(hasPendingProcess), std::ref(operationColor), std::ref(operation), std::ref(currentPage), std::ref(newISOFound)).detach();
         }
            
         std::cout << "\033[1A\033[K";
@@ -354,7 +356,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 
         // Handle filtering operations
         if (handleFilteringForISO(inputString, filteredFiles, isFiltered, needsClrScrn, 
-                                    filterHistory, operation, operationColor, isoDirs, isUnmount)) {
+                                    filterHistory, operation, operationColor, isoDirs, isUnmount, currentPage)) {
                 continue;
         }
 
@@ -396,7 +398,8 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
     bool hasPendingProcess = false;
     
     // Reset page when entering this menu
-    currentPage = 0;
+    size_t currentPage = 0;
+    // Variable to store current page
     size_t originalPage = currentPage;
     
     bool isFiltered = false; // Indicates if the file list is currently filtered
@@ -422,10 +425,11 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         bool verbose = false; // Reset verbose mode
         resetVerboseSets(processedErrors, successOuts, skippedOuts, failedOuts);
         
+        // Store currentPage for unfiltered list
         if (!isFiltered) originalPage = currentPage;
         
         clear_history();
-        if (needsClrScrn) clearAndLoadImageFiles(files, fileType, need2Sort, isFiltered, list, pendingIndices, hasPendingProcess);
+        if (needsClrScrn) clearAndLoadImageFiles(files, fileType, need2Sort, isFiltered, list, pendingIndices, hasPendingProcess, currentPage);
         
         std::cout << "\n\n";
         std::cout << "\033[1A\033[K";
@@ -515,7 +519,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 
         // Handle filter commands
         if (mainInputString == "/" || (!mainInputString.empty() && mainInputString[0] == '/')) {
-            handleFilteringConvert2ISO(mainInputString, files, fileExtensionWithOutDots, isFiltered, needsClrScrn, filterHistory, need2Sort);
+            handleFilteringConvert2ISO(mainInputString, files, fileExtensionWithOutDots, isFiltered, needsClrScrn, filterHistory, need2Sort, currentPage);
             continue;
         }// Check if input contains a semicolon for delayed execution
         else if (mainInputString.find(';') != std::string::npos) {

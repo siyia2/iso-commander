@@ -10,7 +10,7 @@ std::vector<std::string> globalIsoFileList;
 
 
 // Function to print all required lists
-void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& isFiltered) {
+void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& isFiltered, size_t& currentPage) {
     static const char* defaultColor = "\033[0m";
     static const char* bold = "\033[1m";
     static const char* red = "\033[31;1m";

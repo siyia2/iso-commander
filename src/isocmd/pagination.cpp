@@ -4,9 +4,6 @@
 #include "../display.h"
 
 
-// Hold current page for pagination
-size_t currentPage = 0;
-
 // Default max entries per listed page
 size_t ITEMS_PER_PAGE = 25;
 

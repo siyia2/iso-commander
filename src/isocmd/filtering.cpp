@@ -10,7 +10,7 @@ std::vector<FilteringState> filteringStack;
 
 
 // Function to hanlde filtering for selectForIsoFiles
-bool handleFilteringForISO(const std::string& inputString, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, const std::string& operation, const std::string& operationColor, const std::vector<std::string>& isoDirs, bool isUnmount) {
+bool handleFilteringForISO(const std::string& inputString, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, const std::string& operation, const std::string& operationColor, const std::vector<std::string>& isoDirs, bool isUnmount, size_t& currentPage) {
     // Check if the input indicates a filtering operation (must start with '/')
     if (inputString != "/" && (inputString.empty() || inputString[0] != '/')) {
         return false;  // Not a filtering operation
@@ -130,7 +130,7 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
 
 
 // Handle filtering for select_and_convert_to_iso
-void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<std::string>& files, const std::string& fileExtensionWithOutDots, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, bool& need2Sort) {
+void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<std::string>& files, const std::string& fileExtensionWithOutDots, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, bool& need2Sort, size_t& currentPage) {
     // Exit early if not a filtering command
     if (mainInputString.empty() || (mainInputString != "/" && mainInputString[0] != '/')) {
         return;
