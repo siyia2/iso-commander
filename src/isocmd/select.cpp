@@ -226,6 +226,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 
     // Reset page when entering this menu
     currentPage = 0;
+    size_t originalPage = currentPage;
 
     // Determine operation color and specific flags
     std::string operationColor = operation == "rm" ? "\033[1;91m" :
@@ -249,6 +250,8 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         resetVerboseSets(operationFiles, skippedMessages, operationFails, uniqueErrorMessages);
         filterHistory = false;
         clear_history();
+        
+        if (!isFiltered) originalPage = currentPage;
         
         // Handle crashes when not enough permissions to access database
         try {
@@ -305,7 +308,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                 isFiltered = false;
                 // Clear the filtering stack when returning to unfiltered mode
                 filteringStack.clear();
-                currentPage = 0;
+                currentPage = originalPage;
                 needsClrScrn = true;
                 continue;
             } else {
@@ -394,6 +397,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
     
     // Reset page when entering this menu
     currentPage = 0;
+    size_t originalPage = currentPage;
     
     bool isFiltered = false; // Indicates if the file list is currently filtered
     bool needsClrScrn = true;
@@ -417,6 +421,8 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         g_operationCancelled.store(false);
         bool verbose = false; // Reset verbose mode
         resetVerboseSets(processedErrors, successOuts, skippedOuts, failedOuts);
+        
+        if (!isFiltered) originalPage = currentPage;
         
         clear_history();
         if (needsClrScrn) clearAndLoadImageFiles(files, fileType, need2Sort, isFiltered, list, pendingIndices, hasPendingProcess);
@@ -446,7 +452,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
                 isFiltered = false; // Reset filter status
                 // Clear the filtering stack when returning to unfiltered mode
                 filteringStack.clear();
-                currentPage = 0;
+                currentPage = originalPage;
                 need2Sort = false;
                 continue;
             } else {
