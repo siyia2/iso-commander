@@ -224,6 +224,8 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
     bool umountMvRmBreak = false;
     bool filterHistory = false;
 
+    // Reset page when entering this menu
+    currentPage = 0;
 
     // Determine operation color and specific flags
     std::string operationColor = operation == "rm" ? "\033[1;91m" :
@@ -303,9 +305,11 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                 isFiltered = false;
                 // Clear the filtering stack when returning to unfiltered mode
                 filteringStack.clear();
+                currentPage = 0;
                 needsClrScrn = true;
                 continue;
             } else {
+				currentPage = 0;
                 return; // Exit the function
             }
         }
@@ -442,9 +446,11 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
                 isFiltered = false; // Reset filter status
                 // Clear the filtering stack when returning to unfiltered mode
                 filteringStack.clear();
+                currentPage = 0;
                 need2Sort = false;
                 continue;
             } else {
+				currentPage = 0;
                 need2Sort = false;
                 break; // Exit the loop
             }

@@ -57,6 +57,7 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
         
         // If filtering has results and changes the list, update the filtered list
         if (!filterUnchanged && hasResults) {
+			currentPage = 0;
             needsClrScrn = true;
             
             // Use move semantics to avoid unnecessary copying
@@ -124,7 +125,6 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
             saveHistory(filterHistory);
         }
     }
-    
     return true;  // Filtering operation was handled
 }
 
@@ -187,7 +187,7 @@ void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<
         } else {
             filteringStack.push_back(std::move(newState)); // Add new state using move
         }
-        
+        currentPage = 0;
         needsClrScrn = true;
         isFiltered = true;
         need2Sort = true;

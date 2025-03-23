@@ -675,10 +675,6 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
     while (true) {
         // Reset state for each iteration
         int currentCacheOld = 0;
-        
-        // Reset page when entering this menu
-		currentPage = 0;
-        
         std::vector<std::string> directoryPaths;
         std::unordered_set<std::string> uniquePaths, processedErrors, processedErrorsFind;
         std::unordered_set<std::string> successOuts, skippedOuts, failedOuts, invalidDirectoryPaths, fileNames;
