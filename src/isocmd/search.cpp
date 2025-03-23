@@ -675,6 +675,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
     while (true) {
         // Reset state for each iteration
         int currentCacheOld = 0;
+        bool isFirstTime = true;
         std::vector<std::string> directoryPaths;
         std::unordered_set<std::string> uniquePaths, processedErrors, processedErrorsFind;
         std::unordered_set<std::string> successOuts, skippedOuts, failedOuts, invalidDirectoryPaths, fileNames;
@@ -814,7 +815,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
         
         // Process files if operation wasn't cancelled
         if (!g_operationCancelled.load()) {
-            selectForImageFiles(fileType, files, newISOFound, list);
+            selectForImageFiles(fileType, files, newISOFound, list, isFirstTime);
         }
     }
 }

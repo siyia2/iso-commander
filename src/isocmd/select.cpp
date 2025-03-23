@@ -200,7 +200,7 @@ void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOLi
 
 
 // Main function to select and operate on ISOs by number for umount mount cp mv and rm
-void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
+void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, bool& isFirstTime) {
     // Bind readline keys
     rl_bind_key('\f', prevent_readline_keybindings);
     rl_bind_key('\t', prevent_readline_keybindings);
@@ -225,7 +225,10 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
     bool filterHistory = false;
 
     // Reset page when entering this menu
-    currentPage = 0;
+    if (isFirstTime) {
+		currentPage = 0;
+		isFirstTime = false;
+	}
 
     // Determine operation color and specific flags
     std::string operationColor = operation == "rm" ? "\033[1;91m" :
@@ -377,7 +380,7 @@ std::vector<std::string> nrgFilesCache; // Memory cached nrgImgFiles here
 
 
 // Main function to select and convert image files based on type to ISO
-void selectForImageFiles(const std::string& fileType, std::vector<std::string>& files, std::atomic<bool>& newISOFound, bool& list) {
+void selectForImageFiles(const std::string& fileType, std::vector<std::string>& files, std::atomic<bool>& newISOFound, bool& list, bool& isFirstTime) {
 
     // Bind keys for preventing clear screen and enabling tab completion
     rl_bind_key('\f', prevent_readline_keybindings);
@@ -391,7 +394,10 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
     bool hasPendingProcess = false;
     
     // Reset page when entering this menu
-    currentPage = 0;
+    if (isFirstTime) {
+		currentPage = 0;
+		isFirstTime = false;
+	}
     
     bool isFiltered = false; // Indicates if the file list is currently filtered
     bool needsClrScrn = true;

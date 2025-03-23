@@ -31,7 +31,7 @@ void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, s
 		// Calls prevent_clear_screen and tab completion
 		rl_bind_key('\f', prevent_readline_keybindings);
 		rl_bind_key('\t', prevent_readline_keybindings);
-		
+		bool isFirstTime = true;
 		isAtISOList.store(false);
 		
         clearScrollBuffer();
@@ -74,33 +74,33 @@ void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, s
 		switch (submenu_choice[0]) {
         case '1':
 			clearScrollBuffer();
-            selectForIsoFiles("mount", updateHasRun, isAtISOList, isImportRunning, newISOFound);
+            selectForIsoFiles("mount", updateHasRun, isAtISOList, isImportRunning, newISOFound, isFirstTime);
             clearScrollBuffer();
             break;
         case '2':
 			clearScrollBuffer();
-            selectForIsoFiles("umount", updateHasRun, isAtISOList, isImportRunning, newISOFound);
+            selectForIsoFiles("umount", updateHasRun, isAtISOList, isImportRunning, newISOFound, isFirstTime);
             clearScrollBuffer();
             break;
         case '3':
 			clearScrollBuffer();
-            selectForIsoFiles("rm", updateHasRun, isAtISOList, isImportRunning, newISOFound);
+            selectForIsoFiles("rm", updateHasRun, isAtISOList, isImportRunning, newISOFound, isFirstTime);
             clearScrollBuffer();
             break;
         case '4':
 			clearScrollBuffer();
-            selectForIsoFiles("mv", updateHasRun, isAtISOList, isImportRunning, newISOFound);
+            selectForIsoFiles("mv", updateHasRun, isAtISOList, isImportRunning, newISOFound, isFirstTime);
 
             clearScrollBuffer();
             break;
         case '5':
 			clearScrollBuffer();
-            selectForIsoFiles("cp", updateHasRun, isAtISOList, isImportRunning, newISOFound);
+            selectForIsoFiles("cp", updateHasRun, isAtISOList, isImportRunning, newISOFound, isFirstTime);
             clearScrollBuffer();
             break;
         case '6':
 			clearScrollBuffer();
-            selectForIsoFiles("write", updateHasRun, isAtISOList, isImportRunning, newISOFound);
+            selectForIsoFiles("write", updateHasRun, isAtISOList, isImportRunning, newISOFound, isFirstTime);
             clearScrollBuffer();
             break;
 			}
@@ -116,6 +116,7 @@ void submenu2(std::atomic<bool>& newISOFound) {
 		// Calls prevent_clear_screen and tab completion
 		rl_bind_key('\f', prevent_readline_keybindings);
 		rl_bind_key('\t', prevent_readline_keybindings);
+		
 		
 		clearScrollBuffer();
 		std::cout << "\033[1;32m+-------------------------+\n";
