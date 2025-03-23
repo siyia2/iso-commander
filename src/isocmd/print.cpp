@@ -15,6 +15,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     static const char* bold = "\033[1m";
     static const char* red = "\033[31;1m";
     static const char* green = "\033[32;1m";
+    static const char* darkCyan = "\033[38;5;37;1m";
     static const char* blueBold = "\033[94;1m";
     static const char* magenta = "\033[95m";
     static const char* magentaBold = "\033[95;1m";
@@ -38,8 +39,8 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     output << "\n";
 
     if (!disablePagination) {
-        output << brownBold << "Page " << (effectiveCurrentPage + 1) << "/" << totalPages
-               << " (Items (" << (startIndex + 1) << "-" << endIndex << ")/\033[1;93m" << totalItems << brownBold << ")"
+        output << brownBold << "Page " << darkCyan <<(effectiveCurrentPage + 1) << brownBold << "/" << yellowBold << totalPages << brownBold
+               << " (Items (" << darkCyan << (startIndex + 1) << "-" << endIndex << brownBold <<")/" << yellowBold << totalItems << brownBold << ")"
                << defaultColor << "\n\n";
     }
 
