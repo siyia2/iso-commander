@@ -40,7 +40,7 @@ void helpSelections() {
      // Selection tips
     std::cout << "\033[1;32m4. Tips:\033[0m\n"
 			  << "   • Filtered indexes can be utilized only within their generated list\033[0m\n"
-			  << "   • ^(Index) can be utilized only within the original unfiltered list\033[0m\n"
+			  << "   • Index^ can be utilized only within the original unfiltered list\033[0m\n"
 			  << "   • Filtering is adaptive, incremental, and unconstrained by pagination\033[0m\n"
               << "   • If filtering has no matches, no message or list update is issued\n" << std::endl;
               

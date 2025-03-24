@@ -11,14 +11,13 @@ std::vector<std::string> globalIsoFileList;
 
 // Function to print all required lists
 void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& isFiltered, size_t& currentPage) {
-    static const char* defaultColor = "\033[0m";
-    static const char* bold = "\033[1m";
-    static const char* red = "\033[31;1m";
-    static const char* green = "\033[32;1m";
+    static const char* defaultColor = "\033[0;1m";
+    static const char* redBold = "\033[31;1m";
+    static const char* greenBold = "\033[32;1m";
     static const char* darkCyan = "\033[38;5;37;1m";
     static const char* blueBold = "\033[94;1m";
-    static const char* magenta = "\033[95m";
     static const char* magentaBold = "\033[95;1m";
+    static const char* magentaBoldDark = "\033[38;5;105;1m";
     static const char* orangeBold = "\033[1;38;5;208m";
     static const char* grayBold = "\033[38;5;245m";
     static const char* brownBold = "\033[1;38;5;130m";
@@ -48,7 +47,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     size_t currentNumDigits = std::to_string(endIndex).length();
     
     for (size_t i = startIndex; i < endIndex; ++i) {
-        const char* sequenceColor = (i % 2 == 0) ? red : green;
+        const char* sequenceColor = (i % 2 == 0) ? redBold : greenBold;
         std::string directory, filename, displayPath, displayHash;
         
         // Get the item to display
@@ -79,19 +78,19 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
             std::string originalIndexStr = std::to_string(currentIndex);
             filteredIndexStr.insert(0, currentNumDigits - filteredIndexStr.length(), ' ');
             
-            output << sequenceColor << filteredIndexStr << "." << defaultColor << bold;
-            output << "^(" << yellowBold << originalIndexStr << defaultColor << bold << ") ";
+            output << sequenceColor << filteredIndexStr << ":" << defaultColor;
+            output << magentaBoldDark << originalIndexStr << defaultColor << "^ ";
         } else {
             // Just use the regular index for non-filtered items
             currentIndex = i + 1;
             std::string indexStr = std::to_string(currentIndex);
             indexStr.insert(0, currentNumDigits - indexStr.length(), ' ');
             
-            output << sequenceColor << indexStr << ". " << defaultColor << bold;
+            output << sequenceColor << indexStr << ". " << defaultColor;
         }
         
         if (listType == "ISO_FILES") {
-            output << directory << defaultColor << bold << "/" << magenta << filename;
+            output << directory << defaultColor << "/" << magentaBold << filename;
         } else if (listType == "MOUNTED_ISOS") {
             if (displayConfig::toggleFullListUmount)
                 output << blueBold << directory << magentaBold << displayPath << grayBold << displayHash;
