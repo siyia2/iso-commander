@@ -114,10 +114,10 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
 			toLowerInPlace(fileNameLower);
 
 			std::string fileType = 
-								fileNameLower.ends_with(".bin") ? "\033[0;1m.bin" : 
-								fileNameLower.ends_with(".img") ? "\033[0;1m.img" : 
-								fileNameLower.ends_with(".mdf") ? "\033[0;1m.mdf" : 
-								fileNameLower.ends_with(".nrg") ? "\033[0;1m.nrg" : "\033[0;1mImage";
+								fileNameLower.ends_with(".bin") ? "\033[0;1mBIN" : 
+								fileNameLower.ends_with(".img") ? "\033[0;1mIMG" : 
+								fileNameLower.ends_with(".mdf") ? "\033[0;1mMDF" : 
+								fileNameLower.ends_with(".nrg") ? "\033[0;1mNRG" : "\033[0;1mImage";
 
 			localSuccessMsgs.push_back(fileType + " file converted to ISO: \033[1;92m'" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m.\033[0;1m");
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
