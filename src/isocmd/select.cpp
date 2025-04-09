@@ -63,7 +63,7 @@ void processOperationForSelectedIsoFiles(const std::string& inputString, bool is
         }
         
         // Use the merged function for both mount and unmount
-        processIsoOperations(inputString, activeList, operationFiles, skippedMessages, 
+        processInputForConversionsForMountOrUmount(inputString, activeList, operationFiles, skippedMessages, 
                             operationFails, uniqueErrorMessages, umountMvRmBreak, verbose, isUnmount);
     } else if (write) {
         isAtISOList.store(false);
@@ -74,7 +74,7 @@ void processOperationForSelectedIsoFiles(const std::string& inputString, bool is
         isAtISOList.store(false);
         // Use const reference instead of copying
         const std::vector<std::string>& activeList = isFiltered ? filteredFiles : globalIsoFileList;
-        processOperationInput(inputString, activeList, operation, operationFiles, operationFails, 
+        processInputForConversionsForCpMvRm(inputString, activeList, operation, operationFiles, operationFails, 
                              uniqueErrorMessages, umountMvRmBreak, filterHistory, verbose, newISOFound);
     }
     
@@ -507,7 +507,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             }
             
             // Process the pending operations
-            processInput(combinedIndices, files, (fileType == "mdf"), (fileType == "nrg"), 
+            processInputForConversions(combinedIndices, files, (fileType == "mdf"), (fileType == "nrg"), 
                         processedErrors, successOuts, skippedOuts, failedOuts, verbose, needsClrScrn, newISOFound);
             
             needsClrScrn = true;
@@ -529,7 +529,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         }
         // Process other input commands for file processing
         else {
-            processInput(mainInputString, files, (fileType == "mdf"), (fileType == "nrg"), 
+            processInputForConversions(mainInputString, files, (fileType == "mdf"), (fileType == "nrg"), 
                          processedErrors, successOuts, skippedOuts, failedOuts, verbose, needsClrScrn, newISOFound);
             needsClrScrn = true;
             if (verbose) {
