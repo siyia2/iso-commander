@@ -63,7 +63,7 @@ void processOperationForSelectedIsoFiles(const std::string& inputString, bool is
         }
         
         // Use the merged function for both mount and unmount
-        processInputForConversionsForMountOrUmount(inputString, activeList, operationFiles, skippedMessages, 
+        processInputForMountOrUmount(inputString, activeList, operationFiles, skippedMessages, 
                             operationFails, uniqueErrorMessages, umountMvRmBreak, verbose, isUnmount);
     } else if (write) {
         isAtISOList.store(false);
@@ -74,7 +74,7 @@ void processOperationForSelectedIsoFiles(const std::string& inputString, bool is
         isAtISOList.store(false);
         // Use const reference instead of copying
         const std::vector<std::string>& activeList = isFiltered ? filteredFiles : globalIsoFileList;
-        processInputForConversionsForCpMvRm(inputString, activeList, operation, operationFiles, operationFails, 
+        processInputForCpMvRm(inputString, activeList, operation, operationFiles, operationFails, 
                              uniqueErrorMessages, umountMvRmBreak, filterHistory, verbose, newISOFound);
     }
     
