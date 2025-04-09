@@ -63,8 +63,8 @@ void helpSearches(bool isCpMv, bool import2ISO) {
     
     std::cout << "\033[1;32m1. Hotkeys:\033[0m\n"
 			   << "   • Quick Return:\033[1;33m Ctrl+d \033[0m\n"
+			   << (import2ISO ? "   • Cancel Search:\033[1;33m Ctrl+c \033[0m\n" : "")
 			   << "   • Clear Line:\033[1;33m Ctrl+u \033[0m\n"
-			   << (import2ISO ? "   • Cancel Search:\033[1;33m Ctrl+c \033[0m\n" : "") 
                << "   • Declutter Screen:\033[1;33m Ctrl+l \033[0m\n" << std::endl;
                
     std::cout << "\033[1;32m2. Selecting FolderPaths:\033[0m\n"
