@@ -510,7 +510,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         g_completerData.usbDevices = &usbDevices;
 
         // Finalize prompt with usage instructions
-        devicePromptStream << "\n\001\033[1;92m\002Mappings\001\033[1;94m\002 ↵ as \001\033[1;93m\002INDEX>DEVICE\001\033[1;94m\002, ? ↵ for help, ↵ to return:\001\033[0;1m\002 ";
+        devicePromptStream << "\n\001\033[1;92m\002Mappings\001\033[1;94m\002 ↵ as \001\033[1;93m\002INDEX>DEVICE\001\033[1;94m\002, ? ↵ for help, < ↵ to return:\001\033[0;1m\002 ";
         std::string devicePrompt = devicePromptStream.str();
 
         // Get user input
@@ -519,13 +519,22 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         );
         
         // Handle empty input
-        if (!deviceInput || deviceInput.get()[0] == '\0') {
+        if (!deviceInput) {
             restoreReadline();
             return {};
         }
         
-        // Process input
+        if (deviceInput.get()[0] == '\0') {
+			continue;
+		}
+		
+		 // Process input
         std::string mainInputString(deviceInput.get());
+		if (mainInputString == "<") {
+			restoreReadline();
+            return {};
+        }
+        
         if (mainInputString == "?") {
             helpMappings();
             continue;
