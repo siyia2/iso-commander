@@ -352,14 +352,13 @@ bool saveToDatabase(const std::vector<std::string>& isoFiles, std::atomic<bool>&
     
     // Vector to store new entries that are not already in the cache
     std::vector<std::string> newEntries;
-
+    
     // Iterate through the input ISO files to find new entries
     for (const auto& iso : isoFiles) {
         if (existingSet.find(iso) == existingSet.end()) {
             // If the ISO file is not in the existing cache, add it to newEntries
             newEntries.push_back(iso);
             newISOFound.store(true); // Set the atomic variable to true when a new ISO is found
-            loadFromDatabase(globalIsoFileList); // Reload the global ISO file list
         }
     }
     
