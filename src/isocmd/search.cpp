@@ -268,6 +268,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
     }
 }
 
+
 // IMAGE SECTION
 
 
@@ -399,7 +400,6 @@ void clearRamCache(bool& modeMdf, bool& modeNrg) {
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     clearScrollBuffer();
 }
-
 
 
 // Blacklist function for MDF BIN IMG NRG
