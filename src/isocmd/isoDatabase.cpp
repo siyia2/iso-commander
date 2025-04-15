@@ -464,8 +464,8 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
         // Display the buffered entries in RAM
         std::cout << "\n\033[1;94m=== Buffered Entries ===\033[0m\n";
         
-        // Show the total number of transformation cache entries in RAM
-        std::cout << "\033[1;96m\nString Data → RAM:\033[1;97m " << transformationCache.size() + cachedParsesForUmount.size() + originalPathsCache.size() << "\n";
+        // Show the total number of string transformation cache entries in RAM
+        std::cout << "\033[1;96m\nSTR → RAM:\033[1;97m " << transformationCache.size() + cachedParsesForUmount.size() + originalPathsCache.size() << "\n";
         
         // Show the number of ISO files in RAM
         std::cout << "\n\033[1;92mISO → RAM:\033[1;97m " << globalIsoFileList.size() << "\n";
