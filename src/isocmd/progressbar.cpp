@@ -143,9 +143,8 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
                 ss << " ";
             }
             
-            if (!isFinal) {
-                ss << "Speed: " << formatSize(speed) << "/s";
-            }
+            ss << "Speed: " << formatSize(speed) << "/s";
+            
             ss << "\033[K";  // Clear to the end of line
         }
         
@@ -204,7 +203,6 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             
             // Restore terminal settings for input
             restoreInput(&oldt, oldf);
-            if (bytesTrackingEnabled) std::cout << "\033[1A";
             // Prompt for verbose output
             const std::string prompt = "\033[1;94mDisplay verbose output? (y/n):\033[0;1m ";
             std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
