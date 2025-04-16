@@ -303,6 +303,7 @@ std::string userDestDirRm(const std::vector<std::string>& isoFiles, std::vector<
                 historyInput = historyInput.substr(0, historyInput.size() - 3);
             }
             add_history(historyInput.c_str());  // Add valid history input
+            saveHistory(filterHistory);
 
             shouldContinue = false;  // End the loop after valid input
         } else {

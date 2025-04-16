@@ -304,12 +304,6 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
         int maxDepth = 0;
         refreshForDatabase(userDestDir, promptFlag, maxDepth, filterHistory, newISOFound);
     }
-    
-    // Save history and clear it if it's not a delete operation
-    if (!isDelete && !operationIsos.empty()) {
-        saveHistory(filterHistory);
-        clear_history();
-    }
 
     // Clear the history after the operation is complete
     clear_history();
