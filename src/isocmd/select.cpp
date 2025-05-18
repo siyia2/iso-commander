@@ -318,6 +318,11 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                 return; // Exit the function
             }
         }
+        
+        if (inputString == "proc" && pendingIndices.empty()) {
+			hasPendingProcess = false;
+			continue;
+		}
             
         if (inputString == "clr") {
             pendingIndices.clear();
@@ -466,6 +471,11 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             }
         }
         
+        if (mainInputString == "proc" && pendingIndices.empty()) {
+			hasPendingProcess = false;
+			continue;
+		}
+        
         // Check for clear pending command
         if (mainInputString == "clr") {
             pendingIndices.clear();
@@ -478,7 +488,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         if (rawInput && rawInput.get()[0] == ';') {
              std::cout << "\033[2A\033[K"; // Clear the line when entering ;
              needsClrScrn = false;
-            continue;
+			 continue;
         }
         
         std::atomic<bool> isAtISOList{false};
