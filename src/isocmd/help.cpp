@@ -22,7 +22,7 @@ void helpSelections() {
               << "   • Multiple items: Separate with spaces (e.g., '1 5 6')\n"
               << "   • Range of items: Use a hyphen (e.g., '1-3')\n"
               << "   • Combine methods: '1-3 5 7-9'\n"
-              << "   • Mark as pending: Append a semicolon '1-3 5 7-9;'\n"
+              << "   • Mark as pending: '1-3 5 7-9;'\n"
               << "   • Select all: Enter '00' (for mount/umount only)\n" << std::endl;
     
     // Special commands
@@ -39,8 +39,8 @@ void helpSelections() {
     
      // Selection tips
     std::cout << "\033[1;32m4. Tips:\033[0m\n"
-			  << "   • Filtered indexes can be utilized only within their generated list\033[0m\n"
-			  << "   • Index^ can be utilized only within the original unfiltered list\033[0m\n"
+			  << "   • Filtered indexes can only be used within their generated list\033[0m\n"
+			  << "   • Index^ refers to the original unfiltered list\033[0m\n"
 			  << "   • Filtering is adaptive, incremental, and unconstrained by pagination\033[0m\n"
               << "   • If filtering has no matches, no message or list update is issued\n" << std::endl;
               
@@ -73,8 +73,8 @@ void helpSearches(bool isCpMv, bool import2ISO) {
         std::cout << "   • Overwrite files for cp/mv: Append -o (e.g., '/directory/ -o' or '/directory1/;/directory2/ -o')\n" << std::endl;
         
         std::cout << "\033[1;32m2. Tips:\033[0m\n"
-        << "   • Performing mv on single destination path on the same device is instant\n"
-        << "   • Performing mv on multiple destination paths utilizes cp and fs::remove (slower)\n" << std::endl;
+        << "   • Performing mv to a single destination path on the same device is instant\n"
+        << "   • Performing mv to multiple destination paths uses cp and fs::remove (slower)\n" << std::endl;
     }
     
     if (!isCpMv) {
