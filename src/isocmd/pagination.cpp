@@ -62,10 +62,19 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
 		if (isUnmount && !displayConfig::toggleNamesOnly) {
 			displayConfig::toggleFullListUmount = true;
 		}
-		if (!isUnmount && !isConversion) {
-			// Optimization: sort only when we are not on the umount list, since the mount directory is constant
+		if (!isConversion) {
+			std::lock_guard<std::mutex> lock(updateListMutex);
             sortFilesCaseInsensitive(globalIsoFileList);
-		} else if (isConversion) {
+		} else if (isUnmount) {
+			std::lock_guard<std::mutex> lock(updateListMutex);
+			std::thread([] {
+				sortFilesCaseInsensitive(globalIsoFileList);
+			}).detach(); // Launch in background and detach
+		} else {
+			std::lock_guard<std::mutex> lock(updateListMutex);
+			std::thread([] {
+				sortFilesCaseInsensitive(globalIsoFileList);
+			}).detach(); // Launch in background and detach
 			// Flag that sorts convert2ISO lists when in and out of filename-only mode
 			need2Sort = true;
 		}
