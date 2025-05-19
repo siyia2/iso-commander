@@ -8,6 +8,10 @@
 // Mutex to prevent race conditions when live updating ISO list
 std::mutex updateListMutex;
 
+// Mutexes to prevent race conditions when updating Image list
+std::mutex binImgCacheMutex;
+std::mutex mdfMdsCacheMutex;
+std::mutex nrgCacheMutex;
 
 // Default Display config options for lists
 namespace displayConfig {
@@ -182,12 +186,18 @@ void clearAndLoadImageFiles(std::vector<std::string>& files, const std::string& 
     if (!list) {
 		if (need2Sort) {
 			sortFilesCaseInsensitive(files); // Sort the files case-insensitively
-				(fileType == "bin" || fileType == "img") 
-					? sortFilesCaseInsensitive(binImgFilesCache) 
-						: fileType == "mdf" 
-							? sortFilesCaseInsensitive(mdfMdsFilesCache) 
-						: sortFilesCaseInsensitive(nrgFilesCache);
-		}
+				if (fileType == "bin" || fileType == "img") {
+					std::lock_guard<std::mutex> lock(binImgCacheMutex);
+					sortFilesCaseInsensitive(binImgFilesCache);
+				} else if (fileType == "mdf") {
+					std::lock_guard<std::mutex> lock(mdfMdsCacheMutex);
+					sortFilesCaseInsensitive(mdfMdsFilesCache);
+				} else {
+					std::lock_guard<std::mutex> lock(nrgCacheMutex);
+					sortFilesCaseInsensitive(nrgFilesCache);
+				}
+			}
+
 			need2Sort = false;
 	}
 	

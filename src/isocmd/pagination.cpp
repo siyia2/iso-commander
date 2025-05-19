@@ -9,7 +9,7 @@ size_t ITEMS_PER_PAGE = 25;
 
 
 // Main pagination function
-bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPages, size_t& currentPage, bool& needsClrScrn, bool& need2Sort, const bool isMount, const bool isUnmount, const bool isWrite, const bool isConversion, std::atomic<bool>& isAtISOList) {
+bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPages, size_t& currentPage, bool& needsClrScrn, const bool isMount, const bool isUnmount, const bool isWrite, const bool isConversion, std::atomic<bool>& isAtISOList) {
 	
 	// To fix a hang
 	if (command.find("//") != std::string::npos) {
@@ -62,22 +62,22 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
 		if (isUnmount && !displayConfig::toggleNamesOnly) {
 			displayConfig::toggleFullListUmount = true;
 		}
-		if (!isConversion) {
+		std::thread([] {
 			std::lock_guard<std::mutex> lock(updateListMutex);
-            sortFilesCaseInsensitive(globalIsoFileList);
-		} else if (isUnmount) {
-			std::lock_guard<std::mutex> lock(updateListMutex);
-			std::thread([] {
-				sortFilesCaseInsensitive(globalIsoFileList);
-			}).detach(); // Launch in background and detach
-		} else {
-			std::lock_guard<std::mutex> lock(updateListMutex);
-			std::thread([] {
-				sortFilesCaseInsensitive(globalIsoFileList);
-			}).detach(); // Launch in background and detach
-			// Flag that sorts convert2ISO lists when in and out of filename-only mode
-			need2Sort = true;
-		}
+			sortFilesCaseInsensitive(globalIsoFileList);
+		}).detach(); // Launch in background and detach
+		std::thread([] {
+			std::lock_guard<std::mutex> lock(binImgCacheMutex);
+			sortFilesCaseInsensitive(binImgFilesCache);
+		}).detach();
+		std::thread([] {
+			std::lock_guard<std::mutex> lock(mdfMdsCacheMutex);
+			sortFilesCaseInsensitive(mdfMdsFilesCache);
+		}).detach();
+		std::thread([] {
+			std::lock_guard<std::mutex> lock(nrgCacheMutex);
+			sortFilesCaseInsensitive(nrgFilesCache);
+		}).detach();
 		needsClrScrn = true;
 		return true;
 	}
