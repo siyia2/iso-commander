@@ -116,7 +116,6 @@ bool readUserConfigUpdates(const std::string& filePath) {
 }
 
 
-// Function to set ITEMS_PER_PAGE
 // Function to read the configuration file and set pagination settings
 bool paginationSet(const std::string& filePath) {
     // Declare a map to store the configuration key-value pairs (unused in this function, but could be used later)
@@ -180,6 +179,7 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
     std::vector<std::pair<std::string, std::string>> orderedDefaults = {
         {"auto_update", "off"},
         {"pagination", "25"},
+        {"filenames_only", "off"},
         {"mount_list", "compact"},
         {"umount_list", "full"},
         {"cp_mv_rm_list", "compact"},
@@ -269,6 +269,8 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
     displayConfig::toggleFullListCpMvRm = (configMap["cp_mv_rm_list"] == "full");
     displayConfig::toggleFullListWrite = (configMap["write_list"] == "full");
     displayConfig::toggleFullListConversions = (configMap["conversion_lists"] == "full");
+    
+    displayConfig::toggleNamesOnly = (configMap["filenames_only"] == "on");
 
     return configMap;
 }
@@ -315,6 +317,7 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
     std::vector<std::pair<std::string, std::string>> orderedDefaults = {
         {"auto_update", config.count("auto_update") ? config["auto_update"] : "off"},
         {"pagination", std::to_string(paginationValue)},
+        {"filenames_only", config.count("filenames_only") ? config["filenames_only"] : "off"},
         {"mount_list", config.count("mount_list") ? config["mount_list"] : "compact"},
         {"umount_list", config.count("umount_list") ? config["umount_list"] : "full"},
         {"cp_mv_rm_list", config.count("cp_mv_rm_list") ? config["cp_mv_rm_list"] : "compact"},
@@ -348,6 +351,72 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
         std::cout << "\n\033[0;1mPagination status updated: \033[1;91mDisabled\033[0;1m." << std::endl;
     }
     
+    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+}
+
+
+
+// Function to set the AutoUpdate switch in teh config file
+void updateFilenamesOnly(const std::string& configPath, const std::string& inputSearch) {
+    signal(SIGINT, SIG_IGN);  // Ignore Ctrl+C
+    disable_ctrl_d();
+
+    // Create directory if it doesn't exist
+    std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
+    if (!std::filesystem::exists(dirPath)) {
+        if (!std::filesystem::create_directories(dirPath)) {
+            std::cerr << "\n\033[1;91mFailed to create directory: \033[1;93m'" 
+                      << dirPath.string() << "\033[1;91m'.\033[0;1m\n";
+            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            return;
+        }
+    }
+
+    // Read the existing configuration
+    std::map<std::string, std::string> config = readConfig(configPath);
+
+    // Update settings based on input
+    if (inputSearch == "*flno_on") {
+        config["filenames_only"] = "on";
+        displayConfig::toggleNamesOnly = true;
+    } else if (inputSearch == "*flno_off") {
+        config["filenames_only"] = "off";
+        displayConfig::toggleNamesOnly = false;
+    }
+
+    // Maintain order of settings
+    std::vector<std::pair<std::string, std::string>> orderedDefaults = {
+        {"auto_update", config["auto_update"]},
+        {"pagination", config["pagination"]},
+        {"filenames_only", config["filenames_only"]},
+        {"mount_list", config["mount_list"]},
+        {"umount_list", config["umount_list"]},
+        {"cp_mv_rm_list", config["cp_mv_rm_list"]},
+        {"write_list", config["write_list"]},
+        {"conversion_lists", config["conversion_lists"]}
+    };
+
+    // Write back to config file
+    std::ofstream outFile(configPath);
+    if (outFile.is_open()) {
+        for (const auto& [key, value] : orderedDefaults) {
+            outFile << key << " = " << value << "\n";
+        }
+        outFile.close();
+
+        if (inputSearch == "*flno_on" || inputSearch == "*flno_off") {
+            std::cout << "\n\033[0;1mFilename-only display mode has been "
+                      << (inputSearch == "*flno_on" ? "\033[1;92menabled" : "\033[1;91mdisabled")
+                      << "\033[0;1m.\033[0;1m\n";
+        }
+
+    } else {
+        std::cerr << "\n\033[1;91mError: Unable to access configuration file: \033[1;93m'"
+                  << configPath << "'\033[1;91m.\033[0;1m\n";
+    }
+
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
@@ -533,6 +602,7 @@ void displayConfigurationOptions(const std::string& configPath) {
         std::vector<std::pair<std::string, std::string>> orderedDefaults = {
             {"auto_update", "off"},
             {"pagination", "25"},
+            {"filenames_only", "off"},
             {"mount_list", "compact"},
             {"umount_list", "full"},
             {"cp_mv_rm_list", "compact"},

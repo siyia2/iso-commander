@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../headers.h"
+#include "../display.h"
 #include "../threadpool.h"
 
 
@@ -607,7 +608,9 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
         clearHistory(inputSearch);
     } else if (inputSearch == "*auto_on" || inputSearch == "*auto_off") {
         updateAutoUpdateConfig(configPath, inputSearch);
-    } else if (inputSearch.substr(0, 12) == "*pagination_") {
+    } else if (inputSearch == "*flno_on" || inputSearch == "*flno_off") {
+		updateFilenamesOnly(configPath, inputSearch);
+	} else if (inputSearch.substr(0, 12) == "*pagination_") {
         updatePagination(inputSearch, configPath);
     } else if (isValidInput(inputSearch)) {
         setDisplayMode(inputSearch);

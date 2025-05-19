@@ -63,7 +63,7 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
                     refreshForDatabase(dummyDir, promptFlag, maxDepth, filterHistory, newISOFound);
                 }
                 
-                if (input ==  "config" || input == "stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter" || input == "*auto_off" || input == "*auto_on" || isValidInput(input) || input.starts_with("*pagination_")) {
+                if (input ==  "config" || input == "stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter" || input == "*auto_off" || input == "*auto_on" || input == "*flno_on" || input == "*flno_off" || isValidInput(input) || input.starts_with("*pagination_")) {
                     databaseSwitches(input, promptFlag, maxDepth, filterHistory, newISOFound);
                     return;
                 }
@@ -717,6 +717,10 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
 		
 		if (inputSearch.starts_with("*pagination_")) {
 			updatePagination(inputSearch, configPath);
+			continue;
+		}
+		if (inputSearch == "*flno_on" || inputSearch == "*flno_off") {
+			updateFilenamesOnly(configPath, inputSearch);
 			continue;
 		}
 		
