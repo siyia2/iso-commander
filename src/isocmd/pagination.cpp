@@ -9,7 +9,7 @@ size_t ITEMS_PER_PAGE = 25;
 
 
 // Main pagination function
-bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPages, size_t& currentPage, bool& needsClrScrn, const bool isMount, const bool isUnmount, const bool isWrite, const bool isConversion, std::atomic<bool>& isAtISOList) {
+bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPages, size_t& currentPage, bool& needsClrScrn, const bool isMount, const bool isUnmount, const bool isWrite, const bool isConversion, bool& need2Sort, std::atomic<bool>& isAtISOList) {
 	
 	// To fix a hang
 	if (command.find("//") != std::string::npos) {
@@ -78,6 +78,10 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
 			std::lock_guard<std::mutex> lock(nrgCacheMutex);
 			sortFilesCaseInsensitive(nrgFilesCache);
 		}).detach();
+		
+		// Flag to initialize list sorting immediately for convert2ISO only
+		if (isConversion) need2Sort = true;
+		
 		needsClrScrn = true;
 		return true;
 	}
