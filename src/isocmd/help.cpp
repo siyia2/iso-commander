@@ -28,7 +28,7 @@ void helpSelections() {
     // Special commands
     std::cout << "\033[1;32m3. Special Commands:\033[0m\n"
 			  << "   • Enter \033[1;34m'~'\033[0m - Switch between compact and full list\n"
-			  << "   • Enter \033[1;34m'*'\033[0m - Toggle filename-only display mode for all lists\n"
+			  << "   • Enter \033[1;34m'*'\033[0m - Toggle filename-only lists\n"
 			  << "   • Enter \033[1;34m'/'\033[0m - Filter the current list based on search terms (e.g., 'term' or 'term1;term2')\n"
               << "   • Enter \033[1;34m'/term1;term2'\033[0m - Directly filter the list for items containing 'term1' or 'term2'\n"
 			  << "   • Enter \033[1;34m'n'\033[0m - Go to next page if pages > 1\n"
@@ -64,7 +64,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
     
     std::cout << "\033[1;32m1. Hotkeys:\033[0m\n"
 			   << "   • Quick Return:\033[1;33m Ctrl+d \033[0m\n"
-			   << (import2ISO ? "   • Cancel Search:\033[1;33m Ctrl+c \033[0m\n" : "")
+			   << (!isCpMv ? "   • Cancel Search:\033[1;33m Ctrl+c \033[0m\n" : "")
 			   << "   • Clear Line:\033[1;33m Ctrl+u \033[0m\n" << std::endl;
                
     std::cout << "\033[1;32m2. Selecting FolderPaths:\033[0m\n"
@@ -109,9 +109,11 @@ void helpSearches(bool isCpMv, bool import2ISO) {
 				<<  "      • Conversion lists: Enter \033[1;35m'*fl_c'\033[0m or \033[1;35m'*cl_c'\033[0m\n"
 				<<  "      • Combine settings: Use multiple letters after \033[1;35m'*fl_'\033[0m or \033[1;35m'*cl_'\033[0m (e.g., \033[1;35m'*cl_mu'\033[0m for mount and umount lists)\n"
               << std::endl;
+        std::cout << "\033[1;38;5;208m   C. Filename-only Lists (default: disabled):\033[0m\n"
+					<< "      • Enter \033[1;35m'*flno_on'\033[0m or \033[1;35m'*flno_off'\033[0m - Enable/Disable filename-only lists (overrides all display modes)\n\n";
               
 		if (import2ISO) { 
-			std::cout << "   \033[1;38;5;208mC. Auto-Update ISO Database (default: disabled):\033[0m\n"
+			std::cout << "   \033[1;38;5;208mD. Auto-Update ISO Database (default: disabled):\033[0m\n"
             << "      • Enter \033[1;35m'*auto_on'\033[0m or \033[1;35m'*auto_off'\033[0m - Enable/Disable automatic ISO imports from stored folder paths\n\n";
 		}
     }
