@@ -164,7 +164,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
 // Function to clear and load list for image files
 void clearAndLoadImageFiles(std::vector<std::string>& files, const std::string& fileType, bool& need2Sort, bool& isFiltered, bool& list,std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage) {
     // Clear the screen for new content
-    clearScrollBuffer(); 
+    clearScrollBuffer();
     
     // Optimization: sort only if found files are different from cache or it is their first listing
 	files = 

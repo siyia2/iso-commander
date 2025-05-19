@@ -9,7 +9,7 @@ size_t ITEMS_PER_PAGE = 25;
 
 
 // Main pagination function
-bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPages, size_t& currentPage, bool& needsClrScrn, const bool isMount, const bool isUnmount, const bool isWrite, const bool isConversion, std::atomic<bool>& isAtISOList) {
+bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPages, size_t& currentPage, bool& needsClrScrn, bool& need2Sort, const bool isMount, const bool isUnmount, const bool isWrite, const bool isConversion, std::atomic<bool>& isAtISOList) {
 	
 	// To fix a hang
 	if (command.find("//") != std::string::npos) {
@@ -62,9 +62,12 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
 		if (isUnmount && !displayConfig::toggleNamesOnly) {
 			displayConfig::toggleFullListUmount = true;
 		}
-		if (!isUnmount) {
+		if (!isUnmount && !isConversion) {
 			// Optimization: sort only when we are not on the umount list, since the mount directory is constant
             sortFilesCaseInsensitive(globalIsoFileList);
+		} else if (isConversion) {
+			// Flag that sorts convert2ISO lists when in and out of filename-only mode
+			need2Sort = true;
 		}
 		needsClrScrn = true;
 		return true;
