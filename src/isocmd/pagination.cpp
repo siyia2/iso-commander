@@ -58,26 +58,25 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
 	}
 	
 	if (command == "*") {
-		displayConfig::toggleNamesOnly = !displayConfig::toggleNamesOnly;
-		if (isUnmount && !displayConfig::toggleNamesOnly) {
-			displayConfig::toggleFullListUmount = true;
+		if (!isUnmount) {
+			displayConfig::toggleNamesOnly = !displayConfig::toggleNamesOnly;
+			std::thread([] {
+				std::lock_guard<std::mutex> lock(updateListMutex);
+				sortFilesCaseInsensitive(globalIsoFileList);
+			}).detach(); // Launch in background and detach
+			std::thread([] {
+				std::lock_guard<std::mutex> lock(binImgCacheMutex);
+				sortFilesCaseInsensitive(binImgFilesCache);
+			}).detach();
+			std::thread([] {
+				std::lock_guard<std::mutex> lock(mdfMdsCacheMutex);
+				sortFilesCaseInsensitive(mdfMdsFilesCache);
+			}).detach();
+			std::thread([] {
+				std::lock_guard<std::mutex> lock(nrgCacheMutex);
+				sortFilesCaseInsensitive(nrgFilesCache);
+			}).detach();
 		}
-		std::thread([] {
-			std::lock_guard<std::mutex> lock(updateListMutex);
-			sortFilesCaseInsensitive(globalIsoFileList);
-		}).detach(); // Launch in background and detach
-		std::thread([] {
-			std::lock_guard<std::mutex> lock(binImgCacheMutex);
-			sortFilesCaseInsensitive(binImgFilesCache);
-		}).detach();
-		std::thread([] {
-			std::lock_guard<std::mutex> lock(mdfMdsCacheMutex);
-			sortFilesCaseInsensitive(mdfMdsFilesCache);
-		}).detach();
-		std::thread([] {
-			std::lock_guard<std::mutex> lock(nrgCacheMutex);
-			sortFilesCaseInsensitive(nrgFilesCache);
-		}).detach();
 		
 		// Flag to initialize list sorting immediately for convert2ISO only
 		if (isConversion) need2Sort = true;
