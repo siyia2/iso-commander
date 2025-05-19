@@ -466,7 +466,7 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
         std::cout << "\n\033[1;94m=== Buffered Entries ===\033[0m\n";
         
         // Show the total number of cached string entries in RAM
-        std::cout << "\033[1;96m\nSTR → RAM:\033[1;97m " << transformationCache.size() + cachedParsesForUmount.size() + originalPathsCache.size() << "\n";
+        std::cout << "\033[1;96m\nSTR → RAM:\033[1;97m " << transformationCache.size() + cachedParsesForUmount.size() << "\n";
         
         // Show the number of ISO files in RAM
         std::cout << "\n\033[1;92mISO → RAM:\033[1;97m " << globalIsoFileList.size() << "\n";
@@ -583,21 +583,6 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
                 }
                 ++it;
             }
-            // Clean originalPathsCache for .iso entries (case-insensitive)
-            for (auto it = originalPathsCache.begin(); it != originalPathsCache.end();) {
-                const std::string& key = it->first;
-                if (key.size() >= 4) {
-                    // Extract the last 4 characters (extension)
-                    std::string ext = key.substr(key.size() - 4);
-                    // Convert extension to lowercase using toLowerInPlace
-                    toLowerInPlace(ext);
-                    if (ext == ".iso") {
-                        it = originalPathsCache.erase(it);
-                        continue;
-                    }
-                }
-                ++it;
-            }   
                     
             std::cout << "\n\001\033[1;92mISO database cleared successfully\001\033[1;92m." << std::endl;
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";

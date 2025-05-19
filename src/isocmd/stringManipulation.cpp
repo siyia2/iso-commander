@@ -15,96 +15,82 @@ void toLowerInPlace(std::string& str) {
 // For memory mapping string transformations
 std::unordered_map<std::string, std::string> transformationCache;
 
-// For memory mapping original paths
-std::unordered_map<std::string, std::string> originalPathsCache;
-
 
 // Function to extract directory and filename from a given path
-std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view path, const std::string& location) {
-    // Find last slash efficiently
+std::pair<std::string, std::string>
+extractDirectoryAndFilename(std::string_view path, const std::string& location) {
+    // Find last slash or backslash
     auto lastSlashPos = path.find_last_of("/\\");
     
-    // Handle case with no directory separator
+    // No directory separator → everything is “filename”
     if (lastSlashPos == std::string_view::npos) {
-        // If toggleNamesOnly is enabled, return filename only
-        if (displayConfig::toggleNamesOnly) {
-            return {"", std::string(path)};
-        }
         return {"", std::string(path)};
     }
     
-    // Extract filename part (everything after the last slash)
-    std::string filename = std::string(path.substr(lastSlashPos + 1));
-    std::string fullPath = std::string(path);
+    // Extract a view of the filename (no allocation yet)
+    std::string_view filenameView = path.substr(lastSlashPos + 1);
+    std::string fullPath(path);  // key for cache
     
-    // Handle toggleNamesOnly configuration
+    // If only names should be displayed, or one of the “full list” modes
     if (displayConfig::toggleNamesOnly) {
-        return {"", filename};
+        return {"", std::string(filenameView)};
     }
-    
-    // Get original directory path
-    std::string originalDir = std::string(path.substr(0, lastSlashPos));
-    
-    // Early return for various full list modes - use original directory
-    if ((displayConfig::toggleFullListMount && location == "mount") ||
-        (displayConfig::toggleFullListCpMvRm && location == "cp_mv_rm") ||
-        (displayConfig::toggleFullListConversions && location == "conversions") ||
-        (displayConfig::toggleFullListWrite && location == "write")) {
-        return {originalDir, filename};
+    if ((displayConfig::toggleFullListMount       && location == "mount")       ||
+        (displayConfig::toggleFullListCpMvRm      && location == "cp_mv_rm")    ||
+        (displayConfig::toggleFullListConversions && location == "conversions")||
+        (displayConfig::toggleFullListWrite       && location == "write")) {
+        return { std::string(path.substr(0, lastSlashPos)),
+                 std::string(filenameView) };
     }
-    
-    // Check transformation cache
-    auto cacheIt = transformationCache.find(fullPath);
-    if (cacheIt != transformationCache.end()) {
-        return {cacheIt->second, filename};
+
+    // Check if we’ve already cached the processed directory
+    auto it = transformationCache.find(fullPath);
+    if (it != transformationCache.end()) {
+        // Return a copy of the cached directory + a new filename string
+        return { it->second, std::string(filenameView) };
     }
-    
-    // Optimize directory shortening
+
+    // Otherwise, build the truncated directory
     std::string processedDir;
-    processedDir.reserve(originalDir.length() / 2);  // Reasonable pre-allocation
-    
+    processedDir.reserve(lastSlashPos / 2);
     size_t start = 0;
     while (start < lastSlashPos) {
         auto end = path.find_first_of("/\\", start);
         if (end == std::string_view::npos || end > lastSlashPos) {
             end = lastSlashPos;
         }
-        
-        // Get component length
-        size_t componentLength = end - start;
-        
-        // Find first special character position
-        size_t firstSpecialPos = std::string_view::npos;
+
+        size_t compLen = end - start;
+        size_t firstSpecial = std::string_view::npos;
         for (size_t i = start; i < end; ++i) {
             char c = path[i];
             if (c == ' ' || c == '-' || c == '_' || c == '.') {
-                firstSpecialPos = i;
+                firstSpecial = i;
                 break;
             }
         }
-        
-        // Determine truncation position (first special char or max 16 chars)
-        size_t truncatePos = componentLength;
-        if (firstSpecialPos != std::string_view::npos) {
-            truncatePos = std::min(truncatePos, firstSpecialPos - start);
+
+        size_t truncLen = compLen;
+        if (firstSpecial != std::string_view::npos) {
+            truncLen = std::min(truncLen, firstSpecial - start);
         }
-        truncatePos = std::min(truncatePos, size_t(16));
-        
-        // Append the truncated component
-        processedDir.append(path.substr(start, truncatePos));
-        
-        // Add separator if not the last component
+        truncLen = std::min(truncLen, size_t(16));
+
+        processedDir.append(path.substr(start, truncLen));
         if (end < lastSlashPos) {
             processedDir.push_back('/');
         }
-        
         start = end + 1;
     }
-    
-    // Cache the transformed result
-    transformationCache[fullPath] = processedDir;
-    
-    return {processedDir, filename};
+
+    // Cache the newly processed directory
+    auto [insertIt, inserted] = transformationCache.emplace(
+        std::move(fullPath),
+        processedDir
+    );
+
+    // Return copies (directory + filename) to match original API
+    return { insertIt->second, std::string(filenameView) };
 }
 
 
