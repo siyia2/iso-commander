@@ -13,6 +13,7 @@ std::mutex binImgCacheMutex;
 std::mutex mdfMdsCacheMutex;
 std::mutex nrgCacheMutex;
 
+
 // Default Display config options for lists
 namespace displayConfig {
     bool toggleFullListMount = false;
@@ -74,7 +75,7 @@ bool clearAndLoadFiles(std::vector<std::string>& filteredFiles, bool& isFiltered
     
     // Lock to prevent simultaneous access to std::cout
     {
-        std::lock_guard<std::mutex> printLock(couNtMutex);
+        std::lock_guard<std::mutex> lock(updateListMutex);
         if (umountMvRmBreak) {
 			// Clear the filtering stack when returning to unfiltered mode from list modifications with Mv/Rm
 			filteringStack.clear();
