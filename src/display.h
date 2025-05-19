@@ -11,6 +11,7 @@ namespace displayConfig {
     extern bool toggleFullListCpMvRm;
     extern bool toggleFullListWrite;
     extern bool toggleFullListConversions;
+    extern bool toggleNamesOnly;
 }
 
 #endif // DISPLAY_H
