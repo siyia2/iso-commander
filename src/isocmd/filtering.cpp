@@ -11,6 +11,7 @@ std::vector<FilteringState> filteringStack;
 
 
 // Function to hanlde filtering for selectForIsoFiles
+
 bool handleFilteringForISO(const std::string& inputString, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, const std::string& operation, const std::string& operationColor, const std::vector<std::string>& isoDirs, bool isUnmount, size_t& currentPage) {
     // Early exit if not a filtering operation
     if (inputString != "/" && (inputString.empty() || inputString[0] != '/')) {
@@ -25,33 +26,44 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
         return (pos == std::string::npos) ? path : path.substr(pos + 1);
     };
 
+    auto tokenizeSearchString = [](const std::string& searchString) -> std::vector<std::pair<std::string, bool>> {
+        std::vector<std::pair<std::string, bool>> tokens;
+        std::istringstream tokenStream(searchString);
+        std::string token;
+        while (std::getline(tokenStream, token, ';')) {
+            token.erase(0, token.find_first_not_of(" \t"));
+            token.erase(token.find_last_not_of(" \t") + 1);
+            if (!token.empty()) {
+                bool hasUpper = std::any_of(token.begin(), token.end(),
+                    [](unsigned char c) { return std::isupper(c); });
+                tokens.emplace_back(token, hasUpper);
+            }
+        }
+        return tokens;
+    };
+
     auto applyFilter = [&](const std::string& searchString) -> bool {
         if (searchString.empty()) return false;
 
         const auto& sourceList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
         std::vector<std::string> tempFiltered;
         std::vector<size_t> tempIndices;
-        tempFiltered.reserve(sourceList.size());
-        tempIndices.reserve(sourceList.size());
 
-        // Precompute case-sensitive search conditions
-        bool searchHasUpper = std::any_of(searchString.begin(), searchString.end(),
-            [](unsigned char c) { return std::isupper(c); });
-        std::string searchLower;
-        if (!searchHasUpper) {
-            searchLower = searchString;
-            toLowerInPlace(searchLower);
+        auto tokens = tokenizeSearchString(searchString);
+        if (tokens.empty()) {
+            tempFiltered = sourceList;
+            return true;
         }
 
-        // Single-pass filtering with index tracking
-        for (size_t i = 0; i < sourceList.size(); ++i) {
-            const auto& entry = sourceList[i];
-            bool matches = false;
+        if (displayConfig::toggleNamesOnly) {
+            // Name-only multi-term filtering
+            tempFiltered.reserve(sourceList.size());
+            tempIndices.reserve(sourceList.size());
 
-            if (displayConfig::toggleNamesOnly) {
+            for (size_t i = 0; i < sourceList.size(); ++i) {
+                const auto& entry = sourceList[i];
                 std::string name = extractFilename(entry);
 
-                // Special handling for unmount mode
                 if (isUnmount) {
                     auto tildePos = name.find('~');
                     if (tildePos != std::string::npos) {
@@ -59,40 +71,55 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
                     }
                 }
 
-                if (searchHasUpper) {
-                    matches = (name.find(searchString) != std::string::npos);
-                } else {
-                    std::string nameLower = name;
-                    toLowerInPlace(nameLower);
-                    matches = (nameLower.find(searchLower) != std::string::npos);
+                // Change to match behavior in filterFiles - match ANY token (not ALL)
+                bool matchFound = false;
+                for (const auto& [token, isCaseSensitive] : tokens) {
+                    bool tokenMatches = false;
+                    if (isCaseSensitive) {
+                        if (name.find(token) != std::string::npos) {
+                            tokenMatches = true;
+                        }
+                    } else {
+                        std::string nameLower = name;
+                        toLowerInPlace(nameLower);
+                        std::string tokenLower = token;
+                        toLowerInPlace(tokenLower);
+                        if (nameLower.find(tokenLower) != std::string::npos) {
+                            tokenMatches = true;
+                        }
+                    }
+                    
+                    if (tokenMatches) {
+                        matchFound = true;
+                        break; // Match found for this token, no need to check others
+                    }
                 }
-            } else {
-                // Non-name-only filtering (smart case sensitivity)
-                if (searchHasUpper) {
-                    matches = (entry.find(searchString) != std::string::npos);
-                } else {
-                    std::string entryLower = entry;
-                    toLowerInPlace(entryLower);
-                    matches = (entryLower.find(searchLower) != std::string::npos);
+
+                if (matchFound) {
+                    tempFiltered.push_back(entry);
+                    tempIndices.push_back(i);
                 }
             }
-
-            if (matches) {
-                tempFiltered.push_back(entry);
-                tempIndices.push_back(i);
+        } else {
+            // Use filterFiles for standard filtering
+            tempFiltered = filterFiles(sourceList, searchString);
+            
+            // Rebuild indices for filtered results
+            std::unordered_set<std::string> filteredSet(tempFiltered.begin(), tempFiltered.end());
+            for (size_t i = 0; i < sourceList.size(); ++i) {
+                if (filteredSet.find(sourceList[i]) != filteredSet.end()) {
+                    tempIndices.push_back(i);
+                }
             }
         }
 
-        // Early exit if no change or no results
         if (tempFiltered.empty()) return false;
         if (tempFiltered.size() == sourceList.size()) return true;
 
-        // Update state
         currentPage = 0;
         needsClrScrn = true;
         filteredFiles = std::move(tempFiltered);
 
-        // Rebuild original indices
         FilteringState newState;
         newState.originalIndices.reserve(tempIndices.size());
         for (size_t idx : tempIndices) {
@@ -170,6 +197,23 @@ void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<
         auto pos = path.find_last_of("/\\");
         return (pos == std::string::npos) ? path : path.substr(pos + 1);
     };
+    
+    // Helper to tokenize search string using semicolon delimiter
+    auto tokenizeSearchString = [](const std::string& searchString) -> std::vector<std::pair<std::string, bool>> {
+        std::vector<std::pair<std::string, bool>> tokens;
+        std::istringstream tokenStream(searchString);
+        std::string token;
+        while (std::getline(tokenStream, token, ';')) {
+            token.erase(0, token.find_first_not_of(" \t"));
+            token.erase(token.find_last_not_of(" \t") + 1);
+            if (!token.empty()) {
+                bool hasUpper = std::any_of(token.begin(), token.end(),
+                    [](unsigned char c) { return std::isupper(c); });
+                tokens.emplace_back(token, hasUpper);
+            }
+        }
+        return tokens;
+    };
 
     // Function to apply filtering based on search string
     auto applyFilter = [&](const std::string& searchString) -> bool {
@@ -182,44 +226,92 @@ void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<
         tempFiltered.reserve(files.size());
         tempIndices.reserve(files.size());
 
-        // Precompute case-sensitive search conditions
-        bool searchHasUpper = std::any_of(
-            searchString.begin(), searchString.end(),
-            [](unsigned char c) { return std::isupper(c); }
-        );
-        std::string searchLower;
-        if (!searchHasUpper) {
-            searchLower = searchString;
-            toLowerInPlace(searchLower);
+        // Parse the search string into tokens using semicolon delimiter
+        auto tokens = tokenizeSearchString(searchString);
+        if (tokens.empty()) {
+            return false;
         }
 
         // Single-pass filtering with index tracking
         for (size_t i = 0; i < files.size(); ++i) {
             const auto& file = files[i];
-            bool matches = false;
+            bool matchFound = false;
 
             if (displayConfig::toggleNamesOnly) {
                 std::string filename = getBasename(file);
+                std::string filenameLower;
+                bool needLowercase = false;
 
-                if (searchHasUpper) {
-                    matches = (filename.find(searchString) != std::string::npos);
-                } else {
-                    std::string filenameLower = filename;
+                // Check if we need a lowercase version of the filename
+                for (const auto& [token, hasUpper] : tokens) {
+                    if (!hasUpper) {
+                        needLowercase = true;
+                        break;
+                    }
+                }
+
+                if (needLowercase) {
+                    filenameLower = filename;
                     toLowerInPlace(filenameLower);
-                    matches = (filenameLower.find(searchLower) != std::string::npos);
+                }
+
+                // Check if ANY token matches (consistent with filterFiles behavior)
+                for (const auto& [token, hasUpper] : tokens) {
+                    if (hasUpper) {
+                        // Case-sensitive search
+                        if (filename.find(token) != std::string::npos) {
+                            matchFound = true;
+                            break;
+                        }
+                    } else {
+                        // Case-insensitive search
+                        std::string tokenLower = token;
+                        toLowerInPlace(tokenLower);
+                        if (filenameLower.find(tokenLower) != std::string::npos) {
+                            matchFound = true;
+                            break;
+                        }
+                    }
                 }
             } else {
-                // Non-name-only filtering (smart case sensitivity)
-                if (searchHasUpper) {
-                    matches = (file.find(searchString) != std::string::npos);
-                } else {
-                    std::string fileLower = file;
+                // Non-name-only filtering with tokens
+                std::string fileLower;
+                bool needLowercase = false;
+
+                // Check if we need a lowercase version of the file
+                for (const auto& [token, hasUpper] : tokens) {
+                    if (!hasUpper) {
+                        needLowercase = true;
+                        break;
+                    }
+                }
+
+                if (needLowercase) {
+                    fileLower = file;
                     toLowerInPlace(fileLower);
-                    matches = (fileLower.find(searchLower) != std::string::npos);
+                }
+
+                // Check if ANY token matches
+                for (const auto& [token, hasUpper] : tokens) {
+                    if (hasUpper) {
+                        // Case-sensitive search
+                        if (file.find(token) != std::string::npos) {
+                            matchFound = true;
+                            break;
+                        }
+                    } else {
+                        // Case-insensitive search
+                        std::string tokenLower = token;
+                        toLowerInPlace(tokenLower);
+                        if (fileLower.find(tokenLower) != std::string::npos) {
+                            matchFound = true;
+                            break;
+                        }
+                    }
                 }
             }
 
-            if (matches) {
+            if (matchFound) {
                 tempFiltered.push_back(file);
                 tempIndices.push_back(i);
             }
