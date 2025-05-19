@@ -116,6 +116,7 @@ void displayConfigurationOptions(const std::string& configPath);
 void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax_t maxDatabaseSize, const std::unordered_map<std::string, std::string>& transformationCache, const std::vector<std::string>& globalIsoFileList);
 void displayErrors(std::unordered_set<std::string>& uniqueErrorMessages);
 void setDisplayMode(const std::string& inputSearch);
+void updateFilenamesOnly(const std::string& configPath, const std::string& inputSearch);
 
 //------------------
 // Void Functions (Input Handling)
