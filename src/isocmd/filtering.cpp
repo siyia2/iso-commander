@@ -417,90 +417,6 @@ void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<
 }
 
 
-// Boyer-Moore string search implementation for files
-std::vector<size_t> boyerMooreSearch(const std::string &pattern, const std::string &text) {
-    std::vector<size_t> matches;
-    size_t m = pattern.size();
-    size_t n = text.size();
-    
-    // Early exit conditions
-    if(m == 0 || m > n)
-        return matches;
-    
-    // --- Bad Character Rule Preprocessing ---
-    const int ALPHABET_SIZE = 256;
-    // For each character, record its last index in the pattern.
-    std::vector<int> badChar(ALPHABET_SIZE, -1);
-    for (int i = 0; i < static_cast<int>(m); i++) {
-        badChar[static_cast<unsigned char>(pattern[i])] = i;
-    }
-    
-    // --- Good Suffix Rule Preprocessing ---
-    // suffix[i] will hold the length of the longest substring ending at position i
-    // which is also a suffix of the pattern.
-    std::vector<int> suffix(m, 0);
-    suffix[m - 1] = m;
-    int g = static_cast<int>(m) - 1; // the rightmost position of a matching suffix
-    int f = static_cast<int>(m) - 1; // a working index
-    
-    for (int i = static_cast<int>(m) - 2; i >= 0; i--) {
-        if (i > g && suffix[i + m - 1 - f] < i - g)
-            suffix[i] = suffix[i + m - 1 - f];
-        else {
-            if (i < g)
-                g = i;
-            f = i;
-            while (g >= 0 && pattern[g] == pattern[g + m - 1 - f])
-                g--;
-            suffix[i] = f - g;
-        }
-    }
-    
-    // Now build the goodSuffix shift table
-    std::vector<int> goodSuffix(m, static_cast<int>(m));
-    // First phase: set shift for the case where a suffix of the pattern matches a prefix.
-    int j = 0;
-    for (int i = static_cast<int>(m) - 1; i >= -1; i--) {
-        if (i == -1 || suffix[i] == i + 1) {
-            for (; j < static_cast<int>(m) - 1 - i; j++) {
-                if (goodSuffix[j] == static_cast<int>(m))
-                    goodSuffix[j] = static_cast<int>(m) - 1 - i;
-            }
-        }
-    }
-    // Second phase: for the remaining positions
-    for (int i = 0; i <= static_cast<int>(m) - 2; i++) {
-        goodSuffix[m - 1 - suffix[i]] = static_cast<int>(m) - 1 - i;
-    }
-    
-    // --- Search Phase ---
-    int s = 0;  // s is the shift of the pattern with respect to the text
-    while (s <= static_cast<int>(n - m)) {
-        int j = static_cast<int>(m) - 1;
-        // Move backwards through the pattern while characters match.
-        while (j >= 0 && pattern[j] == text[s + j])
-            j--;
-        
-        if (j < 0) {
-            // A match is found at position s
-            matches.push_back(s);
-            // Shift pattern to align the next possible match using goodSuffix[0]
-            s += goodSuffix[0];
-        } else {
-            // Calculate the shift based on the bad character rule:
-            // j - last occurrence index of text[s+j] in the pattern.
-            int bcShift = j - badChar[static_cast<unsigned char>(text[s + j])];
-            // Use the precomputed good suffix shift.
-            int gsShift = goodSuffix[j];
-            // Advance by the maximum shift to ensure progress.
-            s += std::max(1, std::max(bcShift, gsShift));
-        }
-    }
-    
-    return matches;
-}
-
-
 // Remove AnsiCodes from filenames
 std::string removeAnsiCodes(const std::string& input) {
     std::string result;
@@ -525,120 +441,190 @@ std::string removeAnsiCodes(const std::string& input) {
 }
 
 
+// Structure to hold precomputed Boyer-Moore tables and token information
+struct QueryToken {
+    std::string original;      // Original token (case-sensitive if has uppercase)
+    std::string lower;          // Lowercase version (if case-insensitive)
+    bool isCaseSensitive;       // Case sensitivity flag
+    
+    // Precomputed Boyer-Moore tables
+    std::vector<int> originalBadChar;
+    std::vector<int> originalGoodSuffix;
+    std::vector<int> lowerBadChar;
+    std::vector<int> lowerGoodSuffix;
+};
+
+
+// Precomputes Boyer-Moore tables for a pattern
+void precomputeBoyerMooreTables(const std::string& pattern, std::vector<int>& badCharTable, std::vector<int>& goodSuffixTable) {
+    const size_t m = pattern.size();
+    const int ALPHABET_SIZE = 256;
+
+    // Bad Character Table
+    badCharTable.assign(ALPHABET_SIZE, -1);
+    for (int i = 0; i < static_cast<int>(m); ++i) {
+        badCharTable[static_cast<unsigned char>(pattern[i])] = i;
+    }
+
+    // Good Suffix Table
+    goodSuffixTable.resize(m, static_cast<int>(m));
+    std::vector<int> suffix(m, 0);
+
+    // Phase 1: Suffix array calculation
+    suffix[m - 1] = static_cast<int>(m);
+    int g = static_cast<int>(m) - 1;
+    int f = static_cast<int>(m) - 1;
+
+    for (int i = static_cast<int>(m) - 2; i >= 0; --i) {
+        if (i > g && suffix[i + m - 1 - f] < i - g) {
+            suffix[i] = suffix[i + m - 1 - f];
+        } else {
+            g = std::min(g, i);
+            f = i;
+            while (g >= 0 && pattern[g] == pattern[g + m - 1 - f]) {
+                --g;
+            }
+            suffix[i] = f - g;
+        }
+    }
+
+    // Phase 2: Good suffix heuristic rules
+    // Case 1: Suffix matches prefix
+    for (int i = 0; i < static_cast<int>(m) - 1; ++i) {
+        goodSuffixTable[i] = static_cast<int>(m) - 1 - suffix[0];
+    }
+
+    // Case 2: Substring matches suffix
+    for (int i = 0; i <= static_cast<int>(m) - 2; ++i) {
+        const int j = static_cast<int>(m) - 1 - suffix[i];
+        if (goodSuffixTable[j] > static_cast<int>(m) - 1 - i) {
+            goodSuffixTable[j] = static_cast<int>(m) - 1 - i;
+        }
+    }
+}
+
+// Optimized search that returns on first match
+bool boyerMooreSearchExists(const std::string& text, const std::string& pattern, const std::vector<int>& badCharTable, const std::vector<int>& goodSuffixTable) {
+    const size_t n = text.size();
+    const size_t m = pattern.size();
+    if (m == 0 || m > n) return false;
+
+    int s = 0;
+    while (s <= static_cast<int>(n - m)) {
+        int j = static_cast<int>(m) - 1;
+        while (j >= 0 && text[s + j] == pattern[j]) {
+            --j;
+        }
+
+        if (j < 0) {
+            return true;  // Match found
+        } else {
+            const int bcShift = j - badCharTable[static_cast<unsigned char>(text[s + j])];
+            const int gsShift = goodSuffixTable[j];
+            s += std::max(1, std::max(bcShift, gsShift));
+        }
+    }
+    return false;
+}
+
+
 // Function to filter cached ISO files or mountpoints based on search query (case-adaptive)
 std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query) {
-    // Reserve memory for filteredFiles (we will merge per thread later).
     std::vector<std::string> filteredFiles;
-    ThreadPool pool(maxThreads);  // Initialize ThreadPool
-
-    // Structure to hold token information.
-    struct QueryToken {
-        std::string original;  // The original token from the query.
-        std::string lower;     // Lowercase version of the token (only if needed).
-        bool isCaseSensitive;  // Flag to indicate if the token is case-sensitive.
-    };
+    ThreadPool pool(maxThreads);
     std::vector<QueryToken> queryTokens;
-    
-    // Tokenize the query using ';' as a delimiter and remove leading/trailing spaces.
+
+    // Tokenize and preprocess query
     std::stringstream ss(query);
     std::string token;
     while (std::getline(ss, token, ';')) {
-        // Trim leading and trailing spaces.
+        // Trim whitespace
         token.erase(0, token.find_first_not_of(" \t"));
         token.erase(token.find_last_not_of(" \t") + 1);
+        if (token.empty()) continue;
 
-        if (!token.empty()) {
-            // Determine if the token contains uppercase letters (implying case sensitivity).
-            bool hasUpperCase = std::any_of(token.begin(), token.end(),
-                [](unsigned char c) { return std::isupper(c); });
+        QueryToken qt;
+        qt.original = token;
+        qt.isCaseSensitive = std::any_of(token.begin(), token.end(), 
+            [](unsigned char c) { return std::isupper(c); });
 
-            // Construct the QueryToken object.
-            QueryToken qt;
-            qt.original = token;
-            qt.isCaseSensitive = hasUpperCase;
-
-            // Precompute the lowercase version if the token is case-insensitive.
-            if (!hasUpperCase) {
-                qt.lower = token;
-                toLowerInPlace(qt.lower);
-            }
-
-            queryTokens.push_back(std::move(qt)); // Store the token.
+        // Precompute case-insensitive version if needed
+        if (!qt.isCaseSensitive) {
+            qt.lower = qt.original;
+            toLowerInPlace(qt.lower);
+            precomputeBoyerMooreTables(qt.lower, qt.lowerBadChar, qt.lowerGoodSuffix);
         }
+
+        // Always precompute case-sensitive tables (original might have uppercase)
+        precomputeBoyerMooreTables(qt.original, qt.originalBadChar, qt.originalGoodSuffix);
+
+        queryTokens.push_back(std::move(qt));
     }
-    
-    // Check if at least one query token is case-insensitive.
-    bool needLowerCaseFile = std::any_of(queryTokens.begin(), queryTokens.end(),
-                                         [](const QueryToken& qt) { return !qt.isCaseSensitive; });
-        
-    const size_t totalFiles = files.size();
-    
-    // Determine the chunk size for dividing work among threads.
-    size_t chunkSize = (totalFiles + maxThreads - 1) / maxThreads;
-    
-    // Vector to store futures for thread pool tasks
+
+    // Determine if we need lowercase preprocessing for any token
+    const bool needLowerCase = std::any_of(queryTokens.begin(), queryTokens.end(),
+        [](const QueryToken& qt) { return !qt.isCaseSensitive; });
+
+    // Parallel processing
+    const size_t chunkSize = (files.size() + maxThreads - 1) / maxThreads;
     std::vector<std::future<std::vector<std::string>>> futures;
 
-    // Submit tasks to the thread pool
-    for (unsigned int i = 0; i < maxThreads; ++i) {
-        size_t start = i * chunkSize;
-        size_t end = std::min(totalFiles, (i + 1) * chunkSize);
-        
-        // If the start index is out of range, break.
-        if (start >= end)
-            break;
-        
-        // Submit a task to the thread pool
-        futures.emplace_back(pool.enqueue([start, end, &files, &queryTokens, needLowerCaseFile]() -> std::vector<std::string> {
-            std::vector<std::string> localMatches; // Store matching files for this thread.
+    for (unsigned i = 0; i < maxThreads; ++i) {
+        const size_t start = i * chunkSize;
+        const size_t end = std::min(files.size(), (i + 1) * chunkSize);
+        if (start >= end) break;
 
+        futures.emplace_back(pool.enqueue([=, &files, &queryTokens] {
+            std::vector<std::string> localMatches;
             for (size_t j = start; j < end; ++j) {
-                const std::string& file = files[j];
+                const std::string cleanFile = removeAnsiCodes(files[j]);
+                std::string fileLower;
 
-                // Remove ANSI escape codes (e.g., color codes in terminal output).
-                std::string cleanFileName = removeAnsiCodes(file);
-
-                // Convert filename to lowercase if necessary.
-                std::string fileNameLower;
-                if (needLowerCaseFile) {
-                    fileNameLower = cleanFileName;
-                    toLowerInPlace(fileNameLower);
+                // Preprocess filename case if needed
+                if (needLowerCase) {
+                    fileLower = cleanFile;
+                    toLowerInPlace(fileLower);
                 }
-                
-                bool matchFound = false;
 
-                // Iterate through query tokens and search in file names.
+                // Check all query tokens
                 for (const auto& qt : queryTokens) {
+                    bool match;
                     if (qt.isCaseSensitive) {
-                        // Perform a case-sensitive Boyer-Moore search.
-                        if (!boyerMooreSearch(qt.original, cleanFileName).empty()) {
-                            matchFound = true;
-                            break;
-                        }
+                        match = boyerMooreSearchExists(cleanFile, qt.original, 
+                                                     qt.originalBadChar, qt.originalGoodSuffix);
                     } else {
-                        // Perform a case-insensitive search.
-                        if (!boyerMooreSearch(qt.lower, fileNameLower).empty()) {
-                            matchFound = true;
-                            break;
-                        }
+                        match = boyerMooreSearchExists(fileLower, qt.lower,
+                                                     qt.lowerBadChar, qt.lowerGoodSuffix);
+                    }
+
+                    if (match) {
+                        localMatches.push_back(files[j]);
+                        break;
                     }
                 }
-
-                // If any query token matches, add the file to results.
-                if (matchFound) {
-                    localMatches.push_back(file);
-                }
             }
-            return localMatches; // Return matches found in this chunk.
+            return localMatches;
         }));
     }
-    
-    // Merge results from all thread pool tasks
+
+    // Efficient result merging
+    std::vector<std::vector<std::string>> threadResults;
+    threadResults.reserve(futures.size());
     for (auto& fut : futures) {
-        std::vector<std::string> localResult = fut.get();
-        filteredFiles.insert(filteredFiles.end(),
-                             localResult.begin(), localResult.end());
+        threadResults.push_back(fut.get());
     }
-    
-    return filteredFiles; // Return the final list of matching files.
+
+    // Reserve exact space needed
+    size_t totalMatches = 0;
+    for (const auto& res : threadResults) {
+        totalMatches += res.size();
+    }
+    filteredFiles.reserve(totalMatches);
+
+    // Merge results
+    for (const auto& res : threadResults) {
+        filteredFiles.insert(filteredFiles.end(), res.begin(), res.end());
+    }
+
+    return filteredFiles;
 }
