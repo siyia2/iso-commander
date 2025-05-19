@@ -59,6 +59,7 @@ bool readUserConfigUpdates(const std::string& filePath) {
     // Default ordered settings
     std::vector<std::pair<std::string, std::string>> orderedDefaults = {
         {"auto_update", "off"},
+        {"filenames_only", "off"},
         {"pagination", "25"},
         {"mount_list", "compact"},
         {"umount_list", "full"},
@@ -178,8 +179,8 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
     // Default values with a fixed order
     std::vector<std::pair<std::string, std::string>> orderedDefaults = {
         {"auto_update", "off"},
-        {"pagination", "25"},
         {"filenames_only", "off"},
+        {"pagination", "25"},
         {"mount_list", "compact"},
         {"umount_list", "full"},
         {"cp_mv_rm_list", "compact"},
@@ -316,8 +317,8 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
 
     std::vector<std::pair<std::string, std::string>> orderedDefaults = {
         {"auto_update", config.count("auto_update") ? config["auto_update"] : "off"},
-        {"pagination", std::to_string(paginationValue)},
         {"filenames_only", config.count("filenames_only") ? config["filenames_only"] : "off"},
+        {"pagination", std::to_string(paginationValue)},
         {"mount_list", config.count("mount_list") ? config["mount_list"] : "compact"},
         {"umount_list", config.count("umount_list") ? config["umount_list"] : "full"},
         {"cp_mv_rm_list", config.count("cp_mv_rm_list") ? config["cp_mv_rm_list"] : "compact"},
@@ -388,8 +389,8 @@ void updateFilenamesOnly(const std::string& configPath, const std::string& input
     // Maintain order of settings
     std::vector<std::pair<std::string, std::string>> orderedDefaults = {
         {"auto_update", config["auto_update"]},
-        {"pagination", config["pagination"]},
         {"filenames_only", config["filenames_only"]},
+        {"pagination", config["pagination"]},
         {"mount_list", config["mount_list"]},
         {"umount_list", config["umount_list"]},
         {"cp_mv_rm_list", config["cp_mv_rm_list"]},
@@ -600,8 +601,8 @@ void displayConfigurationOptions(const std::string& configPath) {
     auto createDefaultConfig = [&]() -> bool {
         std::vector<std::pair<std::string, std::string>> orderedDefaults = {
             {"auto_update", "off"},
-            {"pagination", "25"},
             {"filenames_only", "off"},
+            {"pagination", "25"},
             {"mount_list", "compact"},
             {"umount_list", "full"},
             {"cp_mv_rm_list", "compact"},
