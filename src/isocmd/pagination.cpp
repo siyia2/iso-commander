@@ -61,7 +61,11 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
 		displayConfig::toggleNamesOnly = !displayConfig::toggleNamesOnly;
 		if (isUnmount && !displayConfig::toggleNamesOnly) {
 			displayConfig::toggleFullListUmount = true;
-		}			
+		}
+		if (!isUnmount) {
+			// Optimization: sort only when we are not on the umount list, since the mount directory is constant
+            sortFilesCaseInsensitive(globalIsoFileList);
+		}
 		needsClrScrn = true;
 		return true;
 	}

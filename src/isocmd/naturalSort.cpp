@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../headers.h"
+#include "../display.h"
 #include "../threadpool.h"
 
 
@@ -57,70 +58,82 @@ int naturalCompare(const std::string &a, const std::string &b) {
 void sortFilesCaseInsensitive(std::vector<std::string>& files) {
     if (files.empty())
         return;
+    
+    bool namesOnly = displayConfig::toggleNamesOnly; // Capture the toggle state once
+
     ThreadPool pool(maxThreads);
     const size_t n = files.size();
-    // Determine optimal chunk size - this should be tuned based on your typical workload
     unsigned int numChunks = std::min<unsigned int>(maxThreads * 2, static_cast<unsigned int>(n / 1000 + 1));
     size_t chunkSize = (n + numChunks - 1) / numChunks;
     
-    // Each pair holds the start and end indices of a sorted chunk
     std::vector<std::pair<size_t, size_t>> chunks;
-    
-    // Futures to wait for each sorting task
     std::vector<std::future<void>> futures;
     
-    // Launch parallel sorting tasks
+    // Parallel sorting of chunks
     for (size_t i = 0; i < numChunks; ++i) {
         size_t start = i * chunkSize;
         size_t end = std::min(n, (i + 1) * chunkSize);
         if (start >= end)
             break;
-            
-        // Record this chunk's range
+        
         chunks.emplace_back(start, end);
         
-        // Enqueue the sorting task to the thread pool
-        futures.emplace_back(pool.enqueue([start, end, &files]() {
-            std::sort(files.begin() + start, files.begin() + end, [](const std::string& a, const std::string& b) {
-                return naturalCompare(a, b) < 0;
-            });
+        futures.emplace_back(pool.enqueue([namesOnly, start, end, &files]() {
+            std::sort(files.begin() + start, files.begin() + end, 
+                [namesOnly](const std::string& a, const std::string& b) {
+                    if (namesOnly) {
+                        size_t a_slash = a.find_last_of('/');
+                        size_t b_slash = b.find_last_of('/');
+                        std::string a_name = (a_slash == std::string::npos) ? a : a.substr(a_slash + 1);
+                        std::string b_name = (b_slash == std::string::npos) ? b : b.substr(b_slash + 1);
+                        return naturalCompare(a_name, b_name) < 0;
+                    } else {
+                        return naturalCompare(a, b) < 0;
+                    }
+                });
         }));
     }
     
-    // Wait for all sorting tasks to complete
     for (auto& f : futures)
         f.get();
+    futures.clear();
     
-    // Merge sorted chunks pairwise until the entire vector is merged
+    // Merge sorted chunks
     while (chunks.size() > 1) {
         std::vector<std::pair<size_t, size_t>> newChunks;
         std::vector<std::future<void>> mergeFutures;
         
         for (size_t i = 0; i < chunks.size(); i += 2) {
-            if (i + 1 < chunks.size()) {
-                size_t start = chunks[i].first;
-                size_t mid = chunks[i + 1].first;
-                size_t end = chunks[i + 1].second;
-                
-                // We could also parallelize the merging for large chunks
-                mergeFutures.emplace_back(pool.enqueue([start, mid, end, &files]() {
-                    std::inplace_merge(files.begin() + start, files.begin() + mid, files.begin() + end,
-                        [](const std::string& a, const std::string& b) {
-                            return naturalCompare(a, b) < 0;
-                        });
-                }));
-                
-                newChunks.emplace_back(start, end);
-            } else {
-                // Odd number of chunks: last one remains as is
+            if (i + 1 >= chunks.size()) {
                 newChunks.push_back(chunks[i]);
+                break;
             }
+            
+            size_t start = chunks[i].first;
+            size_t mid = chunks[i].second;
+            size_t end = chunks[i+1].second;
+            
+            mergeFutures.emplace_back(pool.enqueue([namesOnly, start, mid, end, &files]() {
+                std::inplace_merge(files.begin() + start, files.begin() + mid, files.begin() + end,
+                    [namesOnly](const std::string& a, const std::string& b) {
+                        if (namesOnly) {
+                            size_t a_slash = a.find_last_of('/');
+                            size_t b_slash = b.find_last_of('/');
+                            std::string a_name = (a_slash == std::string::npos) ? a : a.substr(a_slash + 1);
+                            std::string b_name = (b_slash == std::string::npos) ? b : b.substr(b_slash + 1);
+                            return naturalCompare(a_name, b_name) < 0;
+                        } else {
+                            return naturalCompare(a, b) < 0;
+                        }
+                    });
+            }));
+            
+            newChunks.emplace_back(start, end);
         }
         
-        // Wait for all merges at this level to complete
         for (auto& f : mergeFutures)
             f.get();
-            
+        
         chunks = std::move(newChunks);
     }
 }
