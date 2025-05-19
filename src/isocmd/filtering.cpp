@@ -132,7 +132,6 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
 }
 
 
-
 // Handle filtering for select_and_convert_to_iso
 void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<std::string>& files, const std::string& fileExtensionWithOutDots, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, bool& need2Sort, size_t& currentPage) {
     // Exit early if not a filtering command
@@ -280,7 +279,6 @@ void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<
         }
     }
 }
-
 
 
 // Boyer-Moore string search implementation for files
