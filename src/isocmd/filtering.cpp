@@ -1,3 +1,4 @@
+
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../headers.h"
@@ -10,8 +11,31 @@
 std::vector<FilteringState> filteringStack;
 
 
-// Function to hanlde filtering for selectForIsoFiles
+// Remove AnsiCodes from filenames
+std::string removeAnsiCodes(const std::string& input) {
+    std::string result;
+    result.reserve(input.size()); // Preallocate memory
 
+    for (size_t i = 0; i < input.size(); ++i) {
+        if (input[i] == '\033' && i + 1 < input.size() && input[i+1] == '[') {
+            // Skip CSI sequence: \033[ ... [a-zA-Z]
+            size_t j = i + 2; // Skip \033 and [
+            while (j < input.size() && (input[j] < 'A' || input[j] > 'Z') && (input[j] < 'a' || input[j] > 'z')) {
+                ++j;
+            }
+            if (j < input.size()) {
+                ++j; // Skip the terminating letter
+            }
+            i = j - 1; // Adjust i (loop will increment to j)
+        } else {
+            result += input[i];
+        }
+    }
+    return result;
+}
+
+
+// Function to hanlde filtering for selectForIsoFiles
 bool handleFilteringForISO(const std::string& inputString, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, const std::string& operation, const std::string& operationColor, const std::vector<std::string>& isoDirs, bool isUnmount, size_t& currentPage) {
     // Early exit if not a filtering operation
     if (inputString != "/" && (inputString.empty() || inputString[0] != '/')) {
@@ -19,12 +43,6 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
     }
 
     bool isFilterPrompt = (inputString == "/");
-
-    // --- Helper Lambdas ---
-    auto extractFilename = [](const std::string& path) -> std::string {
-        size_t pos = path.find_last_of('/');
-        return (pos == std::string::npos) ? path : path.substr(pos + 1);
-    };
 
     auto tokenizeSearchString = [](const std::string& searchString) -> std::vector<std::pair<std::string, bool>> {
         std::vector<std::pair<std::string, bool>> tokens;
@@ -55,63 +73,16 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
             return true;
         }
 
-        if (displayConfig::toggleNamesOnly) {
-            // Name-only multi-term filtering
-            tempFiltered.reserve(sourceList.size());
-            tempIndices.reserve(sourceList.size());
-
-            for (size_t i = 0; i < sourceList.size(); ++i) {
-                const auto& entry = sourceList[i];
-                std::string name = extractFilename(entry);
-
-                if (isUnmount) {
-                    auto tildePos = name.find('~');
-                    if (tildePos != std::string::npos) {
-                        name = name.substr(0, tildePos);
-                    }
-                }
-
-                // Change to match behavior in filterFiles - match ANY token (not ALL)
-                bool matchFound = false;
-                for (const auto& [token, isCaseSensitive] : tokens) {
-                    bool tokenMatches = false;
-                    if (isCaseSensitive) {
-                        if (name.find(token) != std::string::npos) {
-                            tokenMatches = true;
-                        }
-                    } else {
-                        std::string nameLower = name;
-                        toLowerInPlace(nameLower);
-                        std::string tokenLower = token;
-                        toLowerInPlace(tokenLower);
-                        if (nameLower.find(tokenLower) != std::string::npos) {
-                            tokenMatches = true;
-                        }
-                    }
-                    
-                    if (tokenMatches) {
-                        matchFound = true;
-                        break; // Match found for this token, no need to check others
-                    }
-                }
-
-                if (matchFound) {
-                    tempFiltered.push_back(entry);
-                    tempIndices.push_back(i);
-                }
-            }
-        } else {
-            // Use filterFiles for standard filtering
-            tempFiltered = filterFiles(sourceList, searchString);
+        tempFiltered = filterFiles(sourceList, searchString);
             
-            // Rebuild indices for filtered results
-            std::unordered_set<std::string> filteredSet(tempFiltered.begin(), tempFiltered.end());
-            for (size_t i = 0; i < sourceList.size(); ++i) {
-                if (filteredSet.find(sourceList[i]) != filteredSet.end()) {
+        // Rebuild indices for filtered results
+        std::unordered_set<std::string> filteredSet(tempFiltered.begin(), tempFiltered.end());
+        for (size_t i = 0; i < sourceList.size(); ++i) {
+			if (filteredSet.find(sourceList[i]) != filteredSet.end()) {
                     tempIndices.push_back(i);
-                }
             }
         }
+        
 
         if (tempFiltered.empty()) return false;
         if (tempFiltered.size() == sourceList.size()) return true;
@@ -187,152 +158,89 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
 
 // Handle filtering for select_and_convert_to_iso
 void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<std::string>& files, const std::string& fileExtensionWithOutDots, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, bool& need2Sort, size_t& currentPage) {
-    // Exit early if not a filtering command
+    // Early exit if not a filtering command
     if (mainInputString.empty() || (mainInputString != "/" && mainInputString[0] != '/')) {
         return;
     }
 
-    // Helper to extract filename from path
-    auto getBasename = [](const std::string& path) {
-        auto pos = path.find_last_of("/\\");
-        return (pos == std::string::npos) ? path : path.substr(pos + 1);
-    };
-    
-    // Helper to tokenize search string using semicolon delimiter
-    auto tokenizeSearchString = [](const std::string& searchString) -> std::vector<std::pair<std::string, bool>> {
-        std::vector<std::pair<std::string, bool>> tokens;
-        std::istringstream tokenStream(searchString);
-        std::string token;
-        while (std::getline(tokenStream, token, ';')) {
-            token.erase(0, token.find_first_not_of(" \t"));
-            token.erase(token.find_last_not_of(" \t") + 1);
-            if (!token.empty()) {
-                bool hasUpper = std::any_of(token.begin(), token.end(),
-                    [](unsigned char c) { return std::isupper(c); });
-                tokens.emplace_back(token, hasUpper);
-            }
-        }
-        return tokens;
-    };
-
-    // Function to apply filtering based on search string
+    // Lambda to apply filtering using filterFiles
     auto applyFilter = [&](const std::string& searchString) -> bool {
-        if (searchString.empty()) {
-            return false;
+        if (searchString.empty()) return false;
+
+        // Store original files if we're in names-only mode
+        std::vector<std::string> originalFiles;
+        if (displayConfig::toggleNamesOnly) {
+            originalFiles = files;
+            // Convert to names-only for filtering
+            for (auto& file : files) {
+                size_t lastSlashPos = file.find_last_of('/');
+                if (lastSlashPos != std::string::npos) {
+                    file = file.substr(lastSlashPos + 1);
+                }
+                // Remove ANSI codes from the filename if present
+                file = removeAnsiCodes(file);
+            }
         }
 
-        std::vector<std::string> tempFiltered;
-        std::vector<size_t> tempIndices;
-        tempFiltered.reserve(files.size());
-        tempIndices.reserve(files.size());
+        // Get filtered files using the provided function
+        auto filteredFiles = filterFiles(files, searchString);
 
-        // Parse the search string into tokens using semicolon delimiter
-        auto tokens = tokenizeSearchString(searchString);
-        if (tokens.empty()) {
-            return false;
-        }
-
-        // Single-pass filtering with index tracking
-        for (size_t i = 0; i < files.size(); ++i) {
-            const auto& file = files[i];
-            bool matchFound = false;
-
-            if (displayConfig::toggleNamesOnly) {
-                std::string filename = getBasename(file);
-                std::string filenameLower;
-                bool needLowercase = false;
-
-                // Check if we need a lowercase version of the filename
-                for (const auto& [token, hasUpper] : tokens) {
-                    if (!hasUpper) {
-                        needLowercase = true;
-                        break;
-                    }
+        // Restore original files if we were in names-only mode
+        if (displayConfig::toggleNamesOnly) {
+            files = originalFiles;
+            // Map filtered names back to full paths
+            std::unordered_set<std::string> filteredSet(filteredFiles.begin(), filteredFiles.end());
+            std::vector<std::string> tempFiltered;
+            tempFiltered.reserve(filteredFiles.size());
+            
+            for (const auto& file : files) {
+                std::string nameOnly = file;
+                size_t lastSlashPos = nameOnly.find_last_of('/');
+                if (lastSlashPos != std::string::npos) {
+                    nameOnly = nameOnly.substr(lastSlashPos + 1);
                 }
-
-                if (needLowercase) {
-                    filenameLower = filename;
-                    toLowerInPlace(filenameLower);
-                }
-
-                // Check if ANY token matches (consistent with filterFiles behavior)
-                for (const auto& [token, hasUpper] : tokens) {
-                    if (hasUpper) {
-                        // Case-sensitive search
-                        if (filename.find(token) != std::string::npos) {
-                            matchFound = true;
-                            break;
-                        }
-                    } else {
-                        // Case-insensitive search
-                        std::string tokenLower = token;
-                        toLowerInPlace(tokenLower);
-                        if (filenameLower.find(tokenLower) != std::string::npos) {
-                            matchFound = true;
-                            break;
-                        }
-                    }
-                }
-            } else {
-                // Non-name-only filtering with tokens
-                std::string fileLower;
-                bool needLowercase = false;
-
-                // Check if we need a lowercase version of the file
-                for (const auto& [token, hasUpper] : tokens) {
-                    if (!hasUpper) {
-                        needLowercase = true;
-                        break;
-                    }
-                }
-
-                if (needLowercase) {
-                    fileLower = file;
-                    toLowerInPlace(fileLower);
-                }
-
-                // Check if ANY token matches
-                for (const auto& [token, hasUpper] : tokens) {
-                    if (hasUpper) {
-                        // Case-sensitive search
-                        if (file.find(token) != std::string::npos) {
-                            matchFound = true;
-                            break;
-                        }
-                    } else {
-                        // Case-insensitive search
-                        std::string tokenLower = token;
-                        toLowerInPlace(tokenLower);
-                        if (fileLower.find(tokenLower) != std::string::npos) {
-                            matchFound = true;
-                            break;
-                        }
-                    }
+                nameOnly = removeAnsiCodes(nameOnly);
+                
+                if (filteredSet.find(nameOnly) != filteredSet.end()) {
+                    tempFiltered.push_back(file);
                 }
             }
+            filteredFiles = std::move(tempFiltered);
+        }
 
-            if (matchFound) {
-                tempFiltered.push_back(file);
+        // Check if filter produced meaningful results
+        if (filteredFiles.empty() || filteredFiles.size() == files.size()) {
+            return false;
+        }
+
+        // Create a map of filtered files for faster lookup
+        std::unordered_set<std::string> filteredSet(filteredFiles.begin(), filteredFiles.end());
+
+        // Find original indices of filtered files
+        std::vector<size_t> tempIndices;
+        tempIndices.reserve(filteredFiles.size());
+        
+        for (size_t i = 0; i < files.size(); ++i) {
+            if (filteredSet.find(files[i]) != filteredSet.end()) {
                 tempIndices.push_back(i);
             }
         }
 
-        // Check if the filter produces valid, different results
-        if (tempFiltered.empty() || tempFiltered.size() == files.size()) {
-            return false;
-        }
+        // Validate we found all matches
+        if (tempIndices.size() != filteredFiles.size()) return false;
 
-        // Update files and filtering stack
-        files = std::move(tempFiltered);
-
+        // Update filtering stack with original indices
         FilteringState newState;
         newState.originalIndices.reserve(tempIndices.size());
         for (size_t idx : tempIndices) {
             size_t originalIdx = isFiltered && !filteringStack.empty() && idx < filteringStack.back().originalIndices.size()
-                ? filteringStack.back().originalIndices[idx]
-                : idx;
+                               ? filteringStack.back().originalIndices[idx]
+                               : idx;
             newState.originalIndices.push_back(originalIdx);
         }
+
+        // Update state
+        files = std::move(filteredFiles);
         newState.isFiltered = true;
 
         if (isFiltered && !filteringStack.empty()) {
@@ -349,7 +257,8 @@ void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<
         return true;
     };
 
-    // Function to handle filter history
+
+    // History handling lambda
     auto handleHistory = [&](const std::string& query) {
         filterHistory = true;
         loadHistory(filterHistory);
@@ -357,56 +266,54 @@ void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<
             add_history(query.c_str());
             saveHistory(filterHistory);
         } catch (const std::exception&) {
-            // Optionally log the error
+            // Error handling omitted
         }
     };
 
+    // Interactive filtering mode
     if (mainInputString == "/") {
-        // Interactive filter prompt loop
         std::cout << "\033[1A\033[K";
         std::string filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;38;5;208m\002" +
-                                   fileExtensionWithOutDots + "\001\033[1;94m\002, or ↵ to return: \001\033[0;1m\002";
+                                  fileExtensionWithOutDots + "\001\033[1;94m\002, or ↵ to return: \001\033[0;1m\002";
 
         while (true) {
             clear_history();
             filterHistory = true;
             loadHistory(filterHistory);
 
-            std::unique_ptr<char, decltype(&std::free)> rawSearchQuery(
+            std::unique_ptr<char, decltype(&std::free)> rawSearch(
                 readline(filterPrompt.c_str()), &std::free);
 
-            if (!rawSearchQuery) {
+            if (!rawSearch) {
                 std::cout << "\033[2A\033[K";
                 needsClrScrn = false;
                 need2Sort = false;
                 break;
             }
 
-            std::string inputSearch(rawSearchQuery.get());
-
-            if (inputSearch.empty() || inputSearch == "/") {
+            std::string searchQuery(rawSearch.get());
+            if (searchQuery.empty() || searchQuery == "/") {
                 std::cout << "\033[2A\033[K";
                 needsClrScrn = false;
                 need2Sort = false;
                 break;
             }
 
-            if (applyFilter(inputSearch)) {
-                handleHistory(inputSearch);
+            if (applyFilter(searchQuery)) {
+                handleHistory(searchQuery);
                 filterHistory = false;
                 clear_history();
                 break;
             } else {
                 std::cout << "\033[1A\033[K";
-                continue;
             }
         }
-    } else if (mainInputString.size() > 1) {
-        // Direct filtering mode with /pattern
-        std::string inputSearch = mainInputString.substr(1);
-
-        if (applyFilter(inputSearch)) {
-            handleHistory(inputSearch);
+    }
+    // Direct filtering mode (/pattern)
+    else if (mainInputString.size() > 1) {
+        std::string searchQuery = mainInputString.substr(1);
+        if (applyFilter(searchQuery)) {
+            handleHistory(searchQuery);
             clear_history();
         } else {
             std::cout << "\033[2A\033[K";
@@ -414,30 +321,6 @@ void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<
             needsClrScrn = false;
         }
     }
-}
-
-
-// Remove AnsiCodes from filenames
-std::string removeAnsiCodes(const std::string& input) {
-    std::string result;
-    result.reserve(input.size()); // Preallocate memory
-
-    for (size_t i = 0; i < input.size(); ++i) {
-        if (input[i] == '\033' && i + 1 < input.size() && input[i+1] == '[') {
-            // Skip CSI sequence: \033[ ... [a-zA-Z]
-            size_t j = i + 2; // Skip \033 and [
-            while (j < input.size() && (input[j] < 'A' || input[j] > 'Z') && (input[j] < 'a' || input[j] > 'z')) {
-                ++j;
-            }
-            if (j < input.size()) {
-                ++j; // Skip the terminating letter
-            }
-            i = j - 1; // Adjust i (loop will increment to j)
-        } else {
-            result += input[i];
-        }
-    }
-    return result;
 }
 
 
@@ -503,6 +386,7 @@ void precomputeBoyerMooreTables(const std::string& pattern, std::vector<int>& ba
     }
 }
 
+
 // Optimized search that returns on first match
 bool boyerMooreSearchExists(const std::string& text, const std::string& pattern, const std::vector<int>& badCharTable, const std::vector<int>& goodSuffixTable) {
     const size_t n = text.size();
@@ -531,6 +415,7 @@ bool boyerMooreSearchExists(const std::string& text, const std::string& pattern,
 // Function to filter cached ISO files or mountpoints based on search query (case-adaptive)
 std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query) {
     std::vector<std::string> filteredFiles;
+    const unsigned maxThreads = std::thread::hardware_concurrency();
     ThreadPool pool(maxThreads);
     std::vector<QueryToken> queryTokens;
 
@@ -555,7 +440,7 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
             precomputeBoyerMooreTables(qt.lower, qt.lowerBadChar, qt.lowerGoodSuffix);
         }
 
-        // Always precompute case-sensitive tables (original might have uppercase)
+        // Always precompute case-sensitive tables
         precomputeBoyerMooreTables(qt.original, qt.originalBadChar, qt.originalGoodSuffix);
 
         queryTokens.push_back(std::move(qt));
@@ -624,6 +509,18 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
     // Merge results
     for (const auto& res : threadResults) {
         filteredFiles.insert(filteredFiles.end(), res.begin(), res.end());
+    }
+
+    // Extract filename part if toggleNamesOnly is enabled
+    if (displayConfig::toggleNamesOnly) {
+        for (auto& filePath : filteredFiles) {
+            size_t lastSlashPos = filePath.find_last_of('/');
+            if (lastSlashPos != std::string::npos) {
+                filePath = filePath.substr(lastSlashPos + 1);
+            }
+            // Remove ANSI codes from the filename if present
+            filePath = removeAnsiCodes(filePath);
+        }
     }
 
     return filteredFiles;
