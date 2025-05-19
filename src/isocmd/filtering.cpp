@@ -12,111 +12,111 @@ std::vector<FilteringState> filteringStack;
 
 // Function to hanlde filtering for selectForIsoFiles
 bool handleFilteringForISO(const std::string& inputString, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, const std::string& operation, const std::string& operationColor, const std::vector<std::string>& isoDirs, bool isUnmount, size_t& currentPage) {
-    // Check if the input indicates a filtering operation (must start with '/')
+    // Early exit if not a filtering operation
     if (inputString != "/" && (inputString.empty() || inputString[0] != '/')) {
-        return false;  // Not a filtering operation
+        return false;
     }
 
-    bool isFilterPrompt = (inputString == "/"); // Determine if this is an interactive filter prompt
+    bool isFilterPrompt = (inputString == "/");
 
-    // Function to extract the filename from a path
+    // --- Helper Lambdas ---
     auto extractFilename = [](const std::string& path) -> std::string {
         size_t pos = path.find_last_of('/');
         return (pos == std::string::npos) ? path : path.substr(pos + 1);
     };
 
-    // Function to apply filtering based on search string
     auto applyFilter = [&](const std::string& searchString) -> bool {
-        if (searchString.empty()) {
-            return false;
-        }
+        if (searchString.empty()) return false;
 
-        const std::vector<std::string>& sourceList =
-            isFiltered ? filteredFiles
-                       : (isUnmount ? isoDirs : globalIsoFileList);
+        const auto& sourceList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
         std::vector<std::string> tempFiltered;
+        std::vector<size_t> tempIndices;
+        tempFiltered.reserve(sourceList.size());
+        tempIndices.reserve(sourceList.size());
 
-        // Filtering with optional name-only toggle
-        if (displayConfig::toggleNamesOnly) {
-            std::copy_if(
-                sourceList.begin(),
-                sourceList.end(),
-                std::back_inserter(tempFiltered),
-                [&](const std::string& s) {
-                    // 1) extract just the filename
-                    std::string name = extractFilename(s);
-
-                    // 2) if unmount mode, strip off everything from '~' onwards
-                    if (isUnmount) {
-                        auto tildePos = name.find('~');
-                        if (tildePos != std::string::npos) {
-                            name = name.substr(0, tildePos);
-                        }
-                    }
-
-                    // 3) do the substring match
-                    return name.find(searchString) != std::string::npos;
-                }
-            );
-        }
-        else {
-            // Non-name-only filtering remains the same
-            tempFiltered = filterFiles(sourceList, searchString);
+        // Precompute case-sensitive search conditions
+        bool searchHasUpper = std::any_of(searchString.begin(), searchString.end(),
+            [](unsigned char c) { return std::isupper(c); });
+        std::string searchLower;
+        if (!searchHasUpper) {
+            searchLower = searchString;
+            toLowerInPlace(searchLower);
         }
 
-        std::unordered_set<std::string> filteredSet(
-            tempFiltered.begin(), tempFiltered.end());
-
-        std::vector<std::string> newFilteredFiles;
-        std::vector<size_t> newIndices;
-
-        newFilteredFiles.reserve(filteredSet.size());
-        newIndices.reserve(filteredSet.size());
-
+        // Single-pass filtering with index tracking
         for (size_t i = 0; i < sourceList.size(); ++i) {
-            if (filteredSet.find(sourceList[i]) != filteredSet.end()) {
-                newFilteredFiles.push_back(sourceList[i]);
+            const auto& entry = sourceList[i];
+            bool matches = false;
 
-                size_t originalIdx = i;
-                if (isFiltered && i < filteringStack.back().originalIndices.size()) {
-                    originalIdx = filteringStack.back().originalIndices[i];
+            if (displayConfig::toggleNamesOnly) {
+                std::string name = extractFilename(entry);
+
+                // Special handling for unmount mode
+                if (isUnmount) {
+                    auto tildePos = name.find('~');
+                    if (tildePos != std::string::npos) {
+                        name = name.substr(0, tildePos);
+                    }
                 }
-                newIndices.push_back(originalIdx);
+
+                if (searchHasUpper) {
+                    matches = (name.find(searchString) != std::string::npos);
+                } else {
+                    std::string nameLower = name;
+                    toLowerInPlace(nameLower);
+                    matches = (nameLower.find(searchLower) != std::string::npos);
+                }
+            } else {
+                // Non-name-only filtering (smart case sensitivity)
+                if (searchHasUpper) {
+                    matches = (entry.find(searchString) != std::string::npos);
+                } else {
+                    std::string entryLower = entry;
+                    toLowerInPlace(entryLower);
+                    matches = (entryLower.find(searchLower) != std::string::npos);
+                }
+            }
+
+            if (matches) {
+                tempFiltered.push_back(entry);
+                tempIndices.push_back(i);
             }
         }
 
-        bool filterUnchanged = newFilteredFiles.size() == sourceList.size();
-        bool hasResults       = !newFilteredFiles.empty();
+        // Early exit if no change or no results
+        if (tempFiltered.empty()) return false;
+        if (tempFiltered.size() == sourceList.size()) return true;
 
-        if (!filterUnchanged && hasResults) {
-            currentPage   = 0;
-            needsClrScrn  = true;
-            filteredFiles = std::move(newFilteredFiles);
+        // Update state
+        currentPage = 0;
+        needsClrScrn = true;
+        filteredFiles = std::move(tempFiltered);
 
-            FilteringState newState;
-            newState.originalIndices = std::move(newIndices);
-            newState.isFiltered      = true;
+        // Rebuild original indices
+        FilteringState newState;
+        newState.originalIndices.reserve(tempIndices.size());
+        for (size_t idx : tempIndices) {
+            size_t originalIdx = isFiltered ? filteringStack.back().originalIndices[idx] : idx;
+            newState.originalIndices.push_back(originalIdx);
+        }
+        newState.isFiltered = true;
 
-            if (isFiltered) {
-                filteringStack.back() = std::move(newState);
-            }
-            else {
-                filteringStack.push_back(std::move(newState));
-            }
-
-            isFiltered = true;
-            return true;
+        if (isFiltered) {
+            filteringStack.back() = std::move(newState);
+        } else {
+            filteringStack.push_back(std::move(newState));
         }
 
-        return hasResults;
+        isFiltered = true;
+        return true;
     };
 
+    // --- Interactive Filter Mode ---
     if (isFilterPrompt) {
-        // Interactive filter prompt loop
         while (true) {
             filterHistory = true;
             loadHistory(filterHistory);
-            std::cout << "\033[1A\033[K";
+            std::cout << "\033[1A\033[K"; // Clear previous line
 
             std::string filterPrompt =
                 "\001\033[1;38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001" +
@@ -126,15 +126,14 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
             std::unique_ptr<char, decltype(&std::free)> searchQuery(
                 readline(filterPrompt.c_str()), &std::free);
 
-            if (!searchQuery || searchQuery.get()[0] == '\0' ||
-                strcmp(searchQuery.get(), "/") == 0) {
+            // Exit conditions
+            if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
                 clear_history();
-                needsClrScrn = isFiltered ? true : false;
+                needsClrScrn = isFiltered;
                 return true;
             }
 
             std::string searchString = searchQuery.get();
-
             if (applyFilter(searchString)) {
                 add_history(searchQuery.get());
                 saveHistory(filterHistory);
@@ -143,15 +142,15 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
             }
         }
     }
+    // --- Quick Filter Mode (/pattern) ---
     else {
-        // Quick filtering mode with /pattern
         std::string searchString = inputString.substr(1);
-
         if (applyFilter(searchString)) {
             filterHistory = true;
             loadHistory(filterHistory);
             add_history(searchString.c_str());
             saveHistory(filterHistory);
+            clear_history();
         }
     }
 
@@ -178,17 +177,52 @@ void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<
             return false;
         }
 
-        // Determine filtered list based on toggleNamesOnly
         std::vector<std::string> tempFiltered;
-        if (displayConfig::toggleNamesOnly) {
-            tempFiltered.reserve(files.size());
-            for (const auto& f : files) {
-                if (getBasename(f).find(searchString) != std::string::npos) {
-                    tempFiltered.push_back(f);
+        std::vector<size_t> tempIndices;
+        tempFiltered.reserve(files.size());
+        tempIndices.reserve(files.size());
+
+        // Precompute case-sensitive search conditions
+        bool searchHasUpper = std::any_of(
+            searchString.begin(), searchString.end(),
+            [](unsigned char c) { return std::isupper(c); }
+        );
+        std::string searchLower;
+        if (!searchHasUpper) {
+            searchLower = searchString;
+            toLowerInPlace(searchLower);
+        }
+
+        // Single-pass filtering with index tracking
+        for (size_t i = 0; i < files.size(); ++i) {
+            const auto& file = files[i];
+            bool matches = false;
+
+            if (displayConfig::toggleNamesOnly) {
+                std::string filename = getBasename(file);
+
+                if (searchHasUpper) {
+                    matches = (filename.find(searchString) != std::string::npos);
+                } else {
+                    std::string filenameLower = filename;
+                    toLowerInPlace(filenameLower);
+                    matches = (filenameLower.find(searchLower) != std::string::npos);
+                }
+            } else {
+                // Non-name-only filtering (smart case sensitivity)
+                if (searchHasUpper) {
+                    matches = (file.find(searchString) != std::string::npos);
+                } else {
+                    std::string fileLower = file;
+                    toLowerInPlace(fileLower);
+                    matches = (fileLower.find(searchLower) != std::string::npos);
                 }
             }
-        } else {
-            tempFiltered = filterFiles(files, searchString);
+
+            if (matches) {
+                tempFiltered.push_back(file);
+                tempIndices.push_back(i);
+            }
         }
 
         // Check if the filter produces valid, different results
@@ -196,34 +230,17 @@ void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<
             return false;
         }
 
-        // Convert tempFiltered to unordered_set for O(1) lookups
-        std::unordered_set<std::string> filteredSet(tempFiltered.begin(), tempFiltered.end());
+        // Update files and filtering stack
+        files = std::move(tempFiltered);
 
-        // Build new filtered files and update filtering stack
-        std::vector<std::string> newFiltered;
-        std::vector<size_t> newIndices;
-        newFiltered.reserve(filteredSet.size());
-        newIndices.reserve(filteredSet.size());
-
-        for (size_t i = 0; i < files.size(); ++i) {
-            if (filteredSet.find(files[i]) != filteredSet.end()) {
-                newFiltered.push_back(files[i]);
-
-                // Map to the original index, accounting for previous filtering
-                size_t originalIdx = i;
-                if (isFiltered && !filteringStack.empty() && i < filteringStack.back().originalIndices.size()) {
-                    originalIdx = filteringStack.back().originalIndices[i];
-                }
-                newIndices.push_back(originalIdx);
-            }
-        }
-
-        // Use move semantics to transfer ownership
-        files = std::move(newFiltered);
-
-        // Update filtering stack
         FilteringState newState;
-        newState.originalIndices = std::move(newIndices);
+        newState.originalIndices.reserve(tempIndices.size());
+        for (size_t idx : tempIndices) {
+            size_t originalIdx = isFiltered && !filteringStack.empty() && idx < filteringStack.back().originalIndices.size()
+                ? filteringStack.back().originalIndices[idx]
+                : idx;
+            newState.originalIndices.push_back(originalIdx);
+        }
         newState.isFiltered = true;
 
         if (isFiltered && !filteringStack.empty()) {
@@ -248,7 +265,7 @@ void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<
             add_history(query.c_str());
             saveHistory(filterHistory);
         } catch (const std::exception&) {
-            // Optionally, log the error or handle it
+            // Optionally log the error
         }
     };
 
