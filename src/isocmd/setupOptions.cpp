@@ -356,7 +356,6 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
 }
 
 
-
 // Function to set the AutoUpdate switch in teh config file
 void updateFilenamesOnly(const std::string& configPath, const std::string& inputSearch) {
     signal(SIGINT, SIG_IGN);  // Ignore Ctrl+C

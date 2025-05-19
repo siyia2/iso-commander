@@ -92,7 +92,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         if (listType == "ISO_FILES") {
             output << (displayConfig::toggleNamesOnly ? "" : directory + defaultColor + "/") << magentaBold << filename;
         } else if (listType == "MOUNTED_ISOS") {
-            if (displayConfig::toggleFullListUmount)
+            if (displayConfig::toggleFullListUmount && !displayConfig::toggleNamesOnly)
                 output << blueBold << directory << magentaBold << displayPath << grayBold << displayHash;
             else
                 output << magentaBold << displayPath;

@@ -31,19 +31,41 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
             return false;
         }
 
-        const std::vector<std::string>& sourceList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
+        const std::vector<std::string>& sourceList =
+            isFiltered ? filteredFiles
+                       : (isUnmount ? isoDirs : globalIsoFileList);
         std::vector<std::string> tempFiltered;
 
         // Filtering with optional name-only toggle
         if (displayConfig::toggleNamesOnly) {
-            std::copy_if(sourceList.begin(), sourceList.end(), std::back_inserter(tempFiltered), [&](const std::string& s) {
-                return extractFilename(s).find(searchString) != std::string::npos;
-            });
-        } else {
-            tempFiltered = filterFiles(sourceList, searchString); // existing logic
+            std::copy_if(
+                sourceList.begin(),
+                sourceList.end(),
+                std::back_inserter(tempFiltered),
+                [&](const std::string& s) {
+                    // 1) extract just the filename
+                    std::string name = extractFilename(s);
+
+                    // 2) if unmount mode, strip off everything from '~' onwards
+                    if (isUnmount) {
+                        auto tildePos = name.find('~');
+                        if (tildePos != std::string::npos) {
+                            name = name.substr(0, tildePos);
+                        }
+                    }
+
+                    // 3) do the substring match
+                    return name.find(searchString) != std::string::npos;
+                }
+            );
+        }
+        else {
+            // Non-name-only filtering remains the same
+            tempFiltered = filterFiles(sourceList, searchString);
         }
 
-        std::unordered_set<std::string> filteredSet(tempFiltered.begin(), tempFiltered.end());
+        std::unordered_set<std::string> filteredSet(
+            tempFiltered.begin(), tempFiltered.end());
 
         std::vector<std::string> newFilteredFiles;
         std::vector<size_t> newIndices;
@@ -64,20 +86,21 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
         }
 
         bool filterUnchanged = newFilteredFiles.size() == sourceList.size();
-        bool hasResults = !newFilteredFiles.empty();
+        bool hasResults       = !newFilteredFiles.empty();
 
         if (!filterUnchanged && hasResults) {
-            currentPage = 0;
-            needsClrScrn = true;
+            currentPage   = 0;
+            needsClrScrn  = true;
             filteredFiles = std::move(newFilteredFiles);
 
             FilteringState newState;
             newState.originalIndices = std::move(newIndices);
-            newState.isFiltered = true;
+            newState.isFiltered      = true;
 
             if (isFiltered) {
                 filteringStack.back() = std::move(newState);
-            } else {
+            }
+            else {
                 filteringStack.push_back(std::move(newState));
             }
 
@@ -95,13 +118,16 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
             loadHistory(filterHistory);
             std::cout << "\033[1A\033[K";
 
-            std::string filterPrompt = "\001\033[1;38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001" + 
-                                        operationColor + "\002" + operation + 
-                                        "\001\033[1;94m\002, or ↵ to return: \001\033[0;1m\002";
+            std::string filterPrompt =
+                "\001\033[1;38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001" +
+                operationColor + "\002" + operation +
+                "\001\033[1;94m\002, or ↵ to return: \001\033[0;1m\002";
 
-            std::unique_ptr<char, decltype(&std::free)> searchQuery(readline(filterPrompt.c_str()), &std::free);
+            std::unique_ptr<char, decltype(&std::free)> searchQuery(
+                readline(filterPrompt.c_str()), &std::free);
 
-            if (!searchQuery || searchQuery.get()[0] == '\0' || strcmp(searchQuery.get(), "/") == 0) {
+            if (!searchQuery || searchQuery.get()[0] == '\0' ||
+                strcmp(searchQuery.get(), "/") == 0) {
                 clear_history();
                 needsClrScrn = isFiltered ? true : false;
                 return true;
@@ -116,7 +142,8 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
                 return true;
             }
         }
-    } else {
+    }
+    else {
         // Quick filtering mode with /pattern
         std::string searchString = inputString.substr(1);
 
