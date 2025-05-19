@@ -50,7 +50,6 @@ extern std::mutex couNtMutex;
 
 // Data Caches
 extern std::vector<std::string> globalIsoFileList;
-extern std::unordered_map<std::string, std::string> originalPathsCache;
 extern std::unordered_map<std::string, std::string> transformationCache;
 extern std::unordered_map<std::string, std::tuple<std::string, std::string, std::string>> cachedParsesForUmount;
 extern std::vector<std::string> binImgFilesCache;
