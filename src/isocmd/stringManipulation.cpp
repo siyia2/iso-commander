@@ -23,35 +23,33 @@ std::unordered_map<std::string, std::string> originalPathsCache;
 std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view path, const std::string& location) {
     // Find last slash efficiently
     auto lastSlashPos = path.find_last_of("/\\");
+    
+    // Handle case with no directory separator
     if (lastSlashPos == std::string_view::npos) {
+        // If toggleNamesOnly is enabled, return filename only
+        if (displayConfig::toggleNamesOnly) {
+            return {"", std::string(path)};
+        }
         return {"", std::string(path)};
     }
     
-    // Extract filename part once for reuse
+    // Extract filename part (everything after the last slash)
     std::string filename = std::string(path.substr(lastSlashPos + 1));
     std::string fullPath = std::string(path);
     
-    // Get original directory path
-    std::string originalDir;
-    
-    // Check if path is already in originalPathsCache
-    auto originalPathIt = originalPathsCache.find(fullPath);
-    if (originalPathIt != originalPathsCache.end()) {
-        originalDir = originalPathIt->second;
-    } else {
-        // Store original directory path
-        originalDir = std::string(path.substr(0, lastSlashPos));
-        originalPathsCache[fullPath] = originalDir;
+    // Handle toggleNamesOnly configuration
+    if (displayConfig::toggleNamesOnly) {
+        return {"", filename};
     }
     
-    // Early return for full list mode - use original directory
-    if (displayConfig::toggleFullListMount && location == "mount") {
-        return {originalDir, filename};
-    } else if (displayConfig::toggleFullListCpMvRm && location == "cp_mv_rm") {
-        return {originalDir, filename};
-    } else if (displayConfig::toggleFullListConversions && location == "conversions") {
-        return {originalDir, filename};
-    } else if (displayConfig::toggleFullListWrite && location == "write") {
+    // Get original directory path
+    std::string originalDir = std::string(path.substr(0, lastSlashPos));
+    
+    // Early return for various full list modes - use original directory
+    if ((displayConfig::toggleFullListMount && location == "mount") ||
+        (displayConfig::toggleFullListCpMvRm && location == "cp_mv_rm") ||
+        (displayConfig::toggleFullListConversions && location == "conversions") ||
+        (displayConfig::toggleFullListWrite && location == "write")) {
         return {originalDir, filename};
     }
     
@@ -63,26 +61,43 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view
     
     // Optimize directory shortening
     std::string processedDir;
-    processedDir.reserve(path.length() / 2);  // More conservative pre-allocation
+    processedDir.reserve(originalDir.length() / 2);  // Reasonable pre-allocation
+    
     size_t start = 0;
     while (start < lastSlashPos) {
         auto end = path.find_first_of("/\\", start);
-        if (end == std::string_view::npos) end = lastSlashPos;
-        // More efficient component truncation
+        if (end == std::string_view::npos || end > lastSlashPos) {
+            end = lastSlashPos;
+        }
+        
+        // Get component length
         size_t componentLength = end - start;
-        size_t truncatePos = std::min({
-            componentLength, 
-            path.find(' ', start) - start,
-            path.find('-', start) - start,
-            path.find('_', start) - start,
-            path.find('.', start) - start,
-            size_t(16)
-        });
+        
+        // Find first special character position
+        size_t firstSpecialPos = std::string_view::npos;
+        for (size_t i = start; i < end; ++i) {
+            char c = path[i];
+            if (c == ' ' || c == '-' || c == '_' || c == '.') {
+                firstSpecialPos = i;
+                break;
+            }
+        }
+        
+        // Determine truncation position (first special char or max 16 chars)
+        size_t truncatePos = componentLength;
+        if (firstSpecialPos != std::string_view::npos) {
+            truncatePos = std::min(truncatePos, firstSpecialPos - start);
+        }
+        truncatePos = std::min(truncatePos, size_t(16));
+        
+        // Append the truncated component
         processedDir.append(path.substr(start, truncatePos));
-        // Don't add a slash after the last component
+        
+        // Add separator if not the last component
         if (end < lastSlashPos) {
             processedDir.push_back('/');
         }
+        
         start = end + 1;
     }
     
@@ -92,8 +107,10 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view
     return {processedDir, filename};
 }
 
+
 // Memory map for umount string division
 std::unordered_map<std::string, std::tuple<std::string, std::string, std::string>> cachedParsesForUmount;
+
 
 // Function to divide any mountpoint into three strings and cache the results
 std::tuple<std::string, std::string, std::string> parseMountPointComponents(std::string_view dir) {

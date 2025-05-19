@@ -16,6 +16,7 @@ namespace displayConfig {
     bool toggleFullListCpMvRm = false;
     bool toggleFullListWrite = false;
     bool toggleFullListConversions = false;
+    bool toggleNamesOnly = false;
 }
 
 

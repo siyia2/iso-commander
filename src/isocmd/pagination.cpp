@@ -56,6 +56,16 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
 		needsClrScrn = true;
 		return true;
 	}
+	
+	if (command == "*") {
+		if (!isUnmount) {
+			displayConfig::toggleNamesOnly = !displayConfig::toggleNamesOnly;
+		} else {
+			displayConfig::toggleFullListUmount = !displayConfig::toggleFullListUmount;
+		}
+		needsClrScrn = true;
+		return true;
+	}
         
 	if (command == "~") {
 		// Toggle full list display based on operation type
