@@ -46,6 +46,9 @@ extern unsigned int maxThreads;
 // Mutex Protection
 extern std::mutex globalSetsMutex;
 extern std::mutex updateListMutex;
+extern std::mutex binImgCacheMutex;
+extern std::mutex mdfMdsCacheMutex;
+extern std::mutex nrgCacheMutex;
 extern std::mutex couNtMutex;
 
 // Data Caches
