@@ -47,10 +47,19 @@ int naturalCompare(const std::string &a, const std::string &b) {
             // Case-insensitive compare for non-digits
             char ca = std::tolower(a[i]), cb = std::tolower(b[j]);
             if (ca != cb) return (ca < cb) ? -1 : 1;
+            
+            // If case-insensitive equal, compare case-sensitively
+            if (a[i] != b[j]) return (a[i] < b[j]) ? -1 : 1;
+            
             ++i; ++j;
         }
     }
-    return (i < a.size()) ? 1 : (j < b.size()) ? -1 : 0;
+    // If one string is longer, it comes after
+    if (i < a.size()) return 1;
+    if (j < b.size()) return -1;
+    
+    // If strings are identical, return 0
+    return 0;
 }
 
 
