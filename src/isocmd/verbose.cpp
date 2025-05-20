@@ -91,11 +91,11 @@ void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_se
 
 // Function to clear and de-allocate verbose sets
 void resetVerboseSets(std::unordered_set<std::string>& processedErrors,std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts) {
-    
-    std::unordered_set<std::string>().swap(processedErrors);
-    std::unordered_set<std::string>().swap(successOuts);
-    std::unordered_set<std::string>().swap(skippedOuts);
-    std::unordered_set<std::string>().swap(failedOuts);
+    // Clear the verbose sets
+	processedErrors.clear();
+	successOuts.clear();
+	skippedOuts.clear();
+	failedOuts.clear();
 
 }
 
