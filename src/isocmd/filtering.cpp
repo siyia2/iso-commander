@@ -179,10 +179,7 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
 
 
 // Handle filtering for select_and_convert_to_iso
-void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<std::string>& files, 
-                              const std::string& fileExtensionWithOutDots, bool& isFiltered, 
-                              bool& needsClrScrn, bool& filterHistory, bool& need2Sort, 
-                              size_t& currentPage) {
+void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<std::string>& files, const std::string& fileExtensionWithOutDots, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, bool& need2Sort, size_t& currentPage) {
     // Early exit if not a filtering command
     if (mainInputString.empty() || (mainInputString != "/" && mainInputString[0] != '/')) {
         return;
