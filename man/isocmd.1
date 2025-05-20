@@ -1,4 +1,4 @@
-.TH ISOCMD 1 "May 2025" "Iso Commander 6.0.4" "Iso-Commander Manual"
+.TH ISOCMD 1 "May 2025" "Iso Commander 6.0.5" "Iso-Commander Manual"
 .SH NAME
 Iso Commander (isocmd) - Command-line utility for managing .iso files and converting image formats.
 
@@ -104,9 +104,16 @@ The configuration file is located at \fI~/.config/isocmd/config\fR, using a key-
 .B auto_update
 Controls automatic update behavior for ISO database. Auto-update runs in the background upon startup and scans any stored paths from readline history for .iso files.
 .br
-Values: 0 (disabled), 1 (enabled)
+Values: off (disabled), on (enabled)
 .br
-Default: 0
+Default: off
+.TP
+.B filenames_only
+Controls whether paths are visible in all lists except for the unmount list.
+.br
+Values: off (disabled), on (enabled)
+.br
+Default: off
 .TP
 .B pagination
 Controls the maximum number of entries per listed page, unless disabled.
