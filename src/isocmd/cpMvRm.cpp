@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../headers.h"
+#include "../display.h"
 
 
 // Function to generate entries for selected ISO files
@@ -393,12 +394,12 @@ void performDeleteOperation(const fs::path& srcPath, const std::string& srcDir, 
         // Try removing the file if the operation wasn't cancelled
         if (fs::remove(srcPath, ec)) {
             completedBytes->fetch_add(fileSize); // Add file size to completed bytes count
-            verboseIsos.push_back("\033[0;1mDeleted: \033[1;92m'" + srcDir + "/" + srcFile + "'\033[0;1m.");
+            verboseIsos.push_back("\033[0;1mDeleted: \033[1;92m'" + srcDir + (!displayConfig::toggleNamesOnly ? "/" : "") + srcFile + "'\033[0;1m.");
             completedTasks->fetch_add(1, std::memory_order_acq_rel); // Increment completed tasks count
         }
     } else {
         // If operation was cancelled, add error message
-        verboseErrors.push_back("\033[1;91mError deleting: \033[1;93m'" + srcDir + "/" + srcFile + "'\033[1;91m: " +
+        verboseErrors.push_back("\033[1;91mError deleting: \033[1;93m'" + srcDir + (!displayConfig::toggleNamesOnly ? "/" : "") + srcFile + "'\033[1;91m: " +
                                  errorDetail + ".\033[0;1m");
         failedTasks->fetch_add(1, std::memory_order_acq_rel); // Increment failed tasks count
         operationSuccessful.store(false); // Set operation as unsuccessful
@@ -428,7 +429,7 @@ bool performMoveOperation(const fs::path& srcPath, const fs::path& destPath, con
                 if (!fs::remove(srcPath, deleteEc)) {
                     // If deletion fails, log error message
                     verboseErrors.push_back("\033[1;91mMove completed but failed to remove source file: \033[1;93m'" +
-                                            srcDir + "/" + srcFile + "'\033[1;91m - " +
+                                            srcDir + (!displayConfig::toggleNamesOnly ? "/" : "") + srcFile + "'\033[1;91m - " +
                                             deleteEc.message() + "\033[0m");
                     completedTasks->fetch_add(1, std::memory_order_acq_rel);
                 } else {
@@ -447,7 +448,7 @@ bool performMoveOperation(const fs::path& srcPath, const fs::path& destPath, con
         // If operation failed or an error occurred, log error
         std::string errorDetail = g_operationCancelled.load() ? "Cancelled" : ec.message();
         std::string errorMessageInfo = "\033[1;91mError moving: \033[1;93m'" + 
-                                      srcDir + "/" + srcFile + "'\033[1;91m" +
+                                      srcDir + (!displayConfig::toggleNamesOnly ? "/" : "") + srcFile + "'\033[1;91m" +
                                       " to '" + destDirProcessed + "/': " + errorDetail + "\033[1;91m.\033[0;1m";
         verboseErrors.push_back(errorMessageInfo);
         failedTasks->fetch_add(1, std::memory_order_acq_rel); // Increment failed tasks count
@@ -455,8 +456,8 @@ bool performMoveOperation(const fs::path& srcPath, const fs::path& destPath, con
     } else {
         // Attempt to change ownership, ignoring any errors
         changeOwnership(destPath);
-        verboseIsos.push_back("\033[0;1mMoved: \033[1;92m'" + srcDir + "/" + srcFile +
-                              "'\033[1m to \033[1;94m'" + destDirProcessed + "/" + destFile + "'\033[0;1m.");
+        verboseIsos.push_back("\033[0;1mMoved: \033[1;92m'" + srcDir + (!displayConfig::toggleNamesOnly ? "/" : "") + srcFile +
+                              "'\033[1m to \033[1;94m'" + destDirProcessed + (!displayConfig::toggleNamesOnly ? "/" : "") + destFile + "'\033[0;1m.");
     }
     
     batchInsertMessages(); // Insert messages if batch size limit is reached
@@ -474,7 +475,7 @@ bool performMultiDestMoveOperation(const fs::path& srcPath, const fs::path& dest
         // If copying fails, log error
         std::string errorDetail = g_operationCancelled.load() ? "Cancelled" : ec.message();
         std::string errorMessageInfo = "\033[1;91mError moving: \033[1;93m'" + 
-                                      srcDir + "/" + srcFile + "'\033[1;91m" +
+                                      srcDir + (!displayConfig::toggleNamesOnly ? "/" : "") + srcFile + "'\033[1;91m" +
                                       " to '" + destDirProcessed + "/': " + errorDetail + "\033[1;91m.\033[0;1m";
         verboseErrors.push_back(errorMessageInfo);
         failedTasks->fetch_add(1, std::memory_order_acq_rel); // Increment failed tasks count
@@ -482,8 +483,8 @@ bool performMultiDestMoveOperation(const fs::path& srcPath, const fs::path& dest
     } else {
         // Attempt to change ownership, ignoring any errors
         changeOwnership(destPath);
-        verboseIsos.push_back("\033[0;1mMoved: \033[1;92m'" + srcDir + "/" + srcFile +
-                             "'\033[1m to \033[1;94m'" + destDirProcessed + "/" + destFile + "'\033[0;1m.");
+        verboseIsos.push_back("\033[0;1mMoved: \033[1;92m'" + srcDir + (!displayConfig::toggleNamesOnly ? "/" : "") + srcFile +
+                             "'\033[1m to \033[1;94m'" + destDirProcessed + (!displayConfig::toggleNamesOnly ? "/" : "") + destFile + "'\033[0;1m.");
         completedTasks->fetch_add(1, std::memory_order_acq_rel); // Increment completed tasks count
     }
     
@@ -502,7 +503,7 @@ bool performCopyOperation(const fs::path& srcPath, const fs::path& destPath, con
         // If copying fails, log error
         std::string errorDetail = g_operationCancelled.load() ? "Cancelled" : ec.message();
         std::string errorMessageInfo = "\033[1;91mError copying: \033[1;93m'" + 
-                                      srcDir + "/" + srcFile + "'\033[1;91m" +
+                                      srcDir + (!displayConfig::toggleNamesOnly ? "/" : "") + srcFile + "'\033[1;91m" +
                                       " to '" + destDirProcessed + "/': " + errorDetail + "\033[1;91m.\033[0;1m";
         verboseErrors.push_back(errorMessageInfo);
         failedTasks->fetch_add(1, std::memory_order_acq_rel); // Increment failed tasks count
@@ -510,8 +511,8 @@ bool performCopyOperation(const fs::path& srcPath, const fs::path& destPath, con
     } else {
         // Attempt to change ownership, ignoring any errors
         changeOwnership(destPath);
-        verboseIsos.push_back("\033[0;1mCopied: \033[1;92m'" + srcDir + "/" + srcFile +
-                             "'\033[1m to \033[1;94m'" + destDirProcessed + "/" + destFile + "'\033[0;1m.");
+        verboseIsos.push_back("\033[0;1mCopied: \033[1;92m'" + srcDir + (!displayConfig::toggleNamesOnly ? "/" : "") + srcFile +
+                             "'\033[1m to \033[1;94m'" + destDirProcessed + (!displayConfig::toggleNamesOnly ? "/" : "") + destFile + "'\033[0;1m.");
         completedTasks->fetch_add(1, std::memory_order_acq_rel); // Increment completed tasks count
     }
     
