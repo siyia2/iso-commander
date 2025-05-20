@@ -58,6 +58,7 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
 	}
 	
 	if (command == "*") {
+		// Async sorting when enabling filename-only mode
 		if (!isUnmount) {
 			displayConfig::toggleNamesOnly = !displayConfig::toggleNamesOnly;
 			std::thread([] {
