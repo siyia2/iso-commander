@@ -211,7 +211,7 @@ void clearHistory(const std::string& inputSearch) {
         std::cerr << "\n\001\033[1;91mError clearing " << historyType << " database: \001\033[1;93m'" 
                   << filePath << "'\001\033[1;91m. File missing or inaccessible." << std::endl;
     } else {
-        std::cout << "\n\001\033[1;92m" << historyType << " database successfully." << std::endl;
+        std::cout << "\n\001\033[1;92m" << historyType << " database cleared successfully." << std::endl;
         clear_history();
     }
 
