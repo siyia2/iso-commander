@@ -451,10 +451,10 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         
         if (!rawInput) break;
         
-        std::string mainInputString(rawInput.get());
+        std::string inputString(rawInput.get());
         
         // Check specifically for "<" to return/exit
-        if (mainInputString == "<") {
+        if (inputString == "<") {
             clearScrollBuffer();
             if (isFiltered) {
                 // Restore the original file list
@@ -474,13 +474,13 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             }
         }
         
-        if (mainInputString == "proc" && pendingIndices.empty()) {
+        if (inputString == "proc" && pendingIndices.empty()) {
 			hasPendingProcess = false;
 			continue;
 		}
         
         // Check for clear pending command
-        if (mainInputString == "clr") {
+        if (inputString == "clr") {
             pendingIndices.clear();
             hasPendingProcess = false;
             needsClrScrn = true;
@@ -497,7 +497,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         std::atomic<bool> isAtISOList{false};
         
         size_t totalPages = (ITEMS_PER_PAGE != 0) ? ((files.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE) : 0;
-        bool validCommand = processPaginationHelpAndDisplay(mainInputString, totalPages, currentPage, needsClrScrn, false, false, false, true, need2Sort, isAtISOList);
+        bool validCommand = processPaginationHelpAndDisplay(inputString, totalPages, currentPage, needsClrScrn, false, false, false, true, need2Sort, isAtISOList);
         
         if (validCommand) continue;
                 
@@ -509,7 +509,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         }
         
         // Check for "proc" command to execute pending operations
-        if (mainInputString == "proc" && hasPendingProcess && !pendingIndices.empty()) {
+        if (inputString == "proc" && hasPendingProcess && !pendingIndices.empty()) {
             // Combine all pending indices into a single string as if they were entered normally
             std::string combinedIndices = "";
             for (size_t i = 0; i < pendingIndices.size(); ++i) {
@@ -531,18 +531,18 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         }       
 
         // Handle filter commands
-        if (mainInputString == "/" || (!mainInputString.empty() && mainInputString[0] == '/')) {
-            handleFilteringConvert2ISO(mainInputString, files, fileExtensionWithOutDots, isFiltered, needsClrScrn, filterHistory, need2Sort, currentPage);
+        if (inputString == "/" || (!inputString.empty() && inputString[0] == '/')) {
+            handleFilteringConvert2ISO(inputString, files, fileExtensionWithOutDots, isFiltered, needsClrScrn, filterHistory, need2Sort, currentPage);
             continue;
         }// Check if input contains a semicolon for delayed execution
-        else if (mainInputString.find(';') != std::string::npos) {
-            if (handlePendingInduction(mainInputString, pendingIndices, hasPendingProcess, needsClrScrn)) {
+        else if (inputString.find(';') != std::string::npos) {
+            if (handlePendingInduction(inputString, pendingIndices, hasPendingProcess, needsClrScrn)) {
                 continue; // Continue the loop if new indices were processed
             }
         }
         // Process other input commands for file processing
         else {
-            processInputForConversions(mainInputString, files, (fileType == "mdf"), (fileType == "nrg"), 
+            processInputForConversions(inputString, files, (fileType == "mdf"), (fileType == "nrg"), 
                          processedErrors, successOuts, skippedOuts, failedOuts, verbose, needsClrScrn, newISOFound);
             needsClrScrn = true;
             if (verbose) {
