@@ -367,27 +367,6 @@ void clearRamCache(bool& modeMdf, bool& modeNrg) {
 		}
 	}
 
-	// Manually remove items with matching extensions from original cache
-	for (auto it = originalPathsCache.begin(); it != originalPathsCache.end();) {
-		const std::string& key = it->first;
-		std::string keyLower = key; // Create a lowercase copy of the key
-		toLowerInPlace(keyLower);
-
-		bool shouldErase = std::any_of(extensions.begin(), extensions.end(),
-			[&keyLower](std::string ext) { // Pass by value to modify locally
-				toLowerInPlace(ext); // Convert extension to lowercase
-				return keyLower.size() >= ext.size() &&
-					keyLower.compare(keyLower.size() - ext.size(), ext.size(), ext) == 0;
-			});
-
-		if (shouldErase) {
-			it = originalPathsCache.erase(it);
-			originalCacheWasCleared = true;
-		} else {
-			++it;
-		}
-	}
-
 
     // Display appropriate messages
     if (cacheIsEmpty && (!transformationCacheWasCleared || !originalCacheWasCleared)) {

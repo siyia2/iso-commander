@@ -15,9 +15,6 @@ void toLowerInPlace(std::string& str) {
 // For memory mapping string transformations
 std::unordered_map<std::string, std::string> transformationCache;
 
-// For memory mapping original paths
-std::unordered_map<std::string, std::string> originalPathsCache;
-
 
 // Function to extract directory and filename from a given path
 std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view path, const std::string& location) {
