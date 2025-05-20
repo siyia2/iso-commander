@@ -73,16 +73,38 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
             return true;
         }
 
-        tempFiltered = filterFiles(sourceList, searchString);
+        if (displayConfig::toggleNamesOnly) {
+            // Extract just the filenames (after last '/') for filtering
+            std::vector<std::string> filenames;
+            filenames.reserve(sourceList.size());
+            for (const auto& path : sourceList) {
+                size_t lastSlash = path.find_last_of('/');
+                filenames.push_back((lastSlash != std::string::npos) ? path.substr(lastSlash + 1) : path);
+            }
             
-        // Rebuild indices for filtered results
-        std::unordered_set<std::string> filteredSet(tempFiltered.begin(), tempFiltered.end());
-        for (size_t i = 0; i < sourceList.size(); ++i) {
-			if (filteredSet.find(sourceList[i]) != filteredSet.end()) {
+            // Filter based on filenames
+            auto filteredNames = filterFiles(filenames, searchString);
+            
+            // Map back to original paths
+            std::unordered_set<std::string> nameSet(filteredNames.begin(), filteredNames.end());
+            for (size_t i = 0; i < filenames.size(); ++i) {
+                if (nameSet.count(filenames[i])) {
+                    tempFiltered.push_back(sourceList[i]);
                     tempIndices.push_back(i);
+                }
+            }
+        } else {
+            // Original path-based filtering behavior
+            tempFiltered = filterFiles(sourceList, searchString);
+            
+            // Rebuild indices for filtered results
+            std::unordered_set<std::string> filteredSet(tempFiltered.begin(), tempFiltered.end());
+            for (size_t i = 0; i < sourceList.size(); ++i) {
+                if (filteredSet.find(sourceList[i]) != filteredSet.end()) {
+                    tempIndices.push_back(i);
+                }
             }
         }
-        
 
         if (tempFiltered.empty()) return false;
         if (tempFiltered.size() == sourceList.size()) return true;
@@ -157,90 +179,91 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
 
 
 // Handle filtering for select_and_convert_to_iso
-void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<std::string>& files, const std::string& fileExtensionWithOutDots, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, bool& need2Sort, size_t& currentPage) {
+void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<std::string>& files, 
+                              const std::string& fileExtensionWithOutDots, bool& isFiltered, 
+                              bool& needsClrScrn, bool& filterHistory, bool& need2Sort, 
+                              size_t& currentPage) {
     // Early exit if not a filtering command
     if (mainInputString.empty() || (mainInputString != "/" && mainInputString[0] != '/')) {
         return;
     }
 
+    auto tokenizeSearchString = [](const std::string& searchString) -> std::vector<std::pair<std::string, bool>> {
+        std::vector<std::pair<std::string, bool>> tokens;
+        std::istringstream tokenStream(searchString);
+        std::string token;
+        while (std::getline(tokenStream, token, ';')) {
+            token.erase(0, token.find_first_not_of(" \t"));
+            token.erase(token.find_last_not_of(" \t") + 1);
+            if (!token.empty()) {
+                bool hasUpper = std::any_of(token.begin(), token.end(),
+                    [](unsigned char c) { return std::isupper(c); });
+                tokens.emplace_back(token, hasUpper);
+            }
+        }
+        return tokens;
+    };
+
     // Lambda to apply filtering using filterFiles
     auto applyFilter = [&](const std::string& searchString) -> bool {
         if (searchString.empty()) return false;
 
-        // Store original files if we're in names-only mode
-        std::vector<std::string> originalFiles;
-        if (displayConfig::toggleNamesOnly) {
-            originalFiles = files;
-            // Convert to names-only for filtering
-            for (auto& file : files) {
-                size_t lastSlashPos = file.find_last_of('/');
-                if (lastSlashPos != std::string::npos) {
-                    file = file.substr(lastSlashPos + 1);
-                }
-                // Remove ANSI codes from the filename if present
-                file = removeAnsiCodes(file);
-            }
-        }
-
-        // Get filtered files using the provided function
-        auto filteredFiles = filterFiles(files, searchString);
-
-        // Restore original files if we were in names-only mode
-        if (displayConfig::toggleNamesOnly) {
-            files = originalFiles;
-            // Map filtered names back to full paths
-            std::unordered_set<std::string> filteredSet(filteredFiles.begin(), filteredFiles.end());
-            std::vector<std::string> tempFiltered;
-            tempFiltered.reserve(filteredFiles.size());
-            
-            for (const auto& file : files) {
-                std::string nameOnly = file;
-                size_t lastSlashPos = nameOnly.find_last_of('/');
-                if (lastSlashPos != std::string::npos) {
-                    nameOnly = nameOnly.substr(lastSlashPos + 1);
-                }
-                nameOnly = removeAnsiCodes(nameOnly);
-                
-                if (filteredSet.find(nameOnly) != filteredSet.end()) {
-                    tempFiltered.push_back(file);
-                }
-            }
-            filteredFiles = std::move(tempFiltered);
-        }
-
-        // Check if filter produced meaningful results
-        if (filteredFiles.empty() || filteredFiles.size() == files.size()) {
-            return false;
-        }
-
-        // Create a map of filtered files for faster lookup
-        std::unordered_set<std::string> filteredSet(filteredFiles.begin(), filteredFiles.end());
-
-        // Find original indices of filtered files
+        const auto& sourceList = files;
+        std::vector<std::string> tempFiltered;
         std::vector<size_t> tempIndices;
-        tempIndices.reserve(filteredFiles.size());
-        
-        for (size_t i = 0; i < files.size(); ++i) {
-            if (filteredSet.find(files[i]) != filteredSet.end()) {
-                tempIndices.push_back(i);
+
+        auto tokens = tokenizeSearchString(searchString);
+        if (tokens.empty()) {
+            tempFiltered = sourceList;
+            return true;
+        }
+
+        if (displayConfig::toggleNamesOnly) {
+            // Extract just the filenames (after last '/') for filtering
+            std::vector<std::string> filenames;
+            filenames.reserve(sourceList.size());
+            for (const auto& path : sourceList) {
+                size_t lastSlash = path.find_last_of('/');
+                filenames.push_back((lastSlash != std::string::npos) ? path.substr(lastSlash + 1) : path);
+            }
+            
+            // Filter based on filenames
+            auto filteredNames = filterFiles(filenames, searchString);
+            
+            // Map back to original paths
+            std::unordered_set<std::string> nameSet(filteredNames.begin(), filteredNames.end());
+            for (size_t i = 0; i < filenames.size(); ++i) {
+                if (nameSet.count(filenames[i])) {
+                    tempFiltered.push_back(sourceList[i]);
+                    tempIndices.push_back(i);
+                }
+            }
+        } else {
+            // Original path-based filtering behavior
+            tempFiltered = filterFiles(sourceList, searchString);
+            
+            // Rebuild indices for filtered results
+            std::unordered_set<std::string> filteredSet(tempFiltered.begin(), tempFiltered.end());
+            for (size_t i = 0; i < sourceList.size(); ++i) {
+                if (filteredSet.find(sourceList[i]) != filteredSet.end()) {
+                    tempIndices.push_back(i);
+                }
             }
         }
 
-        // Validate we found all matches
-        if (tempIndices.size() != filteredFiles.size()) return false;
+        if (tempFiltered.empty()) return false;
+        if (tempFiltered.size() == sourceList.size()) return true;
 
-        // Update filtering stack with original indices
+        currentPage = 0;
+        needsClrScrn = true;
+        files = std::move(tempFiltered);
+
         FilteringState newState;
         newState.originalIndices.reserve(tempIndices.size());
         for (size_t idx : tempIndices) {
-            size_t originalIdx = isFiltered && !filteringStack.empty() && idx < filteringStack.back().originalIndices.size()
-                               ? filteringStack.back().originalIndices[idx]
-                               : idx;
+            size_t originalIdx = isFiltered && !filteringStack.empty() ? filteringStack.back().originalIndices[idx] : idx;
             newState.originalIndices.push_back(originalIdx);
         }
-
-        // Update state
-        files = std::move(filteredFiles);
         newState.isFiltered = true;
 
         if (isFiltered && !filteringStack.empty()) {
@@ -249,14 +272,10 @@ void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<
             filteringStack.push_back(std::move(newState));
         }
 
-        currentPage = 0;
-        needsClrScrn = true;
         isFiltered = true;
         need2Sort = true;
-
         return true;
     };
-
 
     // History handling lambda
     auto handleHistory = [&](const std::string& query) {
@@ -509,18 +528,6 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
     // Merge results
     for (const auto& res : threadResults) {
         filteredFiles.insert(filteredFiles.end(), res.begin(), res.end());
-    }
-
-    // Extract filename part if toggleNamesOnly is enabled
-    if (displayConfig::toggleNamesOnly) {
-        for (auto& filePath : filteredFiles) {
-            size_t lastSlashPos = filePath.find_last_of('/');
-            if (lastSlashPos != std::string::npos) {
-                filePath = filePath.substr(lastSlashPos + 1);
-            }
-            // Remove ANSI codes from the filename if present
-            filePath = removeAnsiCodes(filePath);
-        }
     }
 
     return filteredFiles;
