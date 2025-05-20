@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../headers.h"
-#include "../display.h"
 
 
 // Function to check if a file already exists for conversion output
@@ -64,7 +63,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
 
         if (!fs::exists(inputPath)) {
             localFailedMsgs.push_back(
-                "\033[1;35mMissing: \033[1;93m'" + directory + (!displayConfig::toggleNamesOnly ? "/" : "") + fileNameOnly + "'\033[1;35m.\033[0;1m");
+                "\033[1;35mMissing: \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;35m.\033[0;1m");
 
             // Select the appropriate cache based on the mode.
             auto& cache = modeNrg ? nrgFilesCache :
@@ -90,7 +89,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
 
         std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
         if (fileExists(outputPath)) {
-            localSkippedMsgs.push_back("\033[1;93mThe corresponding .iso file already exists for: \033[1;92m'" + directory + (!displayConfig::toggleNamesOnly ? "/" : "") + fileNameOnly + "'\033[1;93m. Skipped conversion.\033[0;1m");
+            localSkippedMsgs.push_back("\033[1;93mThe corresponding .iso file already exists for: \033[1;92m'" + directory + "/" + fileNameOnly + "'\033[1;93m. Skipped conversion.\033[0;1m");
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
             
             // Check if we need to batch insert
@@ -120,11 +119,11 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
 								fileNameLower.ends_with(".mdf") ? "\033[0;1mMDF" : 
 								fileNameLower.ends_with(".nrg") ? "\033[0;1mNRG" : "\033[0;1mImage";
 
-			localSuccessMsgs.push_back(fileType + " file converted to ISO: \033[1;92m'" + outDirectory + (!displayConfig::toggleNamesOnly ? "/" : "") + outFileNameOnly + "'\033[0;1m.\033[0;1m");
+			localSuccessMsgs.push_back(fileType + " file converted to ISO: \033[1;92m'" + outDirectory + "/" + outFileNameOnly + "'\033[0;1m.\033[0;1m");
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
         } else {
 			if (fs::exists(outputPath)) std::remove(outputPath.c_str());
-            localFailedMsgs.push_back("\033[1;91mConversion of \033[1;93m'" + directory + (!displayConfig::toggleNamesOnly ? "/" : "") + fileNameOnly + "'\033[1;91m " + 
+            localFailedMsgs.push_back("\033[1;91mConversion of \033[1;93m'" + directory + "/" + fileNameOnly + "'\033[1;91m " + 
                                       (g_operationCancelled.load() ? "cancelled" : "failed") + ".\033[0;1m");
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
         }

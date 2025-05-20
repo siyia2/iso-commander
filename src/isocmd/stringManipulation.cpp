@@ -22,18 +22,9 @@ extractDirectoryAndFilename(std::string_view path, const std::string& location) 
     // Find last slash or backslash
     auto lastSlashPos = path.find_last_of("/\\");
     
-    // No directory separator → everything is “filename”
-    if (lastSlashPos == std::string_view::npos) {
-        return {"", std::string(path)};
-    }
-    
     // Extract a view of the filename (no allocation)
     std::string_view filenameView = path.substr(lastSlashPos + 1);
     
-    // Early returns skip unnecessary fullPath construction
-    if (displayConfig::toggleNamesOnly) {
-        return {"", std::string(filenameView)};
-    }
     if ((displayConfig::toggleFullListMount       && location == "mount")       ||
         (displayConfig::toggleFullListCpMvRm      && location == "cp_mv_rm")    ||
         (displayConfig::toggleFullListConversions && location == "conversions") ||
