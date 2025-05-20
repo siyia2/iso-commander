@@ -447,9 +447,9 @@ bool performMoveOperation(const fs::path& srcPath, const fs::path& destPath, con
     if (!success || ec) {
         // If operation failed or an error occurred, log error
         std::string errorDetail = g_operationCancelled.load() ? "Cancelled" : ec.message();
-        std::string errorMessageInfo = "\033[1;91mError moving: \033[1;93m'" + 
-                                      srcDir + (!displayConfig::toggleNamesOnly ? "/" : "") + srcFile + "'\033[1;91m" +
-                                      " to '" + destDirProcessed + "/': " + errorDetail + "\033[1;91m.\033[0;1m";
+        std::string errorMessageInfo = 
+			"\033[1;91mError moving: \033[1;93m'" + 
+			srcDir + (!displayConfig::toggleNamesOnly ? "/" : "") + srcFile + "'\033[1;91m" + (!displayConfig::toggleNamesOnly ? " to '" + destDirProcessed + "/'" : "") + ": " + errorDetail + "\033[1;91m.\033[0;1m";
         verboseErrors.push_back(errorMessageInfo);
         failedTasks->fetch_add(1, std::memory_order_acq_rel); // Increment failed tasks count
         operationSuccessful.store(false); // Set operation as unsuccessful
@@ -502,9 +502,10 @@ bool performCopyOperation(const fs::path& srcPath, const fs::path& destPath, con
     if (!success || ec) {
         // If copying fails, log error
         std::string errorDetail = g_operationCancelled.load() ? "Cancelled" : ec.message();
-        std::string errorMessageInfo = "\033[1;91mError copying: \033[1;93m'" + 
-                                      srcDir + (!displayConfig::toggleNamesOnly ? "/" : "") + srcFile + "'\033[1;91m" +
-                                      " to '" + destDirProcessed + "/': " + errorDetail + "\033[1;91m.\033[0;1m";
+        std::string errorMessageInfo = 
+			"\033[1;91mError copying: \033[1;93m'" + 
+			srcDir + (!displayConfig::toggleNamesOnly ? "/" : "") + srcFile + "'\033[1;91m" + (!displayConfig::toggleNamesOnly ? " to '" + destDirProcessed + "/'" : "") + ": " + errorDetail + "\033[1;91m.\033[0;1m";
+
         verboseErrors.push_back(errorMessageInfo);
         failedTasks->fetch_add(1, std::memory_order_acq_rel); // Increment failed tasks count
         operationSuccessful.store(false); // Set operation as unsuccessful
