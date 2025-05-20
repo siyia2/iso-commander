@@ -15,69 +15,82 @@ void toLowerInPlace(std::string& str) {
 // For memory mapping string transformations
 std::unordered_map<std::string, std::string> transformationCache;
 
+// For memory mapping original paths
+std::unordered_map<std::string, std::string> originalPathsCache;
 
 // Function to extract directory and filename from a given path
-std::pair<std::string, std::string>
-extractDirectoryAndFilename(std::string_view path, const std::string& location) {
-    // Find last slash or backslash
+std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view path, const std::string& location) {
+    // Find last slash efficiently
     auto lastSlashPos = path.find_last_of("/\\");
-    
-    // Extract a view of the filename (no allocation)
-    std::string_view filenameView = path.substr(lastSlashPos + 1);
-    
-    if ((displayConfig::toggleFullListMount       && location == "mount")       ||
-        (displayConfig::toggleFullListCpMvRm      && location == "cp_mv_rm")    ||
-        (displayConfig::toggleFullListConversions && location == "conversions") ||
-        (displayConfig::toggleFullListWrite       && location == "write")) {
-        return { std::string(path.substr(0, lastSlashPos)),
-                 std::string(filenameView) };
+    if (lastSlashPos == std::string_view::npos) {
+        return {"", std::string(path)};
     }
-
-    // Now create fullPath only when needed
-    std::string fullPath(path); // Key for cache
     
-    // Check cache after early returns
-    if (auto it = transformationCache.find(fullPath); it != transformationCache.end()) {
-        return { it->second, std::string(filenameView) };
+    // Extract filename part once for reuse
+    std::string filename = std::string(path.substr(lastSlashPos + 1));
+    std::string fullPath = std::string(path);
+    
+    // Get original directory path
+    std::string originalDir;
+    
+    // Check if path is already in originalPathsCache
+    auto originalPathIt = originalPathsCache.find(fullPath);
+    if (originalPathIt != originalPathsCache.end()) {
+        originalDir = originalPathIt->second;
+    } else {
+        // Store original directory path
+        originalDir = std::string(path.substr(0, lastSlashPos));
+        originalPathsCache[fullPath] = originalDir;
     }
-
-    // Build truncated directory
+    
+    // Early return for full list mode - use original directory
+    if (displayConfig::toggleFullListMount && location == "mount") {
+        return {originalDir, filename};
+    } else if (displayConfig::toggleFullListCpMvRm && location == "cp_mv_rm") {
+        return {originalDir, filename};
+    } else if (displayConfig::toggleFullListConversions && location == "conversions") {
+        return {originalDir, filename};
+    } else if (displayConfig::toggleFullListWrite && location == "write") {
+        return {originalDir, filename};
+    }
+    
+    // Check transformation cache
+    auto cacheIt = transformationCache.find(fullPath);
+    if (cacheIt != transformationCache.end()) {
+        return {cacheIt->second, filename};
+    }
+    
+    // Optimize directory shortening
     std::string processedDir;
+    processedDir.reserve(path.length() / 2);  // More conservative pre-allocation
     size_t start = 0;
     while (start < lastSlashPos) {
         auto end = path.find_first_of("/\\", start);
-        if (end == std::string_view::npos || end > lastSlashPos) {
-            end = lastSlashPos;
-        }
-
-        const size_t compLen = end - start;
-        // Limit search to first 16 characters of the component
-        const size_t truncationLimit = std::min(start + 16, end);
-        size_t firstSpecial = std::string_view::npos;
-        
-        // Search for special characters within the first 16 chars
-        for (size_t i = start; i < truncationLimit; ++i) {
-            if (const char c = path[i]; c == ' ' || c == '-' || c == '_' || c == '.') {
-                firstSpecial = i;
-                break;
-            }
-        }
-
-        size_t truncLen = (firstSpecial != std::string_view::npos) 
-                          ? (firstSpecial - start) 
-                          : std::min(compLen, size_t(16));
-        
-        processedDir.append(path.substr(start, truncLen));
+        if (end == std::string_view::npos) end = lastSlashPos;
+        // More efficient component truncation
+        size_t componentLength = end - start;
+        size_t truncatePos = std::min({
+            componentLength, 
+            path.find(' ', start) - start,
+            path.find('-', start) - start,
+            path.find('_', start) - start,
+            path.find('.', start) - start,
+            size_t(16)
+        });
+        processedDir.append(path.substr(start, truncatePos));
+        // Don't add a slash after the last component
         if (end < lastSlashPos) {
             processedDir.push_back('/');
         }
         start = end + 1;
     }
-
-    // Cache and return
-    auto [insertIt, _] = transformationCache.emplace(std::move(fullPath), processedDir);
-    return { insertIt->second, std::string(filenameView) };
+    
+    // Cache the transformed result
+    transformationCache[fullPath] = processedDir;
+    
+    return {processedDir, filename};
 }
+
 
 
 // Memory map for umount string division
