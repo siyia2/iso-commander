@@ -3,8 +3,6 @@
 #ifndef MOUNT_H
 #define MOUNT_H
 
-#include "display.h"
-
 
 // Structure to handle formatting verbose output messages for mount
 struct VerbosityFormatter {
@@ -34,12 +32,9 @@ struct VerbosityFormatter {
                                   const std::string& fsType = "") {
         outputBuffer.clear();
         outputBuffer.append(mountedFormatPrefix)
-    .append(isoDirectory).append(!displayConfig::toggleNamesOnly ? "/" : "")
-    .append(isoFilename)
-    .append(mountedFormatMiddle)
-    .append(mountisoDirectory).append(!displayConfig::toggleNamesOnly ? "/" : "")
-    .append(mountisoFilename);
-
+                   .append(isoDirectory).append("/").append(isoFilename)
+                   .append(mountedFormatMiddle)
+                   .append(mountisoDirectory).append("/").append(mountisoFilename);
         
         if (!fsType.empty()) {
             outputBuffer.append(mountedFormatSuffixWithFS)
@@ -59,7 +54,7 @@ struct VerbosityFormatter {
                            const std::string& errorCode) {
         outputBuffer.clear();
         outputBuffer.append(errorFormatPrefix)
-                   .append(isoDirectory).append(!displayConfig::toggleNamesOnly ? "/" : "").append(isoFilename)
+                   .append(isoDirectory).append("/").append(isoFilename)
                    .append(errorFormatSuffix).append("{").append(errorCode).append("}")
                    .append(errorFormatEnd);
         return outputBuffer;
@@ -70,7 +65,7 @@ struct VerbosityFormatter {
                                    const std::string& errorDetail) {
         outputBuffer.clear();
         outputBuffer.append(errorFormatPrefix)
-                   .append(isoDirectory).append(!displayConfig::toggleNamesOnly ? "/" : "").append(isoFilename)
+                   .append(isoDirectory).append("/").append(isoFilename)
                    .append(errorFormatSuffix).append(errorDetail)
                    .append(errorFormatEnd);
         return outputBuffer;
@@ -81,9 +76,9 @@ struct VerbosityFormatter {
                              const std::string& mountisoDirectory, const std::string& mountisoFilename) {
         outputBuffer.clear();
         outputBuffer.append(skippedFormatPrefix)
-                   .append(isoDirectory).append(!displayConfig::toggleNamesOnly ? "/" : "").append(isoFilename)
+                   .append(isoDirectory).append("/").append(isoFilename)
                    .append(skippedFormatMiddle)
-                   .append(mountisoDirectory).append(!displayConfig::toggleNamesOnly ? "/" : "").append(mountisoFilename)
+                   .append(mountisoDirectory).append("/").append(mountisoFilename)
                    .append(skippedFormatSuffix);
         return outputBuffer;
     }
@@ -95,7 +90,7 @@ struct VerbosityFormatter {
                                  const std::string& errorType, const std::string& mountTarget = "") {
         outputBuffer.clear();
         outputBuffer.append(errorFormatPrefix)
-                   .append(isoDirectory).append(!displayConfig::toggleNamesOnly ? "/" : "").append(isoFilename)
+                   .append(isoDirectory).append("/").append(isoFilename)
                    .append(errorFormatSuffix);
                    
         if (errorType == "clx") {
@@ -122,7 +117,7 @@ struct VerbosityFormatter {
     std::string formatMountSkipped(const std::string& isoDirectory, const std::string& isoFilename) {
         outputBuffer.clear();
         outputBuffer.append(skippedFormatPrefix)
-                   .append(isoDirectory).append(!displayConfig::toggleNamesOnly ? "/" : "").append(isoFilename)
+                   .append(isoDirectory).append("/").append(isoFilename)
                    .append("'\033[1;93m skipped.\033[0m");
         return outputBuffer;
     }
