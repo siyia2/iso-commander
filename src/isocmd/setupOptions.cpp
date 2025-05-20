@@ -407,7 +407,7 @@ void updateFilenamesOnly(const std::string& configPath, const std::string& input
         outFile.close();
 
         if (inputSearch == "*flno_on" || inputSearch == "*flno_off") {
-            std::cout << "\n\033[0;1mFilename-only display mode has been "
+            std::cout << "\n\033[0;1mFilename-only lists have been "
                       << (inputSearch == "*flno_on" ? "\033[1;92menabled" : "\033[1;91mdisabled")
                       << "\033[0;1m.\033[0;1m\n";
         }
