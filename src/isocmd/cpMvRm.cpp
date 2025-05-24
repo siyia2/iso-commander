@@ -484,7 +484,7 @@ bool performMultiDestMoveOperation(const fs::path& srcPath, const fs::path& dest
         // Attempt to change ownership, ignoring any errors
         changeOwnership(destPath);
         verboseIsos.push_back("\033[0;1mMoved: \033[1;92m'" + (!displayConfig::toggleNamesOnly ? srcDir + "/" : "") + srcFile +
-                             "'\033[1m to \033[1;94m'" + destDirProcessed + "/" + destFile + "'\033[0;1m.");
+                             "'\033[0;1m to \033[1;94m'" + destDirProcessed + "/" + destFile + "'\033[0;1m.");
         completedTasks->fetch_add(1, std::memory_order_acq_rel); // Increment completed tasks count
     }
     
@@ -512,7 +512,7 @@ bool performCopyOperation(const fs::path& srcPath, const fs::path& destPath, con
         // Attempt to change ownership, ignoring any errors
         changeOwnership(destPath);
         verboseIsos.push_back("\033[0;1mCopied: \033[1;92m'" + (!displayConfig::toggleNamesOnly ? srcDir + "/" : "") + srcFile +
-                             "'\033[1m to \033[1;94m'" + destDirProcessed + "/" + destFile + "'\033[0;1m.");
+                             "'\033[0;1m to \033[1;94m'" + destDirProcessed + "/" + destFile + "'\033[0;1m.");
         completedTasks->fetch_add(1, std::memory_order_acq_rel); // Increment completed tasks count
     }
     
