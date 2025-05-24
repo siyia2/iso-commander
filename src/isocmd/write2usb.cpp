@@ -4,6 +4,7 @@
 #include "../threadpool.h"
 #include "../write.h"
 #include "../readline.h"
+#include "../display.h"
 
 
 // Shared progress data
@@ -448,9 +449,10 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         std::ostringstream devicePromptStream;
         devicePromptStream << "\n\033[0;1mSelected \033[1;92mISO\033[0;1m:\n\n";
         for (size_t i = 0; i < sortedIsos.size(); ++i) {
-            auto [shortDir, filename] = extractDirectoryAndFilename(sortedIsos[i].path, "write");
+            auto [isoDir, filename] = extractDirectoryAndFilename(sortedIsos[i].path, "write");
             devicePromptStream << "  \033[1;93m" << (i+1) << ">\033[0;1m " 
-                               << shortDir << "/\033[1;95m" << filename 
+                               << (!displayConfig::toggleNamesOnly ? isoDir + "/\033[1;95m" : "\033[1;95m" ) 
+                               << filename 
                                << "\033[0;1m (\033[1;35m" << sortedIsos[i].sizeStr 
                                << "\033[0;1m)\n";
         }
