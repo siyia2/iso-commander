@@ -3,6 +3,8 @@
 #ifndef MOUNT_H
 #define MOUNT_H
 
+#include "display.h"
+
 
 // Structure to handle formatting verbose output messages for mount
 struct VerbosityFormatter {
@@ -31,11 +33,12 @@ struct VerbosityFormatter {
                                   const std::string& mountisoDirectory, const std::string& mountisoFilename,
                                   const std::string& fsType = "") {
         outputBuffer.clear();
-        outputBuffer.append(mountedFormatPrefix)
-                   .append(isoDirectory).append("/").append(isoFilename)
-                   .append(mountedFormatMiddle)
-                   .append(mountisoDirectory).append("/").append(mountisoFilename);
-        
+		outputBuffer.append(mountedFormatPrefix)
+					.append(displayConfig::toggleNamesOnly ? "" : isoDirectory + "/")
+					.append(isoFilename)
+					.append(mountedFormatMiddle)
+					.append(mountisoDirectory).append("/").append(mountisoFilename);
+
         if (!fsType.empty()) {
             outputBuffer.append(mountedFormatSuffixWithFS)
                        .append(fsType)
@@ -54,9 +57,10 @@ struct VerbosityFormatter {
                            const std::string& errorCode) {
         outputBuffer.clear();
         outputBuffer.append(errorFormatPrefix)
-                   .append(isoDirectory).append("/").append(isoFilename)
-                   .append(errorFormatSuffix).append("{").append(errorCode).append("}")
-                   .append(errorFormatEnd);
+					.append(displayConfig::toggleNamesOnly ? "" : isoDirectory + "/")
+					.append(isoFilename)
+					.append(errorFormatSuffix).append("{").append(errorCode).append("}")
+					.append(errorFormatEnd);
         return outputBuffer;
     }
     
@@ -76,10 +80,11 @@ struct VerbosityFormatter {
                              const std::string& mountisoDirectory, const std::string& mountisoFilename) {
         outputBuffer.clear();
         outputBuffer.append(skippedFormatPrefix)
-                   .append(isoDirectory).append("/").append(isoFilename)
-                   .append(skippedFormatMiddle)
-                   .append(mountisoDirectory).append("/").append(mountisoFilename)
-                   .append(skippedFormatSuffix);
+					.append(displayConfig::toggleNamesOnly ? "" : isoDirectory + "/")
+					.append(isoFilename)
+					.append(skippedFormatMiddle)
+					.append(mountisoDirectory).append("/").append(mountisoFilename)
+					.append(skippedFormatSuffix);
         return outputBuffer;
     }
     
