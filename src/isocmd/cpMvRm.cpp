@@ -13,11 +13,11 @@ std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>&
         // Iterate through each index in the chunk
         for (int index : chunk) {
             // Extract the directory and filename from the ISO file
-            auto [shortDir, filename] = extractDirectoryAndFilename(isoFiles[index - 1], "cp_mv_rm");
+            auto [isoDir, filename] = extractDirectoryAndFilename(isoFiles[index - 1], "cp_mv_rm");
             
             // Format the string to highlight the directory and filename
             std::ostringstream oss;
-            oss << "\033[1m-> " << shortDir << "/\033[95m" << filename << "\033[0m\n";
+            oss << "\033[1m-> " << (!displayConfig::toggleNamesOnly ? isoDir + "/\033[1;95m" : "\033[1;95m" ) << filename << "\033[0m\n";
             entries.push_back(oss.str()); // Add formatted entry to the list
         }
     }
