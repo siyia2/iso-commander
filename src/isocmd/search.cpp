@@ -45,7 +45,7 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
             
             bool isCpMv = false;
             // Prompt the user to enter directory paths for manual database refresh
-            std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;92m\002.iso\001\033[1;94m\002 files and import them into the \001\033[1;92m\002local\001\033[1;94m\002 database, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
+            std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;92m\002.iso\001\033[1;94m\002 entries and import them into the \001\033[1;92m\002local\001\033[1;94m\002 database, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
             char* rawSearchQuery = readline(prompt.c_str());
             
             // Handle EOF (Ctrl+D) scenario
@@ -648,7 +648,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
     
     // Define prompt once
     std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;38;5;208m\002" + fileExtension +
-                         "\001\033[1;94m\002 files and store them into \001\033[1;93m\002RAM\001\033[1;94m\002, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
+                         "\001\033[1;94m\002 entries and load them into \001\033[1;93m\002RAM\001\033[1;94m\002, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
     
     // Main processing loop
     while (true) {
