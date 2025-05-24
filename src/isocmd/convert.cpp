@@ -90,7 +90,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
 
         std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
         if (fileExists(outputPath)) {
-            localSkippedMsgs.push_back("\033[1;93mCorresponding ISO already exists for: \033[1;92m'" + (!displayConfig::toggleNamesOnly ? directory + "/" : "") + fileNameOnly + "'\033[1;93m. Skipped conversion.\033[0;1m");
+            localSkippedMsgs.push_back("\033[1;93mISO already exists for: \033[1;92m'" + (!displayConfig::toggleNamesOnly ? directory + "/" : "") + fileNameOnly + "'\033[1;93m. Skipped conversion.\033[0;1m");
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
             
             // Check if we need to batch insert
