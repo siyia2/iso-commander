@@ -124,16 +124,16 @@ void reportErrorCpMvRm(const std::string& errorType, const std::string& srcDir, 
     
     if (errorType == "same_file") {
         errorMsg = "\033[1;91mCannot " + operation + " file to itself: \033[1;93m'" +
-                   (!displayConfig::toggleNamesOnly ? srcDir + "/" : "") + "/" + srcFile + "'\033[1;91m.\033[0m";
+                   srcDir + "/" + srcFile + "'\033[1;91m.\033[0m";
     }
     else if (errorType == "invalid_dest") {
         errorMsg = "\033[1;91mError " + operation + ": \033[1;93m'" + 
-                   (!displayConfig::toggleNamesOnly ? srcDir + "/" : "") + "/" + srcFile + "'\033[1;91m to '" + 
+                   (!displayConfig::toggleNamesOnly ? srcDir + "/" : "") + srcFile + "'\033[1;91m to '" + 
                    destDir + "': " + errorDetail + "\033[1;91m.\033[0;1m";
     }
     else if (errorType == "source_missing") {
         errorMsg = "\033[1;91mSource file no longer exists: \033[1;93m'" +
-                   (!displayConfig::toggleNamesOnly ? srcDir + "/" : "") + "/" + srcFile + "'\033[1;91m.\033[0;1m";
+                   (!displayConfig::toggleNamesOnly ? srcDir + "/" : "") + srcFile + "'\033[1;91m.\033[0;1m";
     }
     else if (errorType == "overwrite_failed") {
         errorMsg = "\033[1;91mFailed to overwrite: \033[1;93m'" +
@@ -142,17 +142,17 @@ void reportErrorCpMvRm(const std::string& errorType, const std::string& srcDir, 
     }
     else if (errorType == "file_exists") {
         errorMsg = "\033[1;91mError " + operation + ": \033[1;93m'" + 
-                   (!displayConfig::toggleNamesOnly ? srcDir + "/" : "") + "/" + srcFile + "'\033[1;91m to '" + 
-                   destDir + "/': File exists (enable overwrites)\033[1;91m.\033[0;1m";
+                   (!displayConfig::toggleNamesOnly ? srcDir + "/" : "") + srcFile + "'\033[1;91m to '" + 
+                   destDir + "/': File exists (\033[1;93menable overwrites\033[1;91m).\033[0;1m";
     }
     else if (errorType == "remove_after_move") {
         errorMsg = "\033[1;91mMove completed but failed to remove source file: \033[1;93m'" +
-                   (!displayConfig::toggleNamesOnly ? srcDir + "/" : "") + "/" + srcFile + "'\033[1;91m - " +
+                   (!displayConfig::toggleNamesOnly ? srcDir + "/" : "") + srcFile + "'\033[1;91m - " +
                    errorDetail + "\033[0m";
     }
     else if (errorType == "missing_file") {
         errorMsg = "\033[1;35mMissing: \033[1;93m'" +
-                   (!displayConfig::toggleNamesOnly ? srcDir + "/" : "") + "/" + srcFile + "'\033[1;35m.\033[0;1m";
+                   (!displayConfig::toggleNamesOnly ? srcDir + "/" : "") + srcFile + "'\033[1;35m.\033[0;1m";
     }
     else {
         // Generic error case
