@@ -64,7 +64,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
 
         if (!fs::exists(inputPath)) {
             localFailedMsgs.push_back(
-                "\033[1;35mMissing: \033[1;93m'" + (!displayConfig::toggleNamesOnly ? directory + "/" : "") + fileNameOnly + "'\033[1;35m.\033[0;1m");
+                "\033[1;35mMissing file: \033[1;93m'" + (!displayConfig::toggleNamesOnly ? directory + "/" : "") + fileNameOnly + "'\033[1;35m.\033[0;1m");
 
             // Select the appropriate cache based on the mode.
             auto& cache = modeNrg ? nrgFilesCache :
@@ -80,7 +80,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
 
         std::ifstream file(inputPath);
         if (!file.good()) {
-            localFailedMsgs.push_back("\033[1;91mThe specified file \033[1;93m'" + inputPath + "'\033[1;91m cannot be read. Check permissions.\033[0;1m");
+            localFailedMsgs.push_back("\033[1;91mThe specified file \033[1;93m'" + (!displayConfig::toggleNamesOnly ? directory + "/" : "") + fileNameOnly + "'\033[1;91m cannot be read. Check permissions.\033[0;1m");
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
             
             // Check if we need to batch insert
@@ -90,7 +90,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
 
         std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
         if (fileExists(outputPath)) {
-            localSkippedMsgs.push_back("\033[1;93mThe corresponding .iso file already exists for: \033[1;92m'" + (!displayConfig::toggleNamesOnly ? directory + "/" : "") + fileNameOnly + "'\033[1;93m. Skipped conversion.\033[0;1m");
+            localSkippedMsgs.push_back("\033[1;93mCorresponding ISO already exists for: \033[1;92m'" + (!displayConfig::toggleNamesOnly ? directory + "/" : "") + fileNameOnly + "'\033[1;93m. Skipped conversion.\033[0;1m");
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
             
             // Check if we need to batch insert
