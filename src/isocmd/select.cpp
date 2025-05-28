@@ -344,7 +344,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 		// Dummy variable never used from here
 		bool need2Sort = false;
         
-        bool validCommand = processPaginationHelpAndDisplay(inputString, totalPages, currentPage, needsClrScrn, isMount, isUnmount, write, isConversion, need2Sort, isAtISOList);
+        bool validCommand = processPaginationHelpAndDisplay(inputString, totalPages, currentPage, isFiltered, needsClrScrn, isMount, isUnmount, write, isConversion, need2Sort, isAtISOList);
 
         if (validCommand) continue;
         
@@ -497,7 +497,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         std::atomic<bool> isAtISOList{false};
         
         size_t totalPages = (ITEMS_PER_PAGE != 0) ? ((files.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE) : 0;
-        bool validCommand = processPaginationHelpAndDisplay(inputString, totalPages, currentPage, needsClrScrn, false, false, false, true, need2Sort, isAtISOList);
+        bool validCommand = processPaginationHelpAndDisplay(inputString, totalPages, currentPage, isFiltered, needsClrScrn, false, false, false, true, need2Sort, isAtISOList);
         
         if (validCommand) continue;
                 

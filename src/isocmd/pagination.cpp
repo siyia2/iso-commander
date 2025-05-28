@@ -9,7 +9,7 @@ size_t ITEMS_PER_PAGE = 25;
 
 
 // Main pagination function
-bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPages, size_t& currentPage, bool& needsClrScrn, const bool isMount, const bool isUnmount, const bool isWrite, const bool isConversion, bool& need2Sort, std::atomic<bool>& isAtISOList) {
+bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPages, size_t& currentPage, bool& isFiltered, bool& needsClrScrn, const bool isMount, const bool isUnmount, const bool isWrite, const bool isConversion, bool& need2Sort, std::atomic<bool>& isAtISOList) {
 	
 	// To fix a hang
 	if (command.find("//") != std::string::npos) {
@@ -57,7 +57,7 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
 		return true;
 	}
 	
-	if (command == "*") {
+	if (command == "*" && !isFiltered) {
 		// Async sorting when enabling filename-only mode
 		if (!isUnmount) {
 			displayConfig::toggleNamesOnly = !displayConfig::toggleNamesOnly;
@@ -84,7 +84,8 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
 		
 		needsClrScrn = true;
 		return true;
-	}
+	} // Do not change to filenames-only mode when list is already filtered to maintain index^ validity 
+	else if (command == "*" && isFiltered ) return true;
         
 	if (command == "~") {
 		// Toggle full list display based on operation type
