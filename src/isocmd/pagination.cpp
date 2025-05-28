@@ -84,7 +84,7 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
 		
 		needsClrScrn = true;
 		return true;
-	} // Do not change to filenames-only mode when list is already filtered to maintain index^ validity 
+	} // Do not change to filename-only mode when list is already filtered to maintain index^ validity 
 	else if (command == "*" && isFiltered ) return true;
         
 	if (command == "~") {
