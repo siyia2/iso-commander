@@ -133,8 +133,8 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, std:
 
         // Display pagination info if applicable
         if (!disablePagination) {
-            pageContent << "\033[1;38;5;130mPage \033[38;5;37;1m" << (currentPage + 1) << "\033[1;38;5;130m/\033[1;93m" << totalPages
-                        << "\033[1;38;5;130m (Items (\033[38;5;37;1m" << (start + 1) << "-" << end << "\033[1;38;5;130m)/\033[1;93m" << totalEntries << "\033[1;38;5;130m)"
+            pageContent << "\033[1;38;5;94mPage \033[38;5;37;1m" << (currentPage + 1) << "\033[1;38;5;94m/\033[1;93m" << totalPages
+                        << "\033[1;38;5;94m (Items (\033[38;5;37;1m" << (start + 1) << "-" << end << "\033[1;38;5;94m)/\033[1;93m" << totalEntries << "\033[1;38;5;94m)"
                         << "\033[0m\n\n";
         }
 
@@ -145,7 +145,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, std:
 
         // If pagination is enabled, show navigation options
         if (!disablePagination && totalPages > 1) {
-            pageContent << "\n\033[1;38;5;130mPagination: ";
+            pageContent << "\n\033[1;38;5;94mPagination: ";
             if (currentPage > 0) pageContent << "[p] ↵ Previous | ";
             if (currentPage < totalPages - 1) pageContent << "[n] ↵ Next | ";
             pageContent << "[g<num>] ↵ Go to | \033[0m\n";

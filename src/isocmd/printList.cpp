@@ -20,7 +20,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     static const char* magentaBoldDark = "\033[38;5;105;1m";
     static const char* orangeBold = "\033[1;38;5;208m";
     static const char* grayBold = "\033[38;5;245m";
-    static const char* brownBold = "\033[1;38;5;130m";
+    static const char* brownBold = "\033[1;38;5;94m";
     static const char* yellowBold = "\033[1;93m";
 
     bool disablePagination = (ITEMS_PER_PAGE == 0 || items.size() <= ITEMS_PER_PAGE);
