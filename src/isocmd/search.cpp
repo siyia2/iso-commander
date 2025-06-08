@@ -206,7 +206,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
             // If operation is cancelled, break out of the loop
             if (g_operationCancelled.load()) {
                 if (!g_CancelledMessageAdded.exchange(true)) {
-                    std::lock_guard<std::mutex> lock(globalSetsMutex); // Lock to prevent race conditions while accessing global error messages
+                    std::lock_guard<std::mutex> lock(traverseErrorsMutex); // Lock to prevent race conditions while accessing global error messages
                     uniqueErrorMessages.clear(); // Clear previous errors
                     uniqueErrorMessages.insert("\n\033[1;33mISO search interrupted by user.\033[0;1m"); // Add cancellation message
                 }
