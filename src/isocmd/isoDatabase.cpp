@@ -238,7 +238,8 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
     std::mutex traverseErrorMutex;
     
     // Create a thread pool based on the available hardware threads.
-    size_t numThreads = (std::thread::hardware_concurrency() == 0 ? 4 : std::thread::hardware_concurrency()) * 2;
+    unsigned int hc = std::thread::hardware_concurrency();
+    size_t numThreads = (hc == 0 ? 4 : std::min(hc * 2, static_cast<unsigned int>(MAX_HISTORY_LINES)));
 
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
