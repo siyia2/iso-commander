@@ -21,22 +21,18 @@ bool isNumeric(const std::string& str) {
 void tokenizeInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<int>& processedIndices) {
     std::istringstream iss(input);
     std::string token;
-
     std::unordered_set<std::string> invalidInputs;
     std::unordered_set<std::string> invalidIndices;
     std::unordered_set<std::string> invalidRanges;
-
     while (iss >> token) {
         if (startsWithZero(token)) {
             invalidIndices.insert(token);
             continue;
         }
-
         if (std::count(token.begin(), token.end(), '-') > 1) {
             invalidInputs.insert(token);
             continue;
         }
-
         size_t dashPos = token.find('-');
         if (dashPos != std::string::npos) {
             int start, end;
@@ -50,12 +46,10 @@ void tokenizeInput(const std::string& input, const std::vector<std::string>& iso
                 invalidRanges.insert(token);
                 continue;
             }
-
             if (start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size() || start == 0 || end == 0) {
                 invalidRanges.insert(token);
                 continue;
             }
-
             int step = (start <= end) ? 1 : -1;
             for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
                 if (i >= 1 && i <= static_cast<int>(isoFiles.size())) {
@@ -65,19 +59,24 @@ void tokenizeInput(const std::string& input, const std::vector<std::string>& iso
                 }
             }
         } else if (isNumeric(token)) {
-            int num = std::stoi(token);
-            if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size()) {
-                if (processedIndices.find(num) == processedIndices.end()) {
-                    processedIndices.insert(num);
+            try {
+                int num = std::stoi(token);
+                if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size()) {
+                    if (processedIndices.find(num) == processedIndices.end()) {
+                        processedIndices.insert(num);
+                    }
+                } else {
+                    invalidIndices.insert(token);
                 }
-            } else {
+            } catch (const std::invalid_argument&) {
+                invalidInputs.insert(token);
+            } catch (const std::out_of_range&) {
                 invalidIndices.insert(token);
             }
         } else {
             invalidInputs.insert(token);
         }
     }
-
     // Helper to format error messages with pluralization
     auto formatCategory = [](const std::string& singular, const std::string& plural,
                             const std::unordered_set<std::string>& items) {
@@ -91,7 +90,6 @@ void tokenizeInput(const std::string& input, const std::vector<std::string>& iso
         oss << "'.\033[0;1m";
         return oss.str();
     };
-
     // Add formatted messages with conditional pluralization
     if (!invalidInputs.empty()) {
         uniqueErrorMessages.insert(formatCategory("Invalid input", "Invalid inputs", invalidInputs));
