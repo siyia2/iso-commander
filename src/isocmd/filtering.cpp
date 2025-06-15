@@ -11,30 +11,6 @@
 std::vector<FilteringState> filteringStack;
 
 
-// Remove AnsiCodes from filenames
-std::string removeAnsiCodes(const std::string& input) {
-    std::string result;
-    result.reserve(input.size()); // Preallocate memory
-
-    for (size_t i = 0; i < input.size(); ++i) {
-        if (input[i] == '\033' && i + 1 < input.size() && input[i+1] == '[') {
-            // Skip CSI sequence: \033[ ... [a-zA-Z]
-            size_t j = i + 2; // Skip \033 and [
-            while (j < input.size() && (input[j] < 'A' || input[j] > 'Z') && (input[j] < 'a' || input[j] > 'z')) {
-                ++j;
-            }
-            if (j < input.size()) {
-                ++j; // Skip the terminating letter
-            }
-            i = j - 1; // Adjust i (loop will increment to j)
-        } else {
-            result += input[i];
-        }
-    }
-    return result;
-}
-
-
 // Function to hanlde filtering for selectForIsoFiles
 bool handleFilteringForISO(const std::string& inputString, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, const std::string& operation, const std::string& operationColor, const std::vector<std::string>& isoDirs, bool isUnmount, size_t& currentPage) {
     // Early exit if not a filtering operation
@@ -478,25 +454,23 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
         futures.emplace_back(pool.enqueue([=, &files, &queryTokens] {
             std::vector<std::string> localMatches;
             for (size_t j = start; j < end; ++j) {
-                const std::string cleanFile = removeAnsiCodes(files[j]);
-                std::string fileLower;
-
-                // Preprocess filename case if needed
-                if (needLowerCase) {
-                    fileLower = cleanFile;
-                    toLowerInPlace(fileLower);
-                }
-
-                // Check all query tokens
-                for (const auto& qt : queryTokens) {
-                    bool match;
-                    if (qt.isCaseSensitive) {
-                        match = boyerMooreSearchExists(cleanFile, qt.original, 
-                                                     qt.originalBadChar, qt.originalGoodSuffix);
-                    } else {
-                        match = boyerMooreSearchExists(fileLower, qt.lower,
-                                                     qt.lowerBadChar, qt.lowerGoodSuffix);
-                    }
+				const std::string& cleanFile = files[j];  // Direct reference, no ANSI removal
+				std::string fileLower;
+				// Preprocess filename case if needed
+				if (needLowerCase) {
+					fileLower = cleanFile;
+					toLowerInPlace(fileLower);
+				}
+				// Check all query tokens
+				for (const auto& qt : queryTokens) {
+					bool match;
+					if (qt.isCaseSensitive) {
+						match = boyerMooreSearchExists(cleanFile, qt.original, 
+														qt.originalBadChar, qt.originalGoodSuffix);
+					} else {
+						match = boyerMooreSearchExists(fileLower, qt.lower,
+														qt.lowerBadChar, qt.lowerGoodSuffix);
+					}
 
                     if (match) {
                         localMatches.push_back(files[j]);
