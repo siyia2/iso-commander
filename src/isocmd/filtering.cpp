@@ -49,13 +49,30 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
             return true;
         }
 
+        // Helper function to extract the desired substring for unmount filtering
+        auto extractUnmountFilterString = [](const std::string& path) -> std::string {
+            size_t lastSlash = path.find_last_of('/');
+            std::string name = (lastSlash != std::string::npos) ? path.substr(lastSlash + 1) : path;
+            size_t lastTilde = name.find_last_of('~');
+            return (lastTilde != std::string::npos) ? name.substr(0, lastTilde) : name;
+        };
+
         if (displayConfig::toggleNamesOnly) {
-            // Extract just the filenames (after last '/') for filtering
+            // Extract filenames with additional processing for unmount
             std::vector<std::string> filenames;
             filenames.reserve(sourceList.size());
             for (const auto& path : sourceList) {
                 size_t lastSlash = path.find_last_of('/');
-                filenames.push_back((lastSlash != std::string::npos) ? path.substr(lastSlash + 1) : path);
+                std::string name = (lastSlash != std::string::npos) ? path.substr(lastSlash + 1) : path;
+                
+                // Apply special unmount filtering if required
+                if (isUnmount && !displayConfig::toggleFullListUmount) {
+                    size_t lastTilde = name.find_last_of('~');
+                    if (lastTilde != std::string::npos) {
+                        name = name.substr(0, lastTilde);
+                    }
+                }
+                filenames.push_back(name);
             }
             
             // Filter based on filenames
@@ -70,14 +87,36 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
                 }
             }
         } else {
-            // Original path-based filtering behavior
-            tempFiltered = filterFiles(sourceList, searchString);
-            
-            // Rebuild indices for filtered results
-            std::unordered_set<std::string> filteredSet(tempFiltered.begin(), tempFiltered.end());
-            for (size_t i = 0; i < sourceList.size(); ++i) {
-                if (filteredSet.find(sourceList[i]) != filteredSet.end()) {
-                    tempIndices.push_back(i);
+            // Handle path-based filtering with special case for unmount
+            if (isUnmount && !displayConfig::toggleFullListUmount) {
+                // Create a list of extracted substrings for filtering
+                std::vector<std::string> filterStrings;
+                filterStrings.reserve(sourceList.size());
+                for (const auto& path : sourceList) {
+                    filterStrings.push_back(extractUnmountFilterString(path));
+                }
+                
+                // Filter based on extracted substrings
+                auto filteredSubstrings = filterFiles(filterStrings, searchString);
+                
+                // Map back to original paths
+                std::unordered_set<std::string> substringSet(filteredSubstrings.begin(), filteredSubstrings.end());
+                for (size_t i = 0; i < filterStrings.size(); ++i) {
+                    if (substringSet.count(filterStrings[i])) {
+                        tempFiltered.push_back(sourceList[i]);
+                        tempIndices.push_back(i);
+                    }
+                }
+            } else {
+                // Standard path-based filtering
+                tempFiltered = filterFiles(sourceList, searchString);
+                
+                // Rebuild indices for filtered results
+                std::unordered_set<std::string> filteredSet(tempFiltered.begin(), tempFiltered.end());
+                for (size_t i = 0; i < sourceList.size(); ++i) {
+                    if (filteredSet.find(sourceList[i]) != filteredSet.end()) {
+                        tempIndices.push_back(i);
+                    }
                 }
             }
         }
