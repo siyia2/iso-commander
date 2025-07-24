@@ -7,6 +7,7 @@
 // STANDARD LIBRARY INCLUDES
 //==============================
 // C++ Standard Library
+#include <cassert>
 #include <chrono>
 #include <csignal>
 #include <cstring>
