@@ -838,13 +838,11 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
         return false;
     }
 
-    // Get ISO file size and check alignment
+    // Get ISO file size
     const uint64_t fileSize = std::filesystem::file_size(isoPath);
-    if (fileSize % sectorSize != 0) {
-        progressData[progressIndex].failed.store(true);
-        close(device_fd);
-        return false;
-    }
+    
+    // Calculate aligned file size (round up to next sector boundary)
+    const uint64_t alignedFileSize = ((fileSize + sectorSize - 1) / sectorSize) * sectorSize;
 
     // Set buffer size as multiple of sector size (8MB default)
     size_t bufferSize = 8 * 1024 * 1024;
@@ -867,34 +865,66 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     const int UPDATE_INTERVAL_MS = 500;
 
     try {
-        while (progressData[progressIndex].bytesWritten.load() < fileSize && !g_operationCancelled) {
-            const uint64_t totalWritten = progressData[progressIndex].bytesWritten.load();
-            const uint64_t remaining = fileSize - totalWritten;
-            const size_t bytesToRead = std::min(bufferSize, static_cast<size_t>(remaining));
-
-            iso.read(alignedBuffer, bytesToRead);
-            const std::streamsize bytesRead = iso.gcount();
+        uint64_t totalBytesProcessed = 0;
+        
+        while (totalBytesProcessed < alignedFileSize && !g_operationCancelled) {
+            const uint64_t remaining = alignedFileSize - totalBytesProcessed;
+            const size_t chunkSize = std::min(bufferSize, static_cast<size_t>(remaining));
             
-            if (bytesRead <= 0 || static_cast<size_t>(bytesRead) != bytesToRead) {
-                throw std::runtime_error("Read error");
+            // Always work with sector-aligned chunks
+            assert(chunkSize % sectorSize == 0);
+            
+            // Clear buffer to ensure padding bytes are zero
+            std::memset(alignedBuffer, 0, chunkSize);
+            
+            // Read data from ISO file
+            size_t bytesToReadFromFile = chunkSize;
+            if (totalBytesProcessed + chunkSize > fileSize) {
+                // This is the final chunk that extends beyond the file
+                bytesToReadFromFile = fileSize - totalBytesProcessed;
             }
-
-            // Handle partial writes
-            ssize_t bytesWritten = 0;
-            while (bytesWritten < static_cast<ssize_t>(bytesToRead)) {
-                size_t chunk = std::min(static_cast<size_t>(bytesToRead - bytesWritten), bufferSize);
-                chunk = (chunk / sectorSize) * sectorSize;
-                if (chunk == 0) break;
-                ssize_t result = write(device_fd, alignedBuffer + bytesWritten, chunk);
-                if (result == -1) {
-                    throw std::runtime_error("Write error");
+            
+            if (bytesToReadFromFile > 0) {
+                iso.read(alignedBuffer, bytesToReadFromFile);
+                const std::streamsize bytesRead = iso.gcount();
+                
+                if (bytesRead < 0) {
+                    throw std::runtime_error("Read error from ISO file");
                 }
-                bytesWritten += result;
+                
+                if (static_cast<size_t>(bytesRead) != bytesToReadFromFile) {
+                    if (iso.eof() && totalBytesProcessed + bytesRead == fileSize) {
+                        // Expected EOF - we've read the entire file
+                    } else {
+                        throw std::runtime_error("Incomplete read from ISO file");
+                    }
+                }
+            }
+            
+            // The buffer now contains file data + zero padding to sector boundary
+            // Write the entire sector-aligned chunk
+            ssize_t totalWritten = 0;
+            while (totalWritten < static_cast<ssize_t>(chunkSize)) {
+                ssize_t result = write(device_fd, alignedBuffer + totalWritten, chunkSize - totalWritten);
+                if (result == -1) {
+                    if (errno == EINTR) {
+                        continue; // Interrupted by signal, retry
+                    }
+                    throw std::runtime_error("Write error to device: " + std::string(strerror(errno)));
+                }
+                if (result == 0) {
+                    throw std::runtime_error("Unexpected zero write to device");
+                }
+                totalWritten += result;
             }
 
-            // Atomically update progress
-            progressData[progressIndex].bytesWritten.fetch_add(bytesWritten);
-            bytesInWindow += bytesWritten;
+            // Update progress tracking
+            totalBytesProcessed += chunkSize;
+            
+            // Update progress based on actual file bytes written (not including padding)
+            const uint64_t fileBytesWritten = std::min(totalBytesProcessed, fileSize);
+            progressData[progressIndex].bytesWritten.store(fileBytesWritten);
+            bytesInWindow += totalWritten;
 
             // Update progress and speed
             auto now = std::chrono::high_resolution_clock::now();
@@ -902,7 +932,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
 
             if (timeSinceLastUpdate.count() >= UPDATE_INTERVAL_MS) {
                 // Calculate and update progress atomically
-                const int progress = static_cast<int>((static_cast<double>(progressData[progressIndex].bytesWritten.load()) / fileSize) * 100);
+                const int progress = static_cast<int>((static_cast<double>(fileBytesWritten) / fileSize) * 100);
                 progressData[progressIndex].progress.store(progress);
 
                 // Calculate and update speed atomically
@@ -915,16 +945,31 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
                 bytesInWindow = 0;
             }
         }
+        
+        // Ensure all data is written to device
+        if (!g_operationCancelled.load()) {
+            if (fsync(device_fd) != 0) {
+                throw std::runtime_error("Failed to sync data to device: " + std::string(strerror(errno)));
+            }
+        }
+        
+    } catch (const std::exception& e) {
+        progressData[progressIndex].failed.store(true);
+        close(device_fd);
+        // Log the specific error if logging is available
+        // std::cerr << "ISO write failed: " << e.what() << std::endl;
+        return false;
     } catch (...) {
         progressData[progressIndex].failed.store(true);
         close(device_fd);
         return false;
     }
 
+    close(device_fd);
+
     if (!g_operationCancelled.load()) {
         fsync(device_fd);
     }
-    close(device_fd);
 
     if (!g_operationCancelled && progressData[progressIndex].bytesWritten.load() == fileSize) {
         progressData[progressIndex].completed.store(true);
