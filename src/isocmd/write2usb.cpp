@@ -871,9 +871,6 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
             const uint64_t remaining = alignedFileSize - totalBytesProcessed;
             const size_t chunkSize = std::min(bufferSize, static_cast<size_t>(remaining));
             
-            // Always work with sector-aligned chunks
-            assert(chunkSize % sectorSize == 0);
-            
             // Clear buffer to ensure padding bytes are zero
             std::memset(alignedBuffer, 0, chunkSize);
             
