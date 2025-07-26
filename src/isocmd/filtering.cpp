@@ -143,7 +143,7 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
             std::cout << "\033[1A\033[K"; // Clear previous line
 
             std::string filterPrompt =
-                "\001\033[1;38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001" +
+                "\001\033[1;96m\002FilterTerms\001\033[1;94m\002 ↵ for \001" +
                 operationColor + "\002" + operation +
                 "\001\033[1;94m\002, or ↵ to return: \001\033[0;1m\002";
 
@@ -293,7 +293,7 @@ void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<
     // Interactive filtering mode
     if (mainInputString == "/") {
         std::cout << "\033[1A\033[K";
-        std::string filterPrompt = "\001\033[38;5;94m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;38;5;208m\002" +
+        std::string filterPrompt = "\001\033[1;96m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;38;5;208m\002" +
                                   fileExtensionWithOutDots + "\001\033[1;94m\002, or ↵ to return: \001\033[0;1m\002";
 
         while (true) {

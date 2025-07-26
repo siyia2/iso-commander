@@ -753,7 +753,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     std::cout << std::fixed << std::setprecision(1);
     std::cout << "\n\033[0;1mSuccessful: \033[1;92m" << completedTasks.load()
             << "\033[0;1m/\033[1;93m" << validPairs.size() 
-            << "\033[0;1m in \033[0;1m" << duration << " seconds.\033[0;1m\n";
+            << "\033[0;1m | Duration: \033[0;1m" << duration << "s\033[0;1m\n";
     
     flushStdin();
     restoreInput();
