@@ -580,8 +580,8 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             std::string driveName = getDriveName(device);
             
             std::cout << "  {\033[1;93m" << device << " \033[0;1m<" << driveName << "> (\033[1;35m" 
-                      << deviceSizeStr << "\033[0;1m)} ← \033[1;92m" 
-                      << iso.filename << "\033[0;1m\n";
+                      << deviceSizeStr << "\033[0;1m)} ← {\033[1;92m" 
+                      << iso.filename << "\033[0;1m (\033[1;35m" << iso.sizeStr << "\033[0;1m)}\n";
         }
         
         disableReadlineForConfirmation();
