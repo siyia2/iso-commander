@@ -864,10 +864,21 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     uint64_t bytesInWindow = 0;
     const int UPDATE_INTERVAL_MS = 500;
 
+    // Capture initial cancellation state and track if we were cancelled during operation
+    bool wasCancelledDuringOperation = false;
+    bool loopExitedDueToCancellation = false;
+
     try {
         uint64_t totalBytesProcessed = 0;
         
-        while (totalBytesProcessed < alignedFileSize && !g_operationCancelled) {
+        while (totalBytesProcessed < alignedFileSize) {
+            // Check cancellation at the start of each iteration
+            if (g_operationCancelled.load()) {
+                wasCancelledDuringOperation = true;
+                loopExitedDueToCancellation = true;
+                break;
+            }
+            
             const uint64_t remaining = alignedFileSize - totalBytesProcessed;
             const size_t chunkSize = std::min(bufferSize, static_cast<size_t>(remaining));
             
@@ -898,10 +909,23 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
                 }
             }
             
+            // Check cancellation before write operation
+            if (g_operationCancelled.load()) {
+                wasCancelledDuringOperation = true;
+                loopExitedDueToCancellation = true;
+                break;
+            }
+            
             // The buffer now contains file data + zero padding to sector boundary
             // Write the entire sector-aligned chunk
             ssize_t totalWritten = 0;
             while (totalWritten < static_cast<ssize_t>(chunkSize)) {
+                // Check cancellation during write
+                if (g_operationCancelled.load()) {
+                    wasCancelledDuringOperation = true;
+                    break;
+                }
+                
                 ssize_t result = write(device_fd, alignedBuffer + totalWritten, chunkSize - totalWritten);
                 if (result == -1) {
                     if (errno == EINTR) {
@@ -913,6 +937,12 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
                     throw std::runtime_error("Unexpected zero write to device");
                 }
                 totalWritten += result;
+            }
+            
+            // If cancelled during write, break out
+            if (wasCancelledDuringOperation) {
+                loopExitedDueToCancellation = true;
+                break;
             }
 
             // Update progress tracking
@@ -943,8 +973,8 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
             }
         }
         
-        // Ensure all data is written to device
-        if (!g_operationCancelled.load()) {
+        // Ensure all data is written to device (only if not cancelled)
+        if (!wasCancelledDuringOperation && !g_operationCancelled.load()) {
             if (fsync(device_fd) != 0) {
                 throw std::runtime_error("Failed to sync data to device: " + std::string(strerror(errno)));
             }
@@ -964,14 +994,23 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
 
     close(device_fd);
 
-    if (!g_operationCancelled.load()) {
-        fsync(device_fd);
-    }
-
-    if (!g_operationCancelled && progressData[progressIndex].bytesWritten.load() == fileSize) {
+    // Handle the different exit conditions with proper precedence
+    const bool allBytesWritten = (progressData[progressIndex].bytesWritten.load() == fileSize);
+    
+    // Check if operation was definitely cancelled
+    const bool definiteCancellation = wasCancelledDuringOperation || loopExitedDueToCancellation;
+    
+    if (allBytesWritten && !definiteCancellation) {
+        // Operation completed successfully
         progressData[progressIndex].completed.store(true);
         return true;
+    } else if (definiteCancellation) {
+        // Operation was definitely cancelled - DON'T set failed flag
+        // The calling code can check g_operationCancelled to distinguish
+        return false;
+    } else {
+        // Operation failed for some other reason (incomplete write, not due to cancellation)
+        progressData[progressIndex].failed.store(true);
+        return false;
     }
-    
-    return false;
 }
