@@ -173,9 +173,8 @@ void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOLi
         // Only proceed if the import process is not running
         if (!isImportRunning.load()) {
 
-            // Check if a new ISO was found and the list is at the ISO list
+            // Check if the list is at the ISO list
             if (isAtISOList.load()) {
-
                 // If conditions are met, clear and reload the filtered file list with the updated data
                 clearAndLoadFiles(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, isImportRunning);
                 // Reconstruct and use non-filtered prompt to avoid graphical glitch
