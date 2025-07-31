@@ -19,6 +19,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     static const char* magentaBold = "\033[95;1m";
     static const char* magentaBoldDark = "\033[38;5;105;1m";
     static const char* orangeBold = "\033[1;38;5;208m";
+    static const char* gray = "\033[0;2m";
     static const char* grayBold = "\033[38;5;245m";
     static const char* brownBold = "\033[1;38;5;94m";
     static const char* yellowBold = "\033[1;93m";
@@ -40,11 +41,11 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     if (!disablePagination) {
         output << brownBold << "Page " << darkCyan <<(effectiveCurrentPage + 1) << brownBold << "/" << yellowBold << totalPages << brownBold
                << " (Items (" << darkCyan << (startIndex + 1) << "-" << endIndex << brownBold <<")/" << yellowBold << totalItems << brownBold << ")"
-               << (isImportRunning.load() ? "\n\n\033[0;2m[Auto-Update: List automatically adjusts for newly discovered ISO]\033[0m" : "")
+               << gray << (isImportRunning.load() ? "\n\n[Auto-Update: List automatically adjusts for newly discovered ISO]" : "")
                << defaultColor << "\n\n";
     }
     
-    if (disablePagination && isImportRunning.load() && listType == "ISO_FILES") std::cout << "\n\033[2m[Auto-Update: List automatically adjusts for newly discovered ISO]\033[0m\n";
+    if (disablePagination && isImportRunning.load() && listType == "ISO_FILES") std::cout << gray << "\n[Auto-Update: List automatically adjusts for newly discovered ISO]" << defaultColor << "\n";
 
     // Calculate padding based on current page's maximum index
     size_t currentNumDigits = std::to_string(endIndex).length();
