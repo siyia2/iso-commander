@@ -516,6 +516,7 @@ void updateAutoUpdateConfig(const std::string& configPath, const std::string& in
     // Ensure settings maintain order and are written back to the file
     std::vector<std::pair<std::string, std::string>> orderedDefaults = {
         {"auto_update", config["auto_update"]},       // Updated auto_update value
+        {"filenames_only", config["filenames_only"]},         // Existing filenames_only value
         {"pagination", config["pagination"]},         // Existing pagination value
         {"mount_list", config["mount_list"]},
         {"umount_list", config["umount_list"]},
