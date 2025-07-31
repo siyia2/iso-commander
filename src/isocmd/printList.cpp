@@ -40,11 +40,11 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     if (!disablePagination) {
         output << brownBold << "Page " << darkCyan <<(effectiveCurrentPage + 1) << brownBold << "/" << yellowBold << totalPages << brownBold
                << " (Items (" << darkCyan << (startIndex + 1) << "-" << endIndex << brownBold <<")/" << yellowBold << totalItems << brownBold << ")"
-               << (isImportRunning.load() ? "\n\n\033[0;2m[Auto-Update: List will refresh on completion]\033[0m" : "")
+               << (isImportRunning.load() ? "\n\n\033[0;2m[Auto-Update: List automatically adjusts for newly discovered ISO]\033[0m" : "")
                << defaultColor << "\n\n";
     }
     
-    if (disablePagination && isImportRunning.load() && listType == "ISO_FILES") std::cout << "\n\033[2m[Auto-Update: List will refresh on completion]\033[0m\n";
+    if (disablePagination && isImportRunning.load() && listType == "ISO_FILES") std::cout << "\n\033[2m[Auto-Update: List automatically adjusts for newly discovered ISO]\033[0m\n";
 
     // Calculate padding based on current page's maximum index
     size_t currentNumDigits = std::to_string(endIndex).length();
