@@ -4,7 +4,6 @@
 
 
 // Terminal blocking for progress bar
-
 struct termios oldt;
 int oldf;
 
