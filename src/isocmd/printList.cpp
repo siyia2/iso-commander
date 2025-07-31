@@ -41,7 +41,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     if (!disablePagination) {
         output << brownBold << "Page " << darkCyan <<(effectiveCurrentPage + 1) << brownBold << "/" << yellowBold << totalPages << brownBold
                << " (Items (" << darkCyan << (startIndex + 1) << "-" << endIndex << brownBold <<")/" << yellowBold << totalItems << brownBold << ")"
-               << gray << (isImportRunning.load() ? "\n\n[Auto-Update: List automatically adjusts for newly discovered ISO]" : "")
+               << gray << (isImportRunning.load() && listType == "ISO_FILES" ? "\n\n[Auto-Update: List automatically adjusts for newly discovered ISO]" : "")
                << defaultColor << "\n\n";
     }
     
