@@ -160,7 +160,7 @@ int main(int argc, char *argv[]) {
                     case '2':
 						isAtMain.store(false);
 						isAtISOList.store(false);
-                        submenu2(newISOFound);
+                        submenu2(newISOFound, isImportRunning);
                         break;
                     case '3':
 						isAtMain.store(false);

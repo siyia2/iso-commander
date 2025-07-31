@@ -10,7 +10,7 @@ std::vector<std::string> globalIsoFileList;
 
 
 // Function to print all required lists
-void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& isFiltered, size_t& currentPage) {
+void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& isFiltered, size_t& currentPage, std::atomic<bool>& isImportRunning) {
     static const char* defaultColor = "\033[0;1m";
     static const char* redBold = "\033[31;1m";
     static const char* greenBold = "\033[32;1m";
@@ -36,6 +36,10 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
 
     std::ostringstream output;
     output << "\n";
+    
+    if (isImportRunning.load() && listType == "ISO_FILES") {
+			std::cout << "\n\033[2m[Auto-Update: running in the background...ISO list will refresh on completion]\033[0m\n";
+	}
 
     if (!disablePagination) {
         output << brownBold << "Page " << darkCyan <<(effectiveCurrentPage + 1) << brownBold << "/" << yellowBold << totalPages << brownBold

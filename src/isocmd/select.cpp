@@ -174,10 +174,10 @@ void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOLi
         if (!isImportRunning.load()) {
 
             // Check if a new ISO was found and the list is at the ISO list
-            if (newISOFound.load() && isAtISOList.load()) {
+            if (isAtISOList.load()) {
 
                 // If conditions are met, clear and reload the filtered file list with the updated data
-                clearAndLoadFiles(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage);
+                clearAndLoadFiles(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, isImportRunning);
                 // Reconstruct and use non-filtered prompt to avoid graphical glitch
 				std::string prompt = "\001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001"
                            + operationColor + "\002" + operation 
@@ -272,10 +272,10 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         // Load files based on operation type
         if (needsClrScrn) {
             if (!isUnmount) {
-                if (!clearAndLoadFiles(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage))
+                if (!clearAndLoadFiles(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, isImportRunning))
                     break;
             } else {
-                if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage))
+                if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, isImportRunning))
                     break;
             }
 			
@@ -283,7 +283,6 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             // Flag for initiating screen clearing on destructive list actions e.g. Umount/Mv/Rm
             umountMvRmBreak = false;
         }
-        
         if (updateHasRun.load() && !isUnmount && !globalIsoFileList.empty()) {
             std::thread(refreshListAfterAutoUpdate, 1, std::ref(isAtISOList), 
                         std::ref(isImportRunning), std::ref(updateHasRun), std::ref(umountMvRmBreak),
@@ -392,7 +391,7 @@ std::vector<std::string> nrgFilesCache; // Memory cached nrgImgFiles here
 
 
 // Main function to select and convert image files based on type to ISO
-void selectForImageFiles(const std::string& fileType, std::vector<std::string>& files, std::atomic<bool>& newISOFound, bool& list) {
+void selectForImageFiles(const std::string& fileType, std::vector<std::string>& files, std::atomic<bool>& newISOFound, bool& list, std::atomic<bool>& isImportRunning) {
 
     // Bind keys for preventing clear screen and enabling tab completion
     rl_bind_key('\f', prevent_readline_keybindings);
@@ -437,7 +436,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         if (!isFiltered) originalPage = currentPage;
         
         clear_history();
-        if (needsClrScrn) clearAndLoadImageFiles(files, fileType, need2Sort, isFiltered, list, pendingIndices, hasPendingProcess, currentPage);
+        if (needsClrScrn) clearAndLoadImageFiles(files, fileType, need2Sort, isFiltered, list, pendingIndices, hasPendingProcess, currentPage, isImportRunning);
         
         std::cout << "\n\n";
         std::cout << "\033[1A\033[K";

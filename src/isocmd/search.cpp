@@ -618,7 +618,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
 
 
 // Function to search  files based on user's choice of file type (MDF, BIN/IMG, NRG)
-void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<bool>& newISOFound) {
+void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning) {
     // Setup file type configuration
     std::string fileExtension, fileTypeName, fileType = fileTypeChoice;
     bool modeMdf = (fileType == "mdf");
@@ -797,7 +797,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
         
         // Process files if operation wasn't cancelled
         if (!g_operationCancelled.load()) {
-            selectForImageFiles(fileType, files, newISOFound, list);
+            selectForImageFiles(fileType, files, newISOFound, list, isImportRunning);
         }
     }
 }

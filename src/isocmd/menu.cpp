@@ -110,7 +110,7 @@ void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, s
 
 
 // Function to print submenu2
-void submenu2(std::atomic<bool>& newISOFound) {
+void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning) {
 	
 	while (true) {
 		// Calls prevent_clear_screen and tab completion
@@ -153,17 +153,17 @@ void submenu2(std::atomic<bool>& newISOFound) {
          switch (submenu_choice[0]) {
              case '1':
 				operation = "bin";
-					promptSearchBinImgMdfNrg(operation, newISOFound);
+					promptSearchBinImgMdfNrg(operation, newISOFound, isImportRunning);
                 clearScrollBuffer();
                 break;
              case '2':
 				operation = "mdf";
-					promptSearchBinImgMdfNrg(operation, newISOFound);
+					promptSearchBinImgMdfNrg(operation, newISOFound, isImportRunning);
                 clearScrollBuffer();
                 break;
              case '3':
 				operation = "nrg";
-					promptSearchBinImgMdfNrg(operation, newISOFound);
+					promptSearchBinImgMdfNrg(operation, newISOFound, isImportRunning);
                 clearScrollBuffer();
                 break;
 			}
