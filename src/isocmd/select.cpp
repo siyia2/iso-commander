@@ -163,28 +163,23 @@ bool handlePendingProcess(const std::string& inputString,std::vector<std::string
 
 
 // Function to automatically update ISO list if auto-update is on
-void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, bool& umountMvRmBreak, std::vector<std::string>& filteredFiles, bool& isFiltered, std::string& listSubtype, std::vector<std::string>& pendingIndices, bool& hasPendingProcess,std::string& operationColor, const std::string& operation, size_t& currentPage, std::atomic<bool>& newISOFound) {
+void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, bool& umountMvRmBreak, std::vector<std::string>& filteredFiles, bool& isFiltered, std::string& listSubtype, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, std::atomic<bool>& newISOFound) {
     // Continuously checks for conditions at intervals specified by timeoutSeconds
     
     while (true) {
-        // Sleep for the given timeout (1s) before checking the conditions
+        // Sleep for the given timeout (2s) before checking the conditions
         std::this_thread::sleep_for(std::chrono::seconds(timeoutSeconds));
 
         // Only proceed if the import process is not running
         if (!isImportRunning.load()) {
 
             // Check if the list is at the ISO list
-            if (isAtISOList.load()) {
+            if (isAtISOList.load() && isAtISOList && !isFiltered) {
                 // If conditions are met, clear and reload the filtered file list with the updated data
                 clearAndLoadFiles(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, isImportRunning);
-                // Reconstruct and use non-filtered prompt to avoid graphical glitch
-				std::string prompt = "\001\033[1;92m\002ISO\001\033[1;94m\002 ↵ for \001"
-                           + operationColor + "\002" + operation 
-                           + "\001\033[1;94m\002, ? ↵ for help, < ↵ to return:\001\033[0;1m\002 ";
-                // Output a new line to indicate that the list has been updated
                 std::cout << "\n";
+                
                 rl_on_new_line(); // necessary to avoid the graphical glitch when transitioning from filtered -> non-filtered list
-                rl_set_prompt(prompt.c_str());
                 rl_redisplay();    // Refresh the readline interface to display updated content
             }
 
@@ -283,10 +278,10 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             umountMvRmBreak = false;
         }
         if (updateHasRun.load() && !isUnmount && !globalIsoFileList.empty()) {
-            std::thread(refreshListAfterAutoUpdate, 1, std::ref(isAtISOList), 
+            std::thread(refreshListAfterAutoUpdate, 2, std::ref(isAtISOList), 
                         std::ref(isImportRunning), std::ref(updateHasRun), std::ref(umountMvRmBreak),
                         std::ref(filteredFiles), std::ref(isFiltered), std::ref(listSubtype), std::ref(pendingIndices), 
-                        std::ref(hasPendingProcess), std::ref(operationColor), std::ref(operation), std::ref(currentPage), std::ref(newISOFound)).detach();
+                        std::ref(hasPendingProcess), std::ref(currentPage), std::ref(newISOFound)).detach();
         }
            
         std::cout << "\033[1A\033[K";
