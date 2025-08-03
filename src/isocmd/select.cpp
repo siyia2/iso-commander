@@ -164,9 +164,8 @@ bool handlePendingProcess(const std::string& inputString,std::vector<std::string
 
 // Function to automatically update ISO list if auto-update is on
 void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, bool& umountMvRmBreak, std::vector<std::string>& filteredFiles, bool& isFiltered, std::string& listSubtype, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, std::atomic<bool>& newISOFound) {
-	// Determine wether pagination is enabled/disabled for non-filtered ISO
-	bool disablePagination = (ITEMS_PER_PAGE == 0 || globalIsoFileList.size() <= ITEMS_PER_PAGE);
-    // Continuously checks for conditions at intervals specified by timeoutSeconds 
+    // Continuously checks for conditions at intervals specified by timeoutSeconds
+    
     while (true) {
         // Sleep for the given timeout (2s) before checking the conditions
         std::this_thread::sleep_for(std::chrono::seconds(timeoutSeconds));
@@ -175,23 +174,15 @@ void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOLi
         if (!isImportRunning.load()) {
 
             // Check if the list is a non-filtered ISO list
-            if ((isAtISOList.load() && !isFiltered && newISOFound.load()) || (disablePagination && isAtISOList.load() && !isFiltered)) {
+            if (isAtISOList.load() && !isFiltered) {
                 // If conditions are met, clear and reload the ISO list with the updated data
                 clearAndLoadFiles(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, isImportRunning);
                 std::cout << "\n";
                 
                 rl_on_new_line(); // necessary to avoid the graphical glitch when transitioning from filtered -> non-filtered list
                 rl_redisplay();    // Refresh the readline interface to display updated content
-            } else if (!disablePagination && isAtISOList.load() && !isFiltered && !newISOFound.load()){
-				// Delete lines 4 and 5 from beginning of terminal
-				std::cout << "\033[s"        // Save cursor position
-              << "\033[4;1H"     // Move to line 4, column 1
-              << "\033[M"        // Delete line 4 (line 5 becomes new line 4)
-              << "\033[M"        // Delete the new line 4 (original line 5)
-              << "\033[u"        // Restore cursor position
-              << "\033[2A"       // Move cursor up 2 lines to compensate for deleted lines
-              << std::flush;
-			}
+            }
+
             // Reset flags indicating update status and new ISO discovery
             updateHasRun.store(false);  // Reset update status flag
             newISOFound.store(false);   // Reset the flag for newly found ISO
