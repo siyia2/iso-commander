@@ -164,8 +164,8 @@ bool handlePendingProcess(const std::string& inputString,std::vector<std::string
 
 // Function to automatically update ISO list if auto-update is on
 void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, bool& umountMvRmBreak, std::vector<std::string>& filteredFiles, bool& isFiltered, std::string& listSubtype, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, std::atomic<bool>& newISOFound) {
-	// Determine wether pagination is enabled/disabled
-	bool disablePagination = (ITEMS_PER_PAGE == 0 || filteredFiles.size() <= ITEMS_PER_PAGE);
+	// Determine wether pagination is enabled/disabled for non-filtered ISO
+	bool disablePagination = (ITEMS_PER_PAGE == 0 || globalIsoFileList.size() <= ITEMS_PER_PAGE);
     // Continuously checks for conditions at intervals specified by timeoutSeconds 
     while (true) {
         // Sleep for the given timeout (2s) before checking the conditions
