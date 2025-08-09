@@ -97,7 +97,6 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                         try {
                             for (const auto& entry : fs::directory_iterator(dir)) {
                                 if (g_operationCancelled.load()) return;
-
                                 if (entry.is_symlink()) continue;  // <-- skip symlinks
 
                                 if (entry.is_regular_file()) {
@@ -107,7 +106,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                                         isoFiles.insert(fs::canonical(entry.path()).string());
                                     }
                                 }
-                                // FIXED: Allow recursion when maxDepth is -1 (unlimited) or within depth limit
+                                // Allow recursion when maxDepth is -1 (unlimited) or within depth limit
                                 else if (entry.is_directory() && (maxDepth == -1 || currentDepth < maxDepth)) {
                                     scanDir(entry.path(), currentDepth + 1);
                                 }
@@ -119,7 +118,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                             hasErrors = true;
                         }
                     };
-
+					
                     scanDir(path, 0);
                 } else {
                     if (!silentMode)
@@ -134,7 +133,9 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                 hasErrors = true;
             }
         }
-
+		
+		if (!silentMode && g_operationCancelled.load()) std::cout << "\033[1;33mMount Operation cancelled by user.\n\033[0m";
+		
         if (isoFiles.empty()) {
             if (!silentMode && !g_operationCancelled.load()) std::cout << "No ISO files found to mount.\n";
             return hasErrors ? 1 : 0;
@@ -256,7 +257,8 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                 }
             }
         }
-
+		if (!silentMode && g_operationCancelled.load()) std::cout << "\033[1;33mUmount Operation cancelled by user.\n\033[0m";
+		
         if (mountPointsToUnmount.empty()) {
             if (!silentMode && !g_operationCancelled.load()) std::cout << "No ISO mount points found to unmount.\n";
             return hasErrors ? 1 : 0;
