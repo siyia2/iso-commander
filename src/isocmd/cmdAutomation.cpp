@@ -224,8 +224,8 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                             mountPointsToUnmount.insert(canonicalStr);
                         } else {
                             if (!quietMode)
-                                std::cerr << "\033[1;93mWarning: Directory parameter '" << originalPath
-                                          << "' is not allowed. Only /mnt/ or /mnt/iso_* allowed.\n\033[0m";
+                                std::cerr << "\033[1;93mWarning: Directory parameter '\033[1;91m" << originalPath
+                                          << "\033[1;93m' is not allowed. Only \033[1;94m/mnt\033[1;93m or \033[1;94m/mnt/iso_*\033[1;93m allowed.\n\033[0m";
                             hasErrors = true;
                         }
                     } else {
