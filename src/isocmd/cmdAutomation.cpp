@@ -12,7 +12,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
 
     // Parse flags
     bool quietMode = false;
-    int maxDepth = 0; // Default: surface scan only
+    int maxDepth = -1; // Default: max depth
     std::vector<std::string> args;
     args.reserve(argc);
     
