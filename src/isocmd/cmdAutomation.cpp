@@ -104,7 +104,6 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                                     std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
                                     if (ext == ".iso") {
                                         isoFiles.insert(fs::canonical(entry.path()).string());
-                                        if (!quietMode) std::cout << "Found: " << entry.path().string() << "\n";
                                     }
                                 }
                                 // FIXED: Allow recursion when maxDepth is -1 (unlimited) or within depth limit
@@ -140,7 +139,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
             return hasErrors ? 1 : 0;
         }
 
-        if (!quietMode) std::cout << "\nMounting " << isoFiles.size() << " ISO files...\n";
+        if (!quietMode) std::cout << "\nLocated " << isoFiles.size() << " ISO files; Attempting to mount...\n";
         std::unordered_set<std::string> mountedFiles;
         std::unordered_set<std::string> skippedMessages;
         std::unordered_set<std::string> mountedFails;
