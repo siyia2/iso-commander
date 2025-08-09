@@ -24,6 +24,7 @@ For best experience execute with: `sudo isocmd`.
 * Robust tab completion and pagination.
 * Comprehensive command history.
 * Advanced progress tracking.
+* Optional non-interactive mode.
 
 
 ⚡ High-Performance Architecture:
