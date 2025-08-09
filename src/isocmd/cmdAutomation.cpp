@@ -137,11 +137,14 @@ int handleMountUmountCommands(int argc, char* argv[]) {
 		if (!silentMode && g_operationCancelled.load()) std::cout << "\033[1;33mMount Operation cancelled by user.\n\033[0m";
 		
         if (isoFiles.empty()) {
-            if (!silentMode && !g_operationCancelled.load()) std::cout << "No ISO files found to mount.\n";
+            if (!silentMode && !g_operationCancelled.load()) std::cout << "\033[1;93mNo ISO files found to mount.\n\033[0m";
             return hasErrors ? 1 : 0;
         }
 
-        if (!silentMode) std::cout << "\nLocated " << isoFiles.size() << " ISO files; Attempting to mount...\n";
+        if (!silentMode) {
+			std::cout << "\nLocated " << isoFiles.size() << " ISO file" << (isoFiles.size() == 1 ? "" : "s") << "; Attempting to mount...\n";
+		}
+
         std::unordered_set<std::string> mountedFiles;
         std::unordered_set<std::string> skippedMessages;
         std::unordered_set<std::string> mountedFails;
@@ -260,7 +263,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
 		if (!silentMode && g_operationCancelled.load()) std::cout << "\033[1;33mUmount Operation cancelled by user.\n\033[0m";
 		
         if (mountPointsToUnmount.empty()) {
-            if (!silentMode && !g_operationCancelled.load()) std::cout << "No ISO mount points found to unmount.\n";
+            if (!silentMode && !g_operationCancelled.load()) std::cout << "\033[1;93mNo ISO mount points found to unmount.\n\033[0m";
             return hasErrors ? 1 : 0;
         }
 
