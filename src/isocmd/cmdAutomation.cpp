@@ -25,12 +25,13 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                 maxDepth = std::stoi(arg.substr(2));
                 if (maxDepth < 0) {
                     std::cerr << "\033[1;93mWarning: Negative depth (" << maxDepth 
-                              << ") makes no sense. Using 0 (surface scan).\n\033[0m";
-                    maxDepth = 0;
+                              << ") means a full recursive scan.\n\033[0m"; // Fixed typo: recusrsive -> recursive
+                    maxDepth = -1;
                 }
             } catch (...) {
                 std::cerr << "\033[1;93mWarning: Invalid depth '" << arg.substr(2) 
                           << "'. Using 0 (surface scan).\n\033[0m";
+                          maxDepth = 0;
             }
         } else {
             args.push_back(arg);
@@ -86,28 +87,31 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                     
                     std::function<void(const fs::path&, int)> scanDir;
                     scanDir = [&](const fs::path& dir, int currentDepth) {
-                        try {
-                            for (const auto& entry : fs::directory_iterator(dir)) {
-                                if (g_operationCancelled.load()) return;
-                                
-                                if (entry.is_regular_file()) {
-                                    std::string ext = entry.path().extension().string();
-                                    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-                                    if (ext == ".iso") {
-                                        isoFiles.insert(fs::canonical(entry.path()).string());
-                                        if (!quietMode) std::cout << "Found: " << entry.path().string() << "\n";
-                                    }
-                                }
-                                else if (entry.is_directory() && currentDepth < maxDepth) {
-                                    scanDir(entry.path(), currentDepth + 1);
-                                }
-                            }
-                        }
-                        catch (const fs::filesystem_error& e) {
-                            if (!quietMode) std::cerr << "\033[1;93mWarning: Error scanning directory '\033[1;91m" << dir << "\033[1;93m': " << e.what() << "\n\033[0m";
-                            hasErrors = true;
-                        }
-                    };
+    try {
+        for (const auto& entry : fs::directory_iterator(dir)) {
+            if (g_operationCancelled.load()) return;
+
+            if (entry.is_symlink()) continue;  // <-- skip symlinks
+
+            if (entry.is_regular_file()) {
+                std::string ext = entry.path().extension().string();
+                std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                if (ext == ".iso") {
+                    isoFiles.insert(fs::canonical(entry.path()).string());
+                    if (!quietMode) std::cout << "Found: " << entry.path().string() << "\n";
+                }
+            }
+            // FIXED: Allow recursion when maxDepth is -1 (unlimited) or within depth limit
+            else if (entry.is_directory() && (maxDepth == -1 || currentDepth < maxDepth)) {
+                scanDir(entry.path(), currentDepth + 1);
+            }
+        }
+    }
+    catch (const fs::filesystem_error& e) {
+        if (!quietMode) std::cerr << "\033[1;93mWarning: Error scanning directory '\033[1;91m" << dir << "\033[1;93m': " << e.what() << "\n\033[0m";
+        hasErrors = true;
+    }
+};
                     
                     scanDir(path, 0);
                 }
@@ -167,6 +171,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                         if (!quietMode) std::cout << "\033[1;93m\nOperation cancelled by user.\n\033[0m";
                         return 1;
                     }
+                    if (entry.is_symlink()) continue;  // <-- skip symlinks
                     if (entry.is_directory()) {
                         std::string dirName = entry.path().filename().string();
                         if (dirName.substr(0, 4) == "iso_") {
