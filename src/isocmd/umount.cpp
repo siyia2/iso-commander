@@ -18,15 +18,21 @@ bool isDirectoryEmpty(const std::string& path) {
 
 
 // Function to perform unmount using umount2
-void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std::string>& unmountedFiles, std::unordered_set<std::string>& unmountedErrors, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks) {
-
+void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std::string>& unmountedFiles, std::unordered_set<std::string>& unmountedErrors, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, bool quietMode) {
+    bool hasRoot = (geteuid() == 0);
+    
+    // Only allocate resources if not in quiet mode
     VerboseMessageFormatter messageFormatter;
-    const size_t BATCH_SIZE = 1000;
     std::vector<std::string> errorMessages, successMessages;
-    errorMessages.reserve(BATCH_SIZE);
-    successMessages.reserve(BATCH_SIZE);
+    if (!quietMode) {
+        const size_t BATCH_SIZE = 1000;
+        errorMessages.reserve(BATCH_SIZE);
+        successMessages.reserve(BATCH_SIZE);
+    }
 
+    // Flush function - no-op in quiet mode
     auto flushTemporaryBuffers = [&]() {
+        if (quietMode) return;
         std::lock_guard<std::mutex> lock(globalSetsMutex);
         if (!successMessages.empty()) {
             unmountedFiles.insert(successMessages.begin(), successMessages.end());
@@ -38,86 +44,87 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std:
         }
     };
 
-    auto checkAndFlush = [&]() {
-        if (errorMessages.size() >= BATCH_SIZE || successMessages.size() >= BATCH_SIZE) {
-            flushTemporaryBuffers();
-        }
-    };
-
-    bool hasRoot = (geteuid() == 0);
+    // Check cancellation helper
+    auto isCancelled = []() { return g_operationCancelled.load(); };
 
     if (!hasRoot) {
         for (const auto& isoDir : isoDirs) {
-            auto dirParts = parseMountPointComponents(isoDir);
-            std::string formattedDir;
-            if (displayConfig::toggleFullListUmount) 
-                formattedDir = std::get<0>(dirParts);
-            formattedDir += std::get<1>(dirParts);
-            if (displayConfig::toggleFullListUmount) 
-                formattedDir += "\033[38;5;245m" + std::get<2>(dirParts) + "\033[0m";
-            
-            if (!g_operationCancelled.load()) {
-                errorMessages.push_back(messageFormatter.format("root_error", formattedDir));
+            if (isCancelled()) {
                 failedTasks->fetch_add(1);
-            } else {
-                errorMessages.push_back(messageFormatter.format("cancel", formattedDir));
+                continue;
             }
-            checkAndFlush();
+            
+            if (!quietMode) {
+                auto dirParts = parseMountPointComponents(isoDir);
+                std::string formattedDir = std::get<1>(dirParts);  // Always include base name
+                if (displayConfig::toggleFullListUmount) {
+                    formattedDir = std::get<0>(dirParts) + formattedDir + 
+                                  "\033[38;5;245m" + std::get<2>(dirParts) + "\033[0m";
+                }
+                errorMessages.push_back(messageFormatter.format("root_error", formattedDir));
+            }
+            failedTasks->fetch_add(1);
         }
-        flushTemporaryBuffers();
+        if (!quietMode) flushTemporaryBuffers();
         return;
     }
 
-    std::vector<std::pair<std::string, int>> unmountResults;
-    unmountResults.reserve(isoDirs.size());
-
+    // Process unmounting
     for (const auto& isoDir : isoDirs) {
-        if (!g_operationCancelled.load()) {
-			int result = umount2(isoDir.c_str(), MNT_DETACH);
-			unmountResults.emplace_back(isoDir, result);
-		}
-    }
-
-    for (const auto& [dir, result] : unmountResults) {
-		if (!g_operationCancelled.load()) {
-			bool isEmpty = isDirectoryEmpty(dir);
-			auto dirParts = parseMountPointComponents(dir);
-			std::string formattedDir;
-			if (displayConfig::toggleFullListUmount) 
-				formattedDir = std::get<0>(dirParts);
-			formattedDir += std::get<1>(dirParts);
-			if (displayConfig::toggleFullListUmount) 
-				formattedDir += "\033[38;5;245m" + std::get<2>(dirParts) + "\033[0m";
-
-			if (result == 0 || isEmpty) {
-				if (isEmpty && rmdir(dir.c_str()) == 0) {
-					successMessages.push_back(messageFormatter.format("success", formattedDir));
-					completedTasks->fetch_add(1);
-				}
-			} else {
-				errorMessages.push_back(messageFormatter.format("error", formattedDir));
-				failedTasks->fetch_add(1);
-			}
-			checkAndFlush();
-		}
-    }
-
-    if (g_operationCancelled.load()) {
-        for (size_t i = unmountResults.size(); i < isoDirs.size(); ++i) {
-            const std::string& isoDir = isoDirs[i];
-            auto dirParts = parseMountPointComponents(isoDir);
-            std::string formattedDir;
-            if (displayConfig::toggleFullListUmount) 
-                formattedDir = std::get<0>(dirParts);
-            formattedDir += std::get<1>(dirParts);
-            if (displayConfig::toggleFullListUmount) 
-                formattedDir += "\033[38;5;245m" + std::get<2>(dirParts) + "\033[0m";
-            
-            errorMessages.push_back(messageFormatter.format("cancel", formattedDir));
+        if (isCancelled()) {
             failedTasks->fetch_add(1);
-            checkAndFlush();
+            if (!quietMode) {
+                auto dirParts = parseMountPointComponents(isoDir);
+                std::string formattedDir = std::get<1>(dirParts);
+                if (displayConfig::toggleFullListUmount) {
+                    formattedDir = std::get<0>(dirParts) + formattedDir + 
+                                  "\033[38;5;245m" + std::get<2>(dirParts) + "\033[0m";
+                }
+                errorMessages.push_back(messageFormatter.format("cancel", formattedDir));
+            }
+            continue;
+        }
+
+        // Attempt unmount
+        int result = umount2(isoDir.c_str(), MNT_DETACH);
+        bool directoryEmpty = isDirectoryEmpty(isoDir);
+        bool success = (result == 0) || directoryEmpty;
+
+        if (success) {
+            // Remove directory if empty
+            if (directoryEmpty) {
+                rmdir(isoDir.c_str());  // Attempt removal but ignore result
+            }
+            completedTasks->fetch_add(1);
+            
+            if (!quietMode) {
+                auto dirParts = parseMountPointComponents(isoDir);
+                std::string formattedDir = std::get<1>(dirParts);
+                if (displayConfig::toggleFullListUmount) {
+                    formattedDir = std::get<0>(dirParts) + formattedDir + 
+                                  "\033[38;5;245m" + std::get<2>(dirParts) + "\033[0m";
+                }
+                successMessages.push_back(messageFormatter.format("success", formattedDir));
+            }
+        } else {
+            failedTasks->fetch_add(1);
+            if (!quietMode) {
+                auto dirParts = parseMountPointComponents(isoDir);
+                std::string formattedDir = std::get<1>(dirParts);
+                if (displayConfig::toggleFullListUmount) {
+                    formattedDir = std::get<0>(dirParts) + formattedDir + 
+                                  "\033[38;5;245m" + std::get<2>(dirParts) + "\033[0m";
+                }
+                errorMessages.push_back(messageFormatter.format("error", formattedDir));
+            }
+        }
+
+        // Batch flushing check
+        if (!quietMode && 
+            (successMessages.size() >= 1000 || errorMessages.size() >= 1000)) {
+            flushTemporaryBuffers();
         }
     }
 
-    flushTemporaryBuffers();
+    if (!quietMode) flushTemporaryBuffers();
 }

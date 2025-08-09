@@ -25,91 +25,67 @@ bool isAlreadyMounted(const std::string& mountPoint) {
 
 
 // Function to mount selected ISO files called from processAndMountIsoFiles
-void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedFiles, std::unordered_set<std::string>& skippedMessages, std::unordered_set<std::string>& mountedFails, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks) {
-    // Pre-allocate temporary containers with batch capacity
-    const size_t BATCH_SIZE = 1000;
-    std::vector<std::string> tempMountedFiles;
-    std::vector<std::string> tempSkippedMessages;
-    std::vector<std::string> tempMountedFails;
-    tempMountedFiles.reserve(BATCH_SIZE);
-    tempSkippedMessages.reserve(BATCH_SIZE);
-    tempMountedFails.reserve(BATCH_SIZE);
-    
-    // Create formatter for verbose output
-    VerbosityFormatter formatter;
-    
+void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedFiles, std::unordered_set<std::string>& skippedMessages, std::unordered_set<std::string>& mountedFails, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, bool quietMode) {
     // Create mount context once
     struct libmnt_context *ctx = mnt_new_context();
     if (!ctx) {
-        // Handle context creation failure globally
-        std::string errorMsg = "\033[1;91mFailed to create mount context. Cannot proceed with mounting operations.\033[0m";
-        std::lock_guard<std::mutex> lock(globalSetsMutex);
-        mountedFails.insert(errorMsg);
+        if (!quietMode) {
+            std::string errorMsg = "\033[1;91mFailed to create mount context. Cannot proceed with mounting operations.\033[0m";
+            std::lock_guard<std::mutex> lock(globalSetsMutex);
+            mountedFails.insert(errorMsg);
+        }
         return;
     }
 
-    // Function to flush temporary buffers to permanent sets
+    // Only allocate buffers and formatter if not in quiet mode
+    std::vector<std::string> tempMountedFiles;
+    std::vector<std::string> tempSkippedMessages;
+    std::vector<std::string> tempMountedFails;
+    VerbosityFormatter formatter;
+    
+    if (!quietMode) {
+        // Pre-allocate temporary containers with batch capacity
+        const size_t BATCH_SIZE = 1000;
+        tempMountedFiles.reserve(BATCH_SIZE);
+        tempSkippedMessages.reserve(BATCH_SIZE);
+        tempMountedFails.reserve(BATCH_SIZE);
+    }
+
+    // Function to flush temporary buffers (only in verbose mode)
     auto flushBuffers = [&]() {
+        if (quietMode) return;
         std::lock_guard<std::mutex> lock(globalSetsMutex);
         mountedFiles.insert(tempMountedFiles.begin(), tempMountedFiles.end());
         skippedMessages.insert(tempSkippedMessages.begin(), tempSkippedMessages.end());
         mountedFails.insert(tempMountedFails.begin(), tempMountedFails.end());
-        
         tempMountedFiles.clear();
         tempSkippedMessages.clear();
         tempMountedFails.clear();
     };
 
-    // Merged error/skip handling lambda to replace the separate function
-    auto handleFailureOrSkip = [&](const std::string& isoDirectory, const std::string& isoFilename, 
-                                 const std::string& errorTypeOrMountDir, bool isSkipped = false, 
-                                 const std::string& mountisoFilename = "") {
-        if (isSkipped) {
-            // Handle skipped cases (already mounted)
-            // In this case, errorTypeOrMountDir contains the mount directory
-            tempSkippedMessages.push_back(formatter.formatSkipped(
-                isoDirectory, 
-                isoFilename, 
-                errorTypeOrMountDir,  // mountisoDirectory 
-                mountisoFilename
-            ));
-            completedTasks->fetch_add(1, std::memory_order_acq_rel);
-        } else {
-            // Handle error cases
-            if (errorTypeOrMountDir == "detailedError") {
-                tempMountedFails.push_back(formatter.formatDetailedError(isoDirectory, isoFilename, errorTypeOrMountDir));
-            } else {
-                tempMountedFails.push_back(formatter.formatError(isoDirectory, isoFilename, errorTypeOrMountDir));
-            }
-            failedTasks->fetch_add(1, std::memory_order_acq_rel);
-        }
-
-        // Check if we need to flush
-        if (tempMountedFiles.size() >= BATCH_SIZE || tempSkippedMessages.size() >= BATCH_SIZE || tempMountedFails.size() >= BATCH_SIZE) {
-            flushBuffers();
-        }
-    };
-
     for (const auto& isoFile : isoFiles) {
         fs::path isoPath(isoFile);
-
-        // Prepare path information
-        std::string isoFileName = isoPath.stem().string();
         auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile, "mount");
-        
+
         // Check for cancellation
         if (g_operationCancelled.load()) {
-            handleFailureOrSkip(isoDirectory, isoFilename, "cxl");
+            if (!quietMode) {
+                tempMountedFails.push_back(formatter.formatError(isoDirectory, isoFilename, "cxl"));
+            }
+            failedTasks->fetch_add(1, std::memory_order_acq_rel);
             continue;
         }
         
         // Root privilege check
         if (geteuid() != 0) {
-            handleFailureOrSkip(isoDirectory, isoFilename, "needsRoot");
+            if (!quietMode) {
+                tempMountedFails.push_back(formatter.formatError(isoDirectory, isoFilename, "needsRoot"));
+            }
+            failedTasks->fetch_add(1, std::memory_order_acq_rel);
             continue;
         }
 
-        // Generate unique hash for mount point
+        // Generate unique mount point
         std::hash<std::string> hasher;
         size_t hashValue = hasher(isoFile);
         const std::string base36Chars = "0123456789abcdefghijklmnopqrstuvwxyz";
@@ -119,20 +95,27 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
             hashValue /= 36;
         }
 
-        // Create unique mount point
-        std::string uniqueId = isoFileName + "~" + shortHash;
+        std::string uniqueId = isoPath.stem().string() + "~" + shortHash;
         std::string mountPoint = "/mnt/iso_" + uniqueId;
         auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint, "mount");
 
         // Check if already mounted
         if (isAlreadyMounted(mountPoint)) {
-            handleFailureOrSkip(isoDirectory, isoFilename, mountisoDirectory, true, mountisoFilename);
+            if (!quietMode) {
+                tempSkippedMessages.push_back(formatter.formatSkipped(
+                    isoDirectory, isoFilename, mountisoDirectory, mountisoFilename
+                ));
+            }
+            completedTasks->fetch_add(1, std::memory_order_acq_rel);
             continue;
         }
         
         // Verify ISO file exists
         if (!fs::exists(isoPath)) {
-            handleFailureOrSkip(isoDirectory, isoFilename, "missingISO");
+            if (!quietMode) {
+                tempMountedFails.push_back(formatter.formatError(isoDirectory, isoFilename, "missingISO"));
+            }
+            failedTasks->fetch_add(1, std::memory_order_acq_rel);
             continue;
         }
 
@@ -140,13 +123,18 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
         if (!fs::exists(mountPoint)) {
             try {
                 fs::create_directory(mountPoint);
-            } catch (const fs::filesystem_error& e) {
-                handleFailureOrSkip(isoDirectory, isoFilename, "detailedError");
+            } catch (const fs::filesystem_error&) {
+                if (!quietMode) {
+                    tempMountedFails.push_back(formatter.formatDetailedError(
+                        isoDirectory, isoFilename, "Failed to create mount directory"
+                    ));
+                }
+                failedTasks->fetch_add(1, std::memory_order_acq_rel);
                 continue;
             }
         }
 
-        // Reuse the mount context
+        // Configure mount context
         mnt_reset_context(ctx);
         mnt_context_set_source(ctx, isoFile.c_str());
         mnt_context_set_target(ctx, mountPoint.c_str());
@@ -155,38 +143,42 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
 
         // Attempt to mount
         int ret = mnt_context_mount(ctx);
-        bool mountSuccess = (ret == 0);
-
-        if (mountSuccess) {
-            // Get filesystem type if available
-            std::string detectedFsType;
-            const char* fstype = mnt_context_get_fstype(ctx);
-            if (fstype) {
-                detectedFsType = fstype;
+        if (ret == 0) {
+            if (!quietMode) {
+                // Get filesystem type if available
+                std::string detectedFsType;
+                if (const char* fstype = mnt_context_get_fstype(ctx)) {
+                    detectedFsType = fstype;
+                }
+                tempMountedFiles.push_back(formatter.formatMountSuccess(
+                    isoDirectory, isoFilename, 
+                    mountisoDirectory, mountisoFilename, 
+                    detectedFsType
+                ));
             }
-
-            // Add successful mount message
-            tempMountedFiles.push_back(formatter.formatMountSuccess(
-                isoDirectory, isoFilename, 
-                mountisoDirectory, mountisoFilename, 
-                detectedFsType
-            ));
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
-            
-            // Check if we need to flush after success
-            if (tempMountedFiles.size() >= BATCH_SIZE) {
-                flushBuffers();
-            }
         } else {
-            // Mount failed
-            handleFailureOrSkip(isoDirectory, isoFilename, "badFS");
+            if (!quietMode) {
+                tempMountedFails.push_back(formatter.formatError(
+                    isoDirectory, isoFilename, "badFS"
+                ));
+            }
+            failedTasks->fetch_add(1, std::memory_order_acq_rel);
             fs::remove(mountPoint);
+        }
+
+        // Batch processing check (only relevant in verbose mode)
+        if (!quietMode && 
+            (tempMountedFiles.size() >= 1000 || 
+             tempSkippedMessages.size() >= 1000 || 
+             tempMountedFails.size() >= 1000)) {
+            flushBuffers();
         }
     }
 
     // Free the mount context
     mnt_free_context(ctx);
 
-    // Final flush for any remaining entries
+    // Final flush if needed
     flushBuffers();
 }

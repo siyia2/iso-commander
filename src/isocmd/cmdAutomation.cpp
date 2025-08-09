@@ -149,7 +149,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
 
         mountIsoFiles(std::vector<std::string>(isoFiles.begin(), isoFiles.end()),
                       mountedFiles, skippedMessages, mountedFails,
-                      &completedTasks, &failedTasks);
+                      &completedTasks, &failedTasks, quietMode);
 
         if (!quietMode) {
             for (const auto& msg : mountedFiles) std::cout << msg << "\n";
@@ -267,7 +267,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
 
         unmountISO(std::vector<std::string>(mountPointsToUnmount.begin(), mountPointsToUnmount.end()),
                    unmountedFiles, unmountedErrors,
-                   &completedTasks, &failedTasks);
+                   &completedTasks, &failedTasks, quietMode);
 
         if (!quietMode) {
             for (const auto& msg : unmountedFiles) std::cout << msg << "\n";
@@ -286,5 +286,3 @@ int handleMountUmountCommands(int argc, char* argv[]) {
     std::cerr << "\033[1;91mError: Unknown action '" << action << "'\n\033[0m";
     return 1;
 }
-
-

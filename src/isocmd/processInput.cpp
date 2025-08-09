@@ -81,9 +81,9 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
             if (g_operationCancelled.load()) return;
             
             if (isUnmount) {
-                unmountISO(chunk, operationFiles, operationFails, &completedTasks, &failedTasks);
+                unmountISO(chunk, operationFiles, operationFails, &completedTasks, &failedTasks, false);
             } else {
-                mountIsoFiles(chunk, operationFiles, skippedMessages, operationFails, &completedTasks, &failedTasks);
+                mountIsoFiles(chunk, operationFiles, skippedMessages, operationFails, &completedTasks, &failedTasks, false);
             }
         }));
     }
