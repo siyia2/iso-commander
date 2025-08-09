@@ -1,22 +1,83 @@
-.TH ISOCMD 1 "August 2025" "Iso Commander 6.1.3" "Iso-Commander Manual"
+.TH ISOCMD 1 "August 2025" "Iso Commander 6.1.4" "Iso-Commander Manual"
+
 .SH NAME
-Iso Commander (isocmd) - Command-line utility for managing .iso files and converting image formats.
+Iso Commander (isocmd) \- Command-line utility for managing .iso files and converting image formats.
 
 .SH DESCRIPTION
 Iso Commander (isocmd) is a command-line utility for managing .iso files and converting various image formats to .iso using asynchronous I/O operations.
 
-.SH OPTIONS
+.SH NON-INTERACTIVE OPTIONS
 .TP
 .B -v, --version
-Display the program version.
+Show program version.
+
+.TP
+.B --quiet
+Suppress informational and warning output, showing only critical errors and summaries.
+
+.TP
+.B -d\<N\>
+Set max directory recursion depth when scanning for ISOs; default is -1 (unlimited).
+
+.TP
+.B mount
+Mount one or more ISO files or directories containing ISOs. Requires root.
+
+.TP
+.B umount, unmount
+Unmount ISO mount points. Without arguments or with "all", unmounts all under /mnt.  Requires root.
+
+.SH EXAMPLES
+
+.TP
+Mount specific ISOs:
+.br
+\fBisocmd /path/to/file1.iso /path/to/file2.iso mount\fR
+
+.TP
+Mount all ISOs in a directory:
+.br
+\fBisocmd /path/to/dir mount\fR
+
+.TP
+Mount all ISOs recursively up to depth 2:
+.br
+\fBisocmd -d2 /path/to/dir mount\fR
+
+.TP
+Mount an ISO quietly:
+.br
+\fBisocmd --quiet /path/to/file.iso mount\fR
+
+.TP
+Unmount ISO mount points:
+.br
+\fBisocmd /mnt/iso_example /mnt/iso_other umount\fR
+
+.TP
+Unmount all ISO mount points:
+.br
+\fBisocmd all umount\fR
+
+.TP
+Unmount all ISO mount points quietly:
+.br
+\fBisocmd --quiet all umount\fR
+
+.TP
+Unmount an ISO mount point quietly:
+.br
+\fBisocmd --quiet /mnt/iso_example umount\fR
 
 .SH BASIC CTRL SIGNALS
 .TP
 .B Ctrl + c
 Cancel and clean up ongoing operations immediately.
+
 .TP
 .B Ctrl + d
 Exit or break from loops, terminating input or sessions.
+
 .TP
 .B Ctrl + z
 Suspend the process and move it to the background.
@@ -76,12 +137,14 @@ Write function checks USB devices for sufficient capacity and type.
 .B Tab Completion
 
 Press Tab once for path autocompletion, twice for listing files.
+
 .TP
 .B Important Keyboard Shortcuts
 
 \fBCtrl+l\fR: Declutter screen and redraw the current line.
 
 \fBCtrl+u\fR: Delete from cursor to the beginning of the line.
+
 .TP
 .B History
 
