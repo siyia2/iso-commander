@@ -1,5 +1,6 @@
 #include "../headers.h"
 
+
 int handleMountUmountCommands(int argc, char* argv[]) {
     // Setup signal handler
     setupSignalHandlerCancellations();
@@ -86,6 +87,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                     }
                     isoFiles.insert(fs::canonical(path).string());
                 } else if (fs::is_directory(path)) {
+					disableInput();
                     if (!silentMode) {
 						std::cout << "Scanning directory " << path << " ("<< (maxDepth == 0 ? "surface scan" : "max depth: " + std::string(maxDepth < 0 ? "unlimited" : std::to_string(maxDepth))) << ")...\n";
 					}
@@ -171,6 +173,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
 
         // If no arguments before "umount" or if explicitly "all"
         if (args.size() <= 1 || (args.size() == 2 && (args[0] == "all"))) {
+			disableInput();
             if (!silentMode) std::cout << "Scanning /mnt for ISO mount points (surface scan)...\n";
             try {
                 for (const auto& entry : fs::directory_iterator("/mnt")) {
@@ -208,6 +211,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
 
                         // Allowed directories: /mnt or /mnt/iso_*
                         if (canonicalStr == "/mnt") {
+							disableInput();
                             // Surface scan for iso_ dirs in /mnt
                             if (!silentMode) std::cout << "Scanning /mnt for ISO mount points (surface scan)...\n";
                             for (const auto& entry : fs::directory_iterator(canonicalPath)) {
