@@ -42,6 +42,13 @@ int main(int argc, char *argv[]) {
         printVersionNumber("6.1.3");
         return 0;
     }
+    
+	// Command-line automation support
+	if (argc >= 3) {
+		return handleMountUmountCommands(argc, argv);
+	}
+
+    
     // Readline use semicolon as delimiter
     rl_completer_word_break_characters =";";
     
