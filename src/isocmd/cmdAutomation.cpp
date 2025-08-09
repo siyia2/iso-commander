@@ -58,7 +58,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
         // Collect all args except the last one (which is "mount")
         for (size_t i = 0; i < args.size() - 1; ++i) {
             if (g_operationCancelled.load()) {
-                if (!quietMode) std::cout << "\033[1;93m\nOperation cancelled by user.\n\033[0m";
+                if (!quietMode) std::cout << "\033[1;33m\nOperation cancelled by user.\n\033[0m";
                 return 1;
             }
 
@@ -135,7 +135,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
         }
 
         if (isoFiles.empty()) {
-            if (!quietMode) std::cout << "No ISO files found to mount.\n";
+            if (!quietMode && !g_operationCancelled.load()) std::cout << "No ISO files found to mount.\n";
             return hasErrors ? 1 : 0;
         }
 
@@ -176,7 +176,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
             try {
                 for (const auto& entry : fs::directory_iterator("/mnt")) {
                     if (g_operationCancelled.load()) {
-                        if (!quietMode) std::cout << "\033[1;93m\nOperation cancelled by user.\n\033[0m";
+                        if (!quietMode) std::cout << "\033[1;33m\nOperation cancelled by user.\n\033[0m";
                         return 1;
                     }
                     if (entry.is_directory()) {
@@ -210,6 +210,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                         // Allowed directories: /mnt or /mnt/iso_*
                         if (canonicalStr == "/mnt") {
                             // Surface scan for iso_ dirs in /mnt
+                            if (!quietMode) std::cout << "Scanning /mnt for ISO mount points (surface scan)...\n";
                             for (const auto& entry : fs::directory_iterator(canonicalPath)) {
                                 if (entry.is_directory()) {
                                     std::string entryDirName = entry.path().filename().string();
@@ -239,22 +240,22 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                             mountPointsToUnmount.insert(fs::canonical(candidatePath).string());
                         } else {
                             if (!quietMode)
-                                std::cerr << "\033[1;93mWarning: Mount point '" << originalPath
-                                          << "' does not exist or is invalid, skipping.\n\033[0m";
+                                std::cerr << "\033[1;93mWarning: Mount point '\033[1;91m" << originalPath
+                                          << "\033[1;93m' does not exist or is invalid, skipping.\n\033[0m";
                             hasErrors = true;
                         }
                     }
                 } catch (const fs::filesystem_error& e) {
                     if (!quietMode)
-                        std::cerr << "\033[1;93mWarning: Error processing '" << originalPath
-                                  << "': " << e.what() << "\n\033[0m";
+                        std::cerr << "\033[1;93mWarning: Error processing '\033[1;91m" << originalPath
+                                  << "\033[1;93m': " << e.what() << "\n\033[0m";
                     hasErrors = true;
                 }
             }
         }
 
         if (mountPointsToUnmount.empty()) {
-            if (!quietMode) std::cout << "No ISO mount points found to unmount.\n";
+            if (!quietMode && !g_operationCancelled.load()) std::cout << "No ISO mount points found to unmount.\n";
             return hasErrors ? 1 : 0;
         }
 
