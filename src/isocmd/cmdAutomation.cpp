@@ -18,7 +18,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
-        if (arg == "--quiet") {
+        if (arg == "--silent") {
             quietMode = true;
         } else if (arg.substr(0, 2) == "-d") {
             try {

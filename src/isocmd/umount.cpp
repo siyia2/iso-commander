@@ -18,13 +18,13 @@ bool isDirectoryEmpty(const std::string& path) {
 
 
 // Function to perform unmount using umount2
-void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std::string>& unmountedFiles, std::unordered_set<std::string>& unmountedErrors, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, bool quietMode) {
+void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std::string>& unmountedFiles, std::unordered_set<std::string>& unmountedErrors, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, bool silentMode) {
     bool hasRoot = (geteuid() == 0);
     
     // Only allocate resources if not in quiet mode
     VerboseMessageFormatter messageFormatter;
     std::vector<std::string> errorMessages, successMessages;
-    if (!quietMode) {
+    if (!silentMode) {
         const size_t BATCH_SIZE = 1000;
         errorMessages.reserve(BATCH_SIZE);
         successMessages.reserve(BATCH_SIZE);
@@ -32,7 +32,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std:
 
     // Flush function - no-op in quiet mode
     auto flushTemporaryBuffers = [&]() {
-        if (quietMode) return;
+        if (silentMode) return;
         std::lock_guard<std::mutex> lock(globalSetsMutex);
         if (!successMessages.empty()) {
             unmountedFiles.insert(successMessages.begin(), successMessages.end());
@@ -54,7 +54,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std:
                 continue;
             }
             
-            if (!quietMode) {
+            if (!silentMode) {
                 auto dirParts = parseMountPointComponents(isoDir);
                 std::string formattedDir = std::get<1>(dirParts);  // Always include base name
                 if (displayConfig::toggleFullListUmount) {
@@ -65,7 +65,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std:
             }
             failedTasks->fetch_add(1);
         }
-        if (!quietMode) flushTemporaryBuffers();
+        if (!silentMode) flushTemporaryBuffers();
         return;
     }
 
@@ -73,7 +73,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std:
     for (const auto& isoDir : isoDirs) {
         if (isCancelled()) {
             failedTasks->fetch_add(1);
-            if (!quietMode) {
+            if (!silentMode) {
                 auto dirParts = parseMountPointComponents(isoDir);
                 std::string formattedDir = std::get<1>(dirParts);
                 if (displayConfig::toggleFullListUmount) {
@@ -97,7 +97,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std:
             }
             completedTasks->fetch_add(1);
             
-            if (!quietMode) {
+            if (!silentMode) {
                 auto dirParts = parseMountPointComponents(isoDir);
                 std::string formattedDir = std::get<1>(dirParts);
                 if (displayConfig::toggleFullListUmount) {
@@ -108,7 +108,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std:
             }
         } else {
             failedTasks->fetch_add(1);
-            if (!quietMode) {
+            if (!silentMode) {
                 auto dirParts = parseMountPointComponents(isoDir);
                 std::string formattedDir = std::get<1>(dirParts);
                 if (displayConfig::toggleFullListUmount) {
@@ -120,11 +120,11 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std:
         }
 
         // Batch flushing check
-        if (!quietMode && 
+        if (!silentMode && 
             (successMessages.size() >= 1000 || errorMessages.size() >= 1000)) {
             flushTemporaryBuffers();
         }
     }
 
-    if (!quietMode) flushTemporaryBuffers();
+    if (!silentMode) flushTemporaryBuffers();
 }

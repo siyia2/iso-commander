@@ -25,11 +25,11 @@ bool isAlreadyMounted(const std::string& mountPoint) {
 
 
 // Function to mount selected ISO files called from processAndMountIsoFiles
-void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedFiles, std::unordered_set<std::string>& skippedMessages, std::unordered_set<std::string>& mountedFails, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, bool quietMode) {
+void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedFiles, std::unordered_set<std::string>& skippedMessages, std::unordered_set<std::string>& mountedFails, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, bool silentMode) {
     // Create mount context once
     struct libmnt_context *ctx = mnt_new_context();
     if (!ctx) {
-        if (!quietMode) {
+        if (!silentMode) {
             std::string errorMsg = "\033[1;91mFailed to create mount context. Cannot proceed with mounting operations.\033[0m";
             std::lock_guard<std::mutex> lock(globalSetsMutex);
             mountedFails.insert(errorMsg);
@@ -43,7 +43,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
     std::vector<std::string> tempMountedFails;
     VerbosityFormatter formatter;
     
-    if (!quietMode) {
+    if (!silentMode) {
         // Pre-allocate temporary containers with batch capacity
         const size_t BATCH_SIZE = 1000;
         tempMountedFiles.reserve(BATCH_SIZE);
@@ -53,7 +53,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
 
     // Function to flush temporary buffers (only in verbose mode)
     auto flushBuffers = [&]() {
-        if (quietMode) return;
+        if (silentMode) return;
         std::lock_guard<std::mutex> lock(globalSetsMutex);
         mountedFiles.insert(tempMountedFiles.begin(), tempMountedFiles.end());
         skippedMessages.insert(tempSkippedMessages.begin(), tempSkippedMessages.end());
@@ -69,7 +69,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
 
         // Check for cancellation
         if (g_operationCancelled.load()) {
-            if (!quietMode) {
+            if (!silentMode) {
                 tempMountedFails.push_back(formatter.formatError(isoDirectory, isoFilename, "cxl"));
             }
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
@@ -78,7 +78,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
         
         // Root privilege check
         if (geteuid() != 0) {
-            if (!quietMode) {
+            if (!silentMode) {
                 tempMountedFails.push_back(formatter.formatError(isoDirectory, isoFilename, "needsRoot"));
             }
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
@@ -101,7 +101,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
 
         // Check if already mounted
         if (isAlreadyMounted(mountPoint)) {
-            if (!quietMode) {
+            if (!silentMode) {
                 tempSkippedMessages.push_back(formatter.formatSkipped(
                     isoDirectory, isoFilename, mountisoDirectory, mountisoFilename
                 ));
@@ -112,7 +112,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
         
         // Verify ISO file exists
         if (!fs::exists(isoPath)) {
-            if (!quietMode) {
+            if (!silentMode) {
                 tempMountedFails.push_back(formatter.formatError(isoDirectory, isoFilename, "missingISO"));
             }
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
@@ -124,7 +124,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
             try {
                 fs::create_directory(mountPoint);
             } catch (const fs::filesystem_error&) {
-                if (!quietMode) {
+                if (!silentMode) {
                     tempMountedFails.push_back(formatter.formatDetailedError(
                         isoDirectory, isoFilename, "Failed to create mount directory"
                     ));
@@ -144,7 +144,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
         // Attempt to mount
         int ret = mnt_context_mount(ctx);
         if (ret == 0) {
-            if (!quietMode) {
+            if (!silentMode) {
                 // Get filesystem type if available
                 std::string detectedFsType;
                 if (const char* fstype = mnt_context_get_fstype(ctx)) {
@@ -158,7 +158,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
             }
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
         } else {
-            if (!quietMode) {
+            if (!silentMode) {
                 tempMountedFails.push_back(formatter.formatError(
                     isoDirectory, isoFilename, "badFS"
                 ));
@@ -168,7 +168,7 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
         }
 
         // Batch processing check (only relevant in verbose mode)
-        if (!quietMode && 
+        if (!silentMode && 
             (tempMountedFiles.size() >= 1000 || 
              tempSkippedMessages.size() >= 1000 || 
              tempMountedFails.size() >= 1000)) {
