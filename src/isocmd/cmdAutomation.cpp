@@ -6,7 +6,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
     g_operationCancelled.store(false);
 
     if (argc < 2) {
-        std::cerr << "Error: No arguments provided.\n";
+        std::cerr << "\033[1;91mError: No arguments provided.\n\033[0m";
         return 1;
     }
 
@@ -24,7 +24,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
     }
 
     if (args.empty()) {
-        std::cerr << "Error: No action provided.\n";
+        std::cerr << "\033[1;91mError: No action provided.\n\033[0m";
         return 1;
     }
 
@@ -33,26 +33,29 @@ int handleMountUmountCommands(int argc, char* argv[]) {
     // ---------- MOUNT MULTIPLE ----------
     if (action == "mount") {
         if (geteuid() != 0) {
-            std::cerr << "Error: Root privileges required for mounting ISOs.\n";
+            std::cerr << "\033[1;91mError: Root privileges required for mounting ISOs.\n\033[0m";
             return 1;
         }
 
         std::vector<std::string> isoFiles;
+        bool hasErrors = false;
 
         // Collect all args except the last one (which is "mount")
         for (size_t i = 0; i < args.size() - 1; ++i) {
             std::string path = args[i];
             if (!fs::exists(path)) {
-                std::cerr << "Error: '" << path << "' does not exist.\n";
-                return 1;
+                if (!quietMode) std::cerr << "\033[1;93mWarning: '\033[1;91m" << path << "\033[1;93m' does not exist, skipping.\n\033[0m";
+                hasErrors = true;
+                continue; // Continue processing other paths
             }
 
             if (fs::is_regular_file(path)) {
                 std::string ext = fs::path(path).extension().string();
                 std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
                 if (ext != ".iso") {
-                    std::cerr << "Error: '" << path << "' is not an ISO file.\n";
-                    return 1;
+                    if (!quietMode) std::cerr << "\033[1;93m '\033[1;91m" << path << "\033[1;93m' is not an ISO file, skipping.\n";
+                    hasErrors = true;
+                    continue; // Continue processing other paths
                 }
                 isoFiles.push_back(path);
             }
@@ -75,19 +78,21 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                     }
                 }
                 catch (const fs::filesystem_error& e) {
-                    std::cerr << "Error scanning directory: " << e.what() << "\n";
-                    return 1;
+                    if (!quietMode) std::cerr << "\033[1;93mWarning: Error scanning directory '\033[1;91m" << path << "\033[1;93m': " << e.what() << "\n\033[0m";
+                    hasErrors = true;
+                    continue; // Continue processing other paths
                 }
             }
             else {
-                std::cerr << "Error: '" << path << "' is not a valid file or directory.\n";
-                return 1;
+                if (!quietMode) std::cerr << "\033[1;93mWarning: '\033[1;91m" << path << "\033[1;93m' is not a valid file or directory, skipping.\n\033[0m";
+                hasErrors = true;
+                continue; // Continue processing other paths
             }
         }
 
         if (isoFiles.empty()) {
             if (!quietMode) std::cout << "No ISO files found to mount.\n";
-            return 0;
+            return hasErrors ? 1 : 0; // Return error if there were invalid paths but no valid files
         }
 
         if (!quietMode) std::cout << "\nMounting ISO files...\n";
@@ -112,12 +117,14 @@ int handleMountUmountCommands(int argc, char* argv[]) {
             std::cout << "Failed: " << failedTasks.load() << "\n";
         }
 
-        return completedTasks.load() > 0 ? 0 : 1;
+        // Return success if at least one mount succeeded, or if there were no errors and no files to process
+        return (completedTasks.load() > 0 || (!hasErrors && isoFiles.empty())) ? 0 : 1;
     }
 
     // ---------- UMOUNT MULTIPLE ----------
     else if (action == "umount" || action == "unmount") {
         std::vector<std::string> mountPointsToUnmount;
+        bool hasErrors = false;
 
         // If only one argument before "umount" and it is "all" or "*"
         if (args.size() == 2 && (args[0] == "all" || args[0] == "*")) {
@@ -137,7 +144,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                 }
             }
             catch (const fs::filesystem_error& e) {
-                std::cerr << "Error scanning /mnt: " << e.what() << "\n";
+                std::cerr << "\033[1;91mError scanning /mnt: " << e.what() << "\n\033[0m";
                 return 1;
             }
         }
@@ -145,6 +152,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
             // Loop through all paths before "umount"
             for (size_t i = 0; i < args.size() - 1; ++i) {
                 std::string path = args[i];
+                std::string originalPath = path;
 
                 if (!fs::exists(path)) {
                     // If just given name, assume it's in /mnt
@@ -155,8 +163,9 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                 }
 
                 if (!fs::exists(path)) {
-                    std::cerr << "Error: Mount point '" << path << "' does not exist.\n";
-                    return 1;
+                    if (!quietMode) std::cerr << "\033[1;93mWarning: Mount point '\033[1;91m" << originalPath << "\033[1;93m' does not exist, skipping.\n\033[0m";
+                    hasErrors = true;
+                    continue; // Continue processing other paths
                 }
 
                 while (!path.empty() && path.back() == '/') {
@@ -169,26 +178,34 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                         mountPointsToUnmount.push_back(path);
                     }
                     else {
-                        for (const auto& entry : fs::directory_iterator(path)) {
-                            if (entry.is_directory()) {
-                                std::string entryDirName = entry.path().filename().string();
-                                if (entryDirName.rfind("iso_", 0) == 0) {
-                                    mountPointsToUnmount.push_back(entry.path().string());
+                        try {
+                            for (const auto& entry : fs::directory_iterator(path)) {
+                                if (entry.is_directory()) {
+                                    std::string entryDirName = entry.path().filename().string();
+                                    if (entryDirName.rfind("iso_", 0) == 0) {
+                                        mountPointsToUnmount.push_back(entry.path().string());
+                                    }
                                 }
                             }
+                        }
+                        catch (const fs::filesystem_error& e) {
+                            if (!quietMode) std::cerr << "\033[1;93mWarning: Error scanning directory '\033[1;91m" << path << "\033[1;93m': " << e.what() << "\n\033[0m";
+                            hasErrors = true;
+                            continue;
                         }
                     }
                 }
                 else {
-                    std::cerr << "Error: '" << path << "' is not a directory.\n";
-                    return 1;
+                    if (!quietMode) std::cerr << "\033[1;93mWarning: '\033[1;91m" << originalPath << "\033[1;93m' is not a directory, skipping.\n\033[0m";
+                    hasErrors = true;
+                    continue; // Continue processing other paths
                 }
             }
         }
 
         if (mountPointsToUnmount.empty()) {
             if (!quietMode) std::cout << "No ISO mount points found to unmount.\n";
-            return 0;
+            return hasErrors ? 1 : 0; // Return error if there were invalid paths but no valid mount points
         }
 
         if (!quietMode) std::cout << "Unmounting " << mountPointsToUnmount.size() << " mount point(s)...\n";
@@ -209,7 +226,8 @@ int handleMountUmountCommands(int argc, char* argv[]) {
             std::cout << "Failed: " << failedTasks.load() << "\n";
         }
 
-        return failedTasks.load() == 0 ? 0 : 1;
+        // Return success if no tasks failed and there were no input errors, or if at least one unmount succeeded
+        return (failedTasks.load() == 0 && !hasErrors) || completedTasks.load() > 0 ? 0 : 1;
     }
 
     // ---------- UNKNOWN ----------
