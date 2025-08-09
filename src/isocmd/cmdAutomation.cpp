@@ -83,8 +83,10 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                     isoFiles.insert(fs::canonical(path).string());
                 }
                 else if (fs::is_directory(path)) {
-                    if (!quietMode) std::cout << "Scanning directory " << path << " (max depth: " << maxDepth << ")...\n";
-                    
+                   std::cout << "Scanning directory " << path << " (" 
+              << (maxDepth == 0 ? "surface scan" 
+                  : "max depth: " + std::string(maxDepth < 0 ? "unlimited" : std::to_string(maxDepth)))
+              << ")...\n";
                     std::function<void(const fs::path&, int)> scanDir;
                     scanDir = [&](const fs::path& dir, int currentDepth) {
     try {
