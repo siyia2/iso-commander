@@ -1,7 +1,7 @@
 #include "../headers.h"
 
 int handleMountUmountCommands(int argc, char* argv[]) {
-        // Setup signal handler
+    // Setup signal handler
     setupSignalHandlerCancellations();
     g_operationCancelled.store(false);
 
@@ -10,7 +10,25 @@ int handleMountUmountCommands(int argc, char* argv[]) {
         return 1;
     }
 
-    std::string action = argv[argc - 1]; // Last arg is always the action
+    // Check for --quiet flag
+    bool quietMode = false;
+    std::vector<std::string> args;
+    args.reserve(argc);
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--quiet") {
+            quietMode = true;
+        } else {
+            args.push_back(arg);
+        }
+    }
+
+    if (args.empty()) {
+        std::cerr << "Error: No action provided.\n";
+        return 1;
+    }
+
+    std::string action = args.back(); // Last arg is always the action
 
     // ---------- MOUNT MULTIPLE ----------
     if (action == "mount") {
@@ -22,8 +40,8 @@ int handleMountUmountCommands(int argc, char* argv[]) {
         std::vector<std::string> isoFiles;
 
         // Collect all args except the last one (which is "mount")
-        for (int i = 1; i < argc - 1; ++i) {
-            std::string path = argv[i];
+        for (size_t i = 0; i < args.size() - 1; ++i) {
+            std::string path = args[i];
             if (!fs::exists(path)) {
                 std::cerr << "Error: '" << path << "' does not exist.\n";
                 return 1;
@@ -39,11 +57,11 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                 isoFiles.push_back(path);
             }
             else if (fs::is_directory(path)) {
-                std::cout << "Scanning directory " << path << " for ISO files...\n";
+                if (!quietMode) std::cout << "Scanning directory " << path << " for ISO files...\n";
                 try {
                     for (const auto& entry : fs::recursive_directory_iterator(path)) {
                         if (g_operationCancelled.load()) {
-                            std::cout << "\033[1;93m\nScan cancelled by user.\n\033[0m";
+                            if (!quietMode) std::cout << "\033[1;93m\nScan cancelled by user.\n\033[0m";
                             return 1;
                         }
                         if (entry.is_regular_file()) {
@@ -51,7 +69,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                             std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
                             if (ext == ".iso") {
                                 isoFiles.push_back(entry.path().string());
-                                std::cout << "Found: " << entry.path().string() << "\n";
+                                if (!quietMode) std::cout << "Found: " << entry.path().string() << "\n";
                             }
                         }
                     }
@@ -68,11 +86,11 @@ int handleMountUmountCommands(int argc, char* argv[]) {
         }
 
         if (isoFiles.empty()) {
-            std::cout << "No ISO files found to mount.\n";
+            if (!quietMode) std::cout << "No ISO files found to mount.\n";
             return 0;
         }
 
-        std::cout << "\nMounting ISO files...\n";
+        if (!quietMode) std::cout << "\nMounting ISO files...\n";
         std::unordered_set<std::string> mountedFiles;
         std::unordered_set<std::string> skippedMessages;
         std::unordered_set<std::string> mountedFails;
@@ -82,13 +100,17 @@ int handleMountUmountCommands(int argc, char* argv[]) {
         mountIsoFiles(isoFiles, mountedFiles, skippedMessages, mountedFails,
                       &completedTasks, &failedTasks);
 
-        for (const auto& msg : mountedFiles) std::cout << msg << "\n";
-        for (const auto& msg : skippedMessages) std::cout << msg << "\n";
-        for (const auto& msg : mountedFails) std::cout << msg << "\n";
+        if (!quietMode) {
+			for (const auto& msg : mountedFiles) std::cout << msg << "\n";
+			for (const auto& msg : skippedMessages) std::cout << msg << "\n";
+			for (const auto& msg : mountedFails) std::cout << msg << "\n";
+		}
 
-        std::cout << "\nMount Summary:\n";
-        std::cout << "Successful: " << completedTasks.load() << "\n";
-        std::cout << "Failed: " << failedTasks.load() << "\n";
+        if (!quietMode) {
+            std::cout << "\nMount Summary:\n";
+            std::cout << "Successful: " << completedTasks.load() << "\n";
+            std::cout << "Failed: " << failedTasks.load() << "\n";
+        }
 
         return completedTasks.load() > 0 ? 0 : 1;
     }
@@ -98,12 +120,12 @@ int handleMountUmountCommands(int argc, char* argv[]) {
         std::vector<std::string> mountPointsToUnmount;
 
         // If only one argument before "umount" and it is "all" or "*"
-        if (argc == 3 && (std::string(argv[1]) == "all" || std::string(argv[1]) == "*")) {
-            std::cout << "Scanning /mnt for ISO mount points...\n";
+        if (args.size() == 2 && (args[0] == "all" || args[0] == "*")) {
+            if (!quietMode) std::cout << "Scanning /mnt for ISO mount points...\n";
             try {
                 for (const auto& entry : fs::directory_iterator("/mnt")) {
                     if (g_operationCancelled.load()) {
-                        std::cout << "\033[1;93m\nScan cancelled by user.\n\033[0m";
+                        if (!quietMode) std::cout << "\033[1;93m\nScan cancelled by user.\n\033[0m";
                         return 1;
                     }
                     if (entry.is_directory()) {
@@ -121,8 +143,8 @@ int handleMountUmountCommands(int argc, char* argv[]) {
         }
         else {
             // Loop through all paths before "umount"
-            for (int i = 1; i < argc - 1; ++i) {
-                std::string path = argv[i];
+            for (size_t i = 0; i < args.size() - 1; ++i) {
+                std::string path = args[i];
 
                 if (!fs::exists(path)) {
                     // If just given name, assume it's in /mnt
@@ -137,18 +159,16 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                     return 1;
                 }
 
-                // Remove trailing slashes
                 while (!path.empty() && path.back() == '/') {
                     path.pop_back();
                 }
 
                 if (fs::is_directory(path)) {
                     std::string dirName = fs::path(path).filename().string();
-                    if (dirName.rfind("iso_", 0) == 0) { // starts with iso_
+                    if (dirName.rfind("iso_", 0) == 0) {
                         mountPointsToUnmount.push_back(path);
                     }
                     else {
-                        // Scan inside for iso_ mount points
                         for (const auto& entry : fs::directory_iterator(path)) {
                             if (entry.is_directory()) {
                                 std::string entryDirName = entry.path().filename().string();
@@ -167,11 +187,11 @@ int handleMountUmountCommands(int argc, char* argv[]) {
         }
 
         if (mountPointsToUnmount.empty()) {
-            std::cout << "No ISO mount points found to unmount.\n";
+            if (!quietMode) std::cout << "No ISO mount points found to unmount.\n";
             return 0;
         }
 
-        std::cout << "Unmounting " << mountPointsToUnmount.size() << " mount point(s)...\n";
+        if (!quietMode) std::cout << "Unmounting " << mountPointsToUnmount.size() << " mount point(s)...\n";
         std::unordered_set<std::string> unmountedFiles;
         std::unordered_set<std::string> unmountedErrors;
         std::atomic<size_t> completedTasks{0};
@@ -179,13 +199,15 @@ int handleMountUmountCommands(int argc, char* argv[]) {
 
         unmountISO(mountPointsToUnmount, unmountedFiles, unmountedErrors,
                    &completedTasks, &failedTasks);
-
-        for (const auto& msg : unmountedFiles) std::cout << msg << "\n";
-        for (const auto& msg : unmountedErrors) std::cout << msg << "\n";
-
-        std::cout << "\nUnmount Summary:\n";
-        std::cout << "Successful: " << completedTasks.load() << "\n";
-        std::cout << "Failed: " << failedTasks.load() << "\n";
+		if (!quietMode) {
+			for (const auto& msg : unmountedFiles) std::cout << msg << "\n";
+			for (const auto& msg : unmountedErrors) std::cout << msg << "\n";
+		}
+        if (!quietMode) {
+            std::cout << "\nUnmount Summary:\n";
+            std::cout << "Successful: " << completedTasks.load() << "\n";
+            std::cout << "Failed: " << failedTasks.load() << "\n";
+        }
 
         return failedTasks.load() == 0 ? 0 : 1;
     }
@@ -194,8 +216,9 @@ int handleMountUmountCommands(int argc, char* argv[]) {
     else {
         std::cerr << "Unknown action: " << action << "\n";
         std::cerr << "Usage:\n";
-        std::cerr << "  " << argv[0] << " <file|dir> [<file|dir> ...] mount\n";
-        std::cerr << "  " << argv[0] << " <mount_point|dir|all> [<...>] umount\n";
+        std::cerr << "  " << argv[0] << " [--quiet] <file|dir> [...] mount\n";
+        std::cerr << "  " << argv[0] << " [--quiet] <mount_point|dir|all> [...] umount\n";
         return 1;
     }
 }
+
