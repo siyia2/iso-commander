@@ -99,6 +99,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
 //------------------
 // Integer Functions
 //------------------
+int handleMountUmountCommands(int argc, char* argv[]);
 int prevent_readline_keybindings(int, int);
 int clear_screen_and_buffer(int, int);
 
