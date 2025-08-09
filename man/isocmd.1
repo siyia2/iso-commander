@@ -12,8 +12,8 @@ Iso Commander (isocmd) is a command-line utility for managing .iso files and con
 Show program version.
 
 .TP
-.B --quiet
-Suppress informational and warning output.
+.B --silent
+Suppress informational, error and warning output.
 
 .TP
 .B -d\<N\>
@@ -45,9 +45,9 @@ Mount all ISOs within a directory up to depth 2:
 \fBisocmd -d2 /path/to/dir mount\fR
 
 .TP
-Mount an ISO quietly:
+Mount an ISO silently:
 .br
-\fBisocmd --quiet /path/to/file.iso mount\fR
+\fBisocmd --silent /path/to/file.iso mount\fR
 
 .TP
 Unmount ISO mount points:
@@ -60,14 +60,14 @@ Unmount all ISO mount points:
 \fBisocmd all umount\fR
 
 .TP
-Unmount all ISO mount points quietly:
+Unmount all ISO mount points silently:
 .br
-\fBisocmd --quiet all umount\fR
+\fBisocmd --silent all umount\fR
 
 .TP
-Unmount an ISO mount point quietly:
+Unmount an ISO mount point silently:
 .br
-\fBisocmd --quiet /mnt/iso_example umount\fR
+\fBisocmd --silent /mnt/iso_example umount\fR
 
 .SH BASIC CTRL SIGNALS
 .TP
