@@ -16,6 +16,7 @@ void printVersionNumber(const std::string& version) {
     std::cout << "\x1B[32mIso Commander v" << version << "\x1B[0m\n"; // Output the version number in green color
 }
 
+
 // Main function
 int main(int argc, char *argv[]) {
 
