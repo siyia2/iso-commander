@@ -44,10 +44,9 @@ int main(int argc, char *argv[]) {
     }
     
 	// Command-line automation support
-	if (argc >= 3) {
+	if (argc >= 3 || (argc == 2 && (std::string(argv[1]) == "umount" || std::string(argv[1]) == "unmount" || std::string(argv[1]) == "mount"))) {
 		return handleMountUmountCommands(argc, argv);
 	}
-
     
     // Readline use semicolon as delimiter
     rl_completer_word_break_characters =";";
