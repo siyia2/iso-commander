@@ -15,7 +15,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
     int maxDepth = -1; // Default: max depth
     std::vector<std::string> args;
     args.reserve(argc);
-    
+
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--quiet") {
@@ -24,14 +24,14 @@ int handleMountUmountCommands(int argc, char* argv[]) {
             try {
                 maxDepth = std::stoi(arg.substr(2));
                 if (maxDepth < 0) {
-                    std::cerr << "\033[1;93mWarning: Negative depth (" << maxDepth 
-                              << ") means a full recursive scan.\n\033[0m"; // Fixed typo: recusrsive -> recursive
+                    std::cerr << "\033[1;93mWarning: Negative depth (" << maxDepth
+                              << ") means a full recursive scan.\n\033[0m"; // Fixed typo: recursive
                     maxDepth = -1;
                 }
             } catch (...) {
-                std::cerr << "\033[1;93mWarning: Invalid depth '" << arg.substr(2) 
+                std::cerr << "\033[1;93mWarning: Invalid depth '" << arg.substr(2)
                           << "'. Using 0 (surface scan).\n\033[0m";
-                          maxDepth = 0;
+                maxDepth = 0;
             }
         } else {
             args.push_back(arg);
@@ -67,7 +67,9 @@ int handleMountUmountCommands(int argc, char* argv[]) {
 
             try {
                 if (!fs::exists(path)) {
-                    if (!quietMode) std::cerr << "\033[1;93mWarning: '\033[1;91m" << originalPath << "\033[1;93m' does not exist, skipping.\n\033[0m";
+                    if (!quietMode)
+                        std::cerr << "\033[1;93mWarning: '\033[1;91m" << originalPath
+                                  << "\033[1;93m' does not exist, skipping.\n\033[0m";
                     hasErrors = true;
                     continue;
                 }
@@ -76,54 +78,59 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                     std::string ext = path.extension().string();
                     std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
                     if (ext != ".iso") {
-                        if (!quietMode) std::cerr << "\033[1;93mWarning: '\033[1;91m" << originalPath << "\033[1;93m' is not an ISO file, skipping.\n\033[0m";
+                        if (!quietMode)
+                            std::cerr << "\033[1;93mWarning: '\033[1;91m" << originalPath
+                                      << "\033[1;93m' is not an ISO file, skipping.\n\033[0m";
                         hasErrors = true;
                         continue;
                     }
                     isoFiles.insert(fs::canonical(path).string());
-                }
-                else if (fs::is_directory(path)) {
-                   std::cout << "Scanning directory " << path << " (" 
-              << (maxDepth == 0 ? "surface scan" 
-                  : "max depth: " + std::string(maxDepth < 0 ? "unlimited" : std::to_string(maxDepth)))
-              << ")...\n";
+                } else if (fs::is_directory(path)) {
+                    std::cout << "Scanning directory " << path << " ("
+                              << (maxDepth == 0 ? "surface scan"
+                                                : "max depth: " +
+                                                      std::string(maxDepth < 0 ? "unlimited" : std::to_string(maxDepth)))
+                              << ")...\n";
                     std::function<void(const fs::path&, int)> scanDir;
                     scanDir = [&](const fs::path& dir, int currentDepth) {
-    try {
-        for (const auto& entry : fs::directory_iterator(dir)) {
-            if (g_operationCancelled.load()) return;
+                        try {
+                            for (const auto& entry : fs::directory_iterator(dir)) {
+                                if (g_operationCancelled.load()) return;
 
-            if (entry.is_symlink()) continue;  // <-- skip symlinks
+                                if (entry.is_symlink()) continue;  // <-- skip symlinks
 
-            if (entry.is_regular_file()) {
-                std::string ext = entry.path().extension().string();
-                std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-                if (ext == ".iso") {
-                    isoFiles.insert(fs::canonical(entry.path()).string());
-                    if (!quietMode) std::cout << "Found: " << entry.path().string() << "\n";
-                }
-            }
-            // FIXED: Allow recursion when maxDepth is -1 (unlimited) or within depth limit
-            else if (entry.is_directory() && (maxDepth == -1 || currentDepth < maxDepth)) {
-                scanDir(entry.path(), currentDepth + 1);
-            }
-        }
-    }
-    catch (const fs::filesystem_error& e) {
-        if (!quietMode) std::cerr << "\033[1;93mWarning: Error scanning directory '\033[1;91m" << dir << "\033[1;93m': " << e.what() << "\n\033[0m";
-        hasErrors = true;
-    }
-};
-                    
+                                if (entry.is_regular_file()) {
+                                    std::string ext = entry.path().extension().string();
+                                    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                                    if (ext == ".iso") {
+                                        isoFiles.insert(fs::canonical(entry.path()).string());
+                                        if (!quietMode) std::cout << "Found: " << entry.path().string() << "\n";
+                                    }
+                                }
+                                // FIXED: Allow recursion when maxDepth is -1 (unlimited) or within depth limit
+                                else if (entry.is_directory() && (maxDepth == -1 || currentDepth < maxDepth)) {
+                                    scanDir(entry.path(), currentDepth + 1);
+                                }
+                            }
+                        } catch (const fs::filesystem_error& e) {
+                            if (!quietMode)
+                                std::cerr << "\033[1;93mWarning: Error scanning directory '\033[1;91m" << dir
+                                          << "\033[1;93m': " << e.what() << "\n\033[0m";
+                            hasErrors = true;
+                        }
+                    };
+
                     scanDir(path, 0);
-                }
-                else {
-                    if (!quietMode) std::cerr << "\033[1;93mWarning: '\033[1;91m" << originalPath << "\033[1;93m' is not a valid file or directory, skipping.\n\033[0m";
+                } else {
+                    if (!quietMode)
+                        std::cerr << "\033[1;93mWarning: '\033[1;91m" << originalPath
+                                  << "\033[1;93m' is not a valid file or directory, skipping.\n\033[0m";
                     hasErrors = true;
                 }
-            }
-            catch (const fs::filesystem_error& e) {
-                if (!quietMode) std::cerr << "\033[1;93mWarning: Error processing '\033[1;91m" << originalPath << "\033[1;93m': " << e.what() << "\n\033[0m";
+            } catch (const fs::filesystem_error& e) {
+                if (!quietMode)
+                    std::cerr << "\033[1;93mWarning: Error processing '\033[1;91m" << originalPath
+                              << "\033[1;93m': " << e.what() << "\n\033[0m";
                 hasErrors = true;
             }
         }
@@ -141,8 +148,8 @@ int handleMountUmountCommands(int argc, char* argv[]) {
         std::atomic<size_t> failedTasks{0};
 
         mountIsoFiles(std::vector<std::string>(isoFiles.begin(), isoFiles.end()),
-                     mountedFiles, skippedMessages, mountedFails,
-                     &completedTasks, &failedTasks);
+                      mountedFiles, skippedMessages, mountedFails,
+                      &completedTasks, &failedTasks);
 
         if (!quietMode) {
             for (const auto& msg : mountedFiles) std::cout << msg << "\n";
@@ -161,92 +168,91 @@ int handleMountUmountCommands(int argc, char* argv[]) {
 
     // ---------- UMOUNT MULTIPLE ----------
     else if (action == "umount" || action == "unmount") {
-    std::unordered_set<std::string> mountPointsToUnmount; // Automatic deduplication
-    bool hasErrors = false;
+        std::unordered_set<std::string> mountPointsToUnmount; // Automatic deduplication
+        bool hasErrors = false;
 
-    // If no arguments before "umount" or if explicitly "all"
-    if (args.size() <= 1 || (args.size() == 2 && (args[0] == "all"))) {
-        if (!quietMode) std::cout << "Scanning /mnt for ISO mount points (surface scan)...\n";
-        try {
-            for (const auto& entry : fs::directory_iterator("/mnt")) {
+        // If no arguments before "umount" or if explicitly "all"
+        if (args.size() <= 1 || (args.size() == 2 && (args[0] == "all"))) {
+            if (!quietMode) std::cout << "Scanning /mnt for ISO mount points (surface scan)...\n";
+            try {
+                for (const auto& entry : fs::directory_iterator("/mnt")) {
+                    if (g_operationCancelled.load()) {
+                        if (!quietMode) std::cout << "\033[1;93m\nOperation cancelled by user.\n\033[0m";
+                        return 1;
+                    }
+                    if (entry.is_directory()) {
+                        std::string dirName = entry.path().filename().string();
+                        if (dirName.substr(0, 4) == "iso_") {
+                            mountPointsToUnmount.insert(fs::canonical(entry.path()).string());
+                        }
+                    }
+                }
+            } catch (const fs::filesystem_error& e) {
+                std::cerr << "\033[1;91mError scanning /mnt: " << e.what() << "\n\033[0m";
+                return 1;
+            }
+        } else {
+            // Reject directory parameters other than /mnt
+            for (size_t i = 0; i < args.size() - 1; ++i) {
                 if (g_operationCancelled.load()) {
                     if (!quietMode) std::cout << "\033[1;93m\nOperation cancelled by user.\n\033[0m";
                     return 1;
                 }
-                if (entry.is_directory()) {
-                    std::string dirName = entry.path().filename().string();
-                    if (dirName.substr(0, 4) == "iso_") {
-                        mountPointsToUnmount.insert(fs::canonical(entry.path()).string());
-                    }
-                }
-            }
-        }
-        catch (const fs::filesystem_error& e) {
-            std::cerr << "\033[1;91mError scanning /mnt: " << e.what() << "\n\033[0m";
-            return 1;
-        }
-    }
-    else {
-        // Reject directory parameters other than /mnt
-        for (size_t i = 0; i < args.size() - 1; ++i) {
-            if (g_operationCancelled.load()) {
-                if (!quietMode) std::cout << "\033[1;93m\nOperation cancelled by user.\n\033[0m";
-                return 1;
-            }
 
-            fs::path path(args[i]);
-            std::string originalPath = path.string();
+                fs::path path(args[i]);
+                std::string originalPath = path.string();
 
-            try {
-                // Reject if directory parameter and not /mnt or /mnt/iso_*
-                if (fs::exists(path) && fs::is_directory(path)) {
-                    auto canonicalPath = fs::canonical(path);
-                    std::string canonicalStr = canonicalPath.string();
+                try {
+                    // Reject if directory parameter and not /mnt or /mnt/iso_*
+                    if (fs::exists(path) && fs::is_directory(path)) {
+                        auto canonicalPath = fs::canonical(path);
+                        std::string canonicalStr = canonicalPath.string();
 
-                    // Allowed directories: /mnt or /mnt/iso_*
-                    if (canonicalStr == "/mnt") {
-                        // Surface scan for iso_ dirs in /mnt
-                        for (const auto& entry : fs::directory_iterator(canonicalPath)) {
-                            if (entry.is_directory()) {
-                                std::string entryDirName = entry.path().filename().string();
-                                if (entryDirName.rfind("iso_", 0) == 0) {
-                                    mountPointsToUnmount.insert(fs::canonical(entry.path()).string());
+                        // Allowed directories: /mnt or /mnt/iso_*
+                        if (canonicalStr == "/mnt") {
+                            // Surface scan for iso_ dirs in /mnt
+                            for (const auto& entry : fs::directory_iterator(canonicalPath)) {
+                                if (entry.is_directory()) {
+                                    std::string entryDirName = entry.path().filename().string();
+                                    if (entryDirName.rfind("iso_", 0) == 0) {
+                                        mountPointsToUnmount.insert(fs::canonical(entry.path()).string());
+                                    }
                                 }
                             }
+                        } else if (canonicalStr.rfind("/mnt/iso_", 0) == 0) {
+                            // Accept specific /mnt/iso_* dir
+                            mountPointsToUnmount.insert(canonicalStr);
+                        } else {
+                            if (!quietMode)
+                                std::cerr << "\033[1;93mWarning: Directory parameter '" << originalPath
+                                          << "' is not allowed. Only /mnt/ or /mnt/iso_* allowed.\n\033[0m";
+                            hasErrors = true;
+                        }
+                    } else {
+                        // For relative paths or non-directory paths, treat as mount point name under /mnt/iso_*
+                        // Compose full path:
+                        fs::path candidatePath = path;
+                        if (path.is_relative()) {
+                            candidatePath = fs::path("/mnt") / ("iso_" + path.filename().string());
+                        }
+
+                        if (fs::exists(candidatePath) && fs::is_directory(candidatePath)) {
+                            mountPointsToUnmount.insert(fs::canonical(candidatePath).string());
+                        } else {
+                            if (!quietMode)
+                                std::cerr << "\033[1;93mWarning: Mount point '" << originalPath
+                                          << "' does not exist or is invalid, skipping.\n\033[0m";
+                            hasErrors = true;
                         }
                     }
-                    else if (canonicalStr.rfind("/mnt/iso_", 0) == 0) {
-                        // Accept specific /mnt/iso_* dir
-                        mountPointsToUnmount.insert(canonicalStr);
-                    }
-                    else {
-                        if (!quietMode) std::cerr << "\033[1;93mWarning: Directory parameter '" << originalPath << "' is not allowed. Only /mnt/ or /mnt/iso_* allowed.\n\033[0m";
-                        hasErrors = true;
-                    }
+                } catch (const fs::filesystem_error& e) {
+                    if (!quietMode)
+                        std::cerr << "\033[1;93mWarning: Error processing '" << originalPath
+                                  << "': " << e.what() << "\n\033[0m";
+                    hasErrors = true;
                 }
-                else {
-                    // For relative paths or non-directory paths, treat as mount point name under /mnt/iso_*
-                    // Compose full path:
-                    fs::path candidatePath = path;
-                    if (path.is_relative()) {
-                        candidatePath = fs::path("/mnt") / ("iso_" + path.filename().string());
-                    }
-
-                    if (fs::exists(candidatePath) && fs::is_directory(candidatePath)) {
-                        mountPointsToUnmount.insert(fs::canonical(candidatePath).string());
-                    }
-                    else {
-                        if (!quietMode) std::cerr << "\033[1;93mWarning: Mount point '" << originalPath << "' does not exist or is invalid, skipping.\n\033[0m";
-                        hasErrors = true;
-                    }
-                }
-            }
-            catch (const fs::filesystem_error& e) {
-                if (!quietMode) std::cerr << "\033[1;93mWarning: Error processing '" << originalPath << "': " << e.what() << "\n\033[0m";
-                hasErrors = true;
             }
         }
-    }
 
         if (mountPointsToUnmount.empty()) {
             if (!quietMode) std::cout << "No ISO mount points found to unmount.\n";
@@ -260,8 +266,8 @@ int handleMountUmountCommands(int argc, char* argv[]) {
         std::atomic<size_t> failedTasks{0};
 
         unmountISO(std::vector<std::string>(mountPointsToUnmount.begin(), mountPointsToUnmount.end()),
-                  unmountedFiles, unmountedErrors,
-                  &completedTasks, &failedTasks);
+                   unmountedFiles, unmountedErrors,
+                   &completedTasks, &failedTasks);
 
         if (!quietMode) {
             for (const auto& msg : unmountedFiles) std::cout << msg << "\n";
@@ -280,4 +286,5 @@ int handleMountUmountCommands(int argc, char* argv[]) {
     std::cerr << "\033[1;91mError: Unknown action '" << action << "'\n\033[0m";
     return 1;
 }
+
 
