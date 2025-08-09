@@ -162,8 +162,8 @@ int handleMountUmountCommands(int argc, char* argv[]) {
         std::unordered_set<std::string> mountPointsToUnmount; // Automatic deduplication
         bool hasErrors = false;
 
-        // If no arguments before "umount" or if explicitly "all" or "*"
-        if (args.size() <= 1 || (args.size() == 2 && (args[0] == "all" || args[0] == "*"))) {
+        // If no arguments before "umount" or if explicitly "all"
+        if (args.size() <= 1 || (args.size() == 2 && (args[0] == "all"))) {
             if (!quietMode) std::cout << "Scanning /mnt for ISO mount points (surface scan)...\n";
             try {
                 for (const auto& entry : fs::directory_iterator("/mnt")) {
@@ -171,7 +171,6 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                         if (!quietMode) std::cout << "\033[1;93m\nOperation cancelled by user.\n\033[0m";
                         return 1;
                     }
-                    if (entry.is_symlink()) continue;  // <-- skip symlinks
                     if (entry.is_directory()) {
                         std::string dirName = entry.path().filename().string();
                         if (dirName.substr(0, 4) == "iso_") {
