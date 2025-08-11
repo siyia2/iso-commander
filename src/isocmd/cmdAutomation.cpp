@@ -174,6 +174,11 @@ int handleMountUmountCommands(int argc, char* argv[]) {
     else if (action == "umount" || action == "unmount") {
         std::unordered_set<std::string> mountPointsToUnmount; // Automatic deduplication
         bool hasErrors = false;
+        
+        if (geteuid() != 0) {
+            std::cerr << "\033[1;91mError: Root privileges required for unmounting ISOs.\n\033[0m";
+            return 1;
+        }
 
         // If no arguments before "umount" or if explicitly "all"
         if (args.size() <= 1 || (args.size() == 2 && (args[0] == "all"))) {
@@ -267,7 +272,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
             return hasErrors ? 1 : 0;
         }
 
-        if (!silentMode) std::cout << "Unmounting " << mountPointsToUnmount.size() << " mount point(s)...\n";
+        if (!silentMode) std::cout << "\nLocated " << mountPointsToUnmount.size() << " mount point" << (mountPointsToUnmount.size() == 1 ? "" : "s") << "; Attempting to unmount...\n";
         std::unordered_set<std::string> unmountedFiles;
         std::unordered_set<std::string> unmountedErrors;
         std::atomic<size_t> completedTasks{0};
