@@ -213,19 +213,24 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
         return a.size() < b.size();
     });
     
-    // Filter out subdirectories
+    // OPTION 1: Keep the most specific paths (remove parents when children exist)
     std::vector<std::string> finalPaths;
     for (const auto& path : paths) {
-        bool isSubdir = false;
-        for (const auto& existingPath : finalPaths) {
-            if (path.size() >= existingPath.size() &&
-                path.compare(0, existingPath.size(), existingPath) == 0 &&
-                (existingPath.back() == '/' || path[existingPath.size()] == '/')) {
-                isSubdir = true;
+        bool hasChildPath = false;
+        
+        // Check if any other path is a child of this path
+        for (const auto& otherPath : paths) {
+            if (otherPath != path && 
+                otherPath.size() > path.size() &&
+                otherPath.compare(0, path.size(), path) == 0 &&
+                (path.back() == '/' || otherPath[path.size()] == '/')) {
+                hasChildPath = true;
                 break;
             }
         }
-        if (!isSubdir) {
+        
+        // Only keep paths that don't have more specific children
+        if (!hasChildPath) {
             finalPaths.push_back(path);
         }
     }
