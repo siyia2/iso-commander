@@ -175,7 +175,6 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
     std::vector<std::string> paths;
     int localMaxDepth = -1;
     bool localPromptFlag = false;
-
     // Read paths from file
     {
         std::ifstream file(historyFilePath);
@@ -220,12 +219,19 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
         
         // Check if any other path is a child of this path
         for (const auto& otherPath : paths) {
-            if (otherPath != path && 
-                otherPath.size() > path.size() &&
-                otherPath.compare(0, path.size(), path) == 0 &&
-                (path.back() == '/' || otherPath[path.size()] == '/')) {
-                hasChildPath = true;
-                break;
+            if (otherPath != path && otherPath.size() > path.size()) {
+                // Ensure path ends with '/' for consistent comparison
+                std::string normalizedPath = path;
+                if (normalizedPath.back() != '/') {
+                    normalizedPath += '/';
+                }
+                
+                // Check if otherPath starts with normalizedPath
+                if (otherPath.compare(0, normalizedPath.size(), normalizedPath) == 0) {
+                    // Now we have a true parent-child relationship
+                    hasChildPath = true;
+                    break;
+                }
             }
         }
         
@@ -244,7 +250,6 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
     
     // Create a thread pool based on the available hardware threads.
     size_t numThreads = (maxThreads == 0 ? 4 : std::min(maxThreads * 2, static_cast<unsigned int>(MAX_HISTORY_LINES)));
-
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
     
