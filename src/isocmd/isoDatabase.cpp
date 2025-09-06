@@ -213,33 +213,36 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
     });
     
     // Keep the most specific paths (remove parents when children exist)
-    std::vector<std::string> finalPaths;
-    for (const auto& path : paths) {
-        bool hasChildPath = false;
-        
-        // Check if any other path is a child of this path
-        for (const auto& otherPath : paths) {
-            if (otherPath != path && otherPath.size() > path.size()) {
-                // Ensure path ends with '/' for consistent comparison
-                std::string normalizedPath = path;
-                if (normalizedPath.back() != '/') {
-                    normalizedPath += '/';
-                }
-                
-                // Check if otherPath starts with normalizedPath
-                if (otherPath.compare(0, normalizedPath.size(), normalizedPath) == 0) {
-                    // Now we have a true parent-child relationship
-                    hasChildPath = true;
-                    break;
-                }
-            }
-        }
-        
-        // Only keep paths that don't have more specific children
-        if (!hasChildPath) {
-            finalPaths.push_back(path);
-        }
-    }
+	std::vector<std::string> finalPaths;
+	finalPaths.reserve(paths.size()); // Reserve space to avoid reallocations
+
+	for (size_t i = 0; i < paths.size(); ++i) {
+		const auto& path = paths[i];
+		bool hasChildPath = false;
+		
+		// Normalize current path once
+		std::string normalizedPath = path;
+		if (normalizedPath.back() != '/') {
+			normalizedPath += '/';
+		}
+		
+		// Since paths are sorted by length, only check longer paths
+		// Start from i+1 since shorter paths can't be children
+		for (size_t j = i + 1; j < paths.size(); ++j) {
+			const auto& otherPath = paths[j];
+			
+			// Quick size check before string comparison
+			if (otherPath.size() > normalizedPath.size() &&
+				otherPath.compare(0, normalizedPath.size(), normalizedPath) == 0) {
+				hasChildPath = true;
+				break;
+			}
+		}
+		
+		if (!hasChildPath) {
+			finalPaths.push_back(path);
+		}
+	}
     
     // Set up data structures for processing
     std::vector<std::string> allIsoFiles;
