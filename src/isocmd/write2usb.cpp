@@ -838,11 +838,13 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
         return false;
     }
 
-    // Get ISO file size
+    // Get ISO file size and check alignment
     const uint64_t fileSize = std::filesystem::file_size(isoPath);
-    
-    // Calculate aligned file size (round up to next sector boundary)
-    const uint64_t alignedFileSize = ((fileSize + sectorSize - 1) / sectorSize) * sectorSize;
+    if (fileSize % sectorSize != 0) {
+        progressData[progressIndex].failed.store(true);
+        close(device_fd);
+        return false;
+    }
 
     // Set buffer size as multiple of sector size (8MB default)
     size_t bufferSize = 8 * 1024 * 1024;
@@ -864,94 +866,35 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     uint64_t bytesInWindow = 0;
     const int UPDATE_INTERVAL_MS = 500;
 
-    // Capture initial cancellation state and track if we were cancelled during operation
-    bool wasCancelledDuringOperation = false;
-    bool loopExitedDueToCancellation = false;
-
     try {
-        uint64_t totalBytesProcessed = 0;
-        
-        while (totalBytesProcessed < alignedFileSize) {
-            // Check cancellation at the start of each iteration
-            if (g_operationCancelled.load()) {
-                wasCancelledDuringOperation = true;
-                loopExitedDueToCancellation = true;
-                break;
-            }
+        while (progressData[progressIndex].bytesWritten.load() < fileSize && !g_operationCancelled) {
+            const uint64_t totalWritten = progressData[progressIndex].bytesWritten.load();
+            const uint64_t remaining = fileSize - totalWritten;
+            const size_t bytesToRead = std::min(bufferSize, static_cast<size_t>(remaining));
+
+            iso.read(alignedBuffer, bytesToRead);
+            const std::streamsize bytesRead = iso.gcount();
             
-            const uint64_t remaining = alignedFileSize - totalBytesProcessed;
-            const size_t chunkSize = std::min(bufferSize, static_cast<size_t>(remaining));
-            
-            // Clear buffer to ensure padding bytes are zero
-            std::memset(alignedBuffer, 0, chunkSize);
-            
-            // Read data from ISO file
-            size_t bytesToReadFromFile = chunkSize;
-            if (totalBytesProcessed + chunkSize > fileSize) {
-                // This is the final chunk that extends beyond the file
-                bytesToReadFromFile = fileSize - totalBytesProcessed;
-            }
-            
-            if (bytesToReadFromFile > 0) {
-                iso.read(alignedBuffer, bytesToReadFromFile);
-                const std::streamsize bytesRead = iso.gcount();
-                
-                if (bytesRead < 0) {
-                    throw std::runtime_error("Read error from ISO file");
-                }
-                
-                if (static_cast<size_t>(bytesRead) != bytesToReadFromFile) {
-                    if (iso.eof() && totalBytesProcessed + bytesRead == fileSize) {
-                        // Expected EOF - we've read the entire file
-                    } else {
-                        throw std::runtime_error("Incomplete read from ISO file");
-                    }
-                }
-            }
-            
-            // Check cancellation before write operation
-            if (g_operationCancelled.load()) {
-                wasCancelledDuringOperation = true;
-                loopExitedDueToCancellation = true;
-                break;
-            }
-            
-            // The buffer now contains file data + zero padding to sector boundary
-            // Write the entire sector-aligned chunk
-            ssize_t totalWritten = 0;
-            while (totalWritten < static_cast<ssize_t>(chunkSize)) {
-                // Check cancellation during write
-                if (g_operationCancelled.load()) {
-                    wasCancelledDuringOperation = true;
-                    break;
-                }
-                
-                ssize_t result = write(device_fd, alignedBuffer + totalWritten, chunkSize - totalWritten);
-                if (result == -1) {
-                    if (errno == EINTR) {
-                        continue; // Interrupted by signal, retry
-                    }
-                    throw std::runtime_error("Write error to device: " + std::string(strerror(errno)));
-                }
-                if (result == 0) {
-                    throw std::runtime_error("Unexpected zero write to device");
-                }
-                totalWritten += result;
-            }
-            
-            // If cancelled during write, break out
-            if (wasCancelledDuringOperation) {
-                loopExitedDueToCancellation = true;
-                break;
+            if (bytesRead <= 0 || static_cast<size_t>(bytesRead) != bytesToRead) {
+                throw std::runtime_error("Read error");
             }
 
-            // Update progress tracking
-            totalBytesProcessed += chunkSize;
-            
-            // Update progress based on actual file bytes written (not including padding)
-            const uint64_t fileBytesWritten = std::min(totalBytesProcessed, fileSize);
-            progressData[progressIndex].bytesWritten.store(fileBytesWritten);
-            bytesInWindow += totalWritten;
+            // Handle partial writes
+            ssize_t bytesWritten = 0;
+            while (bytesWritten < static_cast<ssize_t>(bytesToRead)) {
+                size_t chunk = std::min(static_cast<size_t>(bytesToRead - bytesWritten), bufferSize);
+                chunk = (chunk / sectorSize) * sectorSize;
+                if (chunk == 0) break;
+                ssize_t result = write(device_fd, alignedBuffer + bytesWritten, chunk);
+                if (result == -1) {
+                    throw std::runtime_error("Write error");
+                }
+                bytesWritten += result;
+            }
+
+            // Atomically update progress
+            progressData[progressIndex].bytesWritten.fetch_add(bytesWritten);
+            bytesInWindow += bytesWritten;
 
             // Update progress and speed
             auto now = std::chrono::high_resolution_clock::now();
@@ -959,7 +902,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
 
             if (timeSinceLastUpdate.count() >= UPDATE_INTERVAL_MS) {
                 // Calculate and update progress atomically
-                const int progress = static_cast<int>((static_cast<double>(fileBytesWritten) / fileSize) * 100);
+                const int progress = static_cast<int>((static_cast<double>(progressData[progressIndex].bytesWritten.load()) / fileSize) * 100);
                 progressData[progressIndex].progress.store(progress);
 
                 // Calculate and update speed atomically
@@ -972,45 +915,21 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
                 bytesInWindow = 0;
             }
         }
-        
-        // Ensure all data is written to device (only if not cancelled)
-        if (!wasCancelledDuringOperation && !g_operationCancelled.load()) {
-            if (fsync(device_fd) != 0) {
-                throw std::runtime_error("Failed to sync data to device: " + std::string(strerror(errno)));
-            }
-        }
-        
-    } catch (const std::exception& e) {
-        progressData[progressIndex].failed.store(true);
-        close(device_fd);
-        // Log the specific error if logging is available
-        // std::cerr << "ISO write failed: " << e.what() << std::endl;
-        return false;
     } catch (...) {
         progressData[progressIndex].failed.store(true);
         close(device_fd);
         return false;
     }
 
+    if (!g_operationCancelled.load()) {
+        fsync(device_fd);
+    }
     close(device_fd);
 
-    // Handle the different exit conditions with proper precedence
-    const bool allBytesWritten = (progressData[progressIndex].bytesWritten.load() == fileSize);
-    
-    // Check if operation was definitely cancelled
-    const bool definiteCancellation = wasCancelledDuringOperation || loopExitedDueToCancellation;
-    
-    if (allBytesWritten && !definiteCancellation) {
-        // Operation completed successfully
+    if (!g_operationCancelled && progressData[progressIndex].bytesWritten.load() == fileSize) {
         progressData[progressIndex].completed.store(true);
         return true;
-    } else if (definiteCancellation) {
-        // Operation was definitely cancelled - DON'T set failed flag
-        // The calling code can check g_operationCancelled to distinguish
-        return false;
-    } else {
-        // Operation failed for some other reason (incomplete write, not due to cancellation)
-        progressData[progressIndex].failed.store(true);
-        return false;
     }
+    
+    return false;
 }
