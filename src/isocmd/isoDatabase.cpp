@@ -213,7 +213,7 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
         return a.size() < b.size();
     });
     
-    // OPTION 1: Keep the most specific paths (remove parents when children exist)
+    // Keep the most specific paths (remove parents when children exist)
     std::vector<std::string> finalPaths;
     for (const auto& path : paths) {
         bool hasChildPath = false;
