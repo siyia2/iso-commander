@@ -40,7 +40,7 @@ int main(int argc, char *argv[]) {
 	setupReadlineToIgnoreCtrlC();
 	
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
-        printVersionNumber("6.1.4");
+        printVersionNumber("6.1.5");
         return 0;
     }
     
