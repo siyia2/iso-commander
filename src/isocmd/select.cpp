@@ -163,7 +163,7 @@ bool handlePendingProcess(const std::string& inputString,std::vector<std::string
 
 
 // Function to automatically update ISO list if auto-update is on
-void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, bool& umountMvRmBreak, std::vector<std::string>& filteredFiles, bool& isFiltered, std::string& listSubtype, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, size_t& originalPage, std::atomic<bool>& newISOFound) {
+void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, bool& umountMvRmBreak, std::vector<std::string>& filteredFiles, bool& isFiltered, std::string& listSubtype, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, std::atomic<bool>& newISOFound) {
     // Continuously checks for conditions at intervals specified by timeoutSeconds
     
     while (true) {
@@ -176,7 +176,7 @@ void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOLi
             // Check if the list is a non-filtered ISO list
             if (isAtISOList.load() && !isFiltered) {
                 // If conditions are met, clear and reload the ISO list with the updated data
-                loadAndDisplayIso(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, isImportRunning);
+                loadAndDisplayIso(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, isImportRunning);
                 std::cout << "\n";
                 
                 rl_on_new_line(); // necessary to avoid the graphical glitch when transitioning from filtered -> non-filtered list
@@ -258,10 +258,10 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         // Load files based on operation type
         if (needsClrScrn) {
             if (!isUnmount) {
-                if (!loadAndDisplayIso(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, isImportRunning))
+                if (!loadAndDisplayIso(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, isImportRunning))
                     break;
             } else {
-                if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, isImportRunning))
+                if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, isImportRunning))
                     break;
             }
 			
@@ -273,7 +273,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             std::thread(refreshListAfterAutoUpdate, 2, std::ref(isAtISOList), 
                         std::ref(isImportRunning), std::ref(updateHasRun), std::ref(umountMvRmBreak),
                         std::ref(filteredFiles), std::ref(isFiltered), std::ref(listSubtype), std::ref(pendingIndices), 
-                        std::ref(hasPendingProcess), std::ref(currentPage), std::ref(originalPage), std::ref(newISOFound)).detach();
+                        std::ref(hasPendingProcess), std::ref(currentPage), std::ref(newISOFound)).detach();
         }
            
         std::cout << "\033[1A\033[K";
