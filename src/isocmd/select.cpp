@@ -249,7 +249,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         // Store currentPage for unfiltered list
         if (!isFiltered) originalPage = currentPage;
         
-        // Handle crashes when not enough permissions to access database
+        // Initiates cleanup sequence for non-existent ISO
         if (!isUnmount) {
 			removeNonExistentPathsFromDatabase();
             isAtISOList.store(true);
