@@ -236,13 +236,13 @@ void verboseForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_
     } else if (validPaths.empty()) {
         std::cout << "\n\033[1;91mDatabase refresh failed: Lack of valid paths.\033[0;1m\n";
 	} else if (!allIsoFiles.empty() && !newISOFound.load() && !saveSuccess){
-        std::cout << "\n\033[1;92mDatabase refresh:\033[1;93m No new ISO found\033[0;1m\n";
+        std::cout << "\n\033[1;92mDatabase refresh:\033[1;93m No new ISO found\033[1;92m.\033[0;1m\n";
     } else if (allIsoFiles.empty()){
-        std::cout << "\n\033[1;92mDatabase refresh:\033[1;91m No ISO found\033[0;1m\n";
+        std::cout << "\n\033[1;92mDatabase refresh:\033[1;91m No ISO found\033[1;92m.\033[0;1m\n";
     } else if (!allIsoFiles.empty() && saveSuccess && newISOFound.load()){
 		int result = countDifferentEntries(allIsoFiles, globalIsoFileList);
 		loadFromDatabase(globalIsoFileList);
-		std::cout << "\n\033[1;92mDatabase refreshed successfully: \033[1;95m" << result << "\033[1;92m new ISO imported\033[0;1m\n";
+		std::cout << "\n\033[1;92mDatabase refresh: \033[1;95m" << result << "\033[1;92m ISO imported.\033[0;1m\n";
 	}
 
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
