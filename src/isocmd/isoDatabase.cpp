@@ -299,7 +299,7 @@ void loadFromDatabase(std::vector<std::string>& isoFiles) {
     
     if (bytesRead != fileStat.st_size) return;
     
-    // Parse the buffer (same logic as before)
+    // Parse the buffer
     std::vector<std::string> loadedFiles;
     char* start = buffer.data();
     char* end = buffer.data() + bytesRead;
