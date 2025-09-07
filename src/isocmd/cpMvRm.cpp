@@ -53,14 +53,10 @@ bool& abortDel) {
     
     while (true) {
         std::string userInput;
-        
+        // OPTIMIZED PATH for when pagiantion is disabled do not use readline to print the generated entries
         if (disablePagination) {
 			// Display any accumulated error messages before showing the entries
 			displayErrors(uniqueErrorMessages);
-            // OPTIMIZED PATH: Suspend readline during bulk output for performance
-            
-            // Suspend readline to avoid prompt save/restore overhead
-            rl_callback_handler_remove();
             
             // Fast bulk output while readline is suspended
             std::cout << promptPrefix;
