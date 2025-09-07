@@ -251,7 +251,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         
         // Initiates cleanup sequence for non-existent ISO
         if (!isUnmount) {
-			removeNonExistentPathsFromDatabase();
+			removeNonExistentPathsFromDatabase(globalIsoFileList);
             isAtISOList.store(true);
         }
         

@@ -17,7 +17,7 @@ std::mutex couNtMutex;
 
 
 // Function to remove non-existent paths from database and cache
-void removeNonExistentPathsFromDatabase() {
+void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileList) {
     // Check if the database file exists
     if (access(databaseFilePath.c_str(), F_OK) != 0) {
 		std::lock_guard<std::mutex> lock(updateListMutex);
@@ -268,7 +268,7 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
         future.wait();
     }
     // Cleanup after automatic update finishes
-    removeNonExistentPathsFromDatabase();
+    removeNonExistentPathsFromDatabase(globalIsoFileList);
     
     saveToDatabase(allIsoFiles, newISOFound);
     isImportRunning.store(false);

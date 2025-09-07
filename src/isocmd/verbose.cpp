@@ -197,7 +197,7 @@ void verboseForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_
     disable_ctrl_d();
     
     // To ensure correct imported ISO counting
-    removeNonExistentPathsFromDatabase();
+    removeNonExistentPathsFromDatabase(globalIsoFileList);
     loadFromDatabase(globalIsoFileList);
     
     auto printInvalidPaths = [&]() {
