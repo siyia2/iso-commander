@@ -24,19 +24,45 @@ void removeNonExistentPathsFromDatabase() {
         return;
     }
     
-    // Open the cache file for reading
-    std::ifstream file(databaseFilePath);
-    if (!file.is_open()) {
+    // Open with read/write access and acquire lock first
+    int fd = open(databaseFilePath.c_str(), O_RDWR | O_CREAT, 0644);
+    if (fd == -1) return;
+    
+    if (flock(fd, LOCK_EX) == -1) {
+        close(fd);
         return;
     }
     
     // Read all lines into a vector
     std::vector<std::string> cache;
     std::string line;
-    while (std::getline(file, line)) {
-        cache.push_back(line);
+    
+    // Use the same file descriptor for reading
+    FILE* file = fdopen(dup(fd), "r");
+    if (!file) {
+        flock(fd, LOCK_UN);
+        close(fd);
+        return;
     }
-    file.close();
+    
+    char* linePtr = nullptr;
+    size_t len = 0;
+    while (getline(&linePtr, &len, file) != -1) {
+        std::string currentLine(linePtr);
+        // Remove trailing newline if present
+        if (!currentLine.empty() && currentLine.back() == '\n') {
+            currentLine.pop_back();
+        }
+        if (!currentLine.empty() && currentLine.back() == '\r') {
+            currentLine.pop_back();
+        }
+        if (!currentLine.empty()) {
+            cache.push_back(currentLine);
+        }
+    }
+    
+    if (linePtr) free(linePtr);
+    fclose(file);
     
     // Create a vector to track which paths exist
     std::vector<bool> pathExists(cache.size(), false);
@@ -72,6 +98,8 @@ void removeNonExistentPathsFromDatabase() {
     // Check if any paths were removed
     if (existingPathCount == cache.size()) {
         // No changes needed, return without modifying the file
+        flock(fd, LOCK_UN);
+        close(fd);
         return;
     }
     
@@ -84,27 +112,24 @@ void removeNonExistentPathsFromDatabase() {
         }
     }
     
-    // Write back to file
-    int writeFd = open(databaseFilePath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if (writeFd == -1) {
-        return;
-    }
-    
-    // Acquire exclusive lock
-    if (flock(writeFd, LOCK_EX) == -1) {
-        close(writeFd);
+    // Truncate and write back to the same file descriptor
+    if (ftruncate(fd, 0) == -1 || lseek(fd, 0, SEEK_SET) == -1) {
+        flock(fd, LOCK_UN);
+        close(fd);
         return;
     }
     
     // Write retained paths
     for (const auto& path : retainedPaths) {
         std::string line = path + '\n';
-        write(writeFd, line.c_str(), line.size());
+        if (write(fd, line.c_str(), line.size()) == -1) {
+            break;
+        }
     }
     
     // Release lock and close
-    flock(writeFd, LOCK_UN);
-    close(writeFd);
+    flock(fd, LOCK_UN);
+    close(fd);
 }
 
 
@@ -309,10 +334,43 @@ bool saveToDatabase(const std::vector<std::string>& isoFiles, std::atomic<bool>&
     if (!std::filesystem::is_directory(databaseDirectory)) {
         return false;
     }
+    
+    // Open file and acquire lock FIRST
+    int fd = open(cachePath.c_str(), O_RDWR | O_CREAT, 0644);
+    if (fd == -1) return false;
+    
+    if (flock(fd, LOCK_EX) == -1) {
+        close(fd);
+        return false;
+    }
 
-    // Load the existing cache from the database
+    // Load the existing cache from the same file descriptor
     std::vector<std::string> existingCache;
-    loadFromDatabase(existingCache);
+    
+    struct stat fileStat;
+    if (fstat(fd, &fileStat) == 0 && fileStat.st_size > 0) {
+        // Read existing content
+        std::vector<char> buffer(fileStat.st_size);
+        ssize_t bytesRead = read(fd, buffer.data(), fileStat.st_size);
+        
+        if (bytesRead == fileStat.st_size) {
+            // Parse the buffer
+            char* start = buffer.data();
+            char* end = buffer.data() + bytesRead;
+            
+            while (start < end) {
+                char* lineEnd = std::find(start, end, '\n');
+                std::string line(start, lineEnd);
+                if (!line.empty() && line.back() == '\r') {
+                    line.pop_back();
+                }
+                if (!line.empty()) {
+                    existingCache.push_back(std::move(line));
+                }
+                start = lineEnd + 1;
+            }
+        }
+    }
 
     // Convert the existing cache to a set for efficient lookup
     std::unordered_set<std::string> existingSet(existingCache.begin(), existingCache.end());
@@ -332,6 +390,8 @@ bool saveToDatabase(const std::vector<std::string>& isoFiles, std::atomic<bool>&
     // If no new entries are found, set newISOFound to false and return
     if (newEntries.empty()) {
         newISOFound.store(false);
+        flock(fd, LOCK_UN);
+        close(fd);
         return false; // No new entries, don't modify cache
     }
     
@@ -343,15 +403,10 @@ bool saveToDatabase(const std::vector<std::string>& isoFiles, std::atomic<bool>&
         combinedCache.erase(combinedCache.begin(), combinedCache.begin() + (combinedCache.size() - maxDatabaseSize));
     }
     
-    // Open the database file for writing, creating it if it doesn't exist
-    int fd = open(cachePath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if (fd == -1) {
-        return false; // Return false if the file cannot be opened
-    }
-
-    // Acquire an exclusive lock to prevent other processes from writing
-    if (flock(fd, LOCK_EX) == -1) {
-        close(fd); // Release the file descriptor if locking fails
+    // Truncate and write back to the same file descriptor
+    if (ftruncate(fd, 0) == -1 || lseek(fd, 0, SEEK_SET) == -1) {
+        flock(fd, LOCK_UN);
+        close(fd);
         return false;
     }
     
