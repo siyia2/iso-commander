@@ -279,65 +279,48 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
 
 // Function to load ISO database from file
 void loadFromDatabase(std::vector<std::string>& isoFiles) {
-    // Open the database file in read-only mode
     int fd = open(databaseFilePath.c_str(), O_RDONLY);
-    if (fd == -1) {
-        return; // File doesn't exist or cannot be opened, exit the function
-    }
-
-    // Acquire a shared lock using flock to allow multiple readers but no writers
+    if (fd == -1) return;
+    
     if (flock(fd, LOCK_SH) == -1) {
-        close(fd); // Release the file descriptor if locking fails
+        close(fd);
         return;
     }
-
-    // Get file statistics to check its size and other attributes
+    
     struct stat fileStat;
     if (fstat(fd, &fileStat) == -1 || fileStat.st_size == 0) {
-        // If fstat fails or the file is empty, release the lock and close the file
         flock(fd, LOCK_UN);
         close(fd);
-        isoFiles.clear(); // Clear the output vector
+        isoFiles.clear();
         return;
     }
-
-    // Store the file size for later use
-    const auto fileSize = fileStat.st_size;
-
-    // Map the file into memory for efficient reading
-    char* mappedFile = static_cast<char*>(mmap(nullptr, fileSize, PROT_READ, MAP_PRIVATE, fd, 0));
-    if (mappedFile == MAP_FAILED) {
-        // If mmap fails, release the lock and close the file
-        flock(fd, LOCK_UN);
-        close(fd);
-        return;
-    }
-
-    // Vector to store the loaded ISO file paths
+    
+    // Simple read approach
+    std::vector<char> buffer(fileStat.st_size);
+    ssize_t bytesRead = read(fd, buffer.data(), fileStat.st_size);
+    
+    flock(fd, LOCK_UN);
+    close(fd);
+    
+    if (bytesRead != fileStat.st_size) return;
+    
+    // Parse the buffer (same logic as before)
     std::vector<std::string> loadedFiles;
-
-    // Iterate through the mapped file to read lines (ISO file paths)
-    char* start = mappedFile;
-    char* end = mappedFile + fileSize;
+    char* start = buffer.data();
+    char* end = buffer.data() + bytesRead;
+    
     while (start < end) {
-        // Find the end of the current line
         char* lineEnd = std::find(start, end, '\n');
-        // Extract the line as a string
         std::string line(start, lineEnd);
-        start = lineEnd + 1; // Move to the start of the next line
-
-        // If the line is not empty, add it to the loadedFiles vector
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
         if (!line.empty()) {
             loadedFiles.push_back(std::move(line));
         }
+        start = lineEnd + 1;
     }
-
-    // Unmap the memory and release the file lock
-    munmap(mappedFile, fileSize);
-    flock(fd, LOCK_UN);
-    close(fd);
-
-    // Swap the loaded files with the input vector to update it
+    
     isoFiles.swap(loadedFiles);
 }
 
