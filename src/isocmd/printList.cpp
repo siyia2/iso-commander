@@ -41,9 +41,13 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     const size_t currentNumDigits = std::to_string(endIndex).length();
     const bool isIsoWithAutoUpdate = (isImportRunning.load() && listType == "ISO_FILES" && !isFiltered && globalIsoFileList.size() != 0);
     
-    // Pre-allocate output buffer - estimate ~100 chars per line on average
+    // Pre-allocate output buffer based on display mode
     std::string output;
-    output.reserve((endIndex - startIndex) * 120 + 1000); // Extra for headers/footers
+    size_t estimatedCharsPerLine;
+    estimatedCharsPerLine = ((displayConfig::toggleNamesOnly && (listType != "MOUNTED_ISOS")) || listType == "MOUNTED_ISOS")
+                        ? 50
+                        : 100;
+    output.reserve((endIndex - startIndex) * estimatedCharsPerLine + 1000); // Extra for headers/footers
     
     // Header
     output += '\n';
