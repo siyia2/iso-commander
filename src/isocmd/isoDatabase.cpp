@@ -20,6 +20,7 @@ std::mutex couNtMutex;
 void removeNonExistentPathsFromDatabase() {
     // Check if the database file exists
     if (access(databaseFilePath.c_str(), F_OK) != 0) {
+		std::lock_guard<std::mutex> lock(updateListMutex);
         globalIsoFileList.clear();
         return;
     }
@@ -275,7 +276,7 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
 
 
 // Function to load ISO database from file
-void loadFromDatabase(std::vector<std::string>& isoFiles) {
+void loadFromDatabase(std::vector<std::string>& globalIsoFileList) {
     int fd = open(databaseFilePath.c_str(), O_RDONLY);
     if (fd == -1) return;
     
@@ -288,7 +289,10 @@ void loadFromDatabase(std::vector<std::string>& isoFiles) {
     if (fstat(fd, &fileStat) == -1 || fileStat.st_size == 0) {
         flock(fd, LOCK_UN);
         close(fd);
-        isoFiles.clear();
+        {
+			std::lock_guard<std::mutex> lock(updateListMutex);
+			globalIsoFileList.clear();
+		}
         return;
     }
     
@@ -317,13 +321,15 @@ void loadFromDatabase(std::vector<std::string>& isoFiles) {
         }
         start = lineEnd + 1;
     }
-    
-    isoFiles.swap(loadedFiles);
+    {
+		std::lock_guard<std::mutex> lock(updateListMutex);
+		globalIsoFileList.swap(loadedFiles);
+	}
 }
 
 
 // Function to save ISO cache to database
-bool saveToDatabase(const std::vector<std::string>& isoFiles, std::atomic<bool>& newISOFound) {
+bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atomic<bool>& newISOFound) {
     // Construct the full path to the database file
     std::filesystem::path cachePath = databaseDirectory;
     cachePath /= databaseFilename;
@@ -381,7 +387,7 @@ bool saveToDatabase(const std::vector<std::string>& isoFiles, std::atomic<bool>&
     std::vector<std::string> newEntries;
     
     // Iterate through the input ISO files to find new entries
-    for (const auto& iso : isoFiles) {
+    for (const auto& iso : globalIsoFileList) {
         if (existingSet.find(iso) == existingSet.end()) {
             // If the ISO file is not in the existing cache, add it to newEntries
             newEntries.push_back(iso);
