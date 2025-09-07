@@ -422,7 +422,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         if (!isFiltered) originalPage = currentPage;
         
         clear_history();
-        if (needsClrScrn) clearAndLoadImageFiles(files, fileType, need2Sort, isFiltered, list, pendingIndices, hasPendingProcess, currentPage, isImportRunning);
+        if (needsClrScrn) loadAndDisplayImageFiles(files, fileType, need2Sort, isFiltered, list, pendingIndices, hasPendingProcess, currentPage, isImportRunning);
         
         std::cout << "\n\n";
         std::cout << "\033[1A\033[K";

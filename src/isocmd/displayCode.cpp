@@ -25,7 +25,7 @@ namespace displayConfig {
 }
 
 
-// Utility function to clear screen buffer and load IsoFiles from database to a global vector only for the first time and only for if the database file has been modified.
+// Utility function to load and display IsoFiles from database to a global vector, database is used only the first time or if the database file has been modified
 bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, std::atomic<bool>& isImportRunning) {
     
     signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
@@ -166,8 +166,8 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
 }
 
 
-// Function to clear and load list for image files
-void clearAndLoadImageFiles(std::vector<std::string>& files, const std::string& fileType, bool& need2Sort, bool& isFiltered, bool& list,std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, std::atomic<bool>& isImportRunning) {
+// Function to load and display the corresponding image files
+void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string& fileType, bool& need2Sort, bool& isFiltered, bool& list,std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, std::atomic<bool>& isImportRunning) {
     // Clear the screen for new content
     clearScrollBuffer();
     
