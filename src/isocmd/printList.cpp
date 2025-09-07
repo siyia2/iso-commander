@@ -47,7 +47,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     estimatedCharsPerLine = ((displayConfig::toggleNamesOnly && (listType != "MOUNTED_ISOS")) || listType == "MOUNTED_ISOS")
                         ? 50
                         : 100;
-    output.reserve((endIndex - startIndex) * estimatedCharsPerLine + 1000); // Extra for headers/footers
+    output.reserve((endIndex - startIndex) * estimatedCharsPerLine + 100); // +100 Extra for headers/footers
     
     // Header
     output += '\n';
