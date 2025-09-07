@@ -19,56 +19,26 @@ std::mutex couNtMutex;
 // Function to remove non-existent paths from database and cache
 void removeNonExistentPathsFromDatabase() {
     // Check if the database file exists
-    if (!fs::exists(databaseFilePath)) {
+    if (access(databaseFilePath.c_str(), F_OK) != 0) {
         globalIsoFileList.clear();
         return;
     }
     
     // Open the cache file for reading
-    int fd = open(databaseFilePath.c_str(), O_RDONLY);
-    if (fd == -1) {
+    std::ifstream file(databaseFilePath);
+    if (!file.is_open()) {
         return;
     }
     
-    // Lock the file to prevent concurrent access
-    if (flock(fd, LOCK_EX) == -1) {
-        close(fd);
-        return;
-    }
-    
-    // Get the file size
-    struct stat sb;
-    if (fstat(fd, &sb) == -1) {
-        flock(fd, LOCK_UN);
-        close(fd);
-        return;
-    }
-    size_t fileSize = sb.st_size;
-    
-    // Memory map the file
-    char* mappedFile = static_cast<char*>(mmap(nullptr, fileSize, PROT_READ, MAP_PRIVATE, fd, 0));
-    if (mappedFile == MAP_FAILED) {
-        flock(fd, LOCK_UN);
-        close(fd);
-        return;
-    }
-    
-    // Read the file into a vector of strings
+    // Read all lines into a vector
     std::vector<std::string> cache;
-    char* start = mappedFile;
-    char* end = mappedFile + fileSize;
-    while (start < end) {
-        char* lineEnd = std::find(start, end, '\n');
-        cache.emplace_back(start, lineEnd);
-        start = lineEnd + 1;
+    std::string line;
+    while (std::getline(file, line)) {
+        cache.push_back(line);
     }
+    file.close();
     
-    // Unmap and close the file
-    munmap(mappedFile, fileSize);
-    flock(fd, LOCK_UN);
-    close(fd);
-    
-    // Create a bitset to track which paths exist (more efficient than vector<bool>)
+    // Create a vector to track which paths exist
     std::vector<bool> pathExists(cache.size(), false);
     std::atomic<size_t> existingPathCount{0};
     
@@ -81,12 +51,12 @@ void removeNonExistentPathsFromDatabase() {
     // Create a vector to hold futures
     std::vector<std::future<void>> futures;
     
-    // Process paths in batches using the thread pool
+    // Process ISO lines in batches using the thread pool
     for (size_t i = 0; i < cache.size(); i += batchSize) {
         size_t batchEnd = std::min(i + batchSize, cache.size());
         futures.emplace_back(pool.enqueue([&cache, &pathExists, &existingPathCount, i, batchEnd]() {
             for (size_t j = i; j < batchEnd; ++j) {
-                if (fs::exists(cache[j])) {
+                if (access(cache[j].c_str(), F_OK) == 0) {
                     pathExists[j] = true;
                     existingPathCount.fetch_add(1, std::memory_order_relaxed);
                 }
@@ -114,7 +84,7 @@ void removeNonExistentPathsFromDatabase() {
         }
     }
     
-    // Open the file for writing, create if necessary, truncate it
+    // Write back to file
     int writeFd = open(databaseFilePath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (writeFd == -1) {
         return;
@@ -126,7 +96,7 @@ void removeNonExistentPathsFromDatabase() {
         return;
     }
     
-    // Write retainedPaths
+    // Write retained paths
     for (const auto& path : retainedPaths) {
         std::string line = path + '\n';
         write(writeFd, line.c_str(), line.size());
