@@ -176,7 +176,7 @@ void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOLi
             // Check if the list is a non-filtered ISO list
             if (isAtISOList.load() && !isFiltered) {
                 // If conditions are met, clear and reload the ISO list with the updated data
-                clearAndLoadFiles(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, isImportRunning);
+                loadAndDisplayIso(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, isImportRunning);
                 std::cout << "\n";
                 
                 rl_on_new_line(); // necessary to avoid the graphical glitch when transitioning from filtered -> non-filtered list
@@ -258,7 +258,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         // Load files based on operation type
         if (needsClrScrn) {
             if (!isUnmount) {
-                if (!clearAndLoadFiles(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, isImportRunning))
+                if (!loadAndDisplayIso(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, isImportRunning))
                     break;
             } else {
                 if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, isImportRunning))
