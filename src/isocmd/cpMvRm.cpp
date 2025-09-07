@@ -53,7 +53,7 @@ bool& abortDel) {
     
     while (true) {
         std::string userInput;
-        // OPTIMIZED PATH for when pagiantion is disabled do not use readline to print the generated entries
+        // OPTIMIZED PATH: When pagiantion is disabled do not use readline to print the generated entries
         if (disablePagination) {
 			// Display any accumulated error messages before showing the entries
 			displayErrors(uniqueErrorMessages);
