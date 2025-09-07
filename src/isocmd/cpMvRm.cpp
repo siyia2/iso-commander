@@ -80,9 +80,6 @@ bool& abortDel) {
             std::cout << promptSuffix;
             std::cout.flush();
             
-            // Restore readline for input
-            setupEnv();
-            
             // Get user input
             char* input = readline("");
             if (!input) {
