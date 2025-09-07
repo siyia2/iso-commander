@@ -196,6 +196,10 @@ void verboseForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
     
+    // To ensure correct imported ISO counting
+    removeNonExistentPathsFromDatabase();
+    loadFromDatabase(globalIsoFileList);
+    
     auto printInvalidPaths = [&]() {
         if (invalidPaths.empty()) return;
         if (totalFiles == 0 && validPaths.empty()) {
@@ -241,7 +245,6 @@ void verboseForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_
         std::cout << "\n\033[1;92mDatabase refresh:\033[1;91m No ISO found\033[1;92m.\033[0;1m\n";
     } else if (!allIsoFiles.empty() && saveSuccess && newISOFound.load()){
 		int result = countDifferentEntries(allIsoFiles, globalIsoFileList);
-		loadFromDatabase(globalIsoFileList);
 		std::cout << "\n\033[1;92mDatabase refresh: \033[1;95m" << result << "\033[1;92m ISO imported.\033[0;1m\n";
 	}
 
