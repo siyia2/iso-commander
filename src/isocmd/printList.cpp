@@ -177,15 +177,15 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     
     // Pending indices
     if (hasPendingProcess && !pendingIndices.empty()) {
-        output += "\n\033[1;35mPending: ";
+        output += "\n\033[1;48;5;19mPending for [\033[1;92mproc\033[0;1;48;5;19m]: ";
         for (size_t i = 0; i < pendingIndices.size(); ++i) {
-            output += "\033[1;93m";
+            output += (listType != "IMAGE_FILES" ? magentaBold : orangeBold);
             output += pendingIndices[i];
             if (i < pendingIndices.size() - 1) {
                 output += ' ';
             }
         }
-        output += "\033[1;35m ([\033[1;92mproc\033[1;35m] ↵ to process [\033[1;93mclr\033[1;35m] ↵ to clear)\033[0;1m\n";
+        output += "\033[0;1m\n";
     }
 
     // Single write to stdout
