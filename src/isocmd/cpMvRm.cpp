@@ -30,32 +30,84 @@ std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>&
 bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages, std::vector<std::vector<int>>& indexChunks, bool& umountMvRmBreak,
 bool& abortDel) {
     bool isPageTurn = false;
+    bool disablePagination = (ITEMS_PER_PAGE <= 0 || isoFiles.size() <= ITEMS_PER_PAGE);
     
     // Set up environment for clearing screen using readline
     auto setupEnv = [&]() {
-        rl_bind_key('\f', clear_screen_and_buffer); // Bind clear screen function to page break key
+        if (!disablePagination) {
+            rl_bind_key('\f', clear_screen_and_buffer); // Bind clear screen function to page break key
+        } else {
+            rl_bind_key('\f', [](int, int) -> int { return 0; }); // Bind to empty function that does nothing
+        }
     };
-
+    
     // Generate the list of ISO entries for the deletion operation
     std::vector<std::string> entries = generateIsoEntries(indexChunks, isoFiles);
     sortFilesCaseInsensitive(entries); // Sort files case-insensitively
-
+    
     // Define the prompt that will be displayed for the user
     std::string promptPrefix = "\n";
     std::string promptSuffix = std::string("\n\001\033[1;94m\002The selected \001\033[1;92m\002ISO\001\033[1;94m\002 will be ") +
     "\001\033[1;91m\002*PERMANENTLY DELETED FROM DISK*\001\033[1;94m\002. Proceed? (Y/N):\001\033[0;1m\002 ";
-
+    
+    
     while (true) {
-        // Display entries with pagination and handle user input
-        std::string userInput = handlePaginatedDisplay(
-            entries,
-            uniqueErrorMessages,
-            promptPrefix,
-            promptSuffix,
-            setupEnv,
-            isPageTurn
-        );
-
+        std::string userInput;
+        
+        if (disablePagination) {
+			// Display any accumulated error messages before showing the entries
+			displayErrors(uniqueErrorMessages);
+            // OPTIMIZED PATH: Suspend readline during bulk output for performance
+            
+            // Suspend readline to avoid prompt save/restore overhead
+            rl_callback_handler_remove();
+            
+            // Fast bulk output while readline is suspended
+            std::cout << promptPrefix;
+            
+            // Batch output for better performance
+            std::ostringstream batch;
+            const size_t BATCH_SIZE = 100;
+            
+            for (size_t i = 0; i < entries.size(); i += BATCH_SIZE) {
+                batch.str("");
+                batch.clear();
+                
+                size_t end = std::min(i + BATCH_SIZE, entries.size());
+                for (size_t j = i; j < end; ++j) {
+                    batch << entries[j];
+                }
+                
+                std::cout << batch.str();
+            }
+            
+            std::cout << promptSuffix;
+            std::cout.flush();
+            
+            // Restore readline for input
+            setupEnv();
+            
+            // Get user input
+            char* input = readline("");
+            if (!input) {
+                userInput = "EOF_SIGNAL";
+            } else {
+                userInput = std::string(input);
+                free(input);
+            }
+            
+        } else {
+            // ORIGINAL PATH: Use existing handlePaginatedDisplay for smaller datasets
+            userInput = handlePaginatedDisplay(
+                entries,
+                uniqueErrorMessages,
+                promptPrefix,
+                promptSuffix,
+                setupEnv,
+                isPageTurn
+            );
+        }
+        
         // Bind the key to prevent accidental clear screen binding during the loop
         rl_bind_key('\f', prevent_readline_keybindings);
         
@@ -70,7 +122,7 @@ bool& abortDel) {
             abortDel = true; // Mark delete operation as aborted
             return false; // Return false, as operation is aborted
         }
-
+        
         if (!isPageTurn) {
             // If no page turn occurred, check the user's response
             if (userInput == "Y") {
