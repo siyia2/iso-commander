@@ -10,7 +10,6 @@ std::vector<std::string> globalIsoFileList;
 
 
 // Function to print all required lists
-// Optimized version for 10k-20k items
 void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& isFiltered, size_t& currentPage, std::atomic<bool>& isImportRunning) {
     
     // Pre-compile colors as string_view for better performance
