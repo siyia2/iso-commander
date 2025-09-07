@@ -26,7 +26,7 @@ namespace displayConfig {
 
 
 // Function to load and display ISO files from the database into a global vector, database file is used only on first access or on every modification
-bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, std::atomic<bool>& isImportRunning) {
+bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, std::string operation, std::atomic<bool>& isImportRunning) {
     
     signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
     disable_ctrl_d();
@@ -80,7 +80,7 @@ bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered
 			// Clear the filtering stack when returning to unfiltered mode from list modifications with Mv/Rm
 			filteringStack.clear();
 			isFiltered = false;
-			currentPage = 0;
+			if (operation != "mv") currentPage = 0;
 		}
         printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType, pendingIndices, hasPendingProcess, isFiltered, currentPage, isImportRunning);
         
