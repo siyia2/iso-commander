@@ -25,7 +25,7 @@ namespace displayConfig {
 }
 
 
-// Utility function to load and display IsoFiles from database to a global vector, database is used only the first time or if the database file has been modified
+// Function to load and display ISO files from the database into a global vector, database file is used only on first access or on every modification
 bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, std::atomic<bool>& isImportRunning) {
     
     signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
