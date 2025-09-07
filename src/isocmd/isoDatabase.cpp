@@ -266,7 +266,7 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
     for (auto& future : futures) {
         future.wait();
     }
-    
+    // Cleanup after automatic update finishes
     removeNonExistentPathsFromDatabase();
     
     saveToDatabase(allIsoFiles, newISOFound);
