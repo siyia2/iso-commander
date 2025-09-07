@@ -91,7 +91,7 @@ bool isHistoryFileEmpty(const std::string& filePath);
 bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, std::atomic<bool>& isImportRunning);
 bool isValidDirectory(const std::string& path);
 bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atomic<bool>& newISOFound);
-bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, std::atomic<bool>& isImportRunning);
+bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, std::string operation, std::atomic<bool>& isImportRunning);
 bool handleFilteringForISO(const std::string& inputString, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, const std::string& operation, const std::string& operationColor, const std::vector<std::string>& isoDirs, bool isUnmount, size_t& currentPage);
 bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, const bool& blacklistNrg);
 bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex);
