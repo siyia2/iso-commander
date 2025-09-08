@@ -60,7 +60,7 @@ bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered
         loadFromDatabase(globalIsoFileList);
         {
             std::lock_guard<std::mutex> lock(updateListMutex);
-            // Restore original page in unfiltered list if possible for cp
+            // Restore original page in unfiltered list if possible during cp operation
             currentPage = originalPage;
             // Clear any pending automatically
 				pendingIndices.clear();
