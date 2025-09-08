@@ -82,7 +82,6 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
             
             if (isUnmount) {
                 unmountISO(chunk, operationFiles, operationFails, &completedTasks, &failedTasks, false);
-                if (completedTasks == 0) operationBreak = false;
             } else {
                 mountIsoFiles(chunk, operationFiles, skippedMessages, operationFails, &completedTasks, &failedTasks, false);
             }
@@ -93,6 +92,8 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
     for (auto& future : futures) {
         future.wait();
     }
+    
+    if (completedTasks == 0) operationBreak = false;
     
     // Cleanup
     isProcessingComplete.store(true);
