@@ -17,15 +17,19 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
 		return true;
 	}
 	
+	// Added proper page validation for rm or umount where the totalPage number can be reduced
+	if (totalPages > 0 && currentPage >= totalPages && (!isWrite || !isConversion || !isMount)) {
+		currentPage = totalPages - 1;
+	}
+	
     // Handle "next" command
     if (command == "n") {
-        if (currentPage < totalPages - 1) {
+        if (totalPages > 0 && currentPage < totalPages - 1) {
             currentPage++;
             needsClrScrn = true;
         }
         return true;
     }
-
     // Handle "prev" command
     if (command == "p") {
         if (currentPage > 0) {
@@ -34,12 +38,11 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
         }
         return true;
     }
-
     // Handle go-to specific page command (e.g., "g3" goes to page 3)
     if (command.size() >= 2 && command[0] == 'g' && std::isdigit(command[1])) {
         try {
             int pageNum = std::stoi(command.substr(1)) - 1; // convert to 0-based index
-            if (pageNum >= 0 && pageNum < static_cast<int>(totalPages)) {
+            if (totalPages > 0 && pageNum >= 0 && pageNum < static_cast<int>(totalPages)) {
                 currentPage = pageNum;
                 needsClrScrn = true;
             }
@@ -81,7 +84,7 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
 		
 		// Flag to initialize list sorting immediately for convert2ISO only
 		if (isConversion) need2Sort = true;
-		
+
 		needsClrScrn = true;
 		return true;
 	} // Do not change to filename-only mode when list is already filtered to maintain index^ validity 
@@ -94,10 +97,10 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
 		else if (isWrite && !displayConfig::toggleNamesOnly) displayConfig::toggleFullListWrite = !displayConfig::toggleFullListWrite;
 		else if (isConversion && !displayConfig::toggleNamesOnly) displayConfig::toggleFullListConversions = !displayConfig::toggleFullListConversions;
 		else if (!displayConfig::toggleNamesOnly) displayConfig::toggleFullListCpMvRm = !displayConfig::toggleFullListCpMvRm;
+		
 		needsClrScrn = true;
 		return true;
 	}
-
     // If no valid command was found
     return false;
 }
