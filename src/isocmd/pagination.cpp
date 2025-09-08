@@ -17,7 +17,7 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
 		return true;
 	}
 	
-	// Added proper page validation for rm or umount where the totalPage number can be reduced
+	// Added proper page validation
 	if (totalPages > 0 && currentPage >= totalPages) {
 		currentPage = totalPages - 1;
 	}
