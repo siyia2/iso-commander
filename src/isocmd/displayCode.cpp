@@ -60,8 +60,8 @@ bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered
         loadFromDatabase(globalIsoFileList);
         {
             std::lock_guard<std::mutex> lock(updateListMutex);
-            // Restore original page in unfiltered list if possible during cp operation
-            currentPage = originalPage;
+            // Restore original page in unfiltered list if possible for rm/mv/cp
+			currentPage = originalPage;
             // Clear any pending automatically
 				pendingIndices.clear();
 				hasPendingProcess = false;
@@ -79,8 +79,7 @@ bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered
     {
         std::lock_guard<std::mutex> lock(updateListMutex);
         if (umountMvRmBreak) {
-			// Restore original page in unfiltered list if possible for rm/mv
-			currentPage = originalPage;
+			
 			// Clear the filtering stack when returning to unfiltered mode from list modifications with Mv/Rm
 			filteringStack.clear();
 			isFiltered = false;
