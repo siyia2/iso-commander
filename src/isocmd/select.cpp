@@ -246,6 +246,9 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         filterHistory = false;
         clear_history();
         
+        // Store currentPage for unfiltered list on cp execution
+        if (!isFiltered) originalPage = currentPage;
+        
         // Initiates cleanup sequence for non-existent ISO
         if (!isUnmount) {
 			removeNonExistentPathsFromDatabase(globalIsoFileList);
