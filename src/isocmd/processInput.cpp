@@ -93,7 +93,7 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
         future.wait();
     }
     
-    if (completedTasks == 0) operationBreak = false;
+    if (completedTasks == 0 && isUnmount) operationBreak = false;
     
     // Cleanup
     isProcessingComplete.store(true);
