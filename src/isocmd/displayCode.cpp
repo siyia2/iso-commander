@@ -77,6 +77,7 @@ bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered
     {
         std::lock_guard<std::mutex> lock(updateListMutex);
         if (umountMvRmBreak) {
+			// Restore original page in unfiltered list if possible
 			currentPage = originalPage;
 			// Clear the filtering stack when returning to unfiltered mode from list modifications with Mv/Rm
 			filteringStack.clear();
@@ -156,6 +157,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
     clearScrollBuffer();
 
     if (filteredFiles.size() == isoDirs.size() || umountMvRmBreak) {
+		// Restore original page in unfiltered list if possible
 		originalPage = currentPage;
 		// Clear the filtering stack when returning to unfiltered mode
         filteringStack.clear();
