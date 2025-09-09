@@ -112,9 +112,6 @@ std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::unordered
         return indexChunks;
     }
 
-    // Treat numThreads == 0 as 2 threads
-    size_t actualThreads = numThreads > 0 ? numThreads : 2;
-
     if (!isDelete) {
         // Group indices by filename to avoid collisions
         std::unordered_map<std::string, std::vector<int>> groups;
@@ -135,7 +132,7 @@ std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::unordered
 
         size_t maxFilesPerChunk = std::max<size_t>(
             1, 
-            (uniqueNameFiles.size() + actualThreads - 1) / actualThreads
+            (uniqueNameFiles.size() + numThreads - 1) / numThreads
         );
 
         for (size_t i = 0; i < uniqueNameFiles.size(); i += maxFilesPerChunk) {
@@ -146,7 +143,7 @@ std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::unordered
         // For delete, chunk based on numThreads
         size_t maxFilesPerChunk = std::max<size_t>(
             1, 
-            (processedIndicesVector.size() + actualThreads - 1) / actualThreads
+            (processedIndicesVector.size() + numThreads - 1) / numThreads
         );
 
         for (size_t i = 0; i < processedIndicesVector.size(); i += maxFilesPerChunk) {
