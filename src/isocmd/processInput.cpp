@@ -103,11 +103,7 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
 
 
 // Function to group files for CpMvRm, identical filenames are grouped in the same chunk and processed by the same thread
-std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(
-    const std::unordered_set<int>& processedIndices,
-    const std::vector<std::string>& isoFiles,
-    unsigned int numThreads,
-    bool isDelete) 
+std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::unordered_set<int>& processedIndices, const std::vector<std::string>& isoFiles, unsigned int numThreads, bool isDelete) 
 {
     std::vector<int> processedIndicesVector(processedIndices.begin(), processedIndices.end());
     std::vector<std::vector<int>> indexChunks;
@@ -115,6 +111,9 @@ std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(
     if (processedIndicesVector.empty()) {
         return indexChunks;
     }
+
+    // Treat numThreads == 0 as 2 threads
+    size_t actualThreads = numThreads > 0 ? numThreads : 2;
 
     if (!isDelete) {
         // Group indices by filename to avoid collisions
@@ -134,8 +133,6 @@ std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(
             }
         }
 
-        // Handle numThreads == 0 by treating as 1 thread
-        size_t actualThreads = numThreads > 0 ? numThreads : 1;
         size_t maxFilesPerChunk = std::max<size_t>(
             1, 
             (uniqueNameFiles.size() + actualThreads - 1) / actualThreads
@@ -147,7 +144,6 @@ std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(
         }
     } else {
         // For delete, chunk based on numThreads
-        size_t actualThreads = numThreads > 0 ? numThreads : 1;
         size_t maxFilesPerChunk = std::max<size_t>(
             1, 
             (processedIndicesVector.size() + actualThreads - 1) / actualThreads
