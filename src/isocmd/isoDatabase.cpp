@@ -166,8 +166,7 @@ std::string getHomeDirectory() {
 }
 
 
-std::vector<std::string> generalizePaths(const std::vector<std::string>& paths) {
-    std::map<std::string, std::vector<std::string>> pathGroups;
+std::vector<std::string> generalizePaths(const std::vector<std::string>& paths) {std::map<std::string, std::vector<std::string>> pathGroups;
     std::vector<std::string> finalPaths;
     std::vector<std::string> allPaths;
     
@@ -186,6 +185,11 @@ std::vector<std::string> generalizePaths(const std::vector<std::string>& paths) 
         }
     }
     
+    // Sort paths by length (shorter paths first) to help with redundancy detection
+    std::sort(allPaths.begin(), allPaths.end(), [](const std::string& a, const std::string& b) {
+        return a.length() < b.length();
+    });
+    
     // Group paths by their first 3 directory levels
     for (const auto& path : allPaths) {
         // Count directory levels (excluding root '/')
@@ -195,8 +199,8 @@ std::vector<std::string> generalizePaths(const std::vector<std::string>& paths) 
         for (size_t i = 1; i < path.length(); ++i) {  // Start from 1 to skip root '/'
             if (path[i] == '/') {
                 slashCount++;
+                lastSlashPos = i;
                 if (slashCount == 3) {
-                    lastSlashPos = i;
                     break;
                 }
             }
@@ -226,7 +230,28 @@ std::vector<std::string> generalizePaths(const std::vector<std::string>& paths) 
         }
     }
     
-    return finalPaths;
+    // Remove redundant parent paths
+    std::vector<std::string> filteredPaths;
+    std::sort(finalPaths.begin(), finalPaths.end());
+    
+    for (size_t i = 0; i < finalPaths.size(); ++i) {
+        bool isRedundant = false;
+        
+        // Check if this path is a parent of any other path
+        for (size_t j = 0; j < finalPaths.size(); ++j) {
+            if (i != j && finalPaths[j].find(finalPaths[i]) == 0) {
+                // finalPaths[j] starts with finalPaths[i], meaning finalPaths[i] is a parent
+                isRedundant = true;
+                break;
+            }
+        }
+        
+        if (!isRedundant) {
+            filteredPaths.push_back(finalPaths[i]);
+        }
+    }
+    
+    return filteredPaths;
 }
 
 
