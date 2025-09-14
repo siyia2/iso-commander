@@ -166,12 +166,76 @@ std::string getHomeDirectory() {
 }
 
 
+std::vector<std::string> generalizePaths(const std::vector<std::string>& paths) {
+    std::map<std::string, std::vector<std::string>> pathGroups;
+    std::vector<std::string> finalPaths;
+    std::vector<std::string> allPaths;
+    
+    // First, split any semicolon-delimited paths
+    for (const auto& pathEntry : paths) {
+        std::istringstream iss(pathEntry);
+        std::string path;
+        while (std::getline(iss, path, ';')) {
+            if (!path.empty() && path[0] == '/') {
+                // Ensure path ends with '/' for consistency
+                if (path.back() != '/') {
+                    path += '/';
+                }
+                allPaths.push_back(path);
+            }
+        }
+    }
+    
+    // Group paths by their first 3 directory levels
+    for (const auto& path : allPaths) {
+        // Count directory levels (excluding root '/')
+        size_t slashCount = 0;
+        size_t lastSlashPos = 0;
+        
+        for (size_t i = 1; i < path.length(); ++i) {  // Start from 1 to skip root '/'
+            if (path[i] == '/') {
+                slashCount++;
+                if (slashCount == 3) {
+                    lastSlashPos = i;
+                    break;
+                }
+            }
+        }
+        
+        if (slashCount >= 3) {
+            // Extract the first 3 directory levels
+            std::string prefix = path.substr(0, lastSlashPos + 1);
+            pathGroups[prefix].push_back(path);
+        } else {
+            // Path has less than 3 levels, keep as is
+            finalPaths.push_back(path);
+        }
+    }
+    
+    // Process grouped paths and apply generalization
+    for (const auto& group : pathGroups) {
+        const std::string& prefix = group.first;
+        const std::vector<std::string>& groupPaths = group.second;
+        
+        if (groupPaths.size() == 1) {
+            // Only one path with this prefix, keep the original path
+            finalPaths.push_back(groupPaths[0]);
+        } else {
+            // Multiple paths with same prefix, use the generalized prefix
+            finalPaths.push_back(prefix);
+        }
+    }
+    
+    return finalPaths;
+}
+
+
 // Function to auto-import ISO files in cache without blocking the UI
 void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
     std::vector<std::string> paths;
     int localMaxDepth = -1;
     bool localPromptFlag = false;
-
+    
     // Read paths from file
     {
         std::ifstream file(historyFilePath);
@@ -204,27 +268,9 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
         }
     }
     
-    // Sort paths by length
-    std::sort(paths.begin(), paths.end(), [](const std::string& a, const std::string& b) {
-        return a.size() < b.size();
-    });
+    // Apply path generalization
+    std::vector<std::string> finalPaths = generalizePaths(paths);
     
-    // Filter out subdirectories
-    std::vector<std::string> finalPaths;
-    for (const auto& path : paths) {
-        bool isSubdir = false;
-        for (const auto& existingPath : finalPaths) {
-            if (path.size() >= existingPath.size() &&
-                path.compare(0, existingPath.size(), existingPath) == 0 &&
-                (existingPath.back() == '/' || path[existingPath.size()] == '/')) {
-                isSubdir = true;
-                break;
-            }
-        }
-        if (!isSubdir) {
-            finalPaths.push_back(path);
-        }
-    }
     
     // Set up data structures for processing
     std::vector<std::string> allIsoFiles;
@@ -235,7 +281,6 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
     
     // Create a thread pool based on the available hardware threads.
     size_t numThreads = (maxThreads == 0 ? 4 : std::min(maxThreads * 2, static_cast<unsigned int>(MAX_HISTORY_LINES)));
-
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
     
