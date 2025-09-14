@@ -166,6 +166,7 @@ std::string getHomeDirectory() {
 }
 
 
+// Function to generalize paths from history and push them into backgroundDatabaseImport for traverse to work with
 std::vector<std::string> generalizePaths(const std::vector<std::string>& paths) {std::map<std::string, std::vector<std::string>> pathGroups;
     std::vector<std::string> finalPaths;
     std::vector<std::string> allPaths;
