@@ -1,3 +1,4 @@
+
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../headers.h"
@@ -167,7 +168,7 @@ std::string getHomeDirectory() {
 
 
 // Function to generalize paths from history and push them into backgroundDatabaseImport for traverse to work with
-std::vector<std::string> generalizePaths(const std::vector<std::string>& paths) {
+std::vector<std::string> hierarchicalPathReduction(const std::vector<std::string>& paths) {
     std::map<std::string, std::vector<std::string>> pathGroups;
     std::vector<std::string> allPaths;
     
@@ -268,7 +269,7 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
     }
     
     // Apply path generalization
-    std::vector<std::string> finalPaths = generalizePaths(paths);
+    std::vector<std::string> finalPaths = hierarchicalPathReduction(paths);
     
     
     // Set up data structures for processing
