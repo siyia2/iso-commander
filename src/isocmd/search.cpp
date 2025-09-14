@@ -143,6 +143,12 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
 			}
 			// When out of scope threads automatically cleanup-up
 		}
+		
+		if (!g_operationCancelled.load()) {
+			// More efficient deduplication using set
+			std::unordered_set<std::string> uniqueFiles(allIsoFiles.begin(), allIsoFiles.end());
+			allIsoFiles.assign(uniqueFiles.begin(), uniqueFiles.end());
+		}
         
         // Post-processing
         if (promptFlag) {
