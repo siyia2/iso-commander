@@ -8,9 +8,9 @@ const std::string historyFilePath = std::string(getenv("HOME")) + "/.local/share
 const std::string filterHistoryFilePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/iso_commander_filter_database.txt";
 
 //Maximum number of history entries at a time
-const int MAX_HISTORY_LINES = 50;
+const int MAX_HISTORY_LINES = 100;
 
-const int MAX_HISTORY_PATTERN_LINES = 25;
+const int MAX_HISTORY_PATTERN_LINES = 50;
 
 
 // Function to check if folder path history is empty
