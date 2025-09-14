@@ -1,4 +1,4 @@
-.TH ISOCMD 1 "September 2025" "Iso Commander 6.1.9" "Iso-Commander Manual"
+.TH ISOCMD 1 "September 2025" "Iso Commander 6.2.0" "Iso-Commander Manual"
 
 .SH NAME
 Iso Commander (isocmd) \- Command-line utility for managing .iso files and converting image formats.
@@ -6,25 +6,30 @@ Iso Commander (isocmd) \- Command-line utility for managing .iso files and conve
 .SH DESCRIPTION
 Iso Commander (isocmd) is a command-line utility for managing .iso files and converting various image formats to .iso using asynchronous I/O operations.
 
-.SH NON-INTERACTIVE OPTIONS
+.SH NON-INTERACTIVE COMMANDS
 .TP
 .B -v, --version
+.br
 Show program version.
 
 .TP
 .B --silent
+.br
 Suppress informational, error and warning output.
 
 .TP
 .B -d\<N\>
+.br
 Set max directory recursion depth when scanning for ISOs; default is -1 (unlimited).
 
 .TP
 .B mount
+.br
 Mount one or more ISO files or directories containing ISOs. Requires root.
 
 .TP
 .B umount, unmount
+.br
 Unmount ISO mount points. Without arguments or with "all", unmounts all under /mnt.  Requires root.
 
 .SH EXAMPLES
