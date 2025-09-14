@@ -167,92 +167,65 @@ std::string getHomeDirectory() {
 
 
 // Function to generalize paths from history and push them into backgroundDatabaseImport for traverse to work with
-std::vector<std::string> generalizePaths(const std::vector<std::string>& paths) {std::map<std::string, std::vector<std::string>> pathGroups;
-    std::vector<std::string> finalPaths;
+std::vector<std::string> generalizePaths(const std::vector<std::string>& paths) {
+    std::map<std::string, std::vector<std::string>> pathGroups;
     std::vector<std::string> allPaths;
     
-    // First, split any semicolon-delimited paths
+    // Split semicolon-delimited paths and normalize
     for (const auto& pathEntry : paths) {
         std::istringstream iss(pathEntry);
         std::string path;
         while (std::getline(iss, path, ';')) {
             if (!path.empty() && path[0] == '/') {
-                // Ensure path ends with '/' for consistency
-                if (path.back() != '/') {
-                    path += '/';
-                }
+                if (path.back() != '/') path += '/';
                 allPaths.push_back(path);
             }
         }
     }
     
-    // Sort paths by length (shorter paths first) to help with redundancy detection
-    std::sort(allPaths.begin(), allPaths.end(), [](const std::string& a, const std::string& b) {
-        return a.length() < b.length();
-    });
-    
-    // Group paths by their first 3 directory levels
+    // Group paths by first 3 directory levels
     for (const auto& path : allPaths) {
-        // Count directory levels (excluding root '/')
-        size_t slashCount = 0;
-        size_t lastSlashPos = 0;
+        size_t slashCount = 0, pos = 0;
         
-        for (size_t i = 1; i < path.length(); ++i) {  // Start from 1 to skip root '/'
+        // Find position after 3rd slash
+        for (size_t i = 1; i < path.length() && slashCount < 3; ++i) {
             if (path[i] == '/') {
+                pos = i;
                 slashCount++;
-                lastSlashPos = i;
-                if (slashCount == 3) {
-                    break;
-                }
             }
         }
         
-        if (slashCount >= 3) {
-            // Extract the first 3 directory levels
-            std::string prefix = path.substr(0, lastSlashPos + 1);
-            pathGroups[prefix].push_back(path);
-        } else {
-            // Path has less than 3 levels, keep as is
-            finalPaths.push_back(path);
-        }
+        std::string key = (slashCount >= 3) ? path.substr(0, pos + 1) : path;
+        pathGroups[key].push_back(path);
     }
     
-    // Process grouped paths and apply generalization
-    for (const auto& group : pathGroups) {
-        const std::string& prefix = group.first;
-        const std::vector<std::string>& groupPaths = group.second;
-        
-        if (groupPaths.size() == 1) {
-            // Only one path with this prefix, keep the original path
-            finalPaths.push_back(groupPaths[0]);
-        } else {
-            // Multiple paths with same prefix, use the generalized prefix
-            finalPaths.push_back(prefix);
-        }
+    // Create final paths: use prefix if multiple paths, original if single
+    std::vector<std::string> finalPaths;
+    for (const auto& [prefix, groupPaths] : pathGroups) {
+        finalPaths.push_back((groupPaths.size() > 1) ? prefix : groupPaths[0]);
     }
     
-    // Remove redundant parent paths
-    std::vector<std::string> filteredPaths;
+    // Remove redundant parent paths (only top-level with ≤2 directory levels)
     std::sort(finalPaths.begin(), finalPaths.end());
+    std::vector<std::string> result;
     
-    for (size_t i = 0; i < finalPaths.size(); ++i) {
-        bool isRedundant = false;
+    for (const auto& path : finalPaths) {
+        // Count directory levels
+        int levels = std::count(path.begin() + 1, path.end(), '/');
         
-        // Check if this path is a parent of any other path
-        for (size_t j = 0; j < finalPaths.size(); ++j) {
-            if (i != j && finalPaths[j].find(finalPaths[i]) == 0) {
-                // finalPaths[j] starts with finalPaths[i], meaning finalPaths[i] is a parent
-                isRedundant = true;
-                break;
-            }
-        }
+        // Skip if it's a top-level path that's a parent of another path
+        bool isRedundant = (levels <= 2) && 
+            std::any_of(finalPaths.begin(), finalPaths.end(), 
+                [&path](const std::string& other) {
+                    return other != path && other.starts_with(path);
+                });
         
         if (!isRedundant) {
-            filteredPaths.push_back(finalPaths[i]);
+            result.push_back(path);
         }
     }
     
-    return filteredPaths;
+    return result;
 }
 
 
