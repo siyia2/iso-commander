@@ -26,15 +26,12 @@ static std::unordered_set<std::string> buildMountPointCache() {
 
 
 // Function to mount selected ISO files called from processAndMountIsoFiles
-void mountIsoFiles(
-    const std::vector<std::string>& isoFiles,
-    std::unordered_set<std::string>& mountedFiles,
-    std::unordered_set<std::string>& skippedMessages,
-    std::unordered_set<std::string>& mountedFails,
-    std::atomic<size_t>* completedTasks,
-    std::atomic<size_t>* failedTasks,
-    bool silentMode)
+void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedFiles, std::unordered_set<std::string>& skippedMessages, std::unordered_set<std::string>& mountedFails,
+std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, bool silentMode)
 {
+    // const bool hasRoot: geteuid() never changes mid-process
+    const bool hasRoot = (geteuid() == 0);
+
     // Each thread owns its own context — no shared mutable state
     struct libmnt_context* ctx = mnt_new_context();
     if (!ctx) {
@@ -79,6 +76,21 @@ void mountIsoFiles(
         tempMountedFails.clear();
     };
 
+    // Early exit if no root — fail all tasks up front
+    if (!hasRoot) {
+        for (const auto& isoFile : isoFiles) {
+            if (!silentMode) {
+                auto [isoDirectory, isoFilename] =
+                    extractDirectoryAndFilename(isoFile, "mount");
+                tempMountedFails.push_back(
+                    formatter.formatError(isoDirectory, isoFilename, "needsRoot"));
+            }
+            failedTasks->fetch_add(1, std::memory_order_acq_rel);
+        }
+        flushBuffers();
+        return;
+    }
+
     for (const auto& isoFile : isoFiles) {
         fs::path isoPath(isoFile);
         auto [isoDirectory, isoFilename] =
@@ -88,14 +100,6 @@ void mountIsoFiles(
             if (!silentMode)
                 tempMountedFails.push_back(
                     formatter.formatError(isoDirectory, isoFilename, "cxl"));
-            failedTasks->fetch_add(1, std::memory_order_acq_rel);
-            continue;
-        }
-
-        if (geteuid() != 0) {
-            if (!silentMode)
-                tempMountedFails.push_back(
-                    formatter.formatError(isoDirectory, isoFilename, "needsRoot"));
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
             continue;
         }
