@@ -5,22 +5,24 @@
 #include "../mount.h"
 
 
-// Function to check if a mountpoint isAlreadyMounted
-bool isAlreadyMounted(const std::string& mountPoint) {
-    // Create a new table and directly find target
+// Function to build a cache of currently mounted points
+static std::unordered_set<std::string> buildMountPointCache() {
+    std::unordered_set<std::string> mounted;
     struct libmnt_table* tb = mnt_new_table_from_file("/proc/mounts");
-    if (!tb) {
-        return false;
+    if (!tb) return mounted;
+
+    struct libmnt_iter* itr = mnt_new_iter(MNT_ITER_FORWARD);
+    struct libmnt_fs* fs = nullptr;
+
+    while (mnt_table_next_fs(tb, itr, &fs) == 0) {
+        if (const char* target = mnt_fs_get_target(fs)) {
+            mounted.emplace(target);
+        }
     }
-    
-    // Look for our mount point directly without using a cache
-    struct libmnt_fs* fs = mnt_table_find_target(tb, mountPoint.c_str(), MNT_ITER_BACKWARD);
-    bool isMounted = (fs != NULL);
-    
-    // Clean up
+
+    mnt_free_iter(itr);
     mnt_unref_table(tb);
-    
-    return isMounted;
+    return mounted;
 }
 
 
@@ -36,6 +38,9 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
         }
         return;
     }
+
+    // Build mount point cache once before the loop
+    std::unordered_set<std::string> mountPointCache = buildMountPointCache();
 
     // Only allocate buffers and formatter if not in quiet mode
     std::vector<std::string> tempMountedFiles;
@@ -99,8 +104,8 @@ void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<
         std::string mountPoint = "/mnt/iso_" + uniqueId;
         auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint, "mount");
 
-        // Check if already mounted
-        if (isAlreadyMounted(mountPoint)) {
+        // Check if already mounted using cache (O(1) lookup)
+        if (mountPointCache.count(mountPoint)) {
             if (!silentMode) {
                 tempSkippedMessages.push_back(formatter.formatSkipped(
                     isoDirectory, isoFilename, mountisoDirectory, mountisoFilename
