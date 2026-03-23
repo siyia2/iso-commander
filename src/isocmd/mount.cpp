@@ -5,6 +5,7 @@
 #include "../mount.h"
 
 
+// Function to build a cache of currently mounted points
 static std::unordered_set<std::string> buildMountPointCache() {
     std::unordered_set<std::string> mounted;
     struct libmnt_table* tb = mnt_new_table_from_file("/proc/mounts");
@@ -24,6 +25,7 @@ static std::unordered_set<std::string> buildMountPointCache() {
 }
 
 
+// Function to mount selected ISO files called from processAndMountIsoFiles
 void mountIsoFiles(
     const std::vector<std::string>& isoFiles,
     std::unordered_set<std::string>& mountedFiles,
@@ -64,7 +66,7 @@ void mountIsoFiles(
         tempSkippedMessages.reserve(BATCH_SIZE);
         tempMountedFails.reserve(BATCH_SIZE);
     }
-
+	// Function to flush temporary buffers (only in verbose mode)
     auto flushBuffers = [&]() {
         // Guard is inside the lambda; caller never needs to check silentMode
         if (silentMode) return;
