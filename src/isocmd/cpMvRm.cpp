@@ -285,14 +285,9 @@ bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::ato
 
 
 // Shared helper to log operation result and call batchInsertMessages
-static void logOperationResult(bool success, bool cancelled, const std::error_code& ec,
-                                const std::string& verb,
-                                const std::string& srcDir, const std::string& srcFile,
-                                const std::string& destDirProcessed, const std::string& destFile,
-                                std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors,
-                                std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks,
-                                std::atomic<bool>& operationSuccessful,
-                                const std::function<void()>& batchInsertMessages) {
+static void logOperationResult(bool success, bool cancelled, const std::error_code& ec, const std::string& verb, const std::string& srcDir, const std::string& srcFile, const std::string& destDirProcessed, const std::string& destFile,
+std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, std::atomic<bool>& operationSuccessful,
+const std::function<void()>& batchInsertMessages) {
     if (!success || ec) {
         std::string errorDetail = cancelled ? "Cancelled" : ec.message();
         verboseErrors.push_back("\033[1;91mError " + verb + ": \033[1;93m'" +
@@ -312,10 +307,8 @@ static void logOperationResult(bool success, bool cancelled, const std::error_co
 
 
 // Function to perform Delete operation
-void performDeleteOperation(const fs::path& srcPath, const std::string& srcDir, const std::string& srcFile, size_t fileSize,
-                             std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks,
-                             std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors,
-                             std::atomic<bool>& operationSuccessful, const std::function<void()>& batchInsertMessages) {
+void performDeleteOperation(const fs::path& srcPath, const std::string& srcDir, const std::string& srcFile, size_t fileSize, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, 
+std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors, std::atomic<bool>& operationSuccessful, const std::function<void()>& batchInsertMessages) {
     if (g_operationCancelled.load()) {
         verboseErrors.push_back("\033[1;91mError deleting: \033[1;93m'" +
                                 (!displayConfig::toggleNamesOnly ? srcDir + "/" : "") + srcFile +
