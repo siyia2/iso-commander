@@ -18,10 +18,7 @@ bool isDirectoryEmpty(const std::string& path) {
 
 
 // Helper to format a mount point directory for display
-static std::string formatDirForDisplay(
-    const std::string& isoDir,
-    VerboseMessageFormatter& fmt,
-    const char* messageKey)
+static std::string formatDirForDisplay(const std::string& isoDir, VerboseMessageFormatter& fmt, const char* messageKey)
 {
     auto dirParts = parseMountPointComponents(isoDir);
     std::string formattedDir = std::get<1>(dirParts);
