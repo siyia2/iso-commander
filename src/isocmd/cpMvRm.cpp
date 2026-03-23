@@ -133,7 +133,9 @@ bool& abortDel) {
 
 
 // This function manages the user input for setting the destination directory and operation type
-std::string userDestDirRm(const std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::unordered_set<std::string>& uniqueErrorMessages, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& filterHistory, bool& isDelete, bool& isCopy, bool& abortDel, bool& overwriteExisting) {
+std::string userDestDirRm(const std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::unordered_set<std::string>& uniqueErrorMessages, 
+std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& filterHistory, bool& isDelete, bool& isCopy, bool& abortDel, 
+bool& overwriteExisting) {
 
     std::vector<std::string> entries = generateIsoEntries(indexChunks, isoFiles);
     sortFilesCaseInsensitive(entries);
@@ -285,9 +287,9 @@ bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::ato
 
 
 // Shared helper to log operation result and call batchInsertMessages
-static void logOperationResult(bool success, bool cancelled, const std::error_code& ec, const std::string& verb, const std::string& srcDir, const std::string& srcFile, const std::string& destDirProcessed, const std::string& destFile,
-std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, std::atomic<bool>& operationSuccessful,
-const std::function<void()>& batchInsertMessages) {
+static void logOperationResult(bool success, bool cancelled, const std::error_code& ec, const std::string& verb, const std::string& srcDir, const std::string& srcFile, 
+const std::string& destDirProcessed, const std::string& destFile,std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors, std::atomic<size_t>* completedTasks, 
+std::atomic<size_t>* failedTasks, std::atomic<bool>& operationSuccessful,const std::function<void()>& batchInsertMessages) {
     if (!success || ec) {
         std::string errorDetail = cancelled ? "Cancelled" : ec.message();
         verboseErrors.push_back("\033[1;91mError " + verb + ": \033[1;93m'" +
@@ -337,7 +339,10 @@ std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors, 
 
 
 // Function to perform Move operation
-bool performMoveOperation(const fs::path& srcPath, const fs::path& destPath, const std::string& srcDir, const std::string& srcFile, const std::string& destDirProcessed, const std::string& destFile, size_t fileSize, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors, std::atomic<bool>& operationSuccessful, const std::function<void()>& batchInsertMessages, const std::function<void(const fs::path&)>& changeOwnership) {
+bool performMoveOperation(const fs::path& srcPath, const fs::path& destPath, const std::string& srcDir, const std::string& srcFile, const std::string& destDirProcessed, 
+const std::string& destFile, size_t fileSize, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, 
+std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors, std::atomic<bool>& operationSuccessful, const std::function<void()>& batchInsertMessages, 
+const std::function<void(const fs::path&)>& changeOwnership) {
 
     if (g_operationCancelled.load()) {
         logOperationResult(false, true, {}, "moving", srcDir, srcFile, destDirProcessed, destFile,
@@ -382,7 +387,9 @@ bool performMoveOperation(const fs::path& srcPath, const fs::path& destPath, con
 
 
 // Helper function for multi-destination Move operation
-bool performMultiDestMoveOperation(const fs::path& srcPath, const fs::path& destPath, const std::string& srcDir, const std::string& srcFile, const std::string& destDirProcessed, const std::string& destFile, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors, std::atomic<bool>& operationSuccessful, const std::function<void()>& batchInsertMessages, const std::function<void(const fs::path&)>& changeOwnership) {
+bool performMultiDestMoveOperation(const fs::path& srcPath, const fs::path& destPath, const std::string& srcDir, const std::string& srcFile, const std::string& destDirProcessed, 
+const std::string& destFile, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, std::vector<std::string>& verboseIsos, 
+std::vector<std::string>& verboseErrors, std::atomic<bool>& operationSuccessful, const std::function<void()>& batchInsertMessages, const std::function<void(const fs::path&)>& changeOwnership) {
 
     std::error_code ec;
     bool success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec);
@@ -394,7 +401,9 @@ bool performMultiDestMoveOperation(const fs::path& srcPath, const fs::path& dest
 
 
 // Function to perform Copy operation
-bool performCopyOperation(const fs::path& srcPath, const fs::path& destPath, const std::string& srcDir, const std::string& srcFile, const std::string& destDirProcessed, const std::string& destFile, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors, std::atomic<bool>& operationSuccessful, const std::function<void()>& batchInsertMessages, const std::function<void(const fs::path&)>& changeOwnership) {
+bool performCopyOperation(const fs::path& srcPath, const fs::path& destPath, const std::string& srcDir, const std::string& srcFile, const std::string& destDirProcessed, 
+const std::string& destFile, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, std::vector<std::string>& verboseIsos, 
+std::vector<std::string>& verboseErrors, std::atomic<bool>& operationSuccessful, const std::function<void()>& batchInsertMessages, const std::function<void(const fs::path&)>& changeOwnership) {
 
     std::error_code ec;
     bool success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec);
@@ -406,7 +415,9 @@ bool performCopyOperation(const fs::path& srcPath, const fs::path& destPath, con
 
 
 // Function to handle CpMvRm
-void handleIsoFileOperation(const std::vector<std::string>& isoFiles, const std::vector<std::string>& isoFilesCopy, std::unordered_set<std::string>& operationIsos, std::unordered_set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, bool overwriteExisting) {
+void handleIsoFileOperation(const std::vector<std::string>& isoFiles, const std::vector<std::string>& isoFilesCopy, std::unordered_set<std::string>& operationIsos, 
+std::unordered_set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete, std::atomic<size_t>* completedBytes, 
+std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, bool overwriteExisting) {
 
     std::atomic<bool> operationSuccessful(true);
 
