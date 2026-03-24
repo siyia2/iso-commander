@@ -270,6 +270,12 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
     // Apply path generalization
     std::vector<std::string> finalPaths = hierarchicalPathReduction(paths);
     
+    // Early exit if paths are empty
+    if (finalPaths.empty()) {
+		isImportRunning.store(false);
+		return;
+	}
+    
     
     // Set up data structures for processing
     std::vector<std::string> allIsoFiles;
@@ -279,7 +285,7 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
     std::mutex traverseErrorMutex;
     
     // Create a thread pool based on the available hardware threads.
-    size_t numThreads = (maxThreads == 0 ? 4 : std::min(maxThreads * 2, static_cast<unsigned int>(MAX_HISTORY_LINES)));
+    size_t numThreads = std::min(finalPaths.size(), static_cast<size_t>(maxThreads == 0 ? 4 : std::min(maxThreads * 2, (unsigned int)MAX_HISTORY_LINES)));
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
     
