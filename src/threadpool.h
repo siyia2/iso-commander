@@ -52,13 +52,13 @@ public:
                         std::memory_order_relaxed)) {
                     tail.compare_exchange_weak(last, new_node,
                         std::memory_order_release,
-                        std::memory_order_acquire);  // Fixed: use acquire on failure
+                        std::memory_order_acquire);
                     return;
                 }
             } else {
                 tail.compare_exchange_weak(last, next,
                     std::memory_order_release,
-                    std::memory_order_acquire);  // Fixed: use acquire on failure
+                    std::memory_order_acquire);
             }
         }
     }
@@ -75,7 +75,7 @@ public:
                     return false;
                 tail.compare_exchange_weak(last, next,
                     std::memory_order_release,
-                    std::memory_order_acquire);  // Fixed: use acquire on failure
+                    std::memory_order_acquire);
             } else {
                 if (head.compare_exchange_weak(first, next,
                         std::memory_order_release,
@@ -146,7 +146,7 @@ private:
                 continue;
             }
 
-            // No task available, check if we should stop
+            // Check stop flag before going to sleep
             if (stop.load(std::memory_order_acquire)) {
                 // Process any remaining tasks before exiting
                 while (task_queue.dequeue(task)) {
@@ -160,17 +160,35 @@ private:
             // Go to sleep
             {
                 std::unique_lock<std::mutex> lock(mutex);
-                sleeping_threads.fetch_add(1, std::memory_order_release);
                 
+                // Double-check stop flag after acquiring mutex to avoid missing
+                // a shutdown signal that arrived between the previous check and lock acquisition
+                if (stop.load(std::memory_order_acquire)) {
+                    // Process remaining tasks before exit
+                    while (task_queue.dequeue(task)) {
+                        pending_tasks.fetch_sub(1, std::memory_order_release);
+                        TaskGuard guard(active_tasks, pending_tasks, cv);
+                        task();
+                    }
+                    return;
+                }
+                
+                // Use relaxed memory order for sleeping_threads since it's only used for monitoring
+                // and approximate counts are sufficient for performance optimizations
+                sleeping_threads.fetch_add(1, std::memory_order_relaxed);
+                
+                // Wait until either:
+                // - New task arrives (queue not empty)
+                // - Shutdown initiated
                 cv.wait(lock, [this] {
                     return !task_queue.isEmpty() || 
                            stop.load(std::memory_order_acquire);
                 });
                 
-                sleeping_threads.fetch_sub(1, std::memory_order_release);
+                sleeping_threads.fetch_sub(1, std::memory_order_relaxed);
                 
                 // After waking up, check if we should exit
-                // Only exit if stop is true AND queue is empty
+                // Exit only if stop is true AND queue is empty
                 if (stop.load(std::memory_order_acquire) && task_queue.isEmpty()) {
                     return;
                 }
@@ -194,6 +212,11 @@ public:
     }
 
     ~ThreadPool() {
+        // First, wait for all pending and active tasks to complete
+        // This ensures no tasks are lost when the thread pool is destroyed
+        // Note: This can deadlock if tasks have circular dependencies waiting on each other
+        waitAllTasksCompleted();
+        
         // Signal all threads to stop
         stop.store(true, std::memory_order_release);
         
@@ -223,8 +246,14 @@ public:
         pending_tasks.fetch_add(1, std::memory_order_release);
         task_queue.enqueue([task]() { (*task)(); });
 
-        // Notify one waiting thread that work is available
-        cv.notify_one();
+        // Optimized wake-up strategy:
+        // - If all threads are sleeping, wake them all to distribute work better
+        // - Otherwise, wake just one thread to avoid unnecessary context switches
+        if (sleeping_threads.load(std::memory_order_relaxed) == num_threads) {
+            cv.notify_all();
+        } else {
+            cv.notify_one();
+        }
         
         return result;
     }
@@ -255,14 +284,31 @@ public:
     }
 
     size_t sleepingCount() const {
-        // No need for mutex as sleeping_threads is atomic
-        return sleeping_threads.load(std::memory_order_acquire);
+        // Relaxed memory order is sufficient for monitoring
+        return sleeping_threads.load(std::memory_order_relaxed);
     }
 
     void waitAndStop() {
         waitAllTasksCompleted();
         stop.store(true, std::memory_order_release);
         cv.notify_all();
+    }
+
+    /**
+     * Stop the thread pool without waiting for pending tasks
+     * 
+     * WARNING: This will discard any pending tasks in the queue!
+     * Use this only when you need immediate shutdown and don't care about pending work
+     */
+    void stopImmediately() {
+        stop.store(true, std::memory_order_release);
+        cv.notify_all();
+        
+        for (auto& t : workers) {
+            if (t.joinable()) {
+                t.join();
+            }
+        }
     }
 };
 
