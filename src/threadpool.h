@@ -7,45 +7,26 @@
 
 // ========================= LOCK-FREE QUEUE =========================
 // Michael-Scott lock-free queue (no freelist, simple new/delete).
-//
-// DESIGN PHILOSOPHY:
-//   - Fully lock-free in hot path (enqueue/dequeue/steal use only CAS)
-//   - No freelist: simplifies correctness (no ABA issues)
-//   - Cache-aligned structures to prevent false sharing
-//
-// LOCK-FREE GUARANTEES:
-//   - enqueue() and dequeue() never block; they spin until successful
-//   - Multiple producers/consumers can operate concurrently without locks
-//
-// MEMORY ORDERING:
-//   - acquire/release semantics for proper synchronization
-//   - relaxed for operations that are safe without full ordering
-
 template <typename T>
 class LockFreeQueue {
 private:
-    // Node structure containing data and next pointer
     struct Node {
-        std::atomic<Node*> next;  // Next node in queue
-        T data;                   // Actual payload
-
+        std::atomic<Node*> next;
+        T data;
         Node() : next(nullptr) {}
         Node(T&& val) : next(nullptr), data(std::move(val)) {}
     };
 
-    // Cache-line aligned atomic pointers to prevent false sharing
-    alignas(64) std::atomic<Node*> head;  // Head of queue (for dequeue)
-    alignas(64) std::atomic<Node*> tail;  // Tail of queue (for enqueue)
+    alignas(64) std::atomic<Node*> head;
+    alignas(64) std::atomic<Node*> tail;
 
 public:
-    // Constructor creates dummy node to simplify queue logic
     LockFreeQueue() {
         Node* dummy = new Node();
         head.store(dummy, std::memory_order_relaxed);
         tail.store(dummy, std::memory_order_relaxed);
     }
 
-    // Destructor cleans all nodes
     ~LockFreeQueue() {
         Node* node = head.load(std::memory_order_acquire);
         while (node) {
@@ -55,151 +36,96 @@ public:
         }
     }
 
-    // Enqueue an item (lock-free, multiple producers)
     void enqueue(T value) {
         Node* new_node = new Node(std::move(value));
         while (true) {
             Node* last = tail.load(std::memory_order_acquire);
             Node* next = last->next.load(std::memory_order_acquire);
-
-            // Check if tail has changed (help other threads progress)
             if (last != tail.load(std::memory_order_acquire))
                 continue;
-
-            // Is this the actual tail?
             if (next == nullptr) {
-                // Try to link new node at the end
-                if (last->next.compare_exchange_weak(
-                        next, new_node,
+                if (last->next.compare_exchange_weak(next, new_node,
                         std::memory_order_release,
                         std::memory_order_relaxed)) {
-
-                    // Success - update tail to new node
-                    tail.compare_exchange_weak(
-                        last, new_node,
+                    tail.compare_exchange_weak(last, new_node,
                         std::memory_order_release,
                         std::memory_order_relaxed);
                     return;
                 }
             } else {
-                // Tail is behind - help advance it
-                tail.compare_exchange_weak(
-                    last, next,
+                tail.compare_exchange_weak(last, next,
                     std::memory_order_release,
                     std::memory_order_relaxed);
             }
         }
     }
 
-    // Dequeue an item (lock-free, multiple consumers)
     bool dequeue(T& result) {
         while (true) {
             Node* first = head.load(std::memory_order_acquire);
             Node* last  = tail.load(std::memory_order_acquire);
             Node* next  = first->next.load(std::memory_order_acquire);
-
-            // Check if head has changed
             if (first != head.load(std::memory_order_acquire))
                 continue;
-
-            // Is queue empty?
             if (first == last) {
                 if (next == nullptr)
-                    return false;  // Empty queue
-
-                // Tail is behind - help advance it
-                tail.compare_exchange_weak(
-                    last, next,
+                    return false;
+                tail.compare_exchange_weak(last, next,
                     std::memory_order_release,
                     std::memory_order_relaxed);
             } else {
-                // Try to advance head to next node
-                if (head.compare_exchange_weak(
-                        first, next,
+                if (head.compare_exchange_weak(first, next,
                         std::memory_order_release,
                         std::memory_order_relaxed)) {
-
-                    // Success - extract data and free dummy node
                     result = std::move(next->data);
-                    delete first;  // free the old dummy node
+                    delete first;
                     return true;
                 }
             }
         }
     }
 
-    // Check if queue is empty (approximate, for heuristics only)
     bool isEmpty() const {
         Node* h = head.load(std::memory_order_acquire);
         return h->next.load(std::memory_order_acquire) == nullptr;
     }
-
-    // Steal operation (alias for dequeue, used by work-stealing scheduler)
-    bool steal(T& result) { return dequeue(result); }
 };
 
 
 // ========================= THREAD POOL =========================
-// Lock-free work-stealing thread pool optimized for I/O-bound workloads.
-//
-// ARCHITECTURE:
-//   - Each worker thread has its own lock-free queue
-//   - Work-stealing ensures load balancing across threads
-//   - Hybrid synchronization: lock-free for hot path, mutex only for sleeping
-//   - Cache-aligned structures prevent false sharing
-//
-// WORK-STEALING ALGORITHM:
-//   1. Thread first checks its own queue (affinity)
-//   2. If empty, attempts to steal from other queues (round-robin)
-//   3. If still empty and not stopping, goes to sleep
-//   4. Before sleeping, double-checks all queues to avoid race conditions
-//   5. Wakes up only when work is available or pool is stopping
-//
-// THREAD STATES:
-//   - RUNNING: Executing tasks
-//   - SPINNING: Looking for work (brief)
-//   - SLEEPING: Blocked on condition variable (no CPU usage)
-//
-// TASK TRACKING:
-//   - pending_tasks: Tasks queued but not yet started (incremented on enqueue)
-//   - active_tasks: Tasks currently executing (incremented in TaskGuard)
-//   - Both must reach zero for pool to be truly idle
-//
-// MEMORY SAFETY:
-//   - TaskGuard uses RAII for exception-safe task counting
-//   - Shared tasks are managed via shared_ptr to prevent premature destruction
-//   - Nodes are allocated with new/delete – no ABA issues
+// Simplified pool for I/O-bound workloads (mounting/unmounting ISOs, etc.)
+// - Single global lock‑free queue
+// - All threads compete for the same queue
+// - On enqueue, all sleeping threads are woken to maximize concurrency
 
 class ThreadPool {
 private:
-    // Cache-aligned atomic bool to prevent false sharing with other variables
+    // Cache-aligned atomic bool to prevent false sharing
     struct alignas(64) AtomicBool {
         std::atomic<bool> value;
         explicit AtomicBool(bool v = false) : value(v) {}
     };
 
-    // Cache-aligned atomic size_t for similar reasons
+    // Cache-aligned atomic size_t
     struct alignas(64) AtomicSize {
         std::atomic<size_t> value;
         explicit AtomicSize(size_t v = 0) : value(v) {}
     };
 
-    std::vector<std::thread> workers;                              // Worker threads
-    std::vector<std::unique_ptr<LockFreeQueue<std::function<void()>>>> queues;  // Per-thread queues
+    std::vector<std::thread> workers;                 // Worker threads
+    LockFreeQueue<std::function<void()>> task_queue;  // Global task queue
 
     std::mutex              mutex;      // Guards condition variable only
     std::condition_variable cv;         // For parking idle threads
     std::atomic<size_t>     sleeping_threads{0};  // Count of parked threads
 
     AtomicBool stop   {false};   // Signal to stop all threads
-    AtomicSize next_queue{0};    // Round-robin index for task distribution
 
     const size_t          num_threads;      // Number of worker threads
     std::atomic<size_t>   active_tasks{0};  // Tasks currently running
     std::atomic<size_t>   pending_tasks{0}; // Tasks queued but not started
 
     // RAII guard for task execution tracking
-    // Ensures active_tasks is properly maintained even if task throws
     struct TaskGuard {
         std::atomic<size_t>& active;
         std::atomic<size_t>& pending;
@@ -215,7 +141,6 @@ private:
 
         ~TaskGuard() {
             active.fetch_sub(1, std::memory_order_release);
-            // When all tasks are done, notify any threads waiting for completion
             if (active.load(std::memory_order_acquire) == 0 &&
                 pending.load(std::memory_order_acquire) == 0) {
                 cv.notify_all();
@@ -223,140 +148,79 @@ private:
         }
     };
 
-    // Select queue for new task using round-robin distribution
-    // Returns index between 0 and num_threads-1
-    size_t selectQueue() {
-        return next_queue.value.fetch_add(1, std::memory_order_relaxed) % num_threads;
-    }
-
-    // Attempt to steal a task from any other thread's queue
-    // Returns true if task was stolen, false otherwise
-    bool tryStealTask(std::function<void()>& task, size_t thief_id) {
-        // Round-robin victim selection to avoid starvation
-        for (size_t i = 1; i < num_threads; ++i) {
-            size_t victim = (thief_id + i) % num_threads;
-            if (queues[victim]->steal(task)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     // Main worker thread function
-    void workerThread(size_t id) {
+    void workerThread() {
         while (true) {
             std::function<void()> task;
-            bool has_work = false;
+            bool has_work = task_queue.dequeue(task);
 
-            // Phase 1: Check own queue (affinity)
-            if (queues[id]->dequeue(task)) {
-                has_work = true;
-            }
-            
-            // Phase 2: Steal from others if own queue was empty
-            if (!has_work && tryStealTask(task, id)) {
-                has_work = true;
-            }
-
-            // Execute task if we found work
             if (has_work) {
+                // Found a task – execute it
                 pending_tasks.fetch_sub(1, std::memory_order_release);
                 TaskGuard guard(active_tasks, pending_tasks, cv);
                 task();  // Task may throw, but guard ensures proper cleanup
                 continue;
             }
 
-            // Check if pool is shutting down
+            // No work – check if we're stopping
             if (stop.value.load(std::memory_order_acquire)) {
                 // Drain all remaining tasks before exiting
-                for (size_t i = 0; i < num_threads; ++i) {
-                    while (queues[i]->dequeue(task)) {
-                        pending_tasks.fetch_sub(1, std::memory_order_release);
-                        TaskGuard guard(active_tasks, pending_tasks, cv);
-                        task();
-                    }
+                while (task_queue.dequeue(task)) {
+                    pending_tasks.fetch_sub(1, std::memory_order_release);
+                    TaskGuard guard(active_tasks, pending_tasks, cv);
+                    task();
                 }
                 return;
             }
 
-            // One final steal attempt before sleeping to catch race conditions
-            // Prevents scenario where work appears just before sleep decision
-            if (tryStealTask(task, id)) {
+            // One final check before sleeping – race condition prevention
+            if (task_queue.dequeue(task)) {
                 pending_tasks.fetch_sub(1, std::memory_order_release);
                 TaskGuard guard(active_tasks, pending_tasks, cv);
                 task();
                 continue;
             }
 
-            // No work found - prepare to sleep
+            // No work – go to sleep
             sleeping_threads.fetch_add(1, std::memory_order_relaxed);
-            
+
             std::unique_lock<std::mutex> lock(mutex);
-            
-            // Double-check all conditions before actually sleeping
-            // This prevents missed wake-ups and spurious wake-ups
+
+            // Double-check conditions before actually sleeping
             bool should_sleep = true;
-            
-            // Check own queue again
-            if (!queues[id]->isEmpty()) {
+
+            // Re-check the queue (might have become non‑empty)
+            if (!task_queue.isEmpty()) {
                 should_sleep = false;
             }
-            
-            // Check other queues for stealable work
-            if (should_sleep) {
-                for (size_t i = 0; i < num_threads; ++i) {
-                    if (i != id && !queues[i]->isEmpty()) {
-                        should_sleep = false;
-                        break;
-                    }
-                }
-            }
-            
-            // Check stop flag again
+
+            // Re-check stop flag
             if (stop.value.load(std::memory_order_acquire)) {
                 should_sleep = false;
             }
-            
+
             if (should_sleep) {
-                // Block until work is available or pool is stopping
-                cv.wait(lock, [this, id] {
-                    // Wake conditions:
-                    // 1. Pool is stopping (shutdown)
+                cv.wait(lock, [this] {
+                    // Wake up if:
+                    // 1. Pool is stopping
                     if (stop.value.load(std::memory_order_acquire))
                         return true;
-                    
-                    // 2. Our queue has work (most likely to be fast)
-                    if (!queues[id]->isEmpty())
-                        return true;
-                    
-                    // 3. Any other queue has work we can steal
-                    for (size_t i = 0; i < num_threads; ++i) {
-                        if (i != id && !queues[i]->isEmpty())
-                            return true;
-                    }
-                    
-                    return false;
+                    // 2. There is work in the queue
+                    return !task_queue.isEmpty();
                 });
             }
-            
+
             sleeping_threads.fetch_sub(1, std::memory_order_relaxed);
-            // Continue loop to re-evaluate work availability
+            // Continue loop – will try to dequeue again
         }
     }
 
 public:
     // Constructor: Create thread pool with specified number of threads
     explicit ThreadPool(size_t n) : num_threads(n) {
-        // Initialize per-thread queues
-        queues.reserve(n);
-        for (size_t i = 0; i < n; ++i)
-            queues.emplace_back(
-                std::make_unique<LockFreeQueue<std::function<void()>>>());
-
-        // Launch worker threads
         workers.reserve(n);
         for (size_t i = 0; i < n; ++i)
-            workers.emplace_back(&ThreadPool::workerThread, this, i);
+            workers.emplace_back(&ThreadPool::workerThread, this);
     }
 
     // Destructor: Clean shutdown of all threads
@@ -375,7 +239,6 @@ public:
     {
         using return_type = std::invoke_result_t<F, Args...>;
 
-        // Wrap function in packaged_task for future support
         auto task = std::make_shared<std::packaged_task<return_type()>>(
             std::bind(std::forward<F>(f), std::forward<Args>(args)...));
 
@@ -383,19 +246,20 @@ public:
 
         // Update task counts and queue the work
         pending_tasks.fetch_add(1, std::memory_order_release);
-        queues[selectQueue()]->enqueue([task]{ (*task)(); });
+        task_queue.enqueue([task]{ (*task)(); });
 
-        // Wake up a sleeping thread if any exist
+        // Wake up all sleeping threads – important for I/O workloads
+        // where threads may block, so we want as many threads as possible
+        // to be ready to handle tasks.
         size_t sleeping = sleeping_threads.load(std::memory_order_acquire);
         if (sleeping > 0) {
-            cv.notify_one();
+            cv.notify_all();   // Wake all – avoids underutilization
         }
 
         return res;
     }
 
     // Block until all submitted tasks have completed
-    // Useful for synchronization points and graceful shutdown
     void waitAllTasksCompleted() {
         std::unique_lock<std::mutex> lock(mutex);
         cv.wait(lock, [this] {
@@ -413,24 +277,23 @@ public:
 
     // Get number of worker threads in pool
     size_t threadCount() const { return num_threads; }
-    
+
     // Get number of tasks waiting to be processed
     size_t pendingCount() const {
         return pending_tasks.load(std::memory_order_acquire);
     }
-    
+
     // Get number of tasks currently being executed
     size_t activeCount() const {
         return active_tasks.load(std::memory_order_acquire);
     }
-    
+
     // Get number of threads currently sleeping (idle)
     size_t sleepingCount() const {
         return sleeping_threads.load(std::memory_order_acquire);
     }
-    
+
     // Wait for all tasks to complete, then stop the pool
-    // Useful for graceful shutdown scenarios
     void waitAndStop() {
         waitAllTasksCompleted();
         stop.value.store(true, std::memory_order_release);
