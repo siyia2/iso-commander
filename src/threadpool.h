@@ -52,13 +52,13 @@ public:
                         std::memory_order_relaxed)) {
                     tail.compare_exchange_weak(last, new_node,
                         std::memory_order_release,
-                        std::memory_order_relaxed);
+                        std::memory_order_acquire);  // Fixed: use acquire on failure
                     return;
                 }
             } else {
                 tail.compare_exchange_weak(last, next,
                     std::memory_order_release,
-                    std::memory_order_relaxed);
+                    std::memory_order_acquire);  // Fixed: use acquire on failure
             }
         }
     }
@@ -75,7 +75,7 @@ public:
                     return false;
                 tail.compare_exchange_weak(last, next,
                     std::memory_order_release,
-                    std::memory_order_relaxed);
+                    std::memory_order_acquire);  // Fixed: use acquire on failure
             } else {
                 if (head.compare_exchange_weak(first, next,
                         std::memory_order_release,
@@ -99,8 +99,8 @@ class ThreadPool {
 private:
     // ---- Fixed declaration order to match initializer list ----
     const size_t num_threads;                        // must come first
-    std::vector<std::function<void()>> func_pool;    // second
-    std::atomic<size_t> sleeping_threads;           // third
+    std::vector<std::function<void()>> func_pool;    // second (kept for compatibility, not used)
+    std::atomic<size_t> sleeping_threads;            // third
 
     std::vector<std::thread> workers;
     LockFreeQueue<std::function<void()>> task_queue;
@@ -112,6 +112,7 @@ private:
     std::atomic<size_t> pending_tasks;
     std::atomic<size_t> active_tasks;
 
+    // Helper struct to track active tasks
     struct TaskGuard {
         std::atomic<size_t>& active;
         std::atomic<size_t>& pending;
@@ -137,6 +138,7 @@ private:
         while (true) {
             std::function<void()> task;
 
+            // Try to dequeue a task
             if (task_queue.dequeue(task)) {
                 pending_tasks.fetch_sub(1, std::memory_order_release);
                 TaskGuard guard(active_tasks, pending_tasks, cv);
@@ -144,7 +146,9 @@ private:
                 continue;
             }
 
+            // No task available, check if we should stop
             if (stop.load(std::memory_order_acquire)) {
+                // Process any remaining tasks before exiting
                 while (task_queue.dequeue(task)) {
                     pending_tasks.fetch_sub(1, std::memory_order_release);
                     TaskGuard guard(active_tasks, pending_tasks, cv);
@@ -153,14 +157,23 @@ private:
                 return;
             }
 
+            // Go to sleep
             {
                 std::unique_lock<std::mutex> lock(mutex);
-                ++sleeping_threads;
+                sleeping_threads.fetch_add(1, std::memory_order_release);
+                
                 cv.wait(lock, [this] {
-                    return !task_queue.isEmpty() ||
+                    return !task_queue.isEmpty() || 
                            stop.load(std::memory_order_acquire);
                 });
-                --sleeping_threads;
+                
+                sleeping_threads.fetch_sub(1, std::memory_order_release);
+                
+                // After waking up, check if we should exit
+                // Only exit if stop is true AND queue is empty
+                if (stop.load(std::memory_order_acquire) && task_queue.isEmpty()) {
+                    return;
+                }
             }
         }
     }
@@ -181,10 +194,17 @@ public:
     }
 
     ~ThreadPool() {
+        // Signal all threads to stop
         stop.store(true, std::memory_order_release);
+        
+        // Wake up all threads to check the stop flag
         cv.notify_all();
+        
+        // Wait for all threads to finish
         for (auto& t : workers) {
-            if (t.joinable()) t.join();
+            if (t.joinable()) {
+                t.join();
+            }
         }
     }
 
@@ -203,7 +223,9 @@ public:
         pending_tasks.fetch_add(1, std::memory_order_release);
         task_queue.enqueue([task]() { (*task)(); });
 
+        // Notify one waiting thread that work is available
         cv.notify_one();
+        
         return result;
     }
 
@@ -220,12 +242,20 @@ public:
                active_tasks.load(std::memory_order_acquire) == 0;
     }
 
-    size_t threadCount() const { return num_threads; }
-    size_t pendingCount() const { return pending_tasks.load(std::memory_order_acquire); }
-    size_t activeCount() const { return active_tasks.load(std::memory_order_acquire); }
+    size_t threadCount() const { 
+        return num_threads; 
+    }
+    
+    size_t pendingCount() const { 
+        return pending_tasks.load(std::memory_order_acquire); 
+    }
+    
+    size_t activeCount() const { 
+        return active_tasks.load(std::memory_order_acquire); 
+    }
 
     size_t sleepingCount() const {
-        std::lock_guard<std::mutex> lock(mutex);
+        // No need for mutex as sleeping_threads is atomic
         return sleeping_threads.load(std::memory_order_acquire);
     }
 
