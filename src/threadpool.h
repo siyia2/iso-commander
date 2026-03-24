@@ -96,7 +96,7 @@ public:
 // Simplified pool for I/O-bound workloads (mounting/unmounting ISOs, etc.)
 // - Single global lock‑free queue
 // - All threads compete for the same queue
-// - On enqueue, all sleeping threads are woken to maximize concurrency
+// - On enqueue, only wake threads when queue transitions from empty to non-empty
 
 class ThreadPool {
 private:
@@ -244,16 +244,21 @@ public:
 
         std::future<return_type> res = task->get_future();
 
-        // Update task counts and queue the work
+        // Update task counts
         pending_tasks.fetch_add(1, std::memory_order_release);
+
+        // Check if queue is empty BEFORE enqueueing
+        bool was_empty = task_queue.isEmpty();
+        
+        // Enqueue the task
         task_queue.enqueue([task]{ (*task)(); });
 
-        // Wake up all sleeping threads – important for I/O workloads
-        // where threads may block, so we want as many threads as possible
-        // to be ready to handle tasks.
-        size_t sleeping = sleeping_threads.load(std::memory_order_acquire);
-        if (sleeping > 0) {
-            cv.notify_all();   // Wake all – avoids underutilization
+        // Only wake sleeping threads if we transitioned from empty to non-empty
+        if (was_empty) {
+            size_t sleeping = sleeping_threads.load(std::memory_order_acquire);
+            if (sleeping > 0) {
+                cv.notify_all();
+            }
         }
 
         return res;
