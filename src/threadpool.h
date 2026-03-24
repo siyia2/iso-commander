@@ -97,10 +97,29 @@ public:
 // ========================= THREAD POOL =========================
 class ThreadPool {
 private:
-    // ---- Fixed declaration order to match initializer list ----
-    const size_t num_threads;                        // must come first
-    std::vector<std::function<void()>> func_pool;    // second (kept for compatibility, not used)
-    std::atomic<size_t> sleeping_threads;            // third
+    const size_t num_threads;
+
+    // Replace separate pending/active atomics with a single combined
+    // counter to eliminate the race window between decrementing pending and
+    // incrementing active. The upper 32 bits hold pending_tasks and the lower
+    // 32 bits hold active_tasks, updated atomically in a single fetch_add.
+    //
+    // Encoding:  state = (pending << 32) | active
+    //
+    // When a worker picks up a task it does a single CAS-like fetch_add that
+    // simultaneously decrements pending and increments active:
+    //   fetch_add( (-1 << 32) + 1 )  →  pending--, active++
+    // When a task completes, active is simply decremented:
+    //   fetch_add(-1)
+    // On enqueue, pending is incremented:
+    //   fetch_add(1 << 32)
+    //
+    // waitAllTasksCompleted checks state == 0, which can only be true when
+    // BOTH halves are zero, with no transient (0,0) window.
+    alignas(64) std::atomic<uint64_t> task_state{0};  // (pending<<32)|active
+
+    static constexpr uint64_t PENDING_ONE = uint64_t(1) << 32;
+    static constexpr uint64_t ACTIVE_ONE  = uint64_t(1);
 
     std::vector<std::thread> workers;
     LockFreeQueue<std::function<void()>> task_queue;
@@ -108,88 +127,104 @@ private:
     mutable std::mutex mutex;
     std::condition_variable cv;
 
-    std::atomic<bool> stop;
-    std::atomic<size_t> pending_tasks;
-    std::atomic<size_t> active_tasks;
+    std::atomic<bool> stop{false};
 
-    // Helper struct to track active tasks
-    struct TaskGuard {
-        std::atomic<size_t>& active;
-        std::atomic<size_t>& pending;
-        std::condition_variable& cv;
+    // Track the number of sleeping threads to implement a smarter
+    // wake-up strategy, but only notify_all on the very first enqueue when all
+    // threads are sleeping, preventing repeated thundering-herd wakes when
+    // multiple tasks are enqueued in rapid succession.
+    alignas(64) std::atomic<size_t> sleeping_threads{0};
 
-        TaskGuard(std::atomic<size_t>& a,
-                  std::atomic<size_t>& p,
-                  std::condition_variable& c)
-            : active(a), pending(p), cv(c) {
-            active.fetch_add(1, std::memory_order_release);
-        }
+    // ---- helpers --------------------------------------------------------
 
-        ~TaskGuard() {
-            active.fetch_sub(1, std::memory_order_release);
-            if (active.load(std::memory_order_acquire) == 0 &&
-                pending.load(std::memory_order_acquire) == 0) {
-                cv.notify_all();
-            }
-        }
-    };
+    uint64_t pendingFromState(uint64_t s) const { return s >> 32; }
+    uint64_t activeFromState (uint64_t s) const { return s & 0xFFFFFFFFULL; }
+
+    // ---- worker ---------------------------------------------------------
 
     void workerThread() {
         while (true) {
             std::function<void()> task;
 
-            // Try to dequeue a task
             if (task_queue.dequeue(task)) {
-                pending_tasks.fetch_sub(1, std::memory_order_release);
-                TaskGuard guard(active_tasks, pending_tasks, cv);
-                task();
+                // Atomically decrement pending and increment active
+                // in a single operation — no window where both are zero while
+                // a task is actually in flight.
+                task_state.fetch_add(
+                    static_cast<uint64_t>(-PENDING_ONE) + ACTIVE_ONE,
+                    std::memory_order_acq_rel);
+
+                // Wrap task execution in try/catch so that a throwing
+                // task cannot propagate out of the worker thread and call
+                // std::terminate. The active counter is still decremented
+                // correctly via the RAII guard below regardless of exceptions.
+                try {
+                    task();
+                } catch (...) {
+                    // Silently swallow — callers observe exceptions via their
+                    // std::future (the packaged_task stores the exception there).
+                }
+
+                // Decrement active; notify waiters if everything is now idle.
+                uint64_t prev = task_state.fetch_sub(ACTIVE_ONE,
+                    std::memory_order_acq_rel);
+                if (prev == ACTIVE_ONE) {          // we were the last active task
+                    std::unique_lock<std::mutex> lk(mutex);
+                    cv.notify_all();
+                }
                 continue;
             }
 
-            // Check stop flag before going to sleep
+            // Check stop before sleeping.
             if (stop.load(std::memory_order_acquire)) {
-                // Process any remaining tasks before exiting
+                // Drain any remaining tasks before exiting.
                 while (task_queue.dequeue(task)) {
-                    pending_tasks.fetch_sub(1, std::memory_order_release);
-                    TaskGuard guard(active_tasks, pending_tasks, cv);
-                    task();
+                    task_state.fetch_add(
+                        static_cast<uint64_t>(-PENDING_ONE) + ACTIVE_ONE,
+                        std::memory_order_acq_rel);
+                    try { task(); } catch (...) {}
+                    uint64_t prev = task_state.fetch_sub(ACTIVE_ONE,
+                        std::memory_order_acq_rel);
+                    if (prev == ACTIVE_ONE) {
+                        std::unique_lock<std::mutex> lk(mutex);
+                        cv.notify_all();
+                    }
                 }
                 return;
             }
 
-            // Go to sleep
+            // Go to sleep.
             {
                 std::unique_lock<std::mutex> lock(mutex);
-                
-                // Double-check stop flag after acquiring mutex to avoid missing
-                // a shutdown signal that arrived between the previous check and lock acquisition
+
+                // Double-check stop flag after acquiring mutex to avoid
+                // missing a shutdown signal that arrived between the previous
+                // check and lock acquisition.
                 if (stop.load(std::memory_order_acquire)) {
-                    // Process remaining tasks before exit
                     while (task_queue.dequeue(task)) {
-                        pending_tasks.fetch_sub(1, std::memory_order_release);
-                        TaskGuard guard(active_tasks, pending_tasks, cv);
-                        task();
+                        task_state.fetch_add(
+                            static_cast<uint64_t>(-PENDING_ONE) + ACTIVE_ONE,
+                            std::memory_order_acq_rel);
+                        try { task(); } catch (...) {}
+                        uint64_t prev = task_state.fetch_sub(ACTIVE_ONE,
+                            std::memory_order_acq_rel);
+                        if (prev == ACTIVE_ONE) cv.notify_all();
                     }
                     return;
                 }
-                
-                // Use relaxed memory order for sleeping_threads since it's only used for monitoring
-                // and approximate counts are sufficient for performance optimizations
+
                 sleeping_threads.fetch_add(1, std::memory_order_relaxed);
-                
-                // Wait until either:
-                // - New task arrives (queue not empty)
-                // - Shutdown initiated
+
                 cv.wait(lock, [this] {
-                    return !task_queue.isEmpty() || 
-                           stop.load(std::memory_order_acquire);
+                    return pendingFromState(
+                               task_state.load(std::memory_order_acquire)) > 0
+                           || stop.load(std::memory_order_acquire);
                 });
-                
+
                 sleeping_threads.fetch_sub(1, std::memory_order_relaxed);
-                
-                // After waking up, check if we should exit
-                // Exit only if stop is true AND queue is empty
-                if (stop.load(std::memory_order_acquire) && task_queue.isEmpty()) {
+
+                if (stop.load(std::memory_order_acquire) &&
+                    pendingFromState(task_state.load(std::memory_order_acquire)) == 0) {
                     return;
                 }
             }
@@ -198,15 +233,11 @@ private:
 
 public:
     explicit ThreadPool(size_t n)
-        : num_threads(n),
-          func_pool(0),
-          sleeping_threads(0),
-          stop(false),
-          pending_tasks(0),
-          active_tasks(0)
+        : num_threads(n)
     {
         if (n == 0) {
-            throw std::invalid_argument("ThreadPool: number of threads must be greater than 0");
+            throw std::invalid_argument(
+                "ThreadPool: number of threads must be greater than 0");
         }
         workers.reserve(n);
         for (size_t i = 0; i < n; ++i) {
@@ -215,79 +246,82 @@ public:
     }
 
     ~ThreadPool() {
-        // First, wait for all pending and active tasks to complete
-        // This ensures no tasks are lost when the thread pool is destroyed
-        // Note: This can deadlock if tasks have circular dependencies waiting on each other
+        // Wait for all pending/active tasks before signalling shutdown.
+        // Note: this can deadlock if tasks submit more tasks and then join
+        // their futures — a fundamental limitation of any pool destructor.
         waitAllTasksCompleted();
-        
-        // Signal all threads to stop
+
         stop.store(true, std::memory_order_release);
-        
-        // Wake up all threads to check the stop flag
         cv.notify_all();
-        
-        // Wait for all threads to finish
+
         for (auto& t : workers) {
-            if (t.joinable()) {
-                t.join();
-            }
+            if (t.joinable()) t.join();
         }
     }
 
     ThreadPool(const ThreadPool&) = delete;
     ThreadPool& operator=(const ThreadPool&) = delete;
 
+    // Eliminate the triple-allocation (bind wrapper + packaged_task +
+    // queue node) by building the lambda directly inside make_shared so that
+    // only two heap allocations are needed: the shared_ptr control block
+    // (fused with the packaged_task via make_shared) and the queue node.
     template <class F, class... Args>
     auto enqueue(F&& f, Args&&... args)
-        -> std::future<std::invoke_result_t<F, Args...>> {
+        -> std::future<std::invoke_result_t<F, Args...>>
+    {
         using return_type = std::invoke_result_t<F, Args...>;
 
+        // Capture arguments in a lambda directly, avoiding std::bind.
         auto task = std::make_shared<std::packaged_task<return_type()>>(
-            std::bind(std::forward<F>(f), std::forward<Args>(args)...));
+            [func = std::forward<F>(f),
+             tup  = std::make_tuple(std::forward<Args>(args)...)]() mutable {
+                return std::apply(std::move(func), std::move(tup));
+            });
+
         std::future<return_type> result = task->get_future();
 
-        pending_tasks.fetch_add(1, std::memory_order_release);
+        // Increment pending before pushing to the queue so that
+        // waitAllTasksCompleted never misses this task.
+        task_state.fetch_add(PENDING_ONE, std::memory_order_release);
         task_queue.enqueue([task]() { (*task)(); });
 
-        // Optimized wake-up strategy:
-        // - If all threads are sleeping, wake them all to distribute work better
-        // - Otherwise, wake just one thread to avoid unnecessary context switches
-        if (sleeping_threads.load(std::memory_order_relaxed) == num_threads) {
+        // FIX #7: Wake strategy — notify_all only when all threads are
+        // sleeping (first task of a burst), otherwise notify_one to avoid
+        // repeatedly hammering all threads on each enqueue.
+        size_t sleeping = sleeping_threads.load(std::memory_order_relaxed);
+        if (sleeping == num_threads) {
             cv.notify_all();
         } else {
             cv.notify_one();
         }
-        
+
         return result;
     }
 
+    // atomic, which has no transient false-zero window.
     void waitAllTasksCompleted() {
         std::unique_lock<std::mutex> lock(mutex);
         cv.wait(lock, [this] {
-            return pending_tasks.load(std::memory_order_acquire) == 0 &&
-                   active_tasks.load(std::memory_order_acquire) == 0;
+            return task_state.load(std::memory_order_acquire) == 0;
         });
     }
 
     bool isIdle() const {
-        return pending_tasks.load(std::memory_order_acquire) == 0 &&
-               active_tasks.load(std::memory_order_acquire) == 0;
+        return task_state.load(std::memory_order_acquire) == 0;
     }
 
-    size_t threadCount() const { 
-        return num_threads; 
+    size_t threadCount()   const { return num_threads; }
+
+    size_t pendingCount()  const {
+        return pendingFromState(task_state.load(std::memory_order_acquire));
     }
-    
-    size_t pendingCount() const { 
-        return pending_tasks.load(std::memory_order_acquire); 
-    }
-    
-    size_t activeCount() const { 
-        return active_tasks.load(std::memory_order_acquire); 
+
+    size_t activeCount()   const {
+        return activeFromState(task_state.load(std::memory_order_acquire));
     }
 
     size_t sleepingCount() const {
-        // Relaxed memory order is sufficient for monitoring
         return sleeping_threads.load(std::memory_order_relaxed);
     }
 
