@@ -205,6 +205,9 @@ public:
           pending_tasks(0),
           active_tasks(0)
     {
+        if (n == 0) {
+            throw std::invalid_argument("ThreadPool: number of threads must be greater than 0");
+        }
         workers.reserve(n);
         for (size_t i = 0; i < n; ++i) {
             workers.emplace_back(&ThreadPool::workerThread, this);
@@ -292,23 +295,6 @@ public:
         waitAllTasksCompleted();
         stop.store(true, std::memory_order_release);
         cv.notify_all();
-    }
-
-    /**
-     * Stop the thread pool without waiting for pending tasks
-     * 
-     * WARNING: This will discard any pending tasks in the queue!
-     * Use this only when you need immediate shutdown and don't care about pending work
-     */
-    void stopImmediately() {
-        stop.store(true, std::memory_order_release);
-        cv.notify_all();
-        
-        for (auto& t : workers) {
-            if (t.joinable()) {
-                t.join();
-            }
-        }
     }
 };
 
