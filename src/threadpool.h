@@ -6,37 +6,27 @@
 #include "headers.h"
 
 // ========================= LOCK-FREE QUEUE =========================
-// Michael-Scott lock-free queue with freelist for efficient node reuse.
+// Michael-Scott lock-free queue (no freelist, simple new/delete).
 //
 // DESIGN PHILOSOPHY:
 //   - Fully lock-free in hot path (enqueue/dequeue/steal use only CAS)
-//   - Memory efficient with node recycling to reduce allocation overhead
+//   - No freelist: simplifies correctness (no ABA issues)
 //   - Cache-aligned structures to prevent false sharing
-//   - Safe memory reclamation via freelist with soft cap
 //
 // LOCK-FREE GUARANTEES:
 //   - enqueue() and dequeue() never block; they spin until successful
 //   - Multiple producers/consumers can operate concurrently without locks
-//   - ABA problem prevented by never freeing nodes back to OS while in-flight
-//
-// FREELIST BEHAVIOR:
-//   - Nodes are recycled to freelist instead of being freed immediately
-//   - Soft cap of MAX_FREE (65536) prevents unbounded memory growth
-//   - When cap is reached, nodes are properly returned to OS
-//   - Allocator first attempts to reuse freelist nodes; falls back to new
 //
 // MEMORY ORDERING:
 //   - acquire/release semantics for proper synchronization
-//   - relaxed for freelist operations (separate synchronization domain)
-//   - memory_order_acq_rel for CAS operations requiring both
+//   - relaxed for operations that are safe without full ordering
 
 template <typename T>
 class LockFreeQueue {
 private:
     // Node structure containing data and next pointer
-    // Each node lives in exactly one state: queue, freelist, or in-flight task
     struct Node {
-        std::atomic<Node*> next;  // Next node in queue/freelist
+        std::atomic<Node*> next;  // Next node in queue
         T data;                   // Actual payload
 
         Node() : next(nullptr) {}
@@ -46,57 +36,6 @@ private:
     // Cache-line aligned atomic pointers to prevent false sharing
     alignas(64) std::atomic<Node*> head;  // Head of queue (for dequeue)
     alignas(64) std::atomic<Node*> tail;  // Tail of queue (for enqueue)
-    alignas(64) std::atomic<Node*> free_list{nullptr};  // Reusable node pool
-
-    // Freelist management with size cap
-    alignas(64) std::atomic<size_t> free_count{0};
-    static constexpr size_t MAX_FREE = 1 << 16;  // 65536 nodes max in freelist
-
-    // Allocate a node, preferring freelist before heap allocation
-    Node* alloc_node(T&& val) {
-        Node* node = free_list.load(std::memory_order_acquire);
-        while (node) {
-            Node* next = node->next.load(std::memory_order_relaxed);
-            if (free_list.compare_exchange_weak(
-                    node, next,
-                    std::memory_order_acq_rel,
-                    std::memory_order_acquire)) {
-
-                free_count.fetch_sub(1, std::memory_order_relaxed);
-
-                // Re-initialize the node with new data
-                node->data = std::move(val);
-                node->next.store(nullptr, std::memory_order_relaxed);
-                return node;
-            }
-        }
-        // Freelist empty - allocate fresh node
-        return new Node(std::move(val));
-    }
-
-    // Return node to freelist, but only if under capacity limit
-    void free_node(Node* node) {
-        size_t count = free_count.load(std::memory_order_relaxed);
-        while (count < MAX_FREE) {
-            if (free_count.compare_exchange_weak(
-                    count, count + 1,
-                    std::memory_order_relaxed,
-                    std::memory_order_relaxed)) {
-
-                Node* old_head = free_list.load(std::memory_order_relaxed);
-                do {
-                    node->next.store(old_head, std::memory_order_relaxed);
-                } while (!free_list.compare_exchange_weak(
-                    old_head, node,
-                    std::memory_order_release,
-                    std::memory_order_relaxed));
-                return;
-            }
-            // CAS failed - count was updated, retry with new value
-        }
-        // Freelist full - free to OS
-        delete node;
-    }
 
 public:
     // Constructor creates dummy node to simplify queue logic
@@ -106,18 +45,9 @@ public:
         tail.store(dummy, std::memory_order_relaxed);
     }
 
-    // Destructor cleans all nodes (queue + freelist)
+    // Destructor cleans all nodes
     ~LockFreeQueue() {
-        // Clean main queue
         Node* node = head.load(std::memory_order_acquire);
-        while (node) {
-            Node* next = node->next.load(std::memory_order_relaxed);
-            delete node;
-            node = next;
-        }
-
-        // Clean freelist
-        node = free_list.load(std::memory_order_acquire);
         while (node) {
             Node* next = node->next.load(std::memory_order_relaxed);
             delete node;
@@ -127,7 +57,7 @@ public:
 
     // Enqueue an item (lock-free, multiple producers)
     void enqueue(T value) {
-        Node* new_node = alloc_node(std::move(value));
+        Node* new_node = new Node(std::move(value));
         while (true) {
             Node* last = tail.load(std::memory_order_acquire);
             Node* next = last->next.load(std::memory_order_acquire);
@@ -191,7 +121,7 @@ public:
 
                     // Success - extract data and free dummy node
                     result = std::move(next->data);
-                    free_node(first);
+                    delete first;  // free the old dummy node
                     return true;
                 }
             }
@@ -238,7 +168,7 @@ public:
 // MEMORY SAFETY:
 //   - TaskGuard uses RAII for exception-safe task counting
 //   - Shared tasks are managed via shared_ptr to prevent premature destruction
-//   - Nodes are recycled via freelist with soft cap to prevent memory bloat
+//   - Nodes are allocated with new/delete – no ABA issues
 
 class ThreadPool {
 private:
@@ -280,7 +210,7 @@ private:
                   std::condition_variable& c)
             : active(a), pending(p), cv(c)
         {
-            active.fetch_add(1, std::memory_order_relaxed);
+            active.fetch_add(1, std::memory_order_release);
         }
 
         ~TaskGuard() {
@@ -330,7 +260,7 @@ private:
 
             // Execute task if we found work
             if (has_work) {
-                pending_tasks.fetch_sub(1, std::memory_order_relaxed);
+                pending_tasks.fetch_sub(1, std::memory_order_release);
                 TaskGuard guard(active_tasks, pending_tasks, cv);
                 task();  // Task may throw, but guard ensures proper cleanup
                 continue;
@@ -341,7 +271,7 @@ private:
                 // Drain all remaining tasks before exiting
                 for (size_t i = 0; i < num_threads; ++i) {
                     while (queues[i]->dequeue(task)) {
-                        pending_tasks.fetch_sub(1, std::memory_order_relaxed);
+                        pending_tasks.fetch_sub(1, std::memory_order_release);
                         TaskGuard guard(active_tasks, pending_tasks, cv);
                         task();
                     }
@@ -352,7 +282,7 @@ private:
             // One final steal attempt before sleeping to catch race conditions
             // Prevents scenario where work appears just before sleep decision
             if (tryStealTask(task, id)) {
-                pending_tasks.fetch_sub(1, std::memory_order_relaxed);
+                pending_tasks.fetch_sub(1, std::memory_order_release);
                 TaskGuard guard(active_tasks, pending_tasks, cv);
                 task();
                 continue;
@@ -452,11 +382,10 @@ public:
         std::future<return_type> res = task->get_future();
 
         // Update task counts and queue the work
-        pending_tasks.fetch_add(1, std::memory_order_relaxed);
+        pending_tasks.fetch_add(1, std::memory_order_release);
         queues[selectQueue()]->enqueue([task]{ (*task)(); });
 
         // Wake up a sleeping thread if any exist
-        // Using notify_one() is sufficient - exactly one thread will process this task
         size_t sleeping = sleeping_threads.load(std::memory_order_acquire);
         if (sleeping > 0) {
             cv.notify_one();
