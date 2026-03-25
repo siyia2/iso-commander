@@ -192,7 +192,7 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
         const size_t end   = std::min(files.size(), start + chunkSize);
         if (start >= end) break;
 
-        futures.emplace_back(pool.enqueue([&files, start, end, needLower, queryTokens] {
+        futures.emplace_back(pool.enqueue([&files, start, end, needLower, &queryTokens] {
             std::vector<std::string> localMatches;
             for (size_t j = start; j < end; ++j) {
                 const std::string& file = files[j];
