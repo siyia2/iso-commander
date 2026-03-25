@@ -26,8 +26,21 @@ static ThreadPool& getThreadPool() {
         const unsigned hw = maxThreads;
         return (hw >= 4) ? 4u : std::max(1u, hw);
     }());
+    
+    static std::once_flag init_flag;
+    std::call_once(init_flag, []() {
+        std::atexit([]() {
+            // Get the pool reference again
+            static ThreadPool& pool_ref = getThreadPool();
+            pool_ref.waitAndStop();  // Safe shutdown
+            // Note: pool destructor will still run later, but waitAndStop
+            // ensures no tasks are running when it does
+        });
+    });
+    
     return pool;
 }
+
 
 // Returns the number of worker threads in the shared pool.
 // filterFiles() uses this so chunk count always matches actual worker count.
