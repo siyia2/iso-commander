@@ -31,20 +31,6 @@ static ThreadPool& getThreadPool() {
 }
 
 
-// One-time atexit registration — avoids re-entering getThreadPool() from
-// inside the atexit handler (which would be UB if the static is mid-destruct).
-static void registerPoolShutdown() {
-    static std::once_flag flag;
-    std::call_once(flag, [] {
-        // Store pointer in a static so the atexit handler (which must be a
-        // plain function pointer with no captures) can reach it without
-        // re-entering getThreadPool() during destruction.
-        static ThreadPool* poolPtr = &getThreadPool();
-        std::atexit([]() { poolPtr->waitAndStop(); });
-    });
-}
-
-
 // Returns the number of worker threads in the shared pool.
 static size_t poolThreadCount() {
     return getThreadPool().threadCount();
@@ -190,8 +176,11 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
 {
     if (files.empty() || query.empty()) return {};
 
-    // Register pool shutdown once here (safe, idempotent via once_flag)
-    registerPoolShutdown();
+    // FIX: Removed registerPoolShutdown() call. The atexit handler it registered
+    // called waitAndStop() during static destruction, which could race with live
+    // futures held in this function's stack frame, causing broken promises when
+    // the promise was destroyed before .get() was called. The ThreadPool
+    // destructor already calls waitAllTasksCompleted() correctly.
 
     // queryTokens is captured by VALUE in the lambda below to avoid
     // dangling references if the calling frame is torn down before all
