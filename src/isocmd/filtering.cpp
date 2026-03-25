@@ -19,13 +19,20 @@ namespace AnsiEscape {
 // Filtering stack: tracks successive filter states for potential undo
 std::vector<FilteringState> filteringStack;
 
-// Long-lived thread pool — created once, reused across all filterFiles() calls
+// Long-lived thread pool — created once, reused across all filterFiles() calls.
+// Capped at 4 threads (or hardware max if fewer than 4 cores available).
 static ThreadPool& getThreadPool() {
     static ThreadPool pool([] {
         const unsigned hw = maxThreads;
         return (hw >= 4) ? 4u : std::max(1u, hw);
     }());
     return pool;
+}
+
+// Returns the number of worker threads in the shared pool.
+// filterFiles() uses this so chunk count always matches actual worker count.
+static size_t poolThreadCount() {
+    return getThreadPool().threadCount();
 }
 
 
@@ -48,9 +55,9 @@ struct QueryToken {
 
 
 // Precompute Boyer-Moore bad-character and good-suffix tables for a pattern
-void precomputeBoyerMooreTables(const std::string& pattern, std::vector<int>&  badCharTable, std::vector<int>&  goodSuffixTable)
+void precomputeBoyerMooreTables(const std::string& pattern, std::vector<int>& badCharTable, std::vector<int>& goodSuffixTable)
 {
-    const size_t m            = pattern.size();
+    const size_t m             = pattern.size();
     const int    ALPHABET_SIZE = 256;
 
     // Bad character table: last occurrence of each character in the pattern
@@ -156,6 +163,11 @@ static std::vector<QueryToken> buildQueryTokens(const std::string& query) {
 
 // Filter a list of strings in parallel using Boyer-Moore search.
 // Returns matching strings preserving their original relative order.
+//
+// Thread count is derived from the shared pool (via poolThreadCount()) so that
+// the number of chunks always matches the number of available workers — avoiding
+// the bug where hardware_concurrency() > pool size produced more chunks than
+// workers and left half the futures queued behind the others.
 std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query)
 {
     if (files.empty() || query.empty()) return {};
@@ -166,10 +178,10 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
     const bool needLower = std::any_of(queryTokens.begin(), queryTokens.end(),
                                [](const QueryToken& qt) { return !qt.isCaseSensitive; });
 
-    // Clamp thread count to the actual number of files to avoid empty chunks
+    // Use the pool's actual thread count — not hardware_concurrency() — so chunk
+    // count and worker count are always in sync.
     ThreadPool&  pool       = getThreadPool();
-    const size_t maxThreads = std::max(1u, std::thread::hardware_concurrency());
-    const size_t numThreads = std::min(maxThreads, files.size());
+    const size_t numThreads = std::min(poolThreadCount(), files.size());
     const size_t chunkSize  = (files.size() + numThreads - 1) / numThreads;
 
     std::vector<std::future<std::vector<std::string>>> futures;
@@ -236,7 +248,7 @@ struct FilterContext {
     const std::vector<std::string>* sourceOverride = nullptr;
 
     // Unmount-specific: whether to strip the trailing ~mountpoint suffix
-    bool isUnmount           = false;
+    bool isUnmount            = false;
     bool toggleFullListUmount = false;
 };
 
@@ -271,7 +283,7 @@ static bool applyFilterCore(const std::string& searchString, FilterContext& ctx)
     std::vector<std::string> tempFiltered;
     std::vector<size_t>      tempIndices;
 
-    const bool useNameOnly  = displayConfig::toggleNamesOnly && !ctx.isUnmount;
+    const bool useNameOnly   = displayConfig::toggleNamesOnly && !ctx.isUnmount;
     const bool useUnmountKey = ctx.isUnmount && !ctx.toggleFullListUmount;
 
     if (useNameOnly || useUnmountKey) {
@@ -318,7 +330,7 @@ static bool applyFilterCore(const std::string& searchString, FilterContext& ctx)
         }
     }
 
-    if (tempFiltered.empty())              return false;
+    if (tempFiltered.empty())                     return false;
     if (tempFiltered.size() == sourceList.size()) return true;  // No change
 
     // ── Commit the filter result ──────────────────────────────────────────────
@@ -361,18 +373,31 @@ static void saveQueryToHistory(const std::string& query, bool& filterHistory) {
 // ─── Interactive / quick filter driver ───────────────────────────────────────
 
 // Shared interactive loop used by both public handlers.
-// promptText  – the readline prompt string
-// ctx         – mutable filter context
-// onSuccess   – called once when a filter is successfully applied
-//               (used for any caller-specific side-effects, e.g. need2Sort)
-static void runFilterLoop(const std::string&          promptText,
-                          const std::string&          quickPattern,  // empty → interactive
-                          FilterContext&               ctx,
-                          const std::function<void()>& onSuccess)
+//
+// promptText   – the readline prompt string
+// quickPattern – non-empty → skip readline and filter immediately (quick mode)
+// ctx          – mutable filter context
+// onSuccess    – called once when a filter is successfully applied
+//                (used for caller-specific side-effects, e.g. need2Sort)
+// onEmptyInput – called when the user submits an empty query or EOF; replaces
+//                the default "clear two lines + needsClrScrn=false" behaviour.
+//                If nullptr the default behaviour is used.
+static void runFilterLoop(const std::string&           promptText,
+                          const std::string&           quickPattern,
+                          FilterContext&                ctx,
+                          const std::function<void()>& onSuccess,
+                          const std::function<void()>& onEmptyInput = nullptr)
 {
     auto tryFilter = [&](const std::string& query) -> bool {
         return applyFilterCore(query, ctx);
     };
+
+    auto defaultEmptyInput = [&]() {
+        std::cout << AnsiEscape::CLEAR_TWO_LINES;
+        ctx.needsClrScrn = false;
+    };
+
+    const auto& handleEmpty = onEmptyInput ? onEmptyInput : defaultEmptyInput;
 
     if (quickPattern.empty()) {
         // ── Interactive mode ──────────────────────────────────────────────────
@@ -386,19 +411,12 @@ static void runFilterLoop(const std::string&          promptText,
             std::unique_ptr<char, decltype(&std::free)> raw(
                 readline(promptText.c_str()), &std::free);
 
-            if (!raw) {
-                std::cout << AnsiEscape::CLEAR_TWO_LINES;
-                ctx.needsClrScrn = false;
+            if (!raw || raw.get()[0] == '\0' || strcmp(raw.get(), "/") == 0) {
+                handleEmpty();
                 break;
             }
 
             std::string query(raw.get());
-            if (query.empty() || query == "/") {
-                std::cout << AnsiEscape::CLEAR_TWO_LINES;
-                ctx.needsClrScrn = false;
-                break;
-            }
-
             if (tryFilter(query)) {
                 saveQueryToHistory(query, ctx.filterHistory);
                 onSuccess();
@@ -413,8 +431,7 @@ static void runFilterLoop(const std::string&          promptText,
             saveQueryToHistory(quickPattern, ctx.filterHistory);
             onSuccess();
         } else {
-            std::cout << AnsiEscape::CLEAR_TWO_LINES;
-            ctx.needsClrScrn = false;
+            handleEmpty();
         }
     }
 }
@@ -448,45 +465,25 @@ const std::string& operationColor, const std::vector<std::string>& isoDirs, bool
         operationColor + "\002" + operation +
         "\001\033[1;94m\002, or ↵ to return: \001\033[0;1m\002";
 
-    if (inputString == "/") {
-        // ── Interactive mode ──────────────────────────────────────────────
-        while (true) {
-            std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
-            clear_history();
-            ctx.filterHistory = true;
-            loadHistory(ctx.filterHistory);
+    // handleFilteringForISO has a special empty-input exit: it sets
+    // needsClrScrn = isFiltered (to redraw only when a filter is already
+    // active) rather than unconditionally clearing the screen.
+    auto onEmptyInput = [&]() {
+        clear_history();
+        needsClrScrn = isFiltered;
+    };
 
-            std::unique_ptr<char, decltype(&std::free)> raw(
-                readline(prompt.c_str()), &std::free);
+    const std::string quickPattern =
+        (inputString == "/") ? "" : inputString.substr(1);
 
-            if (!raw || raw.get()[0] == '\0' || strcmp(raw.get(), "/") == 0) {
-                clear_history();
-                needsClrScrn = isFiltered;
-                return true;
-            }
-
-            std::string query(raw.get());
-            if (applyFilterCore(query, ctx)) {
-                saveQueryToHistory(query, ctx.filterHistory);
-                return true;
-            }
-            // Bad query — loop back and reprint prompt
-        }
-    } else {
-        // ── Quick mode (/pattern) ─────────────────────────────────────────
-        std::string quickPattern = inputString.substr(1);
-        if (applyFilterCore(quickPattern, ctx)) {
-            saveQueryToHistory(quickPattern, ctx.filterHistory);
-        }
-    }
-
+    runFilterLoop(prompt, quickPattern, ctx, []{ /* no extra side-effects */ }, onEmptyInput);
     return true;
 }
 
 
 // Handles filtering for select_and_convert_to_iso
 void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<std::string>& files, const std::string& fileExtensionWithOutDots, bool& isFiltered, bool& needsClrScrn,
-bool& filterHistory,bool& need2Sort, size_t& currentPage)
+bool& filterHistory, bool& need2Sort, size_t& currentPage)
 {
     if (mainInputString.empty() ||
         (mainInputString != "/" && mainInputString[0] != '/'))
