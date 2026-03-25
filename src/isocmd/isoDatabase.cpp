@@ -84,7 +84,7 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
     }
  
     // ── Parallel existence check ─────────────────────────────────────────────
-    // Uses the shared I/O pool (capped at 8 threads) rather than spawning a
+    // Uses the shared I/O pool (capped at 16 threads) rather than spawning a
     // fresh pool per call.
     std::vector<bool>   pathExists(cache.size(), false);
 	std::atomic<size_t> existingCount{0};
