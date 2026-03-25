@@ -195,7 +195,7 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
         const size_t end   = std::min(files.size(), start + chunkSize);
         if (start >= end) break;
 
-        futures.emplace_back(pool.enqueue([&files, start, end, needLower, &queryTokens] {
+        futures.emplace_back(pool.enqueue([&files, start, end, needLower, queryTokens] {
             std::vector<size_t> localMatches;
             localMatches.reserve((end - start) / 4); // Heuristic: assume ~25% match rate
 
