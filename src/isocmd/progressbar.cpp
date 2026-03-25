@@ -56,7 +56,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
     
     // Size formatting function
     auto formatSize = [](double bytes) -> std::string {
-        static std::stringstream ss;
+        std::stringstream ss;
         const char* units[] = {" B", " KB", " MB", " GB"};
         int unit = 0;
         double size = bytes;
@@ -66,8 +66,6 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             unit++;
         }
         
-        ss.str("");
-        ss.clear();
         ss << std::fixed << std::setprecision(2) << size << units[unit];
         return ss.str();
     };
@@ -116,35 +114,30 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         std::stringstream ss;
         
         // First line: progress bar with percentage, task count, and time elapsed
-        ss << "\r[";
+        ss << "\r\033[2K[";
         for (int i = 0; i < barWidth; ++i) {
             ss << (i < progressPos ? "=" : (i == progressPos && !isFinal ? ">" : " "));
         }
         ss << "] " << std::fixed << std::setprecision(0) << (overallProgress * 100.0)
            << "% (" << completedTasksValue << "/" << totalTasks << ") Time Elapsed: " 
-           << std::fixed << std::setprecision(1) << elapsedSeconds << "s\033[K";
+           << std::fixed << std::setprecision(1) << elapsedSeconds << "s";
         
         // Second line: size information right under the percentage part
         if (bytesTrackingEnabled) {
-            // Calculate position to align "Completed" under the percentage
-            int percentPos = barWidth + 3; // This positions "Completed" under the percentage
-            ss << "\n\r";
-            // Add spaces to align "Completed" under the percentage value
+            int percentPos = barWidth + 3;
+            
+            ss << "\n\r\033[2K";
             for (int i = 0; i < percentPos; i++) {
                 ss << " ";
             }
             ss << "Processed: " << formatSize(static_cast<double>(completedBytesValue)) 
                << "/" << totalBytesFormatted;
 
-            // Add a new line and align the speed info under "Completed"
-            ss << "\n\r";
+            ss << "\n\r\033[2K";
             for (int i = 0; i < percentPos; i++) {
                 ss << " ";
             }
-            
             ss << "Speed: " << formatSize(speed) << "/s";
-            
-            ss << "\033[K";  // Clear to the end of line
         }
         
         return ss.str();
@@ -162,47 +155,40 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         
         // Move cursor back up if we have a multi-line output (for updating in place)
         if (bytesTrackingEnabled && !isComplete->load(std::memory_order_acquire)) {
-            std::cout << "\033[2A";  // Move cursor up one line
+            std::cout << "\033[2A";
         }
         
         // If processing is complete, show a final message
         if (isComplete->load(std::memory_order_acquire) && !enterPressed) {
-            signal(SIGINT, SIG_IGN);  // Ignore Ctrl+C after completion
+            signal(SIGINT, SIG_IGN);
             
-            // Show completion status (need to account for multi-line output)
             if (bytesTrackingEnabled) {
-                std::cout << "\033[1J\033[3A";  // Clear above and move up two lines
+                std::cout << "\033[1J\033[3A";
             } else {
-                std::cout << "\033[1J\033[1A";  // Clear above and move up one line
+                std::cout << "\033[1J\033[1A";
             }
             
-            // Get current task counts for status determination
             const size_t completedTasksValue = completedTasks->load(std::memory_order_acquire);
             const size_t failedTasksValue = failedTasks->load(std::memory_order_acquire);
             
-            // Using ternary operators to determine status based on task completion
-            std::cout << "\r\033[0;1m Status: " << operation << "\033[0;1m → " 
+            std::cout << "\r\033[2K\033[0;1m Status: " << operation << "\033[0;1m → " 
                       << (!g_operationCancelled.load() 
                           ? (failedTasksValue > 0 
                              ? (completedTasksValue > 0 
-                                ? "\033[1;93mPARTIAL" // Yellow, some completed, some failed
-                                : "\033[1;91mFAILED")  // Red, none completed, some failed
-                             : "\033[1;92mCOMPLETED") // Green, all completed successfully
-                          : "\033[1;33mINTERRUPTED") // Yellow, operation cancelled
+                                ? "\033[1;93mPARTIAL"
+                                : "\033[1;91mFAILED")
+                             : "\033[1;92mCOMPLETED")
+                          : "\033[1;33mINTERRUPTED")
                       << "\033[0;1m" << std::endl;
             
-            // Show final progress bar
             std::cout << renderProgressBar(true);
             
-            // Disable certain key bindings temporarily
             disableReadlineForConfirmation();
             
             enterPressed = true;
             std::cout << "\n\n";
             
-            // Restore terminal settings for input
             restoreInput(&oldt, oldf);
-            // Prompt for verbose output
             const std::string prompt = "\033[1;94mDisplay verbose output? (y/n):\033[0;1m ";
             std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
             
@@ -210,7 +196,6 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
                 *verbose = (std::string(input.get()) == "y" || std::string(input.get()) == "Y");
             }
             
-            // Restore key bindings after the prompt
             restoreReadline();
         } else {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -219,6 +204,5 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
     
     std::cout << std::endl;
     
-    // Final restoration of terminal settings
     restoreInput(&oldt, oldf);
 }
