@@ -26,24 +26,24 @@ static ThreadPool& getThreadPool() {
         const unsigned hw = maxThreads;
         return (hw >= 4) ? 4u : std::max(1u, hw);
     }());
-    
-    static std::once_flag init_flag;
-    std::call_once(init_flag, []() {
-        std::atexit([]() {
-            // Get the pool reference again
-            static ThreadPool& pool_ref = getThreadPool();
-            pool_ref.waitAndStop();  // Safe shutdown
-            // Note: pool destructor will still run later, but waitAndStop
-            // ensures no tasks are running when it does
-        });
-    });
-    
     return pool;
+}
+
+// One-time atexit registration — avoids re-entering getThreadPool() from
+// inside the atexit handler (which would be UB if the static is mid-destruct).
+static void registerPoolShutdown() {
+    static std::once_flag flag;
+    std::call_once(flag, [] {
+        // Store pointer in a static so the atexit handler (which must be a
+        // plain function pointer with no captures) can reach it without
+        // re-entering getThreadPool() during destruction.
+        static ThreadPool* poolPtr = &getThreadPool();
+        std::atexit([]() { poolPtr->waitAndStop(); });
+    });
 }
 
 
 // Returns the number of worker threads in the shared pool.
-// filterFiles() uses this so chunk count always matches actual worker count.
 static size_t poolThreadCount() {
     return getThreadPool().threadCount();
 }
@@ -51,38 +51,31 @@ static size_t poolThreadCount() {
 
 // ─── Boyer-Moore implementation ──────────────────────────────────────────────
 
-// Structure to hold precomputed Boyer-Moore tables and token metadata
 struct QueryToken {
-    std::string original;           // Original token (used for case-sensitive search)
-    std::string lower;              // Lowercased version (used for case-insensitive search)
-    bool        isCaseSensitive;    // True if token contains any uppercase character
+    std::string original;
+    std::string lower;
+    bool        isCaseSensitive;
 
-    // Precomputed BM tables for case-sensitive search
     std::vector<int> originalBadChar;
     std::vector<int> originalGoodSuffix;
 
-    // Precomputed BM tables for case-insensitive search
     std::vector<int> lowerBadChar;
     std::vector<int> lowerGoodSuffix;
 };
 
 
-// Precompute Boyer-Moore bad-character and good-suffix tables for a pattern
 void precomputeBoyerMooreTables(const std::string& pattern, std::vector<int>& badCharTable, std::vector<int>& goodSuffixTable)
 {
     const size_t m             = pattern.size();
     const int    ALPHABET_SIZE = 256;
 
-    // Bad character table: last occurrence of each character in the pattern
     badCharTable.assign(ALPHABET_SIZE, -1);
     for (int i = 0; i < static_cast<int>(m); ++i)
         badCharTable[static_cast<unsigned char>(pattern[i])] = i;
 
-    // Good suffix table
     goodSuffixTable.resize(m, static_cast<int>(m));
     std::vector<int> suffix(m, 0);
 
-    // Phase 1: compute suffix lengths
     suffix[m - 1] = static_cast<int>(m);
     int g = static_cast<int>(m) - 1;
     int f = static_cast<int>(m) - 1;
@@ -99,11 +92,9 @@ void precomputeBoyerMooreTables(const std::string& pattern, std::vector<int>& ba
         }
     }
 
-    // Phase 2a: suffix matches a prefix of the pattern
     for (int i = 0; i < static_cast<int>(m) - 1; ++i)
         goodSuffixTable[i] = static_cast<int>(m) - 1 - suffix[0];
 
-    // Phase 2b: substring of pattern matches a suffix of the pattern
     for (int i = 0; i <= static_cast<int>(m) - 2; ++i) {
         const int j = static_cast<int>(m) - 1 - suffix[i];
         if (goodSuffixTable[j] > static_cast<int>(m) - 1 - i)
@@ -112,7 +103,6 @@ void precomputeBoyerMooreTables(const std::string& pattern, std::vector<int>& ba
 }
 
 
-// Returns true as soon as the first occurrence of pattern is found in text
 bool boyerMooreSearchExists(const std::string& text, const std::string& pattern, const std::vector<int>& badCharTable, const std::vector<int>& goodSuffixTable)
 {
     const size_t n = text.size();
@@ -138,15 +128,12 @@ bool boyerMooreSearchExists(const std::string& text, const std::string& pattern,
 
 // ─── Query tokenization ──────────────────────────────────────────────────────
 
-// Parse a semicolon-separated query string into QueryToken objects with
-// precomputed Boyer-Moore tables.
 static std::vector<QueryToken> buildQueryTokens(const std::string& query) {
     std::vector<QueryToken> tokens;
     std::stringstream ss(query);
     std::string token;
 
     while (std::getline(ss, token, ';')) {
-        // Trim leading/trailing whitespace
         token.erase(0, token.find_first_not_of(" \t"));
         token.erase(token.find_last_not_of(" \t") + 1);
         if (token.empty()) continue;
@@ -156,10 +143,8 @@ static std::vector<QueryToken> buildQueryTokens(const std::string& query) {
         qt.isCaseSensitive = std::any_of(token.begin(), token.end(),
                                  [](unsigned char c) { return std::isupper(c); });
 
-        // Always precompute case-sensitive tables
         precomputeBoyerMooreTables(qt.original, qt.originalBadChar, qt.originalGoodSuffix);
 
-        // Precompute case-insensitive tables only when needed
         if (!qt.isCaseSensitive) {
             qt.lower = token;
             toLowerInPlace(qt.lower);
@@ -174,18 +159,18 @@ static std::vector<QueryToken> buildQueryTokens(const std::string& query) {
 
 // ─── Core filter engine ──────────────────────────────────────────────────────
 
-// Filter a list of strings in parallel using Boyer-Moore search.
-// Returns matching strings preserving their original relative order.
-//
-// Thread count is derived from the shared pool (via poolThreadCount()) so that
-// the number of chunks always matches the number of available workers
 std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, const std::string& query)
 {
     if (files.empty() || query.empty()) return {};
 
+    // Register pool shutdown once here (safe, idempotent via once_flag)
+    registerPoolShutdown();
+
+    // queryTokens is captured by VALUE in the lambda below to avoid
+    // dangling references if the calling frame is torn down before all
+    // futures are collected (e.g. on exception paths).
     const std::vector<QueryToken> queryTokens = buildQueryTokens(query);
     if (queryTokens.empty()) {
-        // No valid tokens, return all indices
         std::vector<size_t> allIndices(files.size());
         std::iota(allIndices.begin(), allIndices.end(), 0);
         return allIndices;
@@ -194,8 +179,6 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
     const bool needLower = std::any_of(queryTokens.begin(), queryTokens.end(),
                                [](const QueryToken& qt) { return !qt.isCaseSensitive; });
 
-    // Use the pool's actual thread count — not hardware_concurrency() — so chunk
-    // count and worker count are always in sync.
     ThreadPool&  pool       = getThreadPool();
     const size_t numThreads = std::min(poolThreadCount(), files.size());
     const size_t chunkSize  = (files.size() + numThreads - 1) / numThreads;
@@ -208,93 +191,94 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
         const size_t end   = std::min(files.size(), start + chunkSize);
         if (start >= end) break;
 
-        futures.emplace_back(pool.enqueue([&files, start, end, needLower, queryTokens] {
-            std::vector<size_t> localMatches;
-            localMatches.reserve((end - start) / 4); // Heuristic: assume ~25% match rate
+        // Capture queryTokens and needLower by value; capture files by
+        // const-ref is safe because filterFilesIndices blocks until all
+        // futures are .get()'d before returning.
+        futures.emplace_back(pool.enqueue(
+            [&files, start, end, needLower, queryTokens /* by value */]() -> std::vector<size_t> {
+                std::vector<size_t> localMatches;
+                localMatches.reserve((end - start) / 4);
 
-            std::string fileLower;
-            if (needLower) {
-                fileLower.reserve(256); // Pre-allocate reasonable size
-            }
+                std::string fileLower;
+                if (needLower)
+                    fileLower.reserve(256);
 
-            for (size_t j = start; j < end; ++j) {
-                const std::string& file = files[j];
+                for (size_t j = start; j < end; ++j) {
+                    const std::string& file = files[j];
 
-                if (needLower) {
-                    fileLower = file;
-                    toLowerInPlace(fileLower);
-                }
-
-                for (const auto& qt : queryTokens) {
-                    bool match;
-                    if (qt.isCaseSensitive) {
-                        match = boyerMooreSearchExists(file,      qt.original,
-                                                       qt.originalBadChar, qt.originalGoodSuffix);
-                    } else {
-                        match = boyerMooreSearchExists(fileLower, qt.lower,
-                                                       qt.lowerBadChar,    qt.lowerGoodSuffix);
+                    if (needLower) {
+                        fileLower = file;
+                        toLowerInPlace(fileLower);
                     }
-                    if (match) {
-                        localMatches.push_back(j); // Store index directly
-                        break;  // Any token matching is sufficient
+
+                    for (const auto& qt : queryTokens) {
+                        bool match;
+                        if (qt.isCaseSensitive) {
+                            match = boyerMooreSearchExists(file,      qt.original,
+                                                           qt.originalBadChar, qt.originalGoodSuffix);
+                        } else {
+                            match = boyerMooreSearchExists(fileLower, qt.lower,
+                                                           qt.lowerBadChar,    qt.lowerGoodSuffix);
+                        }
+                        if (match) {
+                            localMatches.push_back(j);
+                            break;
+                        }
                     }
                 }
+                return localMatches;
             }
-            return localMatches;
-        }));
+        ));
     }
 
-    // Collect and merge results (they're already in order per chunk)
+    // Collect ALL futures before returning, even if one throws, to
+    // prevent the pool workers from accessing freed stack memory.
     std::vector<size_t> filteredIndices;
     filteredIndices.reserve(files.size());
+
+    std::exception_ptr firstException;
     for (auto& fut : futures) {
-        auto chunk = fut.get();
-        filteredIndices.insert(filteredIndices.end(),
-                               std::make_move_iterator(chunk.begin()),
-                               std::make_move_iterator(chunk.end()));
+        try {
+            auto chunk = fut.get();
+            filteredIndices.insert(filteredIndices.end(),
+                                   std::make_move_iterator(chunk.begin()),
+                                   std::make_move_iterator(chunk.end()));
+        } catch (...) {
+            // Save first exception; drain remaining futures so workers
+            // are not left dangling, then rethrow below.
+            if (!firstException)
+                firstException = std::current_exception();
+        }
     }
+
+    if (firstException)
+        std::rethrow_exception(firstException);
+
     return filteredIndices;
 }
 
 
 // ─── Shared filtering core ───────────────────────────────────────────────────
 
-// Parameters bundled to avoid long argument lists across the two public helpers
 struct FilterContext {
-    std::vector<std::string>& files;        // In/out: list being filtered
-    bool&                      isFiltered;   // In/out: whether a filter is active
-    bool&                      needsClrScrn; // Out: whether the screen needs clearing
+    std::vector<std::string>& files;
+    bool&                      isFiltered;
+    bool&                      needsClrScrn;
     bool&                      filterHistory;
     size_t&                    currentPage;
 
-    // Source list to filter from (may differ from `files` when unmounting)
     const std::vector<std::string>* sourceOverride = nullptr;
 
-    // Unmount-specific: whether to strip the trailing ~mountpoint suffix
     bool isUnmount            = false;
     bool toggleFullListUmount = false;
 };
 
 
-// Applies a single filter pass. Returns true if the call was handled
-// (even if no results were found), false only if searchString is empty.
-//
-// On a successful filter the following side-effects occur:
-//   - ctx.files       is replaced with the filtered subset
-//   - filteringStack  is updated (push on first filter, replace on refinement)
-//   - ctx.isFiltered  is set to true
-//   - ctx.currentPage is reset to 0
 static bool applyFilterCore(const std::string& searchString, FilterContext& ctx) {
     if (searchString.empty()) return false;
 
-    // Choose the correct source list
     const std::vector<std::string>& sourceList =
         ctx.sourceOverride ? *ctx.sourceOverride : ctx.files;
-
-    // ── Build the list to actually search ────────────────────────────────────
-    // In names-only or unmount-abbreviated mode we search a derived list and
-    // then map matches back to the original paths.  Otherwise we search paths
-    // directly and can skip the mapping step entirely.
 
     auto extractUnmountKey = [](const std::string& path) -> std::string {
         size_t lastSlash = path.find_last_of('/');
@@ -310,7 +294,6 @@ static bool applyFilterCore(const std::string& searchString, FilterContext& ctx)
     const bool useUnmountKey = ctx.isUnmount && !ctx.toggleFullListUmount;
 
     if (useNameOnly || useUnmountKey) {
-        // Build a derived list for searching
         std::vector<std::string> derived;
         derived.reserve(sourceList.size());
         for (const auto& path : sourceList) {
@@ -324,11 +307,9 @@ static bool applyFilterCore(const std::string& searchString, FilterContext& ctx)
             }
         }
 
-        // Get matching indices from the derived list
         auto matchedIndices = filterFilesIndices(derived, searchString);
         if (matchedIndices.empty()) return false;
 
-        // Map matched indices back to original paths
         tempFiltered.reserve(matchedIndices.size());
         tempIndices.reserve(matchedIndices.size());
         for (size_t idx : matchedIndices) {
@@ -336,11 +317,9 @@ static bool applyFilterCore(const std::string& searchString, FilterContext& ctx)
             tempIndices.push_back(idx);
         }
     } else {
-        // Search paths directly and get indices in one pass
         tempIndices = filterFilesIndices(sourceList, searchString);
         if (tempIndices.empty()) return false;
 
-        // Build the filtered file list from indices
         tempFiltered.reserve(tempIndices.size());
         for (size_t idx : tempIndices) {
             tempFiltered.push_back(sourceList[idx]);
@@ -348,32 +327,45 @@ static bool applyFilterCore(const std::string& searchString, FilterContext& ctx)
     }
 
     if (tempFiltered.empty())                     return false;
-    if (tempFiltered.size() == sourceList.size()) return true;  // No change
+    if (tempFiltered.size() == sourceList.size()) return true;
 
-    // ── Commit the filter result ──────────────────────────────────────────────
     ctx.currentPage  = 0;
     ctx.needsClrScrn = true;
     ctx.files        = std::move(tempFiltered);
 
-    // Build the new FilteringState, translating indices through any prior filter
+    // Build the new FilteringState, translating indices through any prior filter.
+    //
+    // tempIndices are offsets into sourceList (the current filtered view).
+    // If a filter is already active, filteringStack.back().originalIndices
+    // maps positions in that view back to the master list.  Guard with a
+    // bounds check: without it a stale/mismatched stack causes SIGSEGV on
+    // nested filtering.
     FilteringState newState;
     newState.originalIndices.reserve(tempIndices.size());
+
+    const bool canTranslate = ctx.isFiltered &&
+                              !filteringStack.empty() &&
+                              !filteringStack.back().originalIndices.empty();
+
     for (size_t idx : tempIndices) {
-        size_t originalIdx = (ctx.isFiltered && !filteringStack.empty())
-                             ? filteringStack.back().originalIndices[idx]
-                             : idx;
+        size_t originalIdx = idx;
+        if (canTranslate) {
+            const auto& prevIndices = filteringStack.back().originalIndices;
+            if (idx < prevIndices.size())
+                originalIdx = prevIndices[idx];
+            // Out-of-range means the stack is out of sync — keep idx as-is.
+        }
         newState.originalIndices.push_back(originalIdx);
     }
     newState.isFiltered = true;
 
     if (ctx.isFiltered && !filteringStack.empty())
-        filteringStack.back() = std::move(newState);   // Refine existing filter
+        filteringStack.back() = std::move(newState);
     else
-        filteringStack.push_back(std::move(newState)); // First filter — push new level
+        filteringStack.push_back(std::move(newState));
 
     ctx.isFiltered = true;
     return true;
-
 }
 
 
@@ -390,17 +382,7 @@ static void saveQueryToHistory(const std::string& query, bool& filterHistory) {
 
 // ─── Interactive / quick filter driver ───────────────────────────────────────
 
-// Shared interactive loop used by both public handlers.
-//
-// promptText   – the readline prompt string
-// quickPattern – non-empty → skip readline and filter immediately (quick mode)
-// ctx          – mutable filter context
-// onSuccess    – called once when a filter is successfully applied
-//                (used for caller-specific side-effects, e.g. need2Sort)
-// onEmptyInput – called when the user submits an empty query or EOF; replaces
-//                the default "clear two lines + needsClrScrn=false" behaviour.
-//                If nullptr the default behaviour is used.
-static void runFilterLoop(const std::string& promptText, const std::string& quickPattern, FilterContext& ctx, const std::function<void()>& onSuccess, 
+static void runFilterLoop(const std::string& promptText, const std::string& quickPattern, FilterContext& ctx, const std::function<void()>& onSuccess,
 const std::function<void()>& onEmptyInput = nullptr)
 {
     auto tryFilter = [&](const std::string& query) -> bool {
@@ -415,7 +397,6 @@ const std::function<void()>& onEmptyInput = nullptr)
     const auto& handleEmpty = onEmptyInput ? onEmptyInput : defaultEmptyInput;
 
     if (quickPattern.empty()) {
-        // ── Interactive mode ──────────────────────────────────────────────────
         std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
 
         while (true) {
@@ -426,6 +407,8 @@ const std::function<void()>& onEmptyInput = nullptr)
             std::unique_ptr<char, decltype(&std::free)> raw(
                 readline(promptText.c_str()), &std::free);
 
+            // Treat EOF (null), empty string, and bare "/" as "no input"
+            // using a single consistent check, matching quick-mode behaviour.
             if (!raw || raw.get()[0] == '\0' || strcmp(raw.get(), "/") == 0) {
                 handleEmpty();
                 break;
@@ -438,14 +421,16 @@ const std::function<void()>& onEmptyInput = nullptr)
                 break;
             }
 
-            std::cout << AnsiEscape::CLEAR_LINE_ABOVE;  // Bad query — reprompt
+            std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
         }
     } else {
-        // ── Quick mode (/pattern) ─────────────────────────────────────────────
         if (tryFilter(quickPattern)) {
             saveQueryToHistory(quickPattern, ctx.filterHistory);
             onSuccess();
         } else {
+            // Call handleEmpty on no-result in quick mode so the caller's
+            // state (needsClrScrn etc.) is updated consistently whether the
+            // user typed /pattern or used interactive mode.
             handleEmpty();
         }
     }
@@ -454,7 +439,6 @@ const std::function<void()>& onEmptyInput = nullptr)
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
-// Handles filtering for selectForIsoFiles (ISO list and unmount views)
 bool handleFilteringForISO(const std::string& inputString, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, const std::string& operation,
 const std::string& operationColor, const std::vector<std::string>& isoDirs, bool isUnmount, size_t& currentPage)
 {
@@ -480,9 +464,6 @@ const std::string& operationColor, const std::vector<std::string>& isoDirs, bool
         operationColor + "\002" + operation +
         "\001\033[1;94m\002, or ↵ to return: \001\033[0;1m\002";
 
-    // handleFilteringForISO has a special empty-input exit: it sets
-    // needsClrScrn = isFiltered (to redraw only when a filter is already
-    // active) rather than unconditionally clearing the screen.
     auto onEmptyInput = [&]() {
         clear_history();
         needsClrScrn = isFiltered;
@@ -496,7 +477,6 @@ const std::string& operationColor, const std::vector<std::string>& isoDirs, bool
 }
 
 
-// Handles filtering for select_and_convert_to_iso
 void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<std::string>& files, const std::string& fileExtensionWithOutDots, bool& isFiltered, bool& needsClrScrn,
 bool& filterHistory, bool& need2Sort, size_t& currentPage)
 {
@@ -510,7 +490,6 @@ bool& filterHistory, bool& need2Sort, size_t& currentPage)
         needsClrScrn,
         filterHistory,
         currentPage
-        // sourceOverride = nullptr → applyFilterCore uses ctx.files directly
     };
 
     const bool isInteractive   = (mainInputString == "/");
