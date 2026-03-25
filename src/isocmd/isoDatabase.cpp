@@ -16,119 +16,126 @@ const uintmax_t maxDatabaseSize = 1 * 1024 * 1024; // 1MB
 std::mutex couNtMutex;
 
 
+// Persistent reusable local theadPool for removeNonExistentPathsFromDatabase
+static ThreadPool& getIOThreadPool(size_t* count = nullptr) {
+    static const unsigned cap = std::min(maxThreads, 8u);
+    static ThreadPool pool(cap);
+    if (count) *count = cap;
+    return pool;
+}
+
+
 // Function to remove non-existent paths from database and cache
 void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileList) {
-    // Check if the database file exists
     if (access(databaseFilePath.c_str(), F_OK) != 0) {
-		std::lock_guard<std::mutex> lock(updateListMutex);
+        std::lock_guard<std::mutex> lock(updateListMutex);
         globalIsoFileList.clear();
         return;
     }
-    
-    // Open with read/write access and acquire lock first
+ 
     int fd = open(databaseFilePath.c_str(), O_RDWR | O_CREAT, 0644);
     if (fd == -1) return;
-    
+ 
     if (flock(fd, LOCK_EX) == -1) {
         close(fd);
         return;
     }
-    
-    // Read all lines into a vector
-    std::vector<std::string> cache;
-    std::string line;
-    
-    // Use the same file descriptor for reading
-    FILE* file = fdopen(dup(fd), "r");
-    if (!file) {
+ 
+    // ── Read all lines via a dup'd descriptor ────────────────────────────────
+    // dup() so fdopen() doesn't take ownership of fd — we still need fd for
+    // the truncate/write step below. Close the dup'd fd via fclose().
+    int dupFd = dup(fd);
+    if (dupFd == -1) {
         flock(fd, LOCK_UN);
         close(fd);
         return;
     }
-    
-    char* linePtr = nullptr;
-    size_t len = 0;
-    while (getline(&linePtr, &len, file) != -1) {
-        std::string currentLine(linePtr);
-        // Remove trailing newline if present
-        if (!currentLine.empty() && currentLine.back() == '\n') {
-            currentLine.pop_back();
-        }
-        if (!currentLine.empty() && currentLine.back() == '\r') {
-            currentLine.pop_back();
-        }
-        if (!currentLine.empty()) {
-            cache.push_back(currentLine);
-        }
+ 
+    FILE* file = fdopen(dupFd, "r");
+    if (!file) {
+        close(dupFd);
+        flock(fd, LOCK_UN);
+        close(fd);
+        return;
     }
-    
-    if (linePtr) free(linePtr);
-    fclose(file);
-    
-    // Create a vector to track which paths exist
-    std::vector<bool> pathExists(cache.size(), false);
-    std::atomic<size_t> existingPathCount{0};
-    
-    // Use a thread pool to check paths in parallel
-    ThreadPool pool(maxThreads);
-    
-    // Determine batch size
-    const size_t batchSize = std::max(cache.size() / maxThreads + 1, static_cast<size_t>(2));
-    
-    // Create a vector to hold futures
+ 
+    std::vector<std::string> cache;
+    char*  linePtr = nullptr;
+    size_t len     = 0;
+ 
+    while (getline(&linePtr, &len, file) != -1) {
+        std::string line(linePtr);
+        if (!line.empty() && line.back() == '\n') line.pop_back();
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (!line.empty()) cache.push_back(std::move(line));
+    }
+ 
+    free(linePtr);
+    fclose(file); // also closes dupFd
+ 
+    if (cache.empty()) {
+        flock(fd, LOCK_UN);
+        close(fd);
+        return;
+    }
+ 
+    // ── Parallel existence check ─────────────────────────────────────────────
+    // Uses the shared I/O pool (capped at 8 threads) rather than spawning a
+    // fresh pool per call.
+    std::vector<bool>   pathExists(cache.size(), false);
+	std::atomic<size_t> existingCount{0};
+
+	size_t numThread;
+	ThreadPool& pool      = getIOThreadPool(&numThread);
+	const size_t chunkSize = (cache.size() + numThread - 1) / numThread;
+ 
     std::vector<std::future<void>> futures;
-    
-    // Process ISO lines in batches using the thread pool
-    for (size_t i = 0; i < cache.size(); i += batchSize) {
-        size_t batchEnd = std::min(i + batchSize, cache.size());
-        futures.emplace_back(pool.enqueue([&cache, &pathExists, &existingPathCount, i, batchEnd]() {
-            for (size_t j = i; j < batchEnd; ++j) {
+    futures.reserve(numThread);
+ 
+    for (size_t i = 0; i < numThread; ++i) {
+        const size_t start = i * chunkSize;
+        const size_t end   = std::min(cache.size(), start + chunkSize);
+        if (start >= end) break;
+ 
+        futures.emplace_back(pool.enqueue([&cache, &pathExists, &existingCount, start, end] {
+            for (size_t j = start; j < end; ++j) {
                 if (access(cache[j].c_str(), F_OK) == 0) {
                     pathExists[j] = true;
-                    existingPathCount.fetch_add(1, std::memory_order_relaxed);
+                    existingCount.fetch_add(1, std::memory_order_relaxed);
                 }
             }
         }));
     }
-    
-    // Wait for all tasks to complete
-    for (auto& future : futures) {
-        future.get();  // use get() instead of wait() to propagate exceptions
-    }
-    
-    // Check if any paths were removed
-    if (existingPathCount == cache.size()) {
-        // No changes needed, return without modifying the file
+ 
+    for (auto& f : futures) f.get();
+ 
+    // ── Early exit if nothing changed ────────────────────────────────────────
+    if (existingCount == cache.size()) {
         flock(fd, LOCK_UN);
         close(fd);
         return;
     }
-    
-    // Create vector of retained paths
-    std::vector<std::string> retainedPaths;
-    retainedPaths.reserve(existingPathCount);
+ 
+    // ── Build retained list ──────────────────────────────────────────────────
+    std::vector<std::string> retained;
+    retained.reserve(existingCount);
     for (size_t i = 0; i < cache.size(); ++i) {
-        if (pathExists[i]) {
-            retainedPaths.push_back(std::move(cache[i]));
-        }
+        if (pathExists[i])
+            retained.push_back(std::move(cache[i]));
     }
-    
-    // Truncate and write back to the same file descriptor
+ 
+    // ── Write back ───────────────────────────────────────────────────────────
     if (ftruncate(fd, 0) == -1 || lseek(fd, 0, SEEK_SET) == -1) {
         flock(fd, LOCK_UN);
         close(fd);
         return;
     }
-    
-    // Write retained paths
-    for (const auto& path : retainedPaths) {
+ 
+    for (const auto& path : retained) {
         std::string line = path + '\n';
-        if (write(fd, line.c_str(), line.size()) == -1) {
-            break;
-        }
+        if (write(fd, line.c_str(), line.size()) == -1) break;
     }
-    
-    // Release lock and close
+ 
     flock(fd, LOCK_UN);
     close(fd);
 }
