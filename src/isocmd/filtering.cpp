@@ -423,11 +423,9 @@ static void runFilterLoop(const std::string&          promptText,
 bool handleFilteringForISO(const std::string& inputString, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, const std::string& operation,
 const std::string& operationColor, const std::vector<std::string>& isoDirs, bool isUnmount, size_t& currentPage)
 {
-    // Only handle "/" (interactive) or "/pattern" (quick filter)
     if (inputString != "/" && (inputString.empty() || inputString[0] != '/'))
         return false;
 
-    // Choose the authoritative source list for the first filter pass
     const std::vector<std::string>& baseSource =
         isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
 
@@ -442,20 +440,41 @@ const std::string& operationColor, const std::vector<std::string>& isoDirs, bool
         displayConfig::toggleFullListUmount
     };
 
-    const bool isInteractive = (inputString == "/");
-    const std::string quickPattern = isInteractive ? "" : inputString.substr(1);
-
     const std::string prompt =
         "\001\033[1;96m\002FilterTerms\001\033[1;94m\002 ↵ for \001" +
         operationColor + "\002" + operation +
         "\001\033[1;94m\002, or ↵ to return: \001\033[0;1m\002";
 
-    // Nothing extra to do on success for this caller
-    runFilterLoop(prompt, quickPattern, ctx, [] {});
+    if (inputString == "/") {
+        // ── Interactive mode ──────────────────────────────────────────────
+        while (true) {
+            std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
+            clear_history();
+            ctx.filterHistory = true;
+            loadHistory(ctx.filterHistory);
 
-    if (isInteractive) {
-        // Returning from the interactive prompt: ensure screen refresh if filtered
-        needsClrScrn = isFiltered;
+            std::unique_ptr<char, decltype(&std::free)> raw(
+                readline(prompt.c_str()), &std::free);
+
+            if (!raw || raw.get()[0] == '\0' || strcmp(raw.get(), "/") == 0) {
+                clear_history();
+                needsClrScrn = isFiltered;
+                return true;
+            }
+
+            std::string query(raw.get());
+            if (applyFilterCore(query, ctx)) {
+                saveQueryToHistory(query, ctx.filterHistory);
+                return true;
+            }
+            // Bad query — loop back and reprint prompt
+        }
+    } else {
+        // ── Quick mode (/pattern) ─────────────────────────────────────────
+        std::string quickPattern = inputString.substr(1);
+        if (applyFilterCore(quickPattern, ctx)) {
+            saveQueryToHistory(quickPattern, ctx.filterHistory);
+        }
     }
 
     return true;
