@@ -21,7 +21,10 @@ std::vector<FilteringState> filteringStack;
 
 // Long-lived thread pool — created once, reused across all filterFiles() calls
 static ThreadPool& getThreadPool() {
-    static ThreadPool pool(std::thread::hardware_concurrency());
+    static ThreadPool pool([] {
+        const unsigned hw = maxThreads;
+        return (hw >= 4) ? 4u : std::max(1u, hw);
+    }());
     return pool;
 }
 
@@ -177,7 +180,7 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
         const size_t end   = std::min(files.size(), start + chunkSize);
         if (start >= end) break;
 
-        futures.emplace_back(pool.enqueue([=, &files, &queryTokens] {
+        futures.emplace_back(pool.enqueue([&files, start, end, needLower, queryTokens] {
             std::vector<std::string> localMatches;
             for (size_t j = start; j < end; ++j) {
                 const std::string& file = files[j];
@@ -207,8 +210,8 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
         }));
     }
 
-    // Collect and merge results preserving chunk order
     std::vector<std::string> filteredFiles;
+    filteredFiles.reserve(files.size());
     for (auto& fut : futures) {
         auto chunk = fut.get();
         filteredFiles.insert(filteredFiles.end(),
