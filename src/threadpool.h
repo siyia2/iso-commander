@@ -159,23 +159,27 @@ private:
     // Execute one task that has already been dequeued.
     // Atomically converts it from pending→active, runs it, then active→done.
     void runTask(std::function<void()>& task) {
-        // Atomically decrement pending and increment active in one operation.
-        task_state.fetch_add(
-            static_cast<uint64_t>(-PENDING_ONE) + ACTIVE_ONE,
-            std::memory_order_acq_rel);
+		// Don't process new tasks if stopping
+		if (stop.load(std::memory_order_acquire)) {
+			// Still need to account for the dequeued task
+			task_state.fetch_add(-PENDING_ONE, std::memory_order_acq_rel);
+			return;
+		}
+		
+		// Atomically decrement pending and increment active in one operation.
+		task_state.fetch_add(
+			static_cast<uint64_t>(-PENDING_ONE) + ACTIVE_ONE,
+			std::memory_order_acq_rel);
 
-        // Execute under try/catch: a throwing task must not escape the worker
-        // thread (that would call std::terminate). Exceptions are already
-        // captured inside the packaged_task and delivered via std::future.
-        try {
-            task();
-        } catch (...) {}
+		try {
+			task();
+		} catch (...) {}
 
-        // Decrement active and wake any idle-waiters if pool is now empty.
-        uint64_t prev = task_state.fetch_sub(ACTIVE_ONE,
-            std::memory_order_acq_rel);
-        notifyIfIdle(prev);
-    }
+		// Decrement active and wake any idle-waiters if pool is now empty.
+		uint64_t prev = task_state.fetch_sub(ACTIVE_ONE,
+			std::memory_order_acq_rel);
+		notifyIfIdle(prev);
+	}
 
     // ---- worker ---------------------------------------------------------
 
@@ -298,7 +302,9 @@ public:
     void waitAllTasksCompleted() {
         std::unique_lock<std::mutex> lock(mutex);
         cv.wait(lock, [this] {
-            return task_state.load(std::memory_order_acquire) == 0;
+            // Also check stop to avoid waiting forever
+			return task_state.load(std::memory_order_acquire) == 0 || 
+               stop.load(std::memory_order_acquire);
         });
     }
 
