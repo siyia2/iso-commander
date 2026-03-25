@@ -176,12 +176,6 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
 {
     if (files.empty() || query.empty()) return {};
 
-    // FIX: Removed registerPoolShutdown() call. The atexit handler it registered
-    // called waitAndStop() during static destruction, which could race with live
-    // futures held in this function's stack frame, causing broken promises when
-    // the promise was destroyed before .get() was called. The ThreadPool
-    // destructor already calls waitAllTasksCompleted() correctly.
-
     // queryTokens is captured by VALUE in the lambda below to avoid
     // dangling references if the calling frame is torn down before all
     // futures are collected (e.g. on exception paths).
