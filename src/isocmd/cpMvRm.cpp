@@ -26,11 +26,6 @@ static std::string validateLinuxPath(const std::string& path) {
     if (path.empty() || path[0] != '/')
         return "\001\033[1;91m\002Error: Path \001\033[1;93m\002'" + path + "'\001\033[1;91m\002 must be absolute (start with '/').\001\033[0m\002";
 
-    const std::string invalidChars = "|><&*?`$()[]{}\"'\\";
-    for (char c : invalidChars)
-        if (path.find(c) != std::string::npos)
-            return "\001\033[1;91m\002Error: Invalid characters in path \001\033[1;93m\002'" + path + "'\001\033[1;91m\002.\001\033[0m\002";
-
     for (char c : path)
         if (iscntrl(static_cast<unsigned char>(c)))
             return "\001\033[1;91m\002Error: Control characters in path \001\033[1;93m\002'" + path + "'\001\033[1;91m\002.\001\033[0m\002";
