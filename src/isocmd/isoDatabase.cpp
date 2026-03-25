@@ -18,14 +18,21 @@ std::mutex couNtMutex;
 
 // Persistent reusable local theadPool for removeNonExistentPathsFromDatabase
 static ThreadPool& getIOThreadPool(size_t* count = nullptr) {
-	 // Cap at 16 threads for file existence checks:
+    // Cap at 16 threads for file existence checks:
     // - Database has at most 10k entries
     // - 16 threads = 625 checks per thread (optimal balance)
     // - Filesystem metadata operations saturate beyond 16 threads
-    static const unsigned cap = std::min(maxThreads, 16u);
-    static ThreadPool pool(cap);
+    static const unsigned cap = []() {
+        unsigned int threads = std::thread::hardware_concurrency();
+        unsigned int maxThreadsValue = threads > 0 ? threads : 2;
+        return std::min(maxThreadsValue, 16u);
+    }();
+    
+    // Intentionally leaked to avoid static destruction order issues
+    static ThreadPool* pool = new ThreadPool(cap);
+    
     if (count) *count = cap;
-    return pool;
+    return *pool;
 }
 
 
