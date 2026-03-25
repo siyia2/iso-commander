@@ -165,15 +165,18 @@ static std::vector<QueryToken> buildQueryTokens(const std::string& query) {
 // Returns matching strings preserving their original relative order.
 //
 // Thread count is derived from the shared pool (via poolThreadCount()) so that
-// the number of chunks always matches the number of available workers — avoiding
-// the bug where hardware_concurrency() > pool size produced more chunks than
-// workers and left half the futures queued behind the others.
-std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query)
+// the number of chunks always matches the number of available workers
+std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, const std::string& query)
 {
     if (files.empty() || query.empty()) return {};
 
     const std::vector<QueryToken> queryTokens = buildQueryTokens(query);
-    if (queryTokens.empty()) return files;
+    if (queryTokens.empty()) {
+        // No valid tokens, return all indices
+        std::vector<size_t> allIndices(files.size());
+        std::iota(allIndices.begin(), allIndices.end(), 0);
+        return allIndices;
+    }
 
     const bool needLower = std::any_of(queryTokens.begin(), queryTokens.end(),
                                [](const QueryToken& qt) { return !qt.isCaseSensitive; });
@@ -184,7 +187,7 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
     const size_t numThreads = std::min(poolThreadCount(), files.size());
     const size_t chunkSize  = (files.size() + numThreads - 1) / numThreads;
 
-    std::vector<std::future<std::vector<std::string>>> futures;
+    std::vector<std::future<std::vector<size_t>>> futures;
     futures.reserve(numThreads);
 
     for (size_t i = 0; i < numThreads; ++i) {
@@ -193,11 +196,17 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
         if (start >= end) break;
 
         futures.emplace_back(pool.enqueue([&files, start, end, needLower, &queryTokens] {
-            std::vector<std::string> localMatches;
+            std::vector<size_t> localMatches;
+            localMatches.reserve((end - start) / 4); // Heuristic: assume ~25% match rate
+
+            std::string fileLower;
+            if (needLower) {
+                fileLower.reserve(256); // Pre-allocate reasonable size
+            }
+
             for (size_t j = start; j < end; ++j) {
                 const std::string& file = files[j];
 
-                std::string fileLower;
                 if (needLower) {
                     fileLower = file;
                     toLowerInPlace(fileLower);
@@ -213,7 +222,7 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
                                                        qt.lowerBadChar,    qt.lowerGoodSuffix);
                     }
                     if (match) {
-                        localMatches.push_back(file);
+                        localMatches.push_back(j); // Store index directly
                         break;  // Any token matching is sufficient
                     }
                 }
@@ -222,15 +231,16 @@ std::vector<std::string> filterFiles(const std::vector<std::string>& files, cons
         }));
     }
 
-    std::vector<std::string> filteredFiles;
-    filteredFiles.reserve(files.size());
+    // Collect and merge results (they're already in order per chunk)
+    std::vector<size_t> filteredIndices;
+    filteredIndices.reserve(files.size());
     for (auto& fut : futures) {
         auto chunk = fut.get();
-        filteredFiles.insert(filteredFiles.end(),
-                             std::make_move_iterator(chunk.begin()),
-                             std::make_move_iterator(chunk.end()));
+        filteredIndices.insert(filteredIndices.end(),
+                               std::make_move_iterator(chunk.begin()),
+                               std::make_move_iterator(chunk.end()));
     }
-    return filteredFiles;
+    return filteredIndices;
 }
 
 
@@ -301,32 +311,26 @@ static bool applyFilterCore(const std::string& searchString, FilterContext& ctx)
             }
         }
 
-        auto matched = filterFiles(derived, searchString);
-        if (matched.empty()) return false;
+        // Get matching indices from the derived list
+        auto matchedIndices = filterFilesIndices(derived, searchString);
+        if (matchedIndices.empty()) return false;
 
-        // Map matched derived keys back to original paths.
-        // Build a multimap to handle the (rare) case of duplicate derived keys.
-        std::unordered_multimap<std::string, size_t> keyToIdx;
-        keyToIdx.reserve(derived.size());
-        for (size_t i = 0; i < derived.size(); ++i)
-            keyToIdx.emplace(derived[i], i);
-
-        std::unordered_set<std::string> matchedSet(matched.begin(), matched.end());
-        for (size_t i = 0; i < derived.size(); ++i) {
-            if (matchedSet.count(derived[i])) {
-                tempFiltered.push_back(sourceList[i]);
-                tempIndices.push_back(i);
-            }
+        // Map matched indices back to original paths
+        tempFiltered.reserve(matchedIndices.size());
+        tempIndices.reserve(matchedIndices.size());
+        for (size_t idx : matchedIndices) {
+            tempFiltered.push_back(sourceList[idx]);
+            tempIndices.push_back(idx);
         }
     } else {
-        // Search paths directly; recover indices in a single pass
-        tempFiltered = filterFiles(sourceList, searchString);
-        if (tempFiltered.empty()) return false;
+        // Search paths directly and get indices in one pass
+        tempIndices = filterFilesIndices(sourceList, searchString);
+        if (tempIndices.empty()) return false;
 
-        std::unordered_set<std::string> matchedSet(tempFiltered.begin(), tempFiltered.end());
-        for (size_t i = 0; i < sourceList.size(); ++i) {
-            if (matchedSet.count(sourceList[i]))
-                tempIndices.push_back(i);
+        // Build the filtered file list from indices
+        tempFiltered.reserve(tempIndices.size());
+        for (size_t idx : tempIndices) {
+            tempFiltered.push_back(sourceList[idx]);
         }
     }
 
@@ -356,6 +360,7 @@ static bool applyFilterCore(const std::string& searchString, FilterContext& ctx)
 
     ctx.isFiltered = true;
     return true;
+
 }
 
 
@@ -382,11 +387,8 @@ static void saveQueryToHistory(const std::string& query, bool& filterHistory) {
 // onEmptyInput – called when the user submits an empty query or EOF; replaces
 //                the default "clear two lines + needsClrScrn=false" behaviour.
 //                If nullptr the default behaviour is used.
-static void runFilterLoop(const std::string&           promptText,
-                          const std::string&           quickPattern,
-                          FilterContext&                ctx,
-                          const std::function<void()>& onSuccess,
-                          const std::function<void()>& onEmptyInput = nullptr)
+static void runFilterLoop(const std::string& promptText, const std::string& quickPattern, FilterContext& ctx, const std::function<void()>& onSuccess, 
+const std::function<void()>& onEmptyInput = nullptr)
 {
     auto tryFilter = [&](const std::string& query) -> bool {
         return applyFilterCore(query, ctx);
