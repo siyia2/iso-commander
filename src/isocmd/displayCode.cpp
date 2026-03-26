@@ -161,7 +161,9 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
 		originalPage = currentPage;
 		// Clear the filtering stack when returning to unfiltered mode
         filteringStack.clear();
-        isFiltered = false;        
+        isFiltered = false; 
+        // Restore filteredFiles to match the source
+		filteredFiles = isoDirs;       
     }
     printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS", "", pendingIndices, hasPendingProcess, isFiltered, currentPage, isImportRunning);
 
