@@ -28,12 +28,9 @@ static ThreadPool& getIOThreadPool(size_t* count = nullptr) {
 
 // Function to remove non-existent paths from database and cache
 void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileList) {
-    // Static mutex to serialize file access across threads within the same process
     static std::mutex fileMutex;
     std::lock_guard<std::mutex> fileLock(fileMutex);
-    
-    // Attempt to open the file directly instead of using access() + open(),
-    // which would introduce a TOCTOU race between the existence check and the open.
+
     int fd = open(databaseFilePath.c_str(), O_RDWR, 0644);
     if (fd == -1) {
         if (errno == ENOENT) {
@@ -42,20 +39,19 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
         }
         return;
     }
- 
+
     if (flock(fd, LOCK_EX) == -1) {
         close(fd);
         return;
     }
- 
-    // Read all lines via a dup'd descriptor
+
     int dupFd = dup(fd);
     if (dupFd == -1) {
         flock(fd, LOCK_UN);
         close(fd);
         return;
     }
- 
+
     FILE* file = fdopen(dupFd, "r");
     if (!file) {
         close(dupFd);
@@ -63,70 +59,70 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
         close(fd);
         return;
     }
- 
+
     std::vector<std::string> cache;
     char* linePtr = nullptr;
     size_t len = 0;
- 
+
     while (getline(&linePtr, &len, file) != -1) {
         std::string line(linePtr);
         if (!line.empty() && line.back() == '\n') line.pop_back();
         if (!line.empty() && line.back() == '\r') line.pop_back();
         if (!line.empty()) cache.push_back(std::move(line));
     }
- 
+
     free(linePtr);
     fclose(file); // also closes dupFd
- 
+
     if (cache.empty()) {
         flock(fd, LOCK_UN);
         close(fd);
         return;
     }
- 
-    // Parallel existence check
-    std::vector<bool> pathExists(cache.size(), false);
-    std::atomic<size_t> existingCount{0};
 
+    // Parallel existence check
+    std::vector<int> pathExists(cache.size(), 0);
+    std::atomic<size_t> existingCount{0};
     size_t numThread;
     ThreadPool& pool = getIOThreadPool(&numThread);
     const size_t chunkSize = (cache.size() + numThread - 1) / numThread;
- 
+
     std::vector<std::future<void>> futures;
     futures.reserve(numThread);
- 
+
     for (size_t i = 0; i < numThread; ++i) {
         const size_t start = i * chunkSize;
         const size_t end = std::min(cache.size(), start + chunkSize);
         if (start >= end) break;
- 
+
         futures.emplace_back(pool.enqueue([&cache, &pathExists, &existingCount, start, end] {
             for (size_t j = start; j < end; ++j) {
                 if (access(cache[j].c_str(), F_OK) == 0) {
-                    pathExists[j] = true;
+                    pathExists[j] = 1;
                     existingCount.fetch_add(1, std::memory_order_relaxed);
                 }
             }
         }));
     }
- 
+
     for (auto& f : futures) f.get();
- 
+
     // Early exit if nothing changed
     if (existingCount == cache.size()) {
         flock(fd, LOCK_UN);
         close(fd);
         return;
     }
- 
-    // Build retained list
+
+    // Build retained using COPIES from cache (not moves),
+    // so cache remains intact and valid for the write-back below.
     std::vector<std::string> retained;
     retained.reserve(existingCount);
     for (size_t i = 0; i < cache.size(); ++i) {
         if (pathExists[i])
-            retained.push_back(std::move(cache[i]));
+        retained.push_back(std::move(cache[i]));
     }
- 
+
     // Write back to file
     if (ftruncate(fd, 0) == -1 || lseek(fd, 0, SEEK_SET) == -1) {
         flock(fd, LOCK_UN);
@@ -137,7 +133,9 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
     bool writeSuccess = true;
     for (const auto& path : retained) {
         std::string line = path + '\n';
-        if (write(fd, line.c_str(), line.size()) == -1) {
+        // Use ::write() to explicitly call the POSIX syscall,
+        // preventing name collision with std::write or member shadowing.
+        if (::write(fd, line.c_str(), line.size()) == -1) {
             writeSuccess = false;
             break;
         }
@@ -146,7 +144,9 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
     flock(fd, LOCK_UN);
     close(fd);
 
-    // Sync in-memory list to match pruned database only if write succeeded
+    // Move retained into globalIsoFileList only AFTER the file write
+    // is fully complete and fd is closed. Safe to move now since we no longer
+    // need retained for anything else.
     if (writeSuccess) {
         std::lock_guard<std::mutex> lock(updateListMutex);
         globalIsoFileList = std::move(retained);
