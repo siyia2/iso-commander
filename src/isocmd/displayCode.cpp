@@ -32,22 +32,22 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
     
-    // Move static variable inside the mutex-protected section
+    static std::mutex lastModifiedMutex;
     static std::filesystem::file_time_type lastModifiedTime;
     
     bool needToReload = false;
     
-    // Check if database exists and was modified (under mutex)
+    // Check if database exists and was modified — protected by its own mutex
+    // so lastModifiedTime is never read/written without synchronisation
     {
-        std::lock_guard<std::mutex> lock(updateListMutex);
+        std::lock_guard<std::mutex> lock(lastModifiedMutex);
         
         if (std::filesystem::exists(databaseFilePath)) {
             std::filesystem::file_time_type currentModifiedTime = 
                 std::filesystem::last_write_time(databaseFilePath);
             
-            if (lastModifiedTime == std::filesystem::file_time_type{}) {
-                needToReload = true;
-            } else if (currentModifiedTime > lastModifiedTime) {
+            if (lastModifiedTime == std::filesystem::file_time_type{} ||
+                currentModifiedTime > lastModifiedTime) {
                 needToReload = true;
             }
             
@@ -60,41 +60,46 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
     
     clearScrollBuffer();
     
-    if (needToReload) {
-        std::lock_guard<std::mutex> lock(updateListMutex);
-        loadFromDatabase(globalIsoFileList);
-        currentPage = originalPage;
-        pendingIndices.clear();
-        hasPendingProcess = false;
-        
-        if (isFiltered) {
-            filteringStack.clear();
-            isFiltered = false;
-        }
-        
-        sortFilesCaseInsensitive(globalIsoFileList);
-    }
-    
-    // Lock to prevent simultaneous access to std::cout
+    // Single lock covers both the reload and the print — no gap between them
+    // where another thread could modify globalIsoFileList or filteredFiles
+    bool isEmpty = false;
     {
         std::lock_guard<std::mutex> lock(updateListMutex);
+        
+        if (needToReload) {
+            loadFromDatabase(globalIsoFileList);
+            currentPage = originalPage;
+            pendingIndices.clear();
+            hasPendingProcess = false;
+            
+            if (isFiltered) {
+                filteringStack.clear();
+                isFiltered = false;
+            }
+            
+            sortFilesCaseInsensitive(globalIsoFileList);
+        }
+        
         if (umountMvRmBreak) {
-            // Clear the filtering stack when returning to unfiltered mode from list modifications
             filteringStack.clear();
             isFiltered = false;
         }
         
-        printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType, 
+        printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType,
                   pendingIndices, hasPendingProcess, isFiltered, currentPage, isImportRunning);
         
-        if (globalIsoFileList.empty()) {
-            std::cout << "\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n";
-            std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            return false;
-        }
+        isEmpty = globalIsoFileList.empty();
     }
-
+    
+    // cin.ignore is outside the lock — never block while holding a mutex
+    // or other threads that need updateListMutex will deadlock
+    if (isEmpty) {
+        std::cout << "\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n";
+        std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        return false;
+    }
+    
     return true;
 }
 

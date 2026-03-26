@@ -335,7 +335,6 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
 
 // Function to load ISO database from file
 void loadFromDatabase(std::vector<std::string>& outList) {
-    // Static mutex to serialize file access across threads within the same process
     static std::mutex fileMutex;
     std::lock_guard<std::mutex> fileLock(fileMutex);
     
@@ -351,20 +350,18 @@ void loadFromDatabase(std::vector<std::string>& outList) {
     if (fstat(fd, &fileStat) == -1 || fileStat.st_size == 0) {
         flock(fd, LOCK_UN);
         close(fd);
-        outList.clear();   // caller holds updateListMutex — safe to write directly
+        outList.clear();
         return;
     }
     
-    // Simple read approach
     std::vector<char> buffer(fileStat.st_size);
-    ssize_t bytesRead = read(fd, buffer.data(), fileStat.st_size);
+    ssize_t bytesRead = ::read(fd, buffer.data(), fileStat.st_size);
     
     flock(fd, LOCK_UN);
     close(fd);
     
-    if (bytesRead != fileStat.st_size) return;
+    if (bytesRead <= 0 || bytesRead > fileStat.st_size) return;
     
-    // Parse the buffer
     std::vector<std::string> loadedFiles;
     char* start = buffer.data();
     char* end = buffer.data() + bytesRead;
@@ -378,10 +375,12 @@ void loadFromDatabase(std::vector<std::string>& outList) {
         if (!line.empty()) {
             loadedFiles.push_back(std::move(line));
         }
-        start = lineEnd + 1;
+        // FIX: if lineEnd == end (no trailing newline on last line),
+        // lineEnd + 1 would be one past the buffer — UB.
+        // Clamp to end so the loop condition (start < end) terminates cleanly.
+        start = (lineEnd < end) ? lineEnd + 1 : end;
     }
-
-    outList = std::move(loadedFiles);  // caller decides locking
+    outList = std::move(loadedFiles);
 }
 
 
