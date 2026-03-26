@@ -61,6 +61,7 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
                     input = "";
                     std::string dummyDir = "";
                     refreshForDatabase(dummyDir, promptFlag, maxDepth, filterHistory, newISOFound);
+                    return;
                 }
                 
                 if (input ==  "config" || input == "stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter" || input == "*auto_off" || input == "*auto_on" || input == "*flno_on" || input == "*flno_off" || isValidInput(input) || input.starts_with("*pagination_")) {
@@ -115,40 +116,61 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
                 validPaths.push_back(path);
             }
         }
-
+        
+        // Check if we have any valid paths to process
+        if (validPaths.empty()) {
+            if (promptFlag) {
+                flushStdin();
+                restoreInput();
+                
+                // Show error message about invalid paths
+                if (!invalidPaths.empty()) {
+                    std::cout << "\r\033[1;91mAt least one valid directory path is required.\033[0m\n\n";
+                }
+                
+                std::cout << "\033[1;32m↵ to continue...\033[0;1m";
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                
+                // Return to original prompt by calling refreshForDatabase with empty input
+                std::string dummyDir = "";
+                refreshForDatabase(dummyDir, promptFlag, maxDepth, filterHistory, newISOFound);
+            }
+            return;
+        }
+        
         // Now create the thread pool based on valid paths count
         unsigned int numThreads = std::min(static_cast<unsigned int>(validPaths.size()), maxThreads);
         {
-			// Create a thread pool for concurrent file traversal
-			ThreadPool pool(numThreads);
-			std::vector<std::future<void>> futures;
-			std::mutex processMutex;
-			std::mutex traverseErrorMutex;
+            // Create a thread pool for concurrent file traversal
+            ThreadPool pool(numThreads);
+            std::vector<std::future<void>> futures;
+            std::mutex processMutex;
+            std::mutex traverseErrorMutex;
 
-			// Queue tasks for each valid path
-			for (const auto& validPath : validPaths) {
-				futures.emplace_back(
-					pool.enqueue([validPath, &allIsoFiles, &uniqueErrorMessages, &totalFiles, 
-								  &processMutex, &traverseErrorMutex, &maxDepth, &promptFlag]() {
-						traverse(validPath, allIsoFiles, uniqueErrorMessages, totalFiles, 
-								processMutex, traverseErrorMutex, maxDepth, promptFlag);
-					})
-				);
-			}
+            // Queue tasks for each valid path
+            for (const auto& validPath : validPaths) {
+                futures.emplace_back(
+                    pool.enqueue([validPath, &allIsoFiles, &uniqueErrorMessages, &totalFiles, 
+                                  &processMutex, &traverseErrorMutex, &maxDepth, &promptFlag]() {
+                        traverse(validPath, allIsoFiles, uniqueErrorMessages, totalFiles, 
+                                processMutex, traverseErrorMutex, maxDepth, promptFlag);
+                    })
+                );
+            }
 
-			// Wait for all tasks to complete, checking for cancellation
-			for (auto& future : futures) {
-				future.wait();
-				if (g_operationCancelled.load()) break;
-			}
-			// When out of scope threads automatically cleanup-up
-		}
-		
-		if (!g_operationCancelled.load()) {
-			// More efficient deduplication using set
-			std::unordered_set<std::string> uniqueFiles(allIsoFiles.begin(), allIsoFiles.end());
-			allIsoFiles.assign(uniqueFiles.begin(), uniqueFiles.end());
-		}
+            // Wait for all tasks to complete, checking for cancellation
+            for (auto& future : futures) {
+                future.wait();
+                if (g_operationCancelled.load()) break;
+            }
+            // When out of scope threads automatically cleanup-up
+        }
+        
+        if (!g_operationCancelled.load()) {
+            // More efficient deduplication using set
+            std::unordered_set<std::string> uniqueFiles(allIsoFiles.begin(), allIsoFiles.end());
+            allIsoFiles.assign(uniqueFiles.begin(), uniqueFiles.end());
+        }
         
         // Post-processing
         if (promptFlag) {
