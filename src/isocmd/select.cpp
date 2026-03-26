@@ -291,18 +291,27 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         
         // Check specifically for "<" to return/exit
         if (inputString == "<") {
-            if (isFiltered) {
-                isFiltered = false;
-                // Clear the filtering stack when returning to unfiltered mode
-                filteringStack.clear();
-                currentPage = originalPage;
-                needsClrScrn = true;
-                continue;
-            } else {
+			if (isFiltered) {
+				isFiltered = false;
+				// Clear the filtering stack when returning to unfiltered mode
+				filteringStack.clear();
+				
+				// CRITICAL: Restore filteredFiles to the original source
+				if (isUnmount) {
+					filteredFiles = isoDirs;  // Restore from mounted ISOs
+				} else {
+					std::lock_guard<std::mutex> lock(updateListMutex);
+					filteredFiles = globalIsoFileList;  // Restore from main ISO list
+				}
+				
+				currentPage = originalPage;
+				needsClrScrn = true;
+				continue;
+			} else {
 				currentPage = 0;
-                return; // Exit the function
-            }
-        }
+				return; // Exit the function
+			}
+		}
         
         if (inputString == "proc" && pendingIndices.empty()) {
 			hasPendingProcess = false;
