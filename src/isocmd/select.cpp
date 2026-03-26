@@ -295,8 +295,6 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                 isFiltered = false;
                 // Clear the filtering stack when returning to unfiltered mode
                 filteringStack.clear();
-                // Clear filteredFiles
-				filteredFiles.clear();
                 currentPage = originalPage;
                 needsClrScrn = true;
                 continue;

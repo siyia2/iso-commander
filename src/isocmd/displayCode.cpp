@@ -71,8 +71,7 @@ bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered
                 // Restore filteredFiles when clearing filter state
                 filteringStack.clear();
                 isFiltered = false;
-                // Clear filteredFiles
-                filteredFiles.clear(); 
+
             }
             
             sortFilesCaseInsensitive(globalIsoFileList);
@@ -85,8 +84,7 @@ bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered
             // Restore filteredFiles when clearing filter state
             filteringStack.clear();
             isFiltered = false;
-            // Clear filteredFiles
-            filteredFiles.clear(); 
+
         }
         printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType, pendingIndices, hasPendingProcess, isFiltered, currentPage, isImportRunning);
         
