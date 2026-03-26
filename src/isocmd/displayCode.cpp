@@ -57,33 +57,32 @@ bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered
     // Common operations
     clearScrollBuffer();
     if (needToReload) {
-        loadFromDatabase(globalIsoFileList);
+		loadFromDatabase(globalIsoFileList);
         {
             std::lock_guard<std::mutex> lock(updateListMutex);
-            // Restore original page in unfiltered list if possible for rm/mv/cp
-			currentPage = originalPage;
-            // Clear any pending automatically
-				pendingIndices.clear();
-				hasPendingProcess = false;
-				if (isFiltered) {
-					// Clear the filtering stack when returning to unfiltered mode
-					filteringStack.clear();
-					isFiltered = false;
-				}
-			// Optimization: sort only if (needToReload) from database
+            currentPage = originalPage;
+            pendingIndices.clear();
+            hasPendingProcess = false;
+            
+            if (isFiltered) {
+                // Restore filteredFiles when clearing filter state
+                filteringStack.clear();
+                isFiltered = false;
+                filteredFiles = globalIsoFileList;  // CRITICAL: Restore the file list
+            }
+            
             sortFilesCaseInsensitive(globalIsoFileList);
         }
     }
     
-    // Lock to prevent simultaneous access to std::cout
     {
         std::lock_guard<std::mutex> lock(updateListMutex);
         if (umountMvRmBreak) {
-			
-			// Clear the filtering stack when returning to unfiltered mode from list modifications with Mv/Rm
-			filteringStack.clear();
-			isFiltered = false;
-		}
+            // Restore filteredFiles when clearing filter state
+            filteringStack.clear();
+            isFiltered = false;
+            filteredFiles = globalIsoFileList;  // CRITICAL: Restore the file list
+        }
         printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType, pendingIndices, hasPendingProcess, isFiltered, currentPage, isImportRunning);
         
         if (globalIsoFileList.empty()) {
