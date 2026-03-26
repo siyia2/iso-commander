@@ -26,55 +26,53 @@ namespace displayConfig {
 
 
 // Function to load and display ISO files from the database into a global vector, database file is used only on first access or on every modification
-bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, 
-bool& hasPendingProcess, size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
+bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, 
+size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
     
-    signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+    signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
     
+    // Move static variable inside the mutex-protected section
     static std::filesystem::file_time_type lastModifiedTime;
-
-    // Check if the database file exists and has been modified
+    
     bool needToReload = false;
-    if (std::filesystem::exists(databaseFilePath)) {
-        std::filesystem::file_time_type currentModifiedTime = 
-            std::filesystem::last_write_time(databaseFilePath);
-
-        if (lastModifiedTime == std::filesystem::file_time_type{}) {
-            needToReload = true;
-        } else if (currentModifiedTime > lastModifiedTime) {
-            needToReload = true;
-        }
-
-        lastModifiedTime = currentModifiedTime;
-    } else {
-        needToReload = true;
-    }
-
-    // Common operations
-    clearScrollBuffer();
-    if (needToReload) {
-        // Load from database while holding the mutex
-        {
-            std::lock_guard<std::mutex> lock(updateListMutex);
-            loadFromDatabase(globalIsoFileList);
+    
+    // Check if database exists and was modified (under mutex)
+    {
+        std::lock_guard<std::mutex> lock(updateListMutex);
+        
+        if (std::filesystem::exists(databaseFilePath)) {
+            std::filesystem::file_time_type currentModifiedTime = 
+                std::filesystem::last_write_time(databaseFilePath);
             
-            // Restore original page in unfiltered list if possible
-            currentPage = originalPage;
-            
-            // Clear any pending operations
-            pendingIndices.clear();
-            hasPendingProcess = false;
-            
-            if (isFiltered) {
-                // Clear the filtering stack when returning to unfiltered mode
-                filteringStack.clear();
-                isFiltered = false;
+            if (lastModifiedTime == std::filesystem::file_time_type{}) {
+                needToReload = true;
+            } else if (currentModifiedTime > lastModifiedTime) {
+                needToReload = true;
             }
             
-            // Sort only if we reloaded from database
-            sortFilesCaseInsensitive(globalIsoFileList);
+            lastModifiedTime = currentModifiedTime;
+        } else {
+            needToReload = true;
+            lastModifiedTime = std::filesystem::file_time_type{};
         }
+    }
+    
+    clearScrollBuffer();
+    
+    if (needToReload) {
+        std::lock_guard<std::mutex> lock(updateListMutex);
+        loadFromDatabase(globalIsoFileList);
+        currentPage = originalPage;
+        pendingIndices.clear();
+        hasPendingProcess = false;
+        
+        if (isFiltered) {
+            filteringStack.clear();
+            isFiltered = false;
+        }
+        
+        sortFilesCaseInsensitive(globalIsoFileList);
     }
     
     // Lock to prevent simultaneous access to std::cout
