@@ -28,14 +28,12 @@ static ThreadPool& getIOThreadPool(size_t* count = nullptr) {
 
 // Function to remove non-existent paths from database and cache
 void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileList) {
-	
-	// Static mutex to serialize function externally
-	static std::mutex functionMutex;
-    std::lock_guard<std::mutex> fnLock(functionMutex);
+    // Static mutex to serialize file access across threads within the same process
+    static std::mutex fileMutex;
+    std::lock_guard<std::mutex> fileLock(fileMutex);
     
     // Attempt to open the file directly instead of using access() + open(),
     // which would introduce a TOCTOU race between the existence check and the open.
-    // If the file doesn't exist (ENOENT), clear the in-memory list and return.
     int fd = open(databaseFilePath.c_str(), O_RDWR, 0644);
     if (fd == -1) {
         if (errno == ENOENT) {
@@ -50,9 +48,7 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
         return;
     }
  
-    // ── Read all lines via a dup'd descriptor ────────────────────────────────
-    // dup() so fdopen() doesn't take ownership of fd — we still need fd for
-    // the truncate/write step below. Close the dup'd fd via fclose().
+    // Read all lines via a dup'd descriptor
     int dupFd = dup(fd);
     if (dupFd == -1) {
         flock(fd, LOCK_UN);
@@ -69,8 +65,8 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
     }
  
     std::vector<std::string> cache;
-    char*  linePtr = nullptr;
-    size_t len     = 0;
+    char* linePtr = nullptr;
+    size_t len = 0;
  
     while (getline(&linePtr, &len, file) != -1) {
         std::string line(linePtr);
@@ -88,22 +84,20 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
         return;
     }
  
-    // ── Parallel existence check ─────────────────────────────────────────────
-    // Uses the shared I/O pool (capped at 16 threads) rather than spawning a
-    // fresh pool per call.
-    std::vector<bool>   pathExists(cache.size(), false);
-	std::atomic<size_t> existingCount{0};
+    // Parallel existence check
+    std::vector<bool> pathExists(cache.size(), false);
+    std::atomic<size_t> existingCount{0};
 
-	size_t numThread;
-	ThreadPool& pool      = getIOThreadPool(&numThread);
-	const size_t chunkSize = (cache.size() + numThread - 1) / numThread;
+    size_t numThread;
+    ThreadPool& pool = getIOThreadPool(&numThread);
+    const size_t chunkSize = (cache.size() + numThread - 1) / numThread;
  
     std::vector<std::future<void>> futures;
     futures.reserve(numThread);
  
     for (size_t i = 0; i < numThread; ++i) {
         const size_t start = i * chunkSize;
-        const size_t end   = std::min(cache.size(), start + chunkSize);
+        const size_t end = std::min(cache.size(), start + chunkSize);
         if (start >= end) break;
  
         futures.emplace_back(pool.enqueue([&cache, &pathExists, &existingCount, start, end] {
@@ -118,14 +112,14 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
  
     for (auto& f : futures) f.get();
  
-    // ── Early exit if nothing changed ────────────────────────────────────────
+    // Early exit if nothing changed
     if (existingCount == cache.size()) {
         flock(fd, LOCK_UN);
         close(fd);
         return;
     }
  
-    // ── Build retained list ──────────────────────────────────────────────────
+    // Build retained list
     std::vector<std::string> retained;
     retained.reserve(existingCount);
     for (size_t i = 0; i < cache.size(); ++i) {
@@ -133,23 +127,27 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
             retained.push_back(std::move(cache[i]));
     }
  
-    // ── Write back ───────────────────────────────────────────────────────────
+    // Write back to file
     if (ftruncate(fd, 0) == -1 || lseek(fd, 0, SEEK_SET) == -1) {
         flock(fd, LOCK_UN);
         close(fd);
         return;
     }
 
+    bool writeSuccess = true;
     for (const auto& path : retained) {
         std::string line = path + '\n';
-        if (write(fd, line.c_str(), line.size()) == -1) break;
+        if (write(fd, line.c_str(), line.size()) == -1) {
+            writeSuccess = false;
+            break;
+        }
     }
 
     flock(fd, LOCK_UN);
     close(fd);
 
-    // ── Sync in-memory list to match pruned database ─────────────────────────
-    {
+    // Sync in-memory list to match pruned database only if write succeeded
+    if (writeSuccess) {
         std::lock_guard<std::mutex> lock(updateListMutex);
         globalIsoFileList = std::move(retained);
     }
@@ -337,6 +335,10 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
 
 // Function to load ISO database from file
 void loadFromDatabase(std::vector<std::string>& outList) {
+    // Static mutex to serialize file access across threads within the same process
+    static std::mutex fileMutex;
+    std::lock_guard<std::mutex> fileLock(fileMutex);
+    
     int fd = open(databaseFilePath.c_str(), O_RDONLY);
     if (fd == -1) return;
     
@@ -379,7 +381,7 @@ void loadFromDatabase(std::vector<std::string>& outList) {
         start = lineEnd + 1;
     }
 
-    outList = std::move(loadedFiles);  // no mutex — caller decides locking
+    outList = std::move(loadedFiles);  // caller decides locking
 }
 
 
@@ -394,7 +396,7 @@ bool saveToDatabase(std::vector<std::string> globalIsoFileList, std::atomic<bool
 
     // Create the database directory if it doesn't exist
     if (!std::filesystem::exists(databaseDirectory) && !std::filesystem::create_directories(databaseDirectory)) {
-        return false; // Return false if directory creation fails
+        return false;
     }
     // Check if the database path is a valid directory
     if (!std::filesystem::is_directory(databaseDirectory)) {
@@ -402,7 +404,6 @@ bool saveToDatabase(std::vector<std::string> globalIsoFileList, std::atomic<bool
     }
 
     // Acquire the in-process file mutex before opening the file.
-    // Initialized once on first call, thread-safely guaranteed by C++11.
     // flock() is advisory and provides no mutual exclusion between threads in the
     // same process — both threads share the same lock. This mutex fills that gap.
     static std::mutex fileMutex;
@@ -458,9 +459,8 @@ bool saveToDatabase(std::vector<std::string> globalIsoFileList, std::atomic<bool
     // Iterate through the ISO files to find new entries
     for (const auto& iso : globalIsoFileList) {
         if (existingSet.find(iso) == existingSet.end()) {
-            // If the ISO file is not in the existing cache, add it to newEntries
             newEntries.push_back(iso);
-            localNewISOFound = true; // Track locally; written to atomic once at the end
+            localNewISOFound = true;
         }
     }
 
@@ -469,14 +469,13 @@ bool saveToDatabase(std::vector<std::string> globalIsoFileList, std::atomic<bool
         newISOFound.store(false);
         flock(fd, LOCK_UN);
         close(fd);
-        return false; // No new entries, don't modify cache
+        return false;
     }
 
     // Combine the existing cache with new entries, respecting the maximum size limit
     std::vector<std::string> combinedCache = existingCache;
     combinedCache.insert(combinedCache.end(), newEntries.begin(), newEntries.end());
     if (combinedCache.size() > maxDatabaseSize) {
-        // If the combined cache exceeds the maximum size, remove the oldest entries
         combinedCache.erase(combinedCache.begin(), combinedCache.begin() + (combinedCache.size() - maxDatabaseSize));
     }
 
@@ -492,7 +491,7 @@ bool saveToDatabase(std::vector<std::string> globalIsoFileList, std::atomic<bool
     for (const auto& entry : combinedCache) {
         std::string line = entry + "\n";
         if (write(fd, line.data(), line.size()) == -1) {
-            success = false; // Set success to false if writing fails
+            success = false;
             break;
         }
     }
@@ -501,11 +500,9 @@ bool saveToDatabase(std::vector<std::string> globalIsoFileList, std::atomic<bool
     flock(fd, LOCK_UN);
     close(fd);
 
-    // Write the local result to the shared atomic only once, after all work is done,
-    // so concurrent calls cannot interleave their true/false stores.
+    // Write the local result to the shared atomic only once, after all work is done
     newISOFound.store(localNewISOFound);
 
-    // Return whether the operation was successful
     return success;
 }
 
