@@ -336,7 +336,8 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
 
 
 // Function to load ISO database from file
-void loadFromDatabase(std::vector<std::string>& globalIsoFileList) {
+// Function to load ISO database from file
+void loadFromDatabase(std::vector<std::string>& outList) {
     int fd = open(databaseFilePath.c_str(), O_RDONLY);
     if (fd == -1) return;
     
@@ -349,10 +350,7 @@ void loadFromDatabase(std::vector<std::string>& globalIsoFileList) {
     if (fstat(fd, &fileStat) == -1 || fileStat.st_size == 0) {
         flock(fd, LOCK_UN);
         close(fd);
-        {
-            std::lock_guard<std::mutex> lock(updateListMutex);
-            globalIsoFileList.clear();
-        }
+        outList.clear();   // caller holds updateListMutex — safe to write directly
         return;
     }
     
@@ -381,10 +379,8 @@ void loadFromDatabase(std::vector<std::string>& globalIsoFileList) {
         }
         start = lineEnd + 1;
     }
-    {
-        std::lock_guard<std::mutex> lock(updateListMutex);
-        globalIsoFileList.swap(loadedFiles);
-    }
+
+    outList = std::move(loadedFiles);  // no mutex — caller decides locking
 }
 
 

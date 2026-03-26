@@ -58,9 +58,11 @@ bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered
     // Common operations
     clearScrollBuffer();
     if (needToReload) {
-		loadFromDatabase(globalIsoFileList);
+        std::vector<std::string> freshList;
+        loadFromDatabase(freshList);                    // no mutex held during I/O
         {
             std::lock_guard<std::mutex> lock(updateListMutex);
+            globalIsoFileList = std::move(freshList);  // atomic swap under lock
             currentPage = originalPage;
             pendingIndices.clear();
             hasPendingProcess = false;
@@ -70,7 +72,7 @@ bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered
                 filteringStack.clear();
                 isFiltered = false;
                 // Clear filteredFiles
-				filteredFiles.clear(); 
+                filteredFiles.clear(); 
             }
             
             sortFilesCaseInsensitive(globalIsoFileList);
@@ -84,7 +86,7 @@ bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered
             filteringStack.clear();
             isFiltered = false;
             // Clear filteredFiles
-			filteredFiles.clear(); 
+            filteredFiles.clear(); 
         }
         printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType, pendingIndices, hasPendingProcess, isFiltered, currentPage, isImportRunning);
         
