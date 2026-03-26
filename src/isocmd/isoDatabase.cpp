@@ -336,9 +336,9 @@ void loadFromDatabase(std::vector<std::string>& globalIsoFileList) {
         flock(fd, LOCK_UN);
         close(fd);
         {
-			std::lock_guard<std::mutex> lock(updateListMutex);
-			globalIsoFileList.clear();
-		}
+            std::lock_guard<std::mutex> lock(updateListMutex);
+            globalIsoFileList.clear();
+        }
         return;
     }
     
@@ -368,14 +368,21 @@ void loadFromDatabase(std::vector<std::string>& globalIsoFileList) {
         start = lineEnd + 1;
     }
     {
-		std::lock_guard<std::mutex> lock(updateListMutex);
-		globalIsoFileList.swap(loadedFiles);
-	}
+        std::lock_guard<std::mutex> lock(updateListMutex);
+        globalIsoFileList.swap(loadedFiles);
+    }
 }
 
 
 // Function to save ISO cache to database
 bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atomic<bool>& newISOFound) {
+    // Take a snapshot of the input list under the mutex to ensure thread safety
+    std::vector<std::string> isoSnapshot;
+    {
+        std::lock_guard<std::mutex> lock(updateListMutex);
+        isoSnapshot = globalIsoFileList;
+    }
+
     // Construct the full path to the database file
     std::filesystem::path cachePath = databaseDirectory;
     cachePath /= databaseFilename;
@@ -432,8 +439,8 @@ bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atom
     // Vector to store new entries that are not already in the cache
     std::vector<std::string> newEntries;
     
-    // Iterate through the input ISO files to find new entries
-    for (const auto& iso : globalIsoFileList) {
+    // Iterate through the snapshot of ISO files to find new entries
+    for (const auto& iso : isoSnapshot) {
         if (existingSet.find(iso) == existingSet.end()) {
             // If the ISO file is not in the existing cache, add it to newEntries
             newEntries.push_back(iso);
