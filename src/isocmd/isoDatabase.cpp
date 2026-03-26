@@ -424,9 +424,9 @@ bool saveToDatabase(std::vector<std::string> globalIsoFileList, std::atomic<bool
     if (fstat(fd, &fileStat) == 0 && fileStat.st_size > 0) {
         // Read existing content
         std::vector<char> buffer(fileStat.st_size);
-        ssize_t bytesRead = read(fd, buffer.data(), fileStat.st_size);
+        ssize_t bytesRead = ::read(fd, buffer.data(), fileStat.st_size);
 
-        if (bytesRead == fileStat.st_size) {
+        if (bytesRead > 0 && bytesRead <= fileStat.st_size) {
             // Parse the buffer
             char* start = buffer.data();
             char* end = buffer.data() + bytesRead;
@@ -440,7 +440,8 @@ bool saveToDatabase(std::vector<std::string> globalIsoFileList, std::atomic<bool
                 if (!line.empty()) {
                     existingCache.push_back(std::move(line));
                 }
-                start = lineEnd + 1;
+                // Clamp to end to avoid UB when last line has no trailing newline
+                start = (lineEnd < end) ? lineEnd + 1 : end;
             }
         }
     }
@@ -489,7 +490,8 @@ bool saveToDatabase(std::vector<std::string> globalIsoFileList, std::atomic<bool
     bool success = true;
     for (const auto& entry : combinedCache) {
         std::string line = entry + "\n";
-        if (write(fd, line.data(), line.size()) == -1) {
+        // Use ::write to explicitly call POSIX syscall, preventing name collision
+        if (::write(fd, line.data(), line.size()) == -1) {
             success = false;
             break;
         }
