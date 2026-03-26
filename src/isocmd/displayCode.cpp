@@ -31,27 +31,28 @@ bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered
     signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
     disable_ctrl_d();
     
+    static std::mutex lastModifiedMutex;
     static std::filesystem::file_time_type lastModifiedTime;
-
     // Check if the database file exists and has been modified
     bool needToReload = false;
-    if (std::filesystem::exists(databaseFilePath)) {
-        std::filesystem::file_time_type currentModifiedTime = 
-            std::filesystem::last_write_time(databaseFilePath);
-
-        if (lastModifiedTime == std::filesystem::file_time_type{}) {
-            // First time checking, always load
-            needToReload = true;
-        } else if (currentModifiedTime > lastModifiedTime) {
-            // Cache file has been modified since last load
+    {
+        std::lock_guard<std::mutex> lock(lastModifiedMutex);
+        if (std::filesystem::exists(databaseFilePath)) {
+            std::filesystem::file_time_type currentModifiedTime = 
+                std::filesystem::last_write_time(databaseFilePath);
+            if (lastModifiedTime == std::filesystem::file_time_type{}) {
+                // First time checking, always load
+                needToReload = true;
+            } else if (currentModifiedTime > lastModifiedTime) {
+                // Cache file has been modified since last load
+                needToReload = true;
+            }
+            // Update last modified time
+            lastModifiedTime = currentModifiedTime;
+        } else {
+            // Cache file doesn't exist, need to load
             needToReload = true;
         }
-
-        // Update last modified time
-        lastModifiedTime = currentModifiedTime;
-    } else {
-        // Cache file doesn't exist, need to load
-        needToReload = true;
     }
 
     // Common operations

@@ -28,14 +28,22 @@ static ThreadPool& getIOThreadPool(size_t* count = nullptr) {
 
 // Function to remove non-existent paths from database and cache
 void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileList) {
-    if (access(databaseFilePath.c_str(), F_OK) != 0) {
-        std::lock_guard<std::mutex> lock(updateListMutex);
-        globalIsoFileList.clear();
+	
+	// Static mutex to serialize function externally
+	static std::mutex functionMutex;
+    std::lock_guard<std::mutex> fnLock(functionMutex);
+    
+    // Attempt to open the file directly instead of using access() + open(),
+    // which would introduce a TOCTOU race between the existence check and the open.
+    // If the file doesn't exist (ENOENT), clear the in-memory list and return.
+    int fd = open(databaseFilePath.c_str(), O_RDWR, 0644);
+    if (fd == -1) {
+        if (errno == ENOENT) {
+            std::lock_guard<std::mutex> lock(updateListMutex);
+            globalIsoFileList.clear();
+        }
         return;
     }
- 
-    int fd = open(databaseFilePath.c_str(), O_RDWR | O_CREAT, 0644);
-    if (fd == -1) return;
  
     if (flock(fd, LOCK_EX) == -1) {
         close(fd);
@@ -131,14 +139,20 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
         close(fd);
         return;
     }
- 
+
     for (const auto& path : retained) {
         std::string line = path + '\n';
         if (write(fd, line.c_str(), line.size()) == -1) break;
     }
- 
+
     flock(fd, LOCK_UN);
     close(fd);
+
+    // ── Sync in-memory list to match pruned database ─────────────────────────
+    {
+        std::lock_guard<std::mutex> lock(updateListMutex);
+        globalIsoFileList = std::move(retained);
+    }
 }
 
 
@@ -375,13 +389,9 @@ void loadFromDatabase(std::vector<std::string>& globalIsoFileList) {
 
 
 // Function to save ISO cache to database
-bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atomic<bool>& newISOFound) {
-    // Take a snapshot of the input list under the mutex to ensure thread safety
-    std::vector<std::string> isoSnapshot;
-    {
-        std::lock_guard<std::mutex> lock(updateListMutex);
-        isoSnapshot = globalIsoFileList;
-    }
+bool saveToDatabase(std::vector<std::string> globalIsoFileList, std::atomic<bool>& newISOFound) {
+    // Parameter is passed by value — caller's copy is made at the call site before this
+    // function runs, so globalIsoFileList is exclusively owned here with no mutex needed.
 
     // Construct the full path to the database file
     std::filesystem::path cachePath = databaseDirectory;
@@ -395,11 +405,18 @@ bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atom
     if (!std::filesystem::is_directory(databaseDirectory)) {
         return false;
     }
-    
+
+    // Acquire the in-process file mutex before opening the file.
+    // Initialized once on first call, thread-safely guaranteed by C++11.
+    // flock() is advisory and provides no mutual exclusion between threads in the
+    // same process — both threads share the same lock. This mutex fills that gap.
+    static std::mutex fileMutex;
+    std::lock_guard<std::mutex> fileLock(fileMutex);
+
     // Open file and acquire lock FIRST
     int fd = open(cachePath.c_str(), O_RDWR | O_CREAT, 0644);
     if (fd == -1) return false;
-    
+
     if (flock(fd, LOCK_EX) == -1) {
         close(fd);
         return false;
@@ -407,18 +424,18 @@ bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atom
 
     // Load the existing cache from the same file descriptor
     std::vector<std::string> existingCache;
-    
+
     struct stat fileStat;
     if (fstat(fd, &fileStat) == 0 && fileStat.st_size > 0) {
         // Read existing content
         std::vector<char> buffer(fileStat.st_size);
         ssize_t bytesRead = read(fd, buffer.data(), fileStat.st_size);
-        
+
         if (bytesRead == fileStat.st_size) {
             // Parse the buffer
             char* start = buffer.data();
             char* end = buffer.data() + bytesRead;
-            
+
             while (start < end) {
                 char* lineEnd = std::find(start, end, '\n');
                 std::string line(start, lineEnd);
@@ -435,19 +452,23 @@ bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atom
 
     // Convert the existing cache to a set for efficient lookup
     std::unordered_set<std::string> existingSet(existingCache.begin(), existingCache.end());
-    
+
     // Vector to store new entries that are not already in the cache
     std::vector<std::string> newEntries;
-    
-    // Iterate through the snapshot of ISO files to find new entries
-    for (const auto& iso : isoSnapshot) {
+
+    // Use a local flag instead of writing directly to the shared atomic during the loop,
+    // preventing concurrent calls from clobbering each other's result mid-execution.
+    bool localNewISOFound = false;
+
+    // Iterate through the ISO files to find new entries
+    for (const auto& iso : globalIsoFileList) {
         if (existingSet.find(iso) == existingSet.end()) {
             // If the ISO file is not in the existing cache, add it to newEntries
             newEntries.push_back(iso);
-            newISOFound.store(true); // Set the atomic variable to true when a new ISO is found
+            localNewISOFound = true; // Track locally; written to atomic once at the end
         }
     }
-    
+
     // If no new entries are found, set newISOFound to false and return
     if (newEntries.empty()) {
         newISOFound.store(false);
@@ -455,7 +476,7 @@ bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atom
         close(fd);
         return false; // No new entries, don't modify cache
     }
-    
+
     // Combine the existing cache with new entries, respecting the maximum size limit
     std::vector<std::string> combinedCache = existingCache;
     combinedCache.insert(combinedCache.end(), newEntries.begin(), newEntries.end());
@@ -463,14 +484,14 @@ bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atom
         // If the combined cache exceeds the maximum size, remove the oldest entries
         combinedCache.erase(combinedCache.begin(), combinedCache.begin() + (combinedCache.size() - maxDatabaseSize));
     }
-    
+
     // Truncate and write back to the same file descriptor
     if (ftruncate(fd, 0) == -1 || lseek(fd, 0, SEEK_SET) == -1) {
         flock(fd, LOCK_UN);
         close(fd);
         return false;
     }
-    
+
     // Write the combined cache to the file
     bool success = true;
     for (const auto& entry : combinedCache) {
@@ -480,10 +501,14 @@ bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atom
             break;
         }
     }
-    
+
     // Release the lock and close the file
     flock(fd, LOCK_UN);
     close(fd);
+
+    // Write the local result to the shared atomic only once, after all work is done,
+    // so concurrent calls cannot interleave their true/false stores.
+    newISOFound.store(localNewISOFound);
 
     // Return whether the operation was successful
     return success;
