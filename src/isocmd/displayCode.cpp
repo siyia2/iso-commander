@@ -68,7 +68,8 @@ bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered
                 // Restore filteredFiles when clearing filter state
                 filteringStack.clear();
                 isFiltered = false;
-                filteredFiles = globalIsoFileList;  // CRITICAL: Restore the file list
+                // Clear filteredFiles
+				filteredFiles.clear(); 
             }
             
             sortFilesCaseInsensitive(globalIsoFileList);
@@ -81,7 +82,8 @@ bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered
             // Restore filteredFiles when clearing filter state
             filteringStack.clear();
             isFiltered = false;
-            filteredFiles = globalIsoFileList;  // CRITICAL: Restore the file list
+            // Clear filteredFiles
+			filteredFiles.clear(); 
         }
         printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType, pendingIndices, hasPendingProcess, isFiltered, currentPage, isImportRunning);
         
@@ -162,8 +164,8 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
 		// Clear the filtering stack when returning to unfiltered mode
         filteringStack.clear();
         isFiltered = false; 
-        // Restore filteredFiles to match the source
-		filteredFiles = isoDirs;       
+        // Clear filteredFiles
+		filteredFiles.clear();
     }
     printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS", "", pendingIndices, hasPendingProcess, isFiltered, currentPage, isImportRunning);
 
