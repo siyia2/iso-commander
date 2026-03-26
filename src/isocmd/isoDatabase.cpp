@@ -336,7 +336,6 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
 
 
 // Function to load ISO database from file
-// Function to load ISO database from file
 void loadFromDatabase(std::vector<std::string>& outList) {
     int fd = open(databaseFilePath.c_str(), O_RDONLY);
     if (fd == -1) return;
