@@ -125,16 +125,9 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
                 
                 // Show error message about invalid paths
                 if (!invalidPaths.empty()) {
-					std::cout << "\r\033[0;1mTotal files processed: 0\n\n";
-                    std::cout << "\r\033[1;91mAt least one valid directory path is required.\033[0m\n\n";
+					verboseForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, promptFlag, maxDepth, filterHistory, start_time, newISOFound);
                 }
                 
-                std::cout << "\033[1;32m↵ to continue...\033[0;1m";
-                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                
-                // Return to original prompt by calling refreshForDatabase with empty input
-                std::string dummyDir = "";
-                refreshForDatabase(dummyDir, promptFlag, maxDepth, filterHistory, newISOFound);
             }
             return;
         }
