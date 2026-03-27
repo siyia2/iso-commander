@@ -43,6 +43,24 @@ namespace fs = std::filesystem;
 // Thread Management
 extern unsigned int maxThreads;
 
+// Operation thread caps for static pool
+
+// High I/O
+inline constexpr size_t CPMV_THREAD_CAP   = 8;
+inline constexpr size_t CONV_THREAD_CAP   = 8;
+
+// Moderate I/O
+inline constexpr size_t MOUNT_THREAD_CAP  = 16;
+inline constexpr size_t CLEAN_THREAD_CAP  = 16;
+
+// Low I/O
+inline constexpr size_t UMOUNT_THREAD_CAP = 32;
+inline constexpr size_t RM_THREAD_CAP     = 32;
+
+// Low I/O but fast
+inline constexpr size_t SORT_THREAD_CAP  = 4;
+inline constexpr size_t FILTER_THREAD_CAP  = 4;
+
 // Mutex Protection
 extern std::mutex globalSetsMutex;
 extern std::mutex updateListMutex;
