@@ -348,4 +348,24 @@ public:
     }
 };
 
+
+// Process-wide thread pool shared across all operations (mount, umount, cp, mv, rm, convert, filter).
+// Threads are spawned once on first use and reused for the lifetime of the program.
+// Size is capped at MAX_USEFUL_THREADS so high core count machines (e.g. 128 cores)
+// don't spawn threads that will never get work — no operation uses more than 16 concurrent threads.
+inline ThreadPool& getStaticThreadPool() {
+    static ThreadPool instance([] {
+        unsigned int hw = std::thread::hardware_concurrency();
+        if (hw == 0) hw = 1;
+        // Pool only needs as many threads as the largest operation cap.
+        // No operation uses more than RM_THREAD_CAP/UMOUNT_THREAD_CAP (16),
+        // so spawning 128 threads would leave 112 sleeping forever.
+        constexpr size_t MAX_USEFUL_THREADS = 16;  // matches highest caps
+        return std::min({static_cast<size_t>(hw),
+                         static_cast<size_t>(maxThreads),
+                         MAX_USEFUL_THREADS});
+    }());
+    return instance;
+}
+
 #endif // THREAD_POOL_H
