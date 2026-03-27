@@ -25,16 +25,19 @@ static ThreadPool& getIOThreadPool(size_t* count = nullptr) {
     return pool;
 }
 
+// Database specific mutex
+namespace {
+    std::mutex dbFileMutex;
+}
 
 // Function to remove non-existent paths from database and cache
 void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileList) {
-    static std::mutex fileMutex;
-    std::lock_guard<std::mutex> fileLock(fileMutex);
+    std::lock_guard<std::mutex> fileLock(dbFileMutex);  // always first
 
     int fd = open(databaseFilePath.c_str(), O_RDWR, 0644);
     if (fd == -1) {
         if (errno == ENOENT) {
-            std::lock_guard<std::mutex> lock(updateListMutex);
+            std::lock_guard<std::mutex> lock(updateListMutex);  // second
             globalIsoFileList.clear();
         }
         return;
@@ -43,7 +46,6 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
 
     int dupFd = dup(fd);
     if (dupFd == -1) { flock(fd, LOCK_UN); close(fd); return; }
-
     FILE* file = fdopen(dupFd, "r");
     if (!file) { close(dupFd); flock(fd, LOCK_UN); close(fd); return; }
 
@@ -61,7 +63,6 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
 
     if (cache.empty()) { flock(fd, LOCK_UN); close(fd); return; }
 
-    // --- parallel existence check (unchanged) ---
     std::vector<int> pathExists(cache.size(), 0);
     std::atomic<size_t> existingCount{0};
     size_t numThread;
@@ -92,32 +93,26 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
         if (pathExists[i]) retained.push_back(std::move(cache[i]));
     }
 
-    // *** Acquire updateListMutex BEFORE touching the file ***
-    // This ensures loadAndDisplayIso cannot load a partially-written file
-    // and then print against a filteredFiles list that no longer matches it.
-    {
-        std::lock_guard<std::mutex> lock(updateListMutex);
-
-        if (ftruncate(fd, 0) == -1 || lseek(fd, 0, SEEK_SET) == -1) {
-            flock(fd, LOCK_UN); close(fd); return;
+    // Write to file while holding only dbFileMutex, then update memory under updateListMutex
+    // Order: dbFileMutex (already held) → updateListMutex — consistent everywhere
+    if (ftruncate(fd, 0) == -1 || lseek(fd, 0, SEEK_SET) == -1) {
+        flock(fd, LOCK_UN); close(fd); return;
+    }
+    bool writeSuccess = true;
+    for (const auto& path : retained) {
+        std::string line = path + '\n';
+        if (::write(fd, line.c_str(), line.size()) == -1) {
+            writeSuccess = false;
+            break;
         }
+    }
+    flock(fd, LOCK_UN);
+    close(fd);
 
-        bool writeSuccess = true;
-        for (const auto& path : retained) {
-            std::string line = path + '\n';
-            if (::write(fd, line.c_str(), line.size()) == -1) {
-                writeSuccess = false;
-                break;
-            }
-        }
-
-        flock(fd, LOCK_UN);
-        close(fd);
-
-        if (writeSuccess) {
-            globalIsoFileList = std::move(retained);
-        }
-    } // updateListMutex released here
+    if (writeSuccess) {
+        std::lock_guard<std::mutex> lock(updateListMutex);  // second, after file is done
+        globalIsoFileList = std::move(retained);
+    }
 }
 
 
@@ -302,8 +297,7 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
 
 // Function to load ISO database from file
 void loadFromDatabase(std::vector<std::string>& outList) {
-    static std::mutex fileMutex;
-    std::lock_guard<std::mutex> fileLock(fileMutex);
+    std::lock_guard<std::mutex> fileLock(dbFileMutex);
     
     int fd = open(databaseFilePath.c_str(), O_RDONLY);
     if (fd == -1) return;
@@ -336,15 +330,8 @@ void loadFromDatabase(std::vector<std::string>& outList) {
     while (start < end) {
         char* lineEnd = std::find(start, end, '\n');
         std::string line(start, lineEnd);
-        if (!line.empty() && line.back() == '\r') {
-            line.pop_back();
-        }
-        if (!line.empty()) {
-            loadedFiles.push_back(std::move(line));
-        }
-        // FIX: if lineEnd == end (no trailing newline on last line),
-        // lineEnd + 1 would be one past the buffer — UB.
-        // Clamp to end so the loop condition (start < end) terminates cleanly.
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (!line.empty()) loadedFiles.push_back(std::move(line));
         start = (lineEnd < end) ? lineEnd + 1 : end;
     }
     outList = std::move(loadedFiles);
@@ -369,11 +356,10 @@ bool saveToDatabase(std::vector<std::string> globalIsoFileList, std::atomic<bool
         return false;
     }
 
-    // Acquire the in-process file mutex before opening the file.
+    // Acquire database mutex before opening the file.
     // flock() is advisory and provides no mutual exclusion between threads in the
     // same process — both threads share the same lock. This mutex fills that gap.
-    static std::mutex fileMutex;
-    std::lock_guard<std::mutex> fileLock(fileMutex);
+    std::lock_guard<std::mutex> fileLock(dbFileMutex);
 
     // Open file and acquire lock FIRST
     int fd = open(cachePath.c_str(), O_RDWR | O_CREAT, 0644);

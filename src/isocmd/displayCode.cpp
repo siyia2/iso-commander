@@ -26,80 +26,81 @@ namespace displayConfig {
 
 
 // Function to load and display ISO files from the database into a global vector, database file is used only on first access or on every modification
-bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, 
+bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
 size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
-    
+
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
-    
+
     static std::mutex lastModifiedMutex;
     static std::filesystem::file_time_type lastModifiedTime;
-    
+
     bool needToReload = false;
-    
-    // Check if database exists and was modified — protected by its own mutex
-    // so lastModifiedTime is never read/written without synchronisation
+
     {
         std::lock_guard<std::mutex> lock(lastModifiedMutex);
-        
         if (std::filesystem::exists(databaseFilePath)) {
-            std::filesystem::file_time_type currentModifiedTime = 
+            std::filesystem::file_time_type currentModifiedTime =
                 std::filesystem::last_write_time(databaseFilePath);
-            
             if (lastModifiedTime == std::filesystem::file_time_type{} ||
                 currentModifiedTime > lastModifiedTime) {
                 needToReload = true;
             }
-            
             lastModifiedTime = currentModifiedTime;
         } else {
             needToReload = true;
             lastModifiedTime = std::filesystem::file_time_type{};
         }
     }
-    
+
     clearScrollBuffer();
-    
-    // Single lock covers both the reload and the print — no gap between them
-    // where another thread could modify globalIsoFileList or filteredFiles
+
+    // Load into a local variable under dbFileMutex only — no updateListMutex held here
+    // This breaks the lock-ordering inversion that existed when loadFromDatabase
+    // was called from inside the updateListMutex block below
+    std::vector<std::string> freshList;
+    if (needToReload) {
+        loadFromDatabase(freshList);  // acquires and releases dbFileMutex internally
+    }
+
+    // Now acquire updateListMutex alone to update shared state and print
+    // Order: dbFileMutex already released → updateListMutex — consistent everywhere
     bool isEmpty = false;
     {
         std::lock_guard<std::mutex> lock(updateListMutex);
-        
+
         if (needToReload) {
-            loadFromDatabase(globalIsoFileList);
+            globalIsoFileList = std::move(freshList);
             currentPage = originalPage;
             pendingIndices.clear();
             hasPendingProcess = false;
-            
+
             if (isFiltered) {
                 filteringStack.clear();
                 isFiltered = false;
             }
-            
+
             sortFilesCaseInsensitive(globalIsoFileList);
         }
-        
+
         if (umountMvRmBreak) {
             filteringStack.clear();
             isFiltered = false;
         }
-        
+
         printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType,
                   pendingIndices, hasPendingProcess, isFiltered, currentPage, isImportRunning);
-        
+
         isEmpty = globalIsoFileList.empty();
     }
-    
-    // cin.ignore is outside the lock — never block while holding a mutex
-    // or other threads that need updateListMutex will deadlock
+
     if (isEmpty) {
         std::cout << "\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n";
         std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         return false;
     }
-    
+
     return true;
 }
 
