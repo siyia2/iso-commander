@@ -125,6 +125,7 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
                 
                 // Show error message about invalid paths
                 if (!invalidPaths.empty()) {
+					std::cout << "\r\033[0;1mTotal files processed: 0\n\n";
                     std::cout << "\r\033[1;91mAt least one valid directory path is required.\033[0m\n\n";
                 }
                 
