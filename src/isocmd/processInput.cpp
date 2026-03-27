@@ -6,6 +6,42 @@
 #include "../ccd.h"
 
 
+// Operation caps
+
+// ISO mount via libmount — real bottleneck is kernel loop device allocation
+// (loop_ctl_get_free holds a global mutex). Beyond ~8 concurrent mounts,
+static constexpr size_t MOUNT_THREAD_CAP  = 8;
+
+// Umount is cheaper (no loop allocation) but mountinfo locking still caps gains.
+static constexpr size_t UMOUNT_THREAD_CAP = 16;
+
+// cp/mv — single-drive I/O, parallelism hurts beyond 2-4; 
+// set higher only if you detect multiple devices (future improvement)
+static constexpr size_t CPMV_THREAD_CAP  = 8;
+
+// rm — metadata-only, kernel handles it well with moderate concurrency
+static constexpr size_t RM_THREAD_CAP    = 16;
+
+// Conversions — I/O bound, use 8 cores
+static constexpr size_t CONV_THREAD_CAP  = 8;
+
+
+inline ThreadPool& getStaticThreadPool() {
+    static ThreadPool instance([] {
+        unsigned int hw = std::thread::hardware_concurrency();
+        if (hw == 0) hw = 1;
+        // Pool only needs as many threads as the largest operation cap.
+        // No operation uses more than RM_THREAD_CAP/UMOUNT_THREAD_CAP (16),
+        // so spawning 128 threads would leave 112 sleeping forever.
+        constexpr size_t MAX_USEFUL_THREADS = 16;  // matches the highest caps UMOUNT_THREAD_CAP and RM_THREAD_CAP
+        return std::min({static_cast<size_t>(hw), 
+                         static_cast<size_t>(maxThreads), 
+                         MAX_USEFUL_THREADS});
+    }());
+    return instance;
+}
+
+
 // Function to process mount/unmount indices
 void processInputForMountOrUmount(const std::string& input, const std::vector<std::string>& files, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& skippedMessages, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, bool& operationBreak, bool& verbose, bool isUnmount) {
     // Setup signal handler at the start of the operation
@@ -45,9 +81,11 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
     
     std::string coloredProcess = operationColor + operationName + "\033[0;1m";
     
-    // Thread pool setup
-    unsigned int numThreads = std::min(static_cast<unsigned int>(selectedFiles.size()), maxThreads);
-    const size_t chunkSize = std::min(size_t(100), selectedFiles.size()/numThreads + 1);
+    // Static pool — threads already running, no spawn cost
+    ThreadPool& pool         = getStaticThreadPool();
+    const size_t cap        = isUnmount ? UMOUNT_THREAD_CAP : MOUNT_THREAD_CAP;
+	const size_t numThreads = std::max(size_t(1), std::min(selectedFiles.size(), MOUNT_THREAD_CAP));
+    const size_t chunkSize   = std::min(size_t(100), selectedFiles.size() / numThreads + 1);
     std::vector<std::vector<std::string>> chunks;
     
     // Split work into chunks
@@ -56,7 +94,6 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
         chunks.emplace_back(selectedFiles.begin() + i, end);
     }
     
-    ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
     std::atomic<size_t> completedTasks(0);
     std::atomic<size_t> failedTasks(0);
@@ -130,14 +167,24 @@ std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::unordered
             }
         }
 
-        size_t maxFilesPerChunk = std::max<size_t>(
-            1, 
-            (uniqueNameFiles.size() + numThreads - 1) / numThreads
-        );
+        if (!uniqueNameFiles.empty()) {
+            // Remaining thread budget after collision chunks are accounted for.
+            // If collision chunks have exhausted the budget, clamp to 1 to avoid
+            // creating one giant chunk — the pool will schedule the overflow naturally.
+            size_t usedChunks       = indexChunks.size();
+            size_t remainingThreads = (numThreads > usedChunks)
+                                        ? numThreads - usedChunks
+                                        : 1;
 
-        for (size_t i = 0; i < uniqueNameFiles.size(); i += maxFilesPerChunk) {
-            auto end = std::min(i + maxFilesPerChunk, uniqueNameFiles.size());
-            indexChunks.emplace_back(uniqueNameFiles.begin() + i, uniqueNameFiles.begin() + end);
+            size_t maxFilesPerChunk = std::max<size_t>(
+                1,
+                (uniqueNameFiles.size() + remainingThreads - 1) / remainingThreads
+            );
+
+            for (size_t i = 0; i < uniqueNameFiles.size(); i += maxFilesPerChunk) {
+                auto end = std::min(i + maxFilesPerChunk, uniqueNameFiles.size());
+                indexChunks.emplace_back(uniqueNameFiles.begin() + i, uniqueNameFiles.begin() + end);
+            }
         }
     } else {
         // For delete, chunk based on numThreads
@@ -197,8 +244,10 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
         return;
     }
     
-    // Determine the number of threads to use (up to the number of processed indices or maxThreads)
-    unsigned int numThreads = std::min(static_cast<unsigned int>(processedIndices.size()), maxThreads);
+    // Static pool + operation-aware cap
+    ThreadPool& pool          = getStaticThreadPool();
+    const size_t cap          = isDelete ? RM_THREAD_CAP : CPMV_THREAD_CAP;
+    const unsigned int numThreads = static_cast<unsigned int>(std::min(processedIndices.size(), cap));
     
     // Group the files into chunks for parallel processing
     std::vector<std::vector<int>> indexChunks = groupFilesIntoChunksForCpMvRm(processedIndices, isoFiles, numThreads, isDelete);
@@ -263,8 +312,6 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
                                  totalBytes, &completedTasks, &failedTasks, 
                                  totalTasks, &isProcessingComplete, &verbose, std::string(coloredProcess));
 
-    // Create a thread pool to handle the file operations
-    ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
     futures.reserve(indexChunks.size());
 
@@ -390,9 +437,10 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
         return;
     }
 
-    // Ensure safe unsigned conversion for the number of threads to use
-    unsigned int numThreads = std::min(static_cast<unsigned int>(processedIndices.size()), maxThreads);
-    
+	// Create a thread pool and store the futures for each file processing task
+    ThreadPool& pool        = getStaticThreadPool();
+	const size_t numThreads = std::min(processedIndices.size(), CONV_THREAD_CAP);
+	
     // Chunk the processed files into manageable sizes for processing (max 5 files per chunk)
     std::vector<std::vector<size_t>> indexChunks;
     const size_t maxFilesPerChunk = 5;
@@ -438,8 +486,6 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
     std::thread progressThread(displayProgressBarWithSize, &completedBytes, 
         totalBytes, &completedTasks, &failedTasks, totalTasks, &isProcessingComplete, &verbose, std::string(operation));
 
-    // Create a thread pool and store the futures for each file processing task
-    ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
     futures.reserve(indexChunks.size());
 
