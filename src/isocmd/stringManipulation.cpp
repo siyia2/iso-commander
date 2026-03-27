@@ -62,19 +62,24 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view
         if (end == std::string_view::npos || end > lastSlashPos) end = lastSlashPos;
         
         // More efficient component truncation - only do one sweep through
-        std::string_view component = path.substr(start, end - start);
-        size_t truncatePos = std::min<size_t>(16, component.size());
-        
-        // Find first separator and truncate there if it's earlier
-        for (size_t i = 0; i < truncatePos; ++i) {
-            char c = component[i];
-            if (c == ' ' || c == '-' || c == '_' || c == '.') {
-                truncatePos = i;  // Add +1 to include the separator
-                break;
-            }
-        }
-        
-        processedDir.append(component.substr(0, truncatePos));
+		std::string_view component = path.substr(start, end - start);
+		size_t truncatePos = std::min<size_t>(16, component.size());
+
+		// Find first separator and truncate there if it's earlier
+		for (size_t i = 0; i < truncatePos; ++i) {
+			char c = component[i];
+			if (c == ' ' || c == '-' || c == '_' || c == '.') {
+				truncatePos = i;
+				break;
+			}
+		}
+
+		// Handle hidden files/dirs (e.g. ".config" -> ".c")
+		if (truncatePos == 0 && component.size() > 1 && component[0] == '.') {
+			truncatePos = 1; // keep '.'
+		}
+
+		processedDir.append(component.substr(0, truncatePos));
         
         // Don't add a slash after the last component
         if (end < lastSlashPos) {
