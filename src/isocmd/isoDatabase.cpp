@@ -15,7 +15,7 @@ const uintmax_t maxDatabaseSize = 1 * 1024 * 1024; // 1MB
 // Global mutex to protect counter cout
 std::mutex couNtMutex;
 
-// Database specific mutex
+// Local ISO Database mutex
 namespace {
     std::mutex dbFileMutex;
 }
