@@ -15,6 +15,11 @@ const uintmax_t maxDatabaseSize = 1 * 1024 * 1024; // 1MB
 // Global mutex to protect counter cout
 std::mutex couNtMutex;
 
+// Database specific mutex
+namespace {
+    std::mutex dbFileMutex;
+}
+
 
 // Persistent reusable local theadPool for removeNonExistentPathsFromDatabase
 static ThreadPool& getIOThreadPool(size_t* count = nullptr) {
@@ -25,10 +30,6 @@ static ThreadPool& getIOThreadPool(size_t* count = nullptr) {
     return pool;
 }
 
-// Database specific mutex
-namespace {
-    std::mutex dbFileMutex;
-}
 
 // Function to remove non-existent paths from database and cache
 void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileList) {
