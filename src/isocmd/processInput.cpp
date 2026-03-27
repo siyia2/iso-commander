@@ -6,40 +6,22 @@
 #include "../ccd.h"
 
 
-// Operation caps
+// Operation thread caps
 
-// ISO mount via libmount — real bottleneck is kernel loop device allocation
-// (loop_ctl_get_free holds a global mutex). Beyond ~8 concurrent mounts,
-static constexpr size_t MOUNT_THREAD_CAP  = 8;
+// Moderate I/O
+static constexpr size_t MOUNT_THREAD_CAP  = 16;
 
-// Umount is cheaper (no loop allocation) but mountinfo locking still caps gains.
-static constexpr size_t UMOUNT_THREAD_CAP = 16;
+// Low I/O
+static constexpr size_t UMOUNT_THREAD_CAP = 32;
 
-// cp/mv — single-drive I/O, parallelism hurts beyond 2-4; 
-// set higher only if you detect multiple devices (future improvement)
+// High I/O
 static constexpr size_t CPMV_THREAD_CAP  = 8;
 
-// rm — metadata-only, kernel handles it well with moderate concurrency
-static constexpr size_t RM_THREAD_CAP    = 16;
+// Low I/O
+static constexpr size_t RM_THREAD_CAP    = 32;
 
-// Conversions — I/O bound, use 8 cores
+// High I/O
 static constexpr size_t CONV_THREAD_CAP  = 8;
-
-
-inline ThreadPool& getStaticThreadPool() {
-    static ThreadPool instance([] {
-        unsigned int hw = std::thread::hardware_concurrency();
-        if (hw == 0) hw = 1;
-        // Pool only needs as many threads as the largest operation cap.
-        // No operation uses more than RM_THREAD_CAP/UMOUNT_THREAD_CAP (16),
-        // so spawning 128 threads would leave 112 sleeping forever.
-        constexpr size_t MAX_USEFUL_THREADS = 16;  // matches the highest caps UMOUNT_THREAD_CAP and RM_THREAD_CAP
-        return std::min({static_cast<size_t>(hw), 
-                         static_cast<size_t>(maxThreads), 
-                         MAX_USEFUL_THREADS});
-    }());
-    return instance;
-}
 
 
 // Function to process mount/unmount indices
@@ -84,8 +66,8 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
     // Static pool — threads already running, no spawn cost
     ThreadPool& pool         = getStaticThreadPool();
     const size_t cap        = isUnmount ? UMOUNT_THREAD_CAP : MOUNT_THREAD_CAP;
-	const size_t numThreads = std::max(size_t(1), std::min(selectedFiles.size(), MOUNT_THREAD_CAP));
-    const size_t chunkSize   = std::min(size_t(100), selectedFiles.size() / numThreads + 1);
+	const size_t numThreads = std::max(size_t(1), std::min(selectedFiles.size(), cap));
+	const size_t chunkSize  = std::min(size_t(100), selectedFiles.size() / numThreads + 1);
     std::vector<std::vector<std::string>> chunks;
     
     // Split work into chunks

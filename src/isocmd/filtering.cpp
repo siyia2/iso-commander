@@ -20,23 +20,6 @@ namespace AnsiEscape {
 std::vector<FilteringState> filteringStack;
 
 
-// Long-lived thread pool — created once, reused across all filterFiles() calls.
-// Capped at 4 threads (or hardware max if fewer than 4 cores available).
-static ThreadPool& getThreadPool() {
-    static ThreadPool pool([] {
-        const unsigned hw = maxThreads;
-        return (hw >= 4) ? 4u : std::max(1u, hw);
-    }());
-    return pool;
-}
-
-
-// Returns the number of worker threads in the shared pool.
-static size_t poolThreadCount() {
-    return getThreadPool().threadCount();
-}
-
-
 // ─── Boyer-Moore implementation ──────────────────────────────────────────────
 
 // Precomputed search tables for a single query token.
@@ -185,9 +168,11 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
 
     const bool needLower = std::any_of(queryTokens.begin(), queryTokens.end(),
                                [](const QueryToken& qt) { return !qt.isCaseSensitive; });
-
-    ThreadPool&  pool       = getThreadPool();
-    const size_t numThreads = std::min(poolThreadCount(), files.size());
+	
+	// Use the static threadpool, max limit for filtering threads is capped at 4
+    ThreadPool&  pool       = getStaticThreadPool();
+	const size_t numThreads = std::min({pool.threadCount(), files.size(), size_t(4)});
+    
     const size_t chunkSize  = (files.size() + numThreads - 1) / numThreads;
 
     std::vector<std::future<std::vector<size_t>>> futures;

@@ -67,28 +67,30 @@ int naturalCompare(const std::string &a, const std::string &b) {
 void sortFilesCaseInsensitive(std::vector<std::string>& files) {
     if (files.empty())
         return;
-    
-    bool namesOnly = displayConfig::toggleNamesOnly; // Capture the toggle state once
 
-    ThreadPool pool(maxThreads);
-    const size_t n = files.size();
-    unsigned int numChunks = std::min<unsigned int>(maxThreads * 2, static_cast<unsigned int>(n / 1000 + 1));
-    size_t chunkSize = (n + numChunks - 1) / numChunks;
-    
+    bool namesOnly = displayConfig::toggleNamesOnly;
+
+    ThreadPool& pool = getStaticThreadPool();
+
+    const size_t numThreads = std::min(pool.threadCount(), static_cast<size_t>(4));
+	const size_t n = files.size();
+	size_t numChunks = std::min<size_t>(numThreads * 2, n / 1000 + 1);
+	size_t chunkSize = (n + numChunks - 1) / numChunks;
+
     std::vector<std::pair<size_t, size_t>> chunks;
     std::vector<std::future<void>> futures;
-    
+
     // Parallel sorting of chunks
     for (size_t i = 0; i < numChunks; ++i) {
         size_t start = i * chunkSize;
         size_t end = std::min(n, (i + 1) * chunkSize);
         if (start >= end)
             break;
-        
+
         chunks.emplace_back(start, end);
-        
+
         futures.emplace_back(pool.enqueue([namesOnly, start, end, &files]() {
-            std::sort(files.begin() + start, files.begin() + end, 
+            std::sort(files.begin() + start, files.begin() + end,
                 [namesOnly](const std::string& a, const std::string& b) {
                     if (namesOnly) {
                         size_t a_slash = a.find_last_of('/');
@@ -102,26 +104,26 @@ void sortFilesCaseInsensitive(std::vector<std::string>& files) {
                 });
         }));
     }
-    
+
     for (auto& f : futures)
         f.get();
     futures.clear();
-    
+
     // Merge sorted chunks
     while (chunks.size() > 1) {
         std::vector<std::pair<size_t, size_t>> newChunks;
         std::vector<std::future<void>> mergeFutures;
-        
+
         for (size_t i = 0; i < chunks.size(); i += 2) {
             if (i + 1 >= chunks.size()) {
                 newChunks.push_back(chunks[i]);
                 break;
             }
-            
+
             size_t start = chunks[i].first;
-            size_t mid = chunks[i].second;
-            size_t end = chunks[i+1].second;
-            
+            size_t mid   = chunks[i].second;
+            size_t end   = chunks[i + 1].second;
+
             mergeFutures.emplace_back(pool.enqueue([namesOnly, start, mid, end, &files]() {
                 std::inplace_merge(files.begin() + start, files.begin() + mid, files.begin() + end,
                     [namesOnly](const std::string& a, const std::string& b) {
@@ -136,13 +138,13 @@ void sortFilesCaseInsensitive(std::vector<std::string>& files) {
                         }
                     });
             }));
-            
+
             newChunks.emplace_back(start, end);
         }
-        
+
         for (auto& f : mergeFutures)
             f.get();
-        
+
         chunks = std::move(newChunks);
     }
 }

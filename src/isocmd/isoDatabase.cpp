@@ -21,16 +21,6 @@ namespace {
 }
 
 
-// Persistent reusable local theadPool for removeNonExistentPathsFromDatabase
-static ThreadPool& getIOThreadPool(size_t* count = nullptr) {
-    static const unsigned cap = std::min(maxThreads, 16u);
-    static ThreadPool pool(cap);
-    // No atexit needed — ~ThreadPool() calls waitAllTasksCompleted() then joins all threads cleanly
-    if (count) *count = cap;
-    return pool;
-}
-
-
 // Function to remove non-existent paths from database and cache
 void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileList) {
     std::lock_guard<std::mutex> fileLock(dbFileMutex);  // always first
@@ -66,8 +56,11 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
 
     std::vector<int> pathExists(cache.size(), 0);
     std::atomic<size_t> existingCount{0};
-    size_t numThread;
-    ThreadPool& pool = getIOThreadPool(&numThread);
+    
+    // Use the static threadpool, max threads are capped at a reasonable 16
+    ThreadPool& pool       = getStaticThreadPool();
+	const size_t numThread = std::min(pool.threadCount(), static_cast<size_t>(16));
+    
     const size_t chunkSize = (cache.size() + numThread - 1) / numThread;
     std::vector<std::future<void>> futures;
     futures.reserve(numThread);
