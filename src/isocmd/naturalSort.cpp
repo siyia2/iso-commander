@@ -69,10 +69,11 @@ void sortFilesCaseInsensitive(std::vector<std::string>& files) {
         return;
 
     bool namesOnly = displayConfig::toggleNamesOnly;
-
+	
+	// Use the static threadpool, max limit for sorting threads is capped at 4 (SORT_THREAD_CAP)
     ThreadPool& pool = getStaticThreadPool();
-
-    const size_t numThreads = std::min(pool.threadCount(), static_cast<size_t>(4));
+	const size_t numThreads = std::min(pool.threadCount(), SORT_THREAD_CAP);
+	
 	const size_t n = files.size();
 	size_t numChunks = std::min<size_t>(numThreads * 2, n / 1000 + 1);
 	size_t chunkSize = (n + numChunks - 1) / numChunks;

@@ -169,9 +169,9 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
     const bool needLower = std::any_of(queryTokens.begin(), queryTokens.end(),
                                [](const QueryToken& qt) { return !qt.isCaseSensitive; });
 	
-	// Use the static threadpool, max limit for filtering threads is capped at 4
+	// Use the static threadpool, max limit for filtering threads is capped at 4 (FILTER_THREAD_CAP)
     ThreadPool&  pool       = getStaticThreadPool();
-	const size_t numThreads = std::min({pool.threadCount(), files.size(), size_t(4)});
+	const size_t numThreads = std::min({pool.threadCount(), files.size(), FILTER_THREAD_CAP});
     
     const size_t chunkSize  = (files.size() + numThreads - 1) / numThreads;
 

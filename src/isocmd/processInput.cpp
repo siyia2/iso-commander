@@ -6,24 +6,6 @@
 #include "../ccd.h"
 
 
-// Operation thread caps
-
-// Moderate I/O
-static constexpr size_t MOUNT_THREAD_CAP  = 16;
-
-// Low I/O
-static constexpr size_t UMOUNT_THREAD_CAP = 32;
-
-// High I/O
-static constexpr size_t CPMV_THREAD_CAP  = 8;
-
-// Low I/O
-static constexpr size_t RM_THREAD_CAP    = 32;
-
-// High I/O
-static constexpr size_t CONV_THREAD_CAP  = 8;
-
-
 // Function to process mount/unmount indices
 void processInputForMountOrUmount(const std::string& input, const std::vector<std::string>& files, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& skippedMessages, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, bool& operationBreak, bool& verbose, bool isUnmount) {
     // Setup signal handler at the start of the operation
