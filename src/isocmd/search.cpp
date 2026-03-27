@@ -129,7 +129,7 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
                 }
                 
             }
-            return;
+            return; // Early return since there are no valid paths to process
         }
         
         // Now create the thread pool based on valid paths count
