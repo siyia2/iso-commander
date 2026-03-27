@@ -356,9 +356,8 @@ public:
 inline ThreadPool& getStaticThreadPool() {
     static ThreadPool instance([] {
         // Pool only needs as many threads as the largest operation cap.
-        // No operation uses more than RM_THREAD_CAP/UMOUNT_THREAD_CAP (16),
-        // so spawning 128 threads would leave 112 sleeping forever.
-        constexpr size_t MAX_USEFUL_THREADS = 32;  // matches highest caps
+        // No operation uses more than the highest limit defined in headers.h (32 max)
+        constexpr size_t MAX_USEFUL_THREADS = 32;  // matches highest cap
         return std::min({static_cast<size_t>(maxThreads),
                          MAX_USEFUL_THREADS});
     }());
