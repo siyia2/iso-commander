@@ -260,9 +260,9 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
     std::mutex processMutex;
     std::mutex traverseErrorMutex;
     
-    // Create a thread pool based on the available hardware threads.
-    size_t numThreads = std::min(finalPaths.size(), static_cast<size_t>(maxThreads == 0 ? 4 : std::min(maxThreads * 2, (unsigned int)MAX_HISTORY_LINES)));
-    ThreadPool pool(numThreads);
+    // Utilize the static threadpool
+    ThreadPool& pool = getStaticThreadPool();
+    
     std::vector<std::future<void>> futures;
     
     // Enqueue tasks for each valid directory
