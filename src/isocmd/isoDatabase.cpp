@@ -21,7 +21,6 @@ namespace {
 }
 
 
-
 // Function to remove non-existent ISO paths from database and cache
 void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileList, ThreadPool* externalPool)
 {
