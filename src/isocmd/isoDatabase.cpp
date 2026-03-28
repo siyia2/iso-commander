@@ -58,12 +58,11 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
     std::atomic<size_t> existingCount{0};
     
     // Use the static threadpool, max threads for process are capped at a reasonable 16 (CLEAN_THREAD_CAP)
-    ThreadPool& pool       = getStaticThreadPool();
-	const size_t numThread = std::min(pool.threadCount(), CLEAN_THREAD_CAP);
-    
-    const size_t chunkSize = (cache.size() + numThread - 1) / numThread;
-    std::vector<std::future<void>> futures;
-    futures.reserve(numThread);
+    ThreadPool& pool        = getStaticThreadPool();
+	const size_t numThread  = std::min({pool.threadCount(), CLEAN_THREAD_CAP, cache.size()});
+	const size_t chunkSize  = (cache.size() + numThread - 1) / numThread;
+	std::vector<std::future<void>> futures;
+	futures.reserve(numThread);
     for (size_t i = 0; i < numThread; ++i) {
         const size_t start = i * chunkSize;
         const size_t end = std::min(cache.size(), start + chunkSize);
