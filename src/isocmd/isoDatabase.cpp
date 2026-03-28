@@ -21,18 +21,16 @@ namespace {
 }
 
 
+
 // Function to remove non-existent paths from database and cache
 void removeNonExistentPathsFromDatabase(
     std::vector<std::string>& globalIsoFileList,
-    void* externalPoolPtr)
+    ThreadPool* externalPool)
 {
-    ThreadPool* externalPool = static_cast<ThreadPool*>(externalPoolPtr);
     std::vector<std::string> retained;
     bool anyRemoved = false;
-
     {
         std::lock_guard<std::mutex> fileLock(dbFileMutex);
-
         int fd = open(databaseFilePath.c_str(), O_RDWR, 0644);
         if (fd == -1) {
             if (errno == ENOENT) {
@@ -41,21 +39,16 @@ void removeNonExistentPathsFromDatabase(
             }
             return;
         }
-
         struct FdGuard {
             int fd;
             ~FdGuard() { if (fd != -1) { flock(fd, LOCK_UN); close(fd); } }
             void release() { fd = -1; }
         } fdGuard{fd};
-
         if (flock(fd, LOCK_EX) == -1) return;
-
         int dupFd = dup(fd);
         if (dupFd == -1) return;
-
         FILE* file = fdopen(dupFd, "r");
         if (!file) { close(dupFd); return; }
-
         std::vector<std::string> cache;
         char* linePtr = nullptr;
         size_t len    = 0;
@@ -67,28 +60,21 @@ void removeNonExistentPathsFromDatabase(
         }
         free(linePtr);
         fclose(file);
-
         if (cache.empty()) return;
-
         ThreadPool& staticPool = getStaticThreadPool();
         ThreadPool& pool       = externalPool ? *externalPool : staticPool;
-
         std::vector<int> pathExists(cache.size(), 0);
         std::atomic<size_t> existingCount{0};
-
         const size_t numThread = std::min({pool.threadCount(),
                                            CLEAN_THREAD_CAP,
                                            cache.size()});
         const size_t chunkSize = (cache.size() + numThread - 1) / numThread;
-
         std::vector<std::future<void>> futures;
         futures.reserve(numThread);
-
         for (size_t i = 0; i < numThread; ++i) {
             const size_t start = i * chunkSize;
             const size_t end   = std::min(cache.size(), start + chunkSize);
             if (start >= end) break;
-
             futures.emplace_back(
                 pool.enqueue([&cache, &pathExists, &existingCount, start, end] {
                     for (size_t j = start; j < end; ++j) {
@@ -99,33 +85,32 @@ void removeNonExistentPathsFromDatabase(
                     }
                 }));
         }
-
         for (auto& f : futures) f.get();
-
         if (existingCount == cache.size()) return;
-
         retained.reserve(existingCount);
         for (size_t i = 0; i < cache.size(); ++i)
             if (pathExists[i]) retained.push_back(std::move(cache[i]));
-
         anyRemoved = true;
-
         if (ftruncate(fd, 0) == -1 || lseek(fd, 0, SEEK_SET) == -1) return;
-
         for (const auto& path : retained) {
             std::string line = path + '\n';
             if (::write(fd, line.c_str(), line.size()) == -1) return;
         }
-
         fdGuard.release();
         flock(fd, LOCK_UN);
         close(fd);
     }
-
     if (anyRemoved) {
         std::lock_guard<std::mutex> lock(updateListMutex);
         globalIsoFileList = std::move(retained);
     }
+}
+
+// Public one-argument wrapper — matches the header declaration.
+// All external call sites use this; backgroundDatabaseImport calls
+// the two-argument version directly with its own pool.
+void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileList) {
+    removeNonExistentPathsFromDatabase(globalIsoFileList, nullptr);
 }
 
 
