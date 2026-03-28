@@ -381,10 +381,6 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
     
     // Initialize the cancellation flag for the operation
     g_operationCancelled.store(false);
-    
-    // Store paths of selected files
-    std::unordered_set<std::string> selectedFilePaths;
-    std::string concatenatedFilePaths;
 
     // Track indices of files that are processed
     std::unordered_set<int> processedIndices;
@@ -413,20 +409,19 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
 	
     // Chunk the processed files into manageable sizes for processing (max 5 files per chunk)
     std::vector<std::vector<size_t>> indexChunks;
-    const size_t maxFilesPerChunk = 5;
 
-    size_t totalFiles = processedIndices.size();
-    size_t filesPerThread = (totalFiles + numThreads - 1) / numThreads;
-    size_t chunkSize = std::min(maxFilesPerChunk, filesPerThread);
+    
+    const size_t totalFiles    = processedIndices.size();
+	const size_t filesPerChunk = (totalFiles + numThreads - 1) / numThreads;
 
-    auto it = processedIndices.begin();
-    // Divide processed indices into chunks
-    for (size_t i = 0; i < totalFiles; i += chunkSize) {
-        auto chunkEnd = std::next(it, std::min(chunkSize, 
-            static_cast<size_t>(std::distance(it, processedIndices.end()))));
-        indexChunks.emplace_back(it, chunkEnd);
-        it = chunkEnd;
-    }
+	auto it = processedIndices.begin();
+	// Divide processed indices into chunks
+	for (size_t i = 0; i < totalFiles; i += filesPerChunk) {
+		auto chunkEnd = std::next(it, std::min(filesPerChunk,
+			static_cast<size_t>(std::distance(it, processedIndices.end()))));
+		indexChunks.emplace_back(it, chunkEnd);
+		it = chunkEnd;
+	}
     
     // Create a list of files to process based on the indices
     std::vector<std::string> filesToProcess;
