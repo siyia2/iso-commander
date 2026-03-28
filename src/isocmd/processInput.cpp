@@ -47,8 +47,11 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
     
     // Static pool — threads already running, no spawn cost
     ThreadPool& pool         = getStaticThreadPool();
+    const size_t poolSize   = pool.threadCount();
     const size_t cap        = isUnmount ? UMOUNT_THREAD_CAP : MOUNT_THREAD_CAP;
-	const size_t numThreads = std::max(size_t(1), std::min(selectedFiles.size(), cap));
+	const size_t numThreads = std::max(size_t(1), std::min({selectedFiles.size(), cap, poolSize}));
+	
+	
 	const size_t chunkSize  = std::min(size_t(100), selectedFiles.size() / numThreads + 1);
     std::vector<std::vector<std::string>> chunks;
     
@@ -209,9 +212,10 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
     }
     
     // Static pool + operation-aware cap
-    ThreadPool& pool          = getStaticThreadPool();
-    const size_t cap          = isDelete ? RM_THREAD_CAP : CPMV_THREAD_CAP;
-    const unsigned int numThreads = static_cast<unsigned int>(std::min(processedIndices.size(), cap));
+    ThreadPool& pool        = getStaticThreadPool();
+	const size_t poolSize   = pool.threadCount();
+	const size_t cap        = isDelete ? RM_THREAD_CAP : CPMV_THREAD_CAP;
+	const size_t numThreads = std::max(size_t(1), std::min({processedIndices.size(), cap, poolSize}));
     
     // Group the files into chunks for parallel processing
     std::vector<std::vector<int>> indexChunks = groupFilesIntoChunksForCpMvRm(processedIndices, isoFiles, numThreads, isDelete);
@@ -403,7 +407,9 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
 
 	// Create a thread pool and store the futures for each file processing task
     ThreadPool& pool        = getStaticThreadPool();
-	const size_t numThreads = std::min(processedIndices.size(), CONV_THREAD_CAP);
+	const size_t poolSize   = pool.threadCount();
+	const size_t numThreads = std::max(size_t(1),
+								std::min({processedIndices.size(), CONV_THREAD_CAP, poolSize}));
 	
     // Chunk the processed files into manageable sizes for processing (max 5 files per chunk)
     std::vector<std::vector<size_t>> indexChunks;

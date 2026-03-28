@@ -261,9 +261,16 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
     std::mutex processMutex;
     std::mutex traverseErrorMutex;
     
-    // Create a thread pool based on the final paths with a cap at 32 threads.
-	size_t numThreads = std::min({finalPaths.size(), static_cast<size_t>(maxThreads), size_t(32)});
+    // Create a thread pool based on numThreads.
+	// NVMe/SSD I/O: more threads than cores beneficial due to deep queue depth.
+	// Typical sweet spot is 2-4x hardware threads, capped at device queue depth.
+	// Beyond ~16-32 threads, returns diminish and overhead increases.
+	const size_t hwThreads  = static_cast<size_t>(maxThreads);
+	const size_t ioMultiple = 2;  // tune to 2-4x depending on device
+	const size_t ioCap      = 32; // NVMe queue saturation ceiling
+	const size_t numThreads = std::min({finalPaths.size(), std::min(hwThreads * ioMultiple, ioCap)});
     ThreadPool pool(numThreads);
+    
     std::vector<std::future<void>> futures;
     
     // Enqueue tasks for each valid directory
