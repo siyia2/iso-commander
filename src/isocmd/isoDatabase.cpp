@@ -23,88 +23,89 @@ namespace {
 
 // Function to remove non-existent paths from database and cache
 void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileList) {
-    std::lock_guard<std::mutex> fileLock(dbFileMutex);  // always first
-
-    int fd = open(databaseFilePath.c_str(), O_RDWR, 0644);
-    if (fd == -1) {
-        if (errno == ENOENT) {
-            std::lock_guard<std::mutex> lock(updateListMutex);  // second
-            globalIsoFileList.clear();
-        }
-        return;
-    }
-    if (flock(fd, LOCK_EX) == -1) { close(fd); return; }
-
-    int dupFd = dup(fd);
-    if (dupFd == -1) { flock(fd, LOCK_UN); close(fd); return; }
-    FILE* file = fdopen(dupFd, "r");
-    if (!file) { close(dupFd); flock(fd, LOCK_UN); close(fd); return; }
-
-    std::vector<std::string> cache;
-    char* linePtr = nullptr;
-    size_t len = 0;
-    while (getline(&linePtr, &len, file) != -1) {
-        std::string line(linePtr);
-        if (!line.empty() && line.back() == '\n') line.pop_back();
-        if (!line.empty() && line.back() == '\r') line.pop_back();
-        if (!line.empty()) cache.push_back(std::move(line));
-    }
-    free(linePtr);
-    fclose(file);
-
-    if (cache.empty()) { flock(fd, LOCK_UN); close(fd); return; }
-
-    std::vector<int> pathExists(cache.size(), 0);
-    std::atomic<size_t> existingCount{0};
-    
-    // Use the static threadpool, max threads for process are capped at a reasonable 16 (CLEAN_THREAD_CAP)
-    ThreadPool& pool        = getStaticThreadPool();
-	const size_t numThread  = std::min({pool.threadCount(), CLEAN_THREAD_CAP, cache.size()});
-	
-	const size_t chunkSize  = (cache.size() + numThread - 1) / numThread;
-	std::vector<std::future<void>> futures;
-	futures.reserve(numThread);
-    for (size_t i = 0; i < numThread; ++i) {
-        const size_t start = i * chunkSize;
-        const size_t end = std::min(cache.size(), start + chunkSize);
-        if (start >= end) break;
-        futures.emplace_back(pool.enqueue([&cache, &pathExists, &existingCount, start, end] {
-            for (size_t j = start; j < end; ++j) {
-                if (access(cache[j].c_str(), F_OK) == 0) {
-                    pathExists[j] = 1;
-                    existingCount.fetch_add(1, std::memory_order_relaxed);
-                }
-            }
-        }));
-    }
-    for (auto& f : futures) f.get();
-
-    if (existingCount == cache.size()) { flock(fd, LOCK_UN); close(fd); return; }
-
     std::vector<std::string> retained;
-    retained.reserve(existingCount);
-    for (size_t i = 0; i < cache.size(); ++i) {
-        if (pathExists[i]) retained.push_back(std::move(cache[i]));
-    }
+    bool anyRemoved = false;
+    {
+        std::lock_guard<std::mutex> fileLock(dbFileMutex);  // always first
 
-    // Write to file while holding only dbFileMutex, then update memory under updateListMutex
-    // Order: dbFileMutex (already held) → updateListMutex — consistent everywhere
-    if (ftruncate(fd, 0) == -1 || lseek(fd, 0, SEEK_SET) == -1) {
-        flock(fd, LOCK_UN); close(fd); return;
-    }
-    bool writeSuccess = true;
-    for (const auto& path : retained) {
-        std::string line = path + '\n';
-        if (::write(fd, line.c_str(), line.size()) == -1) {
-            writeSuccess = false;
-            break;
+        int fd = open(databaseFilePath.c_str(), O_RDWR, 0644);
+        if (fd == -1) {
+            if (errno == ENOENT) {
+                std::lock_guard<std::mutex> lock(updateListMutex);
+                globalIsoFileList.clear();
+            }
+            return;
         }
-    }
-    flock(fd, LOCK_UN);
-    close(fd);
+        if (flock(fd, LOCK_EX) == -1) { close(fd); return; }
 
-    if (writeSuccess) {
-        std::lock_guard<std::mutex> lock(updateListMutex);  // second, after file is done
+        int dupFd = dup(fd);
+        if (dupFd == -1) { flock(fd, LOCK_UN); close(fd); return; }
+        FILE* file = fdopen(dupFd, "r");
+        if (!file) { close(dupFd); flock(fd, LOCK_UN); close(fd); return; }
+
+        std::vector<std::string> cache;
+        char* linePtr = nullptr;
+        size_t len = 0;
+        while (getline(&linePtr, &len, file) != -1) {
+            std::string line(linePtr);
+            if (!line.empty() && line.back() == '\n') line.pop_back();
+            if (!line.empty() && line.back() == '\r') line.pop_back();
+            if (!line.empty()) cache.push_back(std::move(line));
+        }
+        free(linePtr);
+        fclose(file);
+
+        if (cache.empty()) { flock(fd, LOCK_UN); close(fd); return; }
+
+        std::vector<int> pathExists(cache.size(), 0);
+        std::atomic<size_t> existingCount{0};
+
+        ThreadPool& pool       = getStaticThreadPool();
+        const size_t numThread = std::min({pool.threadCount(), CLEAN_THREAD_CAP, cache.size()});
+        const size_t chunkSize = (cache.size() + numThread - 1) / numThread;
+        std::vector<std::future<void>> futures;
+        futures.reserve(numThread);
+
+        for (size_t i = 0; i < numThread; ++i) {
+            const size_t start = i * chunkSize;
+            const size_t end   = std::min(cache.size(), start + chunkSize);
+            if (start >= end) break;
+            futures.emplace_back(pool.enqueue([&cache, &pathExists, &existingCount, start, end] {
+                for (size_t j = start; j < end; ++j) {
+                    if (access(cache[j].c_str(), F_OK) == 0) {
+                        pathExists[j] = 1;
+                        existingCount.fetch_add(1, std::memory_order_relaxed);
+                    }
+                }
+            }));
+        }
+        for (auto& f : futures) f.get();
+
+        // Nothing removed — no write, no memory update needed
+        if (existingCount == cache.size()) { flock(fd, LOCK_UN); close(fd); return; }
+
+        retained.reserve(existingCount);
+        for (size_t i = 0; i < cache.size(); ++i) {
+            if (pathExists[i]) retained.push_back(std::move(cache[i]));
+        }
+        anyRemoved = true;
+
+        // Write while still holding dbFileMutex — loadFromDatabase cannot race in here
+        if (ftruncate(fd, 0) == -1 || lseek(fd, 0, SEEK_SET) == -1) {
+            flock(fd, LOCK_UN); close(fd); return;
+        }
+        for (const auto& path : retained) {
+            std::string line = path + '\n';
+            if (::write(fd, line.c_str(), line.size()) == -1) {
+                flock(fd, LOCK_UN); close(fd); return;
+            }
+        }
+        flock(fd, LOCK_UN);
+        close(fd);
+    }  // dbFileMutex released here — file is fully written before loadFromDatabase can proceed
+
+    if (anyRemoved) {
+        std::lock_guard<std::mutex> lock(updateListMutex);
         globalIsoFileList = std::move(retained);
     }
 }
