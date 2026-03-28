@@ -22,33 +22,47 @@ namespace {
 
 
 
-// Function to remove non-existent paths from database and cache
-void removeNonExistentPathsFromDatabase(
-    std::vector<std::string>& globalIsoFileList,
-    ThreadPool* externalPool)
+// Function to remove non-existent ISO paths from database and cache
+void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileList, ThreadPool* externalPool)
 {
     std::vector<std::string> retained;
     bool anyRemoved = false;
     {
+        // dbFileMutex must be acquired before flock() — flock() is advisory
+        // and provides no mutual exclusion between threads in the same process.
         std::lock_guard<std::mutex> fileLock(dbFileMutex);
+
         int fd = open(databaseFilePath.c_str(), O_RDWR, 0644);
         if (fd == -1) {
+            // Database does not exist — clear the in-memory list to match
             if (errno == ENOENT) {
                 std::lock_guard<std::mutex> lock(updateListMutex);
                 globalIsoFileList.clear();
             }
             return;
         }
+
+        // RAII guard — ensures flock(LOCK_UN) and close() are always called,
+        // even on early returns, without duplicating cleanup on every error path.
         struct FdGuard {
             int fd;
             ~FdGuard() { if (fd != -1) { flock(fd, LOCK_UN); close(fd); } }
-            void release() { fd = -1; }
+            void release() { fd = -1; }  // call before manual close to prevent double-close
         } fdGuard{fd};
+
+        // Exclusive lock — prevents other processes from reading or writing
+        // while we inspect and potentially rewrite the file.
         if (flock(fd, LOCK_EX) == -1) return;
+
+        // dup() so fdopen() can own and close its fd independently of the
+        // original fd, which we need to keep open for ftruncate/write later.
         int dupFd = dup(fd);
         if (dupFd == -1) return;
+
         FILE* file = fdopen(dupFd, "r");
         if (!file) { close(dupFd); return; }
+
+        // Read all entries from the database into memory
         std::vector<std::string> cache;
         char* linePtr = nullptr;
         size_t len    = 0;
@@ -59,18 +73,30 @@ void removeNonExistentPathsFromDatabase(
             if (!line.empty()) cache.push_back(std::move(line));
         }
         free(linePtr);
-        fclose(file);
+        fclose(file);  // also closes dupFd
+
         if (cache.empty()) return;
+
+        // Use the injected pool when available to avoid re-entrancy deadlock —
+        // enqueueing into the static pool from within a static pool task would
+        // stall if all threads are occupied, causing futures to never resolve.
         ThreadPool& staticPool = getStaticThreadPool();
         ThreadPool& pool       = externalPool ? *externalPool : staticPool;
+
+        // Parallel filesystem existence checks — each thread owns a contiguous
+        // chunk of cache indices, writing only to its own slice of pathExists,
+        // so no mutex is needed inside the lambda.
         std::vector<int> pathExists(cache.size(), 0);
         std::atomic<size_t> existingCount{0};
+
         const size_t numThread = std::min({pool.threadCount(),
                                            CLEAN_THREAD_CAP,
                                            cache.size()});
         const size_t chunkSize = (cache.size() + numThread - 1) / numThread;
+
         std::vector<std::future<void>> futures;
         futures.reserve(numThread);
+
         for (size_t i = 0; i < numThread; ++i) {
             const size_t start = i * chunkSize;
             const size_t end   = std::min(cache.size(), start + chunkSize);
@@ -85,26 +111,45 @@ void removeNonExistentPathsFromDatabase(
                     }
                 }));
         }
+
+        // .get() propagates any task exception and guarantees all workers
+        // have finished before we inspect results or touch the file.
         for (auto& f : futures) f.get();
+
+        // Nothing removed — skip the write entirely
         if (existingCount == cache.size()) return;
+
+        // Collect surviving entries in original order
         retained.reserve(existingCount);
         for (size_t i = 0; i < cache.size(); ++i)
             if (pathExists[i]) retained.push_back(std::move(cache[i]));
+
         anyRemoved = true;
+
+        // Rewrite the file in-place — truncate first, then write from offset 0
         if (ftruncate(fd, 0) == -1 || lseek(fd, 0, SEEK_SET) == -1) return;
+
         for (const auto& path : retained) {
             std::string line = path + '\n';
             if (::write(fd, line.c_str(), line.size()) == -1) return;
         }
+
+        // File is fully written — release manually before dbFileMutex drops
+        // so loadFromDatabase cannot observe a partially written file.
         fdGuard.release();
         flock(fd, LOCK_UN);
         close(fd);
-    }
+
+    }  // dbFileMutex released here
+
+    // Update the in-memory list only after the file is fully written and
+    // the mutex released, so other threads see a consistent state.
     if (anyRemoved) {
         std::lock_guard<std::mutex> lock(updateListMutex);
         globalIsoFileList = std::move(retained);
     }
 }
+
 
 // Public one-argument wrapper — matches the header declaration.
 // All external call sites use this; backgroundDatabaseImport calls
