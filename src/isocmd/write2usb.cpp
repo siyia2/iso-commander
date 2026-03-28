@@ -627,11 +627,10 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     }
 
     std::atomic<size_t> completedTasks(0);
-    std::atomic<bool> isProcessingComplete(false);
-    const size_t totalTasks = validPairs.size();
-    const unsigned int numThreads = std::min(static_cast<unsigned int>(totalTasks), 
-                                           static_cast<unsigned int>(maxThreads));
-    ThreadPool pool(numThreads);
+	std::atomic<bool> isProcessingComplete(false);
+	const size_t totalTasks = validPairs.size();
+
+	ThreadPool& pool = getStaticThreadPool();
 
     disableInput();
     clearScrollBuffer();
