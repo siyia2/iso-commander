@@ -261,7 +261,7 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
     std::mutex traverseErrorMutex;
     
     // Create a thread pool based on the final paths with a cap at 32 threads.
-    size_t numThreads = std::min(finalPaths.size(), size_t(32));
+	size_t numThreads = std::min({finalPaths.size(), static_cast<size_t>(maxThreads), size_t(32)});
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
     
