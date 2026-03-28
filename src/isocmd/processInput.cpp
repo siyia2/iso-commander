@@ -407,7 +407,7 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
 	const size_t numThreads = std::max(size_t(1),
 								std::min({processedIndices.size(), CONV_THREAD_CAP, poolSize}));
 	
-    // Chunk the processed files into manageable sizes for processing (max 5 files per chunk)
+    // Chunk the processed files into manageable sizes for processing
     std::vector<std::vector<size_t>> indexChunks;
 
     
