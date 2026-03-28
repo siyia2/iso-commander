@@ -22,11 +22,16 @@ namespace {
 
 
 // Function to remove non-existent paths from database and cache
-void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileList) {
+void removeNonExistentPathsFromDatabase(
+    std::vector<std::string>& globalIsoFileList,
+    void* externalPoolPtr)
+{
+    ThreadPool* externalPool = static_cast<ThreadPool*>(externalPoolPtr);
     std::vector<std::string> retained;
     bool anyRemoved = false;
+
     {
-        std::lock_guard<std::mutex> fileLock(dbFileMutex);  // always first
+        std::lock_guard<std::mutex> fileLock(dbFileMutex);
 
         int fd = open(databaseFilePath.c_str(), O_RDWR, 0644);
         if (fd == -1) {
@@ -36,16 +41,24 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
             }
             return;
         }
-        if (flock(fd, LOCK_EX) == -1) { close(fd); return; }
+
+        struct FdGuard {
+            int fd;
+            ~FdGuard() { if (fd != -1) { flock(fd, LOCK_UN); close(fd); } }
+            void release() { fd = -1; }
+        } fdGuard{fd};
+
+        if (flock(fd, LOCK_EX) == -1) return;
 
         int dupFd = dup(fd);
-        if (dupFd == -1) { flock(fd, LOCK_UN); close(fd); return; }
+        if (dupFd == -1) return;
+
         FILE* file = fdopen(dupFd, "r");
-        if (!file) { close(dupFd); flock(fd, LOCK_UN); close(fd); return; }
+        if (!file) { close(dupFd); return; }
 
         std::vector<std::string> cache;
         char* linePtr = nullptr;
-        size_t len = 0;
+        size_t len    = 0;
         while (getline(&linePtr, &len, file) != -1) {
             std::string line(linePtr);
             if (!line.empty() && line.back() == '\n') line.pop_back();
@@ -55,14 +68,19 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
         free(linePtr);
         fclose(file);
 
-        if (cache.empty()) { flock(fd, LOCK_UN); close(fd); return; }
+        if (cache.empty()) return;
+
+        ThreadPool& staticPool = getStaticThreadPool();
+        ThreadPool& pool       = externalPool ? *externalPool : staticPool;
 
         std::vector<int> pathExists(cache.size(), 0);
         std::atomic<size_t> existingCount{0};
 
-        ThreadPool& pool       = getStaticThreadPool();
-        const size_t numThread = std::min({pool.threadCount(), CLEAN_THREAD_CAP, cache.size()});
+        const size_t numThread = std::min({pool.threadCount(),
+                                           CLEAN_THREAD_CAP,
+                                           cache.size()});
         const size_t chunkSize = (cache.size() + numThread - 1) / numThread;
+
         std::vector<std::future<void>> futures;
         futures.reserve(numThread);
 
@@ -70,39 +88,39 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
             const size_t start = i * chunkSize;
             const size_t end   = std::min(cache.size(), start + chunkSize);
             if (start >= end) break;
-            futures.emplace_back(pool.enqueue([&cache, &pathExists, &existingCount, start, end] {
-                for (size_t j = start; j < end; ++j) {
-                    if (access(cache[j].c_str(), F_OK) == 0) {
-                        pathExists[j] = 1;
-                        existingCount.fetch_add(1, std::memory_order_relaxed);
+
+            futures.emplace_back(
+                pool.enqueue([&cache, &pathExists, &existingCount, start, end] {
+                    for (size_t j = start; j < end; ++j) {
+                        if (access(cache[j].c_str(), F_OK) == 0) {
+                            pathExists[j] = 1;
+                            existingCount.fetch_add(1, std::memory_order_relaxed);
+                        }
                     }
-                }
-            }));
+                }));
         }
+
         for (auto& f : futures) f.get();
 
-        // Nothing removed — no write, no memory update needed
-        if (existingCount == cache.size()) { flock(fd, LOCK_UN); close(fd); return; }
+        if (existingCount == cache.size()) return;
 
         retained.reserve(existingCount);
-        for (size_t i = 0; i < cache.size(); ++i) {
+        for (size_t i = 0; i < cache.size(); ++i)
             if (pathExists[i]) retained.push_back(std::move(cache[i]));
-        }
+
         anyRemoved = true;
 
-        // Write while still holding dbFileMutex — loadFromDatabase cannot race in here
-        if (ftruncate(fd, 0) == -1 || lseek(fd, 0, SEEK_SET) == -1) {
-            flock(fd, LOCK_UN); close(fd); return;
-        }
+        if (ftruncate(fd, 0) == -1 || lseek(fd, 0, SEEK_SET) == -1) return;
+
         for (const auto& path : retained) {
             std::string line = path + '\n';
-            if (::write(fd, line.c_str(), line.size()) == -1) {
-                flock(fd, LOCK_UN); close(fd); return;
-            }
+            if (::write(fd, line.c_str(), line.size()) == -1) return;
         }
+
+        fdGuard.release();
         flock(fd, LOCK_UN);
         close(fd);
-    }  // dbFileMutex released here — file is fully written before loadFromDatabase can proceed
+    }
 
     if (anyRemoved) {
         std::lock_guard<std::mutex> lock(updateListMutex);
@@ -208,92 +226,85 @@ std::vector<std::string> hierarchicalPathReduction(const std::vector<std::string
 
 // Function to auto-import ISO files in cache without blocking the UI
 void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
+    struct RunningGuard {
+        std::atomic<bool>& flag;
+        ~RunningGuard() { flag.store(false, std::memory_order_release); }
+    } guard{isImportRunning};
+
+    // ── Read history paths ────────────────────────────────────────────────
     std::vector<std::string> paths;
-    int localMaxDepth = -1;
-    bool localPromptFlag = false;
-    
-    // Read paths from file
     {
         std::ifstream file(historyFilePath);
-        if (!file.is_open()) {
-            isImportRunning.store(false);
-            return;
-        }
+        if (!file.is_open()) return;
+
         std::string line;
         while (std::getline(file, line)) {
             std::istringstream iss(line);
             std::string path;
             while (std::getline(iss, path, ';')) {
                 if (!path.empty() && path[0] == '/') {
-                    if (path.back() != '/') {
-                        path += '/';
-                    }
-                    if (std::find(paths.begin(), paths.end(), path) == paths.end()) {
+                    if (path.back() != '/') path += '/';
+                    if (std::find(paths.begin(), paths.end(), path) == paths.end())
                         paths.push_back(path);
-                    }
                 }
             }
         }
     }
-    
-    // Exclude root path '/' only when there are other paths
+
     if (paths.size() > 1) {
         auto it = std::find(paths.begin(), paths.end(), "/");
-        if (it != paths.end()) {
-            paths.erase(it);
-        }
+        if (it != paths.end()) paths.erase(it);
     }
-    
-    // Apply path generalization
+
     std::vector<std::string> finalPaths = hierarchicalPathReduction(paths);
-    
-    // Early exit if paths are empty
-    if (finalPaths.empty()) {
-		isImportRunning.store(false);
-		return;
-	}
-    
-    
-    // Set up data structures for processing
+    if (finalPaths.empty()) return;
+
+    // ── Build the I/O thread pool ─────────────────────────────────────────
+    const size_t hwThreads  = static_cast<size_t>(maxThreads);
+    const size_t ioMultiple = 2;
+    const size_t ioCap      = 32;
+    const size_t numThreads =
+        std::min({finalPaths.size(), std::min(hwThreads * ioMultiple, ioCap)});
+
+    ThreadPool pool(numThreads);
+
+    // ── Traverse directories ──────────────────────────────────────────────
     std::vector<std::string> allIsoFiles;
-    std::atomic<size_t> totalFiles{0};
+    std::atomic<size_t>      totalFiles{0};
     std::unordered_set<std::string> uniqueErrorMessages;
     std::mutex processMutex;
     std::mutex traverseErrorMutex;
-    
-    // Create a thread pool based on numThreads.
-	// NVMe/SSD I/O: more threads than cores beneficial due to deep queue depth.
-	// Typical sweet spot is 2-4x hardware threads, capped at device queue depth.
-	// Beyond ~16-32 threads, returns diminish and overhead increases.
-	const size_t hwThreads  = static_cast<size_t>(maxThreads);
-	const size_t ioMultiple = 2;  // tune to 2-4x depending on device
-	const size_t ioCap      = 32; // NVMe queue saturation ceiling
-	const size_t numThreads = std::min({finalPaths.size(), std::min(hwThreads * ioMultiple, ioCap)});
-    ThreadPool pool(numThreads);
-    
-    std::vector<std::future<void>> futures;
-    
-    // Enqueue tasks for each valid directory
-    for (const auto& path : finalPaths) {
-        if (isValidDirectory(path)) {
-            futures.emplace_back(pool.enqueue([&, path]() {
-                traverse(path, allIsoFiles, uniqueErrorMessages,
-                         totalFiles, processMutex, traverseErrorMutex,
-                         localMaxDepth, localPromptFlag);
-            }));
+    int  localMaxDepth   = -1;
+    bool localPromptFlag = false;
+
+    {
+        std::vector<std::future<void>> futures;
+        futures.reserve(finalPaths.size());
+
+        for (const auto& path : finalPaths) {
+            if (isValidDirectory(path)) {
+                futures.emplace_back(pool.enqueue([&, path]() {
+                    traverse(path, allIsoFiles, uniqueErrorMessages,
+                             totalFiles, processMutex, traverseErrorMutex,
+                             localMaxDepth, localPromptFlag);
+                }));
+            }
+        }
+
+        for (auto& f : futures) {
+            try { f.get(); }
+            catch (const std::exception& e) {
+                std::lock_guard<std::mutex> lk(traverseErrorMutex);
+                uniqueErrorMessages.insert(e.what());
+            }
         }
     }
-    
-    // Wait for all tasks to complete
-    for (auto& future : futures) {
-        future.wait();
-    }
-    
-    // Cleanup after automatic update finishes
-    removeNonExistentPathsFromDatabase(globalIsoFileList);
-    
+
+    // ── Clean the database (reuses the same pool — no re-entrancy risk) ──
+    removeNonExistentPathsFromDatabase(globalIsoFileList, &pool);
+
+    // ── Persist new findings ──────────────────────────────────────────────
     saveToDatabase(allIsoFiles, newISOFound);
-    isImportRunning.store(false);
 }
 
 
