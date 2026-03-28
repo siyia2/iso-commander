@@ -60,6 +60,7 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
     // Use the static threadpool, max threads for process are capped at a reasonable 16 (CLEAN_THREAD_CAP)
     ThreadPool& pool        = getStaticThreadPool();
 	const size_t numThread  = std::min({pool.threadCount(), CLEAN_THREAD_CAP, cache.size()});
+	
 	const size_t chunkSize  = (cache.size() + numThread - 1) / numThread;
 	std::vector<std::future<void>> futures;
 	futures.reserve(numThread);
@@ -259,9 +260,9 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
     std::mutex processMutex;
     std::mutex traverseErrorMutex;
     
-    // Utilize the static threadpool
-    ThreadPool& pool = getStaticThreadPool();
-    
+    // Create a thread pool based on the final paths with a cap at 32 threads.
+    size_t numThreads = std::min(finalPaths.size(), size_t(32));
+    ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
     
     // Enqueue tasks for each valid directory
