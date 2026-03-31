@@ -118,30 +118,19 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
         if (existingCount == cache.size()) return;
 
         // Collect surviving entries in original order
-        const size_t surviving = existingCount.load();
-        retained.reserve(surviving);
+        retained.reserve(existingCount);
         for (size_t i = 0; i < cache.size(); ++i)
             if (pathExists[i]) retained.push_back(std::move(cache[i]));
 
         anyRemoved = true;
 
-        // Build a single buffer for all surviving paths — one write() syscall
-        // instead of one per path, reducing kernel transitions significantly
-        // when many entries survive.
-        std::string buf;
-        buf.reserve(surviving * 80);
-        for (const auto& path : retained) {
-            buf += path;
-            buf += '\n';
-        }
-
         // Rewrite the file in-place — truncate first, then write from offset 0
         if (ftruncate(fd, 0) == -1 || lseek(fd, 0, SEEK_SET) == -1) return;
 
-        // Guard against partial writes — write() may write fewer bytes than
-        // requested if interrupted or if the buffer is unusually large.
-        ssize_t written = ::write(fd, buf.data(), buf.size());
-        if (written == -1 || static_cast<size_t>(written) != buf.size()) return;
+        for (const auto& path : retained) {
+            std::string line = path + '\n';
+            if (::write(fd, line.c_str(), line.size()) == -1) return;
+        }
 
         // File is fully written — release manually before dbFileMutex drops
         // so loadFromDatabase cannot observe a partially written file.
@@ -338,7 +327,7 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
             }
         }
     }
-	
+
     // ── Clean the database (reuses the same pool — no re-entrancy risk) ──
     removeNonExistentPathsFromDatabase(globalIsoFileList, &pool);
 
