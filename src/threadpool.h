@@ -206,12 +206,13 @@ public:
         });
     }
 
-    // --- restored getters for naturalSort and processInput ---
+    // Getters for naturalSort and processInput ---
     bool isIdle() const { return task_state.load(std::memory_order_acquire) == 0; }
     size_t threadCount() const { return num_threads; }
 };
 
-// RESTORED: Static access helper
+
+// Static access helper
 inline ThreadPool& getStaticThreadPool() {
     static ThreadPool instance([] {
         constexpr size_t MAX_USEFUL_THREADS = 32;
