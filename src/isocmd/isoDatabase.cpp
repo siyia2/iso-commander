@@ -81,7 +81,7 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
 			// Non-owning reference to external pool
 			poolPtr = std::shared_ptr<ThreadPool>(std::shared_ptr<ThreadPool>{}, externalPool);
 		} else {
-			poolPtr = getSharedThreadPool();  // Use the new shared version
+			poolPtr = getSharedThreadPool();  // Use the new shared version because we require ownership here
 		}
 
         // Parallel filesystem existence checks — each thread owns a contiguous
