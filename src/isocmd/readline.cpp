@@ -51,7 +51,7 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
     // Print header if we have multiple matches
     if (num_matches > 1) {
         if (total_pages > 1) {
-            printf("\n\033[1;38;5;130mTab Completion Matches [\033[1;93mpage %d/%d\033[1;38;5;130m] (\033[1;93mCtrl+l\033[0;1m → clear\033[1;38;5;130m):\033[0m\n\n",
+            printf("\n\033[1;38;5;130mTab Completion Matches [\033[38;5;37;1mpage %d/%d\033[1;38;5;130m] (\033[1;93mCtrl+l\033[0;1m → clear\033[1;38;5;130m):\033[0m\n\n",
                    current_page + 1, total_pages);
         } else {
             printf("\n\033[1;38;5;130mTab Completion Matches (\033[1;93mCtrl+l\033[0;1m → clear\033[1;38;5;130m):\033[0m\n\n");
