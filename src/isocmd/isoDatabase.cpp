@@ -117,20 +117,27 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
         // Nothing removed — skip the write entirely
         if (existingCount == cache.size()) return;
 
-        // Collect surviving entries in original order
-        retained.reserve(existingCount);
-        for (size_t i = 0; i < cache.size(); ++i)
-            if (pathExists[i]) retained.push_back(std::move(cache[i]));
+		// Collect surviving entries in original order
+		retained.reserve(existingCount);
+		for (size_t i = 0; i < cache.size(); ++i)
+			if (pathExists[i]) retained.push_back(std::move(cache[i]));
 
-        anyRemoved = true;
+		anyRemoved = true;
 
-        // Rewrite the file in-place — truncate first, then write from offset 0
-        if (ftruncate(fd, 0) == -1 || lseek(fd, 0, SEEK_SET) == -1) return;
+		// CRITICAL: truncate and seek BEFORE writing
+		if (ftruncate(fd, 0) == -1 || lseek(fd, 0, SEEK_SET) == -1) return;
 
-        for (const auto& path : retained) {
-            std::string line = path + '\n';
-            if (::write(fd, line.c_str(), line.size()) == -1) return;
-        }
+		// Now build buffer and write (still one syscall, but file is correctly positioned)
+		std::string buf;
+		buf.reserve(retained.size() * 80);  // rough estimate
+		for (const auto& path : retained) {
+			buf += path;
+			buf += '\n';
+		}
+
+		// Write with proper error handling for partial writes
+		ssize_t written = ::write(fd, buf.data(), buf.size());
+		if (written == -1 || static_cast<size_t>(written) != buf.size()) return;
 
         // File is fully written — release manually before dbFileMutex drops
         // so loadFromDatabase cannot observe a partially written file.
