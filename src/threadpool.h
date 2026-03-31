@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-
 #ifndef THREAD_POOL_H
 #define THREAD_POOL_H
 
@@ -125,6 +123,7 @@ private:
     std::condition_variable cv;
 
     std::atomic<bool> stop{false};
+    std::atomic<bool> shutting_down{false};  // Prevents new tasks during shutdown
 
     // Approximate count of threads currently sleeping on cv.
     // Used by enqueue() to decide between notify_one and notify_all.
@@ -239,6 +238,7 @@ private:
 public:
     explicit ThreadPool(size_t n)
         : num_threads(n)
+        , shutting_down(false)
     {
         if (n == 0) {
             throw std::invalid_argument(
@@ -251,6 +251,9 @@ public:
     }
 
     ~ThreadPool() {
+        // Signal that shutdown has begun - no new tasks allowed
+        shutting_down.store(true, std::memory_order_release);
+        
         // Drain all pending/active work before shutting down threads.
         // Note: deadlocks if tasks circularly wait on each other's futures.
         waitAllTasksCompleted();
@@ -270,6 +273,11 @@ public:
     auto enqueue(F&& f, Args&&... args)
         -> std::future<std::invoke_result_t<F, Args...>>
     {
+        // Don't enqueue new tasks if we're shutting down
+        if (shutting_down.load(std::memory_order_acquire)) {
+            throw std::runtime_error("ThreadPool is shutting down - cannot enqueue new tasks");
+        }
+        
         using return_type = std::invoke_result_t<F, Args...>;
 
         // Capture args in a lambda (avoids std::bind) and fuse the
@@ -321,6 +329,10 @@ public:
         return task_state.load(std::memory_order_acquire) == 0;
     }
 
+    bool isShuttingDown() const {
+        return shutting_down.load(std::memory_order_acquire);
+    }
+
     size_t threadCount()   const { return num_threads; }
 
     size_t pendingCount()  const {
@@ -347,7 +359,6 @@ public:
         cv.notify_all();
     }
 };
-
 
 // Process-wide thread pool shared across all operations (mount, umount, cp, mv, rm, convert, filter).
 // Threads are spawned once on first use and reused for the lifetime of the program.
