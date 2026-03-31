@@ -22,7 +22,7 @@ namespace {
 
 
 // Function to remove non-existent ISO paths from database and cache
-void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileList, ThreadPool* externalPool)
+void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileList)
 {
     std::vector<std::string> retained;
     bool anyRemoved = false;
@@ -74,22 +74,19 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
         fclose(file);  // also closes dupFd
 
         if (cache.empty()) return;
-
-        // Use the injected pool when available to avoid re-entrancy deadlock —
-        // enqueueing into the static pool from within a static pool task would
-        // stall if all threads are occupied, causing futures to never resolve.
-        ThreadPool& staticPool = getStaticThreadPool();
-        ThreadPool& pool       = externalPool ? *externalPool : staticPool;
+        
+        //Get static threadpool
+        ThreadPool& pool       = getStaticThreadPool();
 
         // Parallel filesystem existence checks — each thread owns a contiguous
         // chunk of cache indices, writing only to its own slice of pathExists,
         // so no mutex is needed inside the lambda.
         std::vector<int> pathExists(cache.size(), 0);
         std::atomic<size_t> existingCount{0};
-
-        const size_t numThread = std::min({static_cast<size_t>(maxThreads),
-                                   CLEAN_THREAD_CAP,
-                                   cache.size()});
+		
+        const size_t numThread = std::min({pool.threadCount(),
+                                           CLEAN_THREAD_CAP,
+                                           cache.size()});
         const size_t chunkSize = (cache.size() + numThread - 1) / numThread;
 
         std::vector<std::future<void>> futures;
@@ -157,14 +154,6 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
         std::lock_guard<std::mutex> lock(updateListMutex);
         globalIsoFileList = std::move(retained);
     }
-}
-
-
-// Public one-argument wrapper — matches the header declaration.
-// All external call sites use this; backgroundDatabaseImport calls
-// the two-argument version directly with its own pool.
-void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileList) {
-    removeNonExistentPathsFromDatabase(globalIsoFileList, nullptr);
 }
 
 
