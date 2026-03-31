@@ -37,6 +37,9 @@ int main(int argc, char *argv[]) {
 	// Variable to track if a new .iso file is found after search
 	std::atomic<bool> newISOFound{false};
 	
+	// Variable to hold the ISO files in memory
+	globalIsoFileList.reserve(100);
+	
 	setupReadlineToIgnoreCtrlC();
 	
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
@@ -113,7 +116,6 @@ int main(int argc, char *argv[]) {
 		isAtMain.store(true);
 		isAtISOList.store(false);
 
-		globalIsoFileList.reserve(100);
         clearScrollBuffer();
         print_ascii();
         
