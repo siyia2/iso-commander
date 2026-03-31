@@ -118,7 +118,8 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
         if (existingCount == cache.size()) return;
 
         // Collect surviving entries in original order
-        retained.reserve(existingCount);
+        const size_t surviving = existingCount.load();
+        retained.reserve(surviving);
         for (size_t i = 0; i < cache.size(); ++i)
             if (pathExists[i]) retained.push_back(std::move(cache[i]));
 
@@ -128,7 +129,7 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
         // instead of one per path, reducing kernel transitions significantly
         // when many entries survive.
         std::string buf;
-        buf.reserve(existingCount * 80);
+        buf.reserve(surviving * 80);
         for (const auto& path : retained) {
             buf += path;
             buf += '\n';
@@ -337,7 +338,7 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
             }
         }
     }
-
+	
     // ── Clean the database (reuses the same pool — no re-entrancy risk) ──
     removeNonExistentPathsFromDatabase(globalIsoFileList, &pool);
 
