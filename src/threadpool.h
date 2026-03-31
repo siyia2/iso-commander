@@ -354,10 +354,11 @@ public:
     // static destruction raced with live futures held on stack frames that
     // had already been torn down.
     void waitAndStop() {
-        waitAllTasksCompleted();
-        stop.store(true, std::memory_order_release);
-        cv.notify_all();
-    }
+		shutting_down.store(true, std::memory_order_release);
+		waitAllTasksCompleted();
+		stop.store(true, std::memory_order_release);
+		cv.notify_all();
+	}
 };
 
 // Process-wide thread pool shared across all operations (mount, umount, cp, mv, rm, convert, filter).
