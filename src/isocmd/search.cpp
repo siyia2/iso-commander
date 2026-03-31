@@ -203,7 +203,7 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
 
 
 // Function to traverse a directory and find ISO files
-void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages, std::atomic<size_t>& totalFiles, std::mutex& traverseFilesMutex, std::mutex& traverseErrorsMutex, int& maxDepth, bool& promptFlag) {
+void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages, std::atomic<size_t>& totalFiles, std::mutex& traverseFilesMutex, std::mutex& traverseErrorsMutex, int maxDepth, bool promptFlag) {
     const size_t BATCH_SIZE = 100; // Batch size for collecting ISO files
     std::vector<std::string> localIsoFiles; // Temporary container to hold found ISO file paths in each batch
     
