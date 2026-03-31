@@ -7,6 +7,7 @@
 // STANDARD LIBRARY INCLUDES
 //==============================
 // C++ Standard Library
+#include <atomic>
 #include <chrono>
 #include <csignal>
 #include <cstring>
@@ -16,6 +17,7 @@
 #include <future>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <random>
 #include <thread>
 #include <unordered_map>
