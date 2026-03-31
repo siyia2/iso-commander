@@ -4,65 +4,99 @@
 #include "../readline.h"
 
 
+// Variables to track pagination state across Tab presses
+static int current_page = 0;
+static char last_common_prefix[1024] = "";
+
+
 // Custom readline completion for displaying matching list in search prompts
 void customListingsFunction(char **matches, int num_matches, int max_length) {
+	
     (void)max_length; // Silencing unused parameter warning
-    
+
+    // Detect if this is a new completion context (different matches = reset page)
+    const char* current_prefix = matches[0]; // matches[0] is the common prefix
+    if (strcmp(last_common_prefix, current_prefix) != 0) {
+        current_page = 0;
+        strncpy(last_common_prefix, current_prefix, sizeof(last_common_prefix) - 1);
+        last_common_prefix[sizeof(last_common_prefix) - 1] = '\0';
+    }
+
     // Save the current cursor position
     printf("\033[s");
     // Clear any listings if visible and leave a new line
     std::cout << "\033[J";
     printf("\n");
-    
+
+    int total_pages = 1;
+    int start_index = 1; // matches[] is 1-indexed
+    int items_to_display;
+
     // Calculate how many items to display based on ITEMS_PER_PAGE
     // If ITEMS_PER_PAGE <= 0, show all matches
-    int items_to_display;
     if (ITEMS_PER_PAGE <= 0) {
         items_to_display = num_matches;
     } else {
+        total_pages = ((size_t)num_matches + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE;
+
+        // Clamp page to valid range
+        if (current_page >= total_pages) current_page = 0; // wrap around
+
+        start_index = current_page * (int)ITEMS_PER_PAGE + 1;
         // Fix signedness comparison issue by casting
-        items_to_display = ((size_t)num_matches > ITEMS_PER_PAGE) ? 
-                           (int)ITEMS_PER_PAGE : num_matches;
+        int remaining = num_matches - (start_index - 1);
+        items_to_display = (remaining > (int)ITEMS_PER_PAGE) ? (int)ITEMS_PER_PAGE : remaining;
     }
-    
+
     // Print header if we have multiple matches
     if (num_matches > 1) {
-        printf("\n\033[1;38;5;130mTab Completion Matches (\033[1;93mCtrl+l\033[0;1m → clear\033[1;38;5;130m):\033[0m\n\n");
+        if (total_pages > 1) {
+            printf("\n\033[1;38;5;130mTab Completion Matches [\033[1;93mpage %d/%d\033[1;38;5;130m] (\033[1;93mCtrl+l\033[0;1m → clear\033[1;38;5;130m):\033[0m\n\n",
+                   current_page + 1, total_pages);
+        } else {
+            printf("\n\033[1;38;5;130mTab Completion Matches (\033[1;93mCtrl+l\033[0;1m → clear\033[1;38;5;130m):\033[0m\n\n");
+        }
     }
-    
+
+    // Advance page for next Tab press
+    if (ITEMS_PER_PAGE > 0 && (size_t)num_matches > ITEMS_PER_PAGE) {
+        current_page++;
+        if (current_page >= total_pages) current_page = 0;
+    }
+
     // Find common prefix among matches
     const char* base_path = matches[1];
     int base_len = 0;
-    
+
     // Find the last occurrence of '/' before the part we're tab-completing
     const char* last_slash = strrchr(base_path, '/');
     if (last_slash != NULL) {
         base_len = last_slash - base_path + 1; // Include the slash
     }
-    
+
     // Determine the maximum length of all items
     size_t max_item_length = 0;
-    
-    for (int i = 1; i <= items_to_display; i++) {
+
+    for (int i = start_index; i < start_index + items_to_display; i++) {
         const char* relative_path = matches[i] + base_len;
         size_t item_length = strlen(relative_path);
-        
+
         if (item_length > max_item_length) {
             max_item_length = item_length;
         }
     }
-    
+
     // Calculate number of columns based on items to display
     int num_columns = 3; // Default to 3 columns
     if (items_to_display <= 2) {
         // If we have 1 or 2 items, use fewer columns
         num_columns = items_to_display;
     }
-    
+
     // Define column parameters
     const int column_spacing = 4;
     int column_width = 40; // Default width
-    
+
     // Adjust column width based on number of columns and item length
     if (num_columns < 3) {
         // For fewer columns, we can use wider columns if needed
@@ -74,12 +108,12 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
             column_width = max_item_length + 2; // Add 2 for padding
         }
     }
-    
+
     const int total_column_width = column_width + column_spacing;
-    
+
     // Calculate rows needed
     int rows = (items_to_display + num_columns - 1) / num_columns;
-    
+
     // Function to check if a path is a directory
     auto isDirectory = [](const char* path) -> bool {
         struct stat path_stat;
@@ -88,56 +122,58 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
         }
         return S_ISDIR(path_stat.st_mode);
     };
-    
+
     // Function for smart truncation
     auto smartTruncate = [](const char* str, int max_width) -> std::string {
         std::string result(str);
         size_t len = result.length();
-        
+
         if (len <= (size_t)max_width) {
             return result; // No truncation needed
         }
-        
+
         // Find file extension if present
         size_t dot_pos = result.find_last_of('.');
         bool has_extension = (dot_pos != std::string::npos && dot_pos > 0 && len - dot_pos <= 10);
-        
+
         // If we have a reasonable extension length (<=10 chars), preserve it
         if (has_extension && dot_pos > 0) {
             std::string ext = result.substr(dot_pos);
-            
+
             // Minimum chars to keep at beginning (at least 3)
             int prefix_len = std::max(3, max_width - (int)ext.length() - 3);
-            
+
             if (prefix_len >= 3) {
                 // We have enough space for prefix + ... + extension
                 return result.substr(0, prefix_len) + "..." + ext;
             }
         }
-        
+
         // For other cases or very long extensions, use middle truncation
         int prefix_len = (max_width - 3) / 2;
         int suffix_len = max_width - 3 - prefix_len;
-        
-        return result.substr(0, prefix_len) + "..." + 
+
+        return result.substr(0, prefix_len) + "..." +
                result.substr(len - suffix_len, suffix_len);
     };
-    
+
     // Print matches in the determined number of columns
     for (int row = 0; row < rows; row++) {
         for (int col = 0; col < num_columns; col++) {
-            int index = row + col * rows + 1;
-            
-            if (index <= items_to_display) {
+            // Map row/col to the correct matches[] index within this page
+            int page_offset = row + col * rows; // 0-based within page
+            int index = start_index + page_offset;
+
+            if (page_offset < items_to_display) {
                 const char* full_path = matches[index];
                 const char* relative_path = full_path + base_len;
-                
+
                 // Check if the path is a directory
                 bool is_dir = isDirectory(full_path);
-                
+
                 // Apply color and format based on file type
                 std::string formatted;
-                
+
                 if (is_dir) {
                     // Use blue color for directories and append a slash
                     formatted = "\033[1;34m" + smartTruncate(relative_path, column_width - 1) + "/\033[0m";
@@ -145,18 +181,18 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
                     // Regular color for files
                     formatted = smartTruncate(relative_path, column_width);
                 }
-                
+
                 // Last column doesn't need padding
-                if (col == num_columns - 1 || index == items_to_display) {
+                if (col == num_columns - 1 || page_offset == items_to_display - 1) {
                     printf("%s", formatted.c_str());
                 } else {
                     // Need to handle ANSI escape codes when padding
                     // Standard padding won't work correctly with color codes, so we add spaces manually
                     int visible_length = strlen(relative_path);
                     if (is_dir) visible_length++; // Account for the slash
-                    
+
                     printf("%s", formatted.c_str());
-                    
+
                     // Add appropriate spacing (accounting for truncation)
                     int displayed_length = std::min((int)visible_length, column_width);
                     int padding = total_column_width - displayed_length;
@@ -168,14 +204,13 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
         }
         printf("\n");
     }
-    
-    // Only show the pagination message if we're actually limiting results
-    // and ITEMS_PER_PAGE is positive
+
+    // Show pagination hint when results are spread across multiple pages
     if (ITEMS_PER_PAGE > 0 && (size_t)num_matches > ITEMS_PER_PAGE) {
-        printf("\n\033[1;33m[Showing %d/%d matches... increase pagination limit to display more]\033[0;1m\n", 
-               items_to_display, num_matches);
+        printf("\n\033[1;33m[%d/%d matches — press Tab for next page]\033[0m\n",
+               start_index + items_to_display - 1, num_matches);
     }
-    
+
     // Move the cursor back to the saved position
     printf("\033[u");
 }
@@ -344,5 +379,10 @@ int clear_screen_and_buffer(int, int) {
     fflush(stdout);
     // Force readline to redisplay with the current prompt
     rl_forced_update_display();
+    
+    // Reset pagination state
+    current_page = 0;
+    last_common_prefix[0] = '\0';
+    
     return 0;
 }
