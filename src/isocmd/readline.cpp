@@ -207,7 +207,7 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
 
     // Show pagination hint when results are spread across multiple pages
     if (ITEMS_PER_PAGE > 0 && (size_t)num_matches > ITEMS_PER_PAGE) {
-        printf("\n\033[1;33m[%d/%d matches — press Tab for next page]\033[0m\n",
+        printf("\n\033[0;1m[%d/%d matches — press Tab for next page]\033[0m\n",
                start_index + items_to_display - 1, num_matches);
     }
 
