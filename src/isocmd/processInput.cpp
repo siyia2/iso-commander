@@ -17,16 +17,18 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
     
     // Handle input ("00" = all files, else parse input)
     if (input == "00") {
+        // "00" = all valid indices
         for (size_t i = 0; i < files.size(); ++i)
-            indicesToProcess.insert(i + 1);
+            indicesToProcess.insert(static_cast<int>(i + 1));
     } else {
+        // Tokenize and validate normal input
         tokenizeInput(input, files, uniqueErrorMessages, indicesToProcess);
-        if (indicesToProcess.empty()) {
-            if (isUnmount) {
-                operationBreak = false;
-            }
-            return;
-        }
+    }
+
+    // Nothing to process
+    if (indicesToProcess.empty()) {
+        if (isUnmount) operationBreak = false;
+        return;
     }
     
     // Create selected files vector from indices
