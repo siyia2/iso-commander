@@ -338,9 +338,6 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
             }
         }
     }
-	
-    // ── Clean the database (reuses the same pool — no re-entrancy risk) ──
-    removeNonExistentPathsFromDatabase(globalIsoFileList, &pool);
 
     // ── Persist new findings ──────────────────────────────────────────────
     saveToDatabase(allIsoFiles, newISOFound);
