@@ -349,19 +349,23 @@ public:
 };
 
 
-// Process-wide thread pool shared across all operations (mount, umount, cp, mv, rm, convert, filter).
+// Process-wide thread pool shared across all operations.
 // Threads are spawned once on first use and reused for the lifetime of the program.
 // Size is capped at MAX_USEFUL_THREADS so high core count machines (e.g. 128 cores)
 // don't spawn threads that will never get work — no operation uses more than 32 concurrent threads.
-inline ThreadPool& getStaticThreadPool() {
-    static ThreadPool instance([] {
-        // Pool only needs as many threads as the largest operation cap.
-        // No operation uses more than the highest limit defined in headers.h (32 max)
-        constexpr size_t MAX_USEFUL_THREADS = 32;  // matches highest cap
+inline std::shared_ptr<ThreadPool> getSharedThreadPool() {
+    static auto pool = std::make_shared<ThreadPool>([] {
+        constexpr size_t MAX_USEFUL_THREADS = 32;
         return std::min({static_cast<size_t>(maxThreads),
                          MAX_USEFUL_THREADS});
     }());
-    return instance;
+    return pool;
+}
+
+
+// Convenience wrapper for code that still needs a reference
+inline ThreadPool& getStaticThreadPool() {
+    return *getSharedThreadPool();
 }
 
 #endif // THREAD_POOL_H
