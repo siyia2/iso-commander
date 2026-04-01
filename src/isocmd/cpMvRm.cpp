@@ -140,6 +140,7 @@ bool& overwriteExisting) {
     std::string userInput;
 
     while (shouldContinue) {
+		resetReadlinePagination();
         if (!isDelete) {
             bool isPageTurn = false;
 
@@ -174,7 +175,6 @@ bool& overwriteExisting) {
                 bool import2ISO = false, isCpMv = true;
                 helpSearches(isCpMv, import2ISO);
                 userDestDir = "";
-                resetReadlinePagination();
                 continue;
             }
             if (userInput == "<") {
@@ -182,11 +182,9 @@ bool& overwriteExisting) {
                 userDestDir = "";
                 clear_history();
                 shouldContinue = false;
-                resetReadlinePagination();
                 continue;
             }
             if (userInput.empty()) {
-				resetReadlinePagination();
 				continue;
 			}
             // Strip trailing " -o" flag once
