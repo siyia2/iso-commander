@@ -207,7 +207,7 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
 
     // Show pagination hint when results are spread across multiple pages
     if (ITEMS_PER_PAGE > 0 && (size_t)num_matches > ITEMS_PER_PAGE) {
-        printf("\n\033[0;1m[%d/%d matches — press Tab for next page]\033[0m\n",
+        printf("\n\033[1;38;5;130m[%d/%d matches — press Tab for next page]\033[0m\n",
                start_index + items_to_display - 1, num_matches);
     }
 
@@ -224,6 +224,10 @@ CompleterData g_completerData = {nullptr, nullptr};
 
 // Custom readline completion for write2usb function
 char** completion_cb(const char* text, int start, int end) {
+	// Reset pagination on every new completion attempt
+    current_page = 0;
+    last_common_prefix[0] = '\0';
+	
     rl_attempted_completion_over = 1; // Tell Readline we'll handle completion
     char** matches = nullptr;
     std::string current_word(rl_line_buffer + start, end - start);
@@ -344,6 +348,12 @@ char** completion_cb(const char* text, int start, int end) {
 
 
 // General readline functions
+
+void resetReadlinePagination() {
+    current_page = 0;
+    last_common_prefix[0] = '\0';
+}
+
 
 // Function to restore readline history keys but prevent declutter and listings
 void restoreReadline() {
