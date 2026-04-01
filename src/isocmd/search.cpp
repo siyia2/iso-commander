@@ -22,6 +22,7 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
         enable_ctrl_d();
         // Setup signal handler at the start of the operation
         setupSignalHandlerCancellations();
+        resetReadlinePagination();
         
         // Reset cancellation flag
         g_operationCancelled.store(false);
@@ -56,6 +57,7 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
                 input = trimWhitespace(searchQuery.get());  // Trim only leading and trailing spaces
                 
                 if (input == "?") {
+					resetReadlinePagination();
                     bool import2ISO = true;
                     helpSearches(isCpMv, import2ISO);
                     input = "";
@@ -65,6 +67,7 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
                 }
                 
                 if (input ==  "config" || input == "stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter" || input == "*auto_off" || input == "*auto_on" || input == "*flno_on" || input == "*flno_off" || isValidInput(input) || input.starts_with("*pagination_")) {
+                    resetReadlinePagination();
                     databaseSwitches(input, promptFlag, maxDepth, filterHistory, newISOFound);
                     return;
                 }
@@ -122,13 +125,14 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
             if (promptFlag) {
                 flushStdin();
                 restoreInput();
+                resetReadlinePagination();
                 
                 // Show error message about invalid paths
                 if (!invalidPaths.empty()) {
 					verboseForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, promptFlag, maxDepth, filterHistory, start_time, newISOFound);
                 }
                 
-            }
+            }  
             return; // Early return since there are no valid paths to process
         }
         
@@ -170,6 +174,7 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
         if (promptFlag) {
             flushStdin();
             restoreInput();
+            resetReadlinePagination();
                 
             std::cout << "\r\033[0;1mTotal files processed: " << totalFiles;
             
@@ -684,7 +689,9 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
         // Setup environment
         enable_ctrl_d();
         setupSignalHandlerCancellations();
+        resetReadlinePagination();
         g_operationCancelled.store(false);
+        
         resetVerboseSets(processedErrors, successOuts, skippedOuts, failedOuts);
         clearScrollBuffer();
         clear_history();
@@ -707,36 +714,43 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
         std::string inputSearch = trimWhitespace(mainSearch.get());
         
         if (inputSearch == "stats") {
+			resetReadlinePagination();
 			displayDatabaseStatistics(databaseFilePath, maxDatabaseSize, transformationCache, globalIsoFileList);
 			continue;
 		}
 		
 		if (inputSearch == "config") {
+			resetReadlinePagination();
 			displayConfigurationOptions(configPath);
 			continue;
 		}
 		
 		if (inputSearch.starts_with("*pagination_")) {
+			resetReadlinePagination();
 			updatePagination(inputSearch, configPath);
 			continue;
 		}
 		if (inputSearch == "*flno_on" || inputSearch == "*flno_off") {
+			resetReadlinePagination();
 			updateFilenamesOnly(configPath, inputSearch);
 			continue;
 		}
 		
         // Handle special commands
         if (inputSearch == "!clr_paths" || inputSearch == "!clr_filter") {
+			resetReadlinePagination();
             clearHistory(inputSearch);
             continue;
         }
         
         if (isValidInput(inputSearch)) {
+			resetReadlinePagination();
             setDisplayMode(inputSearch);
             continue;
         }
         
         if (inputSearch == "?") {
+			resetReadlinePagination();
             bool isCpMv = false, import2ISO = false;
             helpSearches(isCpMv, import2ISO);
             continue;
@@ -748,12 +762,14 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
         
         // Handle cache clearing
         if (clr) {
+			resetReadlinePagination();
             clearRamCache(modeMdf, modeNrg);
             continue;
         }
         
         // Show cache contents if requested
 		if (list) {
+			resetReadlinePagination();
 			ramCacheList(files, list, fileExtension, binImgFilesCache, mdfMdsFilesCache, nrgFilesCache, modeMdf, modeNrg);
 			if (files.empty()) {
 				continue;
