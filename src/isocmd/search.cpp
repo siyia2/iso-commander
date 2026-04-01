@@ -714,13 +714,11 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
         std::string inputSearch = trimWhitespace(mainSearch.get());
         
         if (inputSearch == "stats") {
-			resetReadlinePagination();
 			displayDatabaseStatistics(databaseFilePath, maxDatabaseSize, transformationCache, globalIsoFileList);
 			continue;
 		}
 		
 		if (inputSearch == "config") {
-			resetReadlinePagination();
 			displayConfigurationOptions(configPath);
 			continue;
 		}
@@ -731,26 +729,22 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
 			continue;
 		}
 		if (inputSearch == "*flno_on" || inputSearch == "*flno_off") {
-			resetReadlinePagination();
 			updateFilenamesOnly(configPath, inputSearch);
 			continue;
 		}
 		
         // Handle special commands
         if (inputSearch == "!clr_paths" || inputSearch == "!clr_filter") {
-			resetReadlinePagination();
             clearHistory(inputSearch);
             continue;
         }
         
         if (isValidInput(inputSearch)) {
-			resetReadlinePagination();
             setDisplayMode(inputSearch);
             continue;
         }
         
         if (inputSearch == "?") {
-			resetReadlinePagination();
             bool isCpMv = false, import2ISO = false;
             helpSearches(isCpMv, import2ISO);
             continue;
@@ -762,14 +756,12 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
         
         // Handle cache clearing
         if (clr) {
-			resetReadlinePagination();
             clearRamCache(modeMdf, modeNrg);
             continue;
         }
         
         // Show cache contents if requested
 		if (list) {
-			resetReadlinePagination();
 			ramCacheList(files, list, fileExtension, binImgFilesCache, mdfMdsFilesCache, nrgFilesCache, modeMdf, modeNrg);
 			if (files.empty()) {
 				continue;
