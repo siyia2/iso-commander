@@ -74,16 +74,16 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
         fclose(file);  // also closes dupFd
 
         if (cache.empty()) return;
-        
-        //Get static threadpool
-        ThreadPool& pool       = getStaticThreadPool();
+
+        // Get static threadpool
+        ThreadPool& pool = getStaticThreadPool();
 
         // Parallel filesystem existence checks — each thread owns a contiguous
         // chunk of cache indices, writing only to its own slice of pathExists,
         // so no mutex is needed inside the lambda.
         std::vector<int> pathExists(cache.size(), 0);
         std::atomic<size_t> existingCount{0};
-		
+
         const size_t numThread = std::min({pool.threadCount(),
                                            CLEAN_THREAD_CAP,
                                            cache.size()});
@@ -114,19 +114,26 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
         // Nothing removed — skip the write entirely
         if (existingCount == cache.size()) return;
 
-        // Collect surviving entries in original order
+        // Pass 1: Collect surviving entries in original order and calculate
+        // the exact buffer size needed — avoids a reallocation mid-build.
         const size_t surviving = existingCount.load();
         retained.reserve(surviving);
-        for (size_t i = 0; i < cache.size(); ++i)
-            if (pathExists[i]) retained.push_back(std::move(cache[i]));
+        size_t totalBufferSize = 0;
+        for (size_t i = 0; i < cache.size(); ++i) {
+            if (pathExists[i]) {
+                totalBufferSize += cache[i].size() + 1;  // +1 for '\n'
+                retained.push_back(std::move(cache[i]));
+            }
+        }
 
         anyRemoved = true;
 
-        // Build a single buffer for all surviving paths — one write() syscall
+        // Pass 2: Build a single contiguous buffer — one write() syscall
         // instead of one per path, reducing kernel transitions significantly
-        // when many entries survive.
+        // when many entries survive. Both passes are over hot cache data
+        // so the cost is negligible versus the write() and access() calls.
         std::string buf;
-        buf.reserve(surviving * 80);
+        buf.reserve(totalBufferSize);
         for (const auto& path : retained) {
             buf += path;
             buf += '\n';
