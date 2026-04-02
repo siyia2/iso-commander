@@ -701,10 +701,9 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             if (success) {
                 progressData[i].completed.store(true);
                 completedTasks.fetch_add(1);
-            }
-            else {
-                progressData[i].failed.store(true);
-            }
+            } else if (!g_operationCancelled.load()) {  // Only mark failed if NOT cancelled
+				progressData[i].failed.store(true);
+			}
         }));
     }
 
