@@ -645,8 +645,8 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
 
 
 // Returns true if a special command was handled (caller should `continue`)
-bool dispatchSpecialCommand(const std::string& input, const std::string& configPath, bool modeMdf, bool modeNrg, const std::string& fileExtension, std::vector<std::string>& files,
-const std::string& fileType, std::atomic<bool>& newISOFound, bool& list, std::atomic<bool>& isImportRunning) {
+bool dispatchSpecialCommandForConversionsSearch(const std::string& input, const std::string& configPath, bool modeMdf, bool modeNrg, const std::string& fileExtension, 
+std::vector<std::string>& files, const std::string& fileType, std::atomic<bool>& newISOFound, bool& list, std::atomic<bool>& isImportRunning) {
     if (input == "stats") {
         displayDatabaseStatistics(databaseFilePath, maxDatabaseSize, transformationCache, globalIsoFileList);
         return true;
@@ -769,7 +769,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
 
         bool list = false;
         // Handle special commands like config stats etc...
-        if (dispatchSpecialCommand(inputSearch, configPath, modeMdf, modeNrg,
+        if (dispatchSpecialCommandForConversionsSearch(inputSearch, configPath, modeMdf, modeNrg,
                                    fileExtension, files, fileType,
                                    newISOFound, list, isImportRunning))
             continue;
