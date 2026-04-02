@@ -656,7 +656,6 @@ std::vector<std::string>& files, const std::string& fileType, std::atomic<bool>&
         return true;
     }
     if (input.starts_with("*pagination_")) {
-        resetReadlinePagination();
         updatePagination(input, configPath);
         return true;
     }
