@@ -644,190 +644,174 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
 }
 
 
+// Returns true if a special command was handled (caller should `continue`)
+bool dispatchSpecialCommand(const std::string& input, const std::string& configPath, bool modeMdf, bool modeNrg, const std::string& fileExtension, std::vector<std::string>& files,
+const std::string& fileType, std::atomic<bool>& newISOFound, bool& list, std::atomic<bool>& isImportRunning) {
+    if (input == "stats") {
+        displayDatabaseStatistics(databaseFilePath, maxDatabaseSize, transformationCache, globalIsoFileList);
+        return true;
+    }
+    if (input == "config") {
+        displayConfigurationOptions(configPath);
+        return true;
+    }
+    if (input.starts_with("*pagination_")) {
+        resetReadlinePagination();
+        updatePagination(input, configPath);
+        return true;
+    }
+    if (input == "*flno_on" || input == "*flno_off") {
+        updateFilenamesOnly(configPath, input);
+        return true;
+    }
+    if (input == "!clr_paths" || input == "!clr_filter") {
+        clearHistory(input);
+        return true;
+    }
+    if (isValidInput(input)) {
+        setDisplayMode(input);
+        return true;
+    }
+    if (input == "?") {
+        bool isCpMv = false, import2ISO = false;
+        helpSearches(isCpMv, import2ISO);
+        return true;
+    }
+    if (input == "!clr") {
+        clearRamCache(modeMdf, modeNrg);
+        return true;
+    }
+    if (input == "ls") {
+        list = true;
+        ramCacheList(files, list, fileExtension, binImgFilesCache, mdfMdsFilesCache, nrgFilesCache, modeMdf, modeNrg);
+        if (!files.empty())
+            selectForImageFiles(fileType, files, newISOFound, list, isImportRunning);
+        return true;
+    }
+    return false;
+}
+
+
 // Function to search  files based on user's choice of file type (MDF, BIN/IMG, NRG)
 void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning) {
-    // Setup file type configuration
-    std::string fileExtension, fileTypeName, fileType = fileTypeChoice;
-    bool modeMdf = (fileType == "mdf");
-    bool modeNrg = (fileType == "nrg");
 
-    // Configure file type specifics once
-    if (fileType == "bin" || fileType == "img") {
-        fileExtension = ".bin/.img";
-        fileTypeName = "BIN/IMG";
-    } else if (fileType == "mdf") {
-        fileExtension = ".mdf";
-        fileTypeName = "MDF";
-    } else if (fileType == "nrg") {
-        fileExtension = ".nrg";
-        fileTypeName = "NRG";
-    } else {
+    // --- Configuration ---
+    struct FileTypeConfig {
+        std::string extension;
+        std::string name;
+    };
+
+    static const std::unordered_map<std::string, FileTypeConfig> fileTypeMap = {
+        {"bin", {".bin/.img", "BIN/IMG"}},
+        {"img", {".bin/.img", "BIN/IMG"}},
+        {"mdf", {".mdf",      "MDF"    }},
+        {"nrg", {".nrg",      "NRG"    }},
+    };
+
+    const auto configIt = fileTypeMap.find(fileTypeChoice);
+    if (configIt == fileTypeMap.end()) {
         std::cout << "Invalid file type choice. Supported types: BIN/IMG, MDF, NRG\n";
         return;
     }
-    
-    // Pre-allocate container space
+
+    const std::string& fileType      = fileTypeChoice;
+    const std::string& fileExtension = configIt->second.extension;
+    const bool modeMdf = (fileType == "mdf");
+    const bool modeNrg = (fileType == "nrg");
+
+    // --- Pre-allocate caches ---
     std::vector<std::string> files;
     files.reserve(100);
     binImgFilesCache.reserve(100);
     mdfMdsFilesCache.reserve(100);
     nrgFilesCache.reserve(100);
-    
-    // Define prompt once
-    std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;38;5;208m\002" + fileExtension +
-                         "\001\033[1;94m\002 entries and load them into \001\033[1;93m\002RAM\001\033[1;94m\002, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
-    
-    // Main processing loop
-    while (true) {
-        // Reset state for each iteration
-        int currentCacheOld = 0;
-        std::vector<std::string> directoryPaths;
-        std::unordered_set<std::string> uniquePaths, processedErrors, processedErrorsFind;
-        std::unordered_set<std::string> successOuts, skippedOuts, failedOuts, invalidDirectoryPaths, fileNames;
-        bool list = false, clr = false, newFilesFound = false;
 
-        // Setup environment
+    const std::string prompt =
+        "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;38;5;208m\002" + fileExtension +
+        "\001\033[1;94m\002 entries and load them into \001\033[1;93m\002RAM\001\033[1;94m\002"
+        ", ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
+
+    // --- Helpers ---
+    auto initIterationState = [&]() {
         enable_ctrl_d();
         setupSignalHandlerCancellations();
         resetReadlinePagination();
         g_operationCancelled.store(false);
-        
-        resetVerboseSets(processedErrors, successOuts, skippedOuts, failedOuts);
         clearScrollBuffer();
         clear_history();
         bool filterHistory = false;
         loadHistory(filterHistory);
         rl_bind_key('\f', clear_screen_and_buffer);
         rl_bind_key('\t', rl_complete);
-        
-        // Get user input
+    };
+
+    auto isBlankInput = [](const char* s) {
+        return !s || s[0] == '\0' || std::all_of(s, s + strlen(s), [](char c){ return c == ' '; });
+    };
+
+    // --- Main loop ---
+    while (true) {
+        int currentCacheOld = 0;
+        std::vector<std::string> directoryPaths;
+        std::unordered_set<std::string> uniquePaths, processedErrors, processedErrorsFind;
+        std::unordered_set<std::string> successOuts, skippedOuts, failedOuts, invalidDirectoryPaths, fileNames;
+        bool filterHistory = false;
+
+        initIterationState();
+        resetVerboseSets(processedErrors, successOuts, skippedOuts, failedOuts);
+
+        // --- Read input ---
         std::unique_ptr<char, decltype(&std::free)> mainSearch(readline(prompt.c_str()), &std::free);
-        
-        // Check for exit conditions
-        if (!mainSearch.get() || mainSearch.get()[0] == '\0' || 
-            std::all_of(mainSearch.get(), mainSearch.get() + strlen(mainSearch.get()), 
-                       [](char c) { return c == ' '; })) {
-            break;
-        }
-        
-        // Process input
-        std::string inputSearch = trimWhitespace(mainSearch.get());
-        
-        if (inputSearch == "stats") {
-			displayDatabaseStatistics(databaseFilePath, maxDatabaseSize, transformationCache, globalIsoFileList);
-			continue;
-		}
-		
-		if (inputSearch == "config") {
-			displayConfigurationOptions(configPath);
-			continue;
-		}
-		
-		if (inputSearch.starts_with("*pagination_")) {
-			resetReadlinePagination();
-			updatePagination(inputSearch, configPath);
-			continue;
-		}
-		if (inputSearch == "*flno_on" || inputSearch == "*flno_off") {
-			updateFilenamesOnly(configPath, inputSearch);
-			continue;
-		}
-		
-        // Handle special commands
-        if (inputSearch == "!clr_paths" || inputSearch == "!clr_filter") {
-            clearHistory(inputSearch);
+
+        if (isBlankInput(mainSearch.get())) break;
+
+        const std::string inputSearch = trimWhitespace(mainSearch.get());
+
+        bool list = false;
+        // Handle special commands like config stats etc...
+        if (dispatchSpecialCommand(inputSearch, configPath, modeMdf, modeNrg,
+                                   fileExtension, files, fileType,
+                                   newISOFound, list, isImportRunning))
             continue;
-        }
-        
-        if (isValidInput(inputSearch)) {
-            setDisplayMode(inputSearch);
-            continue;
-        }
-        
-        if (inputSearch == "?") {
-            bool isCpMv = false, import2ISO = false;
-            helpSearches(isCpMv, import2ISO);
-            continue;
-        }
-        
-        // Determine operation type
-        list = (inputSearch == "ls");
-        clr = (inputSearch == "!clr");
-        
-        // Handle cache clearing
-        if (clr) {
-            clearRamCache(modeMdf, modeNrg);
-            continue;
-        }
-        
-        // Show cache contents if requested
-		if (list) {
-			ramCacheList(files, list, fileExtension, binImgFilesCache, mdfMdsFilesCache, nrgFilesCache, modeMdf, modeNrg);
-			if (files.empty()) {
-				continue;
-			}
-			// If files is not empty, display corresponding list
-		}
-        
-        // Add spacing for non-list, non-clear operations
-        if (!inputSearch.empty() && !list && !clr) {
-            std::cout << " " << std::endl;
-        }
-        
-        // Start timing for performance measurement
-        auto start_time = std::chrono::high_resolution_clock::now();
-        
-        // Process file search (if not just listing)
-        if (!list) {
-			// Move the cursor to line 3 (2 lines down from the top)
-			std::cout << "\033[3H";
-			// Clear any listings if visible and leave a new line
-			std::cout << "\033[J";
-			std::cout << "\n";
-            // Parse input paths
-            std::istringstream ss(inputSearch);
-            std::string path;
-            
-            // Collect valid paths
-            while (std::getline(ss, path, ';')) {
-                if (!path.empty() && uniquePaths.insert(path).second) {
-                    if (isValidDirectory(path)) {
-                        directoryPaths.push_back(path);
-                    } else {
-                        invalidDirectoryPaths.insert("\033[1;91m" + path);
-                    }
-                }
-            }
-            
-            // Find matching files
-            files = findFiles(directoryPaths, fileNames, currentCacheOld, fileType,
-                             [&](const std::string&, const std::string&) { newFilesFound = true; },
-                             directoryPaths, invalidDirectoryPaths, processedErrorsFind);
-            
-            // Update history if valid paths were processed
-            try {
-				if (!directoryPaths.empty()) {
-					add_history(inputSearch.c_str());
-					saveHistory(filterHistory);
-				}
-			} catch (const std::exception& e) {
-				std::cerr << "\n\n\033[1;91mUnable to access local database: " << e.what();
-			// Optionally, you can log the error or take other actions here
-			}
-            
-            // Display search results
-            verboseSearchResults(fileExtension, fileNames, invalidDirectoryPaths, 
-                                newFilesFound, list, currentCacheOld, files, 
-                                start_time, processedErrorsFind, directoryPaths);
-            
-            if (!newFilesFound) {
-                continue;
+
+        // --- Scan directories ---
+        std::cout << " \n";
+        std::cout << "\033[3H\033[J\n";
+
+        std::istringstream ss(inputSearch);
+        std::string path;
+        while (std::getline(ss, path, ';')) {
+            if (!path.empty() && uniquePaths.insert(path).second) {
+                if (isValidDirectory(path))
+                    directoryPaths.push_back(path);
+                else
+                    invalidDirectoryPaths.insert("\033[1;91m" + path);
             }
         }
-        
-        // Process files if operation wasn't cancelled
-        if (!g_operationCancelled.load()) {
+
+        bool newFilesFound = false;
+        const auto start_time = std::chrono::high_resolution_clock::now();
+
+        files = findFiles(directoryPaths, fileNames, currentCacheOld, fileType,
+                          [&](const std::string&, const std::string&) { newFilesFound = true; },
+                          directoryPaths, invalidDirectoryPaths, processedErrorsFind);
+
+        try {
+            if (!directoryPaths.empty()) {
+                add_history(inputSearch.c_str());
+                saveHistory(filterHistory);
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "\n\n\033[1;91mUnable to access local database: " << e.what();
+        }
+
+        verboseSearchResults(fileExtension, fileNames, invalidDirectoryPaths,
+                             newFilesFound, list, currentCacheOld, files,
+                             start_time, processedErrorsFind, directoryPaths);
+
+        if (!newFilesFound) continue;
+
+        if (!files.empty() && !g_operationCancelled.load())
             selectForImageFiles(fileType, files, newISOFound, list, isImportRunning);
-        }
     }
 }
