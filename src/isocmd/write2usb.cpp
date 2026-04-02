@@ -918,8 +918,8 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
             progressData[progressIndex].failed.store(true);
         }
         close(device_fd);
-        return false;  // ← missing
-    }                  // ← missing closing brace for catch
+        return false;  
+	}
 
     if (!g_operationCancelled.load()) {
         fsync(device_fd);
