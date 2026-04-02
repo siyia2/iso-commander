@@ -914,22 +914,25 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
             }
         }
     } catch (...) {
+        // Only mark as failed if not cancelled; cancelled tasks show CXL instead
         if (!g_operationCancelled.load()) {
             progressData[progressIndex].failed.store(true);
         }
         close(device_fd);
-        return false;  
-	}
+        return false;
+    }
 
+    // Flush to device only if not cancelled; no point syncing a partial write
     if (!g_operationCancelled.load()) {
         fsync(device_fd);
     }
     close(device_fd);
 
+    // Mark as completed only if all bytes were written and not cancelled
     if (!g_operationCancelled && progressData[progressIndex].bytesWritten.load() == fileSize) {
         progressData[progressIndex].completed.store(true);
         return true;
     }
-    
+
     return false;
 }
