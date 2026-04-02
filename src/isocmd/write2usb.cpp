@@ -914,10 +914,12 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
             }
         }
     } catch (...) {
-        progressData[progressIndex].failed.store(true);
+        if (!g_operationCancelled.load()) {
+            progressData[progressIndex].failed.store(true);
+        }
         close(device_fd);
-        return false;
-    }
+        return false;  // ← missing
+    }                  // ← missing closing brace for catch
 
     if (!g_operationCancelled.load()) {
         fsync(device_fd);
