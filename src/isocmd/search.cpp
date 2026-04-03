@@ -66,7 +66,7 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
                     return;
                 }
                 
-                if (input ==  "config" || input == "stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter" || input == "*auto_off" || input == "*auto_on" || input == "*flno_on" || input == "*flno_off" || isValidInput(input) || input.starts_with("*pagination_")) {
+                if (input ==  "?config" || input == "?stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter" || input == "*auto_off" || input == "*auto_on" || input == "*flno_on" || input == "*flno_off" || isValidInput(input) || input.starts_with("*pagination_")) {
                     resetReadlinePagination();
                     databaseSwitches(input, promptFlag, maxDepth, filterHistory, newISOFound);
                     return;
@@ -655,11 +655,11 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
 // Returns true if a special command was handled (caller should `continue`)
 bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input, const std::string& configPath, bool modeMdf, bool modeNrg, const std::string& fileExtension, 
 std::vector<std::string>& files, const std::string& fileType, std::atomic<bool>& newISOFound, bool& list, std::atomic<bool>& isImportRunning) {
-    if (input == "stats") {
+    if (input == "?stats") {
         displayDatabaseStatistics(databaseFilePath, maxDatabaseSize, transformationCache, globalIsoFileList);
         return true;
     }
-    if (input == "config") {
+    if (input == "?config") {
         displayConfigurationOptions(configPath);
         return true;
     }

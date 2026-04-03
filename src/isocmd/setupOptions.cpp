@@ -31,8 +31,8 @@ static const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {"filenames_only", "off", "Display only filenames instead of full paths (on/off)", "", isOnOff},
     {"pagination", "25", "Items per page in list view (0 to disable)", "", [](const std::string& v){ return isNum(v, 0, 1000); }},
     
-    {"folder_path_history_lines", "100", "Max unique folder paths to persist in history", "History Settings", [](const std::string& v){ return isNum(v, 1, 5000); }},
-    {"filter_history_lines", "50", "Max unique search filters to persist in history", "", [](const std::string& v){ return isNum(v, 1, 1000); }},
+    {"folder_path_history_lines", "30", "Max unique folder paths to persist in history", "History Settings", [](const std::string& v){ return isNum(v, 1, 5000); }},
+    {"filter_history_lines", "15", "Max unique search filters to persist in history", "", [](const std::string& v){ return isNum(v, 1, 1000); }},
     
     {"mount_list", "compact", "Display mode for mount operations (full/compact)", "Display Modes", isDisplay},
     {"umount_list", "full", "Display mode for unmount operations (full/compact)", "", isDisplay},
@@ -130,8 +130,8 @@ static void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::str
         } catch (...) { return defaultVal; }
     };
     
-    MAX_HISTORY_LINES = getVal("folder_path_history_lines", 100);
-    MAX_HISTORY_PATTERN_LINES = getVal("filter_history_lines", 50);
+    MAX_HISTORY_LINES = getVal("folder_path_history_lines", 30);
+    MAX_HISTORY_PATTERN_LINES = getVal("filter_history_lines", 15);
     MAX_USEFUL_THREADS = getVal("max_thread_cap", 32);
     CPMV_THREAD_CAP = getVal("threads_for_cp_mv", 8);
     CONV_THREAD_CAP = getVal("threads_for_conversions", 8);
@@ -176,11 +176,11 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
     std::map<std::string, std::string> configMap = readConfig(filePath);
     ensureDefaults(configMap, filePath);
 
-    displayConfig::toggleFullListMount = (configMap["mount_list"] == "full");
+    displayConfig::toggleFullListMount = (configMap["mount_list"] == "compact");
     displayConfig::toggleFullListUmount = (configMap["umount_list"] == "full");
-    displayConfig::toggleFullListCpMvRm = (configMap["cp_mv_rm_list"] == "full");
-    displayConfig::toggleFullListWrite = (configMap["write_list"] == "full");
-    displayConfig::toggleFullListConversions = (configMap["conversion_lists"] == "full");
+    displayConfig::toggleFullListCpMvRm = (configMap["cp_mv_rm_list"] == "compact");
+    displayConfig::toggleFullListWrite = (configMap["write_list"] == "compact");
+    displayConfig::toggleFullListConversions = (configMap["conversion_lists"] == "compact");
     displayConfig::toggleNamesOnly = (configMap["filenames_only"] == "on");
 
     applyThreadCapsAndHistoryLimits(configMap);

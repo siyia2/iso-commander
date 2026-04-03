@@ -650,9 +650,9 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
         "*fl_m", "*cl_m", "*fl_u", "*cl_u", "*fl_fo", "*cl_fo", "*fl_w", "*cl_w", "*fl_c", "*cl_c"
     };
     
-    if (inputSearch == "stats") {
+    if (inputSearch == "?stats") {
         displayDatabaseStatistics(databaseFilePath, maxDatabaseSize, transformationCache, globalIsoFileList);
-    } else if (inputSearch == "config") {
+    } else if (inputSearch == "?config") {
         displayConfigurationOptions(configPath);
     } else if (inputSearch == "!clr") {
         if (std::remove(databaseFilePath.c_str()) != 0) {
