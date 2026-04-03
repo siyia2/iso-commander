@@ -62,110 +62,107 @@ bool isHistoryFileEmpty(const std::string& filePath) {
 void loadHistory(bool& filterHistory) {
     // 1. Wipe current session memory so we don't mix "Filter" history with "Path" history
     clear_history();
-
     std::string targetFilePath = !filterHistory ? 
         historyFilePath : filterHistoryFilePath;
-
     // 2. Check if file exists before trying to lock/open
     if (!std::filesystem::exists(targetFilePath)) {
         return;
     }
-
     // 3. Open file descriptor for flock
     int fd = open(targetFilePath.c_str(), O_RDONLY);
     if (fd == -1) return;
-
     // Acquire a shared lock (multiple readers allowed, prevents writing)
     if (flock(fd, LOCK_SH) == -1) {
         close(fd);
         return;
     }
-
-    // 4. Read file into Readline buffer
-    std::ifstream file(targetFilePath);
-    if (file.is_open()) {
-        std::string line;
-        while (std::getline(file, line)) {
+    // 4. Read file into Readline buffer via the locked fd
+    FILE* f = fdopen(fd, "r");
+    if (f) {
+        char buf[4096];
+        while (fgets(buf, sizeof(buf), f)) {
+            std::string line(buf);
+            // Strip trailing newline
+            if (!line.empty() && line.back() == '\n')
+                line.pop_back();
             if (!line.empty()) {
                 add_history(line.c_str());
             }
         }
-        file.close();
+        // 5. Cleanup — fclose also closes fd, so only unlock before fclose
+        flock(fd, LOCK_UN);
+        fclose(f);
+    } else {
+        // 5. Cleanup (fdopen failed)
+        flock(fd, LOCK_UN);
+        close(fd);
     }
-
-    // 5. Cleanup
-    flock(fd, LOCK_UN);
-    close(fd);
 }
-
-
 // Function to save history from readline
 void saveHistory(bool& filterHistory) {
     std::string targetFilePath = !filterHistory ? 
         historyFilePath : filterHistoryFilePath;
-
     // 1. Get the correct limit
     size_t maxLines = !filterHistory ? 
         MAX_HISTORY_LINES : MAX_HISTORY_PATTERN_LINES;
-
-    // 2. Enforce the limit on Readline's internal buffer immediately
-    stifle_history(maxLines);
-
+    // 2. stifle_history caps future additions but does not retroactively truncate
+    // the existing in-memory list, so the manual loop below handles the limit instead.
     std::filesystem::path dirPath = std::filesystem::path(targetFilePath).parent_path();
     if (!dirPath.empty() && !std::filesystem::exists(dirPath)) {
         std::filesystem::create_directories(dirPath);
     }
-
     // 3. Open the file ONCE. Use the file descriptor to create the stream.
     // We don't use O_TRUNC yet so we don't kill the file if the write fails.
     int fd = open(targetFilePath.c_str(), O_WRONLY | O_CREAT, 0644);
     if (fd == -1) return;
-
     if (flock(fd, LOCK_EX) == -1) {
         close(fd);
         return;
     }
-
     // Now truncate manually since we have the lock
     if (ftruncate(fd, 0) == -1) {
         flock(fd, LOCK_UN);
         close(fd);
         return;
     }
-
     HIST_ENTRY **histList = history_list();
     if (histList) {
         std::vector<std::string> finalLines;
         std::unordered_set<std::string> seen;
-
         int count = 0;
         while (histList[count]) count++;
-
         // Process backwards for uniqueness and limit
         for (int i = count - 1; i >= 0; i--) {
             if (!histList[i] || !histList[i]->line) continue;
             std::string line(histList[i]->line);
             if (line.empty()) continue;
-
             if (seen.find(line) == seen.end()) {
                 finalLines.push_back(line);
                 seen.insert(line);
             }
             if (finalLines.size() >= maxLines) break;
         }
-
         std::reverse(finalLines.begin(), finalLines.end());
-
-        // Write to the file descriptor
-        std::ofstream historyFile(targetFilePath); 
-        for (const auto& line : finalLines) {
-            historyFile << line << "\n";
+        // Write to the file descriptor via the locked fd
+        FILE* f = fdopen(fd, "w");
+        if (f) {
+            for (const auto& line : finalLines) {
+                fprintf(f, "%s\n", line.c_str());
+            }
+            fflush(f);
+            // Cleanup — fclose also closes fd, so only unlock before fclose
+            flock(fd, LOCK_UN);
+            fclose(f);
+        } else {
+            // fdopen failed, clean up manually
+            flock(fd, LOCK_UN);
+            close(fd);
         }
-        historyFile.close();
+    } else {
+        // No history to write, clean up
+        flock(fd, LOCK_UN);
+        close(fd);
     }
-
-    flock(fd, LOCK_UN);
-    close(fd);
 }
 
 
