@@ -32,42 +32,10 @@ Mount one or more ISO files or directories containing ISOs. Requires root.
 .br
 Unmount ISO mount points. Without arguments or with "all", unmounts all under /mnt. Requires root.
 
-.SH EXAMPLES
-
-.TP
-Mount specific ISOs:
-.br
-\fBisocmd /path/to/file1.iso /path/to/file2.iso mount\fR
-
-.TP
-Mount all ISOs within a directory:
-.br
-\fBisocmd /path/to/dir mount\fR
-
-.TP
-Mount all ISOs within a directory up to depth 2:
-.br
-\fBisocmd -d2 /path/to/dir mount\fR
-
-.TP
-Mount an ISO silently:
-.br
-\fBisocmd --silent /path/to/file.iso mount\fR
-
-.TP
-Unmount ISO mount points:
-.br
-\fBisocmd /mnt/iso_example /mnt/iso_other umount\fR
-
-.TP
-Unmount all ISO mount points:
-.br
-\fBisocmd all umount or isocmd umount\fR
-
 .SH UI INTERACTIVE OPTIONS AND FEATURES
 .TP
 .B ManageISO
-Mount, Umount, Delete, Move, Copy, and Write ISO files. Note that Write retains bootable status for USB drives.
+Mount, Umount, Delete, Move, Copy, and Write ISO files. Note that Write retains bootable status for USB drives. Requires root for mount/write operations.
 
 .TP
 .B Convert2ISO
@@ -75,21 +43,27 @@ Converts .bin, .img, .mdf, and .nrg files to .iso. Ported from original C tools 
 
 .TP
 .B ImportISO
-Creates/updates an ISO database (~10,000 entries max) at \fI~/.local/share/isocmd/database/iso_commander_database.txt\fR.
+Creates and updates a local ISO database. The database is capped at approximately \fB10,000 entries\fR or a \fB1MB file size limit\fR to ensure rapid filtering performance.
 
 .SH CONFIGURATION
-The configuration file is located at \fI~/.config/isocmd/config\fR.
+The configuration file is located at \fI~/.config/isocmd/config\fR. It uses a simple \fIkey = value\fR format.
 
 .SS GENERAL SETTINGS
 .TP
 .B auto_update
-Enable background metadata updates from folder history. (on/off)
+Enable background metadata updates from folder history upon startup. 
+.br
+Values: on, off (Default: off)
 .TP
 .B filenames_only
-Display only filenames instead of full paths. Acts as a global override for all list display modes except for the unmount list. (on/off)
+Display only filenames instead of full paths. This acts as a global override for all list display modes except for the unmount list.
+.br
+Values: on, off (Default: on)
 .TP
 .B pagination
-Items per page in list view. (0 to disable)
+Items per page in list view.
+.br
+Values: integer >= 0 (Default: 25). Set to 0 to disable.
 
 .SS HISTORY SETTINGS
 .TP
@@ -100,32 +74,60 @@ Max unique folder paths to persist in history. (Default: 100)
 Max unique search filters to persist in history. (Default: 50)
 
 .SS DISPLAY MODES
-Controls whether lists are shown in \fBfull\fR or \fBcompact\fR format. Options include:
-.B mount_list, umount_list, cp_mv_rm_list, write_list, conversion_lists.
+Controls whether lists are shown in \fBfull\fR (detailed) or \fBcompact\fR format. 
+.br
+\fBNote:\fR If \fBfilenames_only\fR is enabled, path details will be stripped regardless of these settings.
+.IP
+\fBmount_list\fR (Default: compact)
+.br
+\fBumount_list\fR (Default: full)
+.br
+\fBcp_mv_rm_list\fR (Default: compact)
+.br
+\fBwrite_list\fR (Default: compact)
+.br
+\fBconversion_lists\fR (Default: compact)
 
 .SS THREAD CONFIGURATION
-Iso Commander uses a multi-threaded architecture to speed up I/O and UI operations.
+Iso Commander utilizes a multi-threaded architecture to optimize I/O-heavy operations and UI responsiveness.
 .TP
 .B max_thread_cap
 Global maximum concurrent threads allowed. (Default: 32)
 .TP
 .B threads_for_cp_mv
-Threads allocated for copy/move tasks.
+Threads allocated for copy/move tasks. (Default: 8)
 .TP
 .B threads_for_conversions
-Threads allocated for ISO file conversions.
+Threads allocated for ISO file conversions. (Default: 8)
 .TP
-.B threads_for_mount / threads_for_umount
-Threads allocated for mounting and unmounting tasks.
+.B threads_for_mount
+Threads allocated for mounting tasks. (Default: 16)
+.TP
+.B threads_for_umount
+Threads allocated for unmounting tasks. (Default: 32)
 .TP
 .B threads_for_database_cleanup
-Threads allocated for database maintenance.
+Threads allocated for database maintenance and synchronization. (Default: 16)
 .TP
 .B threads_for_rm
-Threads allocated for file removal tasks.
+Threads allocated for file removal tasks. (Default: 32)
 .TP
 .B threads_for_list_sorting / threads_for_list_filtering
-Threads allocated for UI responsiveness and list processing.
+Threads allocated for UI responsiveness during sorting and filtering. (Default: 4)
+
+.SH FILES
+.TP
+.I ~/.config/isocmd/config
+Primary configuration file.
+.TP
+.I ~/.local/share/isocmd/database/iso_commander_database.txt
+The main ISO metadata database.
+.TP
+.I ~/.local/share/isocmd/database/iso_commander_path_database.txt
+Persistent history of accessed folder paths.
+.TP
+.I ~/.local/share/isocmd/database/iso_commander_filter_database.txt
+Persistent history of search filter terms.
 
 .SH AUTHOR
 Written by Eutychios Dimtsas (Siyia).
