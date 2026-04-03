@@ -137,7 +137,7 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
         }
         
         // Now create the thread pool based on valid paths count
-        size_t numThreads = std::min(validPaths.size(), 
+        const size_t numThreads = std::min(validPaths.size(), 
                              std::min(static_cast<size_t>(maxThreads), 
                                       static_cast<size_t>(MAX_USEFUL_THREADS)));
 		

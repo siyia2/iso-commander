@@ -73,11 +73,15 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
         // so no mutex is needed inside the lambda.
         std::vector<int> pathExists(cache.size(), 0);
         std::atomic<size_t> existingCount{0};
+		
+		const size_t numThread = std::min({
+			pool.threadCount(),
+			static_cast<size_t>(CLEAN_THREAD_CAP),
+			cache.size()
+		});
 
-        const size_t numThread = std::min({pool.threadCount(),
-                                           CLEAN_THREAD_CAP,
-                                           cache.size()});
-        const size_t chunkSize = (cache.size() + numThread - 1) / numThread;
+		// Ceiling division for chunking
+		const size_t chunkSize = (cache.size() + numThread - 1) / numThread;
 
         std::vector<std::future<void>> futures;
         futures.reserve(numThread);
