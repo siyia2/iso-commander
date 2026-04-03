@@ -94,8 +94,8 @@ inline const std::string configPath = configDirectory + "config";
 
 // Configuration Limits
 // Using 'constexpr' is often preferred for POD types if the values are known at compile time
-inline constexpr int MAX_HISTORY_LINES         = 100;
-inline constexpr int MAX_HISTORY_PATTERN_LINES = 50;
+inline int MAX_HISTORY_LINES         = 100;
+inline int MAX_HISTORY_PATTERN_LINES = 50;
 inline constexpr uintmax_t maxDatabaseSize     = 1024 * 1024 * 1; // e.g., 1MB
 
 // State Management
