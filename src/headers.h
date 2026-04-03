@@ -43,58 +43,65 @@ namespace fs = std::filesystem;
 // GLOBAL VARIABLES & CONSTANTS
 //==============================
 // Thread Management
-extern unsigned int maxThreads;
+inline unsigned int maxThreads = std::max(2u, std::thread::hardware_concurrency());
 
 // Operation thread caps for static pool
 
+// Global cap for static threads
+inline size_t MAX_USEFUL_THREADS = 32;
+
 // High I/O
-inline constexpr size_t CPMV_THREAD_CAP   = 8;
-inline constexpr size_t CONV_THREAD_CAP   = 8;
+inline size_t CPMV_THREAD_CAP   = 8;
+inline size_t CONV_THREAD_CAP   = 8;
 
 // Moderate I/O
-inline constexpr size_t MOUNT_THREAD_CAP  = 16;
-inline constexpr size_t CLEAN_THREAD_CAP  = 16;
+inline size_t MOUNT_THREAD_CAP  = 16;
+inline size_t CLEAN_THREAD_CAP  = 16;
 
 // Low I/O
-inline constexpr size_t UMOUNT_THREAD_CAP = 32;
-inline constexpr size_t RM_THREAD_CAP     = 32;
+inline size_t UMOUNT_THREAD_CAP = 32;
+inline size_t RM_THREAD_CAP     = 32;
 
 // Low I/O but fast
-inline constexpr size_t SORT_THREAD_CAP  = 4;
-inline constexpr size_t FILTER_THREAD_CAP  = 4;
+inline size_t SORT_THREAD_CAP  = 4;
+inline size_t FILTER_THREAD_CAP  = 4;
 
 // Mutex Protection
-extern std::mutex globalSetsMutex;
-extern std::mutex updateListMutex;
-extern std::mutex binImgCacheMutex;
-extern std::mutex mdfMdsCacheMutex;
-extern std::mutex nrgCacheMutex;
-extern std::mutex couNtMutex;
+inline std::mutex globalSetsMutex;
+inline std::mutex updateListMutex;
+inline std::mutex binImgCacheMutex;
+inline std::mutex mdfMdsCacheMutex;
+inline std::mutex nrgCacheMutex;
+inline std::mutex couNtMutex;
 
 // Data Caches
-extern std::vector<std::string> globalIsoFileList;
-extern std::unordered_map<std::string, std::string> transformationCache;
-extern std::unordered_map<std::string, std::tuple<std::string, std::string, std::string>> cachedParsesForUmount;
-extern std::vector<std::string> binImgFilesCache;
-extern std::vector<std::string> mdfMdsFilesCache;
-extern std::vector<std::string> nrgFilesCache;
+inline std::vector<std::string> globalIsoFileList;
+inline std::unordered_map<std::string, std::string> transformationCache;
+inline std::unordered_map<std::string, std::tuple<std::string, std::string, std::string>> cachedParsesForUmount;
+inline std::vector<std::string> binImgFilesCache;
+inline std::vector<std::string> mdfMdsFilesCache;
+inline std::vector<std::string> nrgFilesCache;
 
 // File Paths
-extern const std::string cacheFileName;
-extern const std::string databaseFilePath;
-extern const std::string historyFilePath;
-extern const std::string filterHistoryFilePath;
-extern const std::string configPath;
+inline const std::string databaseDirectory = std::string(std::getenv("HOME") ? std::getenv("HOME") : "") + "/.local/share/isocmd/database/";
+inline const std::string databaseFilename  = "iso_commander_database.txt";
+inline const std::string databaseFilePath  = databaseDirectory + databaseFilename;
+inline const std::string historyFilePath = databaseDirectory + "iso_commander_path_database.txt";
+inline const std::string filterHistoryFilePath = databaseDirectory + "iso_commander_filter_database.txt";
+
+inline const std::string configDirectory = std::string(std::getenv("HOME") ? std::getenv("HOME") : "") + "/.config/isocmd/";
+inline const std::string configPath = configDirectory + "config";
 
 // Configuration Limits
-extern const int MAX_HISTORY_LINES;
-extern const int MAX_HISTORY_PATTERN_LINES;
-extern const uintmax_t maxDatabaseSize;
+// Using 'constexpr' is often preferred for POD types if the values are known at compile time
+inline constexpr int MAX_HISTORY_LINES         = 100;
+inline constexpr int MAX_HISTORY_PATTERN_LINES = 50;
+inline constexpr uintmax_t maxDatabaseSize     = 1024 * 1024 * 1; // e.g., 1MB
 
 // State Management
-extern std::atomic<bool> g_operationCancelled;
-extern size_t ITEMS_PER_PAGE;
-extern int lockFileDescriptor;
+inline std::atomic<bool> g_operationCancelled{false};
+inline size_t ITEMS_PER_PAGE                   = 25;
+inline int lockFileDescriptor                  = -1;
 
 //==============================
 // ISO COMMANDER FUNCTIONS
