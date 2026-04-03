@@ -137,7 +137,12 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
         }
         
         // Now create the thread pool based on valid paths count
-        unsigned int numThreads = std::min({static_cast<unsigned int>(validPaths.size()), maxThreads, 32u});
+        size_t numThreads = std::min({
+			validPaths.size(),
+			static_cast<size_t>(maxThreads),
+			static_cast<size_t>(MAX_USEFUL_THREADS)
+		});
+		
         {
             // Create a thread pool for concurrent file traversal
             ThreadPool pool(numThreads);
@@ -594,7 +599,12 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
         uniquePaths.push_back(path);
     }
     
-    unsigned int numThreads = std::min({static_cast<unsigned int>(uniquePaths.size()), maxThreads, 32u});
+    unsigned int numThreads = std::min({
+		static_cast<unsigned int>(uniquePaths.size()),
+		static_cast<unsigned int>(maxThreads),
+		static_cast<unsigned int>(MAX_USEFUL_THREADS)
+	});
+	
     if (numThreads == 0) {
         flushStdin();
         restoreInput();

@@ -12,10 +12,6 @@ void toLowerInPlace(std::string& str) {
 }
 
 
-// For memory mapping string transformations
-std::unordered_map<std::string, std::string> transformationCache;
-
-
 // Function to extract directory and filename from a given path
 std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view path, const std::string& location) {
     // Find last slash efficiently
@@ -94,10 +90,6 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view
     
     return {processedDir, std::move(filename)};
 }
-
-
-// Memory map for umount string division
-std::unordered_map<std::string, std::tuple<std::string, std::string, std::string>> cachedParsesForUmount;
 
 
 // Function to divide any mountpoint into three strings and cache the results

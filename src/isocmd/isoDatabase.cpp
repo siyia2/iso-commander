@@ -5,16 +5,6 @@
 #include "../threadpool.h"
 
 
-// Database Variables
-
-const std::string databaseDirectory = std::string(std::getenv("HOME")) + "/.local/share/isocmd/database/"; // Construct the full path to the cache directory
-const std::string databaseFilePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/iso_commander_database.txt";
-const std::string databaseFilename = "iso_commander_database.txt";
-const uintmax_t maxDatabaseSize = 1 * 1024 * 1024; // 1MB
-
-// Global mutex to protect counter cout
-std::mutex couNtMutex;
-
 // Local ISO Database mutex
 namespace {
     std::mutex dbFileMutex;

@@ -4,9 +4,6 @@
 #include "../display.h"
 
 
-const std::string configPath = std::string(getenv("HOME")) + "/.config/isocmd/config";
-
-
 // Canonical ordered defaults for all config keys
 static const std::vector<std::pair<std::string, std::string>> CONFIG_ORDERED_DEFAULTS = {
     {"auto_update",      "off"},

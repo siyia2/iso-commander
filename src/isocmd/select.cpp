@@ -371,10 +371,6 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 
 // IMAGE SELECTION
 
-std::vector<std::string> binImgFilesCache; // Memory cached binImgFiles here
-std::vector<std::string> mdfMdsFilesCache; // Memory cached mdfImgFiles here
-std::vector<std::string> nrgFilesCache; // Memory cached nrgImgFiles here
-
 
 // Main function to select and convert image files based on type to ISO
 void selectForImageFiles(const std::string& fileType, std::vector<std::string>& files, std::atomic<bool>& newISOFound, bool& list, std::atomic<bool>& isImportRunning) {

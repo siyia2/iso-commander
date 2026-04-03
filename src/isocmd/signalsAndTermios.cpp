@@ -3,9 +3,6 @@
 #include "../headers.h"
 
 
-// Global variable to lock program to one instance
-int lockFileDescriptor = -1;
-
 // Function to disable (Ctrl+D)
 void disable_ctrl_d() {
     struct termios term;

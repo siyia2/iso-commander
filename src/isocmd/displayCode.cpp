@@ -5,15 +5,6 @@
 #include "../filtering.h"
 
 
-// Mutex to prevent race conditions when live updating ISO list
-std::mutex updateListMutex;
-
-// Mutexes to prevent race conditions when updating Image list
-std::mutex binImgCacheMutex;
-std::mutex mdfMdsCacheMutex;
-std::mutex nrgCacheMutex;
-
-
 // Default Display config options for lists
 namespace displayConfig {
     bool toggleFullListMount = false;
