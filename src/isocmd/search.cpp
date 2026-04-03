@@ -137,11 +137,9 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
         }
         
         // Now create the thread pool based on valid paths count
-        size_t numThreads = std::min({
-			validPaths.size(),
-			static_cast<size_t>(maxThreads),
-			static_cast<size_t>(MAX_USEFUL_THREADS)
-		});
+        size_t numThreads = std::min(validPaths.size(), 
+                             std::min(static_cast<size_t>(maxThreads), 
+                                      static_cast<size_t>(MAX_USEFUL_THREADS)));
 		
         {
             // Create a thread pool for concurrent file traversal
