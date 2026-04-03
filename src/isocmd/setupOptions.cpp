@@ -197,20 +197,39 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
     size_t underscorePos = inputSearch.find('_');
     if (underscorePos != std::string::npos) {
         std::string valueStr = inputSearch.substr(underscorePos + 1);
-        if (isNum(valueStr, 0, 1000)) { // FIX: Validate before writing
+        
+        // 1. Validate Input
+        if (isNum(valueStr, 0, 1000)) { 
             int val = std::stoi(valueStr);
             std::map<std::string, std::string> config = readConfig(configPath);
+            
+            // 2. Update Map
             config["pagination"] = valueStr;
             
+            // 3. Persistent Storage with Error Handling
             if (writeConfig(configPath, config)) {
+                // Update Global Runtime Variable
                 ITEMS_PER_PAGE = val;
-                if (val > 0) std::cout << "\n\033[0;1mPagination updated to \033[1;93m" << val << "\033[0m" << std::endl;
-                else std::cout << "\n\033[0;1mPagination \033[1;91mDisabled\033[0m." << std::endl;
+
+                // 4. UI Feedback logic using your specific messages
+                if (val > 0) {
+                    std::cout << "\n\033[0;1mPagination status updated: Max entries per page set to \033[1;93m" 
+                              << val << "\033[1;97m.\033[0m" << std::endl;
+                } else {
+                    std::cout << "\n\033[0;1mPagination status updated: \033[1;91mDisabled\033[0;1m." << std::endl;
+                }
+            } else {
+                // Error handling for file write failure
+                std::cerr << "\n\033[1;91mError: Unable to access configuration file: \033[1;93m'"
+                          << configPath << "'\033[1;91m.\033[0;1m\n";
             }
         } else {
+            // Validation error
             std::cout << "\n\033[1;31mError: Invalid number (0-1000 required)\033[0m\n";
         }
     }
+    
+    // 5. User Acknowledgment
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
@@ -272,25 +291,65 @@ void setDisplayMode(const std::string& inputSearch) {
     signal(SIGINT, SIG_IGN); 
     disable_ctrl_d();
 
+    // 1. Setup variables
     std::string command = inputSearch.substr(1, 2); 
     size_t underscorePos = inputSearch.find('_');
+    
     if (underscorePos != std::string::npos) {
         std::string settingsStr = inputSearch.substr(underscorePos + 1);
         std::string newValue = (command == "cl") ? "compact" : "full";
-        std::map<std::string, std::string> config = readConfig(configPath);
+        bool isFull = (newValue == "full");
         
+        std::map<std::string, std::string> config = readConfig(configPath);
+        std::vector<std::string> updatedLabels;
+
+        // 2. Update Map and Global Flags
         for (char c : settingsStr) {
-            if (settingMap.count(c)) config[settingMap.at(c)] = newValue;
+            auto it = settingMap.find(c);
+            if (it != settingMap.end()) {
+                std::string key = it->second;
+                config[key] = newValue;
+
+                // Update global toggle flags and collect labels for the UI
+                if (key == "mount_list") {
+                    displayConfig::toggleFullListMount = isFull;
+                    updatedLabels.push_back("\033[1;92mmount");
+                } 
+                else if (key == "umount_list") {
+                    displayConfig::toggleFullListUmount = isFull;
+                    updatedLabels.push_back("\033[1;93munmount");
+                } 
+                else if (key == "cp_mv_rm_list") {
+                    displayConfig::toggleFullListCpMvRm = isFull;
+                    updatedLabels.push_back("\033[1;92mcp\033[0;1m/\033[1;93mmv\033[0;1m/\033[1;91mrm");
+                } 
+                else if (key == "conversion_lists") {
+                    displayConfig::toggleFullListConversions = isFull;
+                    updatedLabels.push_back("\033[1;38;5;208mconversions");
+                } 
+                else if (key == "write_list") {
+                    displayConfig::toggleFullListWrite = isFull;
+                    updatedLabels.push_back("\033[1;33mwrite");
+                }
+            }
         }
 
+        // 3. Persistent Storage with Error Handling
         if (writeConfig(configPath, config)) {
-            std::cout << "\n\033[0;1mDisplay mode set to \033[1;92m" << newValue << "\033[0m\n";
-            // Re-sync locals
-            displayConfig::toggleFullListMount = (config["mount_list"] == "full");
-            displayConfig::toggleFullListUmount = (config["umount_list"] == "full");
-            // ... (sync other flags as needed)
+            // 4. Verbose Feedback Summary (Only if write succeeded)
+            if (!updatedLabels.empty()) {
+                std::cout << "\n\033[0;1mDisplay mode set to \033[1;92m" << newValue << "\033[0;1m for:\033[0m\n";
+                for (const auto& label : updatedLabels) {
+                    std::cout << "  - " << label << "\033[0m\n";
+                }
+            }
+        } else {
+            std::cerr << "\n\033[1;91mError: Unable to access configuration file: \033[1;93m'"
+                      << configPath << "'\033[1;91m.\033[0;1m\n";
         }
     }
+
+    // 5. User Acknowledgment
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }

@@ -99,7 +99,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
        
 		std::cout << "   \033[1;38;5;208mA. Set Max Items/Page (default: 25):\033[0m\n"
           << "      • Enter \033[1;35m'*pagination_{number}'\033[0m (e.g., \033[1;35m'*pagination_50'\033[0m)\n"
-          << "      • Disable: \033[1;35m{number}\033[0m <= 0 (e.g., \033[1;35m'*pagination_-1'\033[0m or \033[1;35m'*pagination_0'\033[0m)\n"  << std::endl;
+          << "      • Disable: \033[1;35m{number}\033[0m == 0 (e.g., \033[1;35m'*pagination_0'\033[0m)\n"  << std::endl;
                      
 		std::cout << "\033[1;38;5;208m   B. Set Default Display Modes (fl = full list, cl = compact list | default: cl, unmount → fl):\033[0m\n"
 				<<  "      • Mount list:       Enter \033[1;35m'*fl_m'\033[0m or \033[1;35m'*cl_m'\033[0m\n"
