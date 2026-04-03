@@ -58,37 +58,44 @@ bool isHistoryFileEmpty(const std::string& filePath) {
 }
 
 
-// Function to load history from readline
+// Function to load history for readline
 void loadHistory(bool& filterHistory) {
-    // Only load history from file if it's not already populated in memory
-    if (history_length == 0) {
-        std::string targetFilePath = !filterHistory ? 
-            historyFilePath : filterHistoryFilePath;
+    // 1. Wipe current session memory so we don't mix "Filter" history with "Path" history
+    clear_history();
 
-        int fd = open(targetFilePath.c_str(), O_RDONLY);
-        if (fd == -1) {
-            return;  // File doesn't exist or couldn't be opened
-        }
+    std::string targetFilePath = !filterHistory ? 
+        historyFilePath : filterHistoryFilePath;
 
-        // Acquire a shared lock for reading
-        if (flock(fd, LOCK_SH) == -1) {
-            close(fd);
-            return;
-        }
+    // 2. Check if file exists before trying to lock/open
+    if (!std::filesystem::exists(targetFilePath)) {
+        return;
+    }
 
-        std::ifstream file(targetFilePath);
-        if (file.is_open()) {
-            std::string line;
-            while (std::getline(file, line)) {
+    // 3. Open file descriptor for flock
+    int fd = open(targetFilePath.c_str(), O_RDONLY);
+    if (fd == -1) return;
+
+    // Acquire a shared lock (multiple readers allowed, prevents writing)
+    if (flock(fd, LOCK_SH) == -1) {
+        close(fd);
+        return;
+    }
+
+    // 4. Read file into Readline buffer
+    std::ifstream file(targetFilePath);
+    if (file.is_open()) {
+        std::string line;
+        while (std::getline(file, line)) {
+            if (!line.empty()) {
                 add_history(line.c_str());
             }
-            file.close();
         }
-
-        // Release the lock and close the file descriptor
-        flock(fd, LOCK_UN);
-        close(fd);
+        file.close();
     }
+
+    // 5. Cleanup
+    flock(fd, LOCK_UN);
+    close(fd);
 }
 
 
@@ -97,81 +104,66 @@ void saveHistory(bool& filterHistory) {
     std::string targetFilePath = !filterHistory ? 
         historyFilePath : filterHistoryFilePath;
 
-    // Extract directory path from the target file path
+    // 1. Get the correct limit
+    size_t maxLines = !filterHistory ? 
+        MAX_HISTORY_LINES : MAX_HISTORY_PATTERN_LINES;
+
+    // 2. Enforce the limit on Readline's internal buffer immediately
+    stifle_history(maxLines);
+
     std::filesystem::path dirPath = std::filesystem::path(targetFilePath).parent_path();
-
-    // Create the directory if it does not exist
-    if (!std::filesystem::exists(dirPath)) {
-        if (!std::filesystem::create_directories(dirPath)) {
-            return;  // Directory creation failed, exit function
-        }
+    if (!dirPath.empty() && !std::filesystem::exists(dirPath)) {
+        std::filesystem::create_directories(dirPath);
     }
 
-    int fd = open(targetFilePath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if (fd == -1) {
-        return;  // Failed to open file
-    }
+    // 3. Open the file ONCE. Use the file descriptor to create the stream.
+    // We don't use O_TRUNC yet so we don't kill the file if the write fails.
+    int fd = open(targetFilePath.c_str(), O_WRONLY | O_CREAT, 0644);
+    if (fd == -1) return;
 
-    // Acquire an exclusive lock for writing
     if (flock(fd, LOCK_EX) == -1) {
         close(fd);
         return;
     }
 
-    std::ofstream historyFile(targetFilePath, std::ios::out | std::ios::trunc);
-    if (!historyFile.is_open()) {
-        flock(fd, LOCK_UN);  // Release the lock
+    // Now truncate manually since we have the lock
+    if (ftruncate(fd, 0) == -1) {
+        flock(fd, LOCK_UN);
         close(fd);
         return;
     }
 
     HIST_ENTRY **histList = history_list();
-    if (!histList) {
-        flock(fd, LOCK_UN);  // Release the lock
-        close(fd);
-        return;
-    }
+    if (histList) {
+        std::vector<std::string> finalLines;
+        std::unordered_set<std::string> seen;
 
-    std::unordered_map<std::string, size_t> lineIndices;
-    std::vector<std::string> uniqueLines;
+        int count = 0;
+        while (histList[count]) count++;
 
-    // Iterate through history entries
-    for (int i = 0; histList[i]; i++) {
-        std::string line(histList[i]->line);
-        if (line.empty()) continue;
+        // Process backwards for uniqueness and limit
+        for (int i = count - 1; i >= 0; i--) {
+            if (!histList[i] || !histList[i]->line) continue;
+            std::string line(histList[i]->line);
+            if (line.empty()) continue;
 
-        // Remove existing duplicate if present, then add to end
-        auto it = lineIndices.find(line);
-        if (it != lineIndices.end()) {
-            uniqueLines.erase(uniqueLines.begin() + it->second);
-            lineIndices.erase(it);
+            if (seen.find(line) == seen.end()) {
+                finalLines.push_back(line);
+                seen.insert(line);
+            }
+            if (finalLines.size() >= maxLines) break;
         }
 
-        // Add new line to end and update index
-        lineIndices[line] = uniqueLines.size();
-        uniqueLines.push_back(line);
+        std::reverse(finalLines.begin(), finalLines.end());
+
+        // Write to the file descriptor
+        std::ofstream historyFile(targetFilePath); 
+        for (const auto& line : finalLines) {
+            historyFile << line << "\n";
+        }
+        historyFile.close();
     }
 
-    // Determine max lines based on pattern flag
-    size_t maxLines = !filterHistory ? 
-        MAX_HISTORY_LINES : MAX_HISTORY_PATTERN_LINES;
-
-    // Trim excess lines if needed
-    if (uniqueLines.size() > maxLines) {
-        uniqueLines.erase(
-            uniqueLines.begin(), 
-            uniqueLines.begin() + (uniqueLines.size() - maxLines)
-        );
-    }
-
-    // Write unique lines to file
-    for (const auto& line : uniqueLines) {
-        historyFile << line << std::endl;
-    }
-
-    historyFile.close();
-
-    // Release the lock and close the file descriptor
     flock(fd, LOCK_UN);
     close(fd);
 }

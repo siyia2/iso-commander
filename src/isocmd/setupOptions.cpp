@@ -97,9 +97,11 @@ static void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::str
         }
     };
     
-    // History Limits
-    MAX_HISTORY_LINES          = getVal("filter_history_lines", 50);
-    MAX_HISTORY_PATTERN_LINES  = getVal("folder_path_history_lines", 100);   
+    // MAX_HISTORY_LINES is for PATH history
+    MAX_HISTORY_LINES          = getVal("folder_path_history_lines", 100);
+
+    // MAX_HISTORY_PATTERN_LINES is for FILTER history
+    MAX_HISTORY_PATTERN_LINES  = getVal("filter_history_lines", 50);
 
     // Thread Caps
     MAX_USEFUL_THREADS = getVal("max_thread_cap", 32);
