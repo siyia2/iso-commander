@@ -4,7 +4,7 @@
 Iso Commander (isocmd) \- Command-line utility for managing .iso files and converting image formats.
 
 .SH DESCRIPTION
-Iso Commander (isocmd) is a command-line utility for managing .iso files and converting various image formats to .iso using asynchronous I/O operations.
+Iso Commander (isocmd) is a command-line utility for managing .iso files and converting various image formats to .iso using asynchronous I/O operations and multi-threaded processing.
 
 .SH NON-INTERACTIVE COMMANDS
 .TP
@@ -30,7 +30,7 @@ Mount one or more ISO files or directories containing ISOs. Requires root.
 .TP
 .B umount, unmount
 .br
-Unmount ISO mount points. Without arguments or with "all", unmounts all under /mnt.  Requires root.
+Unmount ISO mount points. Without arguments or with "all", unmounts all under /mnt. Requires root.
 
 .SH EXAMPLES
 
@@ -62,172 +62,70 @@ Unmount ISO mount points:
 .TP
 Unmount all ISO mount points:
 .br
-\fBisocmd all umount\fR
-
-.TP
-Unmount all ISO mount points silently:
-.br
-\fBisocmd --silent all umount\fR
-
-.TP
-Unmount an ISO mount point silently:
-.br
-\fBisocmd --silent /mnt/iso_example umount\fR
-
-.SH BASIC CTRL SIGNALS
-.TP
-.B Ctrl + c
-Cancel and clean up ongoing operations immediately.
-
-.TP
-.B Ctrl + d
-Exit or break from loops, terminating input or sessions.
-
-.TP
-.B Ctrl + z
-Suspend the process and move it to the background.
+\fBisocmd all umount or isocmd umount\fR
 
 .SH UI INTERACTIVE OPTIONS AND FEATURES
 .TP
 .B ManageISO
-
-Mount: Mounts .iso files under /mnt/_iso{name}. Requires root.
-
-Umount: Unmounts .iso files. Requires root.
-
-Delete/Move/Copy: Manages .iso files using native C++ calls.
-
-Write: Writes .iso files to USB drives, retaining bootable status. Requires root.
+Mount, Umount, Delete, Move, Copy, and Write ISO files. Note that Write retains bootable status for USB drives.
 
 .TP
 .B Convert2ISO
-
-Converts .bin, .img, .mdf, and .nrg files to .iso.
-
-Ported from original C tools by Salvatore Santagati (mdf2iso), Grégory Kokanosky (nrg2iso), and Danny Kurniawan & Kerry Harris (ccd2iso).
+Converts .bin, .img, .mdf, and .nrg files to .iso. Ported from original C tools (mdf2iso, nrg2iso, ccd2iso).
 
 .TP
 .B ImportISO
-
-Creates and updates an ISO database (max 1MB, ~10,000 entries).
-
-Database location: ~/.local/share/isocmd/database/iso_commander_database.txt
-
-.TP
-.B Automatic Database Management
-
-Automatically syncs database for deleted, moved, copied, or converted .iso files.
-
-.TP
-.B Built-in Filtering
-
-Adaptive Incremental Filtering: Uppercase terms are case-sensitive; lowercase are not. Scope narrows with each iteration.
-
-Supports two modes: 1)rapid (/name1;name2) and 2)regular (/)  with browsable history.
-
-.SH NOTES
-
-Partial conversions are deleted automatically.
-
-Generated .iso files are automatically assigned to the current user.
-
-Ranges and single numbers can be used simultaneously for list selections (e.g., 1-3 5 7-6).
-
-Listed items can be marked as pending for processing with ; (e.g, 1-3 5 7-6;).
-
-Write function checks USB devices for sufficient capacity and type.
-
-.SH USAGE TIPS
-.TP
-.B Tab Completion
-
-Press Tab once for path autocompletion, twice for listing files.
-
-.TP
-.B Important Keyboard Shortcuts
-
-\fBCtrl+l\fR: Declutter screen and redraw the current line.
-
-\fBCtrl+u\fR: Delete from cursor to the beginning of the line.
-
-.TP
-.B History
-
-Folder paths and filter terms are saved in readline history.
-
-History locations:
-
-Folder paths: ~/.local/share/isocmd/database/iso_commander_path_database.txt
-
-Filter terms: ~/.local/share/isocmd/database/iso_commander_filter_database.txt
-
-Max entries: 100 (paths), 50 (filter terms).
+Creates/updates an ISO database (~10,000 entries max) at \fI~/.local/share/isocmd/database/iso_commander_database.txt\fR.
 
 .SH CONFIGURATION
-.nf
-The configuration file is located at \fI~/.config/isocmd/config\fR, using a key-value format with '=' as the separator.
+The configuration file is located at \fI~/.config/isocmd/config\fR.
 
-.SS CONFIGURATION OPTIONS
+.SS GENERAL SETTINGS
 .TP
 .B auto_update
-Controls automatic update behavior for ISO database. Auto-update runs in the background upon startup and scans any stored paths from readline history for .iso files.
-.br
-Values: off (disabled), on (enabled)
-.br
-Default: off
+Enable background metadata updates from folder history. (on/off)
 .TP
 .B filenames_only
-Controls directory path visibility in all lists except for the unmount list.
-.br
-Values: off (disabled), on (enabled)
-.br
-Default: off
+Display only filenames instead of full paths. Acts as a global override for all list display modes except for the unmount list. (on/off)
 .TP
 .B pagination
-Controls the maximum number of entries per listed page, unless disabled.
-.br
-Values: integer <= 0 (disabled), integer > 0 (enabled)
-.br
-Default: 25
-.TP
-.B conversion_lists
-Sets the display format for conversion lists.
-.br
-Values: compact, full
-.br
-Default: compact
-.TP
-.B cp_mv_rm_list
-Sets the display format for copy, move, and remove list.
-.br
-Values: compact, full
-.br
-Default: compact
-.TP
-.B mount_list
-Sets the display format for mount list.
-.br
-Values: compact, full
-.br
-Default: compact
-.TP
-.B unmount_list
-Sets the display format for unmount list.
-.br
-Values: compact, full
-.br
-Default: full
-.TP
-.B write_list
-Sets the display format for write list.
-.br
-Values: compact, full
-.br
-Default: compact
-.fi
+Items per page in list view. (0 to disable)
 
-.SH SEE ALSO
-.BR readline (3)
+.SS HISTORY SETTINGS
+.TP
+.B folder_path_history_lines
+Max unique folder paths to persist in history. (Default: 100)
+.TP
+.B filter_history_lines
+Max unique search filters to persist in history. (Default: 50)
+
+.SS DISPLAY MODES
+Controls whether lists are shown in \fBfull\fR or \fBcompact\fR format. Options include:
+.B mount_list, umount_list, cp_mv_rm_list, write_list, conversion_lists.
+
+.SS THREAD CONFIGURATION
+Iso Commander uses a multi-threaded architecture to speed up I/O and UI operations.
+.TP
+.B max_thread_cap
+Global maximum concurrent threads allowed. (Default: 32)
+.TP
+.B threads_for_cp_mv
+Threads allocated for copy/move tasks.
+.TP
+.B threads_for_conversions
+Threads allocated for ISO file conversions.
+.TP
+.B threads_for_mount / threads_for_umount
+Threads allocated for mounting and unmounting tasks.
+.TP
+.B threads_for_database_cleanup
+Threads allocated for database maintenance.
+.TP
+.B threads_for_rm
+Threads allocated for file removal tasks.
+.TP
+.B threads_for_list_sorting / threads_for_list_filtering
+Threads allocated for UI responsiveness and list processing.
 
 .SH AUTHOR
 Written by Eutychios Dimtsas (Siyia).
