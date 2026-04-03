@@ -207,20 +207,43 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
  * @brief Command handler for changing pagination (e.g., *pagination=50).
  */
 void updatePagination(const std::string& inputSearch, const std::string& configPath) {
-    signal(SIGINT, SIG_IGN); disable_ctrl_d();
-    size_t eqPos = inputSearch.find('=');
-    if (eqPos != std::string::npos) {
-        std::string valueStr = inputSearch.substr(eqPos + 1);
+    signal(SIGINT, SIG_IGN); 
+    disable_ctrl_d();
+
+    // 1. Look for the underscore '_'
+    size_t underscorePos = inputSearch.find('_');
+    
+    if (underscorePos != std::string::npos) {
+        std::string valueStr = inputSearch.substr(underscorePos + 1);
+        
         try {
             int val = std::stoi(valueStr);
+            
+            // 2. Sync with Config Map and File
             std::map<std::string, std::string> config = readConfig(configPath);
             config["pagination"] = std::to_string(val);
             writeConfig(configPath, config);
+            
+            // 3. Update the global variable
             ITEMS_PER_PAGE = val;
-            std::cout << "\n\033[1;37mPagination set to: \033[1;37m" << val << "\033[0m\n";
-        } catch (...) {}
+            
+            // 4. UI Feedback logic using your specific messages
+            if (val > 0) {
+                std::cout << "\n\033[0;1mPagination status updated: Max entries per page set to \033[1;93m" 
+                          << val << "\033[1;97m.\033[0m" << std::endl;
+            } else {
+                std::cout << "\n\033[0;1mPagination status updated: \033[1;91mDisabled\033[0;1m." << std::endl;
+            }
+
+        } catch (...) {
+            std::cout << "\n\033[1;31mError: Could not parse number after '_'\033[0m\n";
+        }
+    } else {
+        std::cout << "\n\033[1;31mError: Use format *pagination_50\033[0m\n";
     }
+
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+    // Clear buffer to wait for user's Enter key
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
@@ -229,16 +252,35 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
  * @brief Command handler for toggling filename display mode.
  */
 void updateFilenamesOnly(const std::string& configPath, const std::string& inputSearch) {
-    signal(SIGINT, SIG_IGN); disable_ctrl_d();
+    signal(SIGINT, SIG_IGN); 
+    disable_ctrl_d();
+
+    // 1. Load the configuration
     std::map<std::string, std::string> config = readConfig(configPath);
-    if (inputSearch == "*flno_on") {
-        config["filenames_only"] = "on"; displayConfig::toggleNamesOnly = true;
-        std::cout << "\n\033[1;37mFilenames only mode: \033[1;37mON\033[0m\n";
-    } else if (inputSearch == "*flno_off") {
-        config["filenames_only"] = "off"; displayConfig::toggleNamesOnly = false;
-        std::cout << "\n\033[1;37mFilenames only mode: \033[1;37mOFF\033[0m\n";
+
+    // 2. Validate input and update settings
+    if (inputSearch == "*flno_on" || inputSearch == "*flno_off") {
+        bool isEnabling = (inputSearch == "*flno_on");
+        
+        // Sync Map and Global Flag
+        config["filenames_only"] = isEnabling ? "on" : "off";
+        displayConfig::toggleNamesOnly = isEnabling;
+
+        // Commit to file
+        writeConfig(configPath, config);
+
+        // 3. Display specific verbose confirmation
+        std::cout << "\n\033[0;1mFilename-only lists have been "
+                  << (isEnabling ? "\033[1;92menabled" : "\033[1;91mdisabled")
+                  << "\033[0;1m.\033[0;1m\n";
+
+    } else {
+        // Error handling if input is malformed or config is missing/unreachable
+        std::cerr << "\n\033[1;91mError: Unable to access configuration file or invalid command: \033[1;93m'"
+                  << configPath << "'\033[1;91m.\033[0;1m\n";
     }
-    writeConfig(configPath, config);
+
+    // 4. Wait for user acknowledgement
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
@@ -272,46 +314,65 @@ bool isValidInput(const std::string& input) {
  * Supports bulk updates (e.g., *cl_mu for compact mount AND unmount).
  */
 void setDisplayMode(const std::string& inputSearch) {
-    signal(SIGINT, SIG_IGN); disable_ctrl_d();
-    std::string command = inputSearch.substr(1, 2);
-    size_t underscorePos = inputSearch.find('_', 3);
+    signal(SIGINT, SIG_IGN); 
+    disable_ctrl_d();
+
+    // 1. Parse command and characters
+    std::string command = inputSearch.substr(1, 2); // "cl" or "fl"
+    size_t underscorePos = inputSearch.find('_');
+    if (underscorePos == std::string::npos) return;
+
     std::string settingsStr = inputSearch.substr(underscorePos + 1);
     std::string newValue = (command == "cl") ? "compact" : "full";
+    bool isFull = (newValue == "full");
 
     std::map<std::string, std::string> config = readConfig(configPath);
+    std::vector<std::string> updatedLabels; // To store human-readable names for the summary
+
+    // 2. Update Map and Global Flags
     for (char c : settingsStr) {
         auto it = settingMap.find(c);
         if (it != settingMap.end()) {
-            config[it->second] = newValue;
-            bool isFull = (newValue == "full");
-            
-            std::cout << "\n\033[0;1m" << inputSearch << " → " << newValue << " list is set for ";
+            std::string key = it->second;
+            config[key] = newValue;
 
-            if (it->second == "mount_list") {
+            // Update global toggle flags and collect labels for the UI
+            if (key == "mount_list") {
                 displayConfig::toggleFullListMount = isFull;
-                std::cout << "\033[1;92mmount";
-            }
-            else if (it->second == "umount_list") {
+                updatedLabels.push_back("\033[1;92mmount");
+            } 
+            else if (key == "umount_list") {
                 displayConfig::toggleFullListUmount = isFull;
-                std::cout << "\033[1;93munmount";
-            }
-            else if (it->second == "cp_mv_rm_list") {
+                updatedLabels.push_back("\033[1;93munmount");
+            } 
+            else if (key == "cp_mv_rm_list") {
                 displayConfig::toggleFullListCpMvRm = isFull;
-                std::cout << "\033[92mcp\033[0;1m/\033[93mmv\033[0;1m/\033[91mrm";
-            }
-            else if (it->second == "conversion_lists") {
+                updatedLabels.push_back("\033[1;92mcp\033[0;1m/\033[1;93mmv\033[0;1m/\033[1;91mrm");
+            } 
+            else if (key == "conversion_lists") {
                 displayConfig::toggleFullListConversions = isFull;
-                std::cout << "\033[1;38;5;208mconversions"; 
-            }
-            else if (it->second == "write_list") {
+                updatedLabels.push_back("\033[1;38;5;208mconversions");
+            } 
+            else if (key == "write_list") {
                 displayConfig::toggleFullListWrite = isFull;
-                std::cout << "\033[1;33mwrite";
+                updatedLabels.push_back("\033[1;33mwrite");
             }
-            std::cout << "\033[0;1m"; 
         }
     }
-    std::cout << std::endl;
+
+    // 3. Persistent Storage
     writeConfig(configPath, config);
+
+    // 4. Verbose Feedback Summary
+    if (!updatedLabels.empty()) {
+        std::cout << "\n\033[0;1mDisplay mode set to \033[1;92m" << newValue << "\033[0;1m for:\033[0m\n";
+        for (const auto& label : updatedLabels) {
+            std::cout << "  - " << label << "\033[0m\n";
+        }
+    } else {
+        std::cerr << "\n\033[1;91mError: No valid settings identified from input.\033[0m\n";
+    }
+
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
