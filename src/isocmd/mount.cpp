@@ -56,7 +56,7 @@ std::unordered_set<std::string>& mountedFails, std::atomic<size_t>* completedTas
     VerbosityFormatter formatter;
 
     if (!silentMode) {
-        constexpr size_t BATCH_SIZE = 1000;
+        constexpr size_t BATCH_SIZE = 50;
         tempMountedFiles.reserve(BATCH_SIZE);
         tempSkippedMessages.reserve(BATCH_SIZE);
         tempMountedFails.reserve(BATCH_SIZE);
@@ -169,9 +169,9 @@ std::unordered_set<std::string>& mountedFails, std::atomic<size_t>* completedTas
 
         // Flush batches if needed
         if (!silentMode &&
-            (tempMountedFiles.size() >= 1000 ||
-             tempSkippedMessages.size() >= 1000 ||
-             tempMountedFails.size() >= 1000)) {
+            (tempMountedFiles.size() >= 50 ||
+             tempSkippedMessages.size() >= 50 ||
+             tempMountedFails.size() >= 50)) {
             flushBuffers();
         }
     }

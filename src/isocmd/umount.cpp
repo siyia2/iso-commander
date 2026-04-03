@@ -39,7 +39,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std:
     VerboseMessageFormatter messageFormatter;
     std::vector<std::string> errorMessages, successMessages;
     if (!silentMode) {
-        const size_t BATCH_SIZE = 1000;
+        const size_t BATCH_SIZE = 50;
         errorMessages.reserve(BATCH_SIZE);
         successMessages.reserve(BATCH_SIZE);
     }
@@ -110,7 +110,7 @@ void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std:
 
         // Batch flushing check
         if (!silentMode && 
-            (successMessages.size() >= 1000 || errorMessages.size() >= 1000)) {
+            (successMessages.size() >= 50 || errorMessages.size() >= 50)) {
             flushTemporaryBuffers();
         }
     }
