@@ -49,17 +49,18 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
     ThreadPool& pool         = getStaticThreadPool();
     const size_t poolSize   = pool.threadCount();
     const size_t cap        = isUnmount ? UMOUNT_THREAD_CAP : MOUNT_THREAD_CAP;
-	const size_t numThreads = std::max(size_t(1), std::min({selectedFiles.size(), cap, poolSize}));
-	
-	
-	const size_t chunkSize  = std::min(size_t(100), selectedFiles.size() / numThreads + 1);
-    std::vector<std::vector<std::string>> chunks;
-    
-    // Split work into chunks
-    for (size_t i = 0; i < selectedFiles.size(); i += chunkSize) {
-        auto end = std::min(selectedFiles.begin() + i + chunkSize, selectedFiles.end());
-        chunks.emplace_back(selectedFiles.begin() + i, end);
-    }
+	// Calculate target chunks based on hardware/caps
+	size_t numChunks = std::max(size_t(1), std::min({selectedFiles.size(), cap, poolSize}));
+
+	// Enforce the "Max 100 per chunk" rule
+	if ((selectedFiles.size() + numChunks - 1) / numChunks > 100) {
+		numChunks = (selectedFiles.size() + 99) / 100;
+	}
+
+	std::vector<std::vector<std::string>> chunks(numChunks);
+	for (size_t i = 0; i < selectedFiles.size(); ++i) {
+		chunks[i % numChunks].push_back(std::move(selectedFiles[i]));
+	}
     
     std::vector<std::future<void>> futures;
     std::atomic<size_t> completedTasks(0);
