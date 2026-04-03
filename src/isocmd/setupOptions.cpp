@@ -133,9 +133,15 @@ static void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::str
  * @brief Checks if auto_update is enabled.
  */
 bool readUserConfigUpdates(const std::string& filePath) {
+    // Just read the current state without triggering ensureDefaults/writeConfig
     std::map<std::string, std::string> configMap = readConfig(filePath);
-    ensureDefaults(configMap, filePath);
-    std::string val = configMap["auto_update"];
+    
+    auto it = configMap.find("auto_update");
+    if (it == configMap.end()) {
+        return false; // Or "off" as per default
+    }
+    
+    std::string val = it->second;
     return (val == "on" || val == "ON" || val == "On");
 }
 
