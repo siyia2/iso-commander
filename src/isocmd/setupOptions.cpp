@@ -3,12 +3,9 @@
 #include "../headers.h"
 #include "../display.h"
 
-
 /**
  * @struct ConfigEntry
  * @brief Metadata for a single configuration setting.
- * * Used to define the structure of the configuration file, including
- * defaults, helpful comments for the user, and section headers.
  */
 struct ConfigEntry {
     std::string key;          ///< The key string in the config file (e.g., "pagination")
@@ -17,30 +14,20 @@ struct ConfigEntry {
     std::string section;      ///< If not empty, starts a new section header in the file
 };
 
-
 /**
  * @brief Canonical list of all supported configuration settings.
- * * This is the "Source of Truth." To add a new setting to the app, 
- * simply add an entry here. The system will handle the rest.
  */
 static const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
-    // --- General Settings ---
     {"auto_update", "off", "Enable background metadata updates from folder path history (on/off)", "General Settings"},
     {"filenames_only", "off", "Display only filenames instead of full paths (on/off)", ""},
     {"pagination", "25", "Items per page in list view (0 to disable)", ""},
-
-    // --- History Settings ---
     {"folder_path_history_lines", "100", "Max unique folder paths to persist in history", "History Settings"},
     {"filter_history_lines", "50", "Max unique search filters to persist in history", ""},
-
-    // --- List Display Modes ---
     {"mount_list", "compact", "Display mode for mount operations (full/compact)", "Display Modes"},
     {"umount_list", "full", "Display mode for unmount operations (full/compact)", ""},
     {"cp_mv_rm_list", "compact", "Display mode for file operations (full/compact)", ""},
     {"write_list", "compact", "Display mode for write operations (full/compact)", ""},
     {"conversion_lists", "compact", "Display mode for conversion operations (full/compact)", ""},
-
-    // --- Thread Configuration ---
     {"max_thread_cap", "32", "Global maximum concurrent threads allowed", "Thread Configuration"},
     {"threads_for_cp_mv", "8", "Threads allocated for copy/move tasks", ""},
     {"threads_for_conversions", "8", "Threads allocated for ISO file conversions", ""},
@@ -52,10 +39,8 @@ static const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {"threads_for_list_filtering", "4", "Threads allocated for UI list filtering", ""}
 };
 
-
 /**
  * @brief Utility to remove leading/trailing whitespace from strings.
- * Used to ensure keys and values are clean regardless of user formatting.
  */
 static std::string trim(std::string str) {
     if(str.empty()) return str;
@@ -65,10 +50,8 @@ static std::string trim(std::string str) {
     return str;
 }
 
-
 /**
  * @brief Reads the configuration file into a key-value map.
- * Skips comments (#) and empty lines. Trims whitespace automatically.
  */
 std::map<std::string, std::string> readConfig(const std::string& configPath) {
     std::map<std::string, std::string> config;
@@ -88,28 +71,25 @@ std::map<std::string, std::string> readConfig(const std::string& configPath) {
     return config;
 }
 
-
 /**
  * @brief Writes the current configuration state back to disk.
- * Rewrites the entire file using CONFIG_ORDERED_DEFAULTS to ensure the
- * file remains organized, commented, and contains all necessary keys.
+ * @return True if write succeeded, False if file was inaccessible.
  */
-static void writeConfig(const std::string& configPath, const std::map<std::string, std::string>& config) {
+static bool writeConfig(const std::string& configPath, const std::map<std::string, std::string>& config) {
     std::ofstream outFile(configPath);
-    if (!outFile) return;
-    outFile << "############################################################\n# ISO COMMANDER'S CONFIGURATION FILE                       #\n############################################################\n\n";
+    if (!outFile) return false;
+
+    outFile << "############################################################\n# ISO COMMANDER'S CONFIGURATION FILE                        #\n############################################################\n\n";
     for (const auto& entry : CONFIG_ORDERED_DEFAULTS) {
         if (!entry.section.empty()) outFile << "\n# --- " << entry.section << " ---\n";
         auto it = config.find(entry.key);
-        // Use value from map if exists, otherwise fallback to hardcoded default
         outFile << "# " << entry.comment << "\n" << entry.key << " = " << (it != config.end() ? it->second : entry.defaultValue) << "\n";
     }
+    return true;
 }
-
 
 /**
  * @brief Self-Healing logic: Checks for missing keys and adds them.
- * @return True if file was already perfect, False if it had to be updated.
  */
 static bool ensureDefaults(std::map<std::string, std::string>& configMap, const std::string& configPath) {
     bool needsUpdate = false;
@@ -119,14 +99,12 @@ static bool ensureDefaults(std::map<std::string, std::string>& configMap, const 
             needsUpdate = true; 
         }
     }
-    if (needsUpdate) writeConfig(configPath, configMap);
-    return !needsUpdate;
+    if (needsUpdate) return writeConfig(configPath, configMap);
+    return true;
 }
-
 
 /**
  * @brief Synchronizes configuration map values with internal global variables.
- * Handles string-to-integer conversion and bounds checking for threads.
  */
 static void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::string>& configMap) {
     auto getVal = [&](const std::string& key, size_t defaultVal) -> size_t {
@@ -138,11 +116,8 @@ static void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::str
         } catch (...) { return defaultVal; }
     };
     
-    // History Sync
     MAX_HISTORY_LINES = getVal("folder_path_history_lines", 100);
     MAX_HISTORY_PATTERN_LINES = getVal("filter_history_lines", 50);
-    
-    // Thread Cap Sync
     MAX_USEFUL_THREADS = getVal("max_thread_cap", 32);
     CPMV_THREAD_CAP = getVal("threads_for_cp_mv", 8);
     CONV_THREAD_CAP = getVal("threads_for_conversions", 8);
@@ -154,7 +129,6 @@ static void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::str
     FILTER_THREAD_CAP = getVal("threads_for_list_filtering", 4);
 }
 
-
 /**
  * @brief Checks if auto_update is enabled.
  */
@@ -164,7 +138,6 @@ bool readUserConfigUpdates(const std::string& filePath) {
     std::string val = configMap["auto_update"];
     return (val == "on" || val == "ON" || val == "On");
 }
-
 
 /**
  * @brief Loads pagination setting into the global ITEMS_PER_PAGE.
@@ -177,10 +150,8 @@ bool paginationSet(const std::string& filePath) {
     return false;
 }
 
-
 /**
  * @brief Main entry point for loading all config settings at app startup.
- * Ensures directories exist and variables are synced.
  */
 std::map<std::string, std::string> readUserConfigLists(const std::string& filePath) {
     fs::path configFilePath(filePath);
@@ -188,9 +159,8 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
         fs::create_directories(configFilePath.parent_path());
 
     std::map<std::string, std::string> configMap = readConfig(filePath);
-    ensureDefaults(configMap, filePath); // Fix missing keys automatically
+    ensureDefaults(configMap, filePath);
 
-    // Map file strings to UI toggle booleans
     displayConfig::toggleFullListMount = (configMap["mount_list"] == "full");
     displayConfig::toggleFullListUmount = (configMap["umount_list"] == "full");
     displayConfig::toggleFullListCpMvRm = (configMap["cp_mv_rm_list"] == "full");
@@ -202,39 +172,32 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
     return configMap;
 }
 
-
 /**
- * @brief Command handler for changing pagination (e.g., *pagination=50).
+ * @brief Command handler for changing pagination.
  */
 void updatePagination(const std::string& inputSearch, const std::string& configPath) {
     signal(SIGINT, SIG_IGN); 
     disable_ctrl_d();
 
-    // 1. Look for the underscore '_'
     size_t underscorePos = inputSearch.find('_');
-    
     if (underscorePos != std::string::npos) {
         std::string valueStr = inputSearch.substr(underscorePos + 1);
-        
         try {
             int val = std::stoi(valueStr);
-            
-            // 2. Sync with Config Map and File
             std::map<std::string, std::string> config = readConfig(configPath);
             config["pagination"] = std::to_string(val);
-            writeConfig(configPath, config);
             
-            // 3. Update the global variable
-            ITEMS_PER_PAGE = val;
-            
-            // 4. UI Feedback logic using your specific messages
-            if (val > 0) {
-                std::cout << "\n\033[0;1mPagination status updated: Max entries per page set to \033[1;93m" 
-                          << val << "\033[1;97m.\033[0m" << std::endl;
+            if (writeConfig(configPath, config)) {
+                ITEMS_PER_PAGE = val;
+                if (val > 0) {
+                    std::cout << "\n\033[0;1mPagination status updated: Max entries per page set to \033[1;93m" << val << "\033[1;97m.\033[0m" << std::endl;
+                } else {
+                    std::cout << "\n\033[0;1mPagination status updated: \033[1;91mDisabled\033[0;1m." << std::endl;
+                }
             } else {
-                std::cout << "\n\033[0;1mPagination status updated: \033[1;91mDisabled\033[0;1m." << std::endl;
+                std::cerr << "\n\033[1;91mError: Unable to access configuration file: \033[1;93m'"
+                          << configPath << "'\033[1;91m.\033[0;1m\n";
             }
-
         } catch (...) {
             std::cout << "\n\033[1;31mError: Could not parse number after '_'\033[0m\n";
         }
@@ -243,10 +206,8 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
     }
 
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-    // Clear buffer to wait for user's Enter key
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
-
 
 /**
  * @brief Command handler for toggling filename display mode.
@@ -255,50 +216,34 @@ void updateFilenamesOnly(const std::string& configPath, const std::string& input
     signal(SIGINT, SIG_IGN); 
     disable_ctrl_d();
 
-    // 1. Load the configuration
     std::map<std::string, std::string> config = readConfig(configPath);
 
-    // 2. Validate input and update settings
     if (inputSearch == "*flno_on" || inputSearch == "*flno_off") {
         bool isEnabling = (inputSearch == "*flno_on");
-        
-        // Sync Map and Global Flag
         config["filenames_only"] = isEnabling ? "on" : "off";
-        displayConfig::toggleNamesOnly = isEnabling;
 
-        // Commit to file
-        writeConfig(configPath, config);
-
-        // 3. Display specific verbose confirmation
-        std::cout << "\n\033[0;1mFilename-only lists have been "
-                  << (isEnabling ? "\033[1;92menabled" : "\033[1;91mdisabled")
-                  << "\033[0;1m.\033[0;1m\n";
-
+        if (writeConfig(configPath, config)) {
+            displayConfig::toggleNamesOnly = isEnabling;
+            std::cout << "\n\033[0;1mFilename-only lists have been "
+                      << (isEnabling ? "\033[1;92menabled" : "\033[1;91mdisabled")
+                      << "\033[0;1m.\033[0;1m\n";
+        } else {
+            std::cerr << "\n\033[1;91mError: Unable to access configuration file: \033[1;93m'"
+                      << configPath << "'\033[1;91m.\033[0;1m\n";
+        }
     } else {
-        // Error handling if input is malformed or config is missing/unreachable
-        std::cerr << "\n\033[1;91mError: Unable to access configuration file or invalid command: \033[1;93m'"
-                  << configPath << "'\033[1;91m.\033[0;1m\n";
+        std::cerr << "\n\033[1;91mError: Invalid command format.\033[0m\n";
     }
 
-    // 4. Wait for user acknowledgement
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
-
-/**
- * @brief Mapping of short-codes to actual config keys for the setDisplayMode function.
- */
 const std::unordered_map<char, std::string> settingMap = {
     {'m', "mount_list"}, {'u', "umount_list"}, {'o', "cp_mv_rm_list"},
     {'c', "conversion_lists"}, {'w', "write_list"}
 };
 
-
-/**
- * @brief Logic gate to check if an input string is a valid display-mode command.
- * Valid formats: *cl_m, *fl_m, *cl_muowc, etc.
- */
 bool isValidInput(const std::string& input) {
     if (input.size() < 4 || input[0] != '*' || (input.substr(1, 2) != "cl" && input.substr(1, 2) != "fl")) return false;
     size_t underscorePos = input.find('_', 3);
@@ -308,17 +253,14 @@ bool isValidInput(const std::string& input) {
     return true;
 }
 
-
 /**
  * @brief Command handler for switching list views between Compact and Full.
- * Supports bulk updates (e.g., *cl_mu for compact mount AND unmount).
  */
 void setDisplayMode(const std::string& inputSearch) {
     signal(SIGINT, SIG_IGN); 
     disable_ctrl_d();
 
-    // 1. Parse command and characters
-    std::string command = inputSearch.substr(1, 2); // "cl" or "fl"
+    std::string command = inputSearch.substr(1, 2); 
     size_t underscorePos = inputSearch.find('_');
     if (underscorePos == std::string::npos) return;
 
@@ -327,60 +269,40 @@ void setDisplayMode(const std::string& inputSearch) {
     bool isFull = (newValue == "full");
 
     std::map<std::string, std::string> config = readConfig(configPath);
-    std::vector<std::string> updatedLabels; // To store human-readable names for the summary
-
-    // 2. Update Map and Global Flags
+    
+    // First, update the map locally
     for (char c : settingsStr) {
         auto it = settingMap.find(c);
         if (it != settingMap.end()) {
-            std::string key = it->second;
-            config[key] = newValue;
-
-            // Update global toggle flags and collect labels for the UI
-            if (key == "mount_list") {
-                displayConfig::toggleFullListMount = isFull;
-                updatedLabels.push_back("\033[1;92mmount");
-            } 
-            else if (key == "umount_list") {
-                displayConfig::toggleFullListUmount = isFull;
-                updatedLabels.push_back("\033[1;93munmount");
-            } 
-            else if (key == "cp_mv_rm_list") {
-                displayConfig::toggleFullListCpMvRm = isFull;
-                updatedLabels.push_back("\033[1;92mcp\033[0;1m/\033[1;93mmv\033[0;1m/\033[1;91mrm");
-            } 
-            else if (key == "conversion_lists") {
-                displayConfig::toggleFullListConversions = isFull;
-                updatedLabels.push_back("\033[1;38;5;208mconversions");
-            } 
-            else if (key == "write_list") {
-                displayConfig::toggleFullListWrite = isFull;
-                updatedLabels.push_back("\033[1;33mwrite");
-            }
+            config[it->second] = newValue;
         }
     }
 
-    // 3. Persistent Storage
-    writeConfig(configPath, config);
-
-    // 4. Verbose Feedback Summary
-    if (!updatedLabels.empty()) {
+    // Only update global states if write successful
+    if (writeConfig(configPath, config)) {
         std::cout << "\n\033[0;1mDisplay mode set to \033[1;92m" << newValue << "\033[0;1m for:\033[0m\n";
-        for (const auto& label : updatedLabels) {
-            std::cout << "  - " << label << "\033[0m\n";
+        for (char c : settingsStr) {
+            auto it = settingMap.find(c);
+            if (it != settingMap.end()) {
+                std::string key = it->second;
+                if (key == "mount_list") { displayConfig::toggleFullListMount = isFull; std::cout << "  - \033[1;92mmount\033[0m\n"; }
+                else if (key == "umount_list") { displayConfig::toggleFullListUmount = isFull; std::cout << "  - \033[1;93munmount\033[0m\n"; }
+                else if (key == "cp_mv_rm_list") { displayConfig::toggleFullListCpMvRm = isFull; std::cout << "  - \033[1;92mcp\033[0;1m/\033[1;93mmv\033[0;1m/\033[1;91mrm\033[0m\n"; }
+                else if (key == "conversion_lists") { displayConfig::toggleFullListConversions = isFull; std::cout << "  - \033[1;38;5;208mconversions\033[0m\n"; }
+                else if (key == "write_list") { displayConfig::toggleFullListWrite = isFull; std::cout << "  - \033[1;33mwrite\033[0m\n"; }
+            }
         }
     } else {
-        std::cerr << "\n\033[1;91mError: No valid settings identified from input.\033[0m\n";
+        std::cerr << "\n\033[1;91mError: Unable to access configuration file: \033[1;93m'"
+                  << configPath << "'\033[1;91m.\033[0;1m\n";
     }
 
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
-
 /**
  * @brief Bulk updater for history and thread settings.
- * Maps short-codes (like 'pathhist') to internal configuration keys.
  */
 void updateConfigSettings(const std::string& inputSearch, const std::string& configPath) {
     signal(SIGINT, SIG_IGN); disable_ctrl_d();
@@ -390,6 +312,7 @@ void updateConfigSettings(const std::string& inputSearch, const std::string& con
         {"conv", "threads_for_conversions"}, {"cpmv", "threads_for_cp_mv"}, {"rm", "threads_for_rm"},
         {"clean", "threads_for_database_cleanup"}, {"sort", "threads_for_list_sorting"}, {"filter", "threads_for_list_filtering"}
     };
+
     size_t eqPos = inputSearch.find('=');
     if (eqPos != std::string::npos) {
         std::string shortName = inputSearch.substr(5, eqPos - 5), valueStr = inputSearch.substr(eqPos + 1);
@@ -397,42 +320,47 @@ void updateConfigSettings(const std::string& inputSearch, const std::string& con
         if (it != keyMap.end()) {
             std::map<std::string, std::string> config = readConfig(configPath);
             config[it->second] = valueStr; 
-            writeConfig(configPath, config);
-            applyThreadCapsAndHistoryLimits(config); // Sync variables immediately
-            std::cout << "\n\033[1;37mSetting \033[1;37m" << it->second << "\033[1;37m updated to: \033[1;37m" << valueStr << "\033[0m\n";
+
+            if (writeConfig(configPath, config)) {
+                applyThreadCapsAndHistoryLimits(config); 
+                std::cout << "\n\033[1;37mSetting \033[1;37m" << it->second << "\033[1;37m updated to: \033[1;37m" << valueStr << "\033[0m\n";
+            } else {
+                std::cerr << "\n\033[1;91mError: Unable to access configuration file: \033[1;93m'"
+                          << configPath << "'\033[1;91m.\033[0;1m\n";
+            }
         }
     }
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
-
 /**
  * @brief UI Function: Displays the current config file content to the user.
- * Parses the file on the fly to show only active settings (skipping comments).
  */
 void displayConfigurationOptions(const std::string& configPath) {
     clearScrollBuffer();
     auto reportError = [&](const std::string& msg) {
-        std::cerr << "\n\033[1;91m" << msg << ".\033[0;1m\n\n\033[1;32m↵ to return...\033[0;1m";
+        std::cerr << "\n\033[1;91mError: " << msg << ": \033[1;93m'" << configPath << "'\033[1;91m.\033[0;1m\n\n\033[1;32m↵ to return...\033[0;1m";
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     };
 
-    // Ensure directory and file exist before trying to read
     std::filesystem::path configDir = std::filesystem::path(configPath).parent_path();
     if (!configDir.empty() && !std::filesystem::exists(configDir)) {
-        try { std::filesystem::create_directories(configDir); } catch (...) { reportError("Permission denied"); return; }
+        try { std::filesystem::create_directories(configDir); } catch (...) { reportError("Unable to access configuration file"); return; }
     }
-    if (!std::filesystem::exists(configPath)) { std::map<std::string, std::string> empty; writeConfig(configPath, empty); }
+    
+    if (!std::filesystem::exists(configPath)) { 
+        std::map<std::string, std::string> empty; 
+        if (!writeConfig(configPath, empty)) { reportError("Unable to access configuration file"); return; }
+    }
 
     std::ifstream configFile(configPath);
-    if (!configFile.is_open()) { reportError("Unable to open file"); return; }
+    if (!configFile.is_open()) { reportError("Unable to access configuration file"); return; }
 
     std::cout << "\n\033[1;96m==== Configuration Options ====\033[0;1m\n\n";
     std::string line; int lineNumber = 1;
     while (std::getline(configFile, line)) {
         line = trim(line);
-        // Only display lines that contain actual settings
         if (!line.empty() && line[0] != '#') 
             std::cout << "\033[1;92m" << lineNumber++ << ". \033[1;97m" << line << "\033[0m\n";
     }
