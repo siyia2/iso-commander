@@ -4,78 +4,123 @@
 #include "../display.h"
 
 
-// Canonical ordered defaults for all config keys
-static const std::vector<std::pair<std::string, std::string>> CONFIG_ORDERED_DEFAULTS = {
-    {"auto_update",      "off"},
-    {"filenames_only",   "off"},
-    {"pagination",       "25"},
-    {"mount_list",       "compact"},
-    {"umount_list",      "full"},
-    {"cp_mv_rm_list",    "compact"},
-    {"write_list",       "compact"},
-    {"conversion_lists", "compact"},    
-    {"filter_history_lines", "50"},
-    {"folder_path_history_lines", "100"},    
-    {"max_thread_cap",      "32"},
-    {"threads_for_cp_mv",     "8"},
-    {"threads_for_conversions",     "8"},
-    {"threads_for_umount",    "32"},
-    {"threads_for_mount",   "16"},
-    {"threads_for_database_cleanup",   "16"},
-    {"threads_for_rm",       "32"},
-    {"threads_for_list_sorting",     "4"},
-    {"threads_for_list_filtering",   "4"}
+/**
+ * @struct ConfigEntry
+ * @brief Metadata for a single configuration setting.
+ */
+struct ConfigEntry {
+    std::string key;
+    std::string defaultValue;
+    std::string comment;
+    std::string section; 
 };
 
 
-// Function to read a configuration file and store key-value pairs in a map
+/**
+ * @brief Canonical list of all supported configuration settings.
+ * The "Source of Truth" for file generation and validation.
+ */
+static const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
+    // --- General Settings ---
+    {"auto_update", "off", "Enable background metadata updates from folder path history (on/off)", "General Settings"},
+    {"filenames_only", "off", "Display only filenames instead of full paths (on/off)", ""},
+    {"pagination", "25", "Items per page in list view (0 to disable)", ""},
+
+    // --- History Settings ---
+    {"folder_path_history_lines", "100", "Max unique folder paths to persist in history ~/.local/share/isocmd/database/iso_commander_database.txt", "History Settings"},
+    {"filter_history_lines", "50", "Max unique search filters to persist in history ~/.local/share/isocmd/database/iso_commander_filter_database.txt", ""},
+
+    // --- List Display Modes ---
+    {"mount_list", "compact", "Display mode for mount operations (full/compact)", "Display Modes"},
+    {"umount_list", "full", "Display mode for unmount operations (full/compact)", ""},
+    {"cp_mv_rm_list", "compact", "Display mode for file operations (full/compact)", ""},
+    {"write_list", "compact", "Display mode for write operations (full/compact)", ""},
+    {"conversion_lists", "compact", "Display mode for conversion operations (full/compact)", ""},
+
+    // --- Thread Configuration ---
+    {"max_thread_cap", "32", "Global maximum concurrent threads allowed", "Thread Configuration"},
+    {"threads_for_cp_mv", "8", "Threads allocated for copy/move tasks", ""},
+    {"threads_for_conversions", "8", "Threads allocated for ISO file conversions", ""},
+    {"threads_for_mount", "16", "Threads allocated for mounting tasks", ""},
+    {"threads_for_umount", "32", "Threads allocated for unmounting tasks", ""},
+    {"threads_for_database_cleanup", "16", "Threads allocated for DB maintenance", ""},
+    {"threads_for_rm", "32", "Threads allocated for removal tasks", ""},
+    {"threads_for_list_sorting", "4", "Threads allocated for UI list sorting", ""},
+    {"threads_for_list_filtering", "4", "Threads allocated for UI list filtering", ""}
+};
+
+
+/**
+ * @brief Utility to trim whitespace from both ends of a string.
+ */
+static std::string trim(std::string str) {
+    if(str.empty()) return str;
+    str.erase(0, str.find_first_not_of(" \t"));
+    size_t last = str.find_last_not_of(" \t");
+    if (last != std::string::npos) str.erase(last + 1);
+    return str;
+}
+
+
+/**
+ * @brief Core Parser: Reads the config file and returns a key-value map.
+ */
 std::map<std::string, std::string> readConfig(const std::string& configPath) {
     std::map<std::string, std::string> config;
     std::ifstream inFile(configPath);
 
-    auto trim = [](std::string str) {
-        str.erase(0, str.find_first_not_of(" "));
-        str.erase(str.find_last_not_of(" ") + 1);
-        return str;
-    };
-
     if (inFile.is_open()) {
         std::string line;
         while (std::getline(inFile, line)) {
+            line = trim(line);
+            if (line.empty() || line[0] == '#') continue;
+
             size_t equalPos = line.find('=');
             if (equalPos != std::string::npos) {
-                std::string key   = line.substr(0, equalPos);
-                std::string value = line.substr(equalPos + 1);
-                config[trim(key)] = trim(value);
+                std::string key = trim(line.substr(0, equalPos));
+                std::string value = trim(line.substr(equalPos + 1));
+                config[key] = value;
             }
         }
         inFile.close();
     }
-
     return config;
 }
 
 
-// Helper to write config in canonical order, merging current values with defaults
-static void writeConfig(const std::string& configPath,
-                        const std::map<std::string, std::string>& config) {
+/**
+ * @brief Core Writer: Persists the map to disk with comments and sections.
+ */
+static void writeConfig(const std::string& configPath, const std::map<std::string, std::string>& config) {
     std::ofstream outFile(configPath);
     if (!outFile) return;
-    for (const auto& [key, def] : CONFIG_ORDERED_DEFAULTS) {
-        auto it = config.find(key);
-        outFile << key << " = " << (it != config.end() ? it->second : def) << "\n";
+
+    outFile << "############################################################\n";
+    outFile << "# ISO COMMANDER'S CONFIGURATION FILE                       #\n";
+    outFile << "############################################################\n\n";
+
+    for (const auto& entry : CONFIG_ORDERED_DEFAULTS) {
+        if (!entry.section.empty()) {
+            outFile << "\n# --- " << entry.section << " ---\n";
+        }
+
+        auto it = config.find(entry.key);
+        std::string value = (it != config.end() ? it->second : entry.defaultValue);
+
+        outFile << "# " << entry.comment << "\n";
+        outFile << entry.key << " = " << value << "\n";
     }
 }
 
 
-// Helper to ensure all default keys are present, writing file if anything was missing.
-// Returns true if the map was already complete, false if defaults were injected.
-static bool ensureDefaults(std::map<std::string, std::string>& configMap,
-                           const std::string& configPath) {
+/**
+ * @brief Self-Healing: Ensures missing keys are added to the file.
+ */
+static bool ensureDefaults(std::map<std::string, std::string>& configMap, const std::string& configPath) {
     bool needsUpdate = false;
-    for (const auto& [key, def] : CONFIG_ORDERED_DEFAULTS) {
-        if (configMap.find(key) == configMap.end()) {
-            configMap[key] = def;
+    for (const auto& entry : CONFIG_ORDERED_DEFAULTS) {
+        if (configMap.find(entry.key) == configMap.end()) {
+            configMap[entry.key] = entry.defaultValue;
             needsUpdate = true;
         }
     }
@@ -84,222 +129,108 @@ static bool ensureDefaults(std::map<std::string, std::string>& configMap,
 }
 
 
-// Helper to apply thread caps and history limits from a fully-populated config map
+/**
+ * @brief Global Sync: Maps config values to internal application variables.
+ */
 static void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::string>& configMap) {
     auto getVal = [&](const std::string& key, size_t defaultVal) -> size_t {
         auto it = configMap.find(key);
         if (it == configMap.end()) return defaultVal;
         try {
             int v = std::stoi(it->second);
-            return (v > 0) ? static_cast<size_t>(v) : defaultVal;
+            return (v >= 0) ? static_cast<size_t>(v) : defaultVal;
         } catch (...) {
             return defaultVal;
         }
     };
     
-    // MAX_HISTORY_LINES is for PATH history
     MAX_HISTORY_LINES          = getVal("folder_path_history_lines", 100);
-
-    // MAX_HISTORY_PATTERN_LINES is for FILTER history
     MAX_HISTORY_PATTERN_LINES  = getVal("filter_history_lines", 50);
 
-    // Thread Caps
     MAX_USEFUL_THREADS = getVal("max_thread_cap", 32);
     CPMV_THREAD_CAP    = getVal("threads_for_cp_mv", 8);
     CONV_THREAD_CAP    = getVal("threads_for_conversions", 8);
     MOUNT_THREAD_CAP   = getVal("threads_for_mount", 16);
     CLEAN_THREAD_CAP   = getVal("threads_for_database_cleanup", 16);
-    UMOUNT_THREAD_CAP  = getVal("threads_for_umount", 32); // Fixed: was using "mount" key
+    UMOUNT_THREAD_CAP  = getVal("threads_for_umount", 32); 
     RM_THREAD_CAP      = getVal("threads_for_rm", 32);
     SORT_THREAD_CAP    = getVal("threads_for_list_sorting", 4);
     FILTER_THREAD_CAP  = getVal("threads_for_list_filtering", 4);
 }
 
 
-// Function to get AutomaticImportConfig status
+/**
+ * @brief Checks if auto-update is enabled.
+ */
 bool readUserConfigUpdates(const std::string& filePath) {
-    std::map<std::string, std::string> configMap;
-    std::ifstream inFile(filePath);
-
-    if (!inFile) return false;
-
-    std::string line;
-    while (std::getline(inFile, line)) {
-        line.erase(0, line.find_first_not_of(" \t"));
-        line.erase(line.find_last_not_of(" \t") + 1);
-        if (line.empty() || line[0] == '#') continue;
-
-        size_t equalsPos = line.find('=');
-        if (equalsPos == std::string::npos) continue;
-
-        std::string key      = line.substr(0, equalsPos);
-        std::string valueStr = line.substr(equalsPos + 1);
-        key.erase(0, key.find_first_not_of(" \t"));
-        key.erase(key.find_last_not_of(" \t") + 1);
-        valueStr.erase(0, valueStr.find_first_not_of(" \t"));
-        valueStr.erase(valueStr.find_last_not_of(" \t") + 1);
-
-        for (const auto& pair : CONFIG_ORDERED_DEFAULTS) {
-            if (key == pair.first) {
-                configMap[key] = valueStr;
-                break;
-            }
-        }
-    }
-    inFile.close();
-
+    std::map<std::string, std::string> configMap = readConfig(filePath);
     ensureDefaults(configMap, filePath);
-
-    return (configMap["auto_update"] == "on");
+    
+    std::string val = configMap["auto_update"];
+    // Case-insensitive check
+    return (val == "on" || val == "ON" || val == "On");
 }
 
 
-// Function to read the configuration file and set pagination settings
+/**
+ * @brief Loads pagination setting into the global variable.
+ */
 bool paginationSet(const std::string& filePath) {
-    std::ifstream inFile(filePath);
-    if (!inFile) return false;
-
-    std::string line;
-    while (std::getline(inFile, line)) {
-        line.erase(0, line.find_first_not_of(" \t"));
-        line.erase(line.find_last_not_of(" \t") + 1);
-        if (line.empty() || line[0] == '#') continue;
-
-        size_t equalsPos = line.find('=');
-        if (equalsPos == std::string::npos) continue;
-
-        std::string key      = line.substr(0, equalsPos);
-        std::string valueStr = line.substr(equalsPos + 1);
-        key.erase(0, key.find_first_not_of(" \t"));
-        key.erase(key.find_last_not_of(" \t") + 1);
-        valueStr.erase(0, valueStr.find_first_not_of(" \t"));
-        valueStr.erase(valueStr.find_last_not_of(" \t") + 1);
-
-        if (key == "pagination") {
-            try {
-                ITEMS_PER_PAGE = std::stoi(valueStr);
-                return true;
-            } catch (...) {
-                return false;
-            }
-        }
+    std::map<std::string, std::string> configMap = readConfig(filePath);
+    if (configMap.count("pagination")) {
+        try {
+            ITEMS_PER_PAGE = std::stoi(configMap["pagination"]);
+            return true;
+        } catch (...) { return false; }
     }
-
     return false;
 }
 
 
-// Function to set list mode based on config file
+/**
+ * @brief Initializes UI display toggles from config.
+ */
 std::map<std::string, std::string> readUserConfigLists(const std::string& filePath) {
-    std::map<std::string, std::string> configMap;
-
-    // Ensure the parent directory exists
     fs::path configFilePath(filePath);
     if (!fs::exists(configFilePath.parent_path()) && !configFilePath.parent_path().empty()) {
         fs::create_directories(configFilePath.parent_path());
     }
 
-    std::ifstream inFile(filePath);
-
-    // If the file cannot be opened, create and write defaults
-    if (!inFile) {
-        for (const auto& [key, def] : CONFIG_ORDERED_DEFAULTS)
-            configMap[key] = def;
-        writeConfig(filePath, configMap);
-        // Apply display flags and thread caps from defaults then return
-        displayConfig::toggleFullListMount       = false;
-        displayConfig::toggleFullListUmount      = true;   // umount default is "full"
-        displayConfig::toggleFullListCpMvRm      = false;
-        displayConfig::toggleFullListWrite       = false;
-        displayConfig::toggleFullListConversions = false;
-        displayConfig::toggleNamesOnly           = false;
-        applyThreadCapsAndHistoryLimits(configMap);
-        return configMap;
-    }
-
-    // Read existing config
-    std::string line;
-    while (std::getline(inFile, line)) {
-        line.erase(0, line.find_first_not_of(" \t"));
-        line.erase(line.find_last_not_of(" \t") + 1);
-        if (line.empty() || line[0] == '#') continue;
-
-        size_t equalsPos = line.find('=');
-        if (equalsPos == std::string::npos) continue;
-
-        std::string key      = line.substr(0, equalsPos);
-        std::string valueStr = line.substr(equalsPos + 1);
-        key.erase(0, key.find_first_not_of(" \t"));
-        key.erase(key.find_last_not_of(" \t") + 1);
-        valueStr.erase(0, valueStr.find_first_not_of(" \t"));
-        valueStr.erase(valueStr.find_last_not_of(" \t") + 1);
-
-        for (const auto& pair : CONFIG_ORDERED_DEFAULTS) {
-            if (key == pair.first) {
-                configMap[key] = valueStr;
-                break;
-            }
-        }
-    }
-    inFile.close();
-
+    std::map<std::string, std::string> configMap = readConfig(filePath);
     ensureDefaults(configMap, filePath);
 
-    // Set display flags
-    displayConfig::toggleFullListMount       = (configMap["mount_list"]       == "full");
-    displayConfig::toggleFullListUmount      = (configMap["umount_list"]      == "full");
-    displayConfig::toggleFullListCpMvRm      = (configMap["cp_mv_rm_list"]    == "full");
-    displayConfig::toggleFullListWrite       = (configMap["write_list"]       == "full");
-    displayConfig::toggleFullListConversions = (configMap["conversion_lists"] == "full");
-    displayConfig::toggleNamesOnly           = (configMap["filenames_only"]   == "on");
+    displayConfig::toggleFullListMount        = (configMap["mount_list"]       == "full");
+    displayConfig::toggleFullListUmount       = (configMap["umount_list"]      == "full");
+    displayConfig::toggleFullListCpMvRm       = (configMap["cp_mv_rm_list"]    == "full");
+    displayConfig::toggleFullListWrite        = (configMap["write_list"]       == "full");
+    displayConfig::toggleFullListConversions  = (configMap["conversion_lists"] == "full");
+    displayConfig::toggleNamesOnly            = (configMap["filenames_only"]   == "on");
 
-    // Apply thread caps
     applyThreadCapsAndHistoryLimits(configMap);
-
     return configMap;
 }
 
 
-// Function to write number of entries per page for pagination
+/**
+ * @brief Updates pagination via runtime command.
+ */
 void updatePagination(const std::string& inputSearch, const std::string& configPath) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
-    std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
-    if (!std::filesystem::exists(dirPath)) {
-        if (!std::filesystem::create_directories(dirPath)) {
-            std::cerr << "\n\033[1;91mFailed to create directory: \033[1;93m'"
-                      << dirPath.string() << "\033[1;91m'.\033[0;1m\n";
-            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            return;
-        }
-    }
+    size_t eqPos = inputSearch.find('=');
+    if (eqPos == std::string::npos) return;
 
-    int paginationValue = 0;
-    std::string paginationValueStr;
+    std::string valueStr = inputSearch.substr(eqPos + 1);
     try {
-        paginationValueStr = inputSearch.substr(12);
-        paginationValue    = std::stoi(paginationValueStr);
-    } catch (const std::invalid_argument&) {
-        std::cerr << "\n\033[1;91mInvalid pagination value: '\033[1;93m"
-                  << paginationValueStr << "\033[1;91m' is not a valid number.\033[0;1m\n";
-        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        return;
-    }
-
-    std::map<std::string, std::string> config = readConfig(configPath);
-    config["pagination"] = std::to_string(paginationValue);
-
-    writeConfig(configPath, config);
-    ITEMS_PER_PAGE = paginationValue;
-
-    if (paginationValue > 0) {
-        std::cout << "\n\033[0;1mPagination status updated: Max entries per page set to \033[1;93m"
-                  << paginationValue << "\033[1;97m.\033[0m\n";
-    } else {
-        std::cout << "\n\033[0;1mPagination status updated: \033[1;91mDisabled\033[0;1m.\n";
+        int paginationValue = std::stoi(valueStr);
+        std::map<std::string, std::string> config = readConfig(configPath);
+        config["pagination"] = std::to_string(paginationValue);
+        writeConfig(configPath, config);
+        ITEMS_PER_PAGE = paginationValue;
+        std::cout << "\n\033[1;32mPagination updated to " << paginationValue << ".\033[0m";
+    } catch (...) {
+        std::cout << "\n\033[1;31mInvalid pagination value.\033[0m";
     }
 
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
@@ -307,249 +238,113 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
 }
 
 
-// Function to set the FilenamesOnly switch in the config file
+/**
+ * @brief Toggles filename display mode via runtime command.
+ */
 void updateFilenamesOnly(const std::string& configPath, const std::string& inputSearch) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
-    std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
-    if (!std::filesystem::exists(dirPath)) {
-        if (!std::filesystem::create_directories(dirPath)) {
-            std::cerr << "\n\033[1;91mFailed to create directory: \033[1;93m'"
-                      << dirPath.string() << "\033[1;91m'.\033[0;1m\n";
-            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            return;
-        }
-    }
-
     std::map<std::string, std::string> config = readConfig(configPath);
 
     if (inputSearch == "*flno_on") {
-        config["filenames_only"]         = "on";
-        displayConfig::toggleNamesOnly   = true;
+        config["filenames_only"] = "on";
+        displayConfig::toggleNamesOnly = true;
     } else if (inputSearch == "*flno_off") {
-        config["filenames_only"]         = "off";
-        displayConfig::toggleNamesOnly   = false;
+        config["filenames_only"] = "off";
+        displayConfig::toggleNamesOnly = false;
     }
 
-    std::ofstream outFile(configPath);
-    if (outFile.is_open()) {
-        writeConfig(configPath, config);
-        if (inputSearch == "*flno_on" || inputSearch == "*flno_off") {
-            std::cout << "\n\033[0;1mFilename-only lists have been "
-                      << (inputSearch == "*flno_on" ? "\033[1;92menabled" : "\033[1;91mdisabled")
-                      << "\033[0;1m.\033[0;1m\n";
-        }
-    } else {
-        std::cerr << "\n\033[1;91mError: Unable to access configuration file: \033[1;93m'"
-                  << configPath << "'\033[1;91m.\033[0;1m\n";
-    }
-
-    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+    writeConfig(configPath, config);
+    std::cout << "\n\033[1;32mFilename display updated. ↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
 
-// Hold valid input for list display mode commands
 const std::unordered_map<char, std::string> settingMap = {
-    {'m', "mount_list"},
-    {'u', "umount_list"},
-    {'o', "cp_mv_rm_list"},
-    {'c', "conversion_lists"},
-    {'w', "write_list"}
+    {'m', "mount_list"}, {'u', "umount_list"}, {'o', "cp_mv_rm_list"},
+    {'c', "conversion_lists"}, {'w', "write_list"}
 };
 
 
-// Function to validate list display mode input dynamically
 bool isValidInput(const std::string& input) {
-    if (input.size() < 4 || input[0] != '*' ||
-        (input.substr(1, 2) != "cl" && input.substr(1, 2) != "fl")) {
-        return false;
-    }
-
+    if (input.size() < 4 || input[0] != '*' || (input.substr(1, 2) != "cl" && input.substr(1, 2) != "fl")) return false;
     size_t underscorePos = input.find('_', 3);
-    if (underscorePos == std::string::npos || underscorePos + 1 >= input.size()) {
-        return false;
-    }
-
+    if (underscorePos == std::string::npos || underscorePos + 1 >= input.size()) return false;
     std::string settingsStr = input.substr(underscorePos + 1);
-    for (char c : settingsStr) {
-        if (settingMap.find(c) == settingMap.end()) {
-            return false;
-        }
-    }
-
+    for (char c : settingsStr) if (settingMap.find(c) == settingMap.end()) return false;
     return true;
 }
 
 
-// Function to write default display modes to config file
+/**
+ * @brief Batch updates list display modes (compact vs full).
+ */
 void setDisplayMode(const std::string& inputSearch) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
-    std::vector<std::string> settingKeys;
-    bool validInput = true;
-    std::string newValue;
+    std::string command = inputSearch.substr(1, 2);
+    size_t underscorePos = inputSearch.find('_', 3);
+    std::string settingsStr = inputSearch.substr(underscorePos + 1);
+    std::string newValue = (command == "cl") ? "compact" : "full";
 
-    // Create directory if needed
-    std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
-    if (!std::filesystem::exists(dirPath)) {
-        if (!std::filesystem::create_directories(dirPath)) {
-            std::cerr << "\n\033[1;91mFailed to create directory: \033[1;93m'"
-                      << dirPath.string() << "'\033[1;91m.\033[0;1m\n";
-            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            return;
-        }
-    }
-
-    // Parse input command and settings
-    if (inputSearch.size() < 4 || inputSearch[0] != '*' ||
-        (inputSearch.substr(1, 2) != "cl" && inputSearch.substr(1, 2) != "fl")) {
-        std::cerr << "\n\033[1;91mInvalid input format. Use '*cl' or '*fl' prefix.\033[0;1m\n";
-        validInput = false;
-    } else {
-        std::string command      = inputSearch.substr(1, 2);
-        size_t underscorePos     = inputSearch.find('_', 3);
-        if (underscorePos == std::string::npos || underscorePos + 1 >= inputSearch.size()) {
-            std::cerr << "\n\033[1;91mExpected '_' followed by settings (e.g., *cl_mu).\033[0;1m\n";
-            validInput = false;
-        } else {
-            std::string settingsStr = inputSearch.substr(underscorePos + 1);
-            newValue = (command == "cl") ? "compact" : "full";
-
-            std::unordered_set<std::string> uniqueKeys;
-            for (char c : settingsStr) {
-                auto it = settingMap.find(c);
-                if (it != settingMap.end()) {
-                    if (uniqueKeys.insert(it->second).second)
-                        settingKeys.push_back(it->second);
-                } else {
-                    std::cerr << "\n\033[1;91mInvalid setting character: '" << c << "'.\033[0;1m\n";
-                    validInput = false;
-                    break;
-                }
-            }
-        }
-    }
-
-    if (!validInput || settingKeys.empty()) {
-        if (validInput) std::cerr << "\n\033[1;91mNo valid settings specified.\033[0;1m\n";
-        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        return;
-    }
-
-    // Read current config, apply changes, write back
     std::map<std::string, std::string> config = readConfig(configPath);
-    for (const auto& key : settingKeys)
-        config[key] = newValue;
-    writeConfig(configPath, config);
-
-    // Update toggle flags
-    for (const auto& key : settingKeys) {
-        if      (key == "mount_list")       displayConfig::toggleFullListMount       = (newValue == "full");
-        else if (key == "umount_list")      displayConfig::toggleFullListUmount      = (newValue == "full");
-        else if (key == "cp_mv_rm_list")    displayConfig::toggleFullListCpMvRm      = (newValue == "full");
-        else if (key == "conversion_lists") displayConfig::toggleFullListConversions = (newValue == "full");
-        else if (key == "write_list")       displayConfig::toggleFullListWrite       = (newValue == "full");
+    for (char c : settingsStr) {
+        auto it = settingMap.find(c);
+        if (it != settingMap.end()) {
+            config[it->second] = newValue;
+            bool isFull = (newValue == "full");
+            if      (it->second == "mount_list")       displayConfig::toggleFullListMount       = isFull;
+            else if (it->second == "umount_list")      displayConfig::toggleFullListUmount      = isFull;
+            else if (it->second == "cp_mv_rm_list")    displayConfig::toggleFullListCpMvRm      = isFull;
+            else if (it->second == "conversion_lists") displayConfig::toggleFullListConversions = isFull;
+            else if (it->second == "write_list")       displayConfig::toggleFullListWrite       = isFull;
+        }
     }
-
-    std::cout << "\n\033[0;1mDisplay mode set to \033[1;92m" << newValue << "\033[0;1m for:\n";
-    for (const auto& key : settingKeys)
-        std::cout << "  - " << key << "\n";
-    std::cout << "\033[0;1m";
-
-    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+    writeConfig(configPath, config);
+    std::cout << "\n\033[1;32mDisplay modes updated. ↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
 
-// Unified function to update Thread Caps or History/Filter lines
-// Prefix used: "*set_" (e.g., *set_filterhist=100 or *set_cpmv=12)
+/**
+ * @brief Updates numeric settings (threads/history) via runtime command.
+ */
 void updateConfigSettings(const std::string& inputSearch, const std::string& configPath) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
-    // Mapping of command "short names" to actual "config file keys"
     static const std::unordered_map<std::string, std::string> keyMap = {
-		// History and Filter settings
-        {"filterhist", "filter_history_lines"},
-        {"pathhist",   "folder_path_history_lines"},
-        // Thread settings
-        {"max",        "max_thread_cap"},
-        {"mount",      "threads_for_mount"},
-        {"umount",     "threads_for_umount"},
-        {"conv",       "threads_for_conversions"},
-        {"cpmv",       "threads_for_cp_mv"},
-        {"rm",         "threads_for_rm"},    
-        {"clean",      "threads_for_database_cleanup"},
-        {"sort",       "threads_for_list_sorting"},
-        {"filter",     "threads_for_list_filtering"},
+        {"filterhist", "filter_history_lines"}, {"pathhist", "folder_path_history_lines"},
+        {"max", "max_thread_cap"}, {"mount", "threads_for_mount"}, {"umount", "threads_for_umount"},
+        {"conv", "threads_for_conversions"}, {"cpmv", "threads_for_cp_mv"}, {"rm", "threads_for_rm"},
+        {"clean", "threads_for_database_cleanup"}, {"sort", "threads_for_list_sorting"}, {"filter", "threads_for_list_filtering"}
     };
 
-    const std::string prefix = "*set_";
-    if (inputSearch.size() < prefix.size() || inputSearch.substr(0, prefix.size()) != prefix) {
-        std::cerr << "\n\033[1;91mInvalid format. Use: *set_<name>=<value>\033[0;1m\n"
-                  << "\033[0;1mExamples: *set_filterhist=100, *set_cpmv=8\n";
-        goto wait_exit;
-    }
+    size_t eqPos = inputSearch.find('=');
+    if (eqPos == std::string::npos) return;
 
-    {
-        std::string rest = inputSearch.substr(prefix.size());
-        size_t eqPos    = rest.find('=');
-        if (eqPos == std::string::npos) {
-            std::cerr << "\n\033[1;91mExpected '=' in input (e.g. *set_filterhist=50).\033[0;1m\n";
-            goto wait_exit;
-        }
+    std::string shortName = inputSearch.substr(5, eqPos - 5);
+    std::string valueStr  = inputSearch.substr(eqPos + 1);
 
-        std::string shortName = rest.substr(0, eqPos);
-        std::string valueStr  = rest.substr(eqPos + 1);
-
-        auto it = keyMap.find(shortName);
-        if (it == keyMap.end()) {
-            std::cerr << "\n\033[1;91mUnknown setting name: '\033[1;93m" << shortName << "\033[1;91m'.\033[0;1m\n"
-                      << "Valid: max, cpmv, conv, mount, umount, filterhist, pathhist, etc.\n";
-            goto wait_exit;
-        }
-
-        const std::string& configKey = it->second;
-        int newVal = 0;
-        try {
-            newVal = std::stoi(valueStr);
-            if (newVal <= 0) throw std::out_of_range("range");
-        } catch (...) {
-            std::cerr << "\n\033[1;91mInvalid value: must be a positive integer.\033[0;1m\n";
-            goto wait_exit;
-        }
-
-        // Ensure directory exists
-        std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
-        if (!dirPath.empty() && !std::filesystem::exists(dirPath)) {
-            std::filesystem::create_directories(dirPath);
-        }
-
-        // Process Update
+    auto it = keyMap.find(shortName);
+    if (it != keyMap.end()) {
         std::map<std::string, std::string> config = readConfig(configPath);
-        config[configKey] = std::to_string(newVal);
+        config[it->second] = valueStr;
         writeConfig(configPath, config);
-        
-        // Sync the changes to global variables immediately
         applyThreadCapsAndHistoryLimits(config);
-
-        std::cout << "\n\033[0;1mSetting '\033[1;93m" << configKey
-                  << "\033[0;1m' updated to \033[1;93m" << newVal << "\033[0;1m.\n";
+        std::cout << "\n\033[1;32mSetting '" << it->second << "' updated to " << valueStr << ".\033[0m";
     }
 
-wait_exit:
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
 
-// Function to read and display configuration options from config file
+/**
+ * @brief UI screen to view current configuration.
+ */
 void displayConfigurationOptions(const std::string& configPath) {
     clearScrollBuffer();
 
@@ -559,51 +354,37 @@ void displayConfigurationOptions(const std::string& configPath) {
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     };
 
-    auto createDefaultConfig = [&]() -> bool {
-        std::filesystem::path configDir = std::filesystem::path(configPath).parent_path();
-        if (!configDir.empty() && !std::filesystem::exists(configDir)) {
-            try {
-                std::filesystem::create_directories(configDir);
-            } catch (const std::filesystem::filesystem_error&) {
-                reportError("Unable to access configuration file: \033[1;93m'" + configPath + "'");
-                return false;
-            }
-        }
+    // Attempt to create directory if missing
+    std::filesystem::path configDir = std::filesystem::path(configPath).parent_path();
+    if (!configDir.empty() && !std::filesystem::exists(configDir)) {
+        try { std::filesystem::create_directories(configDir); } 
+        catch (...) { reportError("Permission denied creating config directory"); return; }
+    }
 
-        std::ofstream newConfigFile(configPath);
-        if (!newConfigFile.is_open()) {
-            reportError("Unable to access configuration file: \033[1;93m'" + configPath + "'");
-            return false;
-        }
-        for (const auto& [key, def] : CONFIG_ORDERED_DEFAULTS)
-            newConfigFile << key << " = " << def << "\n";
-        newConfigFile.close();
-        return true;
-    };
+    // Initialize with defaults if file doesn't exist
+    if (!std::filesystem::exists(configPath)) {
+        std::map<std::string, std::string> emptyMap;
+        writeConfig(configPath, emptyMap); 
+    }
 
     std::ifstream configFile(configPath);
     if (!configFile.is_open()) {
-        if (!createDefaultConfig()) return;
-        configFile.open(configPath);
-        if (!configFile.is_open()) {
-            reportError("Unable to access configuration file: \033[1;93m'" + configPath + "'");
-            return;
-        }
+        reportError("Unable to open configuration file: " + configPath);
+        return;
     }
 
     std::cout << "\n\033[1;96m==== Configuration Options ====\033[0;1m\n\n";
     std::string line;
     int lineNumber = 1;
     while (std::getline(configFile, line)) {
+        line = trim(line);
         if (!line.empty() && line[0] != '#') {
-            std::cout << "\033[1;92m" << lineNumber++ << ". \033[1;97m"
-                      << line << "\033[0m\n";
+            std::cout << "\033[1;92m" << lineNumber++ << ". \033[1;97m" << line << "\033[0m\n";
         }
     }
     configFile.close();
 
-    std::cout << "\n\033[1;93mConfiguration file: \033[1;97m"
-              << configPath << "\033[0;1m\n";
+    std::cout << "\n\033[1;93mConfig: \033[1;97m" << configPath << "\033[0;1m\n";
     std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
