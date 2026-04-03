@@ -13,13 +13,15 @@ static const std::vector<std::pair<std::string, std::string>> CONFIG_ORDERED_DEF
     {"umount_list",      "full"},
     {"cp_mv_rm_list",    "compact"},
     {"write_list",       "compact"},
-    {"conversion_lists", "compact"},
+    {"conversion_lists", "compact"},    
+    {"filter_history_lines", "50"},
+    {"folder_path_history_lines", "100"},    
     {"max_thread_cap",      "32"},
     {"threads_for_cp_mv",     "8"},
     {"threads_for_conversions",     "8"},
-    {"threads_for_mount",    "16"},
-    {"threads_for_umount",    "16"},
-    {"threads_for_mount",   "32"},
+    {"threads_for_umount",    "32"},
+    {"threads_for_mount",   "16"},
+    {"threads_for_database_cleanup",   "16"},
     {"threads_for_rm",       "32"},
     {"threads_for_list_sorting",     "4"},
     {"threads_for_list_filtering",   "4"}
@@ -82,9 +84,9 @@ static bool ensureDefaults(std::map<std::string, std::string>& configMap,
 }
 
 
-// Helper to apply thread caps from a fully-populated config map
-static void applyThreadCaps(const std::map<std::string, std::string>& configMap) {
-    auto getThreadVal = [&](const std::string& key, size_t defaultVal) -> size_t {
+// Helper to apply thread caps and history limits from a fully-populated config map
+static void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::string>& configMap) {
+    auto getVal = [&](const std::string& key, size_t defaultVal) -> size_t {
         auto it = configMap.find(key);
         if (it == configMap.end()) return defaultVal;
         try {
@@ -94,16 +96,21 @@ static void applyThreadCaps(const std::map<std::string, std::string>& configMap)
             return defaultVal;
         }
     };
+    
+    // History Limits
+    MAX_HISTORY_LINES          = getVal("filter_history_lines", 50);
+    MAX_HISTORY_PATTERN_LINES  = getVal("folder_path_history_lines", 100);   
 
-    MAX_USEFUL_THREADS = getThreadVal("max_thread_cap",    32);
-    CPMV_THREAD_CAP    = getThreadVal("threads_for_cp_mv",    8);
-    CONV_THREAD_CAP    = getThreadVal("threads_for_conversions",    8);
-    MOUNT_THREAD_CAP   = getThreadVal("threads_for_mount",  16);
-    CLEAN_THREAD_CAP   = getThreadVal("threads_for_umount",  16);
-    UMOUNT_THREAD_CAP  = getThreadVal("threads_for_mount", 32);
-    RM_THREAD_CAP      = getThreadVal("threads_for_rm",     32);
-    SORT_THREAD_CAP    = getThreadVal("threads_for_list_sorting",    4);
-    FILTER_THREAD_CAP  = getThreadVal("threads_for_list_filtering",  4);
+    // Thread Caps
+    MAX_USEFUL_THREADS = getVal("max_thread_cap", 32);
+    CPMV_THREAD_CAP    = getVal("threads_for_cp_mv", 8);
+    CONV_THREAD_CAP    = getVal("threads_for_conversions", 8);
+    MOUNT_THREAD_CAP   = getVal("threads_for_mount", 16);
+    CLEAN_THREAD_CAP   = getVal("threads_for_database_cleanup", 16);
+    UMOUNT_THREAD_CAP  = getVal("threads_for_umount", 32); // Fixed: was using "mount" key
+    RM_THREAD_CAP      = getVal("threads_for_rm", 32);
+    SORT_THREAD_CAP    = getVal("threads_for_list_sorting", 4);
+    FILTER_THREAD_CAP  = getVal("threads_for_list_filtering", 4);
 }
 
 
@@ -204,7 +211,7 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
         displayConfig::toggleFullListWrite       = false;
         displayConfig::toggleFullListConversions = false;
         displayConfig::toggleNamesOnly           = false;
-        applyThreadCaps(configMap);
+        applyThreadCapsAndHistoryLimits(configMap);
         return configMap;
     }
 
@@ -245,7 +252,7 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
     displayConfig::toggleNamesOnly           = (configMap["filenames_only"]   == "on");
 
     // Apply thread caps
-    applyThreadCaps(configMap);
+    applyThreadCapsAndHistoryLimits(configMap);
 
     return configMap;
 }
@@ -458,86 +465,83 @@ void setDisplayMode(const std::string& inputSearch) {
 }
 
 
-// Function to update a single thread cap from user input.
-// Expected format: "*threads_<name>=<value>"  e.g. "*threads_cpmv=4"
-void updateThreadCap(const std::string& inputSearch, const std::string& configPath) {
+// Unified function to update Thread Caps or History/Filter lines
+// Prefix used: "*set_" (e.g., *set_filterhist=100 or *set_cpmv=12)
+void updateConfigSettings(const std::string& inputSearch, const std::string& configPath) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
-    static const std::unordered_map<std::string, std::string> threadKeyMap = {
-        {"max",    "max_thread_cap"},
-        {"cpmv",   "threads_for_cp_mv"},
-        {"conv",   "threads_for_conversions"},
-        {"mount",  "threads_for_mount"},
-        {"clean",  "threads_for_umount"},
-        {"umount", "threads_for_mount"},
-        {"rm",     "threads_for_rm"},
-        {"sort",   "threads_for_list_sorting"},
-        {"filter", "threads_for_list_filtering"}
+    // Mapping of command "short names" to actual "config file keys"
+    static const std::unordered_map<std::string, std::string> keyMap = {
+		// History and Filter settings
+        {"filterhist", "filter_history_lines"},
+        {"pathhist",   "folder_path_history_lines"}
+        // Thread settings
+        {"max",        "max_thread_cap"},
+        {"mount",      "threads_for_mount"},
+        {"umount",     "threads_for_umount"},
+        {"conv",       "threads_for_conversions"},
+        {"cpmv",       "threads_for_cp_mv"},
+        {"rm",         "threads_for_rm"},    
+        {"clean",      "threads_for_database_cleanup"},
+        {"sort",       "threads_for_list_sorting"},
+        {"filter",     "threads_for_list_filtering"},
     };
 
-    const std::string prefix = "*threads_";
-    if (inputSearch.substr(0, prefix.size()) != prefix) {
-        std::cerr << "\n\033[1;91mInvalid format. Use: *threads_<name>=<value>\033[0;1m\n";
-        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        return;
+    const std::string prefix = "*set_";
+    if (inputSearch.size() < prefix.size() || inputSearch.substr(0, prefix.size()) != prefix) {
+        std::cerr << "\n\033[1;91mInvalid format. Use: *set_<name>=<value>\033[0;1m\n"
+                  << "\033[0;1mExamples: *set_filterhist=100, *set_cpmv=8\n";
+        goto wait_exit;
     }
 
-    std::string rest    = inputSearch.substr(prefix.size());
-    size_t eqPos        = rest.find('=');
-    if (eqPos == std::string::npos) {
-        std::cerr << "\n\033[1;91mExpected '=' in input (e.g. *threads_cpmv=4).\033[0;1m\n";
-        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        return;
-    }
-
-    std::string shortName = rest.substr(0, eqPos);
-    std::string valueStr  = rest.substr(eqPos + 1);
-
-    auto it = threadKeyMap.find(shortName);
-    if (it == threadKeyMap.end()) {
-        std::cerr << "\n\033[1;91mUnknown thread cap name: '\033[1;93m"
-                  << shortName << "\033[1;91m'.\033[0;1m\n"
-                  << "\033[0;1mValid names: max, cpmv, conv, mount, clean, umount, rm, sort, filter\n";
-        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        return;
-    }
-    const std::string& configKey = it->second;
-
-    int newVal = 0;
-    try {
-        newVal = std::stoi(valueStr);
-        if (newVal <= 0) throw std::out_of_range("non-positive");
-    } catch (...) {
-        std::cerr << "\n\033[1;91mInvalid value: '\033[1;93m"
-                  << valueStr << "\033[1;91m' — must be a positive integer.\033[0;1m\n";
-        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        return;
-    }
-
-    // Ensure directory exists
-    std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
-    if (!std::filesystem::exists(dirPath)) {
-        if (!std::filesystem::create_directories(dirPath)) {
-            std::cerr << "\n\033[1;91mFailed to create directory: \033[1;93m'"
-                      << dirPath.string() << "'\033[1;91m.\033[0;1m\n";
-            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            return;
+    {
+        std::string rest = inputSearch.substr(prefix.size());
+        size_t eqPos    = rest.find('=');
+        if (eqPos == std::string::npos) {
+            std::cerr << "\n\033[1;91mExpected '=' in input (e.g. *set_filterhist=50).\033[0;1m\n";
+            goto wait_exit;
         }
+
+        std::string shortName = rest.substr(0, eqPos);
+        std::string valueStr  = rest.substr(eqPos + 1);
+
+        auto it = keyMap.find(shortName);
+        if (it == keyMap.end()) {
+            std::cerr << "\n\033[1;91mUnknown setting name: '\033[1;93m" << shortName << "\033[1;91m'.\033[0;1m\n"
+                      << "Valid: max, cpmv, conv, mount, umount, filterhist, pathhist, etc.\n";
+            goto wait_exit;
+        }
+
+        const std::string& configKey = it->second;
+        int newVal = 0;
+        try {
+            newVal = std::stoi(valueStr);
+            if (newVal <= 0) throw std::out_of_range("range");
+        } catch (...) {
+            std::cerr << "\n\033[1;91mInvalid value: must be a positive integer.\033[0;1m\n";
+            goto wait_exit;
+        }
+
+        // Ensure directory exists
+        std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
+        if (!dirPath.empty() && !std::filesystem::exists(dirPath)) {
+            std::filesystem::create_directories(dirPath);
+        }
+
+        // Process Update
+        std::map<std::string, std::string> config = readConfig(configPath);
+        config[configKey] = std::to_string(newVal);
+        writeConfig(configPath, config);
+        
+        // Sync the changes to global variables immediately
+        applyThreadCapsAndHistoryLimits(config);
+
+        std::cout << "\n\033[0;1mSetting '\033[1;93m" << configKey
+                  << "\033[0;1m' updated to \033[1;93m" << newVal << "\033[0;1m.\n";
     }
 
-    std::map<std::string, std::string> config = readConfig(configPath);
-    config[configKey] = std::to_string(newVal);
-    writeConfig(configPath, config);
-    applyThreadCaps(config);
-
-    std::cout << "\n\033[0;1mThread cap '\033[1;93m" << configKey
-              << "\033[0;1m' updated to \033[1;93m" << newVal << "\033[0;1m.\033[0m\n";
+wait_exit:
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
