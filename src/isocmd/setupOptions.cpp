@@ -475,7 +475,7 @@ void updateConfigSettings(const std::string& inputSearch, const std::string& con
     static const std::unordered_map<std::string, std::string> keyMap = {
 		// History and Filter settings
         {"filterhist", "filter_history_lines"},
-        {"pathhist",   "folder_path_history_lines"}
+        {"pathhist",   "folder_path_history_lines"},
         // Thread settings
         {"max",        "max_thread_cap"},
         {"mount",      "threads_for_mount"},
