@@ -241,16 +241,34 @@ void updateFilenamesOnly(const std::string& configPath, const std::string& input
     signal(SIGINT, SIG_IGN); 
     disable_ctrl_d();
 
-    std::map<std::string, std::string> config = readConfig(configPath);
+    // 1. Validate Input and Prepare Configuration
     if (inputSearch == "*flno_on" || inputSearch == "*flno_off") {
         bool isEnabling = (inputSearch == "*flno_on");
+        std::map<std::string, std::string> config = readConfig(configPath);
+        
+        // 2. Update Map
         config["filenames_only"] = isEnabling ? "on" : "off";
 
+        // 3. Persistent Storage with Error Handling
         if (writeConfig(configPath, config)) {
+            // Update Global Runtime Flag
             displayConfig::toggleNamesOnly = isEnabling;
-            std::cout << "\n\033[0;1mFilename-only lists: " << (isEnabling ? "ON" : "OFF") << "\033[0m\n";
+
+            // Display specific verbose confirmation
+            std::cout << "\n\033[0;1mFilename-only lists have been "
+                      << (isEnabling ? "\033[1;92menabled" : "\033[1;91mdisabled")
+                      << "\033[0;1m.\033[0m\n";
+        } else {
+            // Error handling if write fails
+            std::cerr << "\n\033[1;91mError: Unable to access configuration file: \033[1;93m'"
+                      << configPath << "'\033[1;91m.\033[0;1m\n";
         }
+    } else {
+        // Error handling if command is malformed
+        std::cerr << "\n\033[1;31mError: Invalid command format.\033[0;1m\n";
     }
+
+    // 4. User Acknowledgment
     std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
