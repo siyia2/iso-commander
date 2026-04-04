@@ -143,10 +143,10 @@ void helpSearches(bool isCpMv, bool import2ISO) {
 
         // Menu Colors
         std::cout << orangeC << "    D. Menu Accent Color (default: white):\033[0m\n"
-                  << "      • Enter " << purpleC << "'*menu:{color}'\033[0m - Valid: " << purpleC << "green, cyan, white\033[0m\n\n";
+                  << "      • Enter " << purpleC << "'*menu:{color}'\033[0m - Valid: " << purpleC << "green, cyan, white, purple, amber, rose\033[0m\n\n";
 
         // List Themes
-        std::cout << orangeC << "    E. List Color Theme (default: original):\033[0m\n"
+        std::cout << orangeC << "    E. UI Color Theme (default: original):\033[0m\n"
                   << "      • Enter " << purpleC << "'*theme:{name}'\033[0m - Valid: " << purpleC << "original, classic, high_contrast, neon, ocean, sunset,\n                                       forest, midnight, mono, retro, crimson, dracula\033[0m\n\n";
               
         if (import2ISO) { 

@@ -36,8 +36,11 @@ auto isNum = [](const std::string& v, int min, int max) {
  * @brief Canonical list of all supported configuration settings with validation.
  */
 static const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
-    {"menu_color", "white", "Menu accent color (green/cyan/white)", "Theme Settings",
-        [](const std::string& v){ return v == "green" || v == "cyan" || v == "white"; }},
+    {"menu_color", "white", "Menu accent color (green/cyan/white/purple/amber/rose)", "Theme Settings",
+        [](const std::string& v){ 
+            return v == "green" || v == "cyan" || v == "white" || 
+                   v == "purple" || v == "amber" || v == "rose"; 
+        }},
     {"ui_theme", "original", "List color theme (original/classic/high_contrast/neon/ocean/sunset/forest/midnight/mono/retro/crimson/dracula)", "",
         [](const std::string& v){
             static const std::unordered_set<std::string> valid = {
@@ -321,14 +324,15 @@ void updateUIAppearance(const std::string& configPath, const std::string& inputS
     std::string value;
     bool isValid = false;
 
-    // Handle Menu Color: *menu:green, *menu:cyan, *menu:white
+    // Handle Menu Color: Added purple, amber, rose
     if (inputSearch.substr(0, 6) == "*menu:") {
         key = "menu_color";
-        value = inputSearch.substr(6); // Get everything after *menu:
-        if (value == "green" || value == "cyan" || value == "white") {
+        value = inputSearch.substr(6); 
+        if (value == "green" || value == "cyan" || value == "white" || 
+            value == "purple" || value == "amber" || value == "rose") {
             isValid = true;
         }
-    } 
+    }
     // Handle List Themes: *theme:midnight, *theme:dracula, etc.
     else if (inputSearch.substr(0, 7) == "*theme:") {
         key = "ui_theme";
