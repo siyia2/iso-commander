@@ -227,7 +227,7 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
     bool abortDel = false;
     
     // Process the user's destination directory and handle errors
-    std::string processedUserDestDir = userDestDirRm(isoFiles, indexChunks, uniqueErrorMessages, userDestDir, 
+    std::string processedUserDestDir = userDestDirCpMv(isoFiles, indexChunks, uniqueErrorMessages, userDestDir, 
                                                      operationColor, operationDescription, umountMvRmBreak, 
                                                      filterHistory, isDelete, isCopy, abortDel, overwriteExisting);
         
