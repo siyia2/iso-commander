@@ -194,8 +194,8 @@ void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string
         ? (need2Sort = true, nrgFilesCache) 
     : files;
             
-    if (!list) {
-		if (need2Sort || needSortingAfterflno) {
+    if (!list || (list && needSortingAfterflno)) {
+		if (need2Sort) {
 			sortFilesCaseInsensitive(files); // Sort the files case-insensitively
 				if (fileType == "bin" || fileType == "img") {
 					std::lock_guard<std::mutex> lock(binImgCacheMutex);
@@ -208,9 +208,8 @@ void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string
 					sortFilesCaseInsensitive(nrgFilesCache);
 				}
 			}
-			
-			need2Sort = false;
 			needSortingAfterflno = false;
+			need2Sort = false;
 	}
 	
     printList(files, "IMAGE_FILES", "conversions", pendingIndices, hasPendingProcess, isFiltered, currentPage, isImportRunning); // Print the current list of files
