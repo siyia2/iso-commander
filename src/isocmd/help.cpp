@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../headers.h"
+#include "../themes.h"
 
 
 // Function to display how to select items from lists
@@ -46,7 +47,8 @@ void helpSelections() {
               << "   • If filtering has no matches, no message or list update is issued\n" << std::endl;
               
     // Prompt to continue
-    std::cout << "\033[1;32m↵ to return...\033[0;1m";
+    std::cout << color << "\033[1;32m↵ to return..." << reset;
+    
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
@@ -119,7 +121,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
     }
     
     // Prompt to continue
-    std::cout << "\033[1;32m↵ to return...\033[0;1m";
+    std::cout << color << "\033[1;32m↵ to return..." << reset;
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
@@ -149,6 +151,6 @@ void helpMappings() {
               << "   • USB detection relies on '/sys/class/block/sd*/removable' kernel value\n" << std::endl;
                
     // Prompt to continue
-    std::cout << "\033[1;32m↵ to return...\033[0;1m";
+    std::cout << color << "\033[1;32m↵ to return..." << reset;
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
