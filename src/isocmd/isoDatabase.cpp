@@ -190,7 +190,7 @@ std::string getHomeDirectory() {
 }
 
 
-// Function to generalize paths from history and push them into backgroundDatabaseImport for traverse to work with
+// Function to get paths from history in leaf style and push them into backgroundDatabaseImport for traverse to work with
 std::vector<std::string> hierarchicalPathReduction(const std::vector<std::string>& paths) {
     std::map<std::string, std::vector<std::string>> pathGroups;
     std::vector<std::string> allPaths;
@@ -291,7 +291,7 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
     // ── Build the I/O thread pool ─────────────────────────────────────────
     const size_t hwThreads  = static_cast<size_t>(maxThreads);
     const size_t ioMultiple = 2;
-    const size_t ioCap      = 32;
+    const size_t ioCap      = MAX_USEFUL_THREADS;
     const size_t numThreads =
         std::min({finalPaths.size(), std::min(hwThreads * ioMultiple, ioCap)});
 
