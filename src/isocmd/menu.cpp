@@ -3,9 +3,6 @@
 #include "../headers.h"
 
 
-std::string color = getThemeColor();
-std::string globalMenuTheme = "blue"; 
-
 // Function to print ascii
 void print_ascii() {
     // Display ASCII art
