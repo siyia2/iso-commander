@@ -172,8 +172,21 @@ bool readUserConfigUpdates(const std::string& filePath) {
  */
 bool paginationSet(const std::string& filePath) {
     std::map<std::string, std::string> configMap = readConfig(filePath);
-    if (configMap.count("pagination")) {
-        try { ITEMS_PER_PAGE = std::stoi(configMap["pagination"]); return true; } catch (...) { return false; }
+    auto it = configMap.find("pagination");
+    
+    if (it != configMap.end()) {
+        // Find the validation rule in the defaults vector
+        for (const auto& entry : CONFIG_ORDERED_DEFAULTS) {
+            if (entry.key == "pagination") {
+                if (entry.validate && entry.validate(it->second)) {
+                    try { 
+                        ITEMS_PER_PAGE = std::stoi(it->second); 
+                        return true; 
+                    } catch (...) { return false; }
+                }
+                break; // Rule found, no need to keep looping
+            }
+        }
     }
     return false;
 }
@@ -186,21 +199,29 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
     if (!fs::exists(configFilePath.parent_path()) && !configFilePath.parent_path().empty()) 
         fs::create_directories(configFilePath.parent_path());
  
+    // 1. Single Read & Self-Healing
     std::map<std::string, std::string> configMap = readConfig(filePath);
     ensureDefaults(configMap, filePath);
  
+    // 2. Synchronize Display Settings
     displayConfig::toggleFullListMount       = (configMap["mount_list"]       == "full");
-	displayConfig::toggleFullListUmount      = (configMap["umount_list"]      == "full");
-	displayConfig::toggleFullListCpMvRm      = (configMap["cp_mv_rm_list"]    == "full");
-	displayConfig::toggleFullListWrite       = (configMap["write_list"]       == "full");
-	displayConfig::toggleFullListConversions = (configMap["conversion_lists"] == "full");
-    displayConfig::toggleNamesOnly = (configMap["filenames_only"] == "on");
+    displayConfig::toggleFullListUmount      = (configMap["umount_list"]      == "full");
+    displayConfig::toggleFullListCpMvRm      = (configMap["cp_mv_rm_list"]    == "full");
+    displayConfig::toggleFullListWrite       = (configMap["write_list"]       == "full");
+    displayConfig::toggleFullListConversions = (configMap["conversion_lists"] == "full");
+    displayConfig::toggleNamesOnly           = (configMap["filenames_only"]   == "on");
  
+    // 3. Synchronize Theme Settings
     menuColor = configMap["menu_color"];
     color = getMenuColor();
     globalListTheme = configMap["theme_color"];
  
+    // 4. Synchronize Threading & History Limits
     applyThreadCapsAndHistoryLimits(configMap);
+
+    // Note: 'auto_update' is now held in the returned map. 
+    // Check it in your startup logic using: if (configMap["auto_update"] == "on")
+    
     return configMap;
 }
 
@@ -433,18 +454,37 @@ void updateConfigSettings(const std::string& inputSearch, const std::string& con
  */
 void displayConfigurationOptions(const std::string& configPath) {
     clearScrollBuffer();
-    // (Logic for ensuring directory/file exists remains same...)
-    std::ifstream configFile(configPath);
-    if (!configFile.is_open()) return;
 
-    std::cout << "\n\033[1;96m==== Configuration Options ====\033[0;1m\n\n";
-    std::string line; int lineNumber = 1;
+    // Ensure the directory exists
+    fs::path p(configPath);
+    if (!fs::exists(p.parent_path()) && !p.parent_path().empty()) 
+        fs::create_directories(p.parent_path());
+
+    // --- SELF-HEALING STEP ---
+    // Load current map and ensure it is valid before displaying
+    std::map<std::string, std::string> configMap = readConfig(configPath);
+    ensureDefaults(configMap, configPath); 
+
+    std::ifstream configFile(configPath);
+    if (!configFile.is_open()) {
+        std::cerr << "\n\033[1;31mError: Could not open configuration for reading.\033[0m\n";
+        return;
+    }
+
+    std::cout << "\n\033[1;96m==== Current Configuration (Verified) ====\033[0;1m\n\n";
+    std::string line; 
+    int lineNumber = 1;
+    
     while (std::getline(configFile, line)) {
-        line = trim(line);
-        if (!line.empty() && line[0] != '#') 
-            std::cout << "\033[1;92m" << lineNumber++ << ". \033[1;97m" << line << "\033[0m\n";
+        std::string trimmed = trim(line);
+        // Only show active keys to the user, skipping comments and empty lines
+        if (!trimmed.empty() && trimmed[0] != '#') {
+            std::cout << "\033[1;92m" << lineNumber++ << ". \033[1;97m" << trimmed << "\033[0m\n";
+        }
     }
     configFile.close();
-    std::cout << "\n\033[1;93mConfig: \033[1;97m" << configPath << color << "\n\n↵ to return..." << reset;
+
+    std::cout << "\n\033[1;93mPath: \033[1;97m" << configPath 
+              << color << "\n\n↵ to return..." << reset;
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
