@@ -49,7 +49,7 @@ char* command_generator(const char* text, int state) {
 
 
 // The Dispatcher (The "Auto-Decider")
-char** my_completion_entry(const char* text, int start, int end) {
+char** my_special_completion_entry(const char* text, int start, int end) {
     // Silence warnings by casting to void
     (void)start;
     (void)end;

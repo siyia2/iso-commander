@@ -25,7 +25,7 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
         // Setup signal handler at the start of the operation
         setupSignalHandlerCancellations();
         resetReadlinePagination();
-        rl_attempted_completion_function = my_completion_entry;
+        rl_attempted_completion_function = my_special_completion_entry;
         
         // Reset cancellation flag
         g_operationCancelled.store(false);
@@ -770,7 +770,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
         enable_ctrl_d();
         setupSignalHandlerCancellations();
         resetReadlinePagination();
-        rl_attempted_completion_function = my_completion_entry;
+        rl_attempted_completion_function = my_special_completion_entry;
         g_operationCancelled.store(false);
         clearScrollBuffer();
         clear_history();

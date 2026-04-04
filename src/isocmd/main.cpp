@@ -36,6 +36,9 @@ int main(int argc, char *argv[]) {
 	
 	setupReadlineToIgnoreCtrlC();
 	
+	// Reset readline completion
+	rl_attempted_completion_function = nullptr;
+	
 	if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
         printVersionNumber("6.3.5");
         return 0;
