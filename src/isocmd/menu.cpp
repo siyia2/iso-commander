@@ -6,23 +6,35 @@
 
 // Function to print ascii
 void print_ascii() {
-    // Display ASCII art
+    // True RGB — requires terminal with truecolor support (most modern terminals do)
+    // Format: \033[38;2;R;G;Bm
+    auto rgb = [](int r, int g, int b) -> std::string {
+        return "\033[38;2;" + std::to_string(r) + ";" +
+               std::to_string(g) + ";" + std::to_string(b) + "m";
+    };
 
-    // Fire Palette (ANSI 256-color)
-    const char* top    = "\033[1;38;5;196m"; // Deep Red
-    const char* mid    = "\033[1;38;5;208m"; // Orange
-    const char* bottom = "\033[1;38;5;214m"; // Gold/Yellow (your 214)
-    const char* reset  = "\033[0m";
+    const std::string reset = "\033[0m";
 
-    std::cout << top    << R"( (   (       )             )    * * ) (         (  )" << "\n";
-    std::cout << top    << R"( )\ ))\ ) ( /(     (  ( /(  (  `   (  `    (      ( /( )\ )      )\ ) )" << "\n";
-    std::cout << mid    << R"((()/(()/( )\())    )\ )\()) )\))(  )\))(   )\     )\()(()/(  (  (()/( )" << "\n";
-    std::cout << mid    << R"( /(_)/(_)((_)\    (((_((_)\ ((_)()\((_)()((((_)( ((_)\ /(_)) )\  /(_)) )" << "\n";
-    std::cout << mid    << R"((_))(_))   ((_)  )\___ ((_)(_()((_(_()((_)\ _ )\ _((_(_))_ ((_)(_)) )" << "\n";
-    std::cout << bottom << R"(|_ _/ __| / _ \ ((/ __/ _ \|  \/  |  \/  (_)_\(_| \| ||   \| __| _ \ )" << "\n";
-    std::cout << bottom << R"( | |\__ \| (_) | | (_| (_) | |\/| | |\/| |/ _ \ | .` || |) | _||   / )" << "\n";
-    std::cout << bottom << R"(|___|___/ \___/   \___\___/|_|  |_|_|  |_/_/ \_\|_|\_||___/|___|_|_\ )" << "\n\n" << reset;
+    // True flame gradient sampled from real fire photography
+    std::string rows[] = {
+        rgb(255, 255, 240),  // row 0: near-white (hottest tips)
+        rgb(255, 248, 150),  // row 1: pale lemon
+        rgb(255, 220,  50),  // row 2: bright yellow
+        rgb(255, 165,   0),  // row 3: orange
+        rgb(240,  80,   0),  // row 4: red-orange
+        rgb(200,  20,   0),  // row 5: bright red
+        rgb(140,   8,   0),  // row 6: dark red
+        rgb( 80,   0,   0),  // row 7: deep ember
+    };
 
+    std::cout << rows[0] << R"( (   (       )             )    * * ) (         (  )" << "\n";
+    std::cout << rows[1] << R"( )\ ))\ ) ( /(     (  ( /(  (  `   (  `    (      ( /( )\ )      )\ ) )" << "\n";
+    std::cout << rows[2] << R"((()/(()/( )\())    )\ )\()) )\))(  )\))(   )\     )\()(()/(  (  (()/( )" << "\n";
+    std::cout << rows[3] << R"( /(_)/(_)((_)\    (((_((_)\ ((_)()\((_)()((((_)( ((_)\ /(_)) )\  /(_)) )" << "\n";
+    std::cout << rows[4] << R"((_))(_))   ((_)  )\___ ((_)(_()((_(_()((_)\ _ )\ _((_(_))_ ((_)(_)) )" << "\n";
+    std::cout << rows[5] << R"(|_ _/ __| / _ \ ((/ __/ _ \|  \/  |  \/  (_)_\(_| \| ||   \| __| _ \ )" << "\n";
+    std::cout << rows[6] << R"( | |\__ \| (_) | | (_| (_) | |\/| | |\/| |/ _ \ | .` || |) | _||   / )" << "\n";
+    std::cout << rows[7] << R"(|___|___/ \___/   \___\___/|_|  |_|_|  |_/_/ \_\|_|\_||___/|___|_|_\ )" << "\n\n" << reset;
 }
 
 
