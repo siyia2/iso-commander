@@ -21,7 +21,15 @@ struct ConfigEntry {
 auto isOnOff = [](const std::string& v) { return v == "on" || v == "off"; };
 auto isDisplay = [](const std::string& v) { return v == "full" || v == "compact"; };
 auto isNum = [](const std::string& v, int min, int max) {
-    try { int n = std::stoi(v); return n >= min && n <= max; } catch (...) { return false; }
+    try { 
+        size_t pos;
+        int n = std::stoi(v, &pos); 
+        // Ensure the entire string was processed and it's not just a prefix
+        if (pos != v.length()) return false; 
+        return n >= min && n <= max; 
+    } catch (...) { 
+        return false; 
+    }
 };
 
 /**
