@@ -3,6 +3,7 @@
 #include "../headers.h"
 #include "../display.h"
 #include "../filtering.h"
+#include "../themes.h"
 
 
 // ISO SELECTION

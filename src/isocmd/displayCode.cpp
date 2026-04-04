@@ -3,6 +3,7 @@
 #include "../headers.h"
 #include "../display.h"
 #include "../filtering.h"
+#include "../themes.h"
 
 
 // Default Display config options for lists

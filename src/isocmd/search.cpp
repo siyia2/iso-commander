@@ -2,6 +2,7 @@
 
 #include "../headers.h"
 #include "../threadpool.h"
+#include "../themes.h"
 
 
 //GENERAL SECTION

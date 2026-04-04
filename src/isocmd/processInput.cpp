@@ -4,6 +4,7 @@
 #include "../threadpool.h"
 #include "../mdf.h"
 #include "../ccd.h"
+#include "../themes.h"
 
 
 // Function to process mount/unmount indices

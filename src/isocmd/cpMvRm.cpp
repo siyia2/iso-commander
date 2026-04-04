@@ -2,6 +2,7 @@
 
 #include "../headers.h"
 #include "../display.h"
+#include "../themes.h"
 
 
 // Function to generate entries for selected ISO files

@@ -3,6 +3,7 @@
 #include "../headers.h"
 #include "../display.h"
 #include "../threadpool.h"
+#include "../themes.h"
 
 
 // Local ISO Database mutex
@@ -582,7 +583,7 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
     }
 
     // Prompt the user to press Enter to return
-    std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
+    std::cout << color << "\n↵ to return..." << reset;
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');  // Wait for the user to press Enter
 }
 
@@ -597,7 +598,7 @@ void updateAutoUpdateConfig(const std::string& configPath, const std::string& in
         if (!std::filesystem::create_directories(dirPath)) {
             std::cerr << "\n\033[1;91mFailed to create directory: \033[1;93m'" 
                     << dirPath.string() << "\033[1;91m'.\033[0;1m\n";
-            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+            std::cout << color << "\n↵ to continue..." << reset;
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             return; // Ensure we exit to avoid unnecessary operations after failure
         }
@@ -638,7 +639,7 @@ void updateAutoUpdateConfig(const std::string& configPath, const std::string& in
                   << configPath << "'\033[1;91m.\033[0;1m\n";
     }
 
-    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+    std::cout << color << "\n↵ to continue..." << reset;
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
@@ -662,7 +663,7 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
         if (std::remove(databaseFilePath.c_str()) != 0) {
             std::cerr << "\n\001\033[1;91mError clearing ISO database: \001\033[1;93m'" 
                       << databaseFilePath << "\001'\033[1;91m. File missing or inaccessible." << std::endl;
-            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+            std::cout << color << "\n↵ to continue..." << reset;
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         } else {
             // Clean transformationCache for .iso entries (case-insensitive)
@@ -682,7 +683,7 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
             }
                     
             std::cout << "\n\001\033[1;92mISO database cleared successfully\001\033[1;92m." << std::endl;
-            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+            std::cout << color << "\n↵ to continue..." << reset;
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             std::vector<std::string>().swap(globalIsoFileList);
         }

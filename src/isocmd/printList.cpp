@@ -3,7 +3,7 @@
 #include "../headers.h"
 #include "../display.h"
 #include "../filtering.h"
-
+#include "../themes.h"
 
 
 // Reusable stack buffer — avoid per-iteration heap allocations from std::to_string.

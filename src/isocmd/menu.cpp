@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../headers.h"
+#include "../themes.h"
 
 
 // Function to print ascii

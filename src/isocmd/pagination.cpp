@@ -2,6 +2,7 @@
 
 #include "../headers.h"
 #include "../display.h"
+#include "../themes.h"
 
 
 // Main pagination function

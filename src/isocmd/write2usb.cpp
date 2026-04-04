@@ -5,6 +5,7 @@
 #include "../write.h"
 #include "../readline.h"
 #include "../display.h"
+#include "../themes.h"
 
 
 // Shared progress data
