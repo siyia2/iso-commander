@@ -138,13 +138,21 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         } 
         else if (listType == "MOUNTED_ISOS") {
             auto [dirPart, pathPart, hashPart] = parseMountPointComponents(currentItem);
-            // secondary for dirPart: distinct from both accent (ISO) and highlight (image)
-            output += isOriginal ? blueBold : theme->secondary;
-            output += dirPart;
-            output += isOriginal ? magentaBold : theme->accent;
-            output += pathPart;
-            output += isOriginal ? "\033[38;5;245m" : theme->muted;
-            output += hashPart;
+            
+            // Re-introduced toggle logic
+            if (displayConfig::toggleFullListUmount) {
+                // Show full details: Directory + Path + Hash
+                output += isOriginal ? blueBold : theme->secondary;
+                output += dirPart;
+                output += isOriginal ? magentaBold : theme->accent;
+                output += pathPart;
+                output += isOriginal ? "\033[38;5;245m" : theme->muted;
+                output += hashPart;
+            } else {
+                // Show path only (Simplified view)
+                output += isOriginal ? magentaBold : theme->accent;
+                output += pathPart;
+            }
         }
 
         output += reset;
