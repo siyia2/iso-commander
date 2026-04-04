@@ -16,18 +16,20 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
     std::unordered_set<int> indicesToProcess;
     
     // Handle input ("00" = all files, else parse input)
-    if (input == "00") {
-        for (size_t i = 0; i < files.size(); ++i)
-           indicesToProcess.insert(static_cast<int>(i + 1));
-    } else {
-        tokenizeInput(input, files, uniqueErrorMessages, indicesToProcess);
-        if (indicesToProcess.empty()) {
-            if (isUnmount) {
-                operationBreak = false;
-            }
-            return;
-        }
-    }
+	if (input == "00") {
+		for (size_t i = 0; i < files.size(); ++i) {
+			// Safe to cast i+1 to int as long as files.size() < INT_MAX
+			indicesToProcess.insert(static_cast<int>(i + 1));
+		}
+	} else {
+		tokenizeInput(input, files, uniqueErrorMessages, indicesToProcess);
+		if (indicesToProcess.empty()) {
+			if (isUnmount) {
+				operationBreak = false;
+			}
+			return;
+		}
+	}
     
     // Create selected files vector from indices
     std::vector<std::string> selectedFiles;
