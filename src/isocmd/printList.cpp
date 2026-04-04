@@ -5,8 +5,6 @@
 #include "../filtering.h"
 
 
-std::string globalListTheme = "high_contrast";
-
 
 // Reusable stack buffer — avoid per-iteration heap allocations from std::to_string.
 // format() writes via std::to_chars and returns a string_view into the same buffer,

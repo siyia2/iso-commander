@@ -95,7 +95,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
 			std::cout << "   • Enter \033[1;34m'?config'\033[0m - Display current configuration\n";
             std::cout << "   • Enter \033[1;34m'?stats'\033[0m - Display application statistics\n" << std::endl;
 					
-       std::cout << "\033[1;32m" << "5. Configuration Commands (persistent - saved to config file):\033[0m\n\n";
+		std::cout << "\033[1;32m" << "5. Configuration Commands (persistent - saved to config file):\033[0m\n\n";
        
 		std::cout << "   \033[1;38;5;208mA. Set Max Items/Page (default: 25):\033[0m\n"
           << "      • Enter \033[1;35m'*pagination_{number}'\033[0m (e.g., \033[1;35m'*pagination_50'\033[0m)\n"
