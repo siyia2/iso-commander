@@ -530,13 +530,16 @@ bool& filterHistory, bool& need2Sort, size_t& currentPage)
     const ListTheme* theme = getActiveTheme();
 	const bool isOriginal = (globalListTheme == "original");
 
-	// Determine the theme-aware primary color
+	// Determine the primary color (muted)
 	std::string primaryCol = isOriginal ? "\033[1;94m" : std::string(theme->muted);
 
+	// Determine the extension color (orange if original, theme accent if not)
+	std::string extCol = isOriginal ? "\033[1;38;5;208m" : std::string(theme->accent);
+
 	const std::string prompt =
-		"\001\033[1;96m\002FilterTerms\001" + primaryCol + "\002 ↵ for \001\033[1;38;5;208m\002" +
-		fileExtensionWithOutDots +
-		"\001" + primaryCol + "\002, or ↵ to return: \001\033[0;1m\002";
+		"\001\033[1;96m\002FilterTerms\001" + primaryCol + "\002 ↵ for \001" + 
+		extCol + "\002" + fileExtensionWithOutDots + "\001" + 
+		primaryCol + "\002, or ↵ to return: \001\033[0;1m\002";
 
     // Signal the caller to re-sort after a successful filter, since the
     // filtered subset may arrive in a different order than the original list.

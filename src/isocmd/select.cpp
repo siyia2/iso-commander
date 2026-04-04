@@ -433,11 +433,12 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 		const bool isOriginal = (globalListTheme == "original");
 
 		std::string prompt = (isFiltered ? "\001\033[1;96m\002F⊳ \001" : "\001")
-						   + std::string(isOriginal ? "\033[1;38;5;208m" : theme->highlight) + "\002"
-						   + fileExtensionWithOutDots + "\001"
-						   + std::string(isOriginal ? "\033[1;94m" : theme->muted) + "\002 ↵ for \001"
-						   + std::string(isOriginal ? "\033[1;92m" : theme->accent) + "\002ISO\001"
-						   + std::string(isOriginal ? "\033[1;94m" : theme->muted) + "\002 conversion, ? ↵ for help, < ↵ to return:\001\033[0;1m\002 ";
+                   + std::string(isOriginal ? "\033[1;38;5;208m" : theme->highlight) + "\002"
+                   + fileExtensionWithOutDots + "\001"
+                   + std::string(isOriginal ? "\033[1;94m" : theme->muted) + "\002 ↵ for \001"
+                   + std::string(isOriginal ? "\033[1;92m" : theme->accent) + "\002ISO \001" // Added space here
+                   + "\033[1;38;5;208m\002conversion\001" // Force orange for conversion
+                   + std::string(isOriginal ? "\033[1;94m" : theme->muted) + "\002, ? ↵ for help, < ↵ to return:\001\033[0;1m\002 ";
         
         // Get user input
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);

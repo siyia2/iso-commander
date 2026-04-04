@@ -43,8 +43,19 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
             
             bool isCpMv = false;
             // Prompt the user to enter directory paths for manual database refresh
-            std::string prompt = "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;92m\002.iso\001\033[1;94m\002 entries and import them into the \001\033[1;92m\002local\001\033[1;94m\002 database, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
-            char* rawSearchQuery = readline(prompt.c_str());
+            const ListTheme* theme = getActiveTheme();
+			const bool isOriginal = (globalListTheme == "original");
+
+			std::string prompt = 
+				"\001" + std::string(isOriginal ? "\033[1;92m" : theme->accent) + "\002FolderPaths" +
+				"\001" + std::string(isOriginal ? "\033[1;94m" : theme->muted) + "\002 ↵ to scan for " +
+				"\001" + std::string(isOriginal ? "\033[1;92m" : theme->accent) + "\002.iso" +
+				"\001" + std::string(isOriginal ? "\033[1;94m" : theme->muted) + "\002 entries and import them into the " +
+				"\001" + std::string(isOriginal ? "\033[1;92m" : theme->accent) + "\002local" +
+				"\001" + std::string(isOriginal ? "\033[1;94m" : theme->muted) + "\002 database, ? ↵ for help, ↵ to return:\n" +
+				"\001\033[0;1m\002";
+
+			char* rawSearchQuery = readline(prompt.c_str());
             
             // Handle EOF (Ctrl+D) scenario
             if (!rawSearchQuery) {
@@ -741,10 +752,16 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
     mdfMdsFilesCache.reserve(100);
     nrgFilesCache.reserve(100);
 
-    const std::string prompt =
-        "\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ to scan for \001\033[1;38;5;208m\002" + fileExtension +
-        "\001\033[1;94m\002 entries and load them into \001\033[1;93m\002RAM\001\033[1;94m\002"
-        ", ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
+    const ListTheme* theme = getActiveTheme();
+	const bool isOriginal = (globalListTheme == "original");
+
+	std::string prompt = 
+		"\001" + std::string(isOriginal ? "\033[1;92m" : theme->accent) + "\002FolderPaths" +
+		"\001" + std::string(isOriginal ? "\033[1;94m" : theme->muted) + "\002 ↵ to scan for \001" +
+		std::string(isOriginal ? "\001\033[1;38;5;208m\002" : theme->accent) + fileExtension +
+		"\001" + std::string(isOriginal ? "\033[1;94m" : theme->muted) + "\002 entries and load them into \001" +
+		std::string(isOriginal ? "\033[1;93m" : theme->accent) + "\002RAM\001" + // Yellow/Accent for RAM
+		std::string(isOriginal ? "\033[1;94m" : theme->muted) + "\002, ? ↵ for help, ↵ to return:\n\001\033[0;1m\002";
 
     // --- Helpers ---
     auto initIterationState = [&]() {
