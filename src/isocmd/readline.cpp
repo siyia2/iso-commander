@@ -9,6 +9,47 @@ static int current_page = 0;
 static char last_common_prefix[1024] = "";
 
 
+// List of special commands
+const char* special_cmds[] = {
+    "!clr", "!clr_paths", "!clr_filter", "ls", "?config", "?stats",
+    "*pagination:", "*fl_m", "*cl_m", "*fl_u", "*cl_u", "*cl_mu",
+    "*flno:on", "*flno:off", "*menu:", "*theme:", "*auto:on", "*auto:off",
+    NULL
+};
+
+
+// The Generator (Matches the prefix)
+char* command_generator(const char* text, int state) {
+    static int list_index, len;
+    if (!state) {
+        list_index = 0;
+        len = strlen(text);
+    }
+
+    const char* name;
+    while ((name = special_cmds[list_index++])) {
+        if (strncmp(name, text, len) == 0) {
+            return strdup(name);
+        }
+    }
+    return NULL;
+}
+
+
+// The Dispatcher (The "Auto-Decider")
+char** my_completion_entry(const char* text, int start, int end) {
+    // Silence warnings by casting to void
+    (void)start;
+    (void)end;
+
+    if (text[0] == '!' || text[0] == '?' || text[0] == '*' || (text[0] == 'l')) {
+        return rl_completion_matches(text, command_generator);
+    }
+
+    return nullptr; 
+}
+
+
 // Custom readline completion for displaying matching list in search prompts
 void customListingsFunction(char **matches, int num_matches, int max_length) {
 	
@@ -70,9 +111,11 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
 
     // Find the last occurrence of '/' before the part we're tab-completing
     const char* last_slash = strrchr(base_path, '/');
-    if (last_slash != NULL) {
-        base_len = last_slash - base_path + 1; // Include the slash
-    }
+	if (last_slash != NULL) {
+		base_len = last_slash - base_path + 1;
+	} else {
+		base_len = 0; // No path, it's a command or local file
+	}
 
     // Determine the maximum length of all items
     size_t max_item_length = 0;
