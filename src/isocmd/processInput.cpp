@@ -50,7 +50,7 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
     const size_t poolSize   = pool.threadCount();
     const size_t cap        = isUnmount ? UMOUNT_THREAD_CAP : MOUNT_THREAD_CAP;
 	// Calculate target chunks based on hardware/caps
-	size_t numChunks = std::max(size_t(1), std::min({selectedFiles.size(), cap, poolSize}));
+	size_t numChunks = std::max(size_t(2), std::min({selectedFiles.size(), cap, poolSize}));
 
 	// Enforce the "Max 100 per chunk" rule
 	if ((selectedFiles.size() + numChunks - 1) / numChunks > 100) {
@@ -216,7 +216,7 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
     ThreadPool& pool        = getStaticThreadPool();
 	const size_t poolSize   = pool.threadCount();
 	const size_t cap        = isDelete ? RM_THREAD_CAP : CPMV_THREAD_CAP;
-	const size_t numThreads = std::max(size_t(1), std::min({processedIndices.size(), cap, poolSize}));
+	const size_t numThreads = std::max(size_t(2), std::min({processedIndices.size(), cap, poolSize}));
     
     // Group the files into chunks for parallel processing
     std::vector<std::vector<int>> indexChunks = groupFilesIntoChunksForCpMvRm(processedIndices, isoFiles, numThreads, isDelete);
@@ -405,8 +405,7 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
 	// Create a thread pool and store the futures for each file processing task
     ThreadPool& pool        = getStaticThreadPool();
 	const size_t poolSize   = pool.threadCount();
-	const size_t numThreads = std::max(size_t(1),
-								std::min({processedIndices.size(), CONV_THREAD_CAP, poolSize}));
+	const size_t numThreads = std::max(size_t(2), std::min({processedIndices.size(), CONV_THREAD_CAP, poolSize}));
 	
     // Chunk the processed files into manageable sizes for processing
     std::vector<std::vector<size_t>> indexChunks;
