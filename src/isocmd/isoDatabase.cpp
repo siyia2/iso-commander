@@ -338,7 +338,6 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
 }
 
 
-
 // Function to load ISO database from file
 void loadFromDatabase(std::vector<std::string>& outList) {
     std::lock_guard<std::mutex> fileLock(dbFileMutex);
