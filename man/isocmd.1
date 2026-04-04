@@ -43,7 +43,7 @@ Converts .bin, .img, .mdf, and .nrg files to .iso. Ported from original C tools 
 
 .TP
 .B ImportISO
-Creates and updates a local ISO database. The database is capped at approximately \fB10,000 entries\fR or a \fB1MB file size limit\fR to ensure rapid filtering performance.
+Creates and updates a local ISO database. The database has a maximum file size limit of \fB1MB\fR.
 
 .SH CONFIGURATION
 The configuration file is located at \fI~/.config/isocmd/config\fR. It uses a simple \fIkey = value\fR format.
@@ -128,6 +128,7 @@ Threads allocated for file removal tasks. (Default: 32)
 Threads allocated for UI responsiveness during sorting and filtering. (Default: 4)
 
 .SH FILES
+.I Note: If run with sudo or as the root user, the following paths will be relative to /root/ instead of the current user's home directory.
 .TP
 .I ~/.config/isocmd/config
 Primary configuration file.
