@@ -5,11 +5,6 @@
 #include "../themes.h"
 
 
-// --- Global Cache State ---
-// This stores the configuration in memory to avoid repeated disk reads.
-static std::map<std::string, std::string> g_configCache;
-static std::string g_cachedPath;
-
 /**
  * @struct ConfigEntry
  * @brief Metadata for a single configuration setting.
@@ -83,7 +78,7 @@ static std::string trim(std::string str) {
 /**
  * @brief Logic to write the current configuration state back to disk.
  */
-static bool writeConfig(const std::string& configPath, const std::map<std::string, std::string>& config) {
+bool writeConfig(const std::string& configPath, const std::map<std::string, std::string>& config) {
     std::ofstream outFile(configPath);
     if (!outFile) return false;
 
@@ -137,7 +132,7 @@ static bool ensureDefaults(std::map<std::string, std::string>& configMap, const 
  * @brief Internal helper to ensure the memory cache is ready.
  * Eliminates redundant disk reads by checking if we already have the data.
  */
-static void syncCache(const std::string& filePath) {
+void syncCache(const std::string& filePath) {
     if (g_configCache.empty() || g_cachedPath != filePath) {
         g_configCache = readConfig(filePath);
         ensureDefaults(g_configCache, filePath);

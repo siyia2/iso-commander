@@ -589,53 +589,30 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
 
 // Function to set the AutoUpdate switch in teh config file
 void updateAutoUpdateConfig(const std::string& configPath, const std::string& inputSearch) {
-	signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
-	disable_ctrl_d();
-    // Create directory if it doesn't exist
-    std::filesystem::path dirPath = std::filesystem::path(configPath).parent_path();
-    if (!std::filesystem::exists(dirPath)) {
-        if (!std::filesystem::create_directories(dirPath)) {
-            std::cerr << "\n\033[1;91mFailed to create directory: \033[1;93m'" 
-                    << dirPath.string() << "\033[1;91m'.\033[0;1m\n";
-            std::cout << color << "\n↵ to continue..." << reset;
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            return; // Ensure we exit to avoid unnecessary operations after failure
-        }
-    }
+    signal(SIGINT, SIG_IGN); 
+    disable_ctrl_d();
 
-    // Read the existing configuration (you need to implement this function or replace it)
-    std::map<std::string, std::string> config = readConfig(configPath);
+    // 1. Ensure directories exist
+    fs::path p(configPath);
+    if (!fs::exists(p.parent_path()) && !p.parent_path().empty()) 
+        fs::create_directories(p.parent_path());
 
-    // Update the auto_update setting based on the input
-    config["auto_update"] = (inputSearch == "*auto_on") ? "on" : "off";
+    // 2. Sync memory cache with disk
+    syncCache(configPath);
 
-    // Ensure settings maintain order and are written back to the file
-    std::vector<std::pair<std::string, std::string>> orderedDefaults = {
-        {"auto_update", config["auto_update"]},       // Updated auto_update value
-        {"filenames_only", config["filenames_only"]},         // Existing filenames_only value
-        {"pagination", config["pagination"]},         // Existing pagination value
-        {"mount_list", config["mount_list"]},
-        {"umount_list", config["umount_list"]},
-        {"cp_mv_rm_list", config["cp_mv_rm_list"]},
-        {"write_list", config["write_list"]},
-        {"conversion_lists", config["conversion_lists"]}
-    };
+    // 3. Update the value in the global cache
+    bool isEnabling = (inputSearch == "*auto_on");
+    g_configCache["auto_update"] = isEnabling ? "on" : "off";
 
-    // Write all settings back to file in the correct order
-    std::ofstream outFile(configPath);
-    if (outFile.is_open()) {
-        for (const auto& [key, value] : orderedDefaults) {
-            outFile << key << " = " << value << "\n";
-        }
-        outFile.close();
-
-        // Display the appropriate message based on the action
+    // 4. Use the robust writeConfig function to persist changes
+    // This respects CONFIG_ORDERED_DEFAULTS and keeps your comments/headers intact.
+    if (writeConfig(configPath, g_configCache)) {
         std::cout << "\n\033[0;1mAutomatic background updates have been "
-                << (inputSearch == "*auto_on" ? "\033[1;92menabled" : "\033[1;91mdisabled")
-                << "\033[0;1m.\033[0;1m\n";
+                  << (isEnabling ? "\033[1;92menabled" : "\033[1;91mdisabled")
+                  << "\033[0;1m.\033[0m\n";
     } else {
         std::cerr << "\n\033[1;91mError: Unable to access configuration file: \033[1;93m'"
-                  << configPath << "'\033[1;91m.\033[0;1m\n";
+                  << configPath << "'\033[0m\n";
     }
 
     std::cout << color << "\n↵ to continue..." << reset;
