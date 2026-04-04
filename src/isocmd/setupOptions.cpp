@@ -360,7 +360,7 @@ void updateUIAppearance(const std::string& configPath, const std::string& inputS
 				globalListTheme = value;
 				
 				// Keep existing feedback for Theme
-				std::cout << "\n\033[0;1mUI Theme set to: \033[1;92m" 
+				std::cout << "\n\033[0;1mUI theme set to: \033[1;92m" 
 						  << value << "\033[0;1m.\033[0m\n";
 			}
 		} else {
