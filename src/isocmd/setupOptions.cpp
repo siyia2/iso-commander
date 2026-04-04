@@ -28,7 +28,7 @@ auto isNum = [](const std::string& v, int min, int max) {
  */
 static const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {"auto_update", "off", "Enable background metadata updates from folder path history (on/off)", "General Settings", isOnOff},
-    {"filenames_only", "off", "Display only filenames instead of full paths (on/off)", "", isOnOff},
+    {"filenames_only", "on", "Display only filenames instead of full paths (on/off)", "", isOnOff},
     {"pagination", "25", "Items per page in list view (0 to disable)", "", [](const std::string& v){ return isNum(v, 0, 1000); }},
     
     {"folder_path_history_lines", "30", "Max unique folder paths to persist in history", "History Settings", [](const std::string& v){ return isNum(v, 1, 5000); }},
@@ -176,11 +176,11 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
     std::map<std::string, std::string> configMap = readConfig(filePath);
     ensureDefaults(configMap, filePath);
 
-    displayConfig::toggleFullListMount = (configMap["mount_list"] == "compact");
-    displayConfig::toggleFullListUmount = (configMap["umount_list"] == "full");
-    displayConfig::toggleFullListCpMvRm = (configMap["cp_mv_rm_list"] == "compact");
-    displayConfig::toggleFullListWrite = (configMap["write_list"] == "compact");
-    displayConfig::toggleFullListConversions = (configMap["conversion_lists"] == "compact");
+    displayConfig::toggleFullListMount       = (configMap["mount_list"]       == "full");
+	displayConfig::toggleFullListUmount      = (configMap["umount_list"]      == "full"); // already correct
+	displayConfig::toggleFullListCpMvRm      = (configMap["cp_mv_rm_list"]    == "full");
+	displayConfig::toggleFullListWrite       = (configMap["write_list"]       == "full");
+	displayConfig::toggleFullListConversions = (configMap["conversion_lists"] == "full");
     displayConfig::toggleNamesOnly = (configMap["filenames_only"] == "on");
 
     applyThreadCapsAndHistoryLimits(configMap);
