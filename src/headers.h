@@ -81,6 +81,8 @@ inline std::unordered_map<std::string, std::tuple<std::string, std::string, std:
 inline std::vector<std::string> binImgFilesCache;
 inline std::vector<std::string> mdfMdsFilesCache;
 inline std::vector<std::string> nrgFilesCache;
+inline std::map<std::string, std::string> g_configCache;
+inline std::string g_cachedPath;
 
 // File Paths
 inline const std::string databaseDirectory = std::string(std::getenv("HOME") ? std::getenv("HOME") : "") + "/.local/share/isocmd/database/";
@@ -104,6 +106,7 @@ inline bool needSortingAfterflno			   = false;
 inline size_t ITEMS_PER_PAGE                   = 25;
 inline int lockFileDescriptor                  = -1;
 
+
 //==============================
 // ISO COMMANDER FUNCTIONS
 //==============================
@@ -123,6 +126,7 @@ bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered
 bool handleFilteringForISO(const std::string& inputString, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, const std::string& operation, const std::string& operationColor, const std::vector<std::string>& isoDirs, bool isUnmount, size_t& currentPage);
 bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, const bool& blacklistNrg);
 bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex);
+bool writeConfig(const std::string& configPath, const std::map<std::string, std::string>& config);
 
 //------------------
 // Integer Functions
@@ -148,6 +152,7 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
 void displayErrors(std::unordered_set<std::string>& uniqueErrorMessages);
 void setDisplayMode(const std::string& inputSearch);
 void updateFilenamesOnly(const std::string& configPath, const std::string& inputSearch);
+void syncCache(const std::string& filePath);
 
 //------------------
 // Void Functions (Input Handling)
