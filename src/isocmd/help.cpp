@@ -47,7 +47,7 @@ void helpSelections() {
               << "   • If filtering has no matches, no message or list update is issued\n" << std::endl;
               
     // Prompt to continue
-    std::cout << color << "\033[1;32m↵ to return..." << reset;
+    std::cout << color << "↵ to return..." << reset;
     
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
@@ -121,7 +121,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
     }
     
     // Prompt to continue
-    std::cout << color << "\033[1;32m↵ to return..." << reset;
+    std::cout << color << "↵ to return..." << reset;
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
@@ -151,6 +151,6 @@ void helpMappings() {
               << "   • USB detection relies on '/sys/class/block/sd*/removable' kernel value\n" << std::endl;
                
     // Prompt to continue
-    std::cout << color << "\033[1;32m↵ to return..." << reset;
+    std::cout << color << "↵ to return..." << reset;
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
