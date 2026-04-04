@@ -104,6 +104,35 @@ inline bool needSortingAfterflno			   = false;
 inline size_t ITEMS_PER_PAGE                   = 25;
 inline int lockFileDescriptor                  = -1;
 
+// Menu Themes
+extern std::string color;
+extern  std::string globalMenuTheme; 
+inline std::string reset = "\033[0;1m";
+
+inline std::string getThemeColor() {
+    // Now globalTheme is recognized as a string
+    return (globalMenuTheme == "blue")  ? "\033[1;38;2;23;147;209m" : 
+           (globalMenuTheme == "white") ? "\033[1;38;5;250m"            : 
+                                      "\033[1;32m";
+}
+
+// List Themes
+extern std::string globalListTheme;
+
+struct ListTheme {
+    std::string_view primary;
+    std::string_view secondary;
+    std::string_view accent;
+    std::string_view muted;
+    std::string_view highlight;
+};
+
+inline ListTheme OriginalTheme = {"\033[1;38;5;94m", "\033[31;1m", "\033[32;1m", "\033[38;5;245m", "\033[1;93m"};
+inline ListTheme ClassicTheme  = {"\033[1;38;5;94m", "\033[31;1m", "\033[95;1m", "\033[38;5;246m", "\033[1;93m"};
+inline ListTheme HighContrast  = {"\033[1;37m", "\033[1;33m", "\033[1;36m", "\033[38;5;250m", "\033[1;32m"};
+inline ListTheme NeonTheme     = {"\033[38;5;199m", "\033[38;5;39m", "\033[38;5;82m", "\033[38;5;248m", "\033[38;5;226m"};
+
+
 //==============================
 // ISO COMMANDER FUNCTIONS
 //==============================
