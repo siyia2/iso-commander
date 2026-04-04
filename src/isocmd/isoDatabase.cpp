@@ -690,6 +690,7 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
     } else if (inputSearch == "*auto_on" || inputSearch == "*auto_off") {
         updateAutoUpdateConfig(configPath, inputSearch);
     } else if (inputSearch == "*flno_on" || inputSearch == "*flno_off") {
+		needSortingAfterflno = true;
 		updateFilenamesOnly(configPath, inputSearch);
 	} else if (inputSearch.substr(0, 12) == "*pagination_") {
         updatePagination(inputSearch, configPath);

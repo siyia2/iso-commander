@@ -73,6 +73,12 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
 
             sortFilesCaseInsensitive(globalIsoFileList);
         }
+        
+        // To fix sorting order when changing to filename_only lists from within the program
+        if (needSortingAfterflno) {
+			sortFilesCaseInsensitive(globalIsoFileList);
+			needSortingAfterflno = false;
+		}
 
         if (umountMvRmBreak) {
             filteringStack.clear();
@@ -189,7 +195,7 @@ void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string
     : files;
             
     if (!list) {
-		if (need2Sort) {
+		if (need2Sort || needSortingAfterflno) {
 			sortFilesCaseInsensitive(files); // Sort the files case-insensitively
 				if (fileType == "bin" || fileType == "img") {
 					std::lock_guard<std::mutex> lock(binImgCacheMutex);
@@ -202,8 +208,9 @@ void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string
 					sortFilesCaseInsensitive(nrgFilesCache);
 				}
 			}
-
+			
 			need2Sort = false;
+			needSortingAfterflno = false;
 	}
 	
     printList(files, "IMAGE_FILES", "conversions", pendingIndices, hasPendingProcess, isFiltered, currentPage, isImportRunning); // Print the current list of files
