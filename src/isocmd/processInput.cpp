@@ -397,7 +397,7 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
     if (processedIndices.empty()) {
         clearScrollBuffer();  // Clear the screen buffer
         std::cout << "\n\033[1;91mNo valid input provided.\033[1;91m\n";  // Error message
-        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";  // Wait for user input to continue
+        std::cout << color << "\n↵ to continue..." << reset;
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');  // Ignore input
         needsClrScrn = true;  // Set flag for screen clearing
         return;

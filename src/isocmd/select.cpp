@@ -14,7 +14,7 @@ void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMes
     if (!uniqueErrorMessages.empty() && operationFiles.empty() && operationFails.empty() && skippedMessages.empty()) {
         clearScrollBuffer();
         needsClrScrn = true;
-        std::cout << "\n\033[1;91mNo valid input provided.\033[0;1m\n\n\033[1;32m↵ to continue...\033[0;1m";
+        std::cout << "\n\033[1;91mNo valid input provided.\033[0;1m\n\n" << color << "↵ to continue..." << reset;
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     } else if (verbose) {
         clearScrollBuffer();
@@ -35,7 +35,7 @@ void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMes
         clearScrollBuffer();
         needsClrScrn = true;
         std::cout << "\n\033[1;93mNo ISO available for " << operation << ".\033[0m\n\n";
-        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+        std::cout << color << "\n↵ to continue..." << reset;
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         return;
     }

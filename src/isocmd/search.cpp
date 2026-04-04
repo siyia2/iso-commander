@@ -204,7 +204,7 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
         }
     } catch (const std::exception& e) {
         std::cerr << "\n\033[1;91mUnable to access ISO database: " << e.what() << std::endl;
-        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+        std::cout << color << "\n↵ to continue..." << reset; 
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         std::string dummyDir = "";
         refreshForDatabase(dummyDir, promptFlag, maxDepth, filterHistory, newISOFound);
@@ -320,7 +320,7 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
         
         // Notify the user that no files of the specified type are stored in RAM
         std::cout << "\n\033[1;93mNo " << fileExtension << " entries stored in RAM.\033[1m\n";
-        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+        std::cout << color << "\n↵ to continue..." << reset; 
         
         // Wait for the user to press Enter before continuing
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -407,7 +407,7 @@ void clearRamCache(bool& modeMdf, bool& modeNrg) {
         std::cout << "\n\033[1;92m" << cacheType << " buffer cleared.\033[0;1m\n";
     }
 
-    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+    std::cout << color << "\n↵ to continue..." << reset; 
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     clearScrollBuffer();
 }

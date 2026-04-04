@@ -6,7 +6,7 @@
 
 // Print the version number of the program
 void printVersionNumber(const std::string& version) {	
-    std::cout << "\x1B[32mIso Commander v" << version << "\x1B[0m\n"; // Output the version number in green color
+    std::cout << "\x1B[1mIso Commander v" << version << "\x1B[0m\n"; // Output the version number in green color
 }
 
 

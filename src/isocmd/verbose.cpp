@@ -80,7 +80,7 @@ void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_se
         }
     }
     
-    std::cout << "\033[1;32m↵ to continue...\033[0;1m";  
+    std::cout << color << "↵ to continue..." << reset; 
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
@@ -243,7 +243,7 @@ void verboseForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_
 		std::cout << "\n\033[1;92mDatabase Refresh: [\033[1;95m" << result << " ISO imported\033[1;92m]\033[0;1m\n";
 	}
 
-    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+    std::cout << color << "\n↵ to continue..." << reset; 
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     std::string initialDir = ""; // Create a std::string object
 	refreshForDatabase(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
@@ -323,7 +323,7 @@ void verboseSearchResults(const std::string& fileExtension, std::unordered_set<s
     auto total_elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count();
     std::cout << "\033[1mTime Elapsed: " << std::fixed << std::setprecision(1) << total_elapsed_time << " seconds\033[0;1m\n\n";
     
-    std::cout << "\033[1;32m↵ to continue...\033[0;1m";
+    std::cout << color << "↵ to continue..." << reset; 
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     clearScrollBuffer();
     return;

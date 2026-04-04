@@ -307,7 +307,7 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<s
         
         signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
 		disable_ctrl_d();
-		std::cout << "\n\033[1;92m↵ to " << (!permissions ? "try again..." : "continue...") << "\033[0;1m";
+		std::cout << color << "\n↵ to " << (!permissions ? "try again..." : "continue...") << reset;
 		if (permissions) permissions = false;
         
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -432,7 +432,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         
         if ((selectedIsos.size() > ITEMS_PER_PAGE) && !(ITEMS_PER_PAGE <= 0)) {
 			std::cout << "\n\033[1;91mISO selections for \033[1;93mwrite\033[1;91m cannot exceed the current pagination limit of \033[1;93m" << ITEMS_PER_PAGE << "\033[1;91m!\033[0;1m\n";
-			std::cout << "\n\033[1;92m↵ to try again...\033[0;1m";
+			std::cout << color << "\n↵ to try again..." << reset; 
 			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 			return {};
 		}
@@ -445,17 +445,32 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             return a.size > b.size; // Compare numeric sizes directly
         });
 
-        // Build device prompt with sorted ISOs
-        std::ostringstream devicePromptStream;
-        devicePromptStream << "\n\033[0;1mSelected \033[1;92mISO\033[0;1m:\n\n";
-        for (size_t i = 0; i < sortedIsos.size(); ++i) {
-            auto [isoDir, filename] = extractDirectoryAndFilename(sortedIsos[i].path, "write");
-            devicePromptStream << "  \033[1;93m" << (i+1) << ">\033[0;1m " 
-                               << (!displayConfig::toggleNamesOnly ? isoDir + "/\033[1;95m" : "\033[1;95m" ) 
-                               << filename 
-                               << "\033[0;1m (\033[1;35m" << sortedIsos[i].sizeStr 
-                               << "\033[0;1m)\n";
-        }
+		const ListTheme* theme;
+
+		if      (globalListTheme == "original")       theme = &OriginalTheme;
+		else if (globalListTheme == "classic")        theme = &ClassicTheme;
+		else if (globalListTheme == "high_contrast")  theme = &HighContrast;
+		else if (globalListTheme == "neon")   		  theme = &NeonTheme;
+		// Build device prompt with sorted ISOs
+		std::ostringstream devicePromptStream;
+		devicePromptStream << "\n" << reset << "Selected " << theme->accent << "ISO" << reset << ":\n\n";
+
+		for (size_t i = 0; i < sortedIsos.size(); ++i) {
+			auto [isoDir, filename] = extractDirectoryAndFilename(sortedIsos[i].path, "write");
+			
+			// Index (e.g., 1>)
+			devicePromptStream << "  " << theme->secondary << (i + 1) << ">" << reset << " ";
+			
+			// Path / Directory
+			if (!displayConfig::toggleNamesOnly) {
+				devicePromptStream << theme->muted << isoDir << "/";
+			}
+			
+			// Filename and Size
+			devicePromptStream << theme->accent << filename 
+							   << reset << " (" << theme->highlight << sortedIsos[i].sizeStr 
+							   << reset << ")\n";
+		}
 
         // Process and sort USB devices by capacity
         devicePromptStream << "\n\033[0;1mRemovable USB Devices:\033[0;1m\n\n";
@@ -560,7 +575,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                 std::cerr << "  • " << err << "\n";
             }
             
-            std::cout << "\n\033[1;92m↵ to try again...\033[0;1m";
+            std::cout << color << "\n↵ to try again..." << reset;
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             continue;
         }
@@ -603,7 +618,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         restoreReadline();
         
         std::cout << "\n\033[1;93mWrite operation aborted by user.\033[0;1m\n";
-        std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+        std::cout << color << "\n↵ to continue..." << reset;
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     }
 }
@@ -807,7 +822,7 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
     performWriteOperation(validPairs);
     signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
 	disable_ctrl_d();
-    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+    std::cout << color << "\n↵ to continue..." << reset;
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 

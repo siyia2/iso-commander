@@ -104,107 +104,111 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
 
 // Function that handles all pagination logic for selected entries in Cp/Mv
 std::string handlePaginatedDisplay(const std::vector<std::string>& entries, std::unordered_set<std::string>& uniqueErrorMessages, const std::string& promptPrefix, const std::string& promptSuffix, const std::function<void()>& setupEnvironmentFn, bool& isPageTurn) {
+    
+    // 1. Theme Selection
+    const ListTheme* theme;
+
+    if      (globalListTheme == "original")      theme = &OriginalTheme;
+	else if (globalListTheme == "classic")       theme = &ClassicTheme;
+	else if (globalListTheme == "high_contrast") theme = &HighContrast;
+	else if (globalListTheme == "neon")          theme = &NeonTheme;
+	else                                         theme = &OriginalTheme; // default
+
+    static constexpr std::string_view reset = "\033[0m";
+
     // Determine whether pagination is needed
     bool disablePagination = (ITEMS_PER_PAGE <= 0 || entries.size() <= ITEMS_PER_PAGE);
     
-    // Calculate total pages (if pagination is enabled)
-    size_t totalPages = disablePagination ? 1 : ((entries.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE);
-    size_t currentPage = 0; // Start at the first page
-    size_t totalEntries = entries.size(); // Total number of items
+    // Calculate total pages
+    size_t totalEntries = entries.size();
+    size_t totalPages = disablePagination ? 1 : ((totalEntries + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE);
+    size_t currentPage = 0; 
 
     while (true) {
-        // Call the setup function if provided (e.g., to clear screen, set terminal settings)
         if (setupEnvironmentFn) {
             setupEnvironmentFn();
         }
 
-        // Calculate the range of items to display for the current page
         size_t start = disablePagination ? 0 : (currentPage * ITEMS_PER_PAGE);
         size_t end = disablePagination ? totalEntries : std::min(start + ITEMS_PER_PAGE, totalEntries);
 
-        // Clear the scroll buffer (for terminal output)
         clearScrollBuffer();
-
-        // Display any accumulated error messages before showing the entries
         displayErrors(uniqueErrorMessages);
 
         std::ostringstream pageContent;
 
-        // Display pagination info if applicable
+        // 2. Themed Header Construction
         if (!disablePagination) {
-            pageContent << "\033[1;38;5;94mPage \033[38;5;37;1m" << (currentPage + 1) << "\033[1;38;5;94m/\033[1;93m" << totalPages
-                        << "\033[1;38;5;94m (Items (\033[38;5;37;1m" << (start + 1) << "-" << end << "\033[1;38;5;94m)/\033[1;93m" << totalEntries << "\033[1;38;5;94m)"
-                        << "\033[0m\n\n";
+            pageContent << theme->primary << "Page " 
+                        << theme->accent << (currentPage + 1) 
+                        << theme->primary << " / " 
+                        << theme->highlight << totalPages
+                        << theme->primary << " | Total: "
+                        << theme->highlight << totalEntries
+                        << theme->primary << " (Items " 
+                        << theme->accent << (start + 1) << "-" << end 
+                        << theme->primary << ")"
+                        << reset << "\n\n";
         }
 
-        // Append entries for the current page to the output
+        // Append pre-formatted entries
         for (size_t i = start; i < end; ++i) {
             pageContent << entries[i];
         }
 
-        // If pagination is enabled, show navigation options
+        // 3. Themed Navigation Footer
         if (!disablePagination && totalPages > 1) {
-            pageContent << "\n\033[1;38;5;94mPagination: ";
-            if (currentPage > 0) pageContent << "[p] ↵ Previous | ";
+            pageContent << "\n" << theme->primary << "Pagination: ";
+            if (currentPage > 0) pageContent << "[p] ↵ Prev | ";
             if (currentPage < totalPages - 1) pageContent << "[n] ↵ Next | ";
-            pageContent << "[g<num>] ↵ Go to | \033[0m\n";
+            pageContent << "[g<num>] ↵ Goto" << reset << "\n";
         }
 
-        // Construct the prompt with the current page content
+        // Construct the prompt
         std::string prompt = promptPrefix + pageContent.str() + promptSuffix;
 
-        // Read user input using readline (allocates memory, needs to be freed)
+        // 4. Read User Input
         std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
 
-        // If readline returns null (e.g., CTRL+D), return a special signal
         if (!input.get()) {
             return "EOF_SIGNAL";
         }
 
-        std::string userInput = trimWhitespace(input.get()); // Remove leading/trailing whitespace
+        std::string userInput = trimWhitespace(input.get());
 
-        // Process navigation commands
+        // Process navigation
         if (!userInput.empty()) {
             bool isNavigation = false;
 
-            // Check if user input is a page jump command (e.g., "g2" to go to page 2)
             if (userInput.size() >= 2 && userInput[0] == 'g' && std::isdigit(userInput[1])) {
                 try {
-                    size_t requestedPage = std::stoul(userInput.substr(1)); // Extract page number
+                    size_t requestedPage = std::stoul(userInput.substr(1));
                     isPageTurn = true;
                     isNavigation = true;
                     if (requestedPage >= 1 && requestedPage <= totalPages) {
-                        currentPage = requestedPage - 1; // Convert to zero-based index
+                        currentPage = requestedPage - 1;
                     }
-                } catch (const std::exception&) {
+                } catch (...) {
                     isPageTurn = true;
                     isNavigation = true;
                 }
             }
-            // Move to the next page
             else if (userInput == "n") {
                 isPageTurn = true;
                 isNavigation = true;
-                if (currentPage < totalPages - 1) {
-                    currentPage++;
-                }
+                if (currentPage < totalPages - 1) currentPage++;
             }
-            // Move to the previous page
             else if (userInput == "p") {
                 isPageTurn = true;
                 isNavigation = true;
-                if (currentPage > 0) {
-                    currentPage--;
-                }
+                if (currentPage > 0) currentPage--;
             }
 
-            // If navigation occurred, restart the loop to display the new page
             if (isNavigation) {
                 continue;
             }
         }
 
-        // If no navigation was performed, return the user input for further processing
         isPageTurn = false;
         return userInput;
     }

@@ -93,7 +93,7 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
 
     if (isEmpty) {
         std::cout << "\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n";
-        std::cout << "\n\033[1;32m↵ to return...\033[0;1m";
+        std::cout << color << "\n↵ to return..." << reset;
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         return false;
     }
@@ -152,7 +152,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
     if (isoDirs.empty()) {
         clearScrollBuffer();
         std::cerr << "\n\033[1;93mNo paths matching the '/mnt/iso_{name}' pattern found.\033[0m\033[0;1m\n";
-        std::cout << "\n\033[1;32m↵ to return...\033[0m\033[0;1m";
+        std::cout << color << "\n↵ to return..." << reset;
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         std::vector<std::string>().swap(isoDirs); // De-allocate memory for static vector
         std::unordered_map<std::string, std::tuple<std::string, std::string, std::string>>().swap(cachedParsesForUmount); //De-allocate memory map when no mounpoints exist

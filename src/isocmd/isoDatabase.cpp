@@ -255,39 +255,53 @@ std::vector<std::string> hierarchicalPathReduction(const std::vector<std::string
 
 // Function to auto-import ISO files in cache without blocking the UI
 void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
-    struct RunningGuard {
-        std::atomic<bool>& flag;
-        ~RunningGuard() { flag.store(false, std::memory_order_release); }
-    } guard{isImportRunning};
-
-    // ── Read history paths ────────────────────────────────────────────────
     std::vector<std::string> paths;
+    int localMaxDepth = -1;
+    bool localPromptFlag = false;
+    
+    // Read paths from file
     {
         std::ifstream file(historyFilePath);
-        if (!file.is_open()) return;
-
+        if (!file.is_open()) {
+            isImportRunning.store(false);
+            return;
+        }
         std::string line;
         while (std::getline(file, line)) {
             std::istringstream iss(line);
             std::string path;
             while (std::getline(iss, path, ';')) {
                 if (!path.empty() && path[0] == '/') {
-                    if (path.back() != '/') path += '/';
-                    if (std::find(paths.begin(), paths.end(), path) == paths.end())
+                    if (path.back() != '/') {
+                        path += '/';
+                    }
+                    if (std::find(paths.begin(), paths.end(), path) == paths.end()) {
                         paths.push_back(path);
+                    }
                 }
             }
         }
     }
-
+    
+    // Exclude root path '/' only when there are other paths
     if (paths.size() > 1) {
         auto it = std::find(paths.begin(), paths.end(), "/");
-        if (it != paths.end()) paths.erase(it);
+        if (it != paths.end()) {
+            paths.erase(it);
+        }
     }
-
+    
+    // Apply path generalization
     std::vector<std::string> finalPaths = hierarchicalPathReduction(paths);
-    if (finalPaths.empty()) return;
-
+    
+    
+    // Set up data structures for processing
+    std::vector<std::string> allIsoFiles;
+    std::atomic<size_t> totalFiles{0};
+    std::unordered_set<std::string> uniqueErrorMessages;
+    std::mutex processMutex;
+    std::mutex traverseErrorMutex;
+    
     // ── Build the I/O thread pool ─────────────────────────────────────────
     const size_t hwThreads  = static_cast<size_t>(maxThreads);
     const size_t ioMultiple = 2;
@@ -297,44 +311,31 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
 			static_cast<size_t>(hwThreads * ioMultiple),
 			static_cast<size_t>(ioCap)
 	});
-
+	
     ThreadPool pool(numThreads);
-
-    // ── Traverse directories ──────────────────────────────────────────────
-    std::vector<std::string> allIsoFiles;
-    std::atomic<size_t>      totalFiles{0};
-    std::unordered_set<std::string> uniqueErrorMessages;
-    std::mutex processMutex;
-    std::mutex traverseErrorMutex;
-    int  localMaxDepth   = -1;
-    bool localPromptFlag = false;
-
-    {
-        std::vector<std::future<void>> futures;
-        futures.reserve(finalPaths.size());
-
-        for (const auto& path : finalPaths) {
-            if (isValidDirectory(path)) {
-                futures.emplace_back(pool.enqueue([&, path]() {
-                    traverse(path, allIsoFiles, uniqueErrorMessages,
-                             totalFiles, processMutex, traverseErrorMutex,
-                             localMaxDepth, localPromptFlag);
-                }));
-            }
-        }
-
-        for (auto& f : futures) {
-            try { f.get(); }
-            catch (const std::exception& e) {
-                std::lock_guard<std::mutex> lk(traverseErrorMutex);
-                uniqueErrorMessages.insert(e.what());
-            }
+    std::vector<std::future<void>> futures;
+    
+    // Enqueue tasks for each valid directory
+    for (const auto& path : finalPaths) {
+        if (isValidDirectory(path)) {
+            futures.emplace_back(pool.enqueue([&, path]() {
+                traverse(path, allIsoFiles, uniqueErrorMessages,
+                         totalFiles, processMutex, traverseErrorMutex,
+                         localMaxDepth, localPromptFlag);
+            }));
         }
     }
+    
+    // Wait for all tasks to complete
+    for (auto& future : futures) {
+        future.wait();
+    }
 
-    // ── Persist new findings ──────────────────────────────────────────────
+    
     saveToDatabase(allIsoFiles, newISOFound);
+    isImportRunning.store(false);
 }
+
 
 
 // Function to load ISO database from file

@@ -8,12 +8,45 @@
 std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>& indexChunks, const std::vector<std::string>& isoFiles) {
     std::vector<std::string> entries;
 
+    // --- Theme Selection (Matches printList) ---
+    const ListTheme* theme;
+
+    if      (globalListTheme == "original")      theme = &OriginalTheme;
+	else if (globalListTheme == "classic")       theme = &ClassicTheme;
+	else if (globalListTheme == "high_contrast") theme = &HighContrast;
+	else if (globalListTheme == "neon")          theme = &NeonTheme;
+	else                                         theme = &OriginalTheme; // default
+
+    static constexpr std::string_view reset = "\033[0m";
+    static constexpr std::string_view bold = "\033[1m";
+
     for (const auto& chunk : indexChunks) {
         for (int index : chunk) {
+            // Index safety: assume 1-based indexing from user input
+            if (index <= 0 || static_cast<size_t>(index) > isoFiles.size()) continue;
+
             auto [isoDir, filename] = extractDirectoryAndFilename(isoFiles[index - 1], "cp_mv_rm");
-            std::ostringstream oss;
-            oss << "\033[1m-> " << (!displayConfig::toggleNamesOnly ? isoDir + "/\033[1;95m" : "\033[1;95m") << filename << "\033[0m\n";
-            entries.push_back(oss.str());
+            
+            std::string entry;
+            // Pre-allocate: ~50 chars for ANSI codes + path length
+            entry.reserve(isoDir.length() + filename.length() + 64);
+
+            // Structure: [Bold]-> [Muted]Path/ [Accent]Filename [Reset]
+            entry += bold;
+            entry += "-> ";
+
+            if (!displayConfig::toggleNamesOnly) {
+                entry += theme->muted;
+                entry.append(isoDir);
+                entry += "/";
+            }
+
+            entry += theme->accent;
+            entry.append(filename);
+            entry += reset;
+            entry += '\n';
+
+            entries.push_back(std::move(entry));
         }
     }
 

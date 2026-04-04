@@ -3,6 +3,9 @@
 #include "../headers.h"
 
 
+std::string color = getThemeColor();
+std::string globalMenuTheme = "blue"; 
+
 // Function to print ascii
 void print_ascii() {
     // Display ASCII art
@@ -35,21 +38,23 @@ void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, s
 		isAtISOList.store(false);
 		
         clearScrollBuffer();
-        std::cout << "\033[1;32m+-------------------------+\n";
-        std::cout << "\033[1;32m|↵ Manage ISO              |\n";
-        std::cout << "\033[1;32m+-------------------------+\n";
-        std::cout << "\033[1;32m|1. Mount                 |\n";
-        std::cout << "\033[1;32m+-------------------------+\n";
-        std::cout << "\033[1;32m|2. Umount                |\n";
-        std::cout << "\033[1;32m+-------------------------+\n";
-        std::cout << "\033[1;32m|3. Delete                |\n";
-        std::cout << "\033[1;32m+-------------------------+\n";
-        std::cout << "\033[1;32m|4. Move                  |\n";
-        std::cout << "\033[1;32m+-------------------------+\n";
-        std::cout << "\033[1;32m|5. Copy                  |\n";
-        std::cout << "\033[1;32m+-------------------------+\n";
-        std::cout << "\033[1;32m|6. Write                 |\n";
-        std::cout << "\033[1;32m+-------------------------+\n";
+
+		// Print the menu using the dynamic color
+		std::cout << color << "+-------------------------+\n";
+		std::cout << "|↵ Manage ISO             |\n";
+		std::cout << "+-------------------------+\n";
+		std::cout << "|1. Mount                 |\n";
+		std::cout << "+-------------------------+\n";
+		std::cout << "|2. Umount                |\n";
+		std::cout << "+-------------------------+\n";
+		std::cout << "|3. Delete                |\n";
+		std::cout << "+-------------------------+\n";
+		std::cout << "|4. Move                  |\n";
+		std::cout << "+-------------------------+\n";
+		std::cout << "|5. Copy                  |\n";
+		std::cout << "+-------------------------+\n";
+		std::cout << "|6. Write                 |\n";
+		std::cout << "+-------------------------+" << reset << std::endl;
         std::cout << "\n";
         char* rawInput = readline("\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
 
@@ -118,15 +123,16 @@ void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning
 		rl_bind_key('\t', prevent_readline_keybindings);
 		
 		clearScrollBuffer();
-		std::cout << "\033[1;32m+-------------------------+\n";
-		std::cout << "\033[1;32m|↵ Convert2ISO             |\n";
-		std::cout << "\033[1;32m+-------------------------+\n";
-        std::cout << "\033[1;32m|1. CCD2ISO++             |\n";
-        std::cout << "\033[1;32m+-------------------------+\n";
-        std::cout << "\033[1;32m|2. MDF2ISO++             |\n";
-        std::cout << "\033[1;32m+-------------------------+\n";
-        std::cout << "\033[1;32m|3. NRG2ISO++             |\n";
-        std::cout << "\033[1;32m+-------------------------+\n";
+		
+		std::cout << color << "+-------------------------+\n";
+		std::cout << "|↵ Convert2ISO            |\n";
+		std::cout << "+-------------------------+\n";
+		std::cout << "|1. CCD2ISO++             |\n";
+		std::cout << "+-------------------------+\n";
+		std::cout << "|2. MDF2ISO++             |\n";
+		std::cout << "+-------------------------+\n";
+		std::cout << "|3. NRG2ISO++             |\n";
+		std::cout << "+-------------------------+" << reset << std::endl;
         std::cout << "\n";
         char* rawInput = readline("\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
 
@@ -174,18 +180,19 @@ void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning
 
 // Function to print menu
 void printMenu() {
-    std::cout << "\033[1;32m+-------------------------+\n";
-    std::cout << "\033[1;32m|       Menu Options       |\n";
-    std::cout << "\033[1;32m+-------------------------+\n";
-    std::cout << "\033[1;32m|1. ManageISO             |\n";
-    std::cout << "\033[1;32m+-------------------------+\n";
-    std::cout << "\033[1;32m|2. Convert2ISO           |\n";
-    std::cout << "\033[1;32m+-------------------------+\n";
-    std::cout << "\033[1;32m|3. ImportISO             |\n";
-    std::cout << "\033[1;32m+-------------------------+\n";
-    std::cout << "\033[1;32m|4. Exit                  |\n";
-    std::cout << "\033[1;32m+-------------------------+";
-    std::cout << "\n";
+
+	std::cout << color << "+-------------------------+\n";
+	std::cout << "|       Menu Options      |\n";
+	std::cout << "+-------------------------+\n";
+	std::cout << "|1. ManageISO             |\n";
+	std::cout << "+-------------------------+\n";
+	std::cout << "|2. Convert2ISO           |\n";
+	std::cout << "+-------------------------+\n";
+	std::cout << "|3. ImportISO             |\n";
+	std::cout << "+-------------------------+\n";
+	std::cout << "|4. Exit                  |\n";
+	std::cout << "+-------------------------+";
+	std::cout << "\n";
 }
 
 
