@@ -4,6 +4,7 @@
 #include "../display.h"
 #include "../threadpool.h"
 #include "../filtering.h"
+#include "../themes.h"
 
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -482,10 +483,16 @@ const std::string& operationColor, const std::vector<std::string>& isoDirs, bool
         displayConfig::toggleFullListUmount
     };
 
-    const std::string prompt =
-        "\001\033[1;96m\002FilterTerms\001\033[1;94m\002 ↵ for \001" +
-        operationColor + "\002" + operation +
-        "\001\033[1;94m\002, or ↵ to return: \001\033[0;1m\002";
+	const ListTheme* theme = getActiveTheme();
+	const bool isOriginal = (globalListTheme == "original");
+
+	// Use theme color for the connectors/standard text
+	std::string primaryCol = isOriginal ? "\033[1;94m" : std::string(theme->muted);
+
+	const std::string prompt =
+		"\001\033[1;96m\002FilterTerms\001" + primaryCol + "\002 ↵ for \001" +
+		operationColor + "\002" + operation +
+		"\001" + primaryCol + "\002, or ↵ to return: \001\033[0;1m\002";
 
     auto onEmptyInput = [&]() {
         clear_history();
@@ -520,10 +527,16 @@ bool& filterHistory, bool& need2Sort, size_t& currentPage)
     const bool isInteractive   = (mainInputString == "/");
     const std::string quickPat = isInteractive ? "" : mainInputString.substr(1);
 
-    const std::string prompt =
-        "\001\033[1;96m\002FilterTerms\001\033[1;94m\002 ↵ for \001\033[1;38;5;208m\002" +
-        fileExtensionWithOutDots +
-        "\001\033[1;94m\002, or ↵ to return: \001\033[0;1m\002";
+    const ListTheme* theme = getActiveTheme();
+	const bool isOriginal = (globalListTheme == "original");
+
+	// Determine the theme-aware primary color
+	std::string primaryCol = isOriginal ? "\033[1;94m" : std::string(theme->muted);
+
+	const std::string prompt =
+		"\001\033[1;96m\002FilterTerms\001" + primaryCol + "\002 ↵ for \001\033[1;38;5;208m\002" +
+		fileExtensionWithOutDots +
+		"\001" + primaryCol + "\002, or ↵ to return: \001\033[0;1m\002";
 
     // Signal the caller to re-sort after a successful filter, since the
     // filtered subset may arrive in a different order than the original list.
