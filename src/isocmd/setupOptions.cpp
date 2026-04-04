@@ -2,6 +2,7 @@
 
 #include "../headers.h"
 #include "../display.h"
+#include "../themes.h"
 
 
 /**
@@ -48,7 +49,19 @@ static const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {"threads_for_database_cleanup", "16", "Threads allocated for DB maintenance", "", [](const std::string& v){ return isNum(v, 1, 128); }},
     {"threads_for_rm", "32", "Threads allocated for removal tasks", "", [](const std::string& v){ return isNum(v, 1, 128); }},
     {"threads_for_list_sorting", "4", "Threads allocated for UI list sorting", "", [](const std::string& v){ return isNum(v, 1, 64); }},
-    {"threads_for_list_filtering", "4", "Threads allocated for UI list filtering", "", [](const std::string& v){ return isNum(v, 1, 64); }}
+    {"threads_for_list_filtering", "4", "Threads allocated for UI list filtering", "", [](const std::string& v){ return isNum(v, 1, 64); }},
+ 
+    {"menu_color", "white", "Menu accent color (green/cyan/white)", "Theme Settings",
+		[](const std::string& v){ return v == "green" || v == "cyan" || v == "white"; }},
+	{"theme_color", "original", "List color theme (original/classic/high_contrast/neon/ocean/sunset/forest/midnight/mono/retro/crimson/dracula)", "",
+		[](const std::string& v){
+			static const std::unordered_set<std::string> valid = {
+				"original","classic","high_contrast","neon","ocean",
+				"sunset","forest","midnight","mono","retro","crimson","dracula"
+			};
+			return valid.count(v) > 0;
+		}
+	}
 };
 
 /**
@@ -172,17 +185,21 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
     fs::path configFilePath(filePath);
     if (!fs::exists(configFilePath.parent_path()) && !configFilePath.parent_path().empty()) 
         fs::create_directories(configFilePath.parent_path());
-
+ 
     std::map<std::string, std::string> configMap = readConfig(filePath);
     ensureDefaults(configMap, filePath);
-
+ 
     displayConfig::toggleFullListMount       = (configMap["mount_list"]       == "full");
-	displayConfig::toggleFullListUmount      = (configMap["umount_list"]      == "full"); // already correct
+	displayConfig::toggleFullListUmount      = (configMap["umount_list"]      == "full");
 	displayConfig::toggleFullListCpMvRm      = (configMap["cp_mv_rm_list"]    == "full");
 	displayConfig::toggleFullListWrite       = (configMap["write_list"]       == "full");
 	displayConfig::toggleFullListConversions = (configMap["conversion_lists"] == "full");
     displayConfig::toggleNamesOnly = (configMap["filenames_only"] == "on");
-
+ 
+    menuColor = configMap["menu_color"];
+    color = getMenuColor();
+    globalListTheme = configMap["theme_color"];
+ 
     applyThreadCapsAndHistoryLimits(configMap);
     return configMap;
 }
@@ -230,7 +247,7 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
     }
     
     // 5. User Acknowledgment
-    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+    std::cout << color << "\n↵ to continue..." << reset;
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
@@ -269,7 +286,7 @@ void updateFilenamesOnly(const std::string& configPath, const std::string& input
     }
 
     // 4. User Acknowledgment
-    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+    std::cout << color << "\n↵ to continue..." << reset;
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
@@ -368,7 +385,7 @@ void setDisplayMode(const std::string& inputSearch) {
     }
 
     // 5. User Acknowledgment
-    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+    std::cout << color << "\n↵ to continue..." << reset;
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
@@ -407,7 +424,7 @@ void updateConfigSettings(const std::string& inputSearch, const std::string& con
             }
         }
     }
-    std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+    std::cout << color << "\n↵ to continue..." << reset;
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
@@ -428,6 +445,6 @@ void displayConfigurationOptions(const std::string& configPath) {
             std::cout << "\033[1;92m" << lineNumber++ << ". \033[1;97m" << line << "\033[0m\n";
     }
     configFile.close();
-    std::cout << "\n\033[1;93mConfig: \033[1;97m" << configPath << "\n\n\033[1;32m↵ to return...\033[0;1m";
+    std::cout << "\n\033[1;93mConfig: \033[1;97m" << configPath << color << "\n\n↵ to return..." << reset;
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
