@@ -17,9 +17,8 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
     
     // Handle input ("00" = all files, else parse input)
 	if (input == "00") {
-		for (size_t i = 0; i < files.size(); ++i) {
-			// Safe to cast i+1 to int as long as files.size() < INT_MAX
-			indicesToProcess.insert(static_cast<int>(i + 1));
+		for (int i = 1; i <= static_cast<int>(files.size()); ++i) {
+			indicesToProcess.insert(i);
 		}
 	} else {
 		tokenizeInput(input, files, uniqueErrorMessages, indicesToProcess);
