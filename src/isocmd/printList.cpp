@@ -6,9 +6,7 @@
 #include "../themes.h"
 
 
-// Reusable stack buffer — avoid per-iteration heap allocations from std::to_string.
-// format() writes via std::to_chars and returns a string_view into the same buffer,
-// valid until the next call on that buffer — safe here since we consume it immediately.
+// Reusable stack buffer for fast integer-to-string conversion without heap allocation
 template<std::size_t N = 20>
 struct IntBuf {
     char data[N];
@@ -24,13 +22,11 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
                std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& isFiltered, 
                size_t& currentPage, std::atomic<bool>& isImportRunning) {
     
-    // 1. Theme Selection & Identity Check
-	const ListTheme* theme = getActiveTheme();
-	const bool isOriginal = (globalListTheme == "original");
+    if (items.empty()) return;
 
-    // Original Fidelity Color Codes
+    // 1. Define Color Constants (Missing in previous snippet)
     static constexpr std::string_view defaultColor = "\033[0;1m";
-    static constexpr std::string_view darkCyan      = "\033[38;5;37;1m";
+    static constexpr std::string_view darkCyan     = "\033[38;5;37;1m";
     static constexpr std::string_view magentaBold   = "\033[95;1m";
     static constexpr std::string_view brownBold     = "\033[1;38;5;94m";
     static constexpr std::string_view yellowBold    = "\033[1;93m";
@@ -39,149 +35,102 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     static constexpr std::string_view gray          = "\033[0;2m";
     static constexpr std::string_view reset         = "\033[0m";
 
-    // 2. Pagination Logic
-    const bool disablePagination = (ITEMS_PER_PAGE == 0 || items.size() <= ITEMS_PER_PAGE);
+    const ListTheme* theme = getActiveTheme();
+    const bool isOriginal = (globalListTheme == "original");
+    
+    // 2. Pre-calculate Pagination
     const size_t totalItems = items.size();
+    const bool disablePagination = (ITEMS_PER_PAGE == 0 || totalItems <= ITEMS_PER_PAGE);
     const size_t totalPages = disablePagination ? 1 : (totalItems + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE;
     
-    size_t effectiveCurrentPage = disablePagination ? 0 : currentPage;
-    if (totalPages > 0 && effectiveCurrentPage >= totalPages)
-        effectiveCurrentPage = totalPages - 1;
-
-    const size_t startIndex = disablePagination ? 0 : (effectiveCurrentPage * ITEMS_PER_PAGE);
+    if (!disablePagination && currentPage >= totalPages) currentPage = totalPages - 1;
+    const size_t startIndex = disablePagination ? 0 : (currentPage * ITEMS_PER_PAGE);
     const size_t endIndex = disablePagination ? totalItems : std::min(startIndex + ITEMS_PER_PAGE, totalItems);
-    const size_t currentNumDigits = std::to_string(totalItems).length();
+
+    // 3. Performance Buffers
+    IntBuf<> ib1, ib2, ib3, ib4; 
+    const size_t maxDigits = ib1.format(totalItems).length();
     
-    const bool isIsoWithAutoUpdate = (isImportRunning.load() && listType == "ISO_FILES" && !isFiltered && !globalIsoFileList.empty());
-    
-    // 3. Output Buffer
     std::string output;
-    output.reserve((endIndex - startIndex) * 100 + 512); 
+    output.reserve(((endIndex - startIndex) * 128) + 1024);
     output += '\n';
-    
+
     // 4. Header
     if (!disablePagination) {
-        output += brownBold;
-        output += "Page ";
-        output += isOriginal ? darkCyan : theme->accent;
-        output += std::to_string(effectiveCurrentPage + 1);
-        output += brownBold;
-        output += "/";
-        output += yellowBold;
-        output += std::to_string(totalPages);
-        output += brownBold;
-        output += " (Items (";
-        output += isOriginal ? darkCyan : theme->accent;
-        output += std::to_string(startIndex + 1);
-        output += '-';
-        output += std::to_string(endIndex);
-        output += brownBold;
-        output += ")/";
-        output += yellowBold;
-        output += std::to_string(totalItems);
-        output += brownBold;
-        output += ')';
-        
-        if (isIsoWithAutoUpdate) {
-            output += gray;
-            output += "\n\n[Auto-Update: List restructures if newISOFound]";
-        }
-        output += defaultColor;
-        output += "\n\n";
-    } else if (isIsoWithAutoUpdate) {
-        output += gray;
-        output += "[Auto-Update: List restructures if newISOFound]";
-        output += defaultColor;
-        output += "\n\n";
+        output.append(brownBold).append("Page ");
+        output.append(isOriginal ? darkCyan : theme->accent);
+        output.append(ib1.format(currentPage + 1));
+        output.append(brownBold).append("/");
+        output.append(yellowBold).append(ib2.format(totalPages));
+        output.append(brownBold).append(" (Items (");
+        output.append(isOriginal ? darkCyan : theme->accent);
+        output.append(ib3.format(startIndex + 1)).append("-").append(ib4.format(endIndex));
+        output.append(brownBold).append(")/").append(yellowBold);
+        output.append(ib1.format(totalItems)).append(brownBold).append(")");
     }
 
-    // 5. Main List Loop
-    const std::string padding(currentNumDigits, ' ');
+    if (isImportRunning.load() && listType == "ISO_FILES" && !isFiltered && !globalIsoFileList.empty()) {
+        output.append(gray).append("\n\n[Auto-Update: List restructures if newISOFound]");
+    }
+    output.append(defaultColor).append("\n\n");
+
+    // 5. Main Loop
     for (size_t i = startIndex; i < endIndex; ++i) {
         const std::string_view seqColor = (i % 2 == 0) ? theme->secondary : theme->accent;
-        const std::string indexStr = std::to_string(i + 1);
+        std::string_view idxStr = ib1.format(i + 1);
         
-        output += seqColor;
-        output.append(padding.data(), currentNumDigits - indexStr.length());
-        output += indexStr;
+        output.append(seqColor);
+        for (size_t p = 0; p < (maxDigits - idxStr.length()); ++p) output.push_back(' ');
+        output.append(idxStr);
 
-        // Unified Filter Logic: FilteredIndex:OriginalIndex^ 
         if (isFiltered && !filteringStack.empty() && i < filteringStack.back().originalIndices.size()) {
-            output += ':'; 
-            output += defaultColor;
-            output += "\033[38;5;105;1m"; // magentaBoldDark
-            output += std::to_string(filteringStack.back().originalIndices[i] + 1);
-            output += defaultColor;
-            output += "^ "; 
+            output.append(":").append(defaultColor).append("\033[38;5;105;1m");
+            output.append(ib2.format(filteringStack.back().originalIndices[i] + 1));
+            output.append(defaultColor).append("^ ");
         } else {
-            output += ". ";
-            output += defaultColor;
+            output.append(". ").append(defaultColor);
         }
 
-        const std::string& currentItem = items[i];
+        const std::string& item = items[i];
         if (listType == "ISO_FILES" || listType == "IMAGE_FILES") {
-            auto [dir, fname] = extractDirectoryAndFilename(currentItem, listSubType);
+            auto [dir, fname] = extractDirectoryAndFilename(item, listSubType);
             if (!displayConfig::toggleNamesOnly) {
-                output += isOriginal ? defaultColor : theme->muted;
-                output += dir;
-                output += defaultColor;
-                output += "/";
+                output.append(isOriginal ? defaultColor : theme->muted).append(dir);
+                output.append(defaultColor).append("/");
             }
-            
-            if (listType == "ISO_FILES") {
-                output += isOriginal ? magentaBold : theme->accent;
-            } else {
-                // IMAGE_FILES: highlight keeps it visually distinct from ISOs
-                output += isOriginal ? orangeBold : theme->highlight;
-            }
-            output += fname;
-        } 
-        else if (listType == "MOUNTED_ISOS") {
-            auto [dirPart, pathPart, hashPart] = parseMountPointComponents(currentItem);
-            
-            // Re-introduced toggle logic
+            output.append(listType == "ISO_FILES" ? (isOriginal ? magentaBold : theme->accent) 
+                                                  : (isOriginal ? orangeBold : theme->highlight));
+            output.append(fname);
+        } else if (listType == "MOUNTED_ISOS") {
+            auto [dirPart, pathPart, hashPart] = parseMountPointComponents(item);
             if (displayConfig::toggleFullListUmount) {
-                // Show full details: Directory + Path + Hash
-                output += isOriginal ? blueBold : theme->secondary;
-                output += dirPart;
-                output += isOriginal ? magentaBold : theme->accent;
-                output += pathPart;
-                output += isOriginal ? "\033[38;5;245m" : theme->muted;
-                output += hashPart;
+                output.append(isOriginal ? blueBold : theme->secondary).append(dirPart);
+                output.append(isOriginal ? magentaBold : theme->accent).append(pathPart);
+                output.append(isOriginal ? "\033[38;5;245m" : theme->muted).append(hashPart);
             } else {
-                // Show path only (Simplified view)
-                output += isOriginal ? magentaBold : theme->accent;
-                output += pathPart;
+                output.append(isOriginal ? magentaBold : theme->accent).append(pathPart);
             }
         }
-
-        output += reset;
-        output += '\n';
+        output.append(reset).append("\n");
     }
 
-    // 6. Footer & Navigation
+    // 6. Footer
     if (!disablePagination) {
-        output += '\n';
-        output += brownBold;
-        output += "Pagination: ";
-        if (effectiveCurrentPage > 0) output += "[p] ↵ Previous | ";
-        if (effectiveCurrentPage < totalPages - 1) output += "[n] ↵ Next | ";
-        output += "[g<num>] ↵ Go to | ";
-        output += defaultColor;
-        output += '\n';
+        output.append("\n").append(brownBold).append("Pagination: ");
+        if (currentPage > 0) output.append("[p] ↵ Previous | ");
+        if (currentPage < totalPages - 1) output.append("[n] ↵ Next | ");
+        output.append("[g<num>] ↵ Go to | ").append(defaultColor).append("\n");
     }
 
-    // 7. Pending Indices
     if (hasPendingProcess && !pendingIndices.empty()) {
-        output += "\n\033[1;48;5;19mPending for [\033[1;92mproc\033[0;1;48;5;19m]: "; 
+        output.append("\n\033[1;48;5;19mPending for [\033[1;92mproc\033[0;1;48;5;19m]: ");
+        std::string_view pColor = (listType != "IMAGE_FILES" ? magentaBold : orangeBold);
         for (size_t i = 0; i < pendingIndices.size(); ++i) {
-            output += (listType != "IMAGE_FILES" ? magentaBold : orangeBold);
-            output += pendingIndices[i];
-            if (i < pendingIndices.size() - 1) output += ' ';
+            output.append(pColor).append(pendingIndices[i]);
+            if (i < pendingIndices.size() - 1) output.push_back(' ');
         }
-        output += reset;
-        output += "\033[0;1m\n";
+        output.append(reset).append("\033[0;1m\n");
     }
 
-    std::cout << output;
+    std::cout.write(output.data(), output.size());
 }
