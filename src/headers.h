@@ -104,7 +104,6 @@ inline bool needSortingAfterflno			   = false;
 inline size_t ITEMS_PER_PAGE                   = 25;
 inline int lockFileDescriptor                  = -1;
 
-
 //==============================
 // ISO COMMANDER FUNCTIONS
 //==============================
