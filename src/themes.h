@@ -3,30 +3,53 @@
 #ifndef THEMES_H
 #define THEMES_H
 
-// Menu Themes
+// =========================
+// MENU COLOR CONFIGURATION
+// =========================
+
+// User-selected menu color (string-based for easy config parsing / CLI input)
 inline std::string menuColor = "cyan"; 
+
+// ANSI reset sequence (bold reset)
 inline std::string reset = "\033[0;1m";
 
-
+// Returns the ANSI escape code corresponding to the selected menu color.
+// Falls back to full reset if the color is unknown (safe default).
 inline std::string getMenuColor() {
-    return (menuColor == "green")  ? "\033[1;32m"              : 
-           (menuColor == "cyan")   ? "\033[1;38;2;0;200;200m"  : 
-           (menuColor == "white")  ? "\033[1;38;5;250m"        : 
-                                           "\033[0m";                  // Reset/Default
+    return (menuColor == "green")  ? "\033[1;32m"              : // Bright green
+           (menuColor == "cyan")   ? "\033[1;38;2;0;200;200m"  : // Custom RGB cyan (softer than default)
+           (menuColor == "white")  ? "\033[1;38;5;250m"        : // Light gray/white (not pure white to reduce glare)
+                                           "\033[0m";          // Reset / fallback (prevents broken colors)
 }
 
+// Cached color value (evaluated once at startup)
+// NOTE: If menuColor changes at runtime, this will NOT update automatically.
 inline std::string color = getMenuColor();
 
-// List Themes
+
+// =========================
+// LIST THEME CONFIGURATION
+// =========================
+
+// Active theme name (string allows easy switching via config / CLI)
 inline std::string globalListTheme = "forest";
 
+// Defines a color palette for list rendering.
+// Using string_view avoids unnecessary allocations (points to static literals).
 struct ListTheme {
-    std::string_view primary;
-    std::string_view secondary;
-    std::string_view accent;
-    std::string_view muted;
-    std::string_view highlight;
+    std::string_view primary;    // Main text color (e.g., filenames)
+    std::string_view secondary;  // Secondary info (e.g., errors, warnings)
+    std::string_view accent;     // Highlights (e.g., selected items)
+    std::string_view muted;      // Less important text (e.g., metadata)
+    std::string_view highlight;  // Strong emphasis (e.g., active selection)
 };
+
+
+// =========================
+// PREDEFINED THEMES
+// =========================
+// Each theme is tuned for readability and visual identity.
+// Colors are chosen to maintain contrast and avoid eye strain.
 
 inline ListTheme OriginalTheme = {"\033[1;38;5;94m",  "\033[1;31m",        "\033[1;32m",        "\033[38;5;245m",  "\033[1;93m"};
 inline ListTheme ClassicTheme  = {"\033[1;38;5;94m",  "\033[1;31m",        "\033[1;95m",        "\033[38;5;246m",  "\033[1;93m"};
@@ -41,6 +64,13 @@ inline ListTheme RetroTheme    = {"\033[1;38;5;214m",  "\033[1;38;5;130m",  "\03
 inline ListTheme CrimsonTheme  = {"\033[1;38;5;160m",  "\033[1;38;5;124m",  "\033[1;38;5;203m",  "\033[38;5;95m",   "\033[1;38;5;217m"};
 inline ListTheme DraculaTheme  = {"\033[1;38;5;141m",  "\033[1;38;5;212m",  "\033[1;38;5;84m",   "\033[38;5;61m",   "\033[38;5;228m"};
 
+
+// =========================
+// THEME RESOLUTION
+// =========================
+
+// Returns a pointer to the active theme based on globalListTheme.
+// Uses a static map so it's initialized only once (efficient lookup).
 inline const ListTheme* getActiveTheme() {
     static const std::unordered_map<std::string, const ListTheme*> themeMap = {
         {"original",      &OriginalTheme},
@@ -56,7 +86,11 @@ inline const ListTheme* getActiveTheme() {
         {"crimson",       &CrimsonTheme},
         {"dracula",       &DraculaTheme},
     };
+
+    // Lookup selected theme
     auto it = themeMap.find(globalListTheme);
+
+    // Return matched theme or fallback to OriginalTheme (safe default)
     return (it != themeMap.end()) ? it->second : &OriginalTheme;
 }
 
