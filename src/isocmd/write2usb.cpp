@@ -627,9 +627,14 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         disableReadlineForConfirmation();
 
         // Get confirmation
-        std::unique_ptr<char, decltype(&std::free)> confirmation(
-            readline("\n\001\033[1;94m\002Proceed? (y/n): \001\033[0;1m\002"), &std::free
-        );
+        const std::string confirmPrompt = 
+			"\001" + std::string(isOriginal ? "\033[1;94m" : theme->muted) + 
+			"\001\033[1m\002\nProceed? (y/n): \001\033[0;1m\002";
+
+		std::unique_ptr<char, decltype(&std::free)> confirmation(
+			readline(confirmPrompt.c_str()), 
+			&std::free
+		);
 
         // Process confirmation
         if (confirmation && (confirmation.get()[0] == 'y' || confirmation.get()[0] == 'Y')) {
