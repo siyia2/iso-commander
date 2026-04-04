@@ -601,7 +601,7 @@ void updateAutoUpdateConfig(const std::string& configPath, const std::string& in
     syncCache(configPath);
 
     // 3. Update the value in the global cache
-    bool isEnabling = (inputSearch == "*auto_on");
+    bool isEnabling = (inputSearch == "*auto:on");
     g_configCache["auto_update"] = isEnabling ? "on" : "off";
 
     // 4. Use the robust writeConfig function to persist changes
