@@ -107,6 +107,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
     }
     
     if (!isCpMv) {
+		std::cout << headC << "| ✓ Special Commands below starting with '!', '?', or '*' are supported by Tab completion |\n\n";
         std::cout << headC << "3. Special Cleanup Commands:\033[0m\n";
         if (!import2ISO) {
             std::cout << "    • Enter " << yellowC << "'!clr'\033[0m       - Clear the corresponding buffer\n";
