@@ -4,6 +4,7 @@
 #include "../display.h"
 #include "../themes.h"
 
+
 // --- Global Cache State ---
 // This stores the configuration in memory to avoid repeated disk reads.
 static std::map<std::string, std::string> g_configCache;
