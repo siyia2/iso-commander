@@ -611,16 +611,18 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         }
 
         // Final confirmation dialog
-        std::cout << "\n\033[1;93mWARNING: This will \033[1;91m*ERASE ALL DATA*\033[1;93m on:\033[0;1m\n\n";
-        for (const auto& [iso, device] : validPairs) {
-            uint64_t deviceSize = getBlockDeviceSize(device);
-            std::string deviceSizeStr = formatFileSize(deviceSize);
-            std::string driveName = getDriveName(device);
-            
-            std::cout << "  {\033[1;93m" << device << " \033[0;1m<" << driveName << "> (\033[1;35m" 
-          << deviceSizeStr << "\033[0;1m)} ← {" << theme->accent
-          << iso.filename << reset << " (" << theme->highlight << iso.sizeStr << reset << ")}\n";
-        }
+		std::cout << "\n\033[1;93mWARNING: This will \033[1;91m*ERASE ALL DATA*\033[1;93m on:\033[0;1m\n\n";
+		for (const auto& [iso, device] : validPairs) {
+			uint64_t deviceSize = getBlockDeviceSize(device);
+			std::string deviceSizeStr = formatFileSize(deviceSize);
+			std::string driveName = getDriveName(device);
+			
+			// Use fileCol and sizeCol here to respect the "original" theme overrides
+			std::cout << "  {\033[1;93m" << device << " \033[0;1m<" << driveName << "> (\033[1;35m" 
+					  << deviceSizeStr << "\033[0;1m)} ← {" << fileCol // <--- Use the dynamic fileCol
+					  << iso.filename << reset << " (" << sizeCol // <--- Use the dynamic sizeCol
+					  << iso.sizeStr << reset << ")}\n";
+		}
         
         disableReadlineForConfirmation();
 
