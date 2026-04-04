@@ -105,19 +105,21 @@ inline size_t ITEMS_PER_PAGE                   = 25;
 inline int lockFileDescriptor                  = -1;
 
 // Menu Themes
-extern std::string color;
-extern  std::string globalMenuTheme; 
+inline std::string globalMenuTheme = "cyan"; 
 inline std::string reset = "\033[0;1m";
 
+
 inline std::string getThemeColor() {
-    // Now globalTheme is recognized as a string
-    return (globalMenuTheme == "blue")  ? "\033[1;38;2;23;147;209m" : 
-           (globalMenuTheme == "white") ? "\033[1;38;5;250m"            : 
-                                      "\033[1;32m";
+    return (globalMenuTheme == "green")  ? "\033[1;32m"              : 
+           (globalMenuTheme == "cyan")   ? "\033[1;38;2;0;195;195m"  : 
+           (globalMenuTheme == "white")  ? "\033[1;38;5;250m"        : 
+                                           "\033[0m";                  // Reset/Default
 }
 
+inline std::string color = getThemeColor();
+
 // List Themes
-extern std::string globalListTheme;
+inline std::string globalListTheme = "original";
 
 struct ListTheme {
     std::string_view primary;
