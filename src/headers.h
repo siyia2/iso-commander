@@ -95,9 +95,9 @@ inline const std::string configDirectory = std::string(std::getenv("HOME") ? std
 inline const std::string configPath = configDirectory + "config";
 
 // Configuration Limits
-// Using 'constexpr' is often preferred for POD types if the values are known at compile time
 inline int MAX_HISTORY_LINES         = 100;
 inline int MAX_HISTORY_PATTERN_LINES = 50;
+// Using 'constexpr' is often preferred for POD types if the values are known at compile time
 inline constexpr uintmax_t maxDatabaseSize     = 1024 * 1024 * 1; // e.g., 1MB
 
 // State Management
@@ -153,6 +153,7 @@ void displayErrors(std::unordered_set<std::string>& uniqueErrorMessages);
 void setDisplayMode(const std::string& inputSearch);
 void updateFilenamesOnly(const std::string& configPath, const std::string& inputSearch);
 void syncCache(const std::string& filePath);
+void updateUIAppearance(const std::string& configPath, const std::string& inputSearch);
 
 //------------------
 // Void Functions (Input Handling)
