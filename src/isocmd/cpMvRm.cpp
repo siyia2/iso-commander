@@ -146,7 +146,7 @@ bool& abortDel) {
                 umountMvRmBreak = false;
                 abortDel = true;
                 std::cout << "\n\033[1;93mrm operation aborted by user.\033[0;1m\n";
-                std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+                 std::cout << color << "\n↵ to continue..." << reset;
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 return false;
             }
