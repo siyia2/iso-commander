@@ -85,7 +85,7 @@ static std::string validateLinuxPath(const std::string& path) {
 // Function to handle rm including pagination
 bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages, std::vector<std::vector<int>>& indexChunks, 
 bool& umountMvRmBreak, bool& abortDel) {
-    
+    rl_attempted_completion_function = nullptr;
     // --- Theme & Color Setup ---
     const ListTheme* theme = getActiveTheme();
     const bool isOriginal = (globalListTheme == "original");
@@ -191,7 +191,7 @@ bool& umountMvRmBreak, bool& abortDel) {
 std::string userDestDirCpMv(const std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::unordered_set<std::string>& uniqueErrorMessages, 
 std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& filterHistory, bool& isDelete, bool& isCopy, bool& abortDel, 
 bool& overwriteExisting) {
-
+	rl_attempted_completion_function = nullptr;
     std::vector<std::string> entries = generateIsoEntries(indexChunks, isoFiles);
     sortFilesCaseInsensitive(entries);
     clearScrollBuffer();
