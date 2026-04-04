@@ -65,6 +65,18 @@ Items per page in list view.
 .br
 Values: integer >= 0 (Default: 25). Set to 0 to disable.
 
+.SS THEME SETTINGS
+.TP
+.B menu_color
+Sets the accent color for menus and headers.
+.br
+Values: green, cyan, white (Default: white)
+.TP
+.B list_theme
+Defines the color palette used for displaying lists.
+.br
+Values: original, classic, high_contrast, neon, ocean, sunset, forest, midnight, mono, retro, crimson, dracula (Default: original)
+
 .SS HISTORY SETTINGS
 .TP
 .B folder_path_history_lines
@@ -73,7 +85,7 @@ Max unique folder paths to persist in history. (Default: 30)
 .B filter_history_lines
 Max unique search filters to persist in history. (Default: 15)
 
-.SS DISPLAY MODES
+.SS DISPLAY SETTINGS
 Controls whether lists are shown in \fBfull\fR (detailed) or \fBcompact\fR format. 
 .br
 \fBNote:\fR If \fBfilenames_only\fR is enabled, path details will be stripped regardless of these settings.
@@ -88,7 +100,7 @@ Controls whether lists are shown in \fBfull\fR (detailed) or \fBcompact\fR forma
 .br
 \fBconversion_lists\fR (Default: compact)
 
-.SS THREAD CONFIGURATION
+.SS THREAD SETTINGS
 Iso Commander utilizes a multi-threaded architecture to optimize I/O-heavy operations and UI responsiveness.
 .TP
 .B max_thread_cap
