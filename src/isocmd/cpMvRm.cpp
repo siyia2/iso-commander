@@ -10,13 +10,7 @@ std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>&
     std::vector<std::string> entries;
 
     // --- Theme Selection (Matches printList) ---
-    const ListTheme* theme;
-
-    if      (globalListTheme == "original")      theme = &OriginalTheme;
-	else if (globalListTheme == "classic")       theme = &ClassicTheme;
-	else if (globalListTheme == "high_contrast") theme = &HighContrast;
-	else if (globalListTheme == "neon")          theme = &NeonTheme;
-	else                                         theme = &OriginalTheme; // default
+    const ListTheme* theme = getActiveTheme();
 
     static constexpr std::string_view reset = "\033[0m";
     static constexpr std::string_view bold = "\033[1m";

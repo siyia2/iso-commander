@@ -446,12 +446,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             return a.size > b.size; // Compare numeric sizes directly
         });
 
-		const ListTheme* theme;
-
-		if      (globalListTheme == "original")       theme = &OriginalTheme;
-		else if (globalListTheme == "classic")        theme = &ClassicTheme;
-		else if (globalListTheme == "high_contrast")  theme = &HighContrast;
-		else if (globalListTheme == "neon")   		  theme = &NeonTheme;
+		const ListTheme* theme = getActiveTheme();
 		// Build device prompt with sorted ISOs
 		std::ostringstream devicePromptStream;
 		devicePromptStream << "\n" << reset << "Selected " << theme->accent << "ISO" << reset << ":\n\n";
@@ -596,8 +591,8 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             std::string driveName = getDriveName(device);
             
             std::cout << "  {\033[1;93m" << device << " \033[0;1m<" << driveName << "> (\033[1;35m" 
-                      << deviceSizeStr << "\033[0;1m)} ← {\033[1;92m" 
-                      << iso.filename << "\033[0;1m (\033[1;35m" << iso.sizeStr << "\033[0;1m)}\n";
+          << deviceSizeStr << "\033[0;1m)} ← {" << theme->accent
+          << iso.filename << reset << " (" << theme->highlight << iso.sizeStr << reset << ")}\n";
         }
         
         disableReadlineForConfirmation();
@@ -669,33 +664,35 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             deviceSizeStrs[prog.device] = formatFileSize(deviceSizes[prog.device]);
         }
     }
-
+	
+	const ListTheme* theme = getActiveTheme();
+    
     // Helper lambda to display all progress entries
-    auto displayAllProgress = [&]() {
-        for (size_t i = 0; i < progressData.size(); ++i) {
-            const auto& prog = progressData[i];
-            std::string currentSize = formatFileSize(prog.bytesWritten.load());
+    auto displayAllProgress = [&, theme]() {
+		for (size_t i = 0; i < progressData.size(); ++i) {
+			const auto& prog = progressData[i];
+			std::string currentSize = formatFileSize(prog.bytesWritten.load());
 
-            std::cout << "\033[K"  // Clear line
-                    << ("\033[1;95m" + prog.filename + " \033[0;1m→ {" + 
-                        "\033[1;93m" + prog.device + "\033[0;1m \033[0;1m<" + 
-                        deviceNames[prog.device] + "> (\033[1;35m" + 
-                        deviceSizeStrs[prog.device] + "\033[0;1m)} \033[0;1m")
-                    << std::right
-                    << (prog.completed ? "\033[1;92mDONE\033[0;1m" :
-                        prog.failed ? "\033[1;91mFAIL\033[0;1m" :
-                        g_operationCancelled.load() ? "\033[1;93mCXL\033[0;1m" :
-                        std::to_string(prog.progress) + "%")
-                    << " ["
-                    << currentSize
-                    << "/\033[1;35m"
-                    << prog.totalSize
-                    << "\033[0;1m] "
-                    << "\033[0;1m" + formatSpeed(prog.speed) + "\033[0;1m"
-                    << "\n";
-        }
-        std::cout << std::flush;
-    };
+			std::cout << "\033[K"
+					<< (std::string(theme->accent) + prog.filename + " \033[0;1m→ {" +
+						"\033[1;93m" + prog.device + "\033[0;1m <" +
+						deviceNames[prog.device] + "> (\033[1;35m" +
+						deviceSizeStrs[prog.device] + "\033[0;1m)} \033[0;1m")
+					<< std::right
+					<< (prog.completed ? "\033[1;92mDONE\033[0;1m" :
+						prog.failed    ? "\033[1;91mFAIL\033[0;1m" :
+						g_operationCancelled.load() ? "\033[1;93mCXL\033[0;1m" :
+						std::to_string(prog.progress) + "%")
+					<< " ["
+					<< currentSize
+					<< "/\033[1;35m"
+					<< prog.totalSize
+					<< "\033[0;1m] "
+					<< "\033[0;1m" + formatSpeed(prog.speed) + "\033[0;1m"
+					<< "\n";
+		}
+		std::cout << std::flush;
+	};
 
     // Display progress lambda (modified to use helper)
     auto displayProgress = [&]() {

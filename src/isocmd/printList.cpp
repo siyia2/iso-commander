@@ -25,14 +25,8 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
                size_t& currentPage, std::atomic<bool>& isImportRunning) {
     
     // 1. Theme Selection & Identity Check
-    const ListTheme* theme;
-    const bool isOriginal = (globalListTheme == "original");
-
-    if      (globalListTheme == "original")      theme = &OriginalTheme;
-    else if (globalListTheme == "classic")       theme = &ClassicTheme;
-    else if (globalListTheme == "high_contrast") theme = &HighContrast;
-    else if (globalListTheme == "neon")           theme = &NeonTheme;
-    else                                         theme = &OriginalTheme; // default
+	const ListTheme* theme = getActiveTheme();
+	const bool isOriginal = (globalListTheme == "original");
 
     // Original Fidelity Color Codes
     static constexpr std::string_view defaultColor = "\033[0;1m";

@@ -107,13 +107,7 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
 std::string handlePaginatedDisplay(const std::vector<std::string>& entries, std::unordered_set<std::string>& uniqueErrorMessages, const std::string& promptPrefix, const std::string& promptSuffix, const std::function<void()>& setupEnvironmentFn, bool& isPageTurn) {
     
     // 1. Theme Selection
-    const ListTheme* theme;
-
-    if      (globalListTheme == "original")      theme = &OriginalTheme;
-	else if (globalListTheme == "classic")       theme = &ClassicTheme;
-	else if (globalListTheme == "high_contrast") theme = &HighContrast;
-	else if (globalListTheme == "neon")          theme = &NeonTheme;
-	else                                         theme = &OriginalTheme; // default
+    const ListTheme* theme = getActiveTheme();
 
     static constexpr std::string_view reset = "\033[0m";
 
