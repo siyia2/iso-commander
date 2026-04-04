@@ -100,6 +100,7 @@ inline constexpr uintmax_t maxDatabaseSize     = 1024 * 1024 * 1; // e.g., 1MB
 
 // State Management
 inline std::atomic<bool> g_operationCancelled{false};
+inline bool needSortingAfterflno			   = false;
 inline size_t ITEMS_PER_PAGE                   = 25;
 inline int lockFileDescriptor                  = -1;
 
