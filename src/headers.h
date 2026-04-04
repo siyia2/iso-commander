@@ -229,7 +229,7 @@ std::map<std::string, std::string> readConfig(const std::string& configPath);
 std::map<std::string, std::string> readUserConfigLists(const std::string& filePath);
 std::string trimWhitespace(const std::string& str);
 std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view path, const std::string& location);
-std::string userDestDirRm(const std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::unordered_set<std::string>& uniqueErrorMessages, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& filterHistory, bool& isDelete, bool& isCopy, bool& abortDel, bool& overwriteExisting);
+std::string userDestDirCpMv(const std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::unordered_set<std::string>& uniqueErrorMessages, std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& filterHistory, bool& isDelete, bool& isCopy, bool& abortDel, bool& overwriteExisting);
 std::string handlePaginatedDisplay(const std::vector<std::string>& entries, std::unordered_set<std::string>& uniqueErrorMessages, const std::string& promptPrefix, const std::string& promptSuffix, const std::function<void()>& setupEnvironmentFn, bool& isPageTurn);
 std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query);
 std::tuple<std::string, std::string, std::string> parseMountPointComponents(std::string_view dir);
