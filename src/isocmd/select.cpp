@@ -168,7 +168,7 @@ void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOLi
     // Continuously checks for conditions at intervals specified by timeoutSeconds
     
     while (true) {
-        // Sleep for the given timeout (2s) before checking the conditions
+        // Sleep for the given timeout (1s) before checking the conditions
         std::this_thread::sleep_for(std::chrono::seconds(timeoutSeconds));
 
         // Only proceed if the import process is not running
@@ -271,7 +271,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             umountMvRmBreak = false;
         }
         if (updateHasRun.load() && !isUnmount && !globalIsoFileList.empty()) {
-            std::thread(refreshListAfterAutoUpdate, 2, std::ref(isAtISOList), 
+            std::thread(refreshListAfterAutoUpdate, 1, std::ref(isAtISOList), 
                         std::ref(isImportRunning), std::ref(updateHasRun), std::ref(umountMvRmBreak),
                         std::ref(filteredFiles), std::ref(isFiltered), std::ref(listSubtype), std::ref(pendingIndices), 
                         std::ref(hasPendingProcess), std::ref(currentPage), std::ref(originalPage), std::ref(newISOFound)).detach();
