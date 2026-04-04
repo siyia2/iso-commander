@@ -5,6 +5,14 @@
 
 #include "write.h"
 
+extern "C" {
+#endif
+
+char** my_completion_entry(const char* text, int start, int end);
+
+#ifdef __cplusplus
+}
+
 // Forward declaration
 struct IsoInfo;
 
