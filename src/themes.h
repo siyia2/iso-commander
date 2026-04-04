@@ -8,7 +8,7 @@
 // =========================
 
 // User-selected menu color (string-based for easy config parsing / CLI input)
-inline std::string menuColor = "cyan"; 
+inline std::string menuColor = "white"; 
 
 // ANSI reset sequence (bold reset)
 inline std::string reset = "\033[0;1m";
@@ -32,7 +32,7 @@ inline std::string color = getMenuColor();
 // =========================
 
 // Active theme name (string allows easy switching via config / CLI)
-inline std::string globalListTheme = "forest";
+inline std::string globalListTheme = "original";
 
 // Defines a color palette for list rendering.
 // Using string_view avoids unnecessary allocations (points to static literals).
