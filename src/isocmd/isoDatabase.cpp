@@ -292,8 +292,11 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
     const size_t hwThreads  = static_cast<size_t>(maxThreads);
     const size_t ioMultiple = 2;
     const size_t ioCap      = MAX_USEFUL_THREADS;
-    const size_t numThreads =
-        std::min({finalPaths.size(), std::min(hwThreads * ioMultiple, ioCap)});
+    const size_t numThreads = std::min({
+			finalPaths.size(),
+			static_cast<size_t>(hwThreads * ioMultiple),
+			static_cast<size_t>(ioCap)
+	});
 
     ThreadPool pool(numThreads);
 
