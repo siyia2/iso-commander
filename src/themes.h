@@ -16,10 +16,13 @@ inline std::string reset = "\033[0;1m";
 // Returns the ANSI escape code corresponding to the selected menu color.
 // Falls back to full reset if the color is unknown (safe default).
 inline std::string getMenuColor() {
-    return (menuColor == "green")  ? "\033[1;32m"              : // Bright green
-           (menuColor == "cyan")   ? "\033[1;38;2;0;200;200m"  : // Custom RGB cyan (softer than default)
-           (menuColor == "white")  ? "\033[1;38;5;250m"        : // Light gray/white (not pure white to reduce glare)
-                                           "\033[0m";          // Reset / fallback (prevents broken colors)
+    return (menuColor == "green")   ? "\033[1;32m"               : // Bright green
+           (menuColor == "cyan")    ? "\033[1;38;2;0;200;200m"   : // Soft cyan
+           (menuColor == "purple")  ? "\033[1;38;2;189;147;249m" : // Dracula Purple
+           (menuColor == "amber")   ? "\033[1;38;2;255;176;0m"   : // CRT Amber
+           (menuColor == "rose")    ? "\033[1;38;2;255;121;198m" : // Hot pink/Rose
+           (menuColor == "white")   ? "\033[1;38;5;250m"         : // Light gray
+                                      "\033[0m";                   // Reset
 }
 
 // Cached color value (evaluated once at startup)
