@@ -2,6 +2,7 @@
 
 #include "../headers.h"
 #include "../display.h"
+#include "../themes.h"
 
 
 // Print the version number of the program
@@ -135,7 +136,8 @@ int main(int argc, char *argv[]) {
         clear_history();
 
         // Prompt for the main menu choice
-        char* rawInput = readline("\n\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
+        const ListTheme* theme = getActiveTheme();
+		char* rawInput = readline(("\n\001" + std::string(theme->muted) + "\002Choose an option:\001\033[0;1m\002 ").c_str());
         std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
 
         // Check for EOF (Ctrl+D) or NULL input before processing

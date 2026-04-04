@@ -131,17 +131,19 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
             if (listType == "ISO_FILES") {
                 output += isOriginal ? magentaBold : theme->accent;
             } else {
-                output += orangeBold;
+                // IMAGE_FILES: highlight keeps it visually distinct from ISOs
+                output += isOriginal ? orangeBold : theme->highlight;
             }
             output += fname;
         } 
         else if (listType == "MOUNTED_ISOS") {
             auto [dirPart, pathPart, hashPart] = parseMountPointComponents(currentItem);
-            output += blueBold;
+            // secondary for dirPart: distinct from both accent (ISO) and highlight (image)
+            output += isOriginal ? blueBold : theme->secondary;
             output += dirPart;
-            output += magentaBold;
+            output += isOriginal ? magentaBold : theme->accent;
             output += pathPart;
-            output += isOriginal ? "\033[38;5;245m" : theme->muted; 
+            output += isOriginal ? "\033[38;5;245m" : theme->muted;
             output += hashPart;
         }
 

@@ -54,8 +54,10 @@ void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, s
 		std::cout << "|6. Write                 |\n";
 		std::cout << "+-------------------------+" << reset << std::endl;
         std::cout << "\n";
-        char* rawInput = readline("\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
-
+        
+        const ListTheme* theme = getActiveTheme();
+		char* rawInput = readline(("\001" + std::string(theme->muted) + "\002Choose an option:\001\033[0;1m\002 ").c_str());
+		
         // Use std::unique_ptr to manage memory for input
 		std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
 
@@ -132,7 +134,9 @@ void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning
 		std::cout << "|3. NRG2ISO++             |\n";
 		std::cout << "+-------------------------+" << reset << std::endl;
         std::cout << "\n";
-        char* rawInput = readline("\001\033[1;94m\002Choose an option:\001\033[0;1m\002 ");
+        
+        const ListTheme* theme = getActiveTheme();
+		char* rawInput = readline(("\001" + std::string(theme->muted) + "\002Choose an option:\001\033[0;1m\002 ").c_str());
 
         // Use std::unique_ptr to manage memory for input
 		std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
