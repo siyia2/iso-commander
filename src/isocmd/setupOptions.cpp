@@ -288,8 +288,8 @@ void updateFilenamesOnly(const std::string& configPath, const std::string& input
     signal(SIGINT, SIG_IGN); 
     disable_ctrl_d();
 
-    if (inputSearch == "*flno_on" || inputSearch == "*flno_off") {
-        bool isEnabling = (inputSearch == "*flno_on");
+    if (inputSearch == "*flno:on" || inputSearch == "*flno:off") {
+        bool isEnabling = (inputSearch == "*flno:on");
         syncCache(configPath);
         
         // Update Cache
