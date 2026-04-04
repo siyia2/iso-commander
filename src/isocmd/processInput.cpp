@@ -50,16 +50,16 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
     const size_t poolSize   = pool.threadCount();
     const size_t cap        = isUnmount ? UMOUNT_THREAD_CAP : MOUNT_THREAD_CAP;
 	// Calculate target chunks based on hardware/caps
-	size_t numChunks = std::max(size_t(2), std::min({selectedFiles.size(), cap, poolSize}));
+	size_t numThreads = std::max(size_t(2), std::min({selectedFiles.size(), cap, poolSize}));
 
 	// Enforce the "Max 100 per chunk" rule
-	if ((selectedFiles.size() + numChunks - 1) / numChunks > 100) {
-		numChunks = (selectedFiles.size() + 99) / 100;
+	if ((selectedFiles.size() + numThreads - 1) / numThreads > 100) {
+		numThreads = (selectedFiles.size() + 99) / 100;
 	}
 
-	std::vector<std::vector<std::string>> chunks(numChunks);
+	std::vector<std::vector<std::string>> chunks(numThreads);
 	for (size_t i = 0; i < selectedFiles.size(); ++i) {
-		chunks[i % numChunks].push_back(std::move(selectedFiles[i]));
+		chunks[i % numThreads].push_back(std::move(selectedFiles[i]));
 	}
     
     std::vector<std::future<void>> futures;
