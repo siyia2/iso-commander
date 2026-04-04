@@ -91,9 +91,19 @@ bool& abortDel) {
     sortFilesCaseInsensitive(entries);
 
     std::string promptPrefix = "\n";
-    std::string promptSuffix = std::string("\n\001\033[1;94m\002The selected \001\033[1;92m\002ISO\001\033[1;94m\002 will be ") +
-        "\001\033[1;91m\002*PERMANENTLY DELETED FROM DISK*\001\033[1;94m\002. Proceed? (Y/N):\001\033[0;1m\002 ";
+	const ListTheme* theme = getActiveTheme();
+	const bool isOriginal = (globalListTheme == "original");
 
+	// Use theme color for the general text
+	std::string primaryCol = isOriginal ? "\033[1;94m" : std::string(theme->muted);
+
+	// Hardcoded red for the warning only
+	std::string warningCol = "\033[1;91m";
+	std::string resetCol = "\033[0;1m";
+
+	std::string promptSuffix = "\n\001" + primaryCol + "\002The selected ISO will be " +
+							   "\001" + warningCol + "\002*PERMANENTLY DELETED FROM DISK*\001" + primaryCol + 
+							   "\002. Proceed? (Y/N):\001" + resetCol + "\002 ";							   
     while (true) {
         std::string userInput;
 

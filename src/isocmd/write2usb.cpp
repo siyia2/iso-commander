@@ -523,8 +523,16 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         g_completerData.usbDevices = &usbDevices;
 
         // Finalize prompt with usage instructions
-        devicePromptStream << "\n\001\033[1;92m\002Mappings\001\033[1;94m\002 ↵ as \001\033[1;93m\002INDEX>DEVICE\001\033[1;94m\002, ? ↵ for help, < ↵ to return:\001\033[0;1m\002 ";
-        std::string devicePrompt = devicePromptStream.str();
+		const bool isOriginal = (globalListTheme == "original");
+
+		// Handle the string_view conversion safely
+		std::string primaryCol = isOriginal ? "\033[1;94m" : std::string(theme->muted);
+
+		// Only INDEX>DEVICE remains hardcoded yellow (\033[1;93m)
+		devicePromptStream << "\n\001" << primaryCol << "\002Mappings ↵ as \001\033[1;93m\002INDEX>DEVICE\001" 
+						   << primaryCol << "\002, ? ↵ for help, < ↵ to return:\001\033[0;1m\002 ";
+
+		std::string devicePrompt = devicePromptStream.str();
 
         // Get user input
         std::unique_ptr<char, decltype(&std::free)> deviceInput(
