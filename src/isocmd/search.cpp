@@ -36,11 +36,7 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
             }
             
             loadHistory(filterHistory);
-            
-            const std::unordered_set<std::string> validInputs = {
-                "*fl_m", "*cl_m", "*fl_u", "*cl_u", "*fl_fo", "*cl_fo", "*fl_w", "*cl_w", "*fl_c", "*cl_c"
-            };
-            
+
             // Restore readline autocomplete and screen clear bindings
             rl_bind_key('\f', clear_screen_and_buffer);
             rl_bind_key('\t', rl_complete);
@@ -67,7 +63,7 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
                     return;
                 }
                 
-                if (input ==  "?config" || input == "?stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter" || input == "*auto_off" || input == "*auto_on" || input == "*flno_on" || input == "*flno_off" || isValidInput(input) || input.starts_with("*pagination_")) {
+                if (input.starts_with("*theme:") || input.starts_with("*menu:") || input ==  "?config" || input == "?stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter" || input == "*auto_off" || input == "*auto_on" || input == "*flno_on" || input == "*flno_off" || isValidInput(input) || input.starts_with("*pagination:")) {
                     resetReadlinePagination();
                     databaseSwitches(input, promptFlag, maxDepth, filterHistory, newISOFound);
                     return;
@@ -658,6 +654,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
 // Returns true if a special command was handled (caller should `continue`)
 bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input, const std::string& configPath, bool modeMdf, bool modeNrg, const std::string& fileExtension, 
 std::vector<std::string>& files, const std::string& fileType, std::atomic<bool>& newISOFound, bool& list, std::atomic<bool>& isImportRunning) {
+    
     if (input == "?stats") {
         displayDatabaseStatistics(databaseFilePath, maxDatabaseSize, transformationCache, globalIsoFileList);
         return true;
@@ -666,12 +663,20 @@ std::vector<std::string>& files, const std::string& fileType, std::atomic<bool>&
         displayConfigurationOptions(configPath);
         return true;
     }
-    if (input.starts_with("*pagination_")) {
+    if (input.starts_with("*pagination:")) {
         updatePagination(input, configPath);
         return true;
     }
-    if (input == "*flno_on" || input == "*flno_off") {
+    if (input == "*flno:on" || input == "*flno:off") {
         updateFilenamesOnly(configPath, input);
+        return true;
+    }
+    if (input.starts_with("*menu:")) {
+        updateUIAppearance(configPath, input);
+        return true;
+    }
+    if (input.starts_with("*theme:")) {
+        updateUIAppearance(configPath, input);
         return true;
     }
     if (input == "!clr_paths" || input == "!clr_filter") {

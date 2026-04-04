@@ -309,6 +309,65 @@ void updateFilenamesOnly(const std::string& configPath, const std::string& input
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
+/**
+ * @brief Command handler for UI appearance settings (menu colors and list themes).
+ * Synchronizes the choice to the configuration file and updates live global variables.
+ */
+void updateUIAppearance(const std::string& configPath, const std::string& inputSearch) {
+    signal(SIGINT, SIG_IGN); 
+    disable_ctrl_d();
+
+    std::string key;
+    std::string value;
+    bool isValid = false;
+
+    // Handle Menu Color: *menu:green, *menu:cyan, *menu:white
+    if (inputSearch.substr(0, 6) == "*menu:") {
+        key = "menu_color";
+        value = inputSearch.substr(6); // Get everything after *menu:
+        if (value == "green" || value == "cyan" || value == "white") {
+            isValid = true;
+        }
+    } 
+    // Handle List Themes: *theme:midnight, *theme:dracula, etc.
+    else if (inputSearch.substr(0, 7) == "*theme:") {
+        key = "list_theme";
+        value = inputSearch.substr(7); // Get everything after *theme:
+        const std::unordered_set<std::string> validThemes = {
+            "original", "classic", "high_contrast", "neon", "ocean", 
+            "sunset", "forest", "midnight", "mono", "retro", "crimson", "dracula"
+        };
+        if (validThemes.count(value)) {
+            isValid = true;
+        }
+    }
+
+    if (isValid) {
+        syncCache(configPath);
+        g_configCache[key] = value;
+
+        if (writeConfig(configPath, g_configCache)) {
+            // Apply live changes to global variables
+            if (key == "menu_color") {
+                menuColor = value;
+                color = getMenuColor(); // Refresh ANSI string
+            } else if (key == "list_theme") {
+                globalListTheme = value;
+            }
+
+            std::cout << "\n\033[0;1mUI " << (key == "menu_color" ? "Accent" : "Theme") 
+                      << " updated to: \033[1;92m" << value << "\033[0;1m.\033[0m\n";
+        } else {
+            std::cerr << "\n\033[1;91mError: Unable to access configuration file.\n";
+        }
+    } else {
+        std::cerr << "\n\033[1;31mError: Invalid command or unsupported value.\033[0;1m\n";
+    }
+
+    std::cout << color << "\n↵ to continue..." << reset;
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+}
+
 const std::unordered_map<char, std::string> settingMap = {
     {'m', "mount_list"}, {'u', "umount_list"}, {'o', "cp_mv_rm_list"},
     {'c', "conversion_lists"}, {'w', "write_list"}

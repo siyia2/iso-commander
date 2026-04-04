@@ -65,59 +65,69 @@ void helpSearches(bool isCpMv, bool import2ISO) {
           << " Prompt =====\033[0m\n" << std::endl;
     
     std::cout << "\033[1;32m1. Hotkeys:\033[0m\n"
-			   << "   • Quick Return:\033[1;33m Ctrl+d \033[0m\n"
-			   << (!isCpMv ? "   • Cancel Search:\033[1;33m Ctrl+c \033[0m\n" : "")
-			   << "   • Clear Line:\033[1;33m Ctrl+u \033[0m\n" << std::endl;
+               << "    • Quick Return: \033[1;33m Ctrl+d \033[0m\n"
+               << (!isCpMv ? "    • Cancel Search:\033[1;33m Ctrl+c \033[0m\n" : "")
+               << "    • Clear Line:   \033[1;33m Ctrl+u \033[0m\n" << std::endl;
                
     std::cout << "\033[1;32m2. Selecting FolderPaths:\033[0m\n"
-              << "   • Single directory: Enter a directory (e.g., '/directory/')\n"
-              << "   • Multiple directories: Separate with ; (e.g., '/directory1/;/directory2/')" << (isCpMv ? "" : "\n") << std::endl;
+              << "    • Single directory: Enter a directory (e.g., '/directory/')\n"
+              << "    • Multiple directories: Separate with ; (e.g., '/directory1/;/directory2/')" << (isCpMv ? "" : "\n") << std::endl;
+    
     if (isCpMv) {
-        std::cout << "   • Overwrite files for cp/mv: Append -o (e.g., '/directory/ -o' or '/directory1/;/directory2/ -o')\n" << std::endl;
+        std::cout << "    • Overwrite files for cp/mv: Append -o (e.g., '/directory/ -o' or '/directory1/;/directory2/ -o')\n" << std::endl;
         
         std::cout << "\033[1;32m2. Tips:\033[0m\n"
-        << "   • Performing mv to a single destination path on the same device is instant\n"
-        << "   • Performing mv to multiple destination paths uses cp and fs::remove (slower)\n" << std::endl;
+        << "    • Performing mv to a single destination path on the same device is instant\n"
+        << "    • Performing mv to multiple destination paths uses cp and fs::remove (slower)\n" << std::endl;
     }
     
     if (!isCpMv) {
         std::cout << "\033[1;32m3. Special Cleanup Commands:\033[0m\n";
         if (!import2ISO) {
-            std::cout << "   • Enter \033[1;33m'!clr'\033[0m - Clear the corresponding buffer\n";
+            std::cout << "    • Enter \033[1;33m'!clr'\033[0m       - Clear the corresponding buffer\n";
         }
         if (import2ISO) {
-            std::cout << "   • Enter \033[1;33m'!clr'\033[0m - Clear ISO database\n";
+            std::cout << "    • Enter \033[1;33m'!clr'\033[0m       - Clear ISO database\n";
         }
-		std::cout << "   • Enter \033[1;33m'!clr_paths'\033[0m - Clear FolderPath database\n"
-				  << "   • Enter \033[1;33m'!clr_filter'\033[0m - Clear FilterTerm database\n" << std::endl;
-		std::cout << "\033[1;32m4. Special Display Commands:\033[0m\n";
+        std::cout << "    • Enter \033[1;33m'!clr_paths'\033[0m  - Clear FolderPath database\n"
+                  << "    • Enter \033[1;33m'!clr_filter'\033[0m - Clear FilterTerm database\n" << std::endl;
+
+        std::cout << "\033[1;32m4. Special Display Commands:\033[0m\n";
         if (!import2ISO) {
-            std::cout << "   • Enter \033[1;34m'ls'\033[0m - List corresponding cached entries\n";
+            std::cout << "    • Enter \033[1;34m'ls'\033[0m          - List corresponding cached entries\n";
         }
-			std::cout << "   • Enter \033[1;34m'?config'\033[0m - Display current configuration\n";
-            std::cout << "   • Enter \033[1;34m'?stats'\033[0m - Display application statistics\n" << std::endl;
-					
-		std::cout << "\033[1;32m" << "5. Configuration Commands (persistent - saved to config file):\033[0m\n\n";
-       
-		std::cout << "   \033[1;38;5;208mA. Set Max Items/Page (default: 25):\033[0m\n"
-          << "      • Enter \033[1;35m'*pagination_{number}'\033[0m (e.g., \033[1;35m'*pagination_50'\033[0m)\n"
-          << "      • Disable: \033[1;35m{number}\033[0m == 0 (e.g., \033[1;35m'*pagination_0'\033[0m)\n"  << std::endl;
+            std::cout << "    • Enter \033[1;34m'?config'\033[0m     - Display current configuration\n";
+            std::cout << "    • Enter \033[1;34m'?stats'\033[0m      - Display application statistics\n" << std::endl;
+                    
+        std::cout << "\033[1;32m" << "5. Configuration Commands (persistent - saved to config file):\033[0m\n\n";
+        
+        // Pagination
+        std::cout << "    \033[1;38;5;208mA. Set Max Items/Page (default: 25):\033[0m\n"
+          << "      • Enter \033[1;35m'*pagination:{number}'\033[0m (e.g., \033[1;35m'*pagination:50'\033[0m)\n"
+          << "      • Disable: \033[1;35m{number}\033[0m == 0 (e.g., \033[1;35m'*pagination:0'\033[0m)\n" << std::endl;
                      
-		std::cout << "\033[1;38;5;208m   B. Set Default Display Modes (fl = full list, cl = compact list | default: cl, unmount → fl):\033[0m\n"
-				<<  "      • Mount list:       Enter \033[1;35m'*fl_m'\033[0m or \033[1;35m'*cl_m'\033[0m\n"
-				<<  "      • Umount list:      Enter \033[1;35m'*fl_u'\033[0m or \033[1;35m'*cl_u'\033[0m\n"
-				<<  "      • cp/mv/rm list:    Enter \033[1;35m'*fl_o'\033[0m or \033[1;35m'*cl_o'\033[0m\n"
-				<<  "      • Write list:       Enter \033[1;35m'*fl_w'\033[0m or \033[1;35m'*cl_w'\033[0m\n"
-				<<  "      • Conversion lists: Enter \033[1;35m'*fl_c'\033[0m or \033[1;35m'*cl_c'\033[0m\n"
-				<<  "      • Combine settings: Use multiple letters after \033[1;35m'*fl_'\033[0m or \033[1;35m'*cl_'\033[0m (e.g., \033[1;35m'*cl_mu'\033[0m for mount and umount lists)\n"
-              << std::endl;
-        std::cout << "\033[1;38;5;208m   C. Filename-only Lists (default: disabled):\033[0m\n"
-					<< "      • Enter \033[1;35m'*flno_on'\033[0m or \033[1;35m'*flno_off'\033[0m - Enable/Disable filename-only lists ('umount' excluded)\n\n";
+        // Display Modes
+        std::cout << "\033[1;38;5;208m    B. Set Default Display Modes (fl = full list, cl = compact list | default: cl, unmount → fl):\033[0m\n"
+                <<  "      • Mount list:       Enter \033[1;35m'*fl_m'\033[0m or \033[1;35m'*cl_m'\033[0m\n"
+                <<  "      • Umount list:      Enter \033[1;35m'*fl_u'\033[0m or \033[1;35m'*cl_u'\033[0m\n"
+                <<  "      • Combine settings: e.g., \033[1;35m'*cl_mu'\033[0m for mount and umount lists\n" << std::endl;
+
+        // Filenames Only
+        std::cout << "\033[1;38;5;208m    C. Filename-only Lists (default: on):\033[0m\n"
+                  << "      • Enter \033[1;35m'*flno:on'\033[0m or \033[1;35m'*flno:off'\033[0m - Toggle full path display\n\n";
+
+        // NEW: Menu Colors
+        std::cout << "\033[1;38;5;208m    D. Menu Accent Color (default: white):\033[0m\n"
+                  << "      • Enter \033[1;35m'*menu:{color}'\033[0m - Valid: \033[1;35mgreen, cyan, white\033[0m\n\n";
+
+        // NEW: List Themes
+        std::cout << "\033[1;38;5;208m    E. List Color Theme (default: original):\033[0m\n"
+                  << "      • Enter \033[1;35m'*theme:{name}'\033[0m - Valid: \033[1;35moriginal, classic, high_contrast, neon, ocean, sunset,\n                                       forest, midnight, mono, retro, crimson, dracula\033[0m\n\n";
               
-		if (import2ISO) { 
-			std::cout << "   \033[1;38;5;208mD. Auto-Update ISO Database (default: disabled):\033[0m\n"
-            << "      • Enter \033[1;35m'*auto_on'\033[0m or \033[1;35m'*auto_off'\033[0m - Enable/Disable automatic ISO imports from stored folder paths\n\n";
-		}
+        if (import2ISO) { 
+            std::cout << "    \033[1;38;5;208mF. Auto-Update ISO Database (default: off):\033[0m\n"
+            << "      • Enter \033[1;35m'*auto:on'\033[0m or \033[1;35m'*auto:off'\033[0m - Toggle background imports\n\n";
+        }
     }
     
     // Prompt to continue
