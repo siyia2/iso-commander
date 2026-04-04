@@ -28,19 +28,31 @@ auto isNum = [](const std::string& v, int min, int max) {
  * @brief Canonical list of all supported configuration settings with validation.
  */
 static const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
+    {"menu_color", "white", "Menu accent color (green/cyan/white)", "Theme Settings",
+        [](const std::string& v){ return v == "green" || v == "cyan" || v == "white"; }},
+    {"theme_color", "original", "List color theme (original/classic/high_contrast/neon/ocean/sunset/forest/midnight/mono/retro/crimson/dracula)", "",
+        [](const std::string& v){
+            static const std::unordered_set<std::string> valid = {
+                "original","classic","high_contrast","neon","ocean",
+                "sunset","forest","midnight","mono","retro","crimson","dracula"
+            };
+            return valid.count(v) > 0;
+        }
+    },
+
     {"auto_update", "off", "Enable background metadata updates from folder path history (on/off)", "General Settings", isOnOff},
     {"filenames_only", "on", "Display only filenames instead of full paths (on/off)", "", isOnOff},
     {"pagination", "25", "Items per page in list view (0 to disable)", "", [](const std::string& v){ return isNum(v, 0, 1000); }},
-    
+
     {"folder_path_history_lines", "30", "Max unique folder paths to persist in history", "History Settings", [](const std::string& v){ return isNum(v, 1, 5000); }},
     {"filter_history_lines", "15", "Max unique search filters to persist in history", "", [](const std::string& v){ return isNum(v, 1, 1000); }},
-    
+
     {"mount_list", "compact", "Display mode for mount operations (full/compact)", "Display Modes", isDisplay},
     {"umount_list", "full", "Display mode for unmount operations (full/compact)", "", isDisplay},
     {"cp_mv_rm_list", "compact", "Display mode for file operations (full/compact)", "", isDisplay},
     {"write_list", "compact", "Display mode for write operations (full/compact)", "", isDisplay},
     {"conversion_lists", "compact", "Display mode for conversion operations (full/compact)", "", isDisplay},
-    
+
     {"max_thread_cap", "32", "Global maximum concurrent threads allowed", "Thread Configuration", [](const std::string& v){ return isNum(v, 1, 256); }},
     {"threads_for_cp_mv", "8", "Threads allocated for copy/move tasks", "", [](const std::string& v){ return isNum(v, 1, 128); }},
     {"threads_for_conversions", "8", "Threads allocated for ISO file conversions", "", [](const std::string& v){ return isNum(v, 1, 128); }},
@@ -50,18 +62,6 @@ static const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {"threads_for_rm", "32", "Threads allocated for removal tasks", "", [](const std::string& v){ return isNum(v, 1, 128); }},
     {"threads_for_list_sorting", "4", "Threads allocated for UI list sorting", "", [](const std::string& v){ return isNum(v, 1, 64); }},
     {"threads_for_list_filtering", "4", "Threads allocated for UI list filtering", "", [](const std::string& v){ return isNum(v, 1, 64); }},
- 
-    {"menu_color", "white", "Menu accent color (green/cyan/white)", "Theme Settings",
-		[](const std::string& v){ return v == "green" || v == "cyan" || v == "white"; }},
-	{"theme_color", "original", "List color theme (original/classic/high_contrast/neon/ocean/sunset/forest/midnight/mono/retro/crimson/dracula)", "",
-		[](const std::string& v){
-			static const std::unordered_set<std::string> valid = {
-				"original","classic","high_contrast","neon","ocean",
-				"sunset","forest","midnight","mono","retro","crimson","dracula"
-			};
-			return valid.count(v) > 0;
-		}
-	}
 };
 
 /**
