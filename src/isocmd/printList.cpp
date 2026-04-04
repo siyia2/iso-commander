@@ -24,7 +24,6 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     
     if (items.empty()) return;
 
-    // 1. Define Color Constants (Missing in previous snippet)
     static constexpr std::string_view defaultColor = "\033[0;1m";
     static constexpr std::string_view darkCyan     = "\033[38;5;37;1m";
     static constexpr std::string_view magentaBold   = "\033[95;1m";
@@ -38,43 +37,44 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     const ListTheme* theme = getActiveTheme();
     const bool isOriginal = (globalListTheme == "original");
     
-    // 2. Pre-calculate Pagination
     const size_t totalItems = items.size();
     const bool disablePagination = (ITEMS_PER_PAGE == 0 || totalItems <= ITEMS_PER_PAGE);
     const size_t totalPages = disablePagination ? 1 : (totalItems + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE;
     
-    if (!disablePagination && currentPage >= totalPages) currentPage = totalPages - 1;
-    const size_t startIndex = disablePagination ? 0 : (currentPage * ITEMS_PER_PAGE);
+    size_t effectivePage = (disablePagination) ? 0 : (currentPage >= totalPages ? totalPages - 1 : currentPage);
+    const size_t startIndex = disablePagination ? 0 : (effectivePage * ITEMS_PER_PAGE);
     const size_t endIndex = disablePagination ? totalItems : std::min(startIndex + ITEMS_PER_PAGE, totalItems);
 
-    // 3. Performance Buffers
     IntBuf<> ib1, ib2, ib3, ib4; 
     const size_t maxDigits = ib1.format(totalItems).length();
-    
+    const bool isIsoWithAutoUpdate = (isImportRunning.load() && listType == "ISO_FILES" && !isFiltered && !globalIsoFileList.empty());
+
     std::string output;
     output.reserve(((endIndex - startIndex) * 128) + 1024);
+    
+    // Exact match of your original start
     output += '\n';
 
-    // 4. Header
     if (!disablePagination) {
         output.append(brownBold).append("Page ");
-        output.append(isOriginal ? darkCyan : theme->accent);
-        output.append(ib1.format(currentPage + 1));
-        output.append(brownBold).append("/");
-        output.append(yellowBold).append(ib2.format(totalPages));
+        output.append(isOriginal ? darkCyan : theme->accent).append(ib1.format(effectivePage + 1));
+        output.append(brownBold).append("/").append(yellowBold).append(ib2.format(totalPages));
         output.append(brownBold).append(" (Items (");
-        output.append(isOriginal ? darkCyan : theme->accent);
-        output.append(ib3.format(startIndex + 1)).append("-").append(ib4.format(endIndex));
-        output.append(brownBold).append(")/").append(yellowBold);
+        output.append(isOriginal ? darkCyan : theme->accent).append(ib3.format(startIndex + 1));
+        output.append("-").append(ib4.format(endIndex)).append(brownBold).append(")/").append(yellowBold);
         output.append(ib1.format(totalItems)).append(brownBold).append(")");
+        
+        if (isIsoWithAutoUpdate) {
+            output.append(gray).append("\n\n[Auto-Update: List restructures if newISOFound]");
+        }
+        output.append(defaultColor).append("\n\n"); // The two newlines from your original Header block
+    } 
+    else if (isIsoWithAutoUpdate) {
+        output.append(gray).append("[Auto-Update: List restructures if newISOFound]");
+        output.append(defaultColor).append("\n\n");
     }
 
-    if (isImportRunning.load() && listType == "ISO_FILES" && !isFiltered && !globalIsoFileList.empty()) {
-        output.append(gray).append("\n\n[Auto-Update: List restructures if newISOFound]");
-    }
-    output.append(defaultColor).append("\n\n");
-
-    // 5. Main Loop
+    // Main Loop (logic unchanged)
     for (size_t i = startIndex; i < endIndex; ++i) {
         const std::string_view seqColor = (i % 2 == 0) ? theme->secondary : theme->accent;
         std::string_view idxStr = ib1.format(i + 1);
@@ -95,8 +95,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         if (listType == "ISO_FILES" || listType == "IMAGE_FILES") {
             auto [dir, fname] = extractDirectoryAndFilename(item, listSubType);
             if (!displayConfig::toggleNamesOnly) {
-                output.append(isOriginal ? defaultColor : theme->muted).append(dir);
-                output.append(defaultColor).append("/");
+                output.append(isOriginal ? defaultColor : theme->muted).append(dir).append(defaultColor).append("/");
             }
             output.append(listType == "ISO_FILES" ? (isOriginal ? magentaBold : theme->accent) 
                                                   : (isOriginal ? orangeBold : theme->highlight));
@@ -114,11 +113,11 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         output.append(reset).append("\n");
     }
 
-    // 6. Footer
+    // Footer (logic unchanged)
     if (!disablePagination) {
         output.append("\n").append(brownBold).append("Pagination: ");
-        if (currentPage > 0) output.append("[p] ↵ Previous | ");
-        if (currentPage < totalPages - 1) output.append("[n] ↵ Next | ");
+        if (effectivePage > 0) output.append("[p] ↵ Previous | ");
+        if (effectivePage < totalPages - 1) output.append("[n] ↵ Next | ");
         output.append("[g<num>] ↵ Go to | ").append(defaultColor).append("\n");
     }
 
