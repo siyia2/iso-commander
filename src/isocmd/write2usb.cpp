@@ -447,25 +447,39 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         });
 
 		const ListTheme* theme = getActiveTheme();
+		const bool isOriginal = (globalListTheme == "original");
+
+		static constexpr std::string_view reset = "\033[0m";
+		static constexpr std::string_view boldReset = "\033[0;1m";
+
+		// Define logical colors based on theme
+		std::string headerCol = isOriginal ? "\033[1;92m" : std::string(theme->accent);    // "ISO" header
+		std::string indexCol  = isOriginal ? "\033[1;93m" : std::string(theme->secondary); // "1>"
+		std::string pathCol   = isOriginal ? std::string(boldReset) : std::string(theme->muted); // Directory path
+		std::string fileCol   = isOriginal ? "\033[1;95m" : std::string(theme->accent);    // Filename
+		std::string sizeCol   = isOriginal ? "\033[1;35m" : std::string(theme->highlight); // (Size)
+
 		// Build device prompt with sorted ISOs
 		std::ostringstream devicePromptStream;
-		devicePromptStream << "\n" << reset << "Selected " << theme->accent << "ISO" << reset << ":\n\n";
+		devicePromptStream << "\n" << boldReset << "Selected " << headerCol << "ISO" << boldReset << ":\n\n";
 
 		for (size_t i = 0; i < sortedIsos.size(); ++i) {
 			auto [isoDir, filename] = extractDirectoryAndFilename(sortedIsos[i].path, "write");
 			
-			// Index (e.g., 1>)
-			devicePromptStream << "  " << theme->secondary << (i + 1) << ">" << reset << " ";
+			// 1. Index (e.g.,   1>) in Red for Original mode
+			devicePromptStream << "  " << indexCol << (i + 1) << ">" << boldReset << " ";
 			
-			// Path / Directory
+			// 2. Path / Directory
 			if (!displayConfig::toggleNamesOnly) {
-				devicePromptStream << theme->muted << isoDir << "/";
+				devicePromptStream << pathCol << isoDir << "/";
 			}
 			
-			// Filename and Size
-			devicePromptStream << theme->accent << filename 
-							   << reset << " (" << theme->highlight << sortedIsos[i].sizeStr 
-							   << reset << ")\n";
+			// 3. Filename
+			devicePromptStream << fileCol << filename;
+			
+			// 4. Size (e.g., (4.7G))
+			devicePromptStream << boldReset << " (" << sizeCol << sortedIsos[i].sizeStr 
+							   << boldReset << ")\n";
 		}
 
         // Process and sort USB devices by capacity
@@ -522,15 +536,20 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         g_completerData.sortedIsos = &sortedIsos;
         g_completerData.usbDevices = &usbDevices;
 
-        // Finalize prompt with usage instructions
-		const bool isOriginal = (globalListTheme == "original");
-
-		// Handle the string_view conversion safely
+        // Finalize prompt
+		std::string labelCol = isOriginal ? "\033[1;92m" : std::string(theme->accent);
 		std::string primaryCol = isOriginal ? "\033[1;94m" : std::string(theme->muted);
 
-		// Only INDEX>DEVICE remains hardcoded yellow (\033[1;93m)
-		devicePromptStream << "\n\001" << primaryCol << "\002Mappings ↵ as \001\033[1;93m\002INDEX>DEVICE\001" 
-						   << primaryCol << "\002, ? ↵ for help, < ↵ to return:\001\033[0;1m\002 ";
+		// 3. INDEX>DEVICE is hardcoded yellow in both modes
+		std::string highlightCol = "\033[1;93m"; 
+		std::string resetCol     = "\033[0;1m";
+
+		// Finalize prompt with usage instructions
+		devicePromptStream << "\n\001" << labelCol << "\002Mappings" 
+						   << "\001" << primaryCol << "\002 ↵ as \001" 
+						   << highlightCol << "\002INDEX>DEVICE\001" 
+						   << primaryCol << "\002, ? ↵ for help, < ↵ to return: \001" 
+						   << resetCol << "\002";
 
 		std::string devicePrompt = devicePromptStream.str();
 
@@ -674,30 +693,41 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     }
 	
 	const ListTheme* theme = getActiveTheme();
-    
-    // Helper lambda to display all progress entries
-    auto displayAllProgress = [&, theme]() {
+	const bool isOriginal = (globalListTheme == "original");
+
+	// Helper lambda to display all progress entries
+	auto displayAllProgress = [&, theme, isOriginal]() {
+		// Define colors
+		std::string fileCol   = isOriginal ? "\033[1;95m" : std::string(theme->accent);
+		std::string deviceCol = "\033[1;93m"; // Hardcoded Yellow (matching your prompt logic)
+		std::string sizeCol   = isOriginal ? "\033[1;35m" : std::string(theme->highlight);
+		std::string speedCol  = isOriginal ? "\033[0;1m"  : std::string(theme->highlight);
+		
+		// Status colors (Typically stay semantic: Green/Red/Yellow)
+		static constexpr std::string_view doneCol = "\033[1;92m";
+		static constexpr std::string_view failCol = "\033[1;91m";
+		static constexpr std::string_view cxlCol  = "\033[1;93m";
+		static constexpr std::string_view bold    = "\033[0;1m";
+
 		for (size_t i = 0; i < progressData.size(); ++i) {
 			const auto& prog = progressData[i];
 			std::string currentSize = formatFileSize(prog.bytesWritten.load());
 
-			std::cout << "\033[K"
-					<< (std::string(theme->accent) + prog.filename + " \033[0;1m→ {" +
-						"\033[1;93m" + prog.device + "\033[0;1m <" +
-						deviceNames[prog.device] + "> (\033[1;35m" +
-						deviceSizeStrs[prog.device] + "\033[0;1m)} \033[0;1m")
-					<< std::right
-					<< (prog.completed ? "\033[1;92mDONE\033[0;1m" :
-						prog.failed    ? "\033[1;91mFAIL\033[0;1m" :
-						g_operationCancelled.load() ? "\033[1;93mCXL\033[0;1m" :
-						std::to_string(prog.progress) + "%")
-					<< " ["
-					<< currentSize
-					<< "/\033[1;35m"
-					<< prog.totalSize
-					<< "\033[0;1m] "
-					<< "\033[0;1m" + formatSpeed(prog.speed) + "\033[0;1m"
-					<< "\n";
+			std::cout << "\033[K" // Clear line
+					  << fileCol << prog.filename << " " << bold << "→ {"
+					  << deviceCol << prog.device << bold << " <"
+					  << deviceNames[prog.device] << "> (" << sizeCol
+					  << deviceSizeStrs[prog.device] << bold << ")} " << bold;
+
+			// Status / Percentage
+			if (prog.completed)             std::cout << doneCol << "DONE";
+			else if (prog.failed)           std::cout << failCol << "FAIL";
+			else if (g_operationCancelled.load()) std::cout << cxlCol << "CXL";
+			else                            std::cout << prog.progress << "%";
+
+			// Sizes and Speed
+			std::cout << bold << " [" << currentSize << "/" << sizeCol << prog.totalSize << bold << "] "
+					  << speedCol << formatSpeed(prog.speed) << bold << "\n";
 		}
 		std::cout << std::flush;
 	};

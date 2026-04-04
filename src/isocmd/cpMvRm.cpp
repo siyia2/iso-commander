@@ -9,35 +9,44 @@
 std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>& indexChunks, const std::vector<std::string>& isoFiles) {
     std::vector<std::string> entries;
 
-    // --- Theme Selection (Matches printList) ---
-    const ListTheme* theme = getActiveTheme();
+    // --- Original Color Constants ---
+    static constexpr std::string_view defaultColor = "\033[0;1m";
+    static constexpr std::string_view magentaBold  = "\033[95;1m";
+    static constexpr std::string_view reset        = "\033[0m";
+    static constexpr std::string_view bold         = "\033[1m";
 
-    static constexpr std::string_view reset = "\033[0m";
-    static constexpr std::string_view bold = "\033[1m";
+    const ListTheme* theme = getActiveTheme();
+    const bool isOriginal = (globalListTheme == "original");
 
     for (const auto& chunk : indexChunks) {
         for (int index : chunk) {
-            // Index safety: assume 1-based indexing from user input
+            // Index safety: assume 1-based indexing
             if (index <= 0 || static_cast<size_t>(index) > isoFiles.size()) continue;
 
             auto [isoDir, filename] = extractDirectoryAndFilename(isoFiles[index - 1], "cp_mv_rm");
             
             std::string entry;
-            // Pre-allocate: ~50 chars for ANSI codes + path length
+            // Pre-allocate: ~64 chars for ANSI codes + path length
             entry.reserve(isoDir.length() + filename.length() + 64);
 
-            // Structure: [Bold]-> [Muted]Path/ [Accent]Filename [Reset]
+            // Structure: [Bold]-> [PathColor]Path/ [FileColor]Filename [Reset]
             entry += bold;
             entry += "-> ";
 
+            // 1. Handle Directory Path
             if (!displayConfig::toggleNamesOnly) {
-                entry += theme->muted;
+                // In printList, original mode uses defaultColor for the directory
+                entry += (isOriginal ? defaultColor : theme->muted);
                 entry.append(isoDir);
+                entry += (isOriginal ? defaultColor : ""); // Maintain consistency with printList reset behavior
                 entry += "/";
             }
 
-            entry += theme->accent;
+            // 2. Handle Filename (Magenta in original mode)
+            entry += (isOriginal ? magentaBold : theme->accent);
             entry.append(filename);
+            
+            // 3. Reset and Newline
             entry += reset;
             entry += '\n';
 
@@ -74,8 +83,19 @@ static std::string validateLinuxPath(const std::string& path) {
 
 
 // Function to handle rm including pagination
-bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages, std::vector<std::vector<int>>& indexChunks, bool& umountMvRmBreak,
-bool& abortDel) {
+bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages, std::vector<std::vector<int>>& indexChunks, 
+bool& umountMvRmBreak, bool& abortDel) {
+    
+    // --- Theme & Color Setup ---
+    const ListTheme* theme = getActiveTheme();
+    const bool isOriginal = (globalListTheme == "original");
+
+    // Map theme colors: Original uses Green (92) and Blue (94)
+    std::string green = isOriginal ? "\033[1;92m" : std::string(theme->accent);
+    std::string blue  = isOriginal ? "\033[1;94m" : std::string(theme->secondary);
+    std::string red   = "\033[1;91m"; // Keep red for the "Deleted" warning
+    std::string reset = "\033[0;1m";
+
     bool isPageTurn = false;
     bool disablePagination = (ITEMS_PER_PAGE <= 0 || isoFiles.size() <= ITEMS_PER_PAGE);
 
@@ -87,23 +107,21 @@ bool& abortDel) {
         }
     };
 
+    // Generate entries based on selected indexes
     std::vector<std::string> entries = generateIsoEntries(indexChunks, isoFiles);
     sortFilesCaseInsensitive(entries);
 
     std::string promptPrefix = "\n";
-	const ListTheme* theme = getActiveTheme();
-	const bool isOriginal = (globalListTheme == "original");
+    
+    // Theme-aware prompt construction
+    std::string promptSuffix = 
+        "\n\001" + blue + "\002The selected \001" + 
+        green + "\002ISO\001" + 
+        blue + "\002 will be \001" + 
+        red + "\002*PERMANENTLY DELETED FROM DISK*\001" + 
+        blue + "\002. Proceed? (Y/N):\001" + 
+        reset + "\002 ";
 
-	// Use theme color for the general text
-	std::string primaryCol = isOriginal ? "\033[1;94m" : std::string(theme->muted);
-
-	// Hardcoded red for the warning only
-	std::string warningCol = "\033[1;91m";
-	std::string resetCol = "\033[0;1m";
-
-	std::string promptSuffix = "\n\001" + primaryCol + "\002The selected ISO will be " +
-							   "\001" + warningCol + "\002*PERMANENTLY DELETED FROM DISK*\001" + primaryCol + 
-							   "\002. Proceed? (Y/N):\001" + resetCol + "\002 ";							   
     while (true) {
         std::string userInput;
 
@@ -111,14 +129,13 @@ bool& abortDel) {
             displayErrors(uniqueErrorMessages);
             std::cout << promptPrefix;
 
+            // Batch output for performance
             std::ostringstream batch;
             const size_t BATCH_SIZE = 100;
             for (size_t i = 0; i < entries.size(); i += BATCH_SIZE) {
-                batch.str("");
-                batch.clear();
+                batch.str(""); batch.clear();
                 size_t end = std::min(i + BATCH_SIZE, entries.size());
-                for (size_t j = i; j < end; ++j)
-                    batch << entries[j];
+                for (size_t j = i; j < end; ++j) batch << entries[j];
                 std::cout << batch.str();
             }
 
@@ -149,14 +166,19 @@ bool& abortDel) {
         }
 
         if (!isPageTurn) {
-            if (userInput == "Y") {
+            if (userInput == "Y" || userInput == "y") {
                 umountMvRmBreak = true;
                 return true;
             } else {
                 umountMvRmBreak = false;
                 abortDel = true;
+                
+                // Final abort message also uses yellow/green themed logic if desired
                 std::cout << "\n\033[1;93mrm operation aborted by user.\033[0;1m\n";
-                 std::cout << color << "\n↵ to continue..." << reset;
+                std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+                
+                // Clear any leftover input
+                std::cin.clear();
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 return false;
             }
@@ -196,10 +218,26 @@ bool& overwriteExisting) {
                 }
             };
 
-            std::string promptPrefix = "\n";
-            std::string promptSuffix = "\n\001\033[1;92m\002FolderPaths\001\033[1;94m\002 ↵ for selected \001\033[1;92m\002ISO\001\033[1;94m\002 to be " +
-                operationColor + operationDescription +
-                "\001\033[1;94m\002 into, ? ↵ for help, < ↵ to return:\n\001\033[0;1m\002";
+			// --- Theme & Color Setup ---
+			const ListTheme* theme = getActiveTheme();
+			const bool isOriginal = (globalListTheme == "original");
+
+			// Use std::string to allow concatenation with +
+			// We cast the string_view to std::string or wrap the literal
+			std::string green = isOriginal ? "\001\033[1;92m\002" : std::string("\001") + std::string(theme->accent) + "\002";
+			std::string blue  = isOriginal ? "\001\033[1;94m\002" : std::string("\001") + std::string(theme->secondary) + "\002";
+			std::string reset = "\001\033[0;1m\002";
+
+			std::string promptPrefix = "\n";
+
+			std::string promptSuffix = 
+				"\n" + green + "FolderPaths" + 
+				blue + " ↵ for selected " + 
+				green + "ISO" + 
+				blue + " to be " +
+				operationColor + operationDescription + 
+				blue + " into, ? ↵ for help, < ↵ to return:\n" + 
+				reset;
 
             userInput = handlePaginatedDisplay(
                 entries, uniqueErrorMessages, promptPrefix, promptSuffix, setupEnv, isPageTurn
