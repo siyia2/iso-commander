@@ -133,9 +133,13 @@ void helpSearches(bool isCpMv, bool import2ISO) {
                      
         // Display Modes
         std::cout << orangeC << "    B. Set Default Display Modes (fl = full list, cl = compact list | default: cl, unmount → fl):\033[0m\n"
-                <<  "      • Mount list:       Enter " << purpleC << "'*fl_m'\033[0m or " << purpleC << "'*cl_m'\033[0m\n"
-                <<  "      • Umount list:      Enter " << purpleC << "'*fl_u'\033[0m or " << purpleC << "'*cl_u'\033[0m\n"
-                <<  "      • Combine settings: e.g., " << purpleC << "'*cl_mu'\033[0m for mount and umount lists\n" << std::endl;
+                <<  "      • Mount list:       Enter \033[1;35m'*fl_m'\033[0m or \033[1;35m'*cl_m'\033[0m\n"
+				<<  "      • Umount list:      Enter \033[1;35m'*fl_u'\033[0m or \033[1;35m'*cl_u'\033[0m\n"
+				<<  "      • cp/mv/rm list:    Enter \033[1;35m'*fl_o'\033[0m or \033[1;35m'*cl_o'\033[0m\n"
+				<<  "      • Write list:       Enter \033[1;35m'*fl_w'\033[0m or \033[1;35m'*cl_w'\033[0m\n"
+				<<  "      • Conversion lists: Enter \033[1;35m'*fl_c'\033[0m or \033[1;35m'*cl_c'\033[0m\n"
+				<<  "      • Combine settings: Use multiple letters after \033[1;35m'*fl_'\033[0m or \033[1;35m'*cl_'\033[0m (e.g., \033[1;35m'*cl_mu'\033[0m for mount and umount lists)\n"
+              << std::endl;
 
         // Filenames Only
         std::cout << orangeC << "    C. Filename-only Lists (default: on):\033[0m\n"

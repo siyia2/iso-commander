@@ -11,9 +11,21 @@ static char last_common_prefix[1024] = "";
 
 // List of special commands
 const char* special_cmds[] = {
-    "!clr", "!clr_paths", "!clr_filter", "ls", "?config", "?stats",
-    "*pagination:", "*fl_m", "*cl_m", "*fl_u", "*cl_u", "*cl_mu",
-    "*flno:on", "*flno:off", "*menu:", "*theme:", "*auto:on", "*auto:off",
+    "!clr", "!clr_paths", "!clr_filter", "?config", "?stats",
+    "*pagination:", "*fl_m", "*cl_m", "*fl_u", "*cl_u", "*fl_o", "*cl_o", 
+    "*fl_w", "*cl_w", "*fl_c", "*cl_c", "*flno:on", "*flno:off", 
+    "*auto:on", "*auto:off",
+    
+    // Menu Commands
+    "*menu:green", "*menu:cyan", "*menu:white", 
+    "*menu:purple", "*menu:amber", "*menu:rose",
+    
+    // Theme Commands
+    "*theme:original", "*theme:classic", "*theme:high_contrast", 
+    "*theme:neon", "*theme:ocean", "*theme:sunset", 
+    "*theme:forest", "*theme:midnight", "*theme:mono", 
+    "*theme:retro", "*theme:crimson", "*theme:dracula",
+    
     NULL
 };
 
@@ -42,7 +54,7 @@ char** my_completion_entry(const char* text, int start, int end) {
     (void)start;
     (void)end;
 
-    if (text[0] == '!' || text[0] == '?' || text[0] == '*' || (text[0] == 'l')) {
+    if (text[0] == '!' || text[0] == '?' || text[0] == '*') {
         return rl_completion_matches(text, command_generator);
     }
 
