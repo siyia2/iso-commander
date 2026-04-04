@@ -49,7 +49,7 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
     ThreadPool& pool         = getStaticThreadPool();
     const size_t poolSize   = pool.threadCount();
     const size_t cap        = isUnmount ? UMOUNT_THREAD_CAP : MOUNT_THREAD_CAP;
-	// Calculate target chunks based on hardware/caps
+	// Calculate numThreads based on hardware/caps
 	size_t numThreads = std::max(size_t(2), std::min({selectedFiles.size(), cap, poolSize}));
 
 	// Enforce the "Max 100 per chunk" rule
