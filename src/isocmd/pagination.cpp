@@ -110,7 +110,10 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, std:
     const bool isOriginal = (globalTheme == "original");
     const ListTheme* theme = isOriginal ? nullptr : getActiveTheme();
 
-    static constexpr std::string_view reset = "\033[0;1m";
+    static constexpr std::string_view defaultColor = "\033[0;1m";
+    static constexpr std::string_view darkCyan     = "\033[38;5;37;1m";
+    static constexpr std::string_view yellowBold   = "\033[1;93m";
+    static constexpr std::string_view brownBold    = "\033[1;38;5;94m";
 
     // Determine whether pagination is needed
     bool disablePagination = (ITEMS_PER_PAGE <= 0 || entries.size() <= ITEMS_PER_PAGE);
@@ -141,24 +144,16 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, std:
         // 2. Themed Header Construction
         // Display pagination info if applicable
         if (!disablePagination) {
-            if (isOriginal) {
-                pageContent << "\033[1;38;5;94mPage \033[38;5;37;1m" << (currentPage + 1)
-                            << "\033[1;38;5;94m/\033[1;93m" << totalPages
-                            << "\033[1;38;5;94m (Items (\033[38;5;37;1m" << (start + 1) << "-" << end
-                            << "\033[1;38;5;94m)/\033[1;93m" << totalEntries
-                            << "\033[1;38;5;94m)" << "\033[0m\n\n";
-            } else {
-                pageContent << theme->primary << "Page " 
-                            << theme->accent << (currentPage + 1) 
-                            << theme->primary << " / " 
-                            << theme->highlight << totalPages
-                            << theme->primary << " | Total: "
-                            << theme->highlight << totalEntries
-                            << theme->primary << " (Items " 
-                            << theme->accent << (start + 1) << "-" << end 
-                            << theme->primary << ")"
-                            << reset << "\n\n";
-            }
+            const std::string_view numColor = isOriginal ? darkCyan : std::string_view(theme->accent);
+            pageContent
+                << brownBold << "Page "
+                << numColor  << std::to_string(currentPage + 1)
+                << brownBold << "/" << yellowBold << std::to_string(totalPages)
+                << brownBold << " (Items ("
+                << numColor  << std::to_string(start + 1) << "-" << std::to_string(end)
+                << brownBold << ")/" << yellowBold << std::to_string(totalEntries)
+                << brownBold << ")"
+                << defaultColor << "\n\n";
         }
 
         // Append entries for the current page to the output
@@ -169,17 +164,10 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, std:
         // 3. Themed Navigation Footer
         // If pagination is enabled, show navigation options
         if (!disablePagination && totalPages > 1) {
-            if (isOriginal) {
-                pageContent << "\n\033[1;38;5;94mPagination: ";
-                if (currentPage > 0) pageContent << "[p] ↵ Previous | ";
-                if (currentPage < totalPages - 1) pageContent << "[n] ↵ Next | ";
-                pageContent << "[g<num>] ↵ Go to | \033[0m\n";
-            } else {
-                pageContent << "\n" << theme->primary << "Pagination: ";
-                if (currentPage > 0) pageContent << "[p] ↵ Prev | ";
-                if (currentPage < totalPages - 1) pageContent << "[n] ↵ Next | ";
-                pageContent << "[g<num>] ↵ Goto" << reset << "\n";
-            }
+            pageContent << "\n" << brownBold << "Pagination: ";
+            if (currentPage > 0)              pageContent << "[p] ↵ Previous | ";
+            if (currentPage < totalPages - 1) pageContent << "[n] ↵ Next | ";
+            pageContent << "[g<num>] ↵ Go to | " << defaultColor << "\n";
         }
 
         // Construct the prompt with the current page content
@@ -218,23 +206,17 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, std:
             else if (userInput == "n") {
                 isPageTurn = true;
                 isNavigation = true;
-                if (currentPage < totalPages - 1) {
-                    currentPage++;
-                }
+                if (currentPage < totalPages - 1) currentPage++;
             }
             // Move to the previous page
             else if (userInput == "p") {
                 isPageTurn = true;
                 isNavigation = true;
-                if (currentPage > 0) {
-                    currentPage--;
-                }
+                if (currentPage > 0) currentPage--;
             }
 
             // If navigation occurred, restart the loop to display the new page
-            if (isNavigation) {
-                continue;
-            }
+            if (isNavigation) continue;
         }
 
         // If no navigation was performed, return the user input for further processing
