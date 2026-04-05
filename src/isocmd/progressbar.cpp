@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../headers.h"
+#include "../themes.h"
 
 
 // Terminal blocking for progress bar
@@ -35,6 +36,9 @@ void restoreInput(struct termios *oldt, int oldf) {
 void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t totalBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, size_t totalTasks, std::atomic<bool>* isComplete, bool* verbose,  const std::string& operation) {
     // Set up terminal for non-blocking input
     disableInputForProgressBar(&oldt, &oldf);
+    
+    const ListTheme* theme = getActiveTheme();
+    const bool isOrig = (globalTheme == "original");
 
     int processingBarWidth = 42; // Default to 42
     int finalBarWidth = 30; // Default to 30
@@ -189,7 +193,9 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             std::cout << "\n\n";
             
             restoreInput(&oldt, oldf);
-            const std::string prompt = "\033[1;94mDisplay verbose output? (y/n):\033[0;1m ";
+            // --- Themed Question ---
+            const std::string prompt = "\001" + std::string(isOrig ? "\033[1;94m" : theme->muted) + 
+                                       "\002Display verbose output? (y/n):\001\033[0;1m\002 ";
             std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
             
             if (input.get()) {
