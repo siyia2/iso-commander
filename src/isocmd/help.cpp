@@ -110,7 +110,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
 		std::cout << headC << "| ✓ Special Commands below starting with '!', '?', or '*' are supported by Tab completion |\n\n";
         std::cout << headC << "3. Special Cleanup Commands:\033[0m\n";
         if (!import2ISO) {
-            std::cout << "    • Enter " << yellowC << "'!clr'\033[0m       - Clear the corresponding buffer\n";
+            std::cout << "    • Enter " << yellowC << "'!clr'\033[0m        - Clear the corresponding buffer\n";
         }
         if (import2ISO) {
             std::cout << "    • Enter " << yellowC << "'!clr'\033[0m       - Clear ISO database\n";
@@ -144,19 +144,19 @@ void helpSearches(bool isCpMv, bool import2ISO) {
 
         // Filenames Only
         std::cout << orangeC << "    C. Filename-only Lists (default: on):\033[0m\n"
-                  << "      • Enter " << purpleC << "'*flno:on'\033[0m or " << purpleC << "'*flno:off'\033[0m - Toggle full path display\n\n";
+                  << "      • Enter " << purpleC << "'*flno:on'\033[0m or " << purpleC << "'*flno:off'\033[0m - Enable/Disable filename-only lists ('umount' excluded)\n\n";
 
         // Menu Colors
-        std::cout << orangeC << "    D. Menu Accent Color (default: white):\033[0m\n"
-                  << "      • Enter " << purpleC << "'*menu:{color}'\033[0m - Valid: " << purpleC << "green, cyan, white, purple, amber, rose\033[0m\n\n";
+        std::cout << orangeC << "    D. Skin Color (default: white):\033[0m\n"
+                  << "      • Enter " << purpleC << "'*skin:{color}'\033[0m - Valid: " << purpleC << "green, cyan, white, purple, amber, rose\033[0m\n\n";
 
         // List Themes
-        std::cout << orangeC << "    E. UI Color Theme (default: original):\033[0m\n"
+        std::cout << orangeC << "    E. UI Theme (default: original):\033[0m\n"
                   << "      • Enter " << purpleC << "'*theme:{name}'\033[0m - Valid: " << purpleC << "original, classic, high_contrast, neon, ocean, sunset,\n                                       forest, midnight, mono, retro, crimson, dracula\033[0m\n\n";
               
         if (import2ISO) { 
             std::cout << "    " << orangeC << "F. Auto-Update ISO Database (default: off):\033[0m\n"
-            << "      • Enter " << purpleC << "'*auto:on'\033[0m or " << purpleC << "'*auto:off'\033[0m - Toggle background imports\n\n";
+            << "      • Enter " << purpleC << "'*auto:on'\033[0m or " << purpleC << "'*auto:off'\033[0m - Enable/Disable background imports at startup\n\n";
         }
     }
     
