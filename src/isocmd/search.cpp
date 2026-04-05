@@ -76,7 +76,7 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
                     return;
                 }
                 
-                if (input.starts_with("*theme:") || input.starts_with("*menu:") || input ==  "?config" || input == "?stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter" || input.starts_with("*auto") || input == "*flno_on" || input == "*flno_off" || isValidInput(input) || input.starts_with("*pagination:")) {
+                if (input.starts_with("*theme:") || input.starts_with("*menu:") || input ==  "?config" || input == "?stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter" || input.starts_with("*auto") || input == "*flno:on" || input == "*flno:off" || isValidInput(input) || input.starts_with("*pagination:")) {
                     resetReadlinePagination();
                     databaseSwitches(input, promptFlag, maxDepth, filterHistory, newISOFound);
                     return;
