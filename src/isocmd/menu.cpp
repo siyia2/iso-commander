@@ -23,8 +23,8 @@ void print_ascii() {
         rgb(255, 165,   0),  // row 3: orange
         rgb(240,  80,   0),  // row 4: red-orange
         rgb(200,  20,   0),  // row 5: bright red
-        rgb(140,   8,   0),  // row 6: dark red
-        rgb( 80,   0,   0),  // row 7: deep ember
+        rgb(175,  20,  15),  // row 6: rich crimson
+        rgb(110,  10,  5),  // row 7: burnt maroon
     };
 
     std::cout << rows[0] << R"( (   (       )             )    * * ) (         (  )" << "\n";
