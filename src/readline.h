@@ -5,13 +5,14 @@
 
 #include "write.h"
 
+#ifdef __cplusplus
 extern "C" {
 #endif
 
 char** my_special_completion_entry(const char* text, int start, int end);
 
 #ifdef __cplusplus
-}
+} // end extern "C"
 
 // Forward declaration
 struct IsoInfo;
@@ -28,4 +29,5 @@ extern CompleterData g_completerData;
 // The completion callback function
 char** completion_cb(const char* text, int start, int end);
 
+#endif // __cplusplus
 #endif // READLINE_H
