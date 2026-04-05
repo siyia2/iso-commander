@@ -46,7 +46,7 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
             bool isCpMv = false;
             // Prompt the user to enter directory paths for manual database refresh
             const ListTheme* theme = getActiveTheme();
-			const bool isOriginal = (globalListTheme == "original");
+			const bool isOriginal = (globalTheme == "original");
 
 			std::string prompt = 
 				"\001" + std::string(isOriginal ? "\033[1;92m" : theme->accent) + "\002FolderPaths" +
@@ -76,7 +76,7 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
                     return;
                 }
                 
-                if (input.starts_with("*theme:") || input.starts_with("*menu:") || input ==  "?config" || input == "?stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter" || input.starts_with("*auto") || input == "*flno:on" || input == "*flno:off" || isValidInput(input) || input.starts_with("*pagination:")) {
+                if (input.starts_with("*theme:") || input.starts_with("*skin:") || input ==  "?config" || input == "?stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter" || input.starts_with("*auto") || input == "*flno:on" || input == "*flno:off" || isValidInput(input) || input.starts_with("*pagination:")) {
                     resetReadlinePagination();
                     databaseSwitches(input, promptFlag, maxDepth, filterHistory, newISOFound);
                     return;
@@ -684,7 +684,7 @@ std::vector<std::string>& files, const std::string& fileType, std::atomic<bool>&
         updateFilenamesOnly(configPath, input);
         return true;
     }
-    if (input.starts_with("*menu:")) {
+    if (input.starts_with("*skin:")) {
         updateUIAppearance(configPath, input);
         return true;
     }
@@ -785,7 +785,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
         resetVerboseSets(processedErrors, successOuts, skippedOuts, failedOuts);
 		
 		const ListTheme* theme = getActiveTheme();
-		const bool isOriginal = (globalListTheme == "original");
+		const bool isOriginal = (globalTheme == "original");
 
 		std::string prompt = 
 			"\001" + std::string(isOriginal ? "\033[1;92m" : theme->accent) + "\002FolderPaths" +

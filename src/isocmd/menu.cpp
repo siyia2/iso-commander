@@ -69,7 +69,7 @@ void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, s
         std::cout << "\n";
         
         const ListTheme* theme = getActiveTheme();
-		const bool isOriginal = (globalListTheme == "original");
+		const bool isOriginal = (globalTheme == "original");
 		char* rawInput = readline(("\001" + std::string(isOriginal ? "\033[1;94m" : theme->muted) + "\002Choose an option:\001\033[0;1m\002 ").c_str());
 		
         // Use std::unique_ptr to manage memory for input
@@ -150,7 +150,7 @@ void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning
         std::cout << "\n";
         
         const ListTheme* theme = getActiveTheme();
-		const bool isOriginal = (globalListTheme == "original");
+		const bool isOriginal = (globalTheme == "original");
 		char* rawInput = readline(("\001" + std::string(isOriginal ? "\033[1;94m" : theme->muted) + "\002Choose an option:\001\033[0;1m\002 ").c_str());
 
         // Use std::unique_ptr to manage memory for input

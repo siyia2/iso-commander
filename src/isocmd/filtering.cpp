@@ -484,7 +484,7 @@ const std::string& operationColor, const std::vector<std::string>& isoDirs, bool
     };
 
 	const ListTheme* theme = getActiveTheme();
-	const bool isOriginal = (globalListTheme == "original");
+	const bool isOriginal = (globalTheme == "original");
 
 	// Use theme color for the connectors/standard text
 	std::string primaryCol = isOriginal ? "\033[1;94m" : std::string(theme->muted);
@@ -528,7 +528,7 @@ bool& filterHistory, bool& need2Sort, size_t& currentPage)
     const std::string quickPat = isInteractive ? "" : mainInputString.substr(1);
 
     const ListTheme* theme = getActiveTheme();
-	const bool isOriginal = (globalListTheme == "original");
+	const bool isOriginal = (globalTheme == "original");
 
 	// Determine the primary color (muted)
 	std::string primaryCol = isOriginal ? "\033[1;94m" : std::string(theme->muted);

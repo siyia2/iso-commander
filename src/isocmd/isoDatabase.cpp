@@ -644,7 +644,7 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
         updatePagination(inputSearch, configPath);
     } 
     // --- New functionality for Menu Color ---
-    else if (inputSearch.substr(0, 6) == "*menu:") { // Changed to :
+    else if (inputSearch.substr(0, 6) == "*skin:") { // Changed to :
         updateUIAppearance(configPath, inputSearch);
     } 
     // --- New functionality for List Theme ---

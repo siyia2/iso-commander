@@ -16,7 +16,7 @@ std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>&
     static constexpr std::string_view bold         = "\033[1m";
 
     const ListTheme* theme = getActiveTheme();
-    const bool isOriginal = (globalListTheme == "original");
+    const bool isOriginal = (globalTheme == "original");
 
     for (const auto& chunk : indexChunks) {
         for (int index : chunk) {
@@ -88,7 +88,7 @@ bool& umountMvRmBreak, bool& abortDel) {
     rl_attempted_completion_function = nullptr;
     // --- Theme & Color Setup ---
     const ListTheme* theme = getActiveTheme();
-    const bool isOriginal = (globalListTheme == "original");
+    const bool isOriginal = (globalTheme == "original");
 
     // Map theme colors: Original uses Green (92) and Blue (94)
     std::string green = isOriginal ? "\033[1;92m" : std::string(theme->accent);
@@ -220,7 +220,7 @@ bool& overwriteExisting) {
 
 			// --- Theme & Color Setup ---
 			const ListTheme* theme = getActiveTheme();
-			const bool isOriginal = (globalListTheme == "original");
+			const bool isOriginal = (globalTheme == "original");
 
 			// Use std::string to allow concatenation with +
 			// We cast the string_view to std::string or wrap the literal

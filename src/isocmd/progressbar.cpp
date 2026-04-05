@@ -191,7 +191,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             
             restoreInput(&oldt, oldf);
             const ListTheme* theme = getActiveTheme();
-			const bool isOriginal = (globalListTheme == "original");
+			const bool isOriginal = (globalTheme == "original");
 
 			const std::string prompt = 
 				"\001" + std::string(isOriginal ? "\033[1;94m" : theme->muted) + 

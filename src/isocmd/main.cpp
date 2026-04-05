@@ -137,7 +137,7 @@ int main(int argc, char *argv[]) {
 
         // Prompt for the main menu choice
         const ListTheme* theme = getActiveTheme();
-		const bool isOriginal = (globalListTheme == "original");
+		const bool isOriginal = (globalTheme == "original");
 		char* rawInput = readline(("\n\001" + std::string(isOriginal ? "\033[1;94m" : theme->muted) + "\002Choose an option:\001\033[0;1m\002 ").c_str());
         std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
 

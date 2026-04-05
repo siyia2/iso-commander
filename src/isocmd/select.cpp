@@ -281,7 +281,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         std::cout << "\033[1A\033[K";
         
         const ListTheme* theme = getActiveTheme();
-		const bool isOriginal = (globalListTheme == "original");
+		const bool isOriginal = (globalTheme == "original");
 		std::string prompt = (isFiltered ? "\001\033[1;96m\002F⊳ \001" : "\001")
                    + std::string(isOriginal ? "\033[1;92m" : theme->accent) + "\002ISO\001"
                    + std::string(isOriginal ? "\033[1;94m" : theme->muted) + "\002 ↵ for \001"
@@ -430,7 +430,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         
         // Build the user prompt string dynamically
 		const ListTheme* theme = getActiveTheme();
-		const bool isOriginal = (globalListTheme == "original");
+		const bool isOriginal = (globalTheme == "original");
 
 		std::string prompt = (isFiltered ? "\001\033[1;96m\002F⊳ \001" : "\001")
                    + std::string(isOriginal ? "\033[1;38;5;208m" : theme->highlight) + "\002"

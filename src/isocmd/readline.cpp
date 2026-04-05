@@ -16,9 +16,9 @@ const char* special_cmds[] = {
     "*fl_w", "*cl_w", "*fl_c", "*cl_c", "*flno:on", "*flno:off", 
     "*auto:on", "*auto:off",
     
-    // Menu Commands
-    "*menu:green", "*menu:cyan", "*menu:white", 
-    "*menu:purple", "*menu:amber", "*menu:rose",
+    // Skin Commands
+    "*skin:green", "*skin:cyan", "*skin:white", 
+    "*skin:purple", "*skin:amber", "*skin:rose",
     
     // Theme Commands
     "*theme:original", "*theme:classic", "*theme:high_contrast", 

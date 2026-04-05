@@ -447,7 +447,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         });
 
 		const ListTheme* theme = getActiveTheme();
-		const bool isOriginal = (globalListTheme == "original");
+		const bool isOriginal = (globalTheme == "original");
 
 		static constexpr std::string_view reset = "\033[0m";
 		static constexpr std::string_view boldReset = "\033[0;1m";
@@ -700,7 +700,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     }
 	
 	const ListTheme* theme = getActiveTheme();
-	const bool isOriginal = (globalListTheme == "original");
+	const bool isOriginal = (globalTheme == "original");
 
 	// Helper lambda to display all progress entries
 	auto displayAllProgress = [&, theme, isOriginal]() {

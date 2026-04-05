@@ -7,7 +7,7 @@
 // Helper to get consistent theme state
 void getThemeState(const ListTheme*& theme, bool& isOriginal) {
     theme = getActiveTheme();
-    isOriginal = (globalListTheme == "original");
+    isOriginal = (globalTheme == "original");
 }
 
 // Function to display how to select items from lists

@@ -36,12 +36,12 @@ auto isNum = [](const std::string& v, int min, int max) {
  * @brief Canonical list of all supported configuration settings with validation.
  */
 static const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
-    {"menu_color", "white", "Menu accent color (green/cyan/white/purple/amber/rose)", "Theme Settings",
+    {"skin", "white", "Menu accent color (green/cyan/white/purple/amber/rose)", "Theme Settings",
         [](const std::string& v){ 
             return v == "green" || v == "cyan" || v == "white" || 
                    v == "purple" || v == "amber" || v == "rose"; 
         }},
-    {"ui_theme", "original", "List color theme (original/classic/high_contrast/neon/ocean/sunset/forest/midnight/mono/retro/crimson/dracula)", "",
+    {"theme", "original", "List and prompt color theme (original/classic/high_contrast/neon/ocean/sunset/forest/midnight/mono/retro/crimson/dracula)", "",
         [](const std::string& v){
             static const std::unordered_set<std::string> valid = {
                 "original","classic","high_contrast","neon","ocean",
@@ -230,9 +230,9 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
     displayConfig::toggleNamesOnly           = (g_configCache["filenames_only"]   == "on");
  
     // Synchronize Theme Settings from Cache
-    menuColor = g_configCache["menu_color"];
-    color = getMenuColor();
-    globalListTheme = g_configCache["ui_theme"];
+    skin = g_configCache["skin"];
+    color = getskin();
+    globalTheme = g_configCache["theme"];
  
     // Synchronize Threading & History Limits
     applyThreadCapsAndHistoryLimits(g_configCache);
@@ -328,8 +328,8 @@ void updateUIAppearance(const std::string& configPath, const std::string& inputS
     bool isValid = false;
 
     // Handle Menu Color: Added purple, amber, rose
-    if (inputSearch.substr(0, 6) == "*menu:") {
-        key = "menu_color";
+    if (inputSearch.substr(0, 6) == "*skin:") {
+        key = "skin";
         value = inputSearch.substr(6); 
         if (value == "green" || value == "cyan" || value == "white" || 
             value == "purple" || value == "amber" || value == "rose") {
@@ -338,7 +338,7 @@ void updateUIAppearance(const std::string& configPath, const std::string& inputS
     }
     // Handle List Themes: *theme:midnight, *theme:dracula, etc.
     else if (inputSearch.substr(0, 7) == "*theme:") {
-        key = "ui_theme";
+        key = "theme";
         value = inputSearch.substr(7); // Get everything after *theme:
         const std::unordered_set<std::string> validThemes = {
             "original", "classic", "high_contrast", "neon", "ocean", 
@@ -355,16 +355,16 @@ void updateUIAppearance(const std::string& configPath, const std::string& inputS
 
         if (writeConfig(configPath, g_configCache)) {
 			// Apply live changes to global variables
-			if (key == "menu_color") {
-				menuColor = value;
-				color = getMenuColor(); // Refresh ANSI string
+			if (key == "skin") {
+				skin = value;
+				color = getskin(); // Refresh ANSI string
 				
-				// Custom feedback for Menu Color
-				std::cout << "\n\033[0;1mMenu color set to: \033[1;92m" 
+				// Custom feedback for Skin Color
+				std::cout << "\n\033[0;1mSkin color set to: \033[1;92m" 
 						  << value << "\033[0;1m.\033[J\033[0m\n";
 			} 
-			else if (key == "ui_theme") {
-				globalListTheme = value;
+			else if (key == "theme") {
+				globalTheme = value;
 				
 				// Keep existing feedback for Theme
 				std::cout << "\n\033[0;1mUI theme set to: \033[1;92m" 

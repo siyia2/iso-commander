@@ -35,7 +35,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     static constexpr std::string_view reset         = "\033[0m";
 
     const ListTheme* theme = getActiveTheme();
-    const bool isOriginal = (globalListTheme == "original");
+    const bool isOriginal = (globalTheme == "original");
     
     const size_t totalItems = items.size();
     const bool disablePagination = (ITEMS_PER_PAGE == 0 || totalItems <= ITEMS_PER_PAGE);
