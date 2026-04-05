@@ -183,15 +183,15 @@ void clearHistory(const std::string& inputSearch) {
         historyType = "FilterTerm";
     } else {
         std::cerr << "\n\001\033[1;91mInvalid command: \001\033[1;93m'" 
-                  << inputSearch << "'\001\033[1;91m." << std::endl;
+                  << inputSearch << "'\001\033[1;91m.\033[J" << std::endl;
         return;
     }
 
     if (std::remove(filePath.c_str()) != 0) {
         std::cerr << "\n\001\033[1;91mError clearing " << historyType << " database: \001\033[1;93m'" 
-                  << filePath << "'\001\033[1;91m. File missing or inaccessible." << std::endl;
+                  << filePath << "'\001\033[1;91m. File missing or inaccessible.\033[J" << std::endl;
     } else {
-        std::cout << "\n\001\033[1;92m" << historyType << " database cleared successfully." << std::endl;
+        std::cout << "\n\001\033[1;92m" << historyType << " database cleared successfully.\033[J" << std::endl;
         clear_history();
     }
 

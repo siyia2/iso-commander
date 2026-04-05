@@ -632,7 +632,31 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
     } else if (inputSearch == "?config") {
         displayConfigurationOptions(configPath);
     } else if (inputSearch == "!clr") {
-        // ... (Database clearing logic remains same)
+        if (std::remove(databaseFilePath.c_str()) != 0) {
+            std::cerr << "\n\001\033[1;91mError clearing ISO database: \001\033[1;93m'" 
+                      << databaseFilePath << "\001'\033[1;91m. File missing or inaccessible.\033[J" << std::endl;
+            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        } else {
+            // Clean transformationCache for .iso entries (case-insensitive)
+            for (auto it = transformationCache.begin(); it != transformationCache.end();) {
+                const std::string& key = it->first;
+                if (key.size() >= 4) {
+                    std::string ext = key.substr(key.size() - 4);
+                    toLowerInPlace(ext);
+                    if (ext == ".iso") {
+                        it = transformationCache.erase(it);
+                        continue;
+                    }
+                }
+                ++it;
+            }
+                    
+            std::cout << "\n\001\033[1;92mISO database cleared successfully\001\033[1;92m.\033[J" << std::endl;
+            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            std::vector<std::string>().swap(globalIsoFileList);
+        }
     } else if (inputSearch == "!clr_paths" || inputSearch == "!clr_filter") {
         clearHistory(inputSearch);
     } else if (inputSearch == "*auto:on" || inputSearch == "*auto:off") { // Changed to :
