@@ -531,7 +531,7 @@ void displayConfigurationOptions(const std::string& configPath) {
         return;
     }
 
-    std::cout << "\n\033[1;96m==== Current Configuration (Verified Cache) ====\033[0;1m\n\n";
+    std::cout << "\n\033[1;96m==== Current Configuration ====\033[0;1m\n\n";
     std::string line; 
     int lineNumber = 1;
     
