@@ -32,6 +32,48 @@ Mount one or more ISO files or directories containing ISOs. Requires root.
 .br
 Unmount ISO mount points. Without arguments or with "all", unmounts all under /mnt. Requires root.
 
+.SH EXAMPLES
+
+.TP
+Mount specific ISOs:
+.br
+\fBisocmd /path/to/file1.iso /path/to/file2.iso mount\fR
+
+.TP
+Mount all ISOs within a directory:
+.br
+\fBisocmd /path/to/dir mount\fR
+
+.TP
+Mount all ISOs within a directory up to depth 2:
+.br
+\fBisocmd -d2 /path/to/dir mount\fR
+
+.TP
+Mount an ISO silently:
+.br
+\fBisocmd --silent /path/to/file.iso mount\fR
+
+.TP
+Unmount ISO mount points:
+.br
+\fBisocmd /mnt/iso_example /mnt/iso_other umount\fR
+
+.TP
+Unmount all ISO mount points:
+.br
+\fBisocmd all umount or isocmd umount\fR
+
+.TP
+Unmount all ISO mount points silently:
+.br
+\fBisocmd --silent all umount or isocmd --silent umount\fR
+
+.TP
+Unmount an ISO mount point silently:
+.br
+\fBisocmd --silent /mnt/iso_example umount\fR
+
 .SH UI INTERACTIVE OPTIONS AND FEATURES
 .TP
 .B ManageISO
