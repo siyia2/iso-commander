@@ -8,26 +8,26 @@
 // =========================
 
 // User-selected menu color (string-based for easy config parsing / CLI input)
-inline std::string menuColor = "white"; 
+inline std::string skin = "white"; 
 
 // ANSI reset sequence (bold reset)
 inline std::string reset = "\033[0;1m";
 
 // Returns the ANSI escape code corresponding to the selected menu color.
 // Falls back to full reset if the color is unknown (safe default).
-inline std::string getMenuColor() {
-    return (menuColor == "green")   ? "\033[1;32m"               : // Bright green
-           (menuColor == "cyan")    ? "\033[1;38;2;0;200;200m"   : // Soft cyan
-           (menuColor == "purple")  ? "\033[1;38;2;189;147;249m" : // Dracula Purple
-           (menuColor == "amber")   ? "\033[1;38;2;255;176;0m"   : // CRT Amber
-           (menuColor == "rose")    ? "\033[1;38;2;255;121;198m" : // Hot pink/Rose
-           (menuColor == "white")   ? "\033[1;38;5;250m"         : // Light gray
+inline std::string getskin() {
+    return (skin == "green")   ? "\033[1;32m"               : // Bright green
+           (skin == "cyan")    ? "\033[1;38;2;0;200;200m"   : // Soft cyan
+           (skin == "purple")  ? "\033[1;38;2;189;147;249m" : // Dracula Purple
+           (skin == "amber")   ? "\033[1;38;2;255;176;0m"   : // CRT Amber
+           (skin == "rose")    ? "\033[1;38;2;255;121;198m" : // Hot pink/Rose
+           (skin == "white")   ? "\033[1;38;5;250m"         : // Light gray
                                       "\033[0m";                   // Reset
 }
 
 // Cached color value (evaluated once at startup)
-// NOTE: If menuColor changes at runtime, this will NOT update automatically.
-inline std::string color = getMenuColor();
+// NOTE: If skin changes at runtime, this will NOT update automatically.
+inline std::string color = getskin();
 
 
 // =========================
@@ -35,7 +35,7 @@ inline std::string color = getMenuColor();
 // =========================
 
 // Active theme name (string allows easy switching via config / CLI)
-inline std::string globalListTheme = "original";
+inline std::string globalTheme = "original";
 
 // Defines a color palette for list rendering.
 // Using string_view avoids unnecessary allocations (points to static literals).
@@ -72,7 +72,7 @@ inline ListTheme DraculaTheme  = {"\033[1;38;5;141m",  "\033[1;38;5;212m",  "\03
 // THEME RESOLUTION
 // =========================
 
-// Returns a pointer to the active theme based on globalListTheme.
+// Returns a pointer to the active theme based on globalTheme.
 // Uses a static map so it's initialized only once (efficient lookup).
 inline const ListTheme* getActiveTheme() {
     static const std::unordered_map<std::string, const ListTheme*> themeMap = {
@@ -91,7 +91,7 @@ inline const ListTheme* getActiveTheme() {
     };
 
     // Lookup selected theme
-    auto it = themeMap.find(globalListTheme);
+    auto it = themeMap.find(globalTheme);
 
     // Return matched theme or fallback to OriginalTheme (safe default)
     return (it != themeMap.end()) ? it->second : &OriginalTheme;
