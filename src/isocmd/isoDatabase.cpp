@@ -632,12 +632,14 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
     } else if (inputSearch == "?config") {
         displayConfigurationOptions(configPath);
     } else if (inputSearch == "!clr") {
-        if (std::remove(databaseFilePath.c_str()) != 0) {
+        std::ofstream ofs(databaseFilePath, std::ofstream::out | std::ofstream::trunc);
+		if (!ofs) {
             std::cerr << "\n\001\033[1;91mError clearing ISO database: \001\033[1;93m'" 
                       << databaseFilePath << "\001'\033[1;91m. File missing or inaccessible.\033[J" << std::endl;
             std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         } else {
+            ofs.close();
             // Clean transformationCache for .iso entries (case-insensitive)
             for (auto it = transformationCache.begin(); it != transformationCache.end();) {
                 const std::string& key = it->first;
