@@ -3,24 +3,44 @@
 #ifndef THEMES_H
 #define THEMES_H
 
+#include <string>
+#include <string_view>
+#include <unordered_map>
+
+/**
+ * @brief Current active skin name.
+ */
 inline std::string skin = "white"; 
+
+/**
+ * @brief Global reset sequence for terminal formatting.
+ */
 inline std::string reset = "\033[0;1m";
 
 /**
  * @brief Canonical list of all supported configuration settings with validation.
  * @details Maps user-defined skin names to high-fidelity ANSI color sequences.
+ * @return A string containing the ANSI escape code for the selected skin.
  */
 inline std::string getskin() {
-    return (skin == "green")   ? "\033[1;38;2;0;255;0m"   :
-           (skin == "cyan")    ? "\033[1;38;2;0;200;200m"   :
-           (skin == "purple")  ? "\033[1;38;2;189;147;249m" :
-           (skin == "amber")   ? "\033[1;38;2;255;176;0m"   :
-           (skin == "rose")    ? "\033[1;38;2;255;121;198m" :
-           (skin == "white")   ? "\033[1;38;5;250m"         :
-                                 "\033[0m";
+    if (skin == "green")   return "\033[1;38;2;0;255;0m";
+    if (skin == "cyan")    return "\033[1;38;2;0;200;200m";
+    if (skin == "purple")  return "\033[1;38;2;189;147;249m";
+    if (skin == "amber")   return "\033[1;38;2;255;176;0m";
+    if (skin == "rose")    return "\033[1;38;2;255;121;198m";
+    if (skin == "white")   return "\033[1;38;5;250m";
+    return "\033[0m";
 }
 
+/**
+ * @brief The resolved ANSI color string based on the initial skin value.
+ * @note This is initialized once at startup.
+ */
 inline std::string color = getskin();
+
+/**
+ * @brief The globally selected theme identifier.
+ */
 inline std::string globalTheme = "original";
 
 /**
@@ -42,25 +62,28 @@ struct ListTheme {
  * for proper prompt width calculation.
  */
 struct originalColors {
-    static constexpr std::string_view reset        = "\033[0m";
-    static constexpr std::string_view bold         = "\033[1m";
-    static constexpr std::string_view boldAlt      = "\033[0;1m";
-    static constexpr std::string_view dim          = "\033[0;2m";
+    static constexpr std::string_view reset      = "\033[0m";
+    static constexpr std::string_view bold       = "\033[1m";
+    static constexpr std::string_view boldAlt    = "\033[0;1m";
+    static constexpr std::string_view dim        = "\033[0;2m";
 
-    static constexpr std::string_view red          = "\033[1;91m";
-    static constexpr std::string_view green        = "\033[1;92m";
-    static constexpr std::string_view yellow       = "\033[1;93m";
-    static constexpr std::string_view blue         = "\033[1;94m";
-    static constexpr std::string_view magenta      = "\033[95;1m";
-    static constexpr std::string_view orange       = "\033[1;38;5;208m";
-    static constexpr std::string_view brown        = "\033[1;38;5;94m";
-    static constexpr std::string_view darkCyan     = "\033[38;5;37;1m";
-    static constexpr std::string_view purple       = "\033[1;35m";
+    static constexpr std::string_view red        = "\033[1;91m";
+    static constexpr std::string_view green      = "\033[1;92m";
+    static constexpr std::string_view yellow     = "\033[1;93m";
+    static constexpr std::string_view blue       = "\033[1;94m";
+    static constexpr std::string_view magenta    = "\033[95;1m";
+    static constexpr std::string_view orange     = "\033[1;38;5;208m";
+    static constexpr std::string_view brown      = "\033[1;38;5;94m";
+    static constexpr std::string_view darkCyan   = "\033[38;5;37;1m";
+    static constexpr std::string_view purple     = "\033[1;35m";
+    static constexpr std::string_view dimGray    = "\033[38;5;240m";
 
-    static constexpr std::string_view rl_red       = "\001\033[1;91m\002";
-    static constexpr std::string_view rl_yellow    = "\001\033[1;93m\002";
-    static constexpr std::string_view rl_reset     = "\001\033[0m\002";
+    static constexpr std::string_view rl_red     = "\001\033[1;91m\002";
+    static constexpr std::string_view rl_yellow  = "\001\033[1;93m\002";
+    static constexpr std::string_view rl_reset   = "\001\033[0m\002";
 };
+
+// --- Theme Instances ---
 
 inline ListTheme OriginalTheme = {"\033[1;38;2;135;95;0m",    "\033[1;38;2;255;0;0m",      "\033[1;38;2;0;255;0m",      "\033[1;38;2;142;142;142m", "\033[1;38;2;255;255;0m",    "\033[1;48;2;142;142;142m", "\033[1;38;2;255;175;0m"};
 inline ListTheme ClassicTheme  = {"\033[1;38;2;135;95;0m",    "\033[1;38;2;255;0;0m",      "\033[1;38;2;255;0;255m",    "\033[1;38;2;148;148;148m", "\033[1;38;2;255;255;0m",    "\033[1;48;2;148;148;148m", "\033[1;38;2;255;135;0m"};
