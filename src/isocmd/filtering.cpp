@@ -499,7 +499,7 @@ const std::string& operationColor, const std::vector<std::string>& isoDirs, bool
 		+ colorPrimary + "\002 ↵ for \001" 
 		+ operationColor + "\002" + operation + "\001" 
 		+ colorPrimary + "\002, or ↵ to return: \001" 
-		+ colorReset + "\002 ";
+		+ colorReset + "\002";
 
     auto onEmptyInput = [&]() {
         clear_history();
@@ -548,7 +548,7 @@ bool& filterHistory, bool& need2Sort, size_t& currentPage)
 		+ colorMuted + "\002 ↵ for \001" 
 		+ colorExt   + "\002" + fileExtensionWithOutDots + "\001" 
 		+ colorMuted + "\002, or ↵ to return: \001" 
-		+ colorReset + "\002 ";
+		+ colorReset + "\002";
 
     // Signal the caller to re-sort after a successful filter, since the
     // filtered subset may arrive in a different order than the original list.
