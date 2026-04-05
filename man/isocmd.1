@@ -55,6 +55,13 @@ Creates and updates a local ISO database. The database has a maximum file size l
 
 .SH CONFIGURATION
 The configuration file is located at \fI~/.config/isocmd/config\fR and uses a \fIkey = value\fR format.
+.SS THEME
+.TS
+tab(@);
+lb l l.
+skin@Accent color for menus and headers@green|cyan|white|purple|amber|rose (Default: white)
+theme@Color palette for lists and prompts@original|classic|high_contrast|neon|ocean|sunset|forest|midnight|mono|retro|crimson|dracula (Default: original)
+.TE
 .SS GENERAL
 .TS
 tab(@);
@@ -62,13 +69,6 @@ lb l l.
 auto_update@Enable background metadata updates on startup@on|off (Default: off)
 filenames_only@Show filenames instead of full paths; global override except unmount list@on|off (Default: on)
 pagination@Items per page (0 to disable)@integer >= 0 (Default: 25)
-.TE
-.SS THEME
-.TS
-tab(@);
-lb l l.
-skin@Accent color for menus and headers@green|cyan|white|purple|amber|rose (Default: white)
-theme@Color palette for lists and prompts@original|classic|high_contrast|neon|ocean|sunset|forest|midnight|mono|retro|crimson|dracula (Default: original)
 .TE
 .SS HISTORY
 .TS
@@ -80,6 +80,7 @@ filter_history_lines@Max unique search filters to persist@integer (Default: 15)
 .SS DISPLAY
 Controls whether lists are shown in \fBfull\fR (detailed) or \fBcompact\fR format.
 If \fBfilenames_only\fR is enabled, path details are stripped regardless of these settings.
+.PP
 .TS
 tab(@);
 lb lb.
@@ -93,6 +94,7 @@ conversion_lists@compact
 .TE
 .SS THREADS
 Iso Commander uses a multi-threaded architecture to optimize I/O-heavy operations and UI responsiveness.
+.PP
 .TS
 tab(@);
 lb l.
